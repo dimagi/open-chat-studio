@@ -1,14 +1,4 @@
-def as_int(value) -> int | None:
-    """Convert a value to an int, returning None if it can't be (e.g. a malformed id from JSON).
-
-    Booleans are rejected: they're never valid ids, and ``int(True)`` would otherwise coerce to 1.
-    """
-    if isinstance(value, bool):
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+from apps.utils.fields import as_int
 
 
 def parse_custom_actions(value) -> list[tuple[int, list[str]]]:

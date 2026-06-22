@@ -52,6 +52,15 @@ def experiment_session():
     return ExperimentSessionFactory.create()
 
 
+@pytest.fixture()
+def general_synthetic_voices():
+    """The general (non-team-scoped) voices normally seeded by data migrations."""
+    return [
+        SyntheticVoiceFactory.create(service=service, voice_provider=None)
+        for service in (SyntheticVoice.AWS, SyntheticVoice.OpenAI, SyntheticVoice.Azure)
+    ]
+
+
 class TestSyntheticVoice:
     @pytest.mark.django_db()
     def test_team_scoped_services(self):
@@ -68,13 +77,13 @@ class TestSyntheticVoice:
         assert voices_queryset.count() == SyntheticVoice.objects.count()
 
     @pytest.mark.django_db()
-    def test_get_for_team_excludes_service(self):
+    def test_get_for_team_excludes_service(self, general_synthetic_voices):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.OpenAI, SyntheticVoice.Azure}
 
     @pytest.mark.django_db()
-    def test_get_for_team_do_not_include_other_team_exclusive_voices(self):
+    def test_get_for_team_do_not_include_other_team_exclusive_voices(self, general_synthetic_voices):
         """Tests that `get_for_team` returns both general and team exclusive synthetic voices. Exclusive synthetic
         voices are those whose service is one of SyntheticVoice.TEAM_SCOPED_SERVICES
         """

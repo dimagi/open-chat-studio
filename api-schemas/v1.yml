@@ -1690,8 +1690,8 @@ components:
         pipeline:
           allOf:
           - $ref: '#/components/schemas/InspectPipeline'
-          nullable: true
           readOnly: true
+          nullable: true
         events:
           $ref: '#/components/schemas/InspectEvents'
       required:
@@ -2278,10 +2278,9 @@ components:
       description: |-
         One pipeline node, with the resources it references inlined.
 
-        All resource keys are declared as fields so they appear in the OpenAPI schema, but a node only
-        renders the keys its type actually uses: a ``StartNode`` shows none, while an
+        A node only renders the resource keys its type uses: a ``StartNode`` shows none, while an
         ``LLMResponseWithPrompt`` shows its own — ``null`` for an unset single value, ``[]`` for an
-        unset list. Keys the node type doesn't declare are dropped entirely.
+        unset list. Keys the node type doesn't declare are absent from the response.
       properties:
         node_id:
           type: string
@@ -2308,13 +2307,13 @@ components:
         source_material:
           allOf:
           - $ref: '#/components/schemas/SourceMaterial'
-          nullable: true
           readOnly: true
+          nullable: true
         assistant:
           allOf:
           - $ref: '#/components/schemas/Assistant'
-          nullable: true
           readOnly: true
+          nullable: true
         custom_actions:
           type: array
           items:
@@ -2323,8 +2322,8 @@ components:
         media_collection:
           allOf:
           - $ref: '#/components/schemas/MediaCollection'
-          nullable: true
           readOnly: true
+          nullable: true
         indexed_collections:
           type: array
           items:
@@ -2502,8 +2501,8 @@ components:
       description: |-
         The action an event trigger runs.
 
-        The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline could be found in
-        the team. It's read from the pipelines the fetcher already loaded, so it costs no extra query.
+        The ``pipeline`` key only appears for ``pipeline_start`` actions whose pipeline exists in the
+        team.
       properties:
         type:
           allOf:
@@ -2647,11 +2646,15 @@ components:
         last_name:
           type: string
           maxLength: 150
+        email_verified:
+          type: boolean
+          readOnly: true
         team:
           allOf:
           - $ref: '#/components/schemas/Team'
           readOnly: true
       required:
+      - email_verified
       - id
       - team
       - username

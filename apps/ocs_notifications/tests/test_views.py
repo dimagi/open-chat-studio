@@ -219,4 +219,5 @@ class TestToggleDoNotDisturbView:
             response = client.post(url, data={"duration": "8h"})
             assert response.status_code == 200
             pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
+            assert pref.do_not_disturb_until is not None
             assert pref.do_not_disturb_until - timezone.now() == timezone.timedelta(hours=8)

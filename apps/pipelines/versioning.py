@@ -54,6 +54,7 @@ class VersionedParamSpec:
     display_name: str
     versioning: ParamVersioning
     archiving: ParamArchiving
+    fk_field: str  # the Node FK/M2M column mirroring this param (see apps.pipelines.models.Node)
     many: bool = False  # param holds a list of IDs
 
     def __post_init__(self):
@@ -85,6 +86,24 @@ class VersionedParamSpec:
                         params[self.param_name] = str(instance.create_new_version().id)
                     else:
                         params[self.param_name] = str(instance.latest_version.id)
+
+    def revert_referenced_record(self, node, params: dict) -> None:
+        """Inverse of ``version_referenced_record``: rewrite ``params[param_name]`` from the
+        versioned record back to the id of its working version.
+
+        The versioned record is read from ``node``'s resource FK column (``fk_field``) — the
+        trusted, constraint-backed mirror of the param — rather than re-querying by the param id.
+        ``LIVE_REFERENCE`` params keep their id verbatim (publish never rewrote them)."""
+        if self.versioning == ParamVersioning.LIVE_REFERENCE:
+            return
+
+        instance = getattr(node, self.fk_field)
+        if instance is not None:
+            params[self.param_name] = str(instance.get_working_version_id())
+        elif params.get(self.param_name):
+            # The FK was nulled (its referenced version was deleted) but params still carries a
+            # stale id; clear it so the reverted working node doesn't resurrect a dangling reference.
+            params[self.param_name] = None
 
     def archive_referenced_record(self, params: dict) -> None:
         """Archive the record(s) referenced by the param according to the spec's
@@ -123,6 +142,7 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
             display_name="assistant",
             versioning=ParamVersioning.NEW_VERSION,
             archiving=ParamArchiving.ARCHIVE,
+            fk_field="assistant",
         ),
     ),
     "LLMResponseWithPrompt": (
@@ -133,6 +153,7 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
             versioning=ParamVersioning.REUSE_UNCHANGED,
             # Archiving source material versions when the node is archived is still a TODO
             archiving=ParamArchiving.KEEP,
+            fk_field="source_material",
         ),
         # ADR-0031: collections (media + index) are live shared resources. Only frozen
         # per-bot versions (legacy data) are ever archived; never the live working collection.
@@ -142,6 +163,7 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
             display_name="media",
             versioning=ParamVersioning.LIVE_REFERENCE,
             archiving=ParamArchiving.ARCHIVE_VERSIONS_ONLY,
+            fk_field="collection",
         ),
         VersionedParamSpec(
             param_name="collection_index_ids",
@@ -149,6 +171,7 @@ _NODE_PARAM_SPECS: dict[str, tuple[VersionedParamSpec, ...]] = {
             display_name="Collection Indexes",
             versioning=ParamVersioning.LIVE_REFERENCE,
             archiving=ParamArchiving.ARCHIVE_VERSIONS_ONLY,
+            fk_field="collection_indexes",
             many=True,
         ),
     ),

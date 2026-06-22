@@ -30,4 +30,10 @@
       <a class="auth-link" href="{% url 'account_reset_password' %}">{% translate "Forgot password?" %}</a>
     </div>
   {% endif %}
+  {% if signup_enabled %}
+    <div class="auth-foot">
+      {% translate "Don't have an account?" %}
+      <a class="auth-link" href="{% url 'account_signup' %}">{% translate "Sign up." %}</a>
+    </div>
+  {% endif %}
 {% endblock auth_body %}

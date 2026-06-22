@@ -119,29 +119,29 @@ nav:
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
+      - AI-Assisted Development: developer_guides/ai_development.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
-      - Deployment: developer_guides/deployment.md
-      - AI-Assisted Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
+      - Deployment: developer_guides/deployment.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
       - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
     - Code Systems:
-      - Common Practises: developer_guides/common_practises.md
-      - Object Versioning: developer_guides/versioning.md
-      - Feature Flags: developer_guides/feature_flags.md
-      - WAF Management: developer_guides/waf_management.md
-      - Dynamic Filters: developer_guides/dynamic_filters.md
-      - Slack Channel Integration: developer_guides/slack_channel_integration.md
-      - Meta Cloud API Integration: developer_guides/meta_cloud_api_integration.md
-      - Index Managers: developer_guides/index_managers.md
-      - Notifications: developer_guides/notifications.md
+      - Common Practises: developer_guides/code_systems/common_practises.md
+      - Object Versioning: developer_guides/code_systems/versioning.md
+      - Feature Flags: developer_guides/code_systems/feature_flags.md
+      - WAF Management: developer_guides/code_systems/waf_management.md
+      - Dynamic Filters: developer_guides/code_systems/dynamic_filters.md
+      - Slack Channel Integration: developer_guides/code_systems/slack_channel_integration.md
+      - Meta Cloud API Integration: developer_guides/code_systems/meta_cloud_api_integration.md
+      - Index Managers: developer_guides/code_systems/index_managers.md
+      - Notifications: developer_guides/code_systems/notifications.md
     - Testing:
-      - Integration Testing: developer_guides/integration_testing.md
-      - developer_guides/twilio_testing.md
-      - Help Agent Evals: developer_guides/help_agent_evals.md
+      - Integration Testing: developer_guides/testing/integration_testing.md
+      - Testing Twilio Integration Locally: developer_guides/testing/twilio_testing.md
+      - Help Agent Evals: developer_guides/testing/help_agent_evals.md
   - Self-Hosting:
     - Overview: hosting/index.md
     - Configuration: hosting/configuration.md

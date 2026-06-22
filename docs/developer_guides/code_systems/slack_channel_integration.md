@@ -99,7 +99,7 @@ CSRF_TRUSTED_ORIGINS = [
 
 ## 10. Authorize in Slack
 
-- Slack may auto-select a workspace. If the correct workspace isn't shown: 
+- Slack may auto-select a workspace. If the correct workspace isn't shown:
 Open the link in **Incognito mode** or **clear cookies**.
 - You'll be redirected to your **ngrok URL** (not `localhost`).
 - Log back into Open Chat Studio if prompted.

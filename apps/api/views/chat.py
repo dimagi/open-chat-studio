@@ -29,7 +29,12 @@ from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
-from apps.channels.widget_versions import WIDGET_VERSION_HEADER, widget_sunset_headers
+from apps.channels.widget_versions import (
+    WIDGET_VERSION_HEADER,
+    is_widget_request,
+    mark_widget_request,
+    widget_sunset_headers,
+)
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
@@ -170,20 +175,40 @@ def chat_upload_file(request, session_id):
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
 
-def _issue_or_opt_out_session_token(request, session, use_session_token):
+def _issue_or_opt_out_session_token(request, session, use_session_token, session_data):
     """Issue a session token, or opt the session out of token enforcement.
 
-    `use_session_token` is the request preference (True/False/None). When None, a
-    pre-token widget (identified by the x-ocs-widget-version header) opts out;
-    everything else defaults to enforced. Returns the token, or None when opted out.
+    `use_session_token` is the request preference (True/False/None). A token-aware
+    widget always sends it explicitly (True), so an unset field from widget traffic
+    means a pre-token widget — opt out. Widget traffic is identified by the
+    x-ocs-widget-version header (sent by 0.5.1+) or, for older widgets that send no
+    header, by `session_data.source`. Everything else (direct API consumers) defaults
+    to enforced. Returns the token, or None when opted out.
     """
     if use_session_token is None:
-        use_session_token = "x-ocs-widget-version" not in request.headers
+        use_session_token = not is_widget_request(request, session_data)
     if use_session_token:
         return issue_session_token(session)
     session.session_token_required = False
     session.save(update_fields=["session_token_required"])
     return None
+
+
+def _resolve_experiment_channel(request, team, session_data):
+    """Return the ExperimentChannel for this request.
+
+    Embed-key auth resolves to the widget's own channel; for widget traffic we also
+    record the reported version (or a placeholder for pre-0.5.1 widgets that send no
+    header). Recording is gated on `is_widget_request` so a non-widget caller using an
+    embed key isn't tagged with a placeholder version. Everything else (direct API
+    consumers) falls back to the team API channel.
+    """
+    if not isinstance(request.auth, ExperimentChannel):
+        return ExperimentChannel.objects.get_team_api_channel(team)
+    channel = request.auth
+    if is_widget_request(request, session_data):
+        channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
+    return channel
 
 
 @extend_schema(
@@ -266,6 +291,11 @@ def chat_start_session(request):
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
 
+    # Pre-0.5.1 widgets send no version header; flag them (via session_data.source)
+    # so deprecated old widgets still receive RFC 8594 sunset headers.
+    if is_widget_request(request, session_data):
+        mark_widget_request(request)
+
     # Security check: Only authenticated users can specify version numbers
     if version_number is not None and not request.user.is_authenticated:
         return Response(
@@ -293,13 +323,7 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    # Check if authenticated via DRF EmbeddedWidgetAuthentication
-    if isinstance(request.auth, ExperimentChannel):
-        experiment_channel = request.auth
-        experiment_channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
-    else:
-        # legacy flow
-        experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
+    experiment_channel = _resolve_experiment_channel(request, team, session_data)
 
     if request.user.is_authenticated:
         user = request.user
@@ -350,7 +374,7 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
-    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"))
+    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"), session_data)
 
     # Prepare response data
     response_data = {

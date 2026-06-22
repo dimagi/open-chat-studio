@@ -237,12 +237,20 @@ class ExperimentChannel(BaseTeamModel):
     def record_widget_version(self, raw_version: str | None) -> None:
         """Persist the version reported by the widget (x-ocs-widget-version header).
 
+        Pre-0.5.1 widgets send no header; for those we record a placeholder so the
+        deprecation helpers (badge, team notifications) treat the channel as running
+        a known-old version rather than an unreported one. A present-but-unparseable
+        header is ignored as garbage, and the placeholder never overwrites a real
+        version already on record — a transient missing header must not downgrade it.
+
         Telemetry write: bypasses save() and auditing, throttled to one write
         per 24h unless the version changes.
         """
         version = widget_versions.clean_widget_version(raw_version)
         if version is None:
-            return
+            if raw_version is not None or self.widget_version is not None:
+                return
+            version = widget_versions.UNKNOWN_WIDGET_VERSION
         now = timezone.now()
         if self._widget_version_recently_recorded(version, now):
             return

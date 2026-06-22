@@ -1,3 +1,4 @@
+import re
 from unittest import mock
 from unittest.mock import Mock, patch
 
@@ -159,6 +160,46 @@ def test_tool_call_with_annotated_inputs(get_llm_service, provider, provider_mod
     output = graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
     assert output["messages"][-1] == "123"
     assert output["participant_data"] == {"test": ["123", "next"], "other": "xyz"}
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_current_datetime_kept_out_of_cached_system_prompt(get_llm_service, provider, provider_model):
+    """`{current_datetime}` is coarsened to a date in the (cached) system prompt and the precise
+    time is injected into the latest message turn instead. See issue #3625.
+    """
+    time_pattern = re.compile(r"\d{2}:\d{2}:\d{2}")
+
+    service = build_fake_llm_service(responses=["done"])
+    get_llm_service.return_value = service
+    nodes = [
+        start_node(),
+        llm_response_with_prompt_node(
+            str(provider.id),
+            str(provider_model.id),
+            prompt="Current time: {current_datetime}",
+            name="llm1",
+        ),
+        end_node(),
+    ]
+    pipeline = PipelineFactory.create()
+    session = ExperimentSessionFactory.create()
+    graph = create_runnable(pipeline, nodes)
+    state = PipelineState(messages=["hello"], experiment_session=session)
+    graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
+
+    messages = service.llm.get_call_messages()[0]
+    system_message = next(message for message in messages if message.type == "system")
+    human_message = messages[-1]
+    human_text = " ".join(
+        part["text"] for part in human_message.content if isinstance(part, dict) and part.get("type") == "text"
+    )
+
+    # System prompt is day-precision only -> stays cacheable within a day
+    assert not time_pattern.search(system_message.content)
+    # Precise, second-precision datetime lands on the newest (uncached) turn
+    assert "<current_datetime>" in human_text
+    assert time_pattern.search(human_text)
 
 
 @pytest.mark.django_db()

@@ -46,20 +46,33 @@ class PromptTemplateContext:
             "collection_index_summaries": self.get_collection_index_summaries,
         }
 
-    def get_context(self, variables: list[str]) -> dict:
+    def get_context(self, variables: list[str], coarse_datetime: bool = False) -> dict:
+        """Build the prompt context for the given variables.
+
+        Set ``coarse_datetime=True`` when rendering a cacheable system prompt: ``current_datetime``
+        then resolves to a day-precision date so the cached prefix stays stable within a day. The
+        precise time is injected into the latest message turn instead. See issue #3625.
+        """
         context = {}
         for key, factory in self.factories.items():
             # allow partial matches to support format specifiers
             if any(var.startswith(key) for var in variables):
-                if key not in self.context_cache:
-                    self.context_cache[key] = factory()
-                context[key] = self.context_cache[key]
+                if key == "current_datetime" and coarse_datetime:
+                    # Cached under its own key so it never collides with the full-precision value.
+                    context[key] = self._cached("current_date", self.get_current_date)
+                else:
+                    context[key] = self._cached(key, factory)
 
         # add any extra context provided
         for key, value in self.extra.items():
             if key not in context:
                 context[key] = SafeAccessWrapper(value)
         return context
+
+    def _cached(self, key, factory):
+        if key not in self.context_cache:
+            self.context_cache[key] = factory()
+        return self.context_cache[key]
 
     def get_source_material(self):
         if self.source_material_id is None:
@@ -102,6 +115,14 @@ class PromptTemplateContext:
 
     def get_current_datetime(self):
         return pretty_date(timezone.now(), self.participant_data_proxy.get_timezone())
+
+    def get_current_date(self):
+        """Day-precision, tz-aware date.
+
+        Used in place of the volatile second-precision datetime when rendering the cacheable
+        system prompt so the prompt prefix stays stable within a day. See issue #3625.
+        """
+        return pretty_date(timezone.now(), self.participant_data_proxy.get_timezone(), include_time=False)
 
 
 class SafeAccessWrapper(dict):

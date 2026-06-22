@@ -1,3 +1,4 @@
+import copy
 from collections import defaultdict
 from collections.abc import Iterator
 from functools import cached_property
@@ -19,7 +20,7 @@ from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
-from apps.utils.fields import SanitizedJSONField
+from apps.utils.fields import SanitizedJSONField, as_int
 from apps.utils.models import BaseModel
 
 
@@ -248,6 +249,31 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return pipeline_version
 
     @transaction.atomic()
+    def revert_to_version(self, version: "Pipeline") -> None:
+        """Reset this working pipeline to the state of ``version``.
+
+        Builds the working pipeline's flow data from ``version.flow_data`` (which carries each
+        node's params straight from the version's node rows), remaps params that reference
+        versioned records back to their working id — the inverse of the rewriting done during
+        publish, see ``apps.pipelines.versioning`` — and rebuilds the nodes via
+        ``update_nodes_from_data``. The versioned record for each param is read from the version
+        node's resource FK column.
+        """
+        # flow_data's nodes are built from the same node_set, so every flow_id resolves here.
+        version_nodes_by_flow_id = {node.flow_id: node for node in version.node_set.all()}
+        data = copy.deepcopy(version.flow_data)
+        for node in data.get("nodes", []):
+            node_data = node.get("data", {})
+            params = node_data.get("params", {})
+            version_node = version_nodes_by_flow_id[node["id"]]
+            for spec in get_versioned_param_specs(node_data.get("type")):
+                spec.revert_referenced_record(version_node, params)
+
+        self.data = data
+        self.save(update_fields=["data"])
+        self.update_nodes_from_data()
+
+    @transaction.atomic()
     def archive(self) -> bool:
         """
         Archive this record only when it is not still being referenced by other records. If this record is the working
@@ -327,6 +353,53 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     )
     is_archived = models.BooleanField(default=False)
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
+    llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    source_material = models.ForeignKey(
+        "experiments.SourceMaterial",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    collection = models.ForeignKey(
+        "documents.Collection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="media_nodes",
+    )
+    collection_indexes = models.ManyToManyField(
+        "documents.Collection",
+        blank=True,
+        related_name="index_nodes",
+    )
+    assistant = models.ForeignKey(
+        "assistants.OpenAiAssistant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    synthetic_voice = models.ForeignKey(
+        "experiments.SyntheticVoice",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
     objects = NodeObjectManager()
 
     def __str__(self):
@@ -368,12 +441,29 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         new_version.save()
         if self.params.get("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
+        new_version._sync_resource_fk_fields()
 
         return new_version
+
+    def set_params(self, params):
+        """Assign params, persist them, and re-derive the resource FK mirror.
+
+        Prefer this over assigning ``self.params`` and calling ``save()`` directly: it keeps
+        the FK columns (a derived mirror of the ids in params) from drifting away from params.
+        See ``_sync_resource_fk_fields``.
+        """
+        self.params = params
+        # Persist only params (not a full save of a possibly-stale instance) so concurrent
+        # writes to unrelated columns aren't clobbered. _sync_resource_fk_fields handles the
+        # derived FK columns.
+        self.save(update_fields=["params"])
+        self._sync_resource_fk_fields()
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
+
+        self._sync_resource_fk_fields()
 
         if self.type == LLMResponseWithPrompt.__name__:
             custom_action_infos = []
@@ -382,6 +472,47 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 
             set_custom_actions(self, custom_action_infos)
+
+    @classmethod
+    def resource_fk_fields(cls):
+        return [
+            field.name
+            for field in cls._meta.get_fields()
+            if isinstance(field, models.ForeignKey) and field.remote_field.on_delete is models.SET_NULL
+        ]
+
+    def _sync_resource_fk_fields(self):
+        """Populate FK/M2M fields from the params JSON.
+
+        The FK columns are a derived mirror of the IDs in params (non-int/boolean values
+        map to null). We don't pre-check that a scalar id still exists: a resource can't
+        be deleted while a working node references it — the delete guards check
+        pipeline-node usage (see apps.utils.deletion.get_related_objects /
+        get_related_pipelines_queryset) — so a live node's params never holds a dangling
+        id, and the DB FK constraint surfaces any that slip through. Versions may point at
+        a since-deleted resource, but they're never re-synced. The collection_indexes M2M
+        is set from a Collection queryset, which drops ids that no longer exist. Only
+        saves when a scalar FK changed.
+        """
+        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
+
+        params = self.params or {}
+        update_fields = []
+        for field_name in self.resource_fk_fields():
+            value = as_int(params.get(f"{field_name}_id"))
+            if getattr(self, f"{field_name}_id") != value:
+                setattr(self, f"{field_name}_id", value)
+                update_fields.append(f"{field_name}_id")
+        if update_fields:
+            self.save(update_fields=update_fields)
+
+        raw_index_ids = params.get("collection_index_ids") or []
+        if not isinstance(raw_index_ids, list | tuple | set):
+            raw_index_ids = [raw_index_ids]
+        # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
+        # than blowing up the id__in query.
+        index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
+        self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
     def archive(self):
         """

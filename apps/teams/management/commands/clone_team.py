@@ -404,8 +404,7 @@ class Command(BaseCommand):
             changed = True
 
         if changed:
-            node.params = params
-            node.save(update_fields=["params"])
+            node.set_params(params)
 
     def _clone_experiments(self, ctx: CloneContext):
         """Clone experiments and remap team + FKs."""
