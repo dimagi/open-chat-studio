@@ -381,10 +381,6 @@ class VersionsMixin:
 
     @property
     def version_details(self) -> VersionDetails:
-        # Intentionally NOT cached. `VersionDetails.compare()` mutates the returned object in place,
-        # so a cached (shared) instance lets independent comparisons on the same record clobber each
-        # other's results, and goes stale on mutation. Building it is cheap (the querysets it holds
-        # are lazy), so callers get a fresh instance each time.
         return self._get_version_details()
 
     def _get_version_details(self) -> VersionDetails:
