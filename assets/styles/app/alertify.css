@@ -1,117 +1,59 @@
-@utility alertify {
-  & .ajs-dialog {
-    @apply bg-base-100 shadow-lg rounded-lg;
-  }
+/*
+  Alertify dialog styling.
 
-  & .ajs-header {
-    @apply text-base-content font-bold bg-base-100 border-b border-base-300 rounded-t-lg;
-  }
+  These rules target the classes that alertifyjs adds to the DOM at runtime
+  (`.alertify`, `.ajs-*`). They are written as plain CSS rather than Tailwind
+  `@utility` declarations because the latter are only emitted when Tailwind's
+  content scanner finds the class name in source - which never happens for
+  runtime-injected classes. The daisyUI semantic colors (base-100,
+  base-content, base-300, info) are theme-aware, so dark mode resolves
+  automatically. Selectors match the vendor stylesheet's specificity so these
+  overrides win.
+*/
 
-  & .ajs-body {
-    @apply text-base-content;
-  }
-
-  & .ajs-body .ajs-content .ajs-input {
-    @apply w-full m-1 p-2 border border-base-300 rounded-sm block;
-  }
-
-  & .ajs-body .ajs-content p {
-    @apply m-0;
-  }
-
-  & .ajs-footer {
-    @apply bg-base-100 p-4 border-t border-base-300 rounded-b-lg;
-  }
-
-  & .ajs-footer .ajs-buttons .ajs-button {
-    @apply text-base-content font-bold uppercase bg-transparent border-none;
-  }
-
-  & .ajs-footer .ajs-buttons .ajs-button.ajs-ok {
-    @apply text-info;
-  }
+.alertify .ajs-dialog {
+  @apply bg-base-100 border border-base-300 shadow-2xl rounded-lg;
 }
 
-@utility ajs-dialog {
-  .alertify & {
-    @apply bg-base-100 shadow-lg rounded-lg;
-  }
+.alertify .ajs-header {
+  @apply text-base-content font-bold bg-base-100 border-b border-base-300 rounded-t-lg;
 }
 
-@utility ajs-header {
-  .alertify & {
-    @apply text-base-content font-bold bg-base-100 border-b border-base-300 rounded-t-lg;
-  }
+.alertify .ajs-body {
+  @apply text-base-content;
 }
 
-@utility ajs-body {
-  .alertify & {
-    @apply text-base-content;
-  }
-
-  .alertify & .ajs-content .ajs-input {
-    @apply w-full m-1 p-2 border border-base-300 rounded-sm block;
-  }
-
-  .alertify & .ajs-content p {
-    @apply m-0;
-  }
+.alertify .ajs-body .ajs-content .ajs-input {
+  @apply w-full m-1 p-2 border border-base-300 rounded-sm block;
 }
 
-@utility ajs-content {
-  .alertify .ajs-body & .ajs-input {
-    @apply w-full m-1 p-2 border border-base-300 rounded-sm block;
-  }
-
-  .alertify .ajs-body & p {
-    @apply m-0;
-  }
+.alertify .ajs-body .ajs-content p {
+  @apply m-0;
 }
 
-@utility ajs-input {
-  .alertify .ajs-body .ajs-content & {
-    @apply w-full m-1 p-2 border border-base-300 rounded-sm block;
-  }
+.alertify .ajs-footer {
+  @apply bg-base-100 p-4 border-t border-base-300 rounded-b-lg;
 }
 
-@utility ajs-footer {
-  .alertify & {
-    @apply bg-base-100 p-4 border-t border-base-300 rounded-b-lg;
-  }
-
-  .alertify & .ajs-buttons .ajs-button {
-    @apply text-base-content font-bold uppercase bg-transparent border-none;
-  }
-
-  .alertify & .ajs-buttons .ajs-button.ajs-ok {
-    @apply text-info;
-  }
+.alertify .ajs-footer .ajs-buttons .ajs-button {
+  @apply text-base-content font-bold uppercase bg-transparent border-none;
 }
 
-@utility ajs-buttons {
-  .alertify .ajs-footer & .ajs-button {
-    @apply text-base-content font-bold uppercase bg-transparent border-none;
-  }
-
-  .alertify .ajs-footer & .ajs-button.ajs-ok {
-    @apply text-info;
-  }
+.alertify .ajs-footer .ajs-buttons .ajs-button.ajs-ok {
+  @apply text-info;
 }
 
-@utility ajs-button {
-  .alertify .ajs-footer .ajs-buttons & {
-    @apply text-base-content font-bold uppercase bg-transparent border-none;
-  }
-
-  .alertify .ajs-footer .ajs-buttons &.ajs-ok {
-    @apply text-info;
-  }
+/* The close/maximize icons are dark PNGs; invert them in dark mode so they
+   remain visible against the dark header. */
+[data-theme="dark"] .alertify .ajs-commands button {
+  filter: invert(1);
 }
 
-@utility ajs-ok {
-  .alertify .ajs-footer .ajs-buttons &.ajs-button {
-    @apply text-info;
-  }
+/* The default dimmer is a light grey at 0.5 opacity, which barely darkens an
+   already-dark page. Use a deeper black overlay so the dialog stands out. */
+[data-theme="dark"] .alertify .ajs-dimmer {
+  background-color: #000;
+  opacity: 0.6;
 }
 
 @utility alertify-notifier {

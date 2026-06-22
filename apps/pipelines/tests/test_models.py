@@ -12,6 +12,7 @@ from apps.pipelines.models import Node
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
+    assistant_node,
     boolean_node,
     create_pipeline_model,
     create_runnable,
@@ -484,6 +485,57 @@ class TestUpdateNodesFromData:
         pipeline.create_new_version()
         assert re_added.versions.count() == 1
         assert original.versions.count() == 1
+
+
+@pytest.mark.django_db()
+class TestPipelineRevert:
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_revert_remaps_versioned_params_back_to_working_records(self):
+        """Reverting rebuilds the working pipeline from a version's data, remapping params that
+        reference versioned records (assistant, source material) back to their working ids."""
+        assistant = OpenAiAssistantFactory.create()
+        source_material = SourceMaterialFactory.create(team=assistant.team)
+        provider = LlmProviderFactory.create(team=assistant.team)
+        provider_model = LlmProviderModelFactory.create(team=assistant.team)
+
+        start, asst, llm, end = (
+            start_node(),
+            assistant_node(str(assistant.id)),
+            llm_response_with_prompt_node(
+                str(provider.id), str(provider_model.id), source_material_id=str(source_material.id)
+            ),
+            end_node(),
+        )
+        pipeline = create_pipeline_model([start, asst, llm, end])
+        pipeline.save(update_fields=["data"])
+        version = pipeline.create_new_version()
+
+        # On publish, the version's node params point at the versioned records.
+        version_asst = version.node_set.get(type=AssistantNode.__name__)
+        assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
+        version_llm = version.node_set.get(type=LLMResponseWithPrompt.__name__)
+        assert version_llm.params["source_material_id"] == str(source_material.latest_version.id)
+
+        # Edit the working pipeline so revert has something to undo.
+        other_assistant = OpenAiAssistantFactory.create(team=assistant.team)
+        asst["params"]["assistant_id"] = str(other_assistant.id)
+        create_pipeline_model([start, asst, llm, end], pipeline=pipeline)
+
+        pipeline.revert_to_version(version)
+
+        working_asst = pipeline.node_set.get(type=AssistantNode.__name__)
+        working_llm = pipeline.node_set.get(type=LLMResponseWithPrompt.__name__)
+        # Params point at the working records, not the versioned ones from the snapshot.
+        assert working_asst.params["assistant_id"] == str(assistant.id)
+        assert working_llm.params["source_material_id"] == str(source_material.id)
+        # The mirrored resource FK columns are re-synced to the working records too.
+        assert working_asst.assistant_id == assistant.id
+        assert working_llm.source_material_id == source_material.id
+
+        # The version's nodes are untouched by the revert.
+        version_asst.refresh_from_db()
+        assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
+        assert version_asst.assistant_id == assistant.latest_version.id
 
 
 @pytest.mark.django_db()

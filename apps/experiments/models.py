@@ -38,7 +38,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.events.versioning import sync_triggers
+from apps.events.versioning import TriggerSyncMode, sync_triggers
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -954,10 +954,46 @@ class Experiment(BaseTeamModel, VersionsMixin):
             # nothing to do for copy - just reference the same object in the new copy
             self._copy_attr_to_new_version("consent_form", new_version)
 
-        sync_triggers(self, new_version, is_copy=is_copy)
+        # Version the pipeline before the triggers so a trigger referencing this experiment's own
+        # pipeline pins to the version just created here rather than spawning a redundant one.
         self._copy_pipeline_to_new_version(new_version, is_copy)
+        sync_triggers(self, new_version, mode=TriggerSyncMode.COPY if is_copy else TriggerSyncMode.PUBLISH)
 
         return new_version
+
+    @transaction.atomic()
+    def revert_to_version(self, version: Experiment) -> None:
+        """Revert this working experiment to the content of ``version``.
+
+        Versioned content fields are copied from the version onto the working row and the working
+        pipeline is reset to the version's pipeline (see ``Pipeline.revert_to_version``). The
+        operation is non-destructive: no version rows are modified and ``is_default_version`` is
+        left untouched.
+        """
+        if not self.is_working_version:
+            raise ValueError("Can only revert the working version of an experiment")
+        if version.get_working_version_id() != self.id:
+            raise ValueError("Can only revert to a version of this experiment")
+
+        # `pipeline` and `consent_form` are versioned content but need special handling: the working
+        # pipeline is reset in place rather than re-pointed, and the consent form is remapped to its
+        # working version rather than the version's frozen copy.
+        for field in self.VERSIONED_CONTENT_FIELDS - {"pipeline", "consent_form"}:
+            setattr(self, field, getattr(version, field))
+
+        self.consent_form = version.consent_form.get_working_version() if version.consent_form else None
+        self.save()
+
+        self._revert_pipeline_to_version(version)
+        sync_triggers(version, self, mode=TriggerSyncMode.REVERT)
+
+    def _revert_pipeline_to_version(self, version: Experiment) -> None:
+        """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
+        if not version.pipeline:
+            return
+        if not self.pipeline:
+            raise ValueError("Cannot revert pipeline: working experiment has no pipeline")
+        self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
