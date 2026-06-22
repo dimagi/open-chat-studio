@@ -11,7 +11,7 @@ from apps.assistants.models import OpenAiAssistant
 from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
-from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm
+from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm, TeamPublicKeyForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
 from apps.teams.tasks import delete_team_async
@@ -22,6 +22,20 @@ from apps.web.forms import set_form_fields_disabled
 def get_related_assistants(team):
     related_assistants = OpenAiAssistant.objects.filter(team=team)
     return [Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in related_assistants]
+
+
+def _manage_team_context(request, team, *, team_form=None, public_key_form=None):
+    return {
+        "team": team,
+        "active_tab": "manage-team",
+        "page_title": _("My Team | {team}").format(team=team),
+        "team_form": team_form or TeamChangeForm(instance=team),
+        "invitation_form": InvitationForm(team=team),
+        "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
+        "related_assistants": get_related_assistants(team),
+        "notify_recipients_form": NotifyRecipientsForm,
+        "public_key_form": public_key_form or TeamPublicKeyForm(instance=team),
+    }
 
 
 @login_and_team_required
@@ -44,20 +58,7 @@ def manage_team(request, team_slug):
     if not is_team_admin:
         set_form_fields_disabled(team_form, True)
 
-    return render(
-        request,
-        "teams/manage_team.html",
-        {
-            "team": team,
-            "active_tab": "manage-team",
-            "page_title": _("My Team | {team}").format(team=team),
-            "team_form": team_form,
-            "invitation_form": InvitationForm(team=request.team),
-            "pending_invitations": Invitation.objects.filter(team=team, is_accepted=False).order_by("-created_at"),
-            "related_assistants": get_related_assistants(team),
-            "notify_recipients_form": NotifyRecipientsForm,
-        },
-    )
+    return render(request, "teams/manage_team.html", _manage_team_context(request, team, team_form=team_form))
 
 
 @login_required
@@ -137,6 +138,22 @@ def send_invitation_view(request, team_slug):
                 "-created_at"
             ),
         },
+    )
+
+
+@require_POST
+@permission_required("teams.change_team", raise_exception=True)
+def set_public_key(request, team_slug):
+    form = TeamPublicKeyForm(request.POST, instance=request.team)
+    if form.is_valid():
+        form.save()
+        messages.success(request, _("Public key saved!"))
+    else:
+        messages.error(request, _("Could not save the public key."))
+    return render(
+        request,
+        "teams/manage_team.html",
+        _manage_team_context(request, request.team, public_key_form=form),
     )
 
 
