@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -73,7 +73,7 @@ class TestRecordCostsShortCircuits:
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.cost_tracking_enabled = False
         tracer.metrics_collector = self._collector_with_events()
-        tracer.trace_record = object()
+        tracer.trace_record = Mock(spec=Trace)
         with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
@@ -82,7 +82,7 @@ class TestRecordCostsShortCircuits:
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.cost_tracking_enabled = True
         tracer.metrics_collector = None
-        tracer.trace_record = object()
+        tracer.trace_record = Mock(spec=Trace)
         with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
@@ -101,7 +101,7 @@ class TestRecordCostsShortCircuits:
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.cost_tracking_enabled = True
         tracer.metrics_collector = MetricsCollector(start_time=0.0)
-        tracer.trace_record = object()  # only needs to be truthy here
+        tracer.trace_record = Mock(spec=Trace)
         with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
