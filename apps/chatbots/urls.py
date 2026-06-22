@@ -18,6 +18,11 @@ urlpatterns = [
         name="version-details",
     ),
     path(
+        "<int:experiment_id>/versions/revert/<int:version_number>/confirm/",
+        views.chatbot_revert_confirm,
+        name="revert-version-confirm",
+    ),
+    path(
         "<int:experiment_id>/versions/revert/<int:version_number>/",
         views.revert_chatbot_version,
         name="revert-version",

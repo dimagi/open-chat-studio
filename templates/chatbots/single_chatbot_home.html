@@ -1,5 +1,16 @@
 {% extends "web/app/app_base.html" %}
 {% load django_tables2 form_tags static team_tags waffle_tags %}
+
+{% block page_head %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/editors.css' %}">
+{% endblock page_head %}
+
+{% block page_js %}
+  {{ block.super }}
+  <script src="{% static 'js/editors-bundle.js' %}"></script>
+{% endblock page_js %}
+
 {% block breadcrumbs %}
 
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
