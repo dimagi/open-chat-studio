@@ -14,6 +14,7 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
+from apps.teams.models import Flag, Team
 from apps.trace.models import Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
@@ -187,13 +188,10 @@ class OCSTracer(Tracer):
 
     def _evaluate_cost_tracking_flag(self) -> bool:
         """Look up the team-scoped `flag_ai_cost_monitoring` flag once per
-        trace entry. `Team(pk=...)` is a Django shortcut: `is_active_for_team`
-        only reads `.pk`, so we avoid an unnecessary DB fetch of the Team row.
+        trace entry. `Flag.get` is the cached classmethod; `Team(pk=...)`
+        avoids a DB fetch since `is_active_for_team` only reads `.pk`.
         """
-        from apps.teams.models import Flag, Team  # noqa: PLC0415 - lazy: avoid circular at import time
-
-        flag = Flag.objects.filter(name="flag_ai_cost_monitoring").first()
-        return bool(flag and flag.is_active_for_team(Team(pk=self.team_id)))
+        return Flag.get("flag_ai_cost_monitoring").is_active_for_team(Team(pk=self.team_id))
 
     def _fire_error_notification_if_needed(self) -> None:
         """Fire notification if a span declared one and the trace errored."""

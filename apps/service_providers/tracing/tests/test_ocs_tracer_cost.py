@@ -6,7 +6,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from django.core.cache import cache
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
@@ -17,18 +16,6 @@ from apps.service_providers.tracing.ocs_tracer import OCSTracer
 from apps.teams.models import Flag
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.experiment import ExperimentSessionFactory
-
-
-@pytest.fixture(autouse=True)
-def _clear_waffle_cache():
-    """Waffle caches the (flag_name -> team_ids) set in Redis. The cache
-    isn't transactional and persists across tests, so stale state from
-    a prior test that read the flag with no teams attached would mask the
-    team membership added here. Clear before and after each test.
-    """
-    cache.clear()
-    yield
-    cache.clear()
 
 
 def _llm_result(input_tokens: int, output_tokens: int, model: str = "test-model") -> LLMResult:
@@ -48,10 +35,12 @@ def _llm_result(input_tokens: int, output_tokens: int, model: str = "test-model"
 def enable_team_flag(name: str, team):
     flag, _ = Flag.objects.get_or_create(name=name)
     flag.teams.add(team)
+    flag.flush()
     try:
         yield flag
     finally:
         flag.teams.remove(team)
+        flag.flush()
 
 
 def _seed_rule(provider: str, model: str, kind: ServiceKind, unit_price: str) -> PricingRule:
