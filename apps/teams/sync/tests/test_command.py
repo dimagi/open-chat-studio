@@ -86,7 +86,7 @@ def _scenario(public_key):
 
 def test_schema_checksum_mismatch_aborts(tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
-    manifest["schema_checksum"] = manifest["schema_checksum"] + 1
+    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
     store = FKTranslationStore(tmp_path / "t.sqlite")
     with pytest.raises(CommandError, match="schema"):
         run_sync(FakeClient(manifest, rows), store, keypair[1])
@@ -94,7 +94,7 @@ def test_schema_checksum_mismatch_aborts(tmp_path, keypair):
 
 def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
-    manifest["schema_checksum"] = manifest["schema_checksum"] + 1
+    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
     store = FKTranslationStore(tmp_path / "t.sqlite")
 
     run_sync(FakeClient(manifest, rows), store, keypair[1], enforce_schema=False)
