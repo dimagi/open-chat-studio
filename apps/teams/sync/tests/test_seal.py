@@ -23,17 +23,17 @@ def keypair():
     return public_pem, private_pem
 
 
-def test_seal_unseal_round_trips_a_dict(keypair):
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param({"api_key": "sk-secret", "nested": {"a": 1}}, id="dict"),
+        pytest.param("base64-key==", id="string"),
+    ],
+)
+def test_seal_unseal_round_trips(keypair, value):
     public_pem, private_pem = keypair
-    value = {"api_key": "sk-secret", "nested": {"a": 1}}
     token = seal_mod.seal(value, seal_mod.load_public_key(public_pem))
     assert seal_mod.unseal(token, seal_mod.load_private_key(private_pem)) == value
-
-
-def test_seal_unseal_round_trips_a_string(keypair):
-    public_pem, private_pem = keypair
-    token = seal_mod.seal("base64-key==", seal_mod.load_public_key(public_pem))
-    assert seal_mod.unseal(token, seal_mod.load_private_key(private_pem)) == "base64-key=="
 
 
 def test_seal_handles_value_larger_than_rsa_block(keypair):
