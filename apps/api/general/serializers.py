@@ -29,7 +29,7 @@ def _group_names(self, instance):
 
 
 # Per-model SerializerMethodFields for values that aren't a plain field dump.
-_METHOD_FIELDS: dict[str, dict] = {
+_FIELD_RESOLVERS: dict[str, dict] = {
     "teams.team": {"feature_flags": _feature_flags},
     "teams.membership": {"groups": _group_names},
 }
@@ -47,7 +47,7 @@ def build_sync_serializer(model):
         "Meta": type("Meta", (), meta_attrs),
         "secret_fields": SECRET_REGISTRY.get(label, []),
     }
-    for name, method in _METHOD_FIELDS.get(label, {}).items():
+    for name, method in _FIELD_RESOLVERS.get(label, {}).items():
         attrs[name] = serializers.SerializerMethodField()
         attrs[f"get_{name}"] = method
 
