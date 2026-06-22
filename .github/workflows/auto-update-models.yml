@@ -1,9 +1,15 @@
 name: Auto Update LLM Models
 
 # Daily check against llm-stats.com (via the zeroeval Stats API) for newly
-# released LLM models from providers we use in OCS. When a candidate is found,
-# Claude Code is invoked to add the model following docs/developer_guides/managing_models.md
-# and open a PR.
+# released LLM models from providers we use in OCS.
+#
+# Job 1 runs scripts/fetch_model_updates.py, which fetches candidates, dedups
+# them against the already-registered models, and resolves per-1K-token pricing
+# (llm-stats primary, LiteLLM fallback) — all unit-tested. It emits
+# candidate_models.json. Job 2 invokes Claude Code to make the judgement calls
+# (which models/providers to register, parameters class) following
+# docs/developer_guides/managing_models.md, paste the generated pricing into
+# llm_pricing.json, and open a PR.
 #
 # Model metadata is sourced from https://llm-stats.com (via api.zeroeval.com).
 
@@ -33,96 +39,35 @@ jobs:
       model_count: ${{ steps.fetch.outputs.model_count }}
       model_ids: ${{ steps.fetch.outputs.model_ids }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
-      - name: Fetch model updates from llm-stats.com
+      - name: Fetch, dedup and price model updates
         id: fetch
         env:
           LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
-          DAYS: ${{ inputs.days || '1' }}
         run: |
-          python3 << 'PY'
-          import json
-          import os
-          import sys
-          import urllib.error
-          import urllib.request
+          # The script fetches candidates from the zeroeval Stats API, dedups
+          # against models already in default_models.py / llm_pricing.json, and
+          # resolves per-1K-token pricing. It writes candidate_models.json and
+          # appends has_models / model_count / model_ids to $GITHUB_OUTPUT.
+          # stdlib-only — no dependency install needed.
+          python3 scripts/fetch_model_updates.py \
+            --bearer-token "$LLM_STATS_BEARER_TOKEN" \
+            --days "${{ inputs.days || '1' }}" \
+            --output candidate_models.json
 
-          BEARER = os.environ["LLM_STATS_BEARER_TOKEN"]
-          DAYS = os.environ.get("DAYS", "1")
-
-          # Organizations on llm-stats.com that map to OCS default_models providers.
-          # Strict match — other orgs (xai, mistral, qwen, moonshotai, etc.) are ignored.
-          OCS_ORGS = {"openai", "anthropic", "google", "deepseek", "perplexity"}
-
-          def api_get(url: str) -> dict:
-              req = urllib.request.Request(
-                  url,
-                  headers={
-                      "Authorization": f"Bearer {BEARER}",
-                      "User-Agent": "ocs-auto-models-workflow/1.0",
-                      "Accept": "application/json",
-                  },
-              )
-              with urllib.request.urlopen(req, timeout=30) as resp:
-                  return json.load(resp)
-
-          updates_url = f"https://api.zeroeval.com/stats/v1/updates?days={DAYS}&limit=30"
-          updates = api_get(updates_url)
-
-          matched = [
-              m for m in updates.get("models", [])
-              if m.get("organization", {}).get("id") in OCS_ORGS
-              and m.get("model_type") == "llm"
-          ]
-
-          # Fields on the detail response that are noisy and not useful for adding
-          # a model to default_models.py — drop them to keep the JSON lean.
-          NOISY_DETAIL_FIELDS = {"scores", "top_scores", "providers"}
-
-          enriched = []
-          for m in matched:
-              model_id = m["id"]
-              try:
-                  details = api_get(f"https://api.zeroeval.com/stats/v1/models/{model_id}")
-                  for field in NOISY_DETAIL_FIELDS:
-                      details.pop(field, None)
-                  m["details"] = details
-                  # Prefer context_window from detail endpoint when present
-                  if details.get("context_window") and not m.get("context_window"):
-                      m["context_window"] = details["context_window"]
-              except urllib.error.HTTPError as e:
-                  m["details_error"] = f"HTTP {e.code}: {e.reason}"
-              except Exception as e:
-                  m["details_error"] = str(e)
-              enriched.append(m)
-
-          with open("matched_models.json", "w") as f:
-              json.dump(enriched, f, indent=2)
-
-          model_ids = ",".join(m["id"] for m in enriched)
-          gh_out = os.environ["GITHUB_OUTPUT"]
-          with open(gh_out, "a") as f:
-              f.write(f"has_models={'true' if enriched else 'false'}\n")
-              f.write(f"model_count={len(enriched)}\n")
-              f.write(f"model_ids={model_ids}\n")
-
-          print(f"Found {len(enriched)} candidate model(s) from OCS providers")
-          for m in enriched:
-              org = m.get("organization", {}).get("id", "?")
-              ctx = m.get("context_window") or "unknown"
-              print(f"  - [{org}] {m['id']} (context_window={ctx})")
-          PY
-
-      - name: Upload matched models payload
+      - name: Upload candidate models payload
         if: steps.fetch.outputs.has_models == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: matched-models
-          path: matched_models.json
+          name: candidate-models
+          path: candidate_models.json
           retention-days: 7
 
   update-models:
@@ -166,10 +111,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download matched models payload
+      - name: Download candidate models payload
         uses: actions/download-artifact@v8
         with:
-          name: matched-models
+          name: candidate-models
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -215,85 +160,86 @@ jobs:
           prompt: |
             You are adding newly released LLM models to Open Chat Studio.
 
-            ## Source
-            Model metadata was fetched from the llm-stats.com Stats API (api.zeroeval.com).
-            The matched payload is saved at `./matched_models.json` in the working
-            directory. It contains models released in the last ${{ inputs.days || '1' }}
-            day(s) whose `organization.id` matches one of OCS's providers (openai,
-            anthropic, google, deepseek, perplexity).
+            ## Input
+            `scripts/fetch_model_updates.py` has already fetched candidates from
+            llm-stats.com, removed models already registered in OCS, and resolved
+            per-1K-token pricing. Its output is at `./candidate_models.json`. Do
+            NOT re-fetch, re-dedup, or re-derive pricing — that work is done and
+            unit-tested.
 
-            ${{ needs.fetch-updates.outputs.model_count }} candidate model(s) were
-            found: ${{ needs.fetch-updates.outputs.model_ids }}
+            The payload covers the last ${{ inputs.days || '1' }} day(s). Key fields:
+            - `new_models[]` — candidates to consider. Each has: `id`, `org`,
+              `context_window`, `ocs_providers` (the default OCS provider mapping),
+              `already_registered_providers`, `already_priced_providers`,
+              `source_url`, `sources`, `details_error`, and `pricing`.
+            - `pricing.has_pricing` / `pricing.rates` (per-1K-token) /
+              `pricing.source` (`llm_stats` or `litellm`) /
+              `pricing.llm_pricing_entries` — ready-to-paste `llm_pricing.json`
+              entries, one per provider that still needs pricing.
+            - `pricing_entries` — flat list of all generated pricing entries.
+            - `unpriced_models[]` — models the script could not price.
 
-            ## Your task
-            1. Read `matched_models.json` and `apps/service_providers/llm_service/default_models.py`.
-            2. For each candidate, decide whether it should be added:
-               - Skip any model already present in `DEFAULT_LLM_PROVIDER_MODELS` or
-                 listed in `DELETED_MODELS`.
-               - Skip models that don't make sense for OCS (e.g., embedding-only
-                 models, image-only models, deprecated preview models that have
-                 already been superseded).
-               - Map organizations to OCS providers using these rules:
-                 * `openai` → add to both `openai` and `azure` provider lists
-                   when the model is generally available in both. If unsure, add
-                   to `openai` only.
-                 * `anthropic` → `anthropic`
-                 * `google` → add to both `google` and `google_vertex_ai`
-                 * `deepseek` → `deepseek`
-                 * `perplexity` → `perplexity`
-            3. Follow `docs/developer_guides/managing_models.md` exactly when adding
-               a model:
-               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using the
-                 `context_window` from the payload as `token_limit`.
-               - Pick an existing parameters class that matches the model family.
-                 Only create a new parameters class if no existing one fits.
+            ${{ needs.fetch-updates.outputs.model_count }} new model(s):
+            ${{ needs.fetch-updates.outputs.model_ids }}
+
+            ## Your task (judgement + applying the generated output)
+            1. Read `candidate_models.json` and
+               `apps/service_providers/llm_service/default_models.py`.
+            2. For each model in `new_models`, decide whether to add it:
+               - Skip models that don't make sense for OCS (embedding-only,
+                 image-only, or preview models already superseded).
+               - Use `ocs_providers` as the default provider mapping. Apply
+                 judgement: for an `openai` model keep `azure` only if it is
+                 generally available on Azure OpenAI — otherwise drop `azure` and
+                 add to `openai` only. Skip any provider already in
+                 `already_registered_providers`.
+            3. Follow `docs/developer_guides/managing_models.md` exactly when adding:
+               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using `context_window`
+                 as `token_limit`.
+               - Pick an existing parameters class that matches the model family;
+                 only create a new one if none fits.
                - Create a new Django migration that calls `llm_model_migration()`.
                - Strip `llm_model_migration()` (and any `notify_deprecated_models` /
                  `remove_deprecated_models` data migrations) from earlier migrations
                  in `apps/service_providers/migrations/` so they only run once.
-            4. If a candidate's `context_window` (or other info you need, e.g.
-               parameter ranges, modality, deprecation hints) is missing from the
-               top-level payload, consult `details.sources` in the model detail
-               response — it typically has keys like `api_ref`, `paper`, `weights`,
-               `repo` pointing to the provider's official docs. Use the WebFetch
-               tool to read those URLs if you need more context to make a confident
-               decision. Also check `details.url` (the llm-stats.com page).
-               If a candidate has a `details_error` field set, the detail fetch
-               failed — still try to add the model using only the top-level fields
-               and any knowledge you have about the model family.
-            5. If after consulting sources you STILL cannot determine `context_window`
-               or other essential info, you should STILL add the model but:
-               - Use a conservative placeholder token_limit (e.g. 128000) and add a
-                 comment on that line: `# TODO: verify token_limit — context_window
-                 not available from source`
-               - Flag the model in the PR description under a `## Needs follow-up`
-                 section, listing each model with the specific info that was
-                 missing (token_limit, parameters class choice, etc.) and the
-                 sources you already checked.
-            6. Run linters and tests on the changed files:
-               - `uv run ruff check apps/service_providers/ --fix`
-               - `uv run ruff format apps/service_providers/`
+            4. Apply pricing: for each model you add, append its
+               `pricing.llm_pricing_entries` to
+               `apps/cost_tracking/seed_data/llm_pricing.json`, keeping only the
+               providers you actually registered. Trust the unit conversion but
+               sanity-check the magnitudes. Do NOT invent prices — any model in
+               `unpriced_models` (or a provider with no generated entry) goes under
+               `## Needs follow-up` instead. After editing, confirm the file is
+               still valid JSON.
+            5. If `context_window` or other essential info is missing, consult
+               `sources` / `source_url` with WebFetch. If a model has a
+               `details_error`, the detail fetch failed — use the top-level fields
+               and what you know about the family. If you still can't determine
+               `token_limit`, add the model with a conservative placeholder
+               (e.g. 128000) and a `# TODO: verify token_limit` comment, and flag
+               it under `## Needs follow-up`.
+            6. Lint and test the changed files:
+               - `uv run ruff check apps/ --fix`
+               - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
                - `uv run pytest apps/service_providers/tests/test_default_models.py -v`
-               If the migration touched other files, lint/test those too.
+               Lint/test any other files your migration touched.
             7. Commit the changes with a descriptive message.
-            8. Push the branch and open a PR against `main`. Use the repo's PR
-               template (`.github/pull_request_template.md`) and fill it in.
+            8. Push the branch and open a PR against `main` using the repo's PR
+               template (`.github/pull_request_template.md`).
                - PR title: `Auto: add new LLM models from llm-stats.com (YYYY-MM-DD)`
-                 (use today's UTC date).
+                 (today's UTC date).
                - The PR description MUST:
-                 * List each added model and its source URL from the payload (the
-                   `url` field — typically `https://llm-stats.com/models/<id>`).
+                 * List each added model with its `source_url`.
                  * Include the line: `Model metadata sourced from
                    [llm-stats.com](https://llm-stats.com) via the zeroeval Stats
                    API.`
-                 * Include a `## Needs follow-up` section listing any models where
-                   you couldn't gather enough info, with what's missing.
+                 * Include a `## Needs follow-up` section for any unpriced models or
+                   missing info.
                  * Check the "The migrations are backwards compatible" box —
                    `llm_model_migration()` is additive (only seeds new rows) so
                    these migrations are inherently backwards-compatible.
             9. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            10. If after dedup there is nothing to add, comment-only outcome: do NOT
-                open an empty PR — instead print a short summary to stdout and exit.
+            10. If after review there is nothing to add, do NOT open an empty PR —
+                print a short summary to stdout and exit.
             11. ALWAYS write a decision report to `./decision_report.md` before
                 exiting, regardless of outcome (PR opened, nothing to add, or
                 partial). Use this exact structure:
@@ -311,21 +257,21 @@ jobs:
                 ### `<model-id>` (org: `<org>`)
                 - **Verdict:** Added | Skipped | Needs follow-up
                 - **Mapped providers:** <e.g. openai, azure>  (if added)
+                - **Pricing:** <source: llm_stats | litellm | unpriced>
                 - **Reason:** <one-sentence rationale — why added/skipped, or
                   what info was missing>
-                - **Source:** <llm-stats.com URL from payload>
+                - **Source:** <source_url>
 
-                <repeat for every candidate in matched_models.json>
+                <repeat for every model in new_models>
 
                 ## Notes
                 <any other context worth surfacing — sources consulted, edge
                 cases, decisions deferred to follow-up, etc.>
                 ```
 
-                Every candidate from `matched_models.json` MUST appear in the
-                "Per-model decisions" section with an explicit verdict and
-                reason — including skips and dedup matches. This file is the
-                audit trail for the run.
+                Every model in `new_models` MUST appear in the "Per-model
+                decisions" section with an explicit verdict and reason. This
+                file is the audit trail for the run.
 
             Branch: ${{ steps.branch.outputs.branch_name }} (already created and
             checked out).
