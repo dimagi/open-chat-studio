@@ -1,6 +1,8 @@
 """The single maintenance surface for the team data sync: which models to pull, in what order,
 and the per-model config (secrets, team scoping, global matching) the endpoint and importer need."""
 
+import hashlib
+import json
 from dataclasses import dataclass
 
 from django.apps import apps
@@ -109,12 +111,14 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     return model.objects.filter(team_q)
 
 
-def schema_checksum() -> int:
+def schema_checksum() -> str:
     """Hash of the set of applied migration names; unaffected by apply order."""
     from django.db import connection  # noqa: PLC0415
 
-    names = MigrationRecorder(connection).migration_qs.order_by("name").values_list("name", flat=True)
-    return hash(frozenset(names))
+    names = [n for n in MigrationRecorder(connection).migration_qs.order_by("name").values_list("name", flat=True)]
+    data = json.dumps(names)
+    hash_object = hashlib.sha256(data.encode("utf-8"))
+    return hash_object.hexdigest()
 
 
 def build_manifest() -> dict:
