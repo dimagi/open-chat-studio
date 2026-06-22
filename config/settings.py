@@ -461,6 +461,14 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
     ],
+    "PREPROCESSING_HOOKS": [
+        "apps.api.schema.exclude_legacy_participants_path",
+    ],
+    # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
+    # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
+    "ENUM_NAME_OVERRIDES": {
+        "ExperimentSessionStatusEnum": "apps.experiments.models.SessionStatus",
+    },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },

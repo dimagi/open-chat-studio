@@ -6,6 +6,18 @@ from rest_framework.permissions import SAFE_METHODS
 from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
 
 
+def exclude_legacy_participants_path(endpoints):
+    """Drop the trailing-slash ``/api/participants/`` alias from the schema.
+
+    ``/api/participants`` (no slash) is canonical — it's the only one referenced via ``reverse()``;
+    the slash variant is a backwards-compat alias kept only so existing callers don't break. Both
+    routes share a view, so documenting both produces duplicate operationIds (``list_participants``
+    / ``list_participants_2`` etc.). This is a preprocessing hook (signature: ``endpoints`` ->
+    filtered ``endpoints``).
+    """
+    return [endpoint for endpoint in endpoints if endpoint[0] != "/api/participants/"]
+
+
 def prune_unused_tags(result, generator, request, public, **kwargs):
     """Drop top-level tag definitions not referenced by any operation.
 

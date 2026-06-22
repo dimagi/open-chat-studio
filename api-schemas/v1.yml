@@ -577,148 +577,6 @@ paths:
                       connect_channel_id: c64a1f7d-2f9b-4c3a-9e57-0f0c9a3a1b2d
                   summary: Response including connect channel IDs
           description: ''
-  /api/participants/:
-    get:
-      operationId: list_participants_2
-      description: 'GET: list participants for the team. POST: update/create participant
-        data.'
-      summary: List Participants
-      parameters:
-      - in: query
-        name: chatbot
-        schema:
-          type: string
-          format: uuid
-        description: Filter by chatbot public id; returns participants that have data
-          for the chatbot.
-      - name: cursor
-        required: false
-        in: query
-        description: The pagination cursor value.
-        schema:
-          type: string
-      - in: query
-        name: identifier
-        schema:
-          type: string
-        description: Filter by participant identifier
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      - in: query
-        name: platform
-        schema:
-          type: string
-        description: Filter by platform (e.g. api, telegram, whatsapp)
-      tags:
-      - Participants
-      security:
-      - OAuth2:
-        - participants:read
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedParticipantDetailList'
-              examples:
-                ListParticipants:
-                  value:
-                    next: http://api.example.org/accounts/?cursor=cD00ODY%3D"
-                    previous: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
-                    results:
-                    - id: e172ff63-2469-419f-a828-783fc9291bc7
-                      identifier: part1
-                      name: John
-                      platform: api
-                      remote_id: ''
-                      data:
-                      - chatbot: Support Bot
-                        chatbot_id: 815e7ef4-3479-4689-ae6c-29ca1a04ca8e
-                        data:
-                          name: John
-                          timezone: Africa/Johannesburg
-                        connect_channel_id: null
-                    count: 123
-                  summary: A participant with their chatbot data
-          description: ''
-    post:
-      operationId: update_participant_data_2
-      description: 'GET: list participants for the team. POST: update/create participant
-        data.'
-      summary: Update Participant Data
-      tags:
-      - Participants
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ParticipantDataUpdateRequest'
-            examples:
-              CreateParticipantData:
-                value:
-                  identifier: part1
-                  platform: api
-                  data:
-                  - experiment: exp1
-                    data:
-                      name: John
-                  - experiment: exp2
-                    data:
-                      name: Doe
-                    schedules:
-                    - id: sched1
-                      name: Schedule 1
-                      date: '2022-01-01T00:00:00Z'
-                      prompt: Prompt 1
-                summary: Create participant data for multiple experiments
-              UpdateParticipantSchedules:
-                value:
-                  identifier: part1
-                  platform: api
-                  data:
-                  - experiment: exp1
-                    schedules:
-                    - id: sched1
-                      name: Schedule 1 updated
-                      date: '2022-01-01T00:00:00Z'
-                      prompt: Prompt updated
-                    - id: sched2
-                      delete: true
-                summary: Update and delete participant schedules
-        required: true
-      security:
-      - OAuth2:
-        - participants:write
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ParticipantDetail'
-              examples:
-                UpdateParticipantDataResponse:
-                  value:
-                    id: e172ff63-2469-419f-a828-783fc9291bc7
-                    identifier: part1
-                    name: John
-                    platform: commcare_connect
-                    remote_id: ''
-                    data:
-                    - chatbot: Support Bot
-                      chatbot_id: 815e7ef4-3479-4689-ae6c-29ca1a04ca8e
-                      data:
-                        name: John
-                      connect_channel_id: c64a1f7d-2f9b-4c3a-9e57-0f0c9a3a1b2d
-                  summary: Response including connect channel IDs
-          description: ''
   /api/sessions/:
     get:
       operationId: session_list
@@ -1455,7 +1313,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/Status490Enum'
+          $ref: '#/components/schemas/ExperimentSessionStatusEnum'
         platform:
           type: string
           nullable: true
@@ -1497,6 +1355,22 @@ components:
       required:
       - experiment
       - url
+    ExperimentSessionStatusEnum:
+      enum:
+      - setup
+      - pending
+      - active
+      - pending-review
+      - complete
+      - unknown
+      type: string
+      description: |-
+        * `setup` - Setting Up
+        * `pending` - Awaiting participant
+        * `active` - Active
+        * `pending-review` - Awaiting final review.
+        * `complete` - Complete
+        * `unknown` - Unknown
     ExperimentSessionWithMessages:
       type: object
       properties:
@@ -1528,7 +1402,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/Status490Enum'
+          $ref: '#/components/schemas/ExperimentSessionStatusEnum'
         platform:
           type: string
           nullable: true
@@ -1863,22 +1737,6 @@ components:
       description: |-
         * `active` - Active
         * `ended` - Ended
-    Status490Enum:
-      enum:
-      - setup
-      - pending
-      - active
-      - pending-review
-      - complete
-      - unknown
-      type: string
-      description: |-
-        * `setup` - Setting Up
-        * `pending` - Awaiting participant
-        * `active` - Active
-        * `pending-review` - Awaiting final review.
-        * `complete` - Complete
-        * `unknown` - Unknown
     Team:
       type: object
       properties:
