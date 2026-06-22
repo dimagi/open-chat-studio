@@ -58,9 +58,9 @@ def test_versioned_entries_order_by_working_version_first():
 
 
 @pytest.mark.django_db()
-def test_schema_checksum_is_reproducible_int():
+def test_schema_checksum_is_reproducible():
     first = manifest.schema_checksum()
-    assert isinstance(first, int)
+    assert isinstance(first, str)
     assert first == manifest.schema_checksum()
 
 
@@ -91,7 +91,7 @@ def test_team_scoped_queryset_scopes_team_to_itself():
 @pytest.mark.django_db()
 def test_build_manifest_payload_shape():
     payload = manifest.build_manifest()
-    assert isinstance(payload["schema_checksum"], int)
+    assert isinstance(payload["schema_checksum"], str)
     assert {e["resource"] for e in payload["entries"]} == {e.resource for e in manifest.MANIFEST_ENTRIES}
     first = payload["entries"][0]
     assert set(first) >= {"model", "resource", "phase", "cursor", "secret"}
