@@ -14,8 +14,9 @@ REQUIRED_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_OUTPUT)
 
 
 @pytest.mark.skip(
-    reason="PR 1 ships a minimal seed (4 models). Enable when the auto-update workflow in PR 2 "
-    "expands the seed to cover every global LlmProviderModel."
+    reason="The seed only covers a minimal set of models. PR 2's auto-update workflow adds "
+    "pricing for newly-added models going forward; unskip once the seed has been backfilled "
+    "to cover every currently-registered global LlmProviderModel (PR 3 or a dedicated seed PR)."
 )
 @pytest.mark.django_db()
 def test_every_global_model_has_input_and_output_pricing():

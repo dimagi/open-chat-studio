@@ -63,6 +63,8 @@ class Command(IdempotentCommand):
         channels = ExperimentChannel.objects.filter(
             platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False
         ).select_related("experiment", "team")
+        if not channels.exists():
+            return {}
         channels_with_recent_sessions = set(
             ExperimentSession.objects.filter(experiment_channel__in=channels, created_at__gte=cutoff).values_list(
                 "experiment_channel_id", flat=True
