@@ -1,0 +1,97 @@
+import pytest
+from django.apps import apps
+
+from apps.teams.sync import manifest
+from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
+from apps.utils.factories.team import TeamFactory
+
+
+def _model(label):
+    return apps.get_model(*label.split("."))
+
+
+def test_every_entry_resolves_to_a_model():
+    for entry in manifest.MANIFEST_ENTRIES:
+        assert _model(entry.model) is not None
+
+
+def test_entry_cursor_and_phase_values_are_valid():
+    for entry in manifest.MANIFEST_ENTRIES:
+        assert entry.cursor in {"pk", "updated_at_id"}
+        assert entry.phase in {"structural", "live", "structural+live"}
+
+
+def test_models_and_resources_are_unique():
+    models = [e.model for e in manifest.MANIFEST_ENTRIES]
+    resources = [e.resource for e in manifest.MANIFEST_ENTRIES]
+    assert len(models) == len(set(models))
+    assert len(resources) == len(set(resources))
+
+
+def test_secret_flag_agrees_with_secret_registry():
+    for entry in manifest.MANIFEST_ENTRIES:
+        assert entry.secret == (entry.model in manifest.SECRET_REGISTRY)
+
+
+def test_registry_keys_resolve_to_models():
+    for label in (*manifest.SECRET_REGISTRY, *manifest.EXCLUDE_REGISTRY, *manifest.TEAM_PATH_REGISTRY):
+        assert _model(label) is not None
+
+
+def test_registry_fields_exist_on_their_model():
+    for label, fields in (*manifest.SECRET_REGISTRY.items(), *manifest.EXCLUDE_REGISTRY.items()):
+        model_fields = {f.name for f in _model(label)._meta.get_fields()}
+        for field in fields:
+            assert field in model_fields, f"{label}.{field}"
+
+
+def test_get_entry_returns_matching_entry():
+    entry = manifest.get_entry("teams")
+    assert entry.resource == "teams"
+    assert entry.model == "teams.team"
+    assert manifest.get_entry("not_a_resource") is None
+
+
+def test_versioned_entries_order_by_working_version_first():
+    for resource in ("pipeline", "chatbot"):
+        assert manifest.get_entry(resource).order_by == "working_version_id_nulls_first"
+
+
+@pytest.mark.django_db()
+def test_schema_checksum_is_reproducible_int():
+    first = manifest.schema_checksum()
+    assert isinstance(first, int)
+    assert first == manifest.schema_checksum()
+
+
+@pytest.mark.django_db()
+def test_team_scoped_queryset_isolates_teams_and_includes_globals():
+    team = TeamFactory()
+    other = TeamFactory()
+    mine = LlmProviderModelFactory(team=team)
+    theirs = LlmProviderModelFactory(team=other)
+    global_model = LlmProviderModelFactory(team=None)
+
+    entry = manifest.get_entry("llm_provider_model")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert mine.pk in pks
+    assert global_model.pk in pks
+    assert theirs.pk not in pks
+
+
+@pytest.mark.django_db()
+def test_team_scoped_queryset_scopes_team_to_itself():
+    team = TeamFactory()
+    other = TeamFactory()
+    pks = set(manifest.team_scoped_queryset(manifest.get_entry("teams"), team).values_list("pk", flat=True))
+    assert pks == {team.pk}
+    assert other.pk not in pks
+
+
+@pytest.mark.django_db()
+def test_build_manifest_payload_shape():
+    payload = manifest.build_manifest()
+    assert isinstance(payload["schema_checksum"], int)
+    assert {e["resource"] for e in payload["entries"]} == {e.resource for e in manifest.MANIFEST_ENTRIES}
+    first = payload["entries"][0]
+    assert set(first) >= {"model", "resource", "phase", "cursor", "secret"}

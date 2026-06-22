@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework import routers
 
+from apps.api.general import views as sync_views
 from apps.api.v2 import views
 
 app_name = "v2"
@@ -12,5 +13,6 @@ router.register(r"chatbots", views.ChatbotViewSet, basename="chatbot")
 # Mounted under the capturing ``v2/`` prefix; unlike v1 there is no unversioned alias.
 urlpatterns = [
     path("me/", views.MeView.as_view(), name="me"),
+    path("manifest/", sync_views.ManifestView.as_view(), name="manifest"),
     path("", include(router.urls)),
 ]
