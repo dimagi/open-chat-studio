@@ -12,7 +12,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-
 from fetch_model_updates import (
     _fmt,
     _per_million_to_per_1k,
@@ -24,7 +23,6 @@ from fetch_model_updates import (
     resolve_pricing_from_litellm,
     resolve_pricing_from_llm_stats,
 )
-
 
 # ---------------------------------------------------------------------------
 # Unit-conversion helpers
@@ -55,7 +53,7 @@ def test_per_token_to_per_1k_none():
 
 
 @pytest.mark.parametrize(
-    "value,expected",
+    ("value", "expected"),
     [
         pytest.param(None, None, id="none"),
         pytest.param(0.00250, "0.0025", id="strips_trailing_zeros"),
@@ -107,6 +105,7 @@ def test_resolve_llm_stats_partial_pricing_no_output():
 def test_resolve_llm_stats_unit_conversion():
     """claude-sonnet-4-6: $3/M input, $15/M output."""
     result = resolve_pricing_from_llm_stats({"input_price": 3.0, "output_price": 15.0})
+    assert result is not None
     assert result["llm_input"] == "0.003"
     assert result["llm_output"] == "0.015"
 
@@ -152,12 +151,13 @@ def test_resolve_litellm_per_token_conversion():
         }
     }
     result = resolve_pricing_from_litellm("claude-sonnet", litellm_data)
+    assert result is not None
     assert result["llm_input"] == "0.003"
     assert result["llm_output"] == "0.015"
 
 
 @pytest.mark.parametrize(
-    "model_id,litellm_data",
+    ("model_id", "litellm_data"),
     [
         pytest.param("unknown-model", {}, id="missing_model"),
         pytest.param("gpt-4o", {"gpt-4o": {"context_window": 128000}}, id="no_cost_fields"),
@@ -193,7 +193,7 @@ def test_build_pricing_entries_multi_provider():
 
 
 @pytest.mark.parametrize(
-    "providers,pricing",
+    ("providers", "pricing"),
     [
         pytest.param([], {"llm_input": "0.01"}, id="empty_providers"),
         pytest.param(["openai"], {}, id="empty_pricing"),
@@ -208,9 +208,8 @@ def test_build_pricing_entries_empty(providers, pricing):
 # Fixtures for file-system tests
 # ---------------------------------------------------------------------------
 
-# Includes both single-line Model() entries and a multi-line form (to exercise
-# the look-ahead fix), plus a 3-tuple DELETED_MODELS entry (to exercise the
-# regex fix that dropped the trailing \)).
+# Includes both single-line Model() entries and a multi-line form, plus 2- and
+# 3-tuple DELETED_MODELS entries — all of which the ast parser must handle.
 SAMPLE_DEFAULT_MODELS = textwrap.dedent(
     """\
     DEFAULT_LLM_PROVIDER_MODELS = {
@@ -317,6 +316,79 @@ def test_deleted_models_three_tuple(repo_root):
 def test_unknown_provider_not_present(repo_root):
     registered = load_registered_models(repo_root)
     assert "deepseek" not in registered
+
+
+# ---------------------------------------------------------------------------
+# load_registered_models — awkward formatting robustness
+#
+# These exercise formatting that a line-by-line regex parser misses but a real
+# Python parser handles: a comment between ``Model(`` and the name, a provider
+# whose ``[`` sits on the next line, and a DELETED_MODELS tuple split over
+# several lines.
+# ---------------------------------------------------------------------------
+
+SAMPLE_AWKWARD_MODELS = textwrap.dedent(
+    """\
+    DEFAULT_LLM_PROVIDER_MODELS = {
+        "openai": [
+            Model(
+                # legacy alias kept for back-compat
+                "commented-model",
+                128000,
+            ),
+        ],
+        "newprov":
+            [
+                Model("bracket-on-next-line", 1000),
+            ],
+    }
+
+    DELETED_MODELS = [
+        (
+            "openai",
+            "multiline-deleted",
+        ),
+        ("anthropic", "claude-x", "claude-y", "extra-elt"),
+    ]
+    """
+)
+
+
+@pytest.fixture()
+def awkward_repo_root(tmp_path: Path) -> Path:
+    """Repo tree whose default_models.py uses awkward (but valid) formatting."""
+    models_dir = tmp_path / "apps/service_providers/llm_service"
+    models_dir.mkdir(parents=True)
+    (models_dir / "default_models.py").write_text(SAMPLE_AWKWARD_MODELS)
+
+    pricing_dir = tmp_path / "apps/cost_tracking/seed_data"
+    pricing_dir.mkdir(parents=True)
+    (pricing_dir / "llm_pricing.json").write_text("[]")
+    return tmp_path
+
+
+def test_registered_comment_between_model_and_name(awkward_repo_root):
+    """A comment line between ``Model(`` and the name doesn't hide the model."""
+    registered = load_registered_models(awkward_repo_root)
+    assert "commented-model" in registered["openai"]
+
+
+def test_registered_provider_bracket_on_next_line(awkward_repo_root):
+    """A provider whose opening ``[`` is on the next line is still parsed."""
+    registered = load_registered_models(awkward_repo_root)
+    assert "bracket-on-next-line" in registered["newprov"]
+
+
+def test_deleted_models_multiline_tuple(awkward_repo_root):
+    """A DELETED_MODELS tuple split across lines is captured."""
+    registered = load_registered_models(awkward_repo_root)
+    assert "multiline-deleted" in registered.get("openai", set())
+
+
+def test_deleted_models_n_tuple(awkward_repo_root):
+    """A DELETED_MODELS entry with more than 3 elements is captured by (provider, model)."""
+    registered = load_registered_models(awkward_repo_root)
+    assert "claude-x" in registered.get("anthropic", set())
 
 
 # ---------------------------------------------------------------------------
@@ -450,9 +522,7 @@ def test_process_details_error_falls_back_to_litellm():
             "output_cost_per_token": 0.00001,
         }
     }
-    result = process_candidates(
-        [candidate], {"openai": set(), "azure": set()}, set(), litellm_data
-    )
+    result = process_candidates([candidate], {"openai": set(), "azure": set()}, set(), litellm_data)
     m = result["new_models"][0]
     assert m["pricing"]["has_pricing"] is True
     assert m["pricing"]["source"] == "litellm"
