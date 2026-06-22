@@ -474,6 +474,29 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         return f"{url}#versions"
 
 
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def chatbot_revert_confirm(request, team_slug: str, experiment_id: int, version_number: int):
+    """Render the revert confirmation modal: a diff of the working state vs the target version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    has_unreleased_changes = experiment.compare_with_latest()
+
+    version_details = experiment.version_details
+    version_details.compare(version.version_details)
+    context = {
+        "experiment": experiment,
+        "version": version,
+        "version_details": version_details,
+        "has_unreleased_changes": has_unreleased_changes,
+    }
+    return render(request, "experiments/components/revert_confirm_content.html", context)
+
+
 @require_POST
 @login_and_team_required
 @permission_required("experiments.change_experiment", raise_exception=True)
