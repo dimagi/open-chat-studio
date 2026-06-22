@@ -498,6 +498,11 @@ class MetaCloudAPIWebhookView(View):
             log.warning("Meta Cloud API webhook signature verification failed for channel")
             return HttpResponse()
 
+        self._dispatch_message_values(message_values, channel_map)
+        return HttpResponse()
+
+    def _dispatch_message_values(self, message_values: list[dict], channel_map: dict) -> None:
+        """Queue a task for each conversational message value, routing it to its channel."""
         for value in message_values:
             phone_number_id = value["metadata"]["phone_number_id"]
             ch = channel_map.get(phone_number_id)
@@ -513,8 +518,6 @@ class MetaCloudAPIWebhookView(View):
                 team_slug=ch.team.slug,
                 message_data=value,
             )
-
-        return HttpResponse()
 
     def _payload_has_valid_signature(
         self, channels: list[ExperimentChannel], request_headers: dict, request_body: dict
