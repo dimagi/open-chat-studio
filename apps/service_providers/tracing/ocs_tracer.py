@@ -215,12 +215,12 @@ class OCSTracer(Tracer):
     def set_output_message_id(self, output_message_id: str) -> None:
         """Set the output message ID for the trace."""
         if self.trace_record:
-            self.trace_record.output_message_id = output_message_id
+            self.trace_record.output_message_id = output_message_id  # ty: ignore[invalid-assignment]
 
     def set_input_message_id(self, input_message_id: str) -> None:
         """Set the input message ID for the trace."""
         if self.trace_record:
-            self.trace_record.input_message_id = input_message_id
+            self.trace_record.input_message_id = input_message_id  # ty: ignore[invalid-assignment]
 
     def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         if self.trace_record:

@@ -162,7 +162,7 @@ banned-module-level-imports = [
 
 [dependency-groups]
 dev = [
-    "ruff",
+    "ruff>=0.15.18",
     "mock",
     "invoke",
     "termcolor",
@@ -177,7 +177,7 @@ dev = [
     "django-debug-toolbar>=5.2.0",
     "prek>=0.3.2",
     "django-types",
-    "ty>=0.0.38",
+    "ty>=0.0.51",
     "honcho>=2.0.0",
     # Used only by scripts/mock_connect_server.py — a dev tool that impersonates
     # the CommCare Connect backend for local development.
@@ -219,7 +219,6 @@ unresolved-import = "error"
 abstract-method-in-final-class = "error"
 call-non-callable = "error"
 call-top-callable = "error"
-conflicting-argument-forms = "error"
 conflicting-declarations = "error"
 conflicting-metaclass = "error"
 cyclic-class-definition = "error"
