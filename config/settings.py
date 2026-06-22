@@ -380,7 +380,7 @@ if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
     # use private storage by default
-    STORAGES["default"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["default"] = {
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
         "OPTIONS": {
             "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
@@ -392,7 +392,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["public"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
@@ -453,8 +453,14 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Open Chat Studio",
     "DESCRIPTION": "Build, deploy and monitor chatbots.",
-    "VERSION": "1",
+    # Left blank so info.version is just the API version (e.g. "v1"/"v2"); drf-spectacular would
+    # otherwise prefix it as "<VERSION> (<api_version>)".
+    "VERSION": "",
     "SERVE_INCLUDE_SCHEMA": False,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.api.schema.prune_unused_tags",
+    ],
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
@@ -462,6 +468,14 @@ SPECTACULAR_SETTINGS = {
         {
             "name": "Channels",
             "description": "Trigger bot messages or deliver messages directly to users on a channel.",
+        },
+        {
+            "name": "Chatbots",
+            "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
+        },
+        {
+            "name": "Me",
+            "description": "Information about the authenticated user and the team the token is scoped to.",
         },
         {
             "name": "Chat",

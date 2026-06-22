@@ -6,6 +6,25 @@ from rest_framework.permissions import SAFE_METHODS
 from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
 
 
+def prune_unused_tags(result, generator, request, public, **kwargs):
+    """Drop top-level tag definitions not referenced by any operation.
+
+    ``SPECTACULAR_SETTINGS["TAGS"]`` is a single global list applied to every schema, so a
+    per-version schema would otherwise advertise tags from versions it doesn't include (e.g. v2
+    listing v1's "Experiments"/"Participants"). Keep only the tags its operations actually use.
+    """
+    used = {
+        tag
+        for path in result.get("paths", {}).values()
+        for op in path.values()
+        if isinstance(op, dict)
+        for tag in op.get("tags", [])
+    }
+    if "tags" in result:
+        result["tags"] = [tag for tag in result["tags"] if tag["name"] in used]
+    return result
+
+
 class ApiScheme(OpenApiAuthenticationExtension):
     target_class = "apps.api.permissions.ApiKeyAuthentication"
     name = "apiKeyAuth"
