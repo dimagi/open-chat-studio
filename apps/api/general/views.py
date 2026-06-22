@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import IsTeamAdmin
-from apps.teams.sync.manifest import build_manifest, entry_model, get_entry, team_scoped_queryset
+from apps.teams.sync.manifest import build_manifest, entry_model, get_manifest_entry, team_scoped_queryset
 from apps.teams.sync.seal import load_public_key
 
 from .serializers import build_sync_serializer
@@ -34,7 +34,7 @@ class ResourceView(APIView):
     permission_classes = [IsAuthenticated, IsTeamAdmin]
 
     def get(self, request, resource):
-        entry = get_entry(resource)
+        entry = get_manifest_entry(resource)
         if entry is None:
             raise NotFound("Unknown content type.")
 

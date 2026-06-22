@@ -92,7 +92,7 @@ GLOBAL_CONFIG: dict[str, GlobalSpec] = {
 _ENTRIES_BY_RESOURCE = {entry.resource: entry for entry in MANIFEST_ENTRIES}
 
 
-def get_entry(resource: str) -> ManifestEntry | None:
+def get_manifest_entry(resource: str) -> ManifestEntry | None:
     return _ENTRIES_BY_RESOURCE.get(resource)
 
 

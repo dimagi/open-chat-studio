@@ -45,16 +45,16 @@ def test_registry_fields_exist_on_their_model():
             assert field in model_fields, f"{label}.{field}"
 
 
-def test_get_entry_returns_matching_entry():
-    entry = manifest.get_entry("teams")
+def test_get_manifest_entry_returns_matching_entry():
+    entry = manifest.get_manifest_entry("teams")
     assert entry.resource == "teams"
     assert entry.model == "teams.team"
-    assert manifest.get_entry("not_a_resource") is None
+    assert manifest.get_manifest_entry("not_a_resource") is None
 
 
 def test_versioned_entries_order_by_working_version_first():
     for resource in ("pipeline", "chatbot"):
-        assert manifest.get_entry(resource).order_by == "working_version_id_nulls_first"
+        assert manifest.get_manifest_entry(resource).order_by == "working_version_id_nulls_first"
 
 
 @pytest.mark.django_db()
@@ -72,7 +72,7 @@ def test_team_scoped_queryset_isolates_teams_and_includes_globals():
     theirs = LlmProviderModelFactory(team=other)
     global_model = LlmProviderModelFactory(team=None)
 
-    entry = manifest.get_entry("llm_provider_model")
+    entry = manifest.get_manifest_entry("llm_provider_model")
     pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
     assert mine.pk in pks
     assert global_model.pk in pks
@@ -83,7 +83,7 @@ def test_team_scoped_queryset_isolates_teams_and_includes_globals():
 def test_team_scoped_queryset_scopes_team_to_itself():
     team = TeamFactory()
     other = TeamFactory()
-    pks = set(manifest.team_scoped_queryset(manifest.get_entry("teams"), team).values_list("pk", flat=True))
+    pks = set(manifest.team_scoped_queryset(manifest.get_manifest_entry("teams"), team).values_list("pk", flat=True))
     assert pks == {team.pk}
     assert other.pk not in pks
 
