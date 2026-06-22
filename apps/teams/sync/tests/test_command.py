@@ -6,7 +6,7 @@ from django.core.management.base import CommandError
 
 from apps.api.general.serializers import build_sync_serializer
 from apps.service_providers.models import LlmProvider
-from apps.teams.management.commands.sync_team import run_sync
+from apps.teams.management.commands.sync_team import force_delete_team, run_sync
 from apps.teams.models import Team
 from apps.teams.sync import seal as seal_mod
 from apps.teams.sync.importer import Importer
@@ -166,6 +166,22 @@ def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(tmp_path, keypair):
     # the second run resumes each pk resource from its highest synced source key
     assert dict(second.iter_calls)["teams"] == "9001"
     assert dict(second.iter_calls)["llm_provider"] == "5"
+
+
+def test_force_delete_team_removes_team_and_resets_state(tmp_path):
+    team = Team.objects.create(name="Old", slug="imported-team-z")
+    state_db = tmp_path / "imported-team-z.sqlite"
+    FKTranslationStore(state_db).record("teams.team", 9001, team.id)
+    assert state_db.exists()
+
+    force_delete_team("imported-team-z", tmp_path)
+
+    assert not Team.objects.filter(slug="imported-team-z").exists()
+    assert not state_db.exists()
+
+
+def test_force_delete_team_is_a_no_op_when_team_missing(tmp_path):
+    force_delete_team("never-synced", tmp_path)  # no team, no state DB -- must not raise
 
 
 def test_serialized_row_round_trips_through_importer(tmp_path, keypair):

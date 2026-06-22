@@ -9,7 +9,9 @@ translation store. Each run makes one pass over the manifest and exits; rerun to
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
+from field_audit.models import AuditAction
 
+from apps.teams.models import Team
 from apps.teams.sync.client import SourceClient
 from apps.teams.sync.emails import send_password_reset_email
 from apps.teams.sync.importer import Importer
@@ -63,13 +65,26 @@ def run_sync(
     return importer
 
 
+def force_delete_team(team_slug, state_dir, write=lambda _m: None):
+    """Delete the local team (matched by slug) and its sync-state DB so the next run re-imports from
+    scratch. Without resetting the state, the derived cursor would skip the rows that were deleted."""
+    deleted, _ = Team.objects.filter(slug=team_slug).delete(audit_action=AuditAction.AUDIT)
+    state_db = Path(state_dir) / f"{team_slug}.sqlite"
+    state_db.unlink(missing_ok=True)
+    write(f"force-deleted team '{team_slug}' and reset sync state ({deleted} objects removed)")
+
+
 class Command(BaseCommand):
     help = "Sync a team's data from a source OCS server into this one."
 
     def add_arguments(self, parser):
         parser.add_argument("--source-url", required=True)
         parser.add_argument("--api-key", required=True)
-        parser.add_argument("--team-slug", required=True, help="Names the local run state DB.")
+        parser.add_argument(
+            "--team-slug",
+            required=True,
+            help="Names the local run state DB and identifies the team to drop when --force-delete is set.",
+        )
         parser.add_argument("--private-key-path", help="RSA private key used to unseal secret fields.")
         parser.add_argument("--state-dir", default=".", help="Directory for the per-team SQLite state DB.")
         parser.add_argument("--limit", type=int, default=100, help="Page size for resource requests.")
@@ -78,8 +93,20 @@ class Command(BaseCommand):
             action="store_true",
             help="Sync even if the source and target schema checksums differ.",
         )
+        parser.add_argument(
+            "--force-delete",
+            action="store_true",
+            help="Delete the local team and its sync state before syncing, for a clean re-import.",
+        )
 
     def handle(self, *args, **options):
+        if options["force_delete"]:
+            force_delete_team(
+                options["team_slug"],
+                options["state_dir"],
+                write=lambda message: self.stdout.write(self.style.WARNING(message)),
+            )
+
         private_key = None
         if options["private_key_path"]:
             private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
