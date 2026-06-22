@@ -82,13 +82,14 @@ The conversions happen in ``_per_million_to_per_1k`` and ``_per_token_to_per_1k`
 from __future__ import annotations
 
 import argparse
+import ast
 import datetime
 import json
 import os
-import re
-import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -108,16 +109,16 @@ ORG_TO_OCS_PROVIDERS: dict[str, list[str]] = {
     "perplexity": ["perplexity"],
 }
 
-LITELLM_PRICING_URL = (
-    "https://raw.githubusercontent.com/BerriAI/litellm/main"
-    "/model_prices_and_context_window.json"
-)
+LITELLM_PRICING_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
 DEFAULT_MODELS_REL_PATH = "apps/service_providers/llm_service/default_models.py"
 LLM_PRICING_REL_PATH = "apps/cost_tracking/seed_data/llm_pricing.json"
 
 # Detail-response fields that add noise without helping the agent.
 _NOISY_DETAIL_FIELDS = {"scores", "top_scores", "providers"}
+
+# Shown for any model where neither source carried pricing.
+NO_PRICING_REASON = "No pricing data found in llm_stats or LiteLLM"
 
 # ---------------------------------------------------------------------------
 # HTTP helpers
@@ -148,37 +149,55 @@ def _api_get(url: str, bearer: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _parse_deleted_models_line(
-    line: str,
-    registered: dict[str, set[str]],
-) -> bool:
-    """Parse one line inside the DELETED_MODELS block.
-
-    Handles both 2-tuples ("provider", "model") and 3-tuples
-    ("provider", "model", "replacement").  Adds any matched pair to
-    *registered* and returns True when the closing ``]`` is encountered
-    (signalling the block has ended), False otherwise.
-    """
-    m = re.match(r'\s+\("([a-z_]+)",\s+"([^"]+)"', line)
-    if m:
-        registered.setdefault(m.group(1), set()).add(m.group(2))
-    return bool(re.match(r"^\s*\]", line))
-
-
-def _parse_model_name(line: str, next_line: str | None) -> str | None:
-    """Extract a model name from a ``Model(...)`` line.
-
-    Handles both single-line (``Model("name", ...)``) and multi-line forms
-    where the name appears on the following line.
-    """
-    m = re.match(r'\s+Model\("([^"]+)"', line)
-    if m:
-        return m.group(1)
-    if re.match(r'\s+Model\(\s*$', line) and next_line is not None:
-        name_m = re.match(r'\s+"([^"]+)"', next_line)
-        if name_m:
-            return name_m.group(1)
+def _model_call_name(node: ast.expr) -> str | None:
+    """Return the first positional string arg of a ``Model(...)`` call, else None."""
+    if isinstance(node, ast.Call) and node.args:
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            return first.value
     return None
+
+
+def _const_str(node: ast.expr) -> str | None:
+    """Return the value of a string-constant node, else None."""
+    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+
+def _default_model_pairs(dict_node: ast.Dict) -> Iterator[tuple[str, str]]:
+    """Yield ``(provider, model_name)`` for every ``Model(...)`` in the provider dict."""
+    for key_node, value_node in zip(dict_node.keys, dict_node.values, strict=True):
+        provider = _const_str(key_node) if key_node is not None else None
+        if provider is None or not isinstance(value_node, ast.List):
+            continue
+        for name in filter(None, map(_model_call_name, value_node.elts)):
+            yield provider, name
+
+
+def _deleted_model_pairs(list_node: ast.List) -> Iterator[tuple[str, str]]:
+    """Yield ``(provider, model_name)`` from each DELETED_MODELS tuple.
+
+    Entries are 2- or 3-tuples (``(provider, model[, replacement])``); only the
+    first two string elements are read, so longer tuples are handled too.
+    """
+    for elt in list_node.elts:
+        if not (isinstance(elt, ast.Tuple) and len(elt.elts) >= 2):
+            continue
+        provider, model = _const_str(elt.elts[0]), _const_str(elt.elts[1])
+        if provider is not None and model is not None:
+            yield provider, model
+
+
+def _assignment_pairs(node: ast.stmt) -> Iterator[tuple[str, str]]:
+    """Yield ``(provider, model_name)`` for a DEFAULT_LLM_PROVIDER_MODELS or
+    DELETED_MODELS assignment; nothing for anything else.
+    """
+    if not isinstance(node, ast.Assign):
+        return
+    targets = {t.id for t in node.targets if isinstance(t, ast.Name)}
+    if "DEFAULT_LLM_PROVIDER_MODELS" in targets and isinstance(node.value, ast.Dict):
+        yield from _default_model_pairs(node.value)
+    elif "DELETED_MODELS" in targets and isinstance(node.value, ast.List):
+        yield from _deleted_model_pairs(node.value)
 
 
 def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
@@ -188,38 +207,11 @@ def load_registered_models(repo_root: Path) -> dict[str, set[str]]:
     model is treated as *known* and flagged for review rather than silently
     re-added as a brand-new model.
     """
-    lines = (repo_root / DEFAULT_MODELS_REL_PATH).read_text().splitlines()
+    tree = ast.parse((repo_root / DEFAULT_MODELS_REL_PATH).read_text())
     registered: dict[str, set[str]] = {}
-    current_provider: str | None = None
-    in_deleted_models = False
-
-    for i, line in enumerate(lines):
-        if re.search(r"\bDELETED_MODELS\b\s*=", line):
-            in_deleted_models = True
-            current_provider = None
-            continue
-
-        if in_deleted_models:
-            if _parse_deleted_models_line(line, registered):
-                in_deleted_models = False
-            continue
-
-        provider_m = re.match(r'\s+"([a-z_]+)":\s+\[', line)
-        if provider_m:
-            current_provider = provider_m.group(1)
-            registered.setdefault(current_provider, set())
-            continue
-
-        if current_provider and re.match(r"\s+\],", line):
-            current_provider = None
-            continue
-
-        if current_provider:
-            next_line = lines[i + 1] if i + 1 < len(lines) else None
-            name = _parse_model_name(line, next_line)
-            if name:
-                registered[current_provider].add(name)
-
+    for node in tree.body:
+        for provider, model in _assignment_pairs(node):
+            registered.setdefault(provider, set()).add(model)
     return registered
 
 
@@ -257,31 +249,41 @@ def _per_token_to_per_1k(v: float | None) -> float | None:
     return v * 1_000.0 if v is not None else None
 
 
-def resolve_pricing_from_llm_stats(
-    details: dict[str, Any],
+def _rates_from_raw(
+    raw: dict[str, float | None],
+    convert: Callable[[float | None], float | None],
 ) -> dict[str, str] | None:
+    """Convert a ``{service_kind: raw_price}`` mapping to per-1K-token strings.
+
+    Returns *None* when both input and output prices are absent (a model with
+    only a cached-input rate isn't useful on its own).
+    """
+    if raw.get("llm_input") is None and raw.get("llm_output") is None:
+        return None
+    result: dict[str, str] = {}
+    for kind, value in raw.items():
+        price = _fmt(convert(value))
+        if price is not None:
+            result[kind] = price
+    return result or None
+
+
+def resolve_pricing_from_llm_stats(details: dict[str, Any]) -> dict[str, str] | None:
     """Extract pricing from the llm-stats.com detail payload.
 
     Returns ``{service_kind: unit_price_string}`` in OCS (per-1K-token) units,
     or *None* when the payload carries no pricing fields.
     """
     # llm-stats.com fields are per-million tokens.
-    raw = {
-        "llm_input": details.get("input_price"),
-        "llm_output": details.get("output_price"),
-        "llm_cached_input": details.get("cached_input_price"),
-        "llm_cache_write": details.get("cache_write_price"),
-    }
-
-    if raw["llm_input"] is None and raw["llm_output"] is None:
-        return None
-
-    result = {
-        kind: _fmt(_per_million_to_per_1k(v))
-        for kind, v in raw.items()
-        if v is not None
-    }
-    return result or None
+    return _rates_from_raw(
+        {
+            "llm_input": details.get("input_price"),
+            "llm_output": details.get("output_price"),
+            "llm_cached_input": details.get("cached_input_price"),
+            "llm_cache_write": details.get("cache_write_price"),
+        },
+        _per_million_to_per_1k,
+    )
 
 
 def resolve_pricing_from_litellm(
@@ -296,24 +298,16 @@ def resolve_pricing_from_litellm(
     entry = litellm_data.get(model_id)
     if entry is None:
         return None
-
     # LiteLLM fields are per-token.
-    raw = {
-        "llm_input": entry.get("input_cost_per_token"),
-        "llm_output": entry.get("output_cost_per_token"),
-        "llm_cached_input": entry.get("cache_read_input_token_cost"),
-        "llm_cache_write": entry.get("cache_creation_input_token_cost"),
-    }
-
-    if raw["llm_input"] is None and raw["llm_output"] is None:
-        return None
-
-    result = {
-        kind: _fmt(_per_token_to_per_1k(v))
-        for kind, v in raw.items()
-        if v is not None
-    }
-    return result or None
+    return _rates_from_raw(
+        {
+            "llm_input": entry.get("input_cost_per_token"),
+            "llm_output": entry.get("output_cost_per_token"),
+            "llm_cached_input": entry.get("cache_read_input_token_cost"),
+            "llm_cache_write": entry.get("cache_creation_input_token_cost"),
+        },
+        _per_token_to_per_1k,
+    )
 
 
 def build_pricing_entries(
@@ -322,15 +316,8 @@ def build_pricing_entries(
     pricing: dict[str, str],
 ) -> list[dict]:
     """Build ``llm_pricing.json``-style entries for each provider in *providers*."""
-    rules = [
-        {"service_kind": kind, "unit_price": price}
-        for kind, price in pricing.items()
-    ]
-    return [
-        {"provider_type": provider, "model_name": model_id, "rules": rules}
-        for provider in providers
-        if rules
-    ]
+    rules = [{"service_kind": kind, "unit_price": price} for kind, price in pricing.items()]
+    return [{"provider_type": provider, "model_name": model_id, "rules": rules} for provider in providers if rules]
 
 
 # ---------------------------------------------------------------------------
@@ -343,8 +330,7 @@ def _filter_matched_models(updates: dict) -> list[dict]:
     return [
         m
         for m in updates.get("models", [])
-        if m.get("organization", {}).get("id") in ORG_TO_OCS_PROVIDERS
-        and m.get("model_type") == "llm"
+        if m.get("organization", {}).get("id") in ORG_TO_OCS_PROVIDERS and m.get("model_type") == "llm"
     ]
 
 
@@ -357,9 +343,7 @@ def _enrich_model(model: dict, bearer: str) -> dict:
     """
     model_id = model["id"]
     try:
-        details = _api_get(
-            f"https://api.zeroeval.com/stats/v1/models/{model_id}", bearer
-        )
+        details = _api_get(f"https://api.zeroeval.com/stats/v1/models/{model_id}", bearer)
         for field in _NOISY_DETAIL_FIELDS:
             details.pop(field, None)
         model["details"] = details
@@ -380,89 +364,117 @@ def fetch_candidates(bearer: str, days: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Core pipeline helpers
+# Candidate classification
 # ---------------------------------------------------------------------------
 
 
-def _get_registered_providers(
-    model_id: str,
-    ocs_providers: list[str],
+@dataclass
+class PricingResult:
+    """Resolved per-1K-token pricing for a model, and where it came from."""
+
+    rates: dict[str, str] | None
+    source: str | None  # "llm_stats" | "litellm" | None
+
+    @property
+    def has_pricing(self) -> bool:
+        return bool(self.rates)
+
+
+@dataclass
+class Candidate:
+    """Wraps one enriched zeroeval model dict and derives the OCS-specific
+    facts (mapped providers, registration state) used during classification.
+    """
+
+    raw: dict
+
+    @property
+    def id(self) -> str:
+        return self.raw["id"]
+
+    @property
+    def org(self) -> str:
+        return self.raw.get("organization", {}).get("id", "")
+
+    @property
+    def details(self) -> dict:
+        return self.raw.get("details", {})
+
+    @property
+    def details_error(self) -> str | None:
+        return self.raw.get("details_error")
+
+    @property
+    def context_window(self) -> int | None:
+        return self.raw.get("context_window")
+
+    @property
+    def ocs_providers(self) -> list[str]:
+        return ORG_TO_OCS_PROVIDERS.get(self.org, [])
+
+    @property
+    def source_url(self) -> str:
+        return self.details.get("url") or f"https://llm-stats.com/models/{self.id}"
+
+    def registered_providers(self, registered: dict[str, set[str]]) -> list[str]:
+        """OCS providers under which this model is already registered (or deleted)."""
+        return [p for p in self.ocs_providers if self.id in registered.get(p, set())]
+
+    def is_fully_registered(self, registered: dict[str, set[str]]) -> bool:
+        """True when the model is already known under *every* provider it maps to."""
+        regd = self.registered_providers(registered)
+        return bool(regd) and len(regd) == len(self.ocs_providers)
+
+
+def resolve_pricing(candidate: Candidate, litellm_data: dict[str, Any]) -> PricingResult:
+    """Resolve per-1K-token pricing, trying llm-stats first then LiteLLM."""
+    if not candidate.details_error:
+        rates = resolve_pricing_from_llm_stats(candidate.details)
+        if rates:
+            return PricingResult(rates, "llm_stats")
+    rates = resolve_pricing_from_litellm(candidate.id, litellm_data)
+    return PricingResult(rates, "litellm" if rates else None)
+
+
+def build_model_entry(
+    candidate: Candidate,
     registered: dict[str, set[str]],
-) -> list[str]:
-    """Return the subset of *ocs_providers* for which *model_id* is already registered (or deleted)."""
-    return [p for p in ocs_providers if model_id in registered.get(p, set())]
-
-
-def _resolve_pricing_with_source(
-    model_id: str,
-    m: dict,
-    litellm_data: dict[str, Any],
-) -> tuple[dict[str, str] | None, str | None]:
-    """Resolve per-1K-token pricing for *model_id*, trying llm-stats then LiteLLM.
-
-    Returns ``(pricing_dict, source_name)`` where *source_name* is ``"llm_stats"``,
-    ``"litellm"``, or *None* when no pricing data is available.
-    """
-    if not m.get("details_error"):
-        pricing = resolve_pricing_from_llm_stats(m.get("details", {}))
-        if pricing:
-            return pricing, "llm_stats"
-    pricing = resolve_pricing_from_litellm(model_id, litellm_data)
-    return pricing, ("litellm" if pricing else None)
-
-
-def _build_model_entry(
-    m: dict,
-    ocs_providers: list[str],
-    registered_providers: list[str],
     priced: set[tuple[str, str]],
-    pricing: dict[str, str] | None,
-    pricing_source: str | None,
+    pricing: PricingResult,
 ) -> tuple[dict, list[dict]]:
-    """Build a model entry dict and its pricing entries list.
+    """Build the output entry for a new model and its pricing entries.
 
-    Returns ``(entry, pricing_entries)`` where *pricing_entries* is non-empty
-    only when *pricing* is not None.
+    *pricing_entries* is non-empty only when *pricing* has rates and at least
+    one mapped provider still needs pricing.
     """
-    model_id = m["id"]
-    details = m.get("details", {})
-    already_priced = [p for p in ocs_providers if (p, model_id) in priced]
-
+    model_id = candidate.id
+    providers = candidate.ocs_providers
     entry: dict = {
         "id": model_id,
-        "org": m.get("organization", {}).get("id", ""),
-        "context_window": m.get("context_window"),
-        "ocs_providers": ocs_providers,
-        "already_registered_providers": registered_providers,
-        "already_priced_providers": already_priced,
-        "source_url": details.get("url") or f"https://llm-stats.com/models/{model_id}",
-        "sources": details.get("sources", {}),
-        "details_error": m.get("details_error"),
+        "org": candidate.org,
+        "context_window": candidate.context_window,
+        "ocs_providers": providers,
+        "already_registered_providers": candidate.registered_providers(registered),
+        "already_priced_providers": [p for p in providers if (p, model_id) in priced],
+        "source_url": candidate.source_url,
+        "sources": candidate.details.get("sources", {}),
+        "details_error": candidate.details_error,
     }
 
-    if not pricing:
-        entry["pricing"] = {
-            "has_pricing": False,
-            "source": None,
-            "reason": "No pricing data found in llm_stats or LiteLLM",
-        }
+    if not pricing.has_pricing:
+        entry["pricing"] = {"has_pricing": False, "source": None, "reason": NO_PRICING_REASON}
         return entry, []
 
-    providers_needing_pricing = [p for p in ocs_providers if (p, model_id) not in priced]
-    p_entries = build_pricing_entries(model_id, providers_needing_pricing, pricing)
+    needs_pricing = [p for p in providers if (p, model_id) not in priced]
+    pricing_entries = build_pricing_entries(model_id, needs_pricing, pricing.rates)
     entry["pricing"] = {
         "has_pricing": True,
-        "source": pricing_source,
+        "source": pricing.source,
         "unit": "per_1k_tokens",
-        "rates": pricing,
-        "llm_pricing_entries": p_entries,
+        "rates": pricing.rates,
+        "llm_pricing_entries": pricing_entries,
     }
-    return entry, p_entries
-
-
-# ---------------------------------------------------------------------------
-# Core pipeline
-# ---------------------------------------------------------------------------
+    return entry, pricing_entries
 
 
 def process_candidates(
@@ -477,32 +489,30 @@ def process_candidates(
     unpriced: list[dict] = []
     all_pricing_entries: list[dict] = []
 
-    for m in candidates:
-        model_id = m["id"]
-        org = m.get("organization", {}).get("id", "")
-        ocs_providers = ORG_TO_OCS_PROVIDERS.get(org, [])
-        registered_providers = _get_registered_providers(model_id, ocs_providers, registered)
-
-        if registered_providers and len(registered_providers) == len(ocs_providers):
+    for raw in candidates:
+        candidate = Candidate(raw)
+        if candidate.is_fully_registered(registered):
             already_registered.append(
-                {"id": model_id, "org": org, "registered_providers": registered_providers}
+                {
+                    "id": candidate.id,
+                    "org": candidate.org,
+                    "registered_providers": candidate.registered_providers(registered),
+                }
             )
             continue
 
-        pricing, pricing_source = _resolve_pricing_with_source(model_id, m, litellm_data)
-        entry, p_entries = _build_model_entry(
-            m, ocs_providers, registered_providers, priced, pricing, pricing_source
-        )
-        all_pricing_entries.extend(p_entries)
+        pricing = resolve_pricing(candidate, litellm_data)
+        entry, pricing_entries = build_model_entry(candidate, registered, priced, pricing)
+        all_pricing_entries.extend(pricing_entries)
         new_models.append(entry)
 
-        if not pricing:
+        if not pricing.has_pricing:
             unpriced.append(
                 {
-                    "id": model_id,
-                    "org": org,
-                    "ocs_providers": ocs_providers,
-                    "reason": "No pricing data found in llm_stats or LiteLLM",
+                    "id": candidate.id,
+                    "org": candidate.org,
+                    "ocs_providers": candidate.ocs_providers,
+                    "reason": NO_PRICING_REASON,
                 }
             )
 
@@ -604,7 +614,7 @@ def main(argv: list[str] | None = None) -> None:
     result = process_candidates(candidates, registered, priced, litellm_data)
 
     output = {
-        "run_date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "run_date": datetime.datetime.now(datetime.UTC).isoformat(),
         "days_lookback": args.days,
         "summary": {
             "candidates_from_api": len(candidates),
