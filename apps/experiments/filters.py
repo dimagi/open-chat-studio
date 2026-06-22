@@ -160,7 +160,7 @@ class VersionsFilter(ChoiceColumnFilter):
 
     def prepare(self, team, **kwargs):
         single_experiment = kwargs.get("single_experiment")
-        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)
+        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)  # ty: ignore[invalid-assignment]
 
     def _get_version_numbers(self, version_names):
         """Convert version names to numbers removing the 'v' prefix from 'v1'."""
@@ -193,7 +193,7 @@ class MessageVersionsFilter(ChoiceColumnFilter):
 
     def prepare(self, team, **kwargs):
         single_experiment = kwargs.get("single_experiment")
-        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)
+        self.options = Experiment.objects.get_version_names(team, working_version=single_experiment)  # ty: ignore[invalid-assignment]
 
     def apply_any_of(self, queryset, value, timezone=None):
         return queryset.filter(_message_tag_exists(value, category=Chat.MetadataKeys.EXPERIMENT_VERSION))

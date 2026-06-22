@@ -1237,7 +1237,7 @@ class Participant(BaseTeamModel):
     def get_latest_session(self, experiment: Experiment) -> ExperimentSession:
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
-    def last_seen(self) -> datetime:
+    def last_seen(self) -> datetime | None:
         """Gets the "last seen" date for this participant based on their last message"""
         latest_session = (
             self.experimentsession_set.annotate(message_count=Count("chat__messages"))

@@ -85,7 +85,7 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
         return [int(v[1:]) for v in values if "v" in v]
 
     def prepare(self, team, **kwargs):
-        self.options = Experiment.objects.get_version_names(team)
+        self.options = Experiment.objects.get_version_names(team)  # ty: ignore[invalid-assignment]
 
 
 class TraceStatusFilter(ChoiceColumnFilter):
