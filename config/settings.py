@@ -467,7 +467,7 @@ SPECTACULAR_SETTINGS = {
     # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
     # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
     "ENUM_NAME_OVERRIDES": {
-        "ExperimentSessionStatusEnum": "apps.experiments.models.SessionStatus",
+        "ChatbotSessionStatusEnum": "apps.experiments.models.SessionStatus",
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,

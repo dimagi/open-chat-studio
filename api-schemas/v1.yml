@@ -1225,6 +1225,22 @@ components:
             $ref: '#/components/schemas/UploadedFile'
       required:
       - files
+    ChatbotSessionStatusEnum:
+      enum:
+      - setup
+      - pending
+      - active
+      - pending-review
+      - complete
+      - unknown
+      type: string
+      description: |-
+        * `setup` - Setting Up
+        * `pending` - Awaiting participant
+        * `active` - Active
+        * `pending-review` - Awaiting final review.
+        * `complete` - Complete
+        * `unknown` - Unknown
     CreateChatCompletionRequest:
       type: object
       properties:
@@ -1313,7 +1329,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/ExperimentSessionStatusEnum'
+          $ref: '#/components/schemas/ChatbotSessionStatusEnum'
         platform:
           type: string
           nullable: true
@@ -1355,22 +1371,6 @@ components:
       required:
       - experiment
       - url
-    ExperimentSessionStatusEnum:
-      enum:
-      - setup
-      - pending
-      - active
-      - pending-review
-      - complete
-      - unknown
-      type: string
-      description: |-
-        * `setup` - Setting Up
-        * `pending` - Awaiting participant
-        * `active` - Active
-        * `pending-review` - Awaiting final review.
-        * `complete` - Complete
-        * `unknown` - Unknown
     ExperimentSessionWithMessages:
       type: object
       properties:
@@ -1402,7 +1402,7 @@ components:
           format: date-time
           readOnly: true
         status:
-          $ref: '#/components/schemas/ExperimentSessionStatusEnum'
+          $ref: '#/components/schemas/ChatbotSessionStatusEnum'
         platform:
           type: string
           nullable: true
