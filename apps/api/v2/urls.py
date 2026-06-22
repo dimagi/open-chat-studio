@@ -15,5 +15,5 @@ urlpatterns = [
     path("me/", views.MeView.as_view(), name="me"),
     path("manifest/", sync_views.ManifestView.as_view(), name="manifest"),
     path("", include(router.urls)),
-    re_path(r"^(?P<resource>[a-z_]+)/$", sync_views.ResourceSlugView.as_view(), name="resource"),
+    re_path(r"^(?P<resource>[a-z_]+)/$", sync_views.ResourceView.as_view(), name="resource"),
 ]

@@ -30,7 +30,7 @@ class ManifestView(APIView):
         return Response(build_manifest())
 
 
-class ResourceSlugView(APIView):
+class ResourceView(APIView):
     permission_classes = [IsAuthenticated, IsTeamAdmin]
 
     def get(self, request, resource):
