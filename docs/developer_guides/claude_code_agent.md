@@ -128,6 +128,9 @@ Every non-draft, non-fork, non-Dependabot PR triggers an automated Claude code r
 
 There is no manual trigger for this workflow. To get a fresh review, push a new commit.
 
+!!! note
+    For a fork, pull requests do **not** run the Claude Code Review workflow due to permission restrictions.
+
 ## Maintaining These Workflows
 
 For engineers responsible for extending, debugging, or operating the Claude workflows, see `README-claude-workflows.md` in the repository's `.github/workflows` directory on GitHub.
