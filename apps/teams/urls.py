@@ -20,6 +20,7 @@ team_urlpatterns = (
         path("invite/<slug:invitation_id>/", views.resend_invitation, name="resend_invitation"),
         path("invite/", views.send_invitation_view, name="send_invitation"),
         path("invite/cancel/<slug:invitation_id>/", views.cancel_invitation_view, name="cancel_invitation"),
+        path("public-key/", views.set_public_key, name="set_public_key"),
         path("flags/", views.feature_flags, name="feature_flags"),
     ],
     "single_team",

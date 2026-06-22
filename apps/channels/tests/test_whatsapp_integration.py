@@ -181,6 +181,28 @@ class TestTurnio:
         bot_process_input.assert_not_called()
 
     @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        "message",
+        [
+            turnio_messages.system_user_changed_number_message(),
+            turnio_messages.unsupported_message(),
+        ],
+    )
+    @patch("apps.channels.tasks.handle_turn_message")
+    def test_non_conversational_messages_not_dispatched(self, handle_turn_message_task, message, client):
+        """Regression test for the KeyError: system/unsupported payloads have a
+        "messages" array but no "contacts", so the webhook must skip them in-line
+        instead of dispatching a Celery task that would crash on the missing key."""
+        messaging_provider = MessagingProviderFactory.create(type=MessagingProviderType.turnio)
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP, messaging_provider=messaging_provider
+        )
+        url = reverse("channels:new_turn_message", kwargs={"experiment_id": channel.experiment.public_id})
+        response = client.post(url, data=message, content_type="application/json")
+        assert response.status_code == 200
+        handle_turn_message_task.delay.assert_not_called()
+
+    @pytest.mark.django_db()
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
     @patch("apps.channels.tasks.handle_turn_message")
     def test_outbound_and_status_messages_ignored(self, handle_turn_message_task, message, client):

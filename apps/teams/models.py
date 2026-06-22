@@ -36,6 +36,11 @@ class Team(BaseModel):
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
+    public_key = models.TextField(
+        blank=True,
+        default="",
+        help_text="Public key used to seal data exported from this team.",
+    )
 
     def save(self, *args, **kwargs):
         from .helpers import get_next_unique_team_slug  # noqa: PLC0415 - circular: teams.helpers imports teams.models
