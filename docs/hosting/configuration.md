@@ -84,10 +84,49 @@ Without S3, user-uploaded files are stored on the local filesystem. This is only
 | `USE_S3_STORAGE` | Set to `True` to enable S3 for media storage. |
 | `AWS_ACCESS_KEY_ID` | AWS access key (omit if using IAM roles). |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key (omit if using IAM roles). |
-| `AWS_S3_REGION` | S3 region, e.g. `us-east-1`. |
+| `AWS_S3_REGION` | S3 region, e.g. `us-east-1`. May be left blank for S3-compatible providers (a dummy region is used for signing). |
 | `AWS_PUBLIC_STORAGE_BUCKET_NAME` | Bucket for public user uploads (e.g. profile images). |
 | `AWS_PRIVATE_STORAGE_BUCKET_NAME` | Bucket for private user uploads. |
 | `WHATSAPP_S3_AUDIO_BUCKET` | Bucket for WhatsApp voice message audio files. |
+| `AWS_S3_ENDPOINT_URL` | Optional. Endpoint for S3-compatible storage, e.g. `https://minio.example.com`. Omit for AWS S3. |
+| `AWS_S3_ADDRESSING_STYLE` | Optional. `path` (MinIO, IP endpoints), `virtual` (most cloud providers), or unset (auto). Must match your endpoint. |
+| `AWS_S3_CUSTOM_DOMAIN` | Optional. Public-media URL prefix as a browser sees it. Include the bucket for path-style (`host/bucket`); host-only for virtual-host/CDN. Omit for the AWS default. |
+
+### S3-compatible providers
+
+The settings above also work with any S3-compatible service (MinIO, Cloudflare R2, Backblaze B2, Wasabi, DigitalOcean Spaces, etc.). Leave the three `AWS_S3_*` overrides blank for plain AWS. These apply to both media storage and the WhatsApp audio bucket.
+
+MinIO (path-style addressing — note the bucket is included in `AWS_S3_CUSTOM_DOMAIN`):
+
+```
+USE_S3_STORAGE=True
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_ENDPOINT_URL=http://minio:9000
+AWS_S3_ADDRESSING_STYLE=path
+AWS_S3_CUSTOM_DOMAIN=minio.example.com/public-bucket
+AWS_PUBLIC_STORAGE_BUCKET_NAME=public-bucket
+AWS_PRIVATE_STORAGE_BUCKET_NAME=private-bucket
+WHATSAPP_S3_AUDIO_BUCKET=whatsapp-audio
+```
+
+Cloudflare R2 (virtual-host addressing):
+
+```
+USE_S3_STORAGE=True
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_ENDPOINT_URL=https://<accountid>.r2.cloudflarestorage.com
+AWS_S3_ADDRESSING_STYLE=virtual
+AWS_S3_CUSTOM_DOMAIN=pub.<accountid>.r2.cloudflarestorage.com
+AWS_PUBLIC_STORAGE_BUCKET_NAME=public-bucket
+AWS_PRIVATE_STORAGE_BUCKET_NAME=private-bucket
+```
+
+Notes:
+
+- Private file downloads are served via presigned URLs generated against `AWS_S3_ENDPOINT_URL`, so they work automatically with any provider.
+- For path-style endpoints (MinIO), `AWS_S3_CUSTOM_DOMAIN` must include the bucket segment; for virtual-host, it must not.
 
 ## Integrations
 

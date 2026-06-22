@@ -28,6 +28,7 @@ from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File
 from apps.service_providers.exceptions import MessageMediaError, ServiceProviderConfigError
 from apps.service_providers.file_limits import can_send_on_whatsapp
+from apps.service_providers.s3 import get_s3_client
 from apps.service_providers.speech_service import SynthesizedAudio
 
 logger = logging.getLogger("ocs.messaging")
@@ -213,16 +214,7 @@ class TwilioService(HttpMediaDownloadMixin, MessagingService):
 
     @property
     def s3_client(self):
-        import boto3  # noqa: PLC0415 - TID253: heavy lib, slow startup
-        from botocore.client import Config  # noqa: PLC0415 - lazy: used with boto3
-
-        return boto3.client(
-            "s3",
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_S3_REGION,
-            config=Config(signature_version="s3v4"),
-        )
+        return get_s3_client()
 
     def _upload_audio_file(self, synthetic_voice: SynthesizedAudio):
         file_path = f"{uuid.uuid4()}.mp3"

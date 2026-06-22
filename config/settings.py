@@ -373,7 +373,28 @@ AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default=None)
 AWS_S3_REGION = env("AWS_S3_REGION", default=None)
 WHATSAPP_S3_AUDIO_BUCKET = env("WHATSAPP_S3_AUDIO_BUCKET", default=None)
 
+# Optional S3-compatible overrides (MinIO, Cloudflare R2, Backblaze B2, Wasabi, etc.).
+# Leave all unset for plain AWS S3. django-storages reads these AWS_S3_* settings globally,
+# so they apply to both media backends (and the WhatsApp audio client). See docs/hosting/configuration.md.
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default=None)  # e.g. http://minio:9000
+AWS_S3_ADDRESSING_STYLE = env("AWS_S3_ADDRESSING_STYLE", default=None)  # "path" | "virtual" | None(=auto)
+AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default=None)  # public media URL base (host or host/bucket)
+
 USE_S3_STORAGE = env.bool("USE_S3_STORAGE", default=False)
+
+# Some S3-compatible providers ignore region, but boto3 v4 signing requires one. This applies
+# to the WhatsApp/Twilio audio client too, so it must run even when USE_S3_STORAGE is False.
+if AWS_S3_ENDPOINT_URL and not AWS_S3_REGION:
+    AWS_S3_REGION = "us-east-1"
+
+
+def _public_media_url(custom_domain: str, bucket_name: str, location: str) -> str:
+    """Build the public MEDIA_URL. With a custom domain the caller controls the URL prefix
+    (works for path-style host/bucket and virtual-host bucket.host); otherwise default to AWS S3."""
+    base = custom_domain or f"{bucket_name}.s3.amazonaws.com"
+    return f"https://{base}/{location}/"
+
+
 if USE_S3_STORAGE:
     # match names in django-storages
     AWS_S3_ACCESS_KEY_ID = AWS_ACCESS_KEY_ID
@@ -391,7 +412,7 @@ if USE_S3_STORAGE:
     # public storge for media files e.g. user profile pictures
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
-    MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
+    MEDIA_URL = _public_media_url(AWS_S3_CUSTOM_DOMAIN, AWS_PUBLIC_STORAGE_BUCKET_NAME, PUBLIC_MEDIA_LOCATION)
     STORAGES["public"] = {  # ty: ignore[invalid-assignment]
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
