@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open Chat Studio
-  version: ''
+  version: v1
   description: Build, deploy and monitor chatbots.
 paths:
   /api/chat/{session_id}/{task_id}/poll/:

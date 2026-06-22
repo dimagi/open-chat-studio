@@ -1322,3 +1322,6 @@ tags:
 - name: Me
   description: Information about the authenticated user and the team the token is
     scoped to.
+externalDocs:
+  url: https://docs.openchatstudio.com/api/
+  description: API Guides
