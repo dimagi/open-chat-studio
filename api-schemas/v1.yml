@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Open Chat Studio
-  version: v1
+  version: ''
   description: Build, deploy and monitor chatbots.
 paths:
   /api/chat/{session_id}/{task_id}/poll/:
@@ -2045,3 +2045,6 @@ tags:
   description: OpenAI-compatible endpoints for interacting with chatbots.
 - name: Participants
   description: Manage participants, their data, and their schedules.
+externalDocs:
+  url: https://docs.openchatstudio.com/api/
+  description: API Guides
