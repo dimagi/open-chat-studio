@@ -9,7 +9,6 @@ translation store. Each run makes one pass over the manifest and exits; rerun to
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
-from field_audit.models import AuditAction
 
 from apps.teams.models import Team
 from apps.teams.sync.client import SourceClient
@@ -22,6 +21,8 @@ from apps.teams.sync.translation import (
     derive_pk_cursor,
     derive_updated_at_cursor,
 )
+from apps.teams.utils import current_team
+from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
 
 def _start_cursor(model_label, cursor_type, store, model):
@@ -67,11 +68,18 @@ def run_sync(
 
 def force_delete_team(team_slug, state_dir, write=lambda _m: None):
     """Delete the local team (matched by slug) and its sync-state DB so the next run re-imports from
-    scratch. Without resetting the state, the derived cursor would skip the rows that were deleted."""
-    deleted, _ = Team.objects.filter(slug=team_slug).delete(audit_action=AuditAction.AUDIT)
-    state_db = Path(state_dir) / f"{team_slug}.sqlite"
-    state_db.unlink(missing_ok=True)
-    write(f"force-deleted team '{team_slug}' and reset sync state ({deleted} objects removed)")
+    scratch. Without resetting the state, the derived cursor would skip the rows that were deleted.
+
+    Deletes via the same audited cascade the team-delete view uses, but without the notification
+    emails -- nobody should be told their team was deleted during a re-import."""
+    team = Team.objects.filter(slug=team_slug).first()
+    if team is not None:
+        with current_team(team):
+            stats = delete_object_with_auditing_of_related_objects(team)
+        write(f"force-deleted team '{team_slug}' and reset sync state ({sum(stats.values())} objects removed)")
+    else:
+        write(f"no local team '{team_slug}' to delete; reset sync state")
+    Path(state_dir).joinpath(f"{team_slug}.sqlite").unlink(missing_ok=True)
 
 
 class Command(BaseCommand):

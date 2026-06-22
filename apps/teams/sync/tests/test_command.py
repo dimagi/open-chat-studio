@@ -173,11 +173,13 @@ def test_force_delete_team_removes_team_and_resets_state(tmp_path):
     state_db = tmp_path / "imported-team-z.sqlite"
     FKTranslationStore(state_db).record("teams.team", 9001, team.id)
     assert state_db.exists()
+    mail.outbox.clear()
 
     force_delete_team("imported-team-z", tmp_path)
 
     assert not Team.objects.filter(slug="imported-team-z").exists()
     assert not state_db.exists()
+    assert mail.outbox == []  # a re-import must not notify anyone that their team was deleted
 
 
 def test_force_delete_team_is_a_no_op_when_team_missing(tmp_path):
