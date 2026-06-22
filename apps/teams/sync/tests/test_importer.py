@@ -63,6 +63,7 @@ def _team_row(source_id=9001, slug="imported-team-xyz"):
 
 
 def test_import_team_creates_row_records_translation_and_restores_timestamps(store):
+    """A team row is created, its source->target id recorded, and source timestamps kept."""
     Importer(store).import_rows("teams.team", [_team_row()])
 
     target_pk = store.get_target("teams.team", 9001)
@@ -72,6 +73,7 @@ def test_import_team_creates_row_records_translation_and_restores_timestamps(sto
 
 
 def test_import_resolves_fk_to_target_pk_and_unseals_secret(store, keypair):
+    """A provider's team FK is rewritten to the target team and its sealed config decrypted."""
     public_key, private_key = keypair
     importer = Importer(store, private_key=private_key)
     importer.import_rows("teams.team", [_team_row()])
@@ -94,6 +96,7 @@ def test_import_resolves_fk_to_target_pk_and_unseals_secret(store, keypair):
 
 
 def test_rerun_does_not_duplicate(store):
+    """Re-importing the same row maps to the existing target instead of creating a duplicate."""
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
     first_pk = store.get_target("teams.team", 9001)
@@ -103,6 +106,7 @@ def test_rerun_does_not_duplicate(store):
 
 
 def test_global_row_matches_existing_and_is_not_recreated(store):
+    """A global (teamless) row is matched to the shared target by natural key, not recreated."""
     existing = LlmProviderModel.objects.create(team=None, type="openai", name="gpt-glob", max_token_limit=8192)
     count_before = LlmProviderModel.objects.count()
     row = {
@@ -123,6 +127,7 @@ def test_global_row_matches_existing_and_is_not_recreated(store):
 
 
 def test_node_params_and_fk_columns_are_remapped(store):
+    """Resource ids in both FK columns and node params are translated to their target pks."""
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
     team_pk = store.get_target("teams.team", 9001)
@@ -171,6 +176,7 @@ def test_node_params_and_fk_columns_are_remapped(store):
 
 
 def test_membership_groups_are_linked_by_name(store):
+    """Membership groups are re-linked to target groups matched by name."""
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
     user = CustomUser.objects.create(username="synced@example.com", email="synced@example.com")
@@ -187,6 +193,7 @@ def test_membership_groups_are_linked_by_name(store):
 
 
 def test_default_consent_form_maps_to_auto_created_default(store):
+    """The source's default consent form maps onto the team's auto-created default, not a second one."""
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
     team_pk = store.get_target("teams.team", 9001)
@@ -216,6 +223,7 @@ def test_default_consent_form_maps_to_auto_created_default(store):
 
 
 def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):
+    """A user already on the target is mapped by username, left unchanged, and gets no reset email."""
     existing = CustomUser.objects.create(username="op@example.com", email="op@example.com", first_name="Original")
     created_users = []
     importer = Importer(store, on_user_created=created_users.append)
@@ -229,6 +237,7 @@ def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):
 
 
 def test_new_user_triggers_on_user_created(store):
+    """A newly created user fires the on_user_created callback (e.g. the reset email)."""
     created_users = []
     importer = Importer(store, on_user_created=created_users.append)
 
