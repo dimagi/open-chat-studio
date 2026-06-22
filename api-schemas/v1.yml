@@ -1045,6 +1045,25 @@ paths:
                       channel
                   summary: Experiment cannot send messages on the specified channel
           description: ''
+  /api/v2/{resource}/:
+    get:
+      operationId: api_v2_retrieve
+      parameters:
+      - in: path
+        name: resource
+        schema:
+          type: string
+          pattern: ^[a-z_]+$
+        required: true
+      tags:
+      - api
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
@@ -1135,6 +1154,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+  /api/v2/manifest/:
+    get:
+      operationId: api_v2_manifest_retrieve
+      tags:
+      - api
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v2/me/:
     get:
       operationId: me
