@@ -36,16 +36,13 @@ class PipelineStartForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         team_id = kwargs.pop("team_id")
-        experiment_id = kwargs.pop("experiment_id", None)
         super().__init__(*args, **kwargs)
-        queryset = Pipeline.objects.filter(team_id=team_id, working_version_id__isnull=True)
-        if experiment_id is not None:
-            # Exclude the experiment's own pipeline: a trigger that starts the chatbot's own
-            # pipeline is re-entrant/self-referential and not a meaningful configuration.
-            own_pipeline_id = Experiment.objects.filter(id=experiment_id).values_list("pipeline_id", flat=True).first()
-            if own_pipeline_id is not None:
-                queryset = queryset.exclude(id=own_pipeline_id)
-        self.fields["pipeline_id"].queryset = queryset
+        # Exclude pipelines already directly linked to an experiment (a chatbot's own pipeline).
+        # Such a pipeline runs as part of the chatbot itself, so starting it from a trigger is
+        # re-entrant/self-referential rather than a meaningful configuration.
+        self.fields["pipeline_id"].queryset = Pipeline.objects.filter(
+            team_id=team_id, working_version_id__isnull=True, experiment__isnull=True
+        )
 
     def clean_pipeline_id(self):
         return self.cleaned_data["pipeline_id"].id
@@ -133,7 +130,6 @@ def build_action_params_form(action_type, *, data=None, initial=None, team_id, e
         kwargs["experiment_id"] = experiment_id
     elif form_cls is PipelineStartForm:
         kwargs["team_id"] = team_id
-        kwargs["experiment_id"] = experiment_id
     return form_cls(**kwargs)
 
 
