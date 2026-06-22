@@ -55,6 +55,18 @@ class ResourceView(APIView):
         return Response({"cursor": next_cursor, "has_more": has_more, "results": serializer.data})
 
 
+class CursorHelper:
+    """Encode/decode the keyset-pagination cursor as a base64-wrapped JSON blob."""
+
+    @staticmethod
+    def encode(keyset: dict) -> str:
+        return base64.b64encode(json.dumps(keyset).encode()).decode()
+
+    @staticmethod
+    def decode(cursor: str) -> dict:
+        return json.loads(base64.b64decode(cursor))
+
+
 def _paginate(queryset, cursor_type, cursor, limit):
     if cursor_type == "pk":
         queryset = queryset.order_by("id")
@@ -68,15 +80,14 @@ def _paginate(queryset, cursor_type, cursor, limit):
 
     queryset = queryset.order_by("updated_at", "id")
     if cursor:
-        keyset = json.loads(base64.b64decode(cursor))
+        keyset = CursorHelper.decode(cursor)
         timestamp = parse_datetime(keyset["updated_at"])
         queryset = queryset.filter(Q(updated_at__gt=timestamp) | Q(updated_at=timestamp, id__gt=keyset["id"]))
     rows = list(queryset[: limit + 1])
     has_more = len(rows) > limit
     rows = rows[:limit]
     if rows:
-        keyset = {"updated_at": rows[-1].updated_at.isoformat(), "id": rows[-1].id}
-        next_cursor = base64.b64encode(json.dumps(keyset).encode()).decode()
+        next_cursor = CursorHelper.encode({"updated_at": rows[-1].updated_at.isoformat(), "id": rows[-1].id})
     else:
         next_cursor = cursor
     return rows, next_cursor, has_more
