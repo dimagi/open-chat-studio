@@ -34,8 +34,27 @@ def test_secret_flag_agrees_with_secret_registry():
 
 
 def test_registry_keys_resolve_to_models():
-    for label in (*manifest.SECRET_REGISTRY, *manifest.EXCLUDE_REGISTRY, *manifest.TEAM_PATH_REGISTRY):
+    for label in (
+        *manifest.SECRET_REGISTRY,
+        *manifest.EXCLUDE_REGISTRY,
+        *manifest.TEAM_PATH_REGISTRY,
+        *manifest.IGNORED_MODELS,
+    ):
         assert _model(label) is not None
+
+
+def test_every_first_party_model_is_synced_or_ignored():
+    """Every app model is either in the manifest or explicitly ignored, so a newly added model
+    can't slip past the sync unnoticed -- it forces a choice between syncing and ignoring it."""
+    first_party = {m._meta.label_lower for m in apps.get_models() if m._meta.app_config.name.startswith("apps.")}
+    classified = {e.model for e in manifest.MANIFEST_ENTRIES} | manifest.IGNORED_MODELS
+    unclassified = first_party - classified
+    assert not unclassified, "Add these to MANIFEST_ENTRIES or IGNORED_MODELS: " + ", ".join(sorted(unclassified))
+
+
+def test_manifest_and_ignored_models_are_disjoint():
+    in_manifest = {e.model for e in manifest.MANIFEST_ENTRIES}
+    assert not (in_manifest & manifest.IGNORED_MODELS)
 
 
 def test_registry_fields_exist_on_their_model():
