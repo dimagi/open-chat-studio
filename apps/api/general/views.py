@@ -36,7 +36,7 @@ class ResourceView(APIView):
     def get(self, request, resource):
         entry = get_manifest_entry(resource)
         if entry is None:
-            raise NotFound("Unknown content type.")
+            raise NotFound("Unknown resource.")
 
         context = {"public_key": None}
         if entry.secret:
