@@ -9,10 +9,11 @@ from django.db.models import Q
 from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.exceptions import NotFound
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.api.permissions import IsTeamAdmin
 from apps.teams.sync.manifest import build_manifest, entry_model, get_entry, team_scoped_queryset
 from apps.teams.sync.seal import load_public_key
 
@@ -20,12 +21,6 @@ from .serializers import build_sync_serializer
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
-
-
-class IsTeamAdmin(BasePermission):
-    def has_permission(self, request, view):
-        membership = getattr(request, "team_membership", None)
-        return bool(membership and membership.is_team_admin())
 
 
 class ManifestView(APIView):
