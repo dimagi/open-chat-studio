@@ -17,11 +17,12 @@ def _changed_field_names(version_details):
         for field in details.fields:
             if field.changed:
                 names.append(field.name)
-            if field.raw_value_version:
-                walk(field.raw_value_version)
-            for result in field.queryset_results or []:
-                if result.raw_value_version:
-                    walk(result.raw_value_version)
+            walk_nested(field)
+
+    def walk_nested(field):
+        nested = [field.raw_value_version, *(result.raw_value_version for result in field.queryset_results or [])]
+        for child in filter(None, nested):
+            walk(child)
 
     walk(version_details)
     return names
