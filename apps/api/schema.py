@@ -18,7 +18,7 @@ def exclude_legacy_participants_path(endpoints):
     return [endpoint for endpoint in endpoints if endpoint[0] != "/api/participants/"]
 
 
-def prune_unused_tags(result, generator, request, public, **kwargs):
+def prune_unused_tags(result, **kwargs):
     """Drop top-level tag definitions not referenced by any operation.
 
     ``SPECTACULAR_SETTINGS["TAGS"]`` is a single global list applied to every schema, so a
@@ -92,7 +92,9 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
                 # Get the required scopes from the view
                 required_scopes = getattr(view, "required_scopes", [])
                 if not required_scopes:
-                    return {}
+                    # Any valid OAuth token is accepted, no specific scope. Return the scheme with an
+                    # empty scope list — NOT ``{}``, which OpenAPI reads as "no auth required".
+                    return {self.name: []}
 
                 # Format scopes with :read or :write suffix like TokenHasResourceScope does
                 method = auto_schema.method.upper()

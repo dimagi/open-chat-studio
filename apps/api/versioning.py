@@ -37,7 +37,7 @@ class URLPathVersioning(DRFURLPathVersioning):
             raise NotFound(self.invalid_version_message)
         return version
 
-    def reverse(self, viewname, args=None, kwargs=None, request=None, format=None, **extra):
+    def reverse(self, *args, **kwargs):
         # Skip DRF's version-kwarg injection: our version lives in the path text, not a kwarg, so
         # always emit the canonical unversioned URL (BaseVersioning's behaviour).
-        return BaseVersioning.reverse(self, viewname, args, kwargs, request, format, **extra)
+        return BaseVersioning.reverse(self, *args, **kwargs)

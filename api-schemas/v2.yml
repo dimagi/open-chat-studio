@@ -103,7 +103,7 @@ paths:
       tags:
       - Me
       security:
-      - {}
+      - OAuth2: []
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
