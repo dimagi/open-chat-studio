@@ -21,9 +21,7 @@ from diff_seed_pricing import (
     seed_index,
 )
 
-# ---------------------------------------------------------------------------
 # Pure helpers
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -82,9 +80,7 @@ def test_diffable_models_skips_non_upstream_providers():
     assert diffable_models(index) == {"gpt-4o"}
 
 
-# ---------------------------------------------------------------------------
 # Diff
-# ---------------------------------------------------------------------------
 
 
 def _detail(rates: dict[str, float]) -> dict:
@@ -164,9 +160,7 @@ class TestComputeChanges:
         assert unmatched == set()
 
 
-# ---------------------------------------------------------------------------
 # Apply
-# ---------------------------------------------------------------------------
 
 
 class TestApplyChanges:
@@ -208,9 +202,7 @@ class TestApplyChanges:
         assert updated[1] == seed[1]
 
 
-# ---------------------------------------------------------------------------
 # Migration generation
-# ---------------------------------------------------------------------------
 
 
 def test_next_migration_number_increments(tmp_path):
@@ -232,9 +224,7 @@ def test_generate_migration_writes_file_with_correct_dependency(tmp_path):
     assert "load_pricing_data()" in body
 
 
-# ---------------------------------------------------------------------------
 # PR body
-# ---------------------------------------------------------------------------
 
 
 def test_render_pr_body_includes_table_row_per_change():

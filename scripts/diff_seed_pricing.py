@@ -66,9 +66,7 @@ class RateChange:
     source_url: str
 
 
-# ---------------------------------------------------------------------------
 # Seed parsing
-# ---------------------------------------------------------------------------
 
 
 def load_seed(path: Path) -> list[dict]:
@@ -92,9 +90,7 @@ def diffable_models(index: dict[tuple[str, str], dict[str, str]]) -> set[str]:
     return {model for (provider, model), _ in index.items() if provider in DIFFABLE_PROVIDERS}
 
 
-# ---------------------------------------------------------------------------
 # llm-stats fetch + rate extraction
-# ---------------------------------------------------------------------------
 
 
 def _api_get(url: str, bearer: str) -> Any:
@@ -137,9 +133,7 @@ def _format_per_1k(per_million: float) -> str:
     return f"{per_million / 1000:.8f}".rstrip("0").rstrip(".") or "0"
 
 
-# ---------------------------------------------------------------------------
 # Diff
-# ---------------------------------------------------------------------------
 
 
 def compute_changes(
@@ -193,9 +187,7 @@ def _changes_for_model(
     return out
 
 
-# ---------------------------------------------------------------------------
 # Apply changes to seed + generate migration
-# ---------------------------------------------------------------------------
 
 
 def apply_changes(seed: list[dict], changes: list[RateChange]) -> list[dict]:
@@ -260,9 +252,7 @@ def _migration_template(prev_name: str) -> str:
     )
 
 
-# ---------------------------------------------------------------------------
 # PR body
-# ---------------------------------------------------------------------------
 
 
 def render_pr_body(changes: list[RateChange], unmatched: set[str]) -> str:
@@ -291,9 +281,7 @@ def render_pr_body(changes: list[RateChange], unmatched: set[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-# ---------------------------------------------------------------------------
 # CLI
-# ---------------------------------------------------------------------------
 
 
 def main(argv: list[str] | None = None) -> int:
