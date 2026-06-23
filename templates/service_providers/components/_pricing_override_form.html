@@ -1,0 +1,21 @@
+{% load form_tags %}
+<h3 class="text-lg font-bold">Override pricing — {{ model.display_name }}</h3>
+<p class="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-3">
+  Leave a field blank to inherit the global rate. Prices are per 1M tokens.
+</p>
+<form id="pricing_override_form_inner">
+  {% render_form_fields form "input_price_per_million_tokens" "output_price_per_million_tokens" "cached_input_price_per_million_tokens" %}
+</form>
+<div class="modal-action">
+  <form method="dialog">
+    <button class="btn btn-primary"
+            hx-post="{% url 'service_providers:pricing_override' request.team.slug model.id %}"
+            hx-include="#pricing_override_form_inner"
+            hx-target="#model_{{ model.id }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="pricing_override_modal.close()">
+      Save override
+    </button>
+    <button class="btn">Cancel</button>
+  </form>
+</div>

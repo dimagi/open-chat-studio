@@ -82,12 +82,14 @@ class TestPricingLookup:
 
         result = _pricing_lookup(team, [model])
 
-        kinds = set(result[model.id].keys())
-        assert kinds == {
+        # `primary` / `has_team_override` synthetic keys are part of the shape
+        # but only the service-kind rates carry pricing data.
+        expected_kinds = {
             ServiceKind.LLM_INPUT.value,
             ServiceKind.LLM_OUTPUT.value,
             ServiceKind.LLM_CACHED_INPUT.value,
         }
+        assert expected_kinds <= set(result[model.id].keys())
 
     def test_closed_rules_excluded(self):
         team = TeamFactory.create()

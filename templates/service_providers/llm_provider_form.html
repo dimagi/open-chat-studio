@@ -54,12 +54,26 @@
 
 {% block post_form %}
   {{ block.super }}
+  {% if cost_tracking_enabled %}
+    <dialog id="pricing_override_modal" class="modal">
+      <div class="modal-box" id="pricing_override_modal_body">
+        {# Populated by HTMX on demand from each model row's Override button. #}
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+  {% endif %}
   <dialog id="new_custom_model" class="modal">
     <div class="modal-box">
       <h3 class="text-lg font-bold">Create a new Custom Model</h3>
       <div id="new_model_form">
         <input name="type" type="hidden" value="{{ subtype }}" id="id_type">
         {% render_form_fields new_model_form "name" "max_token_limit" %}
+        {% if cost_tracking_enabled %}
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-1">
+            Optional — set the model's pricing now (per 1M tokens) or leave blank to add it later.
+          </div>
+          {% render_form_fields new_model_form "input_price_per_million_tokens" "output_price_per_million_tokens" %}
+        {% endif %}
       </div>
       <div class="modal-action">
         <form method="dialog">

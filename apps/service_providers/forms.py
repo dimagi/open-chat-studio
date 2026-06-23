@@ -1,4 +1,5 @@
 import hashlib
+from decimal import Decimal
 
 from django import forms
 from django.core.validators import URLValidator
@@ -373,6 +374,23 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 
 class LlmProviderModelForm(forms.ModelForm):
+    """Custom-model creation form. Optional pricing fields are shown only
+    when `flag_ai_cost_monitoring` is on for the team; the view converts
+    per-million to per-1K tokens before persisting `PricingRule` rows."""
+
+    input_price_per_million_tokens = forms.DecimalField(
+        label=_("Input price ($ / 1M tokens)"),
+        required=False,
+        min_value=Decimal("0"),
+        decimal_places=6,
+    )
+    output_price_per_million_tokens = forms.DecimalField(
+        label=_("Output price ($ / 1M tokens)"),
+        required=False,
+        min_value=Decimal("0"),
+        decimal_places=6,
+    )
+
     class Meta:
         model = LlmProviderModel
         fields = ("type", "name", "max_token_limit")
@@ -397,3 +415,44 @@ class LlmProviderModelForm(forms.ModelForm):
             raise forms.ValidationError(_("A model with this name and max token limit already exists for your team"))
 
         return cleaned_data
+
+
+class PricingOverrideForm(forms.Form):
+    """Team-scoped override on a globally-priced model. Prices entered per
+    million tokens (the friendlier unit on provider pricing pages); the
+    view converts to per-1K-tokens before inserting `PricingRule` rows.
+    Leave a field blank to omit a service_kind from the override.
+    """
+
+    input_price_per_million_tokens = forms.DecimalField(
+        label=_("Input price ($ / 1M tokens)"),
+        required=False,
+        min_value=Decimal("0"),
+        decimal_places=6,
+    )
+    output_price_per_million_tokens = forms.DecimalField(
+        label=_("Output price ($ / 1M tokens)"),
+        required=False,
+        min_value=Decimal("0"),
+        decimal_places=6,
+    )
+    cached_input_price_per_million_tokens = forms.DecimalField(
+        label=_("Cached input price ($ / 1M tokens)"),
+        required=False,
+        min_value=Decimal("0"),
+        decimal_places=6,
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        provided = [
+            cleaned.get(f)
+            for f in (
+                "input_price_per_million_tokens",
+                "output_price_per_million_tokens",
+                "cached_input_price_per_million_tokens",
+            )
+        ]
+        if not any(p is not None for p in provided):
+            raise forms.ValidationError(_("Set at least one rate."))
+        return cleaned

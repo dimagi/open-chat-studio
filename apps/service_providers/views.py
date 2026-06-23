@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from decimal import Decimal
 
 from django import views as django_views
 from django.contrib import messages
@@ -11,15 +12,16 @@ from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
-from apps.cost_tracking.models import PricingRule
+from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
-from apps.service_providers.forms import LlmProviderModelForm
+from apps.service_providers.forms import LlmProviderModelForm, PricingOverrideForm
 from apps.service_providers.models import (
     EmbeddingProviderModel,
     LlmProviderModel,
@@ -37,6 +39,14 @@ from .usages import get_provider_usages
 from .utils import ServiceProvider, get_available_subtypes, get_service_provider_forms
 
 log = logging.getLogger("ocs.service_providers")
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
+_PRICE_PER_1K_FROM_MILLION = Decimal(1) / Decimal(1000)
+_FORM_FIELD_TO_KIND = {
+    "input_price_per_million_tokens": ServiceKind.LLM_INPUT,
+    "output_price_per_million_tokens": ServiceKind.LLM_OUTPUT,
+    "cached_input_price_per_million_tokens": ServiceKind.LLM_CACHED_INPUT,
+}
 
 
 def _lookup_subtype_by_slug(subtype_enum, slug):
@@ -323,6 +333,14 @@ def _pricing_lookup(team, llm_models: list) -> dict:
             "source": rule.source,
             "scope": "team" if rule.team_id else "global",
         }
+    # Add a `primary` pointer so the template doesn't have to fall back via
+    # `|default:` (which trips on missing dict keys with STRICT template
+    # resolution), and a `has_team_override` flag for the revert button.
+    for rates in by_key.values():
+        primary = rates.get(ServiceKind.LLM_INPUT.value) or rates.get(ServiceKind.LLM_OUTPUT.value)
+        if primary:
+            rates["primary"] = primary
+        rates["has_team_override"] = any(r["scope"] == "team" for r in rates.values() if isinstance(r, dict))
     return {m.id: by_key[(m.type, m.name)] for m in llm_models if (m.type, m.name) in by_key}
 
 
@@ -331,21 +349,140 @@ def _pricing_lookup(team, llm_models: list) -> dict:
 @permission_required("service_providers.add_llmprovidermodel")
 def create_llm_provider_model(request, team_slug: str):
     form = LlmProviderModelForm(request.team, request.POST)
-    if form.is_valid():
-        model = form.save(commit=False)
-        model.team = request.team
-        model.save()
-    else:
+    if not form.is_valid():
         if len(form.errors) == 1 and "__all__" in form.errors:
             return HttpResponseBadRequest(", ".join([str(v) for v in form.errors.values()]))
         return HttpResponseBadRequest(str(form.errors))
+    cost_tracking_enabled = Flag.get(COST_TRACKING_FLAG).is_active_for_team(request.team)
+    with transaction.atomic():
+        model = form.save(commit=False)
+        model.team = request.team
+        model.save()
+        if cost_tracking_enabled:
+            _persist_team_pricing_rules(request.team, model.type, model.name, form.cleaned_data, request.user)
+    custom_models = LlmProviderModel.objects.filter(team=request.team)
     return render(
         request,
         "service_providers/components/custom_llm_models.html",
         {
-            "llm_models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team)),
-            "embedding_models_by_type": _get_models_by_type(LlmProviderModel.objects.filter(team=request.team)),
+            "llm_models_by_type": _get_models_by_type(custom_models),
+            "embedding_models_by_type": _get_models_by_type(custom_models),
             "for_type": form.cleaned_data["type"],
+            "cost_tracking_enabled": cost_tracking_enabled,
+            "pricing_lookup": _pricing_lookup(request.team, list(custom_models)) if cost_tracking_enabled else {},
+        },
+    )
+
+
+@login_and_team_required
+@permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
+def pricing_override_form(request, team_slug: str, pk: int):
+    """Render the override modal form. Pre-fills with the currently active
+    rate (team-scoped or global) converted back to per-million for display."""
+    _require_cost_tracking_flag(request.team)
+    model = _resolve_model(request.team, pk)
+    initial = _form_initial_from_active_rates(request.team, model)
+    form = PricingOverrideForm(initial=initial)
+    return render(
+        request,
+        "service_providers/components/_pricing_override_form.html",
+        {"form": form, "model": model},
+    )
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
+def pricing_override(request, team_slug: str, pk: int):
+    """POST handler for the override modal. Creates team-scoped rules,
+    superseding any existing team override for the same (kind)."""
+    _require_cost_tracking_flag(request.team)
+    model = _resolve_model(request.team, pk)
+    form = PricingOverrideForm(request.POST)
+    if not form.is_valid():
+        return HttpResponseBadRequest(str(form.errors))
+    with transaction.atomic():
+        _persist_team_pricing_rules(request.team, model.type, model.name, form.cleaned_data, request.user)
+    return _render_model_row(request, model)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
+def pricing_revert(request, team_slug: str, pk: int):
+    """Close every active team-scoped rule for this (provider, model_name).
+    Resolution falls back to the matching global rule on the next read."""
+    _require_cost_tracking_flag(request.team)
+    model = _resolve_model(request.team, pk)
+    PricingRule.objects.filter(
+        team=request.team,
+        provider_type=model.type,
+        model_name=model.name,
+        effective_to__isnull=True,
+    ).update(effective_to=timezone.now())
+    return _render_model_row(request, model)
+
+
+def _resolve_model(team, pk: int) -> LlmProviderModel:
+    """Both team-scoped customs and the global defaults are addressable."""
+    return get_object_or_404(LlmProviderModel, Q(team=team) | Q(team__isnull=True), pk=pk)
+
+
+def _require_cost_tracking_flag(team) -> None:
+    if not Flag.get(COST_TRACKING_FLAG).is_active_for_team(team):
+        raise Http404("Cost tracking is not enabled for this team.")
+
+
+def _form_initial_from_active_rates(team, model: LlmProviderModel) -> dict:
+    """Pre-fill the override form with the currently resolved per-million rate
+    for each service kind (team override wins over global)."""
+    lookup = _pricing_lookup(team, [model])
+    rates = lookup.get(model.id, {})
+    initial: dict[str, Decimal] = {}
+    for field, kind in _FORM_FIELD_TO_KIND.items():
+        rate = rates.get(kind.value)
+        if rate:
+            initial[field] = (rate["unit_price"] * Decimal(1000)).normalize()
+    return initial
+
+
+def _persist_team_pricing_rules(team, provider_type: str, model_name: str, cleaned: dict, user) -> None:
+    """Close any active team rule for the (provider, model, kind) and insert
+    a fresh team-scoped rule per non-empty form field. Globals are untouched
+    — resolution merges them with the team override at read time."""
+    now = timezone.now()
+    for field_name, kind in _FORM_FIELD_TO_KIND.items():
+        per_million = cleaned.get(field_name)
+        if per_million is None:
+            continue
+        PricingRule.objects.filter(
+            team=team,
+            provider_type=provider_type,
+            model_name=model_name,
+            service_kind=kind,
+            effective_to__isnull=True,
+        ).update(effective_to=now)
+        PricingRule.objects.create(
+            team=team,
+            provider_type=provider_type,
+            model_name=model_name,
+            service_kind=kind,
+            unit_price=per_million * _PRICE_PER_1K_FROM_MILLION,
+            source=PricingSource.MANUAL,
+            created_by=user,
+        )
+
+
+def _render_model_row(request, model: LlmProviderModel) -> HttpResponse:
+    """Re-render a single row partial after an HTMX swap."""
+    return render(
+        request,
+        "service_providers/components/_llm_model_row.html",
+        {
+            "model": model,
+            "show_delete": model.team_id == request.team.id,
+            "cost_tracking_enabled": True,
+            "pricing_lookup": _pricing_lookup(request.team, [model]),
         },
     )
 
