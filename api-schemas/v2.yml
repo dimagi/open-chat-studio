@@ -7,7 +7,7 @@ paths:
   /api/v2/auth_provider/:
     get:
       operationId: sync_auth_provider
-      summary: auth_provider
+      summary: Auth Provider
       parameters:
       - in: query
         name: cursor
@@ -33,12 +33,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthProviderExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
         '409':
           content:
             application/json:
@@ -48,7 +42,7 @@ paths:
   /api/v2/chat/:
     get:
       operationId: sync_chat
-      summary: chat
+      summary: Chat
       parameters:
       - in: query
         name: cursor
@@ -74,16 +68,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/chatbot/:
     get:
       operationId: sync_chatbot
-      summary: chatbot
+      summary: Chatbot
       parameters:
       - in: query
         name: cursor
@@ -109,12 +97,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
@@ -208,7 +190,7 @@ paths:
   /api/v2/consent_form/:
     get:
       operationId: sync_consent_form
-      summary: consent_form
+      summary: Consent Form
       parameters:
       - in: query
         name: cursor
@@ -234,16 +216,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConsentFormExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/embedding_provider_model/:
     get:
       operationId: sync_embedding_provider_model
-      summary: embedding_provider_model
+      summary: Embedding Provider Model
       parameters:
       - in: query
         name: cursor
@@ -269,16 +245,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/EmbeddingProviderModelExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/experiment_session/:
     get:
       operationId: sync_experiment_session
-      summary: experiment_session
+      summary: Experiment Session
       parameters:
       - in: query
         name: cursor
@@ -304,16 +274,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentSessionExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/llm_provider/:
     get:
       operationId: sync_llm_provider
-      summary: llm_provider
+      summary: Llm Provider
       parameters:
       - in: query
         name: cursor
@@ -339,12 +303,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/LlmProviderExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
         '409':
           content:
             application/json:
@@ -354,7 +312,7 @@ paths:
   /api/v2/llm_provider_model/:
     get:
       operationId: sync_llm_provider_model
-      summary: llm_provider_model
+      summary: Llm Provider Model
       parameters:
       - in: query
         name: cursor
@@ -380,17 +338,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/LlmProviderModelExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/manifest/:
     get:
-      operationId: api_v2_manifest_retrieve
+      operationId: sync_manifest
+      description: 'Returns the resource manifest: resource call order, per-model
+        config, and a schema checksum clients can use to detect schema compatability.'
+      summary: Manifest
       tags:
-      - api
+      - Manifest
       security:
       - {}
       - apiKeyAuth: []
@@ -424,7 +379,7 @@ paths:
   /api/v2/membership/:
     get:
       operationId: sync_membership
-      summary: membership
+      summary: Membership
       parameters:
       - in: query
         name: cursor
@@ -450,16 +405,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/MembershipExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/messaging_provider/:
     get:
       operationId: sync_messaging_provider
-      summary: messaging_provider
+      summary: Messaging Provider
       parameters:
       - in: query
         name: cursor
@@ -485,12 +434,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessagingProviderExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
         '409':
           content:
             application/json:
@@ -500,7 +443,7 @@ paths:
   /api/v2/node/:
     get:
       operationId: sync_node
-      summary: node
+      summary: Node
       parameters:
       - in: query
         name: cursor
@@ -526,16 +469,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/NodeExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/participant/:
     get:
       operationId: sync_participant
-      summary: participant
+      summary: Participant
       parameters:
       - in: query
         name: cursor
@@ -561,16 +498,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ParticipantExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/participant_data/:
     get:
       operationId: sync_participant_data
-      summary: participant_data
+      summary: Participant Data
       parameters:
       - in: query
         name: cursor
@@ -596,12 +527,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ParticipantDataExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
         '409':
           content:
             application/json:
@@ -611,7 +536,7 @@ paths:
   /api/v2/pipeline/:
     get:
       operationId: sync_pipeline
-      summary: pipeline
+      summary: Pipeline
       parameters:
       - in: query
         name: cursor
@@ -637,16 +562,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/PipelineExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/source_material/:
     get:
       operationId: sync_source_material
-      summary: source_material
+      summary: Source Material
       parameters:
       - in: query
         name: cursor
@@ -672,16 +591,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/SourceMaterialExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/synthetic_voice/:
     get:
       operationId: sync_synthetic_voice
-      summary: synthetic_voice
+      summary: Synthetic Voice
       parameters:
       - in: query
         name: cursor
@@ -707,16 +620,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/SyntheticVoiceExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/teams/:
     get:
       operationId: sync_teams
-      summary: teams
+      summary: Teams
       parameters:
       - in: query
         name: cursor
@@ -742,16 +649,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/TeamExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/trace_provider/:
     get:
       operationId: sync_trace_provider
-      summary: trace_provider
+      summary: Trace Provider
       parameters:
       - in: query
         name: cursor
@@ -777,12 +678,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/TraceProviderExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
         '409':
           content:
             application/json:
@@ -792,7 +687,7 @@ paths:
   /api/v2/user/:
     get:
       operationId: sync_user
-      summary: user
+      summary: User
       parameters:
       - in: query
         name: cursor
@@ -818,16 +713,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomUserExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
   /api/v2/voice_provider/:
     get:
       operationId: sync_voice_provider
-      summary: voice_provider
+      summary: Voice Provider
       parameters:
       - in: query
         name: cursor
@@ -853,12 +742,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/VoiceProviderExportPage'
           description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Unknown resource.
         '409':
           content:
             application/json:
@@ -2490,6 +2373,7 @@ components:
           description: Whether rows carry fields sealed under the team public key.
         order_by:
           type: string
+          nullable: true
           description: Optional ordering applied before paging.
       required:
       - cursor

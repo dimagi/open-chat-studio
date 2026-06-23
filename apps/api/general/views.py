@@ -36,7 +36,16 @@ MAX_LIMIT = 1000
 class ManifestView(APIView):
     permission_classes = [IsAuthenticated, IsTeamAdmin]
 
-    @extend_schema(responses=ManifestSerializer)
+    @extend_schema(
+        operation_id="sync_manifest",
+        tags=["Manifest"],
+        summary="Manifest",
+        description=(
+            "Returns the resource manifest: resource call order, per-model config, and a schema"
+            " checksum clients can use to detect schema compatability."
+        ),
+        responses=ManifestSerializer,
+    )
     def get(self, request):
         return Response(build_manifest())
 
