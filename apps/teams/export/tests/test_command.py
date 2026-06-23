@@ -92,6 +92,17 @@ def test_schema_checksum_mismatch_aborts(tmp_path, keypair):
         run_sync(FakeClient(manifest, rows), store, keypair[1])
 
 
+def test_aborts_when_secrets_present_but_no_private_key(tmp_path, keypair):
+    """Without the private key the sealed secret fields would be imported as unreadable tokens, so
+    the sync must refuse up front rather than silently corrupt provider configs / participant data."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    with pytest.raises(CommandError, match="private key"):
+        run_sync(FakeClient(manifest, rows), store, None)
+
+    assert not Team.objects.filter(slug="imported-team-z").exists()  # aborted before importing anything
+
+
 def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
     manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"

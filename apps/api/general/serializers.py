@@ -28,7 +28,7 @@ def _feature_flags(self, team):
 
 @extend_schema_field(serializers.ListField(child=serializers.CharField()))
 def _group_names(self, instance):
-    return list(instance.groups.values_list("name", flat=True))
+    return [group.name for group in instance.groups.all()]
 
 
 # Per-model SerializerMethodFields for values that aren't a plain field dump.

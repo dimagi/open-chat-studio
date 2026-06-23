@@ -7,7 +7,7 @@ import functools
 from collections.abc import Iterable
 
 from django.contrib.auth.models import Group
-from django.db import models
+from django.db import models, transaction
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
@@ -24,6 +24,19 @@ MANIFEST_LABELS = {entry.model for entry in _ENTRIES}
 
 class UnresolvedForeignKey(Exception):
     """A required FK points at a row that should have been synced but wasn't (an ordering bug)."""
+
+
+class MissingGlobalRow(Exception):
+    """The source serves a shared/global row (e.g. an LLM provider model) that doesn't exist on the
+    target. Globals are matched by natural key, never created, so the operator must add it to the
+    target first rather than have references silently nulled or the sync abort deep in FK resolution."""
+
+    def __init__(self, model_label: str, spec: "GlobalSpec", row: dict):
+        natural_key = {key: row.get(key) for key in spec.natural_key}
+        super().__init__(
+            f"{model_label} global row {natural_key} is not present on the target. "
+            f"Create it on the target server, then rerun the sync."
+        )
 
 
 def resolve_fk(field: models.ForeignKey, source_pk: int | None, store: FKTranslationStore) -> int | None:
@@ -147,25 +160,37 @@ class Importer:
         # record the id translation -- these are shared, never recreated.
         if global_spec and row.get(global_spec.null_field) is None:
             match = self._match_global(model, global_spec, row)
-            if match is not None:
-                self.store.record(model_label, source_pk, match.pk)
+            if match is None:
+                raise MissingGlobalRow(model_label, global_spec, row)
+            self.store.record(model_label, source_pk, match.pk)
             return
 
-        # Team-owned row: create or update it, then record the source->target id for later FK lookups.
-        field_values, m2m_values, timestamps = self._build_values(model_label, model, row)
-        instance, created = self._get_or_create(model_label, model, source_pk, row, field_values)
-        self.store.record(model_label, source_pk, instance.pk)
-
-        for name, target_pks in m2m_values.items():
-            getattr(instance, name).set([pk for pk in target_pks if pk is not None])
-
-        self._apply_named_links(model_label, instance, row)
-
-        if timestamps:  # keep the source timestamps; auto_now would otherwise overwrite them
-            _bypass_auto_now_update(model, instance.pk, timestamps)
+        # Team-owned row. The create, its m2m/named links, the timestamp restore, and the checkpoint
+        # fill all happen in one transaction so an interruption can't leave a committed row whose
+        # checkpoint is still null -- which a rerun would re-fetch and duplicate. The checkpoint is
+        # filled last: if anything before it fails, the row rolls back with it.
+        instance, created = self._import_team_owned_row(model_label, model, source_pk, row)
 
         if created and model_label == "users.customuser" and self.on_user_created:
             self.on_user_created(instance)
+
+    def _import_team_owned_row(
+        self, model_label: str, model: type[models.Model], source_pk: int, row: dict
+    ) -> tuple[models.Model, bool]:
+        with transaction.atomic():
+            field_values, m2m_values, timestamps = self._build_values(model_label, model, row)
+            instance, created = self._get_or_create(model_label, model, source_pk, row, field_values)
+
+            for name, target_pks in m2m_values.items():
+                getattr(instance, name).set([pk for pk in target_pks if pk is not None])
+
+            self._apply_named_links(model_label, instance, row)
+
+            if timestamps:  # keep the source timestamps; auto_now would otherwise overwrite them
+                _bypass_auto_now_update(model, instance.pk, timestamps)
+
+            self.store.record(model_label, source_pk, instance.pk)
+        return instance, created
 
     def _get_or_create(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict, field_values: dict

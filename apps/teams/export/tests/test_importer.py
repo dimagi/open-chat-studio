@@ -9,7 +9,7 @@ from apps.experiments.models import ConsentForm
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
-from apps.teams.export.importer import Importer
+from apps.teams.export.importer import Importer, MissingGlobalRow
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
@@ -124,6 +124,26 @@ def test_global_row_matches_existing_and_is_not_recreated(store):
 
     assert store.get_target("service_providers.llmprovidermodel", 77) == existing.pk
     assert LlmProviderModel.objects.count() == count_before
+
+
+def test_missing_global_row_raises_with_its_natural_key(store):
+    """A global row the source serves but the target lacks must fail loudly (naming the missing row),
+    not silently null the references that point at it or abort obscurely deep in FK resolution."""
+    row = {
+        "id": 77,
+        "team": None,
+        "type": "openai",
+        "name": "model-not-on-target",
+        "max_token_limit": 8192,
+        "deprecated": False,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+    with pytest.raises(MissingGlobalRow, match="model-not-on-target"):
+        Importer(store).import_rows("service_providers.llmprovidermodel", [row])
+
+    assert store.get_target("service_providers.llmprovidermodel", 77) is None
 
 
 def test_node_params_and_fk_columns_are_remapped(store):
@@ -244,3 +264,39 @@ def test_new_user_triggers_on_user_created(store):
     importer.import_rows("users.customuser", [_user_row(51, "fresh@example.com")])
 
     assert [u.username for u in created_users] == ["fresh@example.com"]
+
+
+def _fail_when_filling_checkpoint(store):
+    """Wrap store.record so it raises on the finalizing write (target_key set), simulating a crash
+    after the row is inserted but before its checkpoint is filled."""
+    real_record = store.record
+
+    def record(content_type, source_key, target_key=None):
+        if target_key is not None:
+            raise RuntimeError("interrupted before checkpoint was filled")
+        return real_record(content_type, source_key, target_key)
+
+    return record
+
+
+def test_interrupted_finalize_rolls_back_the_created_row(store, monkeypatch):
+    """A crash after the INSERT but before the checkpoint is filled must roll the row back; an
+    orphaned row with no checkpoint is exactly what a rerun would duplicate."""
+    monkeypatch.setattr(store, "record", _fail_when_filling_checkpoint(store))
+
+    with pytest.raises(RuntimeError):
+        Importer(store).import_rows("teams.team", [_team_row()])
+
+    assert Team.objects.filter(slug="imported-team-xyz").count() == 0
+
+
+def test_rerun_after_interruption_creates_exactly_one_row(store, monkeypatch):
+    """After an interrupted run rolls its row back, a clean rerun creates exactly one -- no duplicate."""
+    monkeypatch.setattr(store, "record", _fail_when_filling_checkpoint(store))
+    with pytest.raises(RuntimeError):
+        Importer(store).import_rows("teams.team", [_team_row()])
+    monkeypatch.undo()
+
+    Importer(store).import_rows("teams.team", [_team_row()])
+
+    assert Team.objects.filter(slug="imported-team-xyz").count() == 1

@@ -56,6 +56,12 @@ def run_sync(
             "before syncing, or pass --skip-schema-check to override."
         )
 
+    if private_key is None and any(entry.get("secret") for entry in manifest["entries"]):
+        raise CommandError(
+            "The source exports sealed secret fields but no private key was provided; the secrets "
+            "would be imported as unreadable tokens. Pass --private-key-path with the team's key."
+        )
+
     importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
     for entry in manifest["entries"]:
         model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]

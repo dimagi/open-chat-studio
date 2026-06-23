@@ -150,6 +150,12 @@ TEAM_PATH_REGISTRY: dict[str, str] = {
     "experiments.syntheticvoice": "voice_provider__team",
 }
 
+# Relations to prefetch so the serializer's method fields (see general.serializers._FIELD_RESOLVERS)
+# don't issue a query per exported row.
+PREFETCH_REGISTRY: dict[str, list[str]] = {
+    "teams.membership": ["groups"],
+}
+
 
 @dataclass(frozen=True)
 class GlobalSpec:
@@ -187,7 +193,9 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     spec = GLOBAL_CONFIG.get(entry.model)
     if spec:
         team_q |= Q(**{f"{spec.null_field}__isnull": True})
-    return model.objects.filter(team_q)
+    queryset = model.objects.filter(team_q)
+    prefetch = PREFETCH_REGISTRY.get(entry.model)
+    return queryset.prefetch_related(*prefetch) if prefetch else queryset
 
 
 def schema_checksum() -> str:

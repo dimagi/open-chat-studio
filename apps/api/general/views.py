@@ -70,7 +70,7 @@ class ResourceView(APIView):
                 )
             context["public_key"] = load_public_key(request.team.public_key)
 
-        limit = min(int(request.query_params.get("limit", DEFAULT_LIMIT)), MAX_LIMIT)
+        limit = _parse_limit(request.query_params.get("limit", DEFAULT_LIMIT))
         queryset = team_scoped_queryset(entry, request.team)
         rows, next_cursor, has_more = _paginate(queryset, entry.cursor, request.query_params.get("cursor"), limit)
 
@@ -87,14 +87,37 @@ class CursorHelper:
 
     @staticmethod
     def decode(cursor: str) -> dict:
-        return json.loads(base64.b64decode(cursor))
+        try:
+            keyset = json.loads(base64.b64decode(cursor))
+        except (ValueError, TypeError) as e:  # bad base64 (binascii.Error) or bad JSON
+            raise ValidationError("Invalid pagination cursor.") from e
+        if not isinstance(keyset, dict) or "updated_at" not in keyset or "id" not in keyset:
+            raise ValidationError("Invalid pagination cursor.")
+        return keyset
+
+
+def _parse_limit(raw) -> int:
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError) as e:
+        raise ValidationError("`limit` must be an integer.") from e
+    if limit < 1:
+        raise ValidationError("`limit` must be a positive integer.")
+    return min(limit, MAX_LIMIT)
+
+
+def _parse_pk_cursor(cursor) -> int:
+    try:
+        return int(cursor)
+    except (TypeError, ValueError) as e:
+        raise ValidationError("Invalid pagination cursor.") from e
 
 
 def _paginate(queryset, cursor_type, cursor, limit):
     if cursor_type == "pk":
         queryset = queryset.order_by("id")
         if cursor is not None:
-            queryset = queryset.filter(id__gt=int(cursor))
+            queryset = queryset.filter(id__gt=_parse_pk_cursor(cursor))
         rows = list(queryset[: limit + 1])
         has_more = len(rows) > limit
         rows = rows[:limit]
