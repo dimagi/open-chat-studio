@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_datetime
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -105,6 +105,8 @@ def _paginate(queryset, cursor_type, cursor, limit):
     if cursor:
         keyset = CursorHelper.decode(cursor)
         timestamp = parse_datetime(keyset["updated_at"])
+        if timestamp is None:
+            raise ValidationError("Invalid pagination cursor.")
         queryset = queryset.filter(Q(updated_at__gt=timestamp) | Q(updated_at=timestamp, id__gt=keyset["id"]))
     rows = list(queryset[: limit + 1])
     has_more = len(rows) > limit

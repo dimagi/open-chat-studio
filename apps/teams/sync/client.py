@@ -51,6 +51,7 @@ class SourceClient:
                 continue
 
             if response.status_code >= 500 and not last_attempt:
+                response.close()  # return the socket to the pool before backing off
                 self._sleep(self.backoff * (attempt + 1))
                 continue
 

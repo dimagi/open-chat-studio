@@ -8,6 +8,7 @@ class FakeResponse:
     def __init__(self, status_code=200, json_data=None):
         self.status_code = status_code
         self._json = json_data or {}
+        self.closed = False
 
     def json(self):
         return self._json
@@ -15,6 +16,9 @@ class FakeResponse:
     def raise_for_status(self):
         if self.status_code >= 400:
             raise requests.HTTPError(f"{self.status_code}")
+
+    def close(self):
+        self.closed = True
 
 
 class FakeSession:
@@ -64,9 +68,11 @@ def test_iter_rows_follows_has_more():
 
 
 def test_transient_5xx_is_retried_then_succeeds():
-    session = FakeSession([FakeResponse(503), FakeResponse(json_data={"ok": True})])
+    failed = FakeResponse(503)
+    session = FakeSession([failed, FakeResponse(json_data={"ok": True})])
     assert _client(session).get_manifest() == {"ok": True}
     assert len(session.calls) == 2
+    assert failed.closed  # the 5xx response is released back to the pool before retrying
 
 
 def test_connection_error_is_retried():
