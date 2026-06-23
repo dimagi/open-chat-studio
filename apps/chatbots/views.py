@@ -915,7 +915,7 @@ def home(
 
 
 class AllSessionsHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
-    template_name = "generic/object_home.html"
+    template_name = "chatbots/all_sessions_home.html"
     permission_required = "experiments.view_experimentsession"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
