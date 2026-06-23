@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, Union
+from xml.sax.saxutils import escape
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
@@ -73,8 +74,12 @@ METADATA_BLOCKLIST = frozenset(
 
 def _format_metadata_value(value: Any) -> str:
     if isinstance(value, list | tuple):
-        return ", ".join(str(v) for v in value)
-    return str(value)
+        formatted = ", ".join(str(v) for v in value)
+    else:
+        formatted = str(value)
+    # Values become raw XML tag content (unlike the chunk text, which is wrapped in CDATA),
+    # so escape special characters to avoid malformed XML / breaking out of the structure.
+    return escape(formatted)
 
 
 def _sanitize_tag(key: str) -> str:
@@ -189,7 +194,7 @@ def _perform_collection_search(
         retrieved_chunks = "\n".join(
             [
                 CHUNK_TEMPLATE.format(
-                    file_name=embedding.file.name,
+                    file_name=escape(embedding.file.name),
                     file_id=embedding.file_id,
                     metadata=_format_metadata_block(embedding.file.metadata),
                     chunk=embedding.text,
@@ -220,9 +225,9 @@ def _format_result_with_collection(embedding: FileChunkEmbedding, collection) ->
     return f"""
 <file>
   <file_id>{embedding.file_id}</file_id>
-  <filename>{embedding.file.name}</filename>
+  <filename>{escape(embedding.file.name)}</filename>
   <collection_id>{collection.id}</collection_id>
-  <collection_name>{collection.name}</collection_name>{_format_metadata_block(embedding.file.metadata)}
+  <collection_name>{escape(collection.name)}</collection_name>{_format_metadata_block(embedding.file.metadata)}
   <context>
     <![CDATA[{embedding.text}]]>
   </context>

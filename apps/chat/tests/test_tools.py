@@ -591,6 +591,11 @@ class TestFormatMetadataBlock:
         block = _format_metadata_block({"title": "T", "date": "2026-01-01", "type": "report"})
         assert block.index("<title>") < block.index("<date>") < block.index("<type>")
 
+    def test_escapes_xml_special_characters(self):
+        block = _format_metadata_block({"title": "Q&A <draft>", "authors": ["A & B"]})
+        assert "<title>Q&amp;A &lt;draft&gt;</title>" in block
+        assert "<authors>A &amp; B</authors>" in block
+
 
 def test_tools_present():
     for tool in AgentTools.values:
