@@ -168,6 +168,23 @@ class TestDocumentSourceManager:
         manager._remove_files.assert_called_once()
         manager._index_files.assert_not_called()
 
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            pytest.param(
+                "https://example.com/files/Loa%20Loa_bringing%20an%20end.pdf",
+                "Loa Loa_bringing an end.pdf",
+                id="url-encoded-path",
+            ),
+            pytest.param("https://example.com/plain.pdf", "plain.pdf", id="plain-path"),
+            pytest.param("just_a_name.pdf", "just_a_name.pdf", id="no-slash"),
+        ],
+    )
+    def test_extract_filename_url_decodes_source(self, document_source, source, expected):
+        manager = DocumentSourceManager(document_source)
+        document = Document(page_content="x", metadata={"source": source})
+        assert manager._extract_filename(document, source) == expected
+
     def test_sync_log_created(self, document_source):
         initial_count = DocumentSourceSyncLog.objects.count()
 
