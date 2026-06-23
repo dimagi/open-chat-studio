@@ -889,6 +889,12 @@ COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_S
 COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
 COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
 
+### Internal team metadata
+# Staff-only, instance-configurable free-text metadata fields shown on a team's internal
+# metadata page and included in admin exports.
+# Format: list of {"key": <slug>, "label": <display label>}
+TEAM_METADATA_FIELDS = env.json("TEAM_METADATA_FIELDS", default=[{"key": "team_owner", "label": "Team Owner"}])
+
 ### System Agent
 # Models for use by the system agent. Separate multiple models (for fallback) using the ',' character.
 # openai:gpt5-2,anthropic:claude-4.5-opus
