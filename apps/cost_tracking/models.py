@@ -38,8 +38,7 @@ class PricingRule(models.Model):
     """A pricing rule. `team=NULL` means a global rule. Effectively
     write-once: rate changes close the active rule via `effective_to` and
     insert a new one. Not a `BaseTeamModel` subclass because `team` is
-    nullable here and the inherited `updated_at` / `VersioningMixin` don't
-    apply.
+    nullable here and `VersioningMixin` doesn't apply.
     """
 
     team = models.ForeignKey(
@@ -61,6 +60,7 @@ class PricingRule(models.Model):
     notes = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey("users.CustomUser", null=True, blank=True, on_delete=models.DO_NOTHING)
 
     class Meta:
