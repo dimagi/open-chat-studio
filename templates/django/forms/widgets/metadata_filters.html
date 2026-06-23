@@ -1,0 +1,49 @@
+<script>
+  // Defined as a global (not via Alpine.data/alpine:init) so it resolves when this
+  // widget is injected into the page by HTMX, after Alpine has already initialised.
+  window.metadataFilterEditor = function (initial = []) {
+    return {
+      rows: (initial || []).map(filter => ({
+        field: filter.field || '',
+        operator: filter.operator || 'eq',
+        value: Array.isArray(filter.value) ? filter.value.join(', ') : (filter.value ?? ''),
+      })),
+      addRow() {
+        this.rows.push({field: '', operator: 'eq', value: ''});
+      },
+      removeRow(index) {
+        this.rows.splice(index, 1);
+      },
+      serialize() {
+        const filters = this.rows
+          .filter(row => row.field.trim())
+          .map(row => ({
+            field: row.field.trim(),
+            operator: row.operator,
+            value: row.operator === 'in'
+              ? String(row.value).split(',').map(part => part.trim()).filter(Boolean)
+              : row.value,
+          }));
+        return JSON.stringify(filters);
+      },
+    };
+  };
+</script>
+
+<div x-data="metadataFilterEditor({{ widget.value|default:'[]' }})" class="w-full">
+  <template x-for="(row, index) in rows" :key="index">
+    <div class="flex gap-2 mb-2 items-center">
+      <input type="text" class="input input-sm input-bordered flex-1 min-w-0" placeholder="field" x-model="row.field">
+      <select class="select select-sm select-bordered w-28 shrink-0" x-model="row.operator">
+        <option value="eq">equals</option>
+        <option value="in">in</option>
+      </select>
+      <input type="text" class="input input-sm input-bordered flex-1 min-w-0"
+             :placeholder="row.operator === 'in' ? 'comma-separated values' : 'value'"
+             x-model="row.value">
+      <button type="button" class="btn btn-sm btn-ghost shrink-0" @click="removeRow(index)">Remove</button>
+    </div>
+  </template>
+  <button type="button" class="btn btn-sm" @click="addRow()">Add filter</button>
+  <input type="hidden" name="{{ widget.name }}" :value="serialize()">
+</div>
