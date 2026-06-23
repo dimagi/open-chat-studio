@@ -14,6 +14,8 @@ urlpatterns = [
     path("export/whatsapp-stats/", views.export_whatsapp_stats, name="export_whatsapp_stats"),
     path("export/top-teams/", views.export_top_teams, name="export_top_teams"),
     path("export/top-experiments/", views.export_top_experiments, name="export_top_experiments"),
+    path("export/team-metadata/", views.export_team_metadata, name="export_team_metadata"),
+    path("import/team-metadata/", views.import_team_metadata, name="import_team_metadata"),
     # Feature Flags
     path("flags/", views.flags_home, name="flags_home"),
     path("flags/<str:flag_name>/", views.flag_detail, name="flag_detail"),
