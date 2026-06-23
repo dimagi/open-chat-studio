@@ -15,7 +15,15 @@ from django.views.decorators.http import require_http_methods
 from django_htmx.http import push_url
 from field_audit.models import AuditEvent
 
-from apps.admin.forms import DateRangeForm, DateRanges, FindProviderByKeyForm, FlagUpdateForm, OcsConfigurationForm
+from apps.admin.forms import (
+    DateRangeForm,
+    DateRanges,
+    FindProviderByKeyForm,
+    FlagUpdateForm,
+    OcsConfigurationForm,
+    TeamMetadataImportForm,
+)
+from apps.admin.imports import import_team_metadata_from_csv
 from apps.admin.models import OcsConfiguration
 from apps.admin.queries import (
     get_message_stats,
@@ -38,6 +46,7 @@ from apps.channels.models import ChannelPlatform
 from apps.experiments.models import Participant
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.teams.flags import get_all_flag_info
+from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Flag, Team
 
 logger = logging.getLogger("ocs.admin")
@@ -224,6 +233,24 @@ def export_team_metadata(request):
     response = HttpResponse(team_metadata_to_csv(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="team_metadata.csv"'
     return response
+
+
+@is_staff
+def import_team_metadata(request):
+    form = TeamMetadataImportForm(request.POST or None, request.FILES or None)
+    result = None
+    if request.method == "POST" and form.is_valid():
+        result = import_team_metadata_from_csv(form.cleaned_data["file"])
+    return TemplateResponse(
+        request,
+        "admin/import_team_metadata.html",
+        context={
+            "active_tab": "admin",
+            "form": form,
+            "result": result,
+            "metadata_fields": get_team_metadata_fields(),
+        },
+    )
 
 
 def _get_date_param(request, param_name, default):

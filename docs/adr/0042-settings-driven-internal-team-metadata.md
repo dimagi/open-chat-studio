@@ -17,6 +17,7 @@ We will store internal team metadata as a single `SanitizedJSONField` (`Team.met
 - Saving merges submitted values into `metadata`, preserving keys not in the current setting.
 - A staff-only (`is_staff`) page under the team settings (`single_team:internal_metadata`) views and edits the values; the entry button is hidden from non-staff.
 - The values are included in admin CSV exports: a dynamic column per field on the existing top-teams export, plus a dedicated all-teams export.
+- A staff CSV import accepts the dedicated export's format, matching teams by the `Slug` column and columns to fields by label, for round-trip bulk editing.
 
 ## Consequences
 
@@ -24,6 +25,7 @@ We will store internal team metadata as a single `SanitizedJSONField` (`Team.met
 - No per-field validation, typing, or referential integrity — a "team owner" is a string, not a FK to a user.
 - Removing a field from the setting hides it from the UI/exports but leaves its stored values intact (merge-on-save), so data is recoverable by re-adding the key.
 - Field keys are an implicit contract: exports and stored data key off `key`, so renaming a key orphans existing values.
+- Import matches teams by slug and columns by label, so renaming a team's slug or a field's label breaks a previously-exported CSV; import writes only the columns present and never deletes keys.
 
 ## Alternatives considered
 
