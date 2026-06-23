@@ -70,7 +70,7 @@
         {% render_form_fields new_model_form "name" "max_token_limit" %}
         {% if cost_tracking_enabled %}
           <div class="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-1">
-            Optional — set the model's pricing now (per 1M tokens) or leave blank to add it later.
+            Optional: set the model's pricing now (per 1M tokens) or leave blank to add it later.
           </div>
           {% render_form_fields new_model_form "input_price_per_million_tokens" "output_price_per_million_tokens" %}
         {% endif %}

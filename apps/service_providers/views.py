@@ -438,12 +438,22 @@ def _form_initial_from_active_rates(team, model: LlmProviderModel) -> dict:
     for each service kind (team override wins over global)."""
     lookup = _pricing_lookup(team, [model])
     rates = lookup.get(model.id, {})
-    initial: dict[str, Decimal] = {}
+    initial: dict[str, str] = {}
     for field, kind in _FORM_FIELD_TO_KIND.items():
         rate = rates.get(kind.value)
         if rate:
-            initial[field] = (rate["unit_price"] * Decimal(1000)).normalize()
+            initial[field] = _format_per_million(rate["unit_price"])
     return initial
+
+
+def _format_per_million(unit_price: Decimal) -> str:
+    """Convert a per-1K unit price to its per-1M display string. Plain
+    decimal — `.normalize()` collapses whole numbers to scientific notation
+    (e.g. `30` → `3E+1`), which the form input renders verbatim."""
+    text = format(unit_price * Decimal(1000), "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _persist_team_pricing_rules(team, provider_type: str, model_name: str, cleaned: dict, user) -> None:

@@ -7,7 +7,7 @@ import pytest
 
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.service_providers.models import LlmProviderModel
-from apps.service_providers.views import _pricing_lookup
+from apps.service_providers.views import _format_per_million, _pricing_lookup
 from apps.utils.factories.team import TeamFactory
 
 
@@ -24,6 +24,21 @@ def _rule(team, *, provider, name, kind, price, source=PricingSource.SEED):
         unit_price=price,
         source=source,
     )
+
+
+@pytest.mark.parametrize(
+    ("unit_price", "expected"),
+    [
+        pytest.param(Decimal("0.03"), "30", id="whole-number-no-scientific"),
+        pytest.param(Decimal("0.00250"), "2.5", id="cents"),
+        pytest.param(Decimal("0.000075"), "0.075", id="sub-cent"),
+        pytest.param(Decimal("0"), "0", id="zero"),
+    ],
+)
+def test_format_per_million_avoids_scientific_notation(unit_price, expected):
+    """`Decimal.normalize()` collapses whole numbers like Decimal('30.000')
+    to Decimal('3E+1'); the format helper renders plain decimal instead."""
+    assert _format_per_million(unit_price) == expected
 
 
 @pytest.mark.django_db()
