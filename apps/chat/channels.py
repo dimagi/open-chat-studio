@@ -188,7 +188,7 @@ class ChannelBase(ABC):
         return cast(ExperimentSession, self._experiment_session)
 
     @experiment_session.setter
-    def experiment_session(self, value: ExperimentSession):
+    def experiment_session(self, value: ExperimentSession | None):
         self._experiment_session = value
         self.reset_bot()
 

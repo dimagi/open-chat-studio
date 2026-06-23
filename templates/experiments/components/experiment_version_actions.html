@@ -23,6 +23,16 @@
             onclick="clearModalAndOpen();">
       View Details
     </button>
+    <div class="tooltip" data-tip="Revert working version to v{{ record.version_number }}">
+      <button type="button" class="btn btn-sm btn-outline btn-primary"
+              hx-get="{% url 'chatbots:revert-version-confirm' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
+              hx-target="#modal-content"
+              hx-trigger="click"
+              hx-swap="innerHTML"
+              onclick="clearModalAndOpen();">
+        <i class="fas fa-rotate-left"></i> Revert
+      </button>
+    </div>
   {% else %}
     {% if record.is_editable %}
       {% include "experiments/create_version_button.html" with experiment=record %}

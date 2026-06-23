@@ -10,6 +10,7 @@ from apps.channels.forms import WidgetParams
 from apps.channels.models import ChannelPlatform
 from apps.channels.widget_versions import (
     LATEST_VERSION,
+    UNKNOWN_WIDGET_VERSION,
     WidgetDeprecation,
     clean_widget_version,
     get_deprecation,
@@ -175,10 +176,18 @@ class TestRecordWidgetVersion:
         widget_channel.refresh_from_db()
         assert widget_channel.widget_version is None
 
-    def test_ignores_missing_header(self, widget_channel):
+    def test_records_placeholder_when_no_header(self, widget_channel):
+        # Pre-0.5.1 widgets send no header — record a placeholder, not nothing.
         widget_channel.record_widget_version(None)
         widget_channel.refresh_from_db()
-        assert widget_channel.widget_version is None
+        assert widget_channel.widget_version == UNKNOWN_WIDGET_VERSION
+
+    def test_placeholder_does_not_overwrite_real_version(self, widget_channel):
+        widget_channel.record_widget_version("0.8.0")
+        widget_channel.refresh_from_db()  # each request loads a fresh channel
+        widget_channel.record_widget_version(None)
+        widget_channel.refresh_from_db()
+        assert widget_channel.widget_version == "0.8.0"
 
     def test_skips_write_when_fresh_and_unchanged(self, widget_channel):
         widget_channel.record_widget_version("0.8.0")
@@ -219,6 +228,14 @@ class TestWidgetUpdateStatusProperty:
 
     def test_widget_channel_without_version(self, widget_channel):
         assert widget_channel.widget_update_status is None
+
+    def test_widget_channel_with_placeholder_version(self, widget_channel):
+        # The placeholder recorded for pre-header widgets must surface a badge.
+        widget_channel.widget_version = UNKNOWN_WIDGET_VERSION
+        with patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION]):
+            status = widget_channel.widget_update_status
+        assert status is not None
+        assert status.deprecation is not None
 
     def test_non_widget_channel(self):
         channel = ExperimentChannelFactory()  # telegram

@@ -8,7 +8,16 @@ from apps.teams.forms import TeamPublicKeyForm
 from apps.teams.models import Team
 from apps.users.models import CustomUser
 
-PUBLIC_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8Abase64encodedkey=="
+PUBLIC_KEY = """\
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv6uzoOlzcQBMGnCY0Vi0
+pL6G/Gep6ayMlqNJoHpvGneiXWyVGeSQoTyopLh+jP8tDR82ZxK42ropGLKAS8Gs
+X1TnfK41a+sa0Linjhe8I6OdlmiaxgUjRbM1eTfS9Irw/IkayDj+XbBrNrFXzxsN
+WDVkN6gLPlA6Vh9dry/BonJz3oHV32amRmDVOm+ddeMRDODTZB2DiBwkWQZeRT2C
+lGELhjr3RXNLsLEg86o2Qx0isKXq5BNOWP6rkKJWn6KFZoQLpWM+8X/t0ofUD76l
+/USJWY8AmN90ov+OtxBB5UBMfZeGVYxYLZju/r2i4iglrai6cB1QbjntzeitiDa4
+KwIDAQAB
+-----END PUBLIC KEY-----"""
 
 
 @pytest.fixture()
@@ -44,10 +53,15 @@ class TestSetPublicKey:
         form = TeamPublicKeyForm(data={"public_key": PUBLIC_KEY})
         assert form.is_valid(), form.errors
 
+    def test_form_rejects_invalid_public_key(self):
+        form = TeamPublicKeyForm(data={"public_key": "not-a-real-key"})
+        assert not form.is_valid()
+        assert "public_key" in form.errors
+
     def test_admin_can_set_public_key(self, client, team, admin):
         client.force_login(admin)
         response = client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY})
-        assert response.status_code == 302
+        assert response.status_code == 200
         team.refresh_from_db()
         assert team.public_key == PUBLIC_KEY
 
@@ -55,6 +69,15 @@ class TestSetPublicKey:
         client.force_login(member)
         response = client.post(_set_public_key_url(team), {"public_key": PUBLIC_KEY})
         assert response.status_code == 403
+        team.refresh_from_db()
+        assert team.public_key == ""
+
+    def test_setting_invalid_public_key_shows_form_error(self, client, team, admin):
+        client.force_login(admin)
+        response = client.post(_set_public_key_url(team), {"public_key": "not-a-real-key"})
+        assert response.status_code == 200
+        form = response.context["public_key_form"]
+        assert "public_key" in form.errors
         team.refresh_from_db()
         assert team.public_key == ""
 

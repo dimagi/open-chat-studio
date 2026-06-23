@@ -474,6 +474,58 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         return f"{url}#versions"
 
 
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def chatbot_revert_confirm(request, team_slug: str, experiment_id: int, version_number: int):
+    """Render the revert confirmation modal: a diff of the working state vs the target version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    has_unreleased_changes = experiment.compare_with_latest()
+
+    version_details = experiment.version_details
+    version_details.compare(version.version_details)
+    context = {
+        "experiment": experiment,
+        "version": version,
+        "version_details": version_details,
+        "has_unreleased_changes": has_unreleased_changes,
+    }
+    return render(request, "experiments/components/revert_confirm_content.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def revert_chatbot_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """Revert the working chatbot to the content (fields + pipeline) of a previous version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    if experiment.is_archived:
+        raise PermissionDenied("Unable to revert an archived chatbot.")
+
+    # Hold the version-operation lock for the whole revert so a concurrent publish/revert can't
+    # interleave with it. acquire_version_operation_lock claims it atomically (no TOCTOU gap).
+    if experiment.acquire_version_operation_lock(f"revert-{experiment.id}-{version_number}"):
+        try:
+            experiment.revert_to_version(version)
+        finally:
+            Experiment.release_version_operation_lock(experiment.id)
+        messages.success(request, f"Reverted to v{version_number}.")
+    else:
+        messages.error(request, "A version operation is already in progress.")
+
+    url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
+    return HttpResponseRedirect(f"{url}#versions")
+
+
 class ChatbotVersionsTableView(ExperimentVersionsTableView):
     model = Experiment
     table_class = ExperimentVersionsTable

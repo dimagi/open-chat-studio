@@ -98,8 +98,6 @@ class TestVersion:
         assert len(changed_fields) == 2
 
         # Early abort should only detect one change
-        experiment._clear_version_cache()
-        exp_version._clear_version_cache()
         working_version = experiment.version_details
         version_version = exp_version.version_details
         working_version.compare(version_version, early_abort=True)
@@ -179,7 +177,6 @@ class TestVersion:
 
     def test_fields_grouped(self, experiment):
         new_version = experiment.create_new_version()
-        experiment._clear_version_cache()
         original_version = experiment.version_details
         original_version.compare(new_version.version_details)
         all_groups = set([field.group_name for field in experiment.version_details.fields])
@@ -193,7 +190,6 @@ class TestVersion:
         # Let's change something
         new_version.seed_message = "new seed message"
 
-        new_version._clear_version_cache()
         original_version.compare(new_version.version_details)
         seed_message_group_name = original_version.get_field("seed_message").group_name
         # Find the seed_message group and check that it reports a change

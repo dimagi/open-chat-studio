@@ -1,4 +1,3 @@
-import contextlib
 from collections import defaultdict
 from dataclasses import dataclass
 from dataclasses import field as data_field
@@ -380,20 +379,12 @@ class VersionsMixin:
             version.compare(prev_version.version_details, early_abort=True)
         return version.fields_changed
 
-    @cached_property
+    @property
     def version_details(self) -> VersionDetails:
         return self._get_version_details()
 
     def _get_version_details(self) -> VersionDetails:
         raise NotImplementedError()
-
-    def save(self, *args, **kwargs):
-        self._clear_version_cache()
-        super().save(*args, **kwargs)
-
-    def _clear_version_cache(self):
-        with contextlib.suppress(AttributeError):
-            del self.version_details
 
 
 class VersionsObjectManagerMixin:

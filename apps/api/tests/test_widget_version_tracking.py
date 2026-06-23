@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 
 from apps.api.session_tokens import issue_session_token
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.widget_versions import WidgetDeprecation
+from apps.channels.widget_versions import UNKNOWN_WIDGET_VERSION, WidgetDeprecation
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -34,9 +34,11 @@ def widget_channel(experiment):
     )
 
 
-def _start_session(api_client, widget_channel, **extra):
+def _start_session(api_client, widget_channel, session_data=None, **extra):
     url = reverse("api:chat:start-session")
     data = {"chatbot_id": widget_channel.experiment.public_id}
+    if session_data is not None:
+        data["session_data"] = session_data
     return api_client.post(
         url,
         data=data,
@@ -57,7 +59,19 @@ def test_start_session_records_widget_version(api_client, widget_channel):
 
 
 @pytest.mark.django_db()
-def test_start_session_without_header_records_nothing(api_client, widget_channel):
+def test_start_session_without_header_records_placeholder(api_client, widget_channel):
+    # A pre-0.5.1 widget sends no version header but declares source=widget; record the
+    # placeholder so the deprecation badge/notifications still fire.
+    response = _start_session(api_client, widget_channel, session_data={"source": "widget"})
+    assert response.status_code == 201
+    widget_channel.refresh_from_db()
+    assert widget_channel.widget_version == UNKNOWN_WIDGET_VERSION
+
+
+@pytest.mark.django_db()
+def test_start_session_non_widget_embed_key_records_nothing(api_client, widget_channel):
+    # An embed-key caller that is not a widget (no version header, no source=widget)
+    # must not be tagged with a placeholder version.
     response = _start_session(api_client, widget_channel)
     assert response.status_code == 201
     widget_channel.refresh_from_db()
@@ -99,11 +113,23 @@ def test_no_sunset_headers_for_current_version(api_client, widget_channel):
 
 @pytest.mark.django_db()
 def test_no_sunset_headers_without_version_header(api_client, widget_channel):
-    # No x-ocs-widget-version header at all (curl, authed users): no deprecation headers
+    # No version header and no widget marker (curl, authed users): no deprecation headers
     with patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION]):
         response = _start_session(api_client, widget_channel)
     assert response.status_code == 201
     assert "Deprecation" not in response.headers
+
+
+@pytest.mark.django_db()
+def test_pre_header_widget_gets_sunset_headers(api_client, widget_channel):
+    # Pre-0.5.1 widgets (e.g. 0.4.8) send no version header but declare source=widget;
+    # they are older than every cutoff and must still get the deprecation headers.
+    with patch("apps.channels.widget_versions.DEPRECATIONS", [DEPRECATION]):
+        response = _start_session(api_client, widget_channel, session_data={"source": "widget"})
+    assert response.status_code == 201
+    assert response.headers["Deprecation"] == "true"
+    assert "Sunset" in response.headers
+    assert 'rel="successor-version"' in response.headers["Link"]
 
 
 @pytest.mark.django_db()
