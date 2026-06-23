@@ -58,24 +58,26 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             )
             return
 
-        item_metadata = self._build_item_metadata(item, title=title, uri=uri)
-        fetchable = [a for a in (item.get("attachments") or []) if a.get("link")]
-
-        if fetchable:
-            yield from self._yield_attachment_documents(item_metadata, fetchable, uri)
+        # Evaluate metadata filters against the raw item before any network I/O.
+        unmatched = next((f for f in self.config.metadata_filters if not f.matches(item)), None)
+        if unmatched is not None:
+            logger.debug(
+                "Skipping item %s: did not satisfy metadata filter on %r",
+                uri or title,
+                unmatched.field,
+            )
             return
 
-        # Fallback: no fetchable attachments
-        if title:
-            yield Document(
-                page_content=title,
-                metadata={**item_metadata, "source": uri or ""},
+        fetchable = [a for a in (item.get("attachments") or []) if a.get("link")]
+        if not fetchable:
+            logger.debug(
+                "Skipping item %s: no attachments with a document link",
+                uri or title,
             )
-        else:
-            logger.warning(
-                "Skipping item with no fetchable attachments and no title (URI=%s)",
-                uri,
-            )
+            return
+
+        item_metadata = self._build_item_metadata(item, title=title, uri=uri)
+        yield from self._yield_attachment_documents(item_metadata, fetchable, uri)
 
     def _build_item_metadata(self, item: dict[str, Any], *, title: str | None, uri: str | None) -> dict[str, Any]:
         metadata: dict[str, Any] = {
@@ -111,6 +113,15 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
     ) -> Iterator[Document]:
         for attachment in fetchable:
             link = attachment["link"]
+            file_type = attachment.get("file_type")
+            if self.config.is_unsupported_file_type(file_type):
+                logger.warning(
+                    "Skipping attachment %s for item %s: unsupported file type %r",
+                    link,
+                    item_uri,
+                    file_type,
+                )
+                continue
             try:
                 text = self._fetch_and_extract(link)
             except Exception as exc:  # noqa: BLE001 -- caught and logged per design

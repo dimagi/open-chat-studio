@@ -1,7 +1,10 @@
-from typing import Any
+from typing import Any, Literal
 
 import pydantic
 from pydantic import HttpUrl, field_validator
+
+# Audio/video types markitdown cannot extract useful text from.
+DEFAULT_UNSUPPORTED_FILE_TYPES = ["mp3", "mp4", "wav", "ogg", "avi", "mov", "mkv"]
 
 
 class ChunkingStrategy(pydantic.BaseModel):
@@ -106,6 +109,26 @@ class ConfluenceSourceConfig(pydantic.BaseModel):
         return self.base_url
 
 
+class MetadataFilter(pydantic.BaseModel):
+    """A single condition evaluated against a feed item's raw metadata."""
+
+    field: str = pydantic.Field(description="Name of the item metadata field to test")
+    operator: Literal["eq", "in"] = pydantic.Field(default="eq", description="Comparison operator")
+    value: Any = pydantic.Field(default=None, description="Value to compare the field against")
+
+    def matches(self, item: dict[str, Any]) -> bool:
+        """Return True if `item` satisfies this filter."""
+        item_value = item.get(self.field)
+        if self.operator == "eq":
+            return item_value == self.value
+        # "in": item matches if the item's value (or any element of a list-valued field)
+        # is one of the allowed values.
+        allowed = self.value if isinstance(self.value, list) else [self.value]
+        if isinstance(item_value, list):
+            return any(element in allowed for element in item_value)
+        return item_value in allowed
+
+
 class JSONCollectionSourceConfig(pydantic.BaseModel):
     json_url: HttpUrl = pydantic.Field(description="URL of the JSON feed")
     request_timeout: int = pydantic.Field(
@@ -114,6 +137,19 @@ class JSONCollectionSourceConfig(pydantic.BaseModel):
         le=300,
         description="HTTP request timeout in seconds, applied to JSON fetch and each attachment download",
     )
+    metadata_filters: list[MetadataFilter] = pydantic.Field(
+        default_factory=list,
+        description="Only items satisfying all of these conditions are indexed",
+    )
+    unsupported_file_types: list[str] = pydantic.Field(
+        default_factory=lambda: list(DEFAULT_UNSUPPORTED_FILE_TYPES),
+        description="Attachment file types to skip without downloading (case-insensitive)",
+    )
+
+    def is_unsupported_file_type(self, file_type: str | None) -> bool:
+        if not file_type:
+            return False
+        return file_type.lower() in {t.lower() for t in self.unsupported_file_types}
 
     def __str__(self) -> str:
         return str(self.json_url)
