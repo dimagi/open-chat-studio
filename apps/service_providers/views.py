@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
@@ -14,6 +15,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 
 from apps.assistants.models import OpenAiAssistant
+from apps.cost_tracking.models import PricingRule
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
@@ -24,6 +26,7 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
+from apps.teams.models import Flag
 from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
@@ -265,12 +268,20 @@ class CreateServiceProvider(
             default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
             embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
             custom_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
+            cost_tracking_enabled = Flag.get("flag_ai_cost_monitoring").is_active_for_team(self.request.team)
             ctx.update(
                 {
                     "default_llm_models_by_type": default_llm_models_by_type,
                     "custom_llm_models_by_type": custom_llm_models_by_type,
                     "embedding_models_by_type": embedding_models_by_type,
                     "new_model_form": LlmProviderModelForm(self.request.team),
+                    "cost_tracking_enabled": cost_tracking_enabled,
+                    "pricing_lookup": _pricing_lookup(
+                        self.request.team,
+                        [*_flatten(default_llm_models_by_type), *_flatten(custom_llm_models_by_type)],
+                    )
+                    if cost_tracking_enabled
+                    else {},
                 }
             )
         return ctx
@@ -284,6 +295,35 @@ def _get_models_by_type(queryset):
     for model in queryset:
         models_by_type[model.type].append(model)
     return {key: sorted(value, key=lambda x: x.name) for key, value in models_by_type.items()}
+
+
+def _flatten(models_by_type: dict) -> list:
+    return [m for models in models_by_type.values() for m in models]
+
+
+def _pricing_lookup(team, llm_models: list) -> dict:
+    """`{model_id: {service_kind: {unit_price, source, scope}, ...}}` for
+    every model with at least one active rule. Single bulk query;
+    team-scoped rules overwrite global ones for the same key.
+    """
+    if not llm_models:
+        return {}
+    rules = PricingRule.objects.filter(
+        Q(team=team) | Q(team__isnull=True),
+        provider_type__in={m.type for m in llm_models},
+        model_name__in={m.name for m in llm_models},
+        effective_to__isnull=True,
+    )
+    by_key: dict[tuple[str, str], dict] = {}
+    # Sort globals first so team-scoped rules override them.
+    for rule in sorted(rules, key=lambda r: r.team_id is not None):
+        key = (rule.provider_type, rule.model_name)
+        by_key.setdefault(key, {})[rule.service_kind] = {
+            "unit_price": rule.unit_price,
+            "source": rule.source,
+            "scope": "team" if rule.team_id else "global",
+        }
+    return {m.id: by_key[(m.type, m.name)] for m in llm_models if (m.type, m.name) in by_key}
 
 
 @require_POST

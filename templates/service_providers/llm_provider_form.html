@@ -18,7 +18,7 @@
         {% endblocktranslate %}
         {% include "generic/help.html" with help_content=help_text %}
       </h2>
-      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type for_type=subtype %}
+      {% include "service_providers/components/llm_models.html" with llm_models_by_type=default_llm_models_by_type for_type=subtype cost_tracking_enabled=cost_tracking_enabled pricing_lookup=pricing_lookup %}
     </div>
 
     <div>
@@ -36,7 +36,7 @@
         </div>
       </div>
       <div id="custom_model_list">
-        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type for_type=subtype %}
+        {% include "service_providers/components/custom_llm_models.html" with llm_models_by_type=custom_llm_models_by_type for_type=subtype cost_tracking_enabled=cost_tracking_enabled pricing_lookup=pricing_lookup %}
       </div>
     </div>
 
