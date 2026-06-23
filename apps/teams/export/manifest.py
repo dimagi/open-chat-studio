@@ -18,12 +18,13 @@ class ManifestEntry:
     phase: str  # structural | live | structural+live
     cursor: str  # pk | updated_at_id
     secret: bool = False
-    order_by: str | None = None
 
 
-_WORKING_FIRST = "working_version_id_nulls_first"
-
-# Pulled in dependency order: a referencing model always follows what it points at.
+# Pulled in dependency order: a referencing model always follows what it points at. Versioned models
+# (source material, consent form, pipeline, node, chatbot) page by "pk": a working version is always
+# created before its published copies, so it has a lower id and is served -- and imported -- first,
+# letting the self-referential working_version FK resolve. Guarded by
+# test_working_version_always_served_before_its_published_copies.
 MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("teams.team", "teams", "structural", "pk"),
     ManifestEntry("users.customuser", "user", "structural", "pk"),
@@ -36,11 +37,11 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("service_providers.llmprovidermodel", "llm_provider_model", "structural", "pk"),
     ManifestEntry("service_providers.embeddingprovidermodel", "embedding_provider_model", "structural", "pk"),
     ManifestEntry("experiments.syntheticvoice", "synthetic_voice", "structural", "pk"),
-    ManifestEntry("experiments.sourcematerial", "source_material", "structural", "pk", order_by=_WORKING_FIRST),
-    ManifestEntry("experiments.consentform", "consent_form", "structural", "pk", order_by=_WORKING_FIRST),
-    ManifestEntry("pipelines.pipeline", "pipeline", "structural", "pk", order_by=_WORKING_FIRST),
-    ManifestEntry("pipelines.node", "node", "structural", "pk", order_by=_WORKING_FIRST),
-    ManifestEntry("experiments.experiment", "chatbot", "structural", "pk", order_by=_WORKING_FIRST),
+    ManifestEntry("experiments.sourcematerial", "source_material", "structural", "pk"),
+    ManifestEntry("experiments.consentform", "consent_form", "structural", "pk"),
+    ManifestEntry("pipelines.pipeline", "pipeline", "structural", "pk"),
+    ManifestEntry("pipelines.node", "node", "structural", "pk"),
+    ManifestEntry("experiments.experiment", "chatbot", "structural", "pk"),
     ManifestEntry("experiments.participant", "participant", "live", "updated_at_id"),
     ManifestEntry("experiments.participantdata", "participant_data", "live", "updated_at_id", secret=True),
     ManifestEntry("chat.chat", "chat", "live", "pk"),
@@ -220,7 +221,6 @@ def build_manifest() -> dict:
                 "phase": e.phase,
                 "cursor": e.cursor,
                 "secret": e.secret,
-                **({"order_by": e.order_by} if e.order_by else {}),
             }
             for e in MANIFEST_ENTRIES
         ],

@@ -2371,10 +2371,6 @@ components:
         secret:
           type: boolean
           description: Whether rows carry fields sealed under the team public key.
-        order_by:
-          type: string
-          nullable: true
-          description: Optional ordering applied before paging.
       required:
       - cursor
       - model

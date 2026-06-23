@@ -46,9 +46,6 @@ class ManifestEntrySerializer(serializers.Serializer):
     phase = serializers.CharField(help_text="structural | live | structural+live.")
     cursor = serializers.CharField(help_text="Pagination cursor type: pk | updated_at_id.")
     secret = serializers.BooleanField(help_text="Whether rows carry fields sealed under the team public key.")
-    order_by = serializers.CharField(
-        required=False, allow_null=True, help_text="Optional ordering applied before paging."
-    )
 
 
 class ManifestSerializer(serializers.Serializer):

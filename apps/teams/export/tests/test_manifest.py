@@ -77,11 +77,6 @@ def test_get_manifest_entry_returns_matching_entry():
     assert manifest.get_manifest_entry("not_a_resource") is None
 
 
-def test_versioned_entries_order_by_working_version_first():
-    for resource in ("pipeline", "chatbot"):
-        assert manifest.get_manifest_entry(resource).order_by == "working_version_id_nulls_first"
-
-
 @pytest.mark.django_db()
 def test_schema_checksum_is_reproducible():
     first = manifest.schema_checksum()
