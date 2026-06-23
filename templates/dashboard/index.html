@@ -135,6 +135,10 @@
       </template>
     </div>
 
+  {% if cost_tracking_enabled %}
+    {% include "dashboard/_cost_tracking_panel.html" %}
+  {% endif %}
+
   <!-- Charts Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 

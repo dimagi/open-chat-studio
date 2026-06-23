@@ -1,16 +1,51 @@
 import json
+from datetime import datetime, timedelta
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import JsonResponse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 
+from apps.cost_tracking.services.reporting import cost_summary, top_n_bots
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.teams.models import Flag
 
 from .forms import DashboardFilterForm, SavedFilterForm
 from .models import DashboardFilter
 from .services import DashboardService
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
+DEFAULT_COST_PERIOD_DAYS = 30
+
+
+def _cost_tracking_context(team, filter_form: DashboardFilterForm) -> dict:
+    """Return the cost-tracking panel context. When the flag is off the panel
+    is hidden entirely — no service calls are made.
+    """
+    if not Flag.get(COST_TRACKING_FLAG).is_active_for_team(team):
+        return {"cost_tracking_enabled": False}
+    start, end = _cost_panel_period(filter_form)
+    return {
+        "cost_tracking_enabled": True,
+        "cost_summary": cost_summary(team, start=start, end=end),
+        "cost_top_bots": top_n_bots(team, start=start, end=end),
+    }
+
+
+def _cost_panel_period(filter_form: DashboardFilterForm) -> tuple[datetime, datetime]:
+    """Mirror the dashboard's date range so the panel stays in sync with the
+    rest of the charts. Falls back to the last 30 days when no filter is set.
+    """
+    if filter_form.is_valid():
+        params = filter_form.get_filter_params()
+        start = params.get("start_date")
+        end = params.get("end_date")
+        if start and end:
+            return start, end
+    end = timezone.now()
+    return end - timedelta(days=DEFAULT_COST_PERIOD_DAYS), end
 
 
 @method_decorator(login_and_team_required, name="dispatch")
@@ -39,6 +74,7 @@ class DashboardView(LoginAndTeamRequiredMixin, TemplateView):
                 "page_title": "Dashboard",
             }
         )
+        context.update(_cost_tracking_context(self.request.team, filter_form))
 
         return context
 
