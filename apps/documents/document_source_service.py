@@ -174,6 +174,7 @@ class DocumentSourceManager:
         filename = self._extract_filename(document, identifier)
         content_file = ContentFile(document.page_content.encode("utf-8"), name=filename)
         existing_file = collection_file.file
+        existing_file.name = filename
         existing_file.file = content_file
         existing_file.content_size = content_file.size
         existing_file.metadata = document.metadata

@@ -185,6 +185,23 @@ class TestDocumentSourceManager:
         document = Document(page_content="x", metadata={"source": source})
         assert manager._extract_filename(document, source) == expected
 
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_update_file_refreshes_decoded_name(self, create_loader, collection, document_source):
+        url = "https://example.com/files/My%20Doc.pdf"
+        docs = [Mock(page_content="v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
+        manager.sync_collection()
+
+        updated_docs = [Mock(page_content="v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
+        create_loader.return_value = MockLoader(collection, updated_docs)
+        manager.sync_collection()
+
+        file = CollectionFile.objects.get(collection=collection).file
+        assert file.name == "My Doc.pdf"
+        assert file.file.read() == b"v2"
+
     def test_sync_log_created(self, document_source):
         initial_count = DocumentSourceSyncLog.objects.count()
 
