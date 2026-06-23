@@ -2,6 +2,8 @@ import base64
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from apps.teams.sync.translation import (
     FKTranslationStore,
     derive_pk_cursor,
@@ -55,9 +57,15 @@ def test_committed_targets_excludes_uncommitted(tmp_path):
     assert store.committed_targets("missing") == {}
 
 
-def test_derive_pk_cursor_is_the_max_committed_key():
-    assert derive_pk_cursor([3, 1, 2]) == "3"
-    assert derive_pk_cursor([]) is None
+@pytest.mark.parametrize(
+    ("source_keys", "expected"),
+    [
+        pytest.param([3, 1, 2], "3", id="returns-max-key"),
+        pytest.param([], None, id="empty-returns-none"),
+    ],
+)
+def test_derive_pk_cursor_is_the_max_committed_key(source_keys, expected):
+    assert derive_pk_cursor(source_keys) == expected
 
 
 def test_derive_updated_at_cursor_picks_highest_keyset():
