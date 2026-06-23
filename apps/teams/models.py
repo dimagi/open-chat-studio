@@ -14,6 +14,7 @@ from waffle.models import CACHE_EMPTY, AbstractUserFlag
 from waffle.utils import get_cache, keyfmt
 
 from apps.teams import model_audit_fields
+from apps.utils.fields import SanitizedJSONField
 from apps.utils.models import BaseModel
 from apps.web.meta import absolute_url
 
@@ -40,6 +41,11 @@ class Team(BaseModel):
         blank=True,
         default="",
         help_text="Public key used to seal data exported from this team.",
+    )
+    metadata = SanitizedJSONField(
+        default=dict,
+        blank=True,
+        help_text="Internal staff-only metadata for this team.",
     )
 
     def save(self, *args, **kwargs):

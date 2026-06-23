@@ -27,6 +27,7 @@ from apps.admin.queries import (
     get_top_teams,
     get_whatsapp_message_stats,
     get_whatsapp_numbers,
+    team_metadata_to_csv,
     top_experiments_to_csv,
     top_teams_to_csv,
     usage_to_csv,
@@ -215,6 +216,13 @@ def export_top_experiments(request):
     response = HttpResponse(top_experiments_to_csv(start_timestamp, end_timestamp), content_type="text/csv")
     export_filename = f"top_experiments_{start.isoformat()}_{end.isoformat()}.csv"
     response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
+    return response
+
+
+@is_staff
+def export_team_metadata(request):
+    response = HttpResponse(team_metadata_to_csv(), content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="team_metadata.csv"'
     return response
 
 
