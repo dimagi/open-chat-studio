@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timedelta
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
@@ -77,6 +77,27 @@ class DashboardView(LoginAndTeamRequiredMixin, TemplateView):
         context.update(_cost_tracking_context(self.request.team, filter_form))
 
         return context
+
+
+@method_decorator(login_and_team_required, name="dispatch")
+class CostTrackingPanelView(LoginAndTeamRequiredMixin, TemplateView):
+    """Re-render the cost panel partial when the dashboard's filter form
+    changes. Returns the partial HTML so the dashboard JS can swap it into
+    `#cost-tracking-panel-container` without a full page reload. Empty
+    response when the flag is off (panel stays hidden)."""
+
+    template_name = "dashboard/_cost_tracking_panel.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        filter_form = DashboardFilterForm(data=self.request.GET, team=self.request.team)
+        context.update(_cost_tracking_context(self.request.team, filter_form))
+        return context
+
+    def render_to_response(self, context, **response_kwargs):
+        if not context.get("cost_tracking_enabled"):
+            return HttpResponse("")
+        return super().render_to_response(context, **response_kwargs)
 
 
 @method_decorator(login_and_team_required, name="dispatch")

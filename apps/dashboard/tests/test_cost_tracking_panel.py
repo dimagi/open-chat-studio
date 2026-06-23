@@ -92,3 +92,52 @@ class TestCostTrackingPanel:
         response = self._get_dashboard(authenticated_client, team)
 
         assert response.context["cost_summary"].total_cost == Decimal(0)
+
+
+@pytest.mark.django_db()
+class TestCostTrackingPanelEndpoint:
+    """The dashboard JS refetches `api/cost-tracking-panel/` on filter change.
+    Returns the rendered partial when the flag is on, empty body otherwise."""
+
+    def _url(self, team):
+        return reverse("dashboard:api_cost_tracking_panel", kwargs={"team_slug": team.slug})
+
+    def test_empty_body_when_flag_off(self, authenticated_client, team):
+        response = authenticated_client.get(self._url(team))
+
+        assert response.status_code == 200
+        assert response.content == b""
+
+    def test_renders_panel_when_flag_on(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.50", when=_NOW - timedelta(days=1))
+
+        response = authenticated_client.get(self._url(team))
+
+        assert response.status_code == 200
+        assert b'data-testid="cost-tracking-panel"' in response.content
+        assert b"1.50" in response.content
+
+    def test_respects_filter_query_params(self, authenticated_client, team):
+        _enable_flag_for(team)
+        # Spend 100 days ago - inside a far-back filter window, outside default.
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=100))
+
+        recent = authenticated_client.get(self._url(team) + "?date_range=7")
+        far_back = authenticated_client.get(
+            self._url(team) + "?date_range=custom&start_date=2026-02-01&end_date=2026-04-01"
+        )
+
+        # Default 7-day window misses the 100-days-ago row.
+        assert b"No chatbot usage in this period" in recent.content
+        # Custom window catches it.
+        assert b"2.00" in far_back.content
+
+    def test_team_isolated(self, authenticated_client, team, experiment_team):
+        _enable_flag_for(team)
+        _enable_flag_for(experiment_team)
+        _usage(experiment_team, cost="999.00", when=_NOW - timedelta(days=1))
+
+        response = authenticated_client.get(self._url(team))
+
+        assert b"999" not in response.content
