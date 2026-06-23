@@ -6,10 +6,12 @@ import copy
 import functools
 from collections.abc import Iterable
 
+from django.contrib.auth.models import Group
 from django.db import models
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
+from apps.teams.models import Flag
 from apps.utils.fields import as_int
 
 from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, GlobalSpec, entry_model
@@ -196,28 +198,40 @@ class Importer:
         named = set(_NAMED_LINK_FIELDS.get(model_label, []))
         field_values, timestamps = {}, {}
         for field in model._meta.concrete_fields:
-            if field.primary_key:
-                continue
-            if getattr(field, "auto_now", False) or getattr(field, "auto_now_add", False):
-                if field.name in row and row[field.name] is not None:
-                    timestamps[field.name] = parse_datetime(row[field.name])
-                continue
-            if isinstance(field, models.ForeignKey):
-                field_values[field.attname] = resolve_fk(field, row.get(field.name), self.store)
-            elif field.name in row and field.name not in named:
-                field_values[field.name] = row[field.name]
+            self._collect_concrete_field(field, row, named, field_values, timestamps)
+        self._remap_embedded_resource_ids(model_label, field_values)
+        m2m_values = self._build_m2m_values(model, row, named)
+        return field_values, m2m_values, timestamps
 
+    def _collect_concrete_field(self, field, row: dict, named: set, field_values: dict, timestamps: dict) -> None:
+        """Route one concrete field into ``field_values`` or ``timestamps`` (or skip it). Source
+        timestamps are held aside so ``auto_now`` doesn't clobber them; FKs are translated to target
+        ids; named-link fields are left for ``_apply_named_links``."""
+        if field.primary_key:
+            return
+        if getattr(field, "auto_now", False) or getattr(field, "auto_now_add", False):
+            if field.name in row and row[field.name] is not None:
+                timestamps[field.name] = parse_datetime(row[field.name])
+        elif isinstance(field, models.ForeignKey):
+            field_values[field.attname] = resolve_fk(field, row.get(field.name), self.store)
+        elif field.name in row and field.name not in named:
+            field_values[field.name] = row[field.name]
+
+    def _remap_embedded_resource_ids(self, model_label: str, field_values: dict) -> None:
+        """Rewrite the source resource ids buried in a pipeline's graph or a node's params in place."""
         if model_label == "pipelines.pipeline" and "data" in field_values:
             field_values["data"] = remap_pipeline_data(field_values["data"], self.store)
         elif model_label == "pipelines.node" and "params" in field_values:
             field_values["params"] = remap_node_params(field_values["params"], self.store)
 
+    def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
+        """Translate each m2m field's source pks to target pks, skipping name-linked fields."""
         m2m_values = {}
         for field in model._meta.many_to_many:
             if field.name in row and field.name not in named:
                 label = field.related_model._meta.label_lower
                 m2m_values[field.name] = [self.store.get_target(label, as_int(pk)) for pk in row[field.name]]
-        return field_values, m2m_values, timestamps
+        return m2m_values
 
     def _match_global(self, model: type[models.Model], spec: GlobalSpec, row: dict) -> models.Model | None:
         """Find the shared global row on the target by its natural key (scoping field null)."""
@@ -230,15 +244,11 @@ class Importer:
         feature flags and auth groups -- aren't synced, so they're matched against existing target
         rows by name rather than by translated id. Names with no match are skipped."""
         if model_label == "teams.team":
-            from apps.teams.models import Flag  # noqa: PLC0415
-
             for name in row.get("feature_flags", []):
                 flag = Flag.objects.filter(name=name).first()
                 if flag:
                     flag.teams.add(instance)
         elif model_label == "teams.membership":
-            from django.contrib.auth.models import Group  # noqa: PLC0415
-
             instance.groups.set(Group.objects.filter(name__in=row.get("groups", [])))
 
 
