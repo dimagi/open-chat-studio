@@ -1,0 +1,28 @@
+OCS Cost Tracking - weekly digest
+{{ summary.period_start|date:"Y-m-d" }} to {{ summary.period_end|date:"Y-m-d" }}
+
+Two coverage gaps are reported below. Both surface from real UsageRecord
+rows in the period, aggregated cross-team.
+
+
+Unpriced models ({{ summary.distinct_unpriced_models }} distinct)
+{% if summary.unpriced_rows %}{% for row in summary.unpriced_rows %}
+  - {{ row.provider_type }}/{{ row.model_name }}/{{ row.service_kind }}: {{ row.calls }} call(s){% endfor %}
+
+Action: add pricing rules for the listed (provider, model) pairs in
+apps/cost_tracking/seed_data/llm_pricing.json (or wait for the daily
+auto-update workflow to land them).
+{% else %}
+  None this period.
+{% endif %}
+
+Unknown calls ({{ summary.total_unknown_calls }} total)
+{% if summary.unknown_rows %}{% for row in summary.unknown_rows %}
+  - {{ row.provider_type }}/{{ row.model_name }}/{{ row.service_kind }}: {{ row.missing_usage_calls }} call(s){% endfor %}
+
+Action: investigate why the provider returned no usage_metadata.
+Provider integration drift or a callback timing issue are the usual
+suspects.
+{% else %}
+  None this period.
+{% endif %}

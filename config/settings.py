@@ -558,6 +558,11 @@ SCHEDULED_TASKS = {
         "task": "apps.evaluations.auto_population.auto_populate_eval_datasets",
         "schedule": timedelta(minutes=5),
     },
+    "cost_tracking.tasks.send_unpriced_usage_digest": {
+        # weekly Monday 09:00 UTC - early-week triage for the platform team
+        "task": "apps.cost_tracking.tasks.send_unpriced_usage_digest",
+        "schedule": crontab(minute="0", hour="9", day_of_week="1"),
+    },
 }
 
 CACHES = {
@@ -599,6 +604,11 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
+
+# Recipient for the cost-tracking weekly digest. Empty falls back to
+# PROJECT_METADATA["CONTACT_EMAIL"]; set this to route the digest elsewhere
+# (e.g. a dedicated operator alias).
+COST_TRACKING_OPERATOR_EMAIL = env("COST_TRACKING_OPERATOR_EMAIL", default="")
 
 # Prelogin marketing pages
 # Optional contact email shown on the contact page. Leave unset to hide the email.
