@@ -1518,8 +1518,6 @@ components:
             participants:read: Read Participant Data
             participants:write: Update Participant Data
             cost_tracking:read: Read Cost Tracking usage and pricing data
-            openid: OpenID Connect scope
-            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header
