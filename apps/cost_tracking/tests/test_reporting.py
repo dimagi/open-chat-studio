@@ -7,46 +7,24 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord
+from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind
 from apps.cost_tracking.services.reporting import (
     cost_summary,
     last_synced_at,
     top_n_bots,
 )
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
 
-def _usage(
-    team,
-    *,
-    cost,
-    when,
-    confidence=Confidence.EXACT,
-    experiment=None,
-    session=None,
-    quantity=100,
-):
-    """Create a UsageRecord at a specific time. Direct ORM update is needed
-    because `timestamp` uses `auto_now_add` which can't be set via .create().
+def _usage(team, *, cost, when, **kwargs):
+    """Thin wrapper around UsageRecordFactory that coerces `cost` to Decimal
+    and forwards optional kwargs (confidence, experiment, session, quantity).
     """
-    record = UsageRecord.objects.create(
-        team=team,
-        service_kind=ServiceKind.LLM_INPUT,
-        provider_type="openai",
-        model_name="gpt-4o-mini",
-        quantity=quantity,
-        unit_price=Decimal("0.00015"),
-        cost=Decimal(str(cost)),
-        confidence=confidence,
-        experiment=experiment,
-        session=session,
-    )
-    UsageRecord.objects.filter(pk=record.pk).update(timestamp=when)
-    record.refresh_from_db()
-    return record
+    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
 
 
 @pytest.mark.django_db()

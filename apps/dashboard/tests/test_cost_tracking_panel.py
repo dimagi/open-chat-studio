@@ -6,8 +6,8 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord
 from apps.teams.models import Flag
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
@@ -18,20 +18,8 @@ def _enable_flag_for(team):
     flag.flush()
 
 
-def _usage(team, *, cost, when, experiment=None, confidence=Confidence.EXACT, quantity=100):
-    record = UsageRecord.objects.create(
-        team=team,
-        service_kind=ServiceKind.LLM_INPUT,
-        provider_type="openai",
-        model_name="gpt-4o-mini",
-        quantity=quantity,
-        unit_price=Decimal("0.00015"),
-        cost=Decimal(str(cost)),
-        confidence=confidence,
-        experiment=experiment,
-    )
-    UsageRecord.objects.filter(pk=record.pk).update(timestamp=when)
-    return record
+def _usage(team, *, cost, when, **kwargs):
+    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
 
 
 @pytest.mark.django_db()

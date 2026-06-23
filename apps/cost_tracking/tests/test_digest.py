@@ -9,37 +9,27 @@ from django.core import mail
 from django.test import override_settings
 from django.utils import timezone
 
-from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord
+from apps.cost_tracking.models import Confidence
 from apps.cost_tracking.services.digest import build_digest
 from apps.cost_tracking.tasks import send_unpriced_usage_digest
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.team import TeamFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
 
-def _usage(
-    team,
-    *,
-    when,
-    confidence=Confidence.EXACT,
-    unit_price="0.00015",
-    extra=None,
-    model="gpt-4o-mini",
-    kind=ServiceKind.LLM_INPUT,
-):
-    record = UsageRecord.objects.create(
+def _usage(team, *, when, unit_price="0.00015", model="gpt-4o-mini", **kwargs):
+    """Wrapper around UsageRecordFactory specialised for digest tests:
+    unit_price=None is the unpriced fixture; `extra` and `kind` flow
+    through factory kwargs.
+    """
+    return UsageRecordFactory.create(
         team=team,
-        service_kind=kind,
-        provider_type="openai",
+        at=when,
         model_name=model,
-        quantity=100,
         unit_price=Decimal(unit_price) if unit_price is not None else None,
-        cost=Decimal(0),
-        confidence=confidence,
-        extra=extra or {},
+        **kwargs,
     )
-    UsageRecord.objects.filter(pk=record.pk).update(timestamp=when)
-    return record
 
 
 @pytest.mark.django_db()

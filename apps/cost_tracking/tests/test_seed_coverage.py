@@ -35,26 +35,26 @@ def test_every_global_model_has_input_and_output_pricing():
     allow-listed in KNOWN_UNPRICED.
     """
     call_command("load_ai_pricing", verbosity=0)
-
     models = LlmProviderModel.objects.filter(team__isnull=True, deprecated=False)
-    missing: list[str] = []
-
-    for model in models:
-        if (model.type, model.name) in KNOWN_UNPRICED:
-            continue
-        for kind in REQUIRED_KINDS:
-            has_rule = PricingRule.objects.filter(
-                team__isnull=True,
-                provider_type=model.type,
-                model_name=model.name,
-                service_kind=kind,
-                effective_to__isnull=True,
-            ).exists()
-            if not has_rule:
-                missing.append(f"  - {model.type}/{model.name} missing {kind}")
-
+    missing = [
+        f"  - {model.type}/{model.name} missing {kind}"
+        for model in models
+        if (model.type, model.name) not in KNOWN_UNPRICED
+        for kind in REQUIRED_KINDS
+        if not _has_active_global_rule(model, kind)
+    ]
     assert not missing, (
         "The following global, non-deprecated LlmProviderModels are missing "
         "active PricingRules. Either add them to apps/cost_tracking/seed_data/llm_pricing.json "
         "or add the (provider, model) pair to KNOWN_UNPRICED with a reason:\n" + "\n".join(missing)
     )
+
+
+def _has_active_global_rule(model: LlmProviderModel, kind: ServiceKind) -> bool:
+    return PricingRule.objects.filter(
+        team__isnull=True,
+        provider_type=model.type,
+        model_name=model.name,
+        service_kind=kind,
+        effective_to__isnull=True,
+    ).exists()

@@ -94,6 +94,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+  /api/v2/cost_tracking/pricing/:
+    get:
+      operationId: cost_tracking_pricing
+      description: |-
+        Active PricingRules visible to the caller's team (team overrides
+        plus globals). Read-only snapshot.
+      summary: Cost-tracking pricing
+      tags:
+      - Cost Tracking
+      security:
+      - OAuth2:
+        - cost_tracking:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingResponse'
+          description: ''
+  /api/v2/cost_tracking/usage/:
+    get:
+      operationId: cost_tracking_usage
+      description: Period-over-period spend summary plus top-N experiments for the
+        team.
+      summary: Cost-tracking usage
+      parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+        description: ISO 8601 end of the reporting window (defaults to now).
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+        description: ISO 8601 start of the reporting window (defaults to 30 days before
+          `end`).
+      tags:
+      - Cost Tracking
+      security:
+      - OAuth2:
+        - cost_tracking:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageResponse'
+          description: ''
   /api/v2/me/:
     get:
       operationId: me
@@ -190,6 +245,34 @@ components:
         tag_output_message:
           type: boolean
           description: Tag the output message with the selected route.
+    BotSpend:
+      type: object
+      description: Mirrors `services.reporting.BotSpend`.
+      properties:
+        experiment_id:
+          type: integer
+        experiment_name:
+          type: string
+        cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        tokens:
+          type: integer
+        sessions:
+          type: integer
+        cost_per_session:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+          nullable: true
+      required:
+      - cost
+      - cost_per_session
+      - experiment_id
+      - experiment_name
+      - sessions
+      - tokens
     Channel:
       type: object
       description: |-
@@ -395,6 +478,52 @@ components:
       - consent_text
       - id
       - name
+    CostSummary:
+      type: object
+      description: Mirrors `services.reporting.CostSummary`.
+      properties:
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        total_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        previous_period_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        delta_pct:
+          type: number
+          format: double
+          nullable: true
+        exact_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        estimated_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        unknown_call_count:
+          type: integer
+        last_synced:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - delta_pct
+      - estimated_cost
+      - exact_cost
+      - last_synced
+      - period_end
+      - period_start
+      - previous_period_cost
+      - total_cost
+      - unknown_call_count
     CustomAction:
       type: object
       description: |-
@@ -1146,6 +1275,51 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
         * `email` - Email
+    PricingResponse:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PricingRule'
+      required:
+      - rules
+    PricingRule:
+      type: object
+      description: |-
+        One active PricingRule. Effective_to is implicit (only active rules
+        are returned).
+      properties:
+        provider_type:
+          type: string
+          maxLength: 64
+        model_name:
+          type: string
+          maxLength: 128
+        service_kind:
+          $ref: '#/components/schemas/ServiceKindEnum'
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        currency:
+          type: string
+          maxLength: 3
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        effective_from:
+          type: string
+          format: date-time
+        scope:
+          type: string
+          description: team-scoped rules are 'team', everything else is 'global'.
+          readOnly: true
+      required:
+      - model_name
+      - provider_type
+      - scope
+      - service_kind
+      - unit_price
     Provider:
       type: object
       description: |-
@@ -1239,6 +1413,28 @@ components:
         body:
           type: string
           description: Jinja2 body template; the pipeline input is used when blank.
+    ServiceKindEnum:
+      enum:
+      - llm_input
+      - llm_output
+      - llm_cached_input
+      - llm_cache_write
+      type: string
+      description: |-
+        * `llm_input` - Llm Input
+        * `llm_output` - Llm Output
+        * `llm_cached_input` - Llm Cached Input
+        * `llm_cache_write` - Llm Cache Write
+    SourceEnum:
+      enum:
+      - seed
+      - manual
+      - import
+      type: string
+      description: |-
+        * `seed` - Seed
+        * `manual` - Manual
+        * `import` - Import
     SourceMaterial:
       type: object
       properties:
@@ -1294,6 +1490,18 @@ components:
       required:
       - name
       - slug
+    UsageResponse:
+      type: object
+      properties:
+        summary:
+          $ref: '#/components/schemas/CostSummary'
+        top_bots:
+          type: array
+          items:
+            $ref: '#/components/schemas/BotSpend'
+      required:
+      - summary
+      - top_bots
   securitySchemes:
     OAuth2:
       type: oauth2
@@ -1309,6 +1517,9 @@ components:
             files:read: Download file content
             participants:read: Read Participant Data
             participants:write: Update Participant Data
+            cost_tracking:read: Read Cost Tracking usage and pricing data
+            openid: OpenID Connect scope
+            profile: User Profile
     apiKeyAuth:
       type: apiKey
       in: header

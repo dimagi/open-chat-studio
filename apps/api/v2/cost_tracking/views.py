@@ -108,6 +108,12 @@ def _parse_period(params) -> tuple[datetime, datetime]:
 
 
 def _parse_iso(value: str | None, *, default: datetime) -> datetime:
+    """ISO 8601 parser that always returns a timezone-aware datetime so
+    Django ORM filters don't blow up under `USE_TZ=True`. Naive inputs are
+    interpreted as UTC."""
     if not value:
         return default
-    return datetime.fromisoformat(value)
+    parsed = datetime.fromisoformat(value)
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed)
+    return parsed

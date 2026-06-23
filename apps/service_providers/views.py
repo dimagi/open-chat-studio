@@ -324,8 +324,15 @@ def _pricing_lookup(team, llm_models: list) -> dict:
         model_name__in={m.name for m in llm_models},
         effective_to__isnull=True,
     )
+    by_key = _index_rules_by_provider_model(rules)
+    for rates in by_key.values():
+        _augment_with_template_helpers(rates)
+    return {m.id: by_key[(m.type, m.name)] for m in llm_models if (m.type, m.name) in by_key}
+
+
+def _index_rules_by_provider_model(rules) -> dict[tuple[str, str], dict]:
+    """Globals first so team-scoped rules overwrite them on the same key."""
     by_key: dict[tuple[str, str], dict] = {}
-    # Sort globals first so team-scoped rules override them.
     for rule in sorted(rules, key=lambda r: r.team_id is not None):
         key = (rule.provider_type, rule.model_name)
         by_key.setdefault(key, {})[rule.service_kind] = {
@@ -333,15 +340,19 @@ def _pricing_lookup(team, llm_models: list) -> dict:
             "source": rule.source,
             "scope": "team" if rule.team_id else "global",
         }
-    # Add a `primary` pointer so the template doesn't have to fall back via
-    # `|default:` (which trips on missing dict keys with STRICT template
-    # resolution), and a `has_team_override` flag for the revert button.
-    for rates in by_key.values():
-        primary = rates.get(ServiceKind.LLM_INPUT.value) or rates.get(ServiceKind.LLM_OUTPUT.value)
-        if primary:
-            rates["primary"] = primary
-        rates["has_team_override"] = any(r["scope"] == "team" for r in rates.values() if isinstance(r, dict))
-    return {m.id: by_key[(m.type, m.name)] for m in llm_models if (m.type, m.name) in by_key}
+    return by_key
+
+
+def _augment_with_template_helpers(rates: dict) -> None:
+    """Mutates `rates` in place with two synthetic keys the template reads
+    directly: `primary` (input rate, falling back to output) and
+    `has_team_override` (for the Revert button). Avoids the Django template
+    `|default:` gotcha on missing dict keys under strict resolution.
+    """
+    primary = rates.get(ServiceKind.LLM_INPUT.value) or rates.get(ServiceKind.LLM_OUTPUT.value)
+    if primary:
+        rates["primary"] = primary
+    rates["has_team_override"] = any(r["scope"] == "team" for r in rates.values() if isinstance(r, dict))
 
 
 @require_POST

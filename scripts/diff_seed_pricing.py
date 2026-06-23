@@ -168,23 +168,41 @@ def _changes_for_model(
 ) -> list[RateChange]:
     """Compare each diffable provider's seed rate to the new rate, model by model."""
     out: list[RateChange] = []
-    for (provider, name), seed_rates in index.items():
-        if name != model_name or provider not in DIFFABLE_PROVIDERS:
-            continue
-        for service_kind, new_price in new_rates.items():
-            old_price = seed_rates.get(service_kind)
-            if old_price != new_price:
-                out.append(
-                    RateChange(
-                        provider_type=provider,
-                        model_name=model_name,
-                        service_kind=service_kind,
-                        old_price=old_price,
-                        new_price=new_price,
-                        source_url=source_url,
-                    )
-                )
+    for provider, seed_rates in _diffable_provider_rates(index, model_name):
+        out.extend(_provider_rate_changes(provider, model_name, seed_rates, new_rates, source_url))
     return out
+
+
+def _diffable_provider_rates(
+    index: dict[tuple[str, str], dict[str, str]],
+    model_name: str,
+) -> list[tuple[str, dict[str, str]]]:
+    return [
+        (provider, seed_rates)
+        for (provider, name), seed_rates in index.items()
+        if name == model_name and provider in DIFFABLE_PROVIDERS
+    ]
+
+
+def _provider_rate_changes(
+    provider: str,
+    model_name: str,
+    seed_rates: dict[str, str],
+    new_rates: dict[str, str],
+    source_url: str,
+) -> list[RateChange]:
+    return [
+        RateChange(
+            provider_type=provider,
+            model_name=model_name,
+            service_kind=service_kind,
+            old_price=seed_rates.get(service_kind),
+            new_price=new_price,
+            source_url=source_url,
+        )
+        for service_kind, new_price in new_rates.items()
+        if seed_rates.get(service_kind) != new_price
+    ]
 
 
 # Apply changes to seed + generate migration
@@ -264,21 +282,30 @@ def render_pr_body(changes: list[RateChange], unmatched: set[str]) -> str:
         "",
         "| Provider | Model | Service | Old (per 1K) | New (per 1K) | Source |",
         "| --- | --- | --- | --- | --- | --- |",
+        *(_change_row(c) for c in changes),
+        *_unmatched_section(unmatched),
     ]
-    for c in changes:
-        old = c.old_price if c.old_price is not None else "-"
-        lines.append(
-            f"| {c.provider_type} | {c.model_name} | {c.service_kind} | "
-            f"{old} | {c.new_price} | [llm-stats]({c.source_url}) |"
-        )
-    if unmatched:
-        lines.append("")
-        lines.append("## Unmatched models")
-        lines.append("")
-        lines.append("These seed models had no usable rate on llm-stats.com:")
-        for m in sorted(unmatched):
-            lines.append(f"- `{m}`")
     return "\n".join(lines) + "\n"
+
+
+def _change_row(c: RateChange) -> str:
+    old = c.old_price if c.old_price is not None else "-"
+    return (
+        f"| {c.provider_type} | {c.model_name} | {c.service_kind} | "
+        f"{old} | {c.new_price} | [llm-stats]({c.source_url}) |"
+    )
+
+
+def _unmatched_section(unmatched: set[str]) -> list[str]:
+    if not unmatched:
+        return []
+    return [
+        "",
+        "## Unmatched models",
+        "",
+        "These seed models had no usable rate on llm-stats.com:",
+        *(f"- `{m}`" for m in sorted(unmatched)),
+    ]
 
 
 # CLI

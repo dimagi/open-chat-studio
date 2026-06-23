@@ -5,20 +5,20 @@ from decimal import Decimal
 
 import pytest
 
-from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
+from apps.cost_tracking.models import PricingSource, ServiceKind
 from apps.service_providers.models import LlmProviderModel
 from apps.service_providers.views import _format_per_million, _pricing_lookup
+from apps.utils.factories.cost_tracking import PricingRuleFactory
 from apps.utils.factories.team import TeamFactory
 
 
-def _model(team, *, provider="openai", name="gpt-4o-mini", token_limit=128000):
-    return LlmProviderModel.objects.create(team=team, type=provider, name=name, max_token_limit=token_limit)
+def _model(team, *, name="gpt-4o-mini"):
+    return LlmProviderModel.objects.create(team=team, type="openai", name=name, max_token_limit=128000)
 
 
-def _rule(team, *, provider, name, kind, price, source=PricingSource.SEED):
-    return PricingRule.objects.create(
+def _rule(team, *, name, kind, price, source=PricingSource.SEED):
+    return PricingRuleFactory.create(
         team=team,
-        provider_type=provider,
         model_name=name,
         service_kind=kind,
         unit_price=price,
@@ -50,7 +50,7 @@ class TestPricingLookup:
     def test_returns_global_rule_when_no_override(self):
         team = TeamFactory.create()
         model = _model(team, name="test-model-a")
-        _rule(team=None, provider="openai", name="test-model-a", kind=ServiceKind.LLM_INPUT, price="0.00250")
+        _rule(team=None, name="test-model-a", kind=ServiceKind.LLM_INPUT, price="0.00250")
 
         result = _pricing_lookup(team, [model])
 
@@ -60,10 +60,9 @@ class TestPricingLookup:
     def test_team_override_wins_over_global(self):
         team = TeamFactory.create()
         model = _model(team, name="test-model-b")
-        _rule(team=None, provider="openai", name="test-model-b", kind=ServiceKind.LLM_INPUT, price="0.00250")
+        _rule(team=None, name="test-model-b", kind=ServiceKind.LLM_INPUT, price="0.00250")
         _rule(
             team=team,
-            provider="openai",
             name="test-model-b",
             kind=ServiceKind.LLM_INPUT,
             price="0.00100",
@@ -81,7 +80,7 @@ class TestPricingLookup:
         team = TeamFactory.create()
         priced = _model(team, name="test-model-c")
         unpriced = _model(team, name="test-model-d")
-        _rule(team=None, provider="openai", name="test-model-c", kind=ServiceKind.LLM_INPUT, price="0.00250")
+        _rule(team=None, name="test-model-c", kind=ServiceKind.LLM_INPUT, price="0.00250")
 
         result = _pricing_lookup(team, [priced, unpriced])
 
@@ -91,9 +90,9 @@ class TestPricingLookup:
     def test_multiple_service_kinds_per_model(self):
         team = TeamFactory.create()
         model = _model(team, name="test-model-e")
-        _rule(team=None, provider="openai", name="test-model-e", kind=ServiceKind.LLM_INPUT, price="0.00250")
-        _rule(team=None, provider="openai", name="test-model-e", kind=ServiceKind.LLM_OUTPUT, price="0.01000")
-        _rule(team=None, provider="openai", name="test-model-e", kind=ServiceKind.LLM_CACHED_INPUT, price="0.00125")
+        _rule(team=None, name="test-model-e", kind=ServiceKind.LLM_INPUT, price="0.00250")
+        _rule(team=None, name="test-model-e", kind=ServiceKind.LLM_OUTPUT, price="0.01000")
+        _rule(team=None, name="test-model-e", kind=ServiceKind.LLM_CACHED_INPUT, price="0.00125")
 
         result = _pricing_lookup(team, [model])
 
@@ -109,7 +108,7 @@ class TestPricingLookup:
     def test_closed_rules_excluded(self):
         team = TeamFactory.create()
         model = _model(team, name="test-model-f")
-        rule = _rule(team=None, provider="openai", name="test-model-f", kind=ServiceKind.LLM_INPUT, price="0.00250")
+        rule = _rule(team=None, name="test-model-f", kind=ServiceKind.LLM_INPUT, price="0.00250")
         rule.effective_to = rule.effective_from
         rule.save()
 
@@ -123,7 +122,6 @@ class TestPricingLookup:
         model = _model(team, name="test-model-g")
         _rule(
             team=other,
-            provider="openai",
             name="test-model-g",
             kind=ServiceKind.LLM_INPUT,
             price="0.00999",

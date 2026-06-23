@@ -8,8 +8,9 @@ import pytest
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient
 
-from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord
+from apps.cost_tracking.models import PricingRule, ServiceKind
 from apps.teams.models import Flag
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -24,20 +25,30 @@ def _enable_flag_for(team):
     return flag
 
 
-def _usage(team, *, cost, when, confidence=Confidence.EXACT, experiment=None):
-    record = UsageRecord.objects.create(
-        team=team,
-        service_kind=ServiceKind.LLM_INPUT,
+def _usage(team, *, cost, when, **kwargs):
+    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
+
+
+def _other_team_rule(team, other_team):
+    PricingRule.objects.create(
+        team=other_team,
         provider_type="openai",
-        model_name="gpt-4o-mini",
-        quantity=100,
-        unit_price=Decimal("0.00015"),
-        cost=Decimal(str(cost)),
-        confidence=confidence,
-        experiment=experiment,
+        model_name="other-team-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        unit_price="0.00099",
     )
-    UsageRecord.objects.filter(pk=record.pk).update(timestamp=when)
-    return record
+
+
+def _closed_rule(team, other_team):
+    closed = PricingRule.objects.create(
+        team=team,
+        provider_type="openai",
+        model_name="closed-test-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        unit_price="0.00010",
+    )
+    closed.effective_to = _NOW
+    closed.save()
 
 
 # URL routing
@@ -189,37 +200,20 @@ class TestPricingEndpoint:
         # Team-scoped override is present.
         assert scopes[("openai", "gpt-4o-mini", "llm_input")] == "team"
 
-    def test_excludes_other_teams_rules(self):
+    @pytest.mark.parametrize(
+        ("setup_rule", "excluded_name"),
+        [
+            pytest.param(_other_team_rule, "other-team-model", id="other-team-rule"),
+            pytest.param(_closed_rule, "closed-test-model", id="closed-rule"),
+        ],
+    )
+    def test_pricing_endpoint_excludes(self, setup_rule, excluded_name):
         team = TeamWithUsersFactory.create()
         other = TeamWithUsersFactory.create()
         _enable_flag_for(team)
-        PricingRule.objects.create(
-            team=other,
-            provider_type="openai",
-            model_name="other-team-model",
-            service_kind=ServiceKind.LLM_INPUT,
-            unit_price="0.00099",
-        )
+        setup_rule(team, other)
 
         response = self._client_for(team).get(reverse("api:v2:cost_tracking:pricing"))
 
         names = {r["model_name"] for r in response.json()["rules"]}
-        assert "other-team-model" not in names
-
-    def test_excludes_closed_rules(self):
-        team = TeamWithUsersFactory.create()
-        _enable_flag_for(team)
-        closed = PricingRule.objects.create(
-            team=team,
-            provider_type="openai",
-            model_name="closed-test-model",
-            service_kind=ServiceKind.LLM_INPUT,
-            unit_price="0.00010",
-        )
-        closed.effective_to = _NOW
-        closed.save()
-
-        response = self._client_for(team).get(reverse("api:v2:cost_tracking:pricing"))
-
-        names = {r["model_name"] for r in response.json()["rules"]}
-        assert "closed-test-model" not in names
+        assert excluded_name not in names
