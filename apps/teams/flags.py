@@ -74,6 +74,14 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    AI_COST_MONITORING = (
+        "flag_ai_cost_monitoring",
+        "AI cost tracking — record per-call cost and surface a usage dashboard",
+        "",
+        [],
+        True,
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)
