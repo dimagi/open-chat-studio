@@ -79,7 +79,9 @@ jobs:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
-        run: uv run python manage.py spectacular --file api-schemas/v1.yml
+        run: |
+          uv run python manage.py spectacular --api-version v1 --file api-schemas/v1.yml --validate
+          uv run python manage.py spectacular --api-version v2 --file api-schemas/v2.yml --validate
 
       - name: Create Missing Migrations
         env:
@@ -91,9 +93,9 @@ jobs:
         run: |
           git add api-schemas/ apps/
           if git diff --cached --exit-code; then
-            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit changes

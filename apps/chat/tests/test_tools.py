@@ -24,6 +24,7 @@ from apps.chat.agent.tools import (
     SearchIndexTool,
     SearchToolConfig,
     _convert_to_sync_tool,
+    _format_metadata_block,
     _get_search_tool_footer,
     _move_datetime_to_new_weekday_and_time,
     create_schedule_message,
@@ -514,6 +515,86 @@ class TestSearchIndexTool:
 {footer}
 """
         assert result == expected_result
+
+    def test_action_includes_file_metadata(self, team, local_index_manager_mock):
+        collection = CollectionFactory.create(team=team)
+        file = FileFactory.create(
+            team=team,
+            name="report.pdf",
+            metadata={
+                "title": "Annual Report",
+                "URI": "https://example.com/report",
+                "date": "2026-01-01",
+                "type": "report",
+                "authors": ["Alice", "Bob"],
+                # An unanticipated feed field should still be surfaced.
+                "section": "Methods",
+                # Internal/duplicate keys that should not be surfaced to the LLM.
+                "collection_id": collection.id,
+                "source_type": "json_collection",
+                "citation_url": "https://example.com/report",
+            },
+        )
+        vector_data = self.load_vector_data()
+        FileChunkEmbedding.objects.create(
+            team=team,
+            file=file,
+            collection=collection,
+            chunk_number=1,
+            text="Apples are great",
+            embedding=vector_data["Apples are great"],
+            page_number=0,
+        )
+
+        local_index_manager_mock.get_embedding_vector.return_value = vector_data["What are great fruit?"]
+        search_config = SearchToolConfig(index_id=collection.id, max_results=1, generate_citations=False)
+        result = SearchIndexTool(search_config=search_config).action(query="What are great fruit?")
+
+        assert "<metadata>" in result
+        assert "<title>Annual Report</title>" in result
+        assert "<URI>https://example.com/report</URI>" in result
+        assert "<date>2026-01-01</date>" in result
+        assert "<type>report</type>" in result
+        assert "<authors>Alice, Bob</authors>" in result
+        assert "<section>Methods</section>" in result
+        # Internal/duplicate keys must not leak to the LLM.
+        assert "collection_id" not in result
+        assert "source_type" not in result
+        assert "citation_url" not in result
+
+
+class TestFormatMetadataBlock:
+    def test_empty_metadata_returns_empty_string(self):
+        assert _format_metadata_block(None) == ""
+        assert _format_metadata_block({}) == ""
+
+    def test_only_blocklisted_fields_returns_empty_string(self):
+        assert _format_metadata_block({"collection_id": 1, "source_type": "json_collection"}) == ""
+
+    def test_skips_empty_values(self):
+        block = _format_metadata_block({"title": "", "date": None, "tags": [], "type": "report"})
+        assert block == "\n  <metadata>\n    <type>report</type>\n  </metadata>"
+
+    def test_lists_joined_with_commas(self):
+        block = _format_metadata_block({"authors": ["Alice", "Bob"]})
+        assert "<authors>Alice, Bob</authors>" in block
+
+    def test_unanticipated_fields_included(self):
+        block = _format_metadata_block({"some_custom_field": "value"})
+        assert "<some_custom_field>value</some_custom_field>" in block
+
+    def test_invalid_tag_characters_sanitized(self):
+        block = _format_metadata_block({"Some Field!": "value"})
+        assert "<Some_Field_>value</Some_Field_>" in block
+
+    def test_preserves_insertion_order(self):
+        block = _format_metadata_block({"title": "T", "date": "2026-01-01", "type": "report"})
+        assert block.index("<title>") < block.index("<date>") < block.index("<type>")
+
+    def test_escapes_xml_special_characters(self):
+        block = _format_metadata_block({"title": "Q&A <draft>", "authors": ["A & B"]})
+        assert "<title>Q&amp;A &lt;draft&gt;</title>" in block
+        assert "<authors>A &amp; B</authors>" in block
 
 
 def test_tools_present():

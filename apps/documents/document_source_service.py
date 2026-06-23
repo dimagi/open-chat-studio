@@ -1,5 +1,6 @@
 import logging
 import time
+from urllib.parse import unquote
 
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -173,6 +174,7 @@ class DocumentSourceManager:
         filename = self._extract_filename(document, identifier)
         content_file = ContentFile(document.page_content.encode("utf-8"), name=filename)
         existing_file = collection_file.file
+        existing_file.name = filename
         existing_file.file = content_file
         existing_file.content_size = content_file.size
         existing_file.metadata = document.metadata
@@ -189,12 +191,13 @@ class DocumentSourceManager:
         if path := document.metadata.get("path"):
             return path
 
-        # Try to get filename from metadata
+        # Try to get filename from metadata. `source` is often a URL, so decode any
+        # percent-encoding (e.g. "%20" -> " ") to get a human-readable filename.
         if "source" in document.metadata:
             source = document.metadata["source"]
             if "/" in source:
-                return source.split("/")[-1]
-            return source
+                return unquote(source.split("/")[-1])
+            return unquote(source)
 
         # Fall back to using part of the identifier
         if ":" in identifier:

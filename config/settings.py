@@ -453,15 +453,38 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Open Chat Studio",
     "DESCRIPTION": "Build, deploy and monitor chatbots.",
-    "VERSION": "1",
+    # Left blank so info.version is just the API version (e.g. "v1"/"v2"); drf-spectacular would
+    # otherwise prefix it as "<VERSION> (<api_version>)".
+    "VERSION": "",
     "SERVE_INCLUDE_SCHEMA": False,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.api.schema.prune_unused_tags",
+    ],
+    "PREPROCESSING_HOOKS": [
+        "apps.api.schema.exclude_legacy_participants_path",
+    ],
+    # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
+    # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
+    "ENUM_NAME_OVERRIDES": {
+        "ChatbotSessionStatusEnum": "apps.experiments.models.SessionStatus",
+    },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
         {
             "name": "Channels",
             "description": "Trigger bot messages or deliver messages directly to users on a channel.",
+        },
+        {
+            "name": "Chatbots",
+            "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
+        },
+        {
+            "name": "Me",
+            "description": "Information about the authenticated user and the team the token is scoped to.",
         },
         {
             "name": "Chat",

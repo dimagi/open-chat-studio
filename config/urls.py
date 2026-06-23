@@ -20,7 +20,7 @@ from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.templatetags.static import static as static_url
 from django.urls import include, path
-from django.views.generic import RedirectView
+from django.views.generic import RedirectView, TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
 from apps.oauth.views import TeamScopedAuthorizationView
@@ -85,9 +85,15 @@ urlpatterns = [
     path("", include(slack_global_urls)),
     path("celery-progress/", include("celery_progress.urls")),
     path("banners/", include("apps.banners.urls")),
-    # API docs
+    # API docs. The version is read from the request path by apps.api.versioning.URLPathVersioning,
+    # so each schema view emits only its version's surface. The unversioned ``/api/schema/`` is the
+    # permanent v1 alias; ``/api/v2/...`` serves the renamed v2 surface (ADR-0022). ``/api/docs/`` is
+    # a landing page linking to the per-version Redoc references and the guides site.
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path("api/v2/schema/", SpectacularAPIView.as_view(), name="schema-v2"),
+    path("api/docs/", TemplateView.as_view(template_name="api/docs_landing.html"), name="api-docs"),
+    path("api/v1/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc-v1"),
+    path("api/v2/docs/", SpectacularRedocView.as_view(url_name="schema-v2"), name="redoc-v2"),
     path("channels/", include("apps.channels.urls", namespace="channels")),
     path("anymail/", include("anymail.urls")),
     path("api/", include("apps.api.urls", namespace="api")),

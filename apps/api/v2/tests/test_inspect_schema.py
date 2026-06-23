@@ -7,7 +7,8 @@ from drf_spectacular.generators import SchemaGenerator
 
 @pytest.fixture(scope="module")
 def api_schema():
-    return SchemaGenerator().get_schema(request=None, public=True)
+    # inspect is a v2-only endpoint; the generator filters per version, so ask for v2 explicitly.
+    return SchemaGenerator(api_version="v2").get_schema(request=None, public=True)
 
 
 def test_inspect_200_references_the_inspect_component(api_schema):
