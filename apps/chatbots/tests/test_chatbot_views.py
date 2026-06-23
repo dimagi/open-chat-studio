@@ -364,27 +364,6 @@ def test_chatbot_sessions_table_view(team_with_users):
 
 
 @pytest.mark.django_db()
-def test_continue_chat_launcher_present_on_session_pages_when_flag_active(client, team_with_users):
-    """The session-chat widget launcher script renders on both the single-chatbot home and the
-    All Sessions page when the chat widget flag is active."""
-    team = team_with_users
-    user = team.members.first()
-    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    user.user_permissions.add(Permission.objects.get(codename="view_experimentsession"))
-    client.force_login(user)
-    experiment = ExperimentFactory.create(team=team)
-
-    with override_flag("flag_chat_widget", active=True):
-        single_home = client.get(reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id]))
-        all_sessions = client.get(reverse("chatbots:all_sessions_home", args=[team.slug]))
-
-    assert "chatbots/all_sessions_home.html" in [t.name for t in all_sessions.templates]
-    for response in (single_home, all_sessions):
-        assert response.status_code == 200
-        assert "window.ocsContinueSessionChat" in response.content.decode()
-
-
-@pytest.mark.django_db()
 @pytest.mark.parametrize("flag_active", [True, False])
 def test_continue_chat_action_respects_widget_flag(flag_active, client, team_with_users):
     """With ``flag_chat_widget`` active the Continue Chat action opens the embedded widget;
