@@ -24,7 +24,7 @@ def _non_admin(team):
 
 
 def _resource_url(resource):
-    return reverse("api:v2:resource", kwargs={"resource": resource})
+    return reverse(f"api:v2:resource-{resource}")
 
 
 def test_manifest_url_resolves():
@@ -67,9 +67,10 @@ def test_resource_returns_team_scoped_rows():
 
 
 def test_resource_rejects_unlisted_model():
+    # Only manifested resources are routed, so an unlisted model 404s at routing.
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
-    assert client.get(_resource_url("assistant")).status_code == 404
+    assert client.get("/api/v2/assistant/").status_code == 404
 
 
 def test_resource_isolates_other_teams_data():

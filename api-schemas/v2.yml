@@ -4,25 +4,117 @@ info:
   version: v2
   description: Build, deploy and monitor chatbots.
 paths:
-  /api/v2/{resource}/:
+  /api/v2/auth_provider/:
     get:
-      operationId: api_v2_retrieve
+      operationId: sync_auth_provider
+      summary: auth_provider
       parameters:
-      - in: path
-        name: resource
+      - in: query
+        name: cursor
         schema:
           type: string
-          pattern: ^[a-z_]+$
-        required: true
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
       tags:
-      - api
+      - Export
       security:
       - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthProviderExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/v2/chat/:
+    get:
+      operationId: sync_chat
+      summary: chat
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/chatbot/:
+    get:
+      operationId: sync_chatbot
+      summary: chatbot
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
@@ -113,6 +205,187 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+  /api/v2/consent_form/:
+    get:
+      operationId: sync_consent_form
+      summary: consent_form
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/embedding_provider_model/:
+    get:
+      operationId: sync_embedding_provider_model
+      summary: embedding_provider_model
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingProviderModelExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/experiment_session/:
+    get:
+      operationId: sync_experiment_session
+      summary: experiment_session
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentSessionExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/llm_provider/:
+    get:
+      operationId: sync_llm_provider
+      summary: llm_provider
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProviderExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/v2/llm_provider_model/:
+    get:
+      operationId: sync_llm_provider_model
+      summary: llm_provider_model
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProviderModelExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
   /api/v2/manifest/:
     get:
       operationId: api_v2_manifest_retrieve
@@ -124,7 +397,11 @@ paths:
       - tokenAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manifest'
+          description: ''
   /api/v2/me/:
     get:
       operationId: me
@@ -144,6 +421,450 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v2/membership/:
+    get:
+      operationId: sync_membership
+      summary: membership
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/messaging_provider/:
+    get:
+      operationId: sync_messaging_provider
+      summary: messaging_provider
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagingProviderExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/v2/node/:
+    get:
+      operationId: sync_node
+      summary: node
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/participant/:
+    get:
+      operationId: sync_participant
+      summary: participant
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/participant_data/:
+    get:
+      operationId: sync_participant_data
+      summary: participant_data
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantDataExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/v2/pipeline/:
+    get:
+      operationId: sync_pipeline
+      summary: pipeline
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/source_material/:
+    get:
+      operationId: sync_source_material
+      summary: source_material
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/synthetic_voice/:
+    get:
+      operationId: sync_synthetic_voice
+      summary: synthetic_voice
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyntheticVoiceExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/teams/:
+    get:
+      operationId: sync_teams
+      summary: teams
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/trace_provider/:
+    get:
+      operationId: sync_trace_provider
+      summary: trace_provider
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceProviderExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/v2/user/:
+    get:
+      operationId: sync_user
+      summary: user
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUserExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+  /api/v2/voice_provider/:
+    get:
+      operationId: sync_voice_provider
+      summary: voice_provider
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceProviderExportPage'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Unknown resource.
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
 components:
   schemas:
     ApiSchemaDigest:
@@ -211,6 +932,71 @@ components:
           type: string
           description: Optional wrapper for the user input; use ``{input}`` as the
             placeholder.
+    AuthProviderExportItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/AuthProviderExportItemTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+        team:
+          type: integer
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - team
+      - type
+      - updated_at
+    AuthProviderExportItemTypeEnum:
+      enum:
+      - basic
+      - api_key
+      - bearer
+      - commcare
+      type: string
+      description: |-
+        * `basic` - Basic
+        * `api_key` - API Key
+        * `bearer` - Bearer Auth
+        * `commcare` - CommCare
+    AuthProviderExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthProviderExportItem'
+      required:
+      - cursor
+      - has_more
+      - results
+    BlankEnum:
+      enum:
+      - ''
     BooleanNodeParams:
       type: object
       properties:
@@ -270,6 +1056,56 @@ components:
       required:
       - messaging_provider
       - name
+    ChatExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    ChatSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        translated_languages:
+          type: array
+          items:
+            type: string
+            maxLength: 3
+          nullable: true
+          description: List of language codes for which translated text is available
+        metadata: {}
+        team:
+          type: integer
+      required:
+      - created_at
+      - id
+      - team
+      - updated_at
     Chatbot:
       type: object
       description: |-
@@ -378,6 +1214,22 @@ components:
       - trace_provider
       - version_description
       - voice
+    ChatbotSessionStatusEnum:
+      enum:
+      - setup
+      - pending
+      - active
+      - pending-review
+      - complete
+      - unknown
+      type: string
+      description: |-
+        * `setup` - Setting Up
+        * `pending` - Awaiting participant
+        * `active` - Active
+        * `pending-review` - Awaiting final review.
+        * `complete` - Complete
+        * `unknown` - Unknown
     ChatbotVersion:
       type: object
       properties:
@@ -426,6 +1278,73 @@ components:
       - consent_text
       - id
       - name
+    ConsentFormExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsentFormSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    ConsentFormSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+        is_default:
+          type: boolean
+          readOnly: true
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_archived:
+          type: boolean
+        team:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - consent_text
+      - created_at
+      - id
+      - is_default
+      - name
+      - team
+      - updated_at
     CustomAction:
       type: object
       description: |-
@@ -465,6 +1384,348 @@ components:
       - id
       - name
       - server_url
+    CustomUserExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomUserSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    CustomUserSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        is_superuser:
+          type: boolean
+          title: Superuser status
+          description: Designates that this user has all permissions without explicitly
+            assigning them.
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        is_staff:
+          type: boolean
+          title: Staff status
+          description: Designates whether the user can log into this admin site.
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        date_joined:
+          type: string
+          format: date-time
+        avatar:
+          type: string
+          format: uri
+        language:
+          type: string
+          nullable: true
+          maxLength: 10
+      required:
+      - id
+      - username
+    EmbeddingProviderModelExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmbeddingProviderModelSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    EmbeddingProviderModelSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeB81Enum'
+        name:
+          type: string
+          description: The name of the model. e.g. 'text-embedding-3-small'
+          maxLength: 128
+        team:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - team
+      - type
+      - updated_at
+    ExperimentExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    ExperimentSessionExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentSessionSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    ExperimentSessionSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        external_id:
+          type: string
+          maxLength: 255
+        session_token_required:
+          type: boolean
+          description: Require a signed session token (or authenticated user) for
+            chat API access to this session.
+        status:
+          $ref: '#/components/schemas/ChatbotSessionStatusEnum'
+        consent_date:
+          type: string
+          format: date-time
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the experiment (chat) ended.
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the final review was submitted.
+        seed_task_id:
+          type: string
+          description: System ID of the seed message task, if present.
+          maxLength: 40
+        state: {}
+        platform:
+          type: string
+          nullable: true
+          maxLength: 128
+        experiment_versions:
+          type: array
+          items:
+            type: integer
+            maximum: 2147483647
+            minimum: 0
+          nullable: true
+          description: Array of unique experiment version numbers seen by this session
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last user interaction
+        first_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the first user interaction
+        team:
+          type: integer
+        participant:
+          type: integer
+        experiment:
+          type: integer
+        chat:
+          type: integer
+        experiment_channel:
+          type: integer
+          nullable: true
+      required:
+      - chat
+      - created_at
+      - experiment
+      - id
+      - participant
+      - team
+      - updated_at
+    ExperimentSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        seed_message:
+          type: string
+          description: If set, send this message to the bot when the session starts,
+            and prompt the user with the initial response.
+        public_id:
+          type: string
+          format: uuid
+        conversational_consent_enabled:
+          type: boolean
+          description: 'If enabled, the consent form will be sent at the start of
+            a conversation for external channels. Note: This requires the experiment
+            to have a seed message.'
+        voice_response_behaviour:
+          allOf:
+          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
+          description: |-
+            This tells the bot when to reply with voice messages
+
+            * `always` - Always
+            * `reciprocal` - Reciprocal
+            * `never` - Never
+        echo_transcript:
+          type: boolean
+          description: Whether or not the bot should tell the user what it heard when
+            the user sends voice messages
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          default: 1
+        is_default_version:
+          type: boolean
+          default: false
+        is_archived:
+          type: boolean
+        version_description:
+          type: string
+        debug_mode_enabled:
+          type: boolean
+        create_version_task_id:
+          type: string
+          maxLength: 128
+        file_uploads_enabled:
+          type: boolean
+          description: Enables file attachments in the web chat interface.
+        team:
+          type: integer
+        owner:
+          type: integer
+        pipeline:
+          type: integer
+          nullable: true
+        consent_form:
+          type: integer
+          nullable: true
+          description: Consent form content to show to users before participation
+            in experiments.
+        voice_provider:
+          type: integer
+          nullable: true
+        synthetic_voice:
+          type: integer
+          nullable: true
+        trace_provider:
+          type: integer
+          nullable: true
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - owner
+      - team
+      - updated_at
+      - working_version
     ExtractParticipantDataParams:
       type: object
       properties:
@@ -580,6 +1841,18 @@ components:
           nullable: true
           description: Use the provider's neural (higher-quality) voice engine, where
             supported.
+    GenderEnum:
+      enum:
+      - male
+      - female
+      - male (child)
+      - female (child)
+      type: string
+      description: |-
+        * `male` - Male
+        * `female` - Female
+        * `male (child)` - Male (Child)
+        * `female (child)` - Female (Child)
     IdentifierTypeEnum:
       enum:
       - email
@@ -1073,6 +2346,157 @@ components:
             type: string
           nullable: true
           description: MCP server tools enabled for the node.
+    LlmProviderExportItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeB81Enum'
+        name:
+          type: string
+          maxLength: 255
+        team:
+          type: integer
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - team
+      - type
+      - updated_at
+    LlmProviderExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmProviderExportItem'
+      required:
+      - cursor
+      - has_more
+      - results
+    LlmProviderModelExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmProviderModelSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    LlmProviderModelSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeB81Enum'
+        name:
+          type: string
+          description: The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'
+          maxLength: 128
+        max_token_limit:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          default: 8192
+          description: When the message history for a session exceeds this limit (in
+            tokens), it will be compressed. If 0, compression will be disabled which
+            may result in errors or high LLM costs.
+        deprecated:
+          type: boolean
+        team:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - team
+      - type
+      - updated_at
+    Manifest:
+      type: object
+      description: 'The sync manifest: the call order and per-model config, plus a
+        checksum of the applied schema.'
+      properties:
+        schema_checksum:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestEntry'
+      required:
+      - entries
+      - schema_checksum
+    ManifestEntry:
+      type: object
+      description: 'One row of the manifest: which model to pull and the config the
+        endpoint/importer need.'
+      properties:
+        model:
+          type: string
+          description: Internal `app_label.model` key.
+        resource:
+          type: string
+          description: URL-facing resource name the endpoint is mounted at.
+        phase:
+          type: string
+          description: structural | live | structural+live.
+        cursor:
+          type: string
+          description: 'Pagination cursor type: pk | updated_at_id.'
+        secret:
+          type: boolean
+          description: Whether rows carry fields sealed under the team public key.
+        order_by:
+          type: string
+          description: Optional ordering applied before paging.
+      required:
+      - cursor
+      - model
+      - phase
+      - resource
+      - secret
     Me:
       type: object
       properties:
@@ -1127,6 +2551,197 @@ components:
       - files
       - id
       - name
+    MembershipExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    MembershipSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        groups:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        team:
+          type: integer
+        user:
+          type: integer
+      required:
+      - created_at
+      - groups
+      - id
+      - team
+      - updated_at
+      - user
+    MessagingProviderExportItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/MessagingProviderExportItemTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+        extra_data: {}
+        team:
+          type: integer
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - team
+      - type
+      - updated_at
+    MessagingProviderExportItemTypeEnum:
+      enum:
+      - twilio
+      - turnio
+      - sureadhere
+      - slack
+      - meta_cloud_api
+      type: string
+      description: |-
+        * `twilio` - Twilio
+        * `turnio` - Turn.io
+        * `sureadhere` - SureAdhere
+        * `slack` - Slack
+        * `meta_cloud_api` - Meta Cloud API (WhatsApp)
+    MessagingProviderExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessagingProviderExportItem'
+      required:
+      - cursor
+      - has_more
+      - results
+    NodeExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    NodeSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        flow_id:
+          type: string
+          maxLength: 128
+        type:
+          type: string
+          maxLength: 128
+        label:
+          type: string
+          maxLength: 128
+        params: {}
+        is_archived:
+          type: boolean
+        working_version:
+          type: integer
+          nullable: true
+        pipeline:
+          type: integer
+        llm_provider:
+          type: integer
+          nullable: true
+        llm_provider_model:
+          type: integer
+          nullable: true
+        source_material:
+          type: integer
+          nullable: true
+        collection:
+          type: integer
+          nullable: true
+        assistant:
+          type: integer
+          nullable: true
+        synthetic_voice:
+          type: integer
+          nullable: true
+        collection_indexes:
+          type: array
+          items:
+            type: integer
+      required:
+      - created_at
+      - flow_id
+      - id
+      - pipeline
+      - type
+      - updated_at
     PaginatedChatbotList:
       type: object
       required:
@@ -1151,6 +2766,173 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    ParticipantDataExportItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        data:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        encryption_key:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        system_metadata: {}
+        team:
+          type: integer
+        participant:
+          type: integer
+        experiment:
+          type: integer
+      required:
+      - created_at
+      - data
+      - encryption_key
+      - experiment
+      - id
+      - participant
+      - team
+      - updated_at
+    ParticipantDataExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDataExportItem'
+      required:
+      - cursor
+      - has_more
+      - results
+    ParticipantExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    ParticipantSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 320
+        identifier:
+          type: string
+          maxLength: 320
+        public_id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+          maxLength: 32
+        remote_id:
+          type: string
+          maxLength: 255
+        team:
+          type: integer
+        user:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - identifier
+      - platform
+      - team
+      - updated_at
+    PipelineExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    PipelineSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        data: {}
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_archived:
+          type: boolean
+        team:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - data
+      - id
+      - name
+      - team
+      - updated_at
     PlatformEnum:
       enum:
       - telegram
@@ -1270,6 +3052,22 @@ components:
         body:
           type: string
           description: Jinja2 body template; the pipeline input is used when blank.
+    ServiceEnum:
+      enum:
+      - AWS
+      - Azure
+      - OpenAI
+      - OpenAIVoiceEngine
+      - ElevenLabs
+      - Intron
+      type: string
+      description: |-
+        * `AWS` - AWS
+        * `Azure` - Azure
+        * `OpenAI` - OpenAI
+        * `OpenAIVoiceEngine` - OpenAIVoiceEngine
+        * `ElevenLabs` - ElevenLabs
+        * `Intron` - Intron
     SourceMaterial:
       type: object
       properties:
@@ -1289,6 +3087,64 @@ components:
       - id
       - material
       - topic
+    SourceMaterialExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceMaterialSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    SourceMaterialSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+        is_archived:
+          type: boolean
+        team:
+          type: integer
+        owner:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - material
+      - owner
+      - team
+      - topic
+      - updated_at
     StaticRouterNodeParams:
       type: object
       properties:
@@ -1312,6 +3168,109 @@ components:
           type: string
           nullable: true
           description: Key within the data source whose value selects the route.
+    SyncErrorDetail:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    SyntheticVoiceExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyntheticVoiceSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    SyntheticVoiceSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          description: The name of the synthetic voice, as per the documentation of
+            the service
+          maxLength: 128
+        external_id:
+          type: string
+          nullable: true
+          description: Provider-specific voice identifier when it differs from the
+            display name
+          maxLength: 128
+        neural:
+          type: boolean
+          default: false
+          description: Indicates whether this voice is a neural voice
+        language:
+          type: string
+          description: The language this voice is for
+          maxLength: 64
+        language_code:
+          type: string
+          description: The language code this voice is for
+          maxLength: 32
+        gender:
+          description: |-
+            The gender of this voice
+
+            * `male` - Male
+            * `female` - Female
+            * `male (child)` - Male (Child)
+            * `female (child)` - Female (Child)
+          oneOf:
+          - $ref: '#/components/schemas/GenderEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        service:
+          allOf:
+          - $ref: '#/components/schemas/ServiceEnum'
+          description: |-
+            The service this voice is from
+
+            * `AWS` - AWS
+            * `Azure` - Azure
+            * `OpenAI` - OpenAI
+            * `OpenAIVoiceEngine` - OpenAIVoiceEngine
+            * `ElevenLabs` - ElevenLabs
+            * `Intron` - Intron
+        voice_provider:
+          type: integer
+          nullable: true
+          title: Team
+        file:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - external_id
+      - gender
+      - id
+      - language
+      - language_code
+      - name
+      - service
+      - updated_at
+      - voice_provider
     Team:
       type: object
       properties:
@@ -1325,6 +3284,210 @@ components:
       required:
       - name
       - slug
+    TeamExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamSync'
+      required:
+      - cursor
+      - has_more
+      - results
+    TeamSync:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        feature_flags:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+      required:
+      - created_at
+      - feature_flags
+      - id
+      - name
+      - slug
+      - updated_at
+    TraceProviderExportItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TraceProviderExportItemTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+        team:
+          type: integer
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - team
+      - type
+      - updated_at
+    TraceProviderExportItemTypeEnum:
+      enum:
+      - langfuse
+      type: string
+      description: '* `langfuse` - Langfuse'
+    TraceProviderExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceProviderExportItem'
+      required:
+      - cursor
+      - has_more
+      - results
+    TypeB81Enum:
+      enum:
+      - openai
+      - azure
+      - anthropic
+      - groq
+      - perplexity
+      - deepseek
+      - google
+      - google_vertex_ai
+      - voyage
+      type: string
+      description: |-
+        * `openai` - OpenAI
+        * `azure` - Azure OpenAI
+        * `anthropic` - Anthropic
+        * `groq` - Groq
+        * `perplexity` - Perplexity
+        * `deepseek` - DeepSeek
+        * `google` - Google Gemini
+        * `google_vertex_ai` - Google Vertex AI
+        * `voyage` - Voyage AI
+    VoiceProviderExportItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/VoiceProviderExportItemTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+        team:
+          type: integer
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - team
+      - type
+      - updated_at
+    VoiceProviderExportItemTypeEnum:
+      enum:
+      - aws
+      - azure
+      - openai
+      - openaivoiceengine
+      - elevenlabs
+      - intron
+      type: string
+      description: |-
+        * `aws` - AWS Polly
+        * `azure` - Azure Text to Speech
+        * `openai` - OpenAI Text to Speech
+        * `openaivoiceengine` - OpenAI Voice Engine Text to Speech
+        * `elevenlabs` - ElevenLabs
+        * `intron` - Intron
+    VoiceProviderExportPage:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceProviderExportItem'
+      required:
+      - cursor
+      - has_more
+      - results
+    VoiceResponseBehaviourEnum:
+      enum:
+      - always
+      - reciprocal
+      - never
+      type: string
+      description: |-
+        * `always` - Always
+        * `reciprocal` - Reciprocal
+        * `never` - Never
   securitySchemes:
     OAuth2:
       type: oauth2
@@ -1348,6 +3511,8 @@ components:
       type: http
       scheme: bearer
 tags:
+- name: Export
+  description: Read team-scoped data one resource at a time for the team data sync/export.
 - name: Chatbots
   description: List, retrieve and inspect chatbots (v2; formerly 'experiments').
 - name: Me
