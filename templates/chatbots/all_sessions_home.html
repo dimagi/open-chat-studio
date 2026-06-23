@@ -1,0 +1,6 @@
+{% extends "generic/object_home.html" %}
+
+{% block app %}
+  {{ block.super }}
+  {% include "chatbots/components/session_chat_widget_launcher.html" %}
+{% endblock app %}

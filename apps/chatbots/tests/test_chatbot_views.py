@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
@@ -360,6 +361,44 @@ def test_chatbot_sessions_table_view(team_with_users):
     response = view(request, team_slug=team.slug, experiment_id=experiment.id)
     assert response.status_code == 200
     assert isinstance(response.context_data["table"], ChatbotSessionsTable)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("flag_active", [True, False])
+def test_continue_chat_action_respects_widget_flag(flag_active, client, team_with_users):
+    """With ``flag_chat_widget`` active the Continue Chat action opens the embedded widget;
+    otherwise it links to the full-page chat UI."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(
+        team=team,
+        experiment=experiment,
+        participant__team=team,
+        participant__user=user,
+        status=SessionStatus.ACTIVE,
+    )
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    with override_flag("flag_chat_widget", active=flag_active):
+        response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+
+    chat_url = reverse(
+        "chatbots:chatbot_chat_session",
+        args=[team.slug, experiment.id, session.get_experiment_version_number(), session.id],
+    )
+    if flag_active:
+        assert "ocsContinueSessionChat(this)" in content
+        assert f'data-session-id="{session.external_id}"' in content
+        token = re.search(r'data-session-token="([^"]+)"', content).group(1)
+        assert validate_session_token(token, session.external_id)
+        assert chat_url not in content
+    else:
+        assert "ocsContinueSessionChat" not in content
+        assert chat_url in content
 
 
 @pytest.mark.django_db()
