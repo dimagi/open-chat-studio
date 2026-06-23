@@ -16,14 +16,16 @@ def _model(team, *, name="gpt-4o-mini"):
     return LlmProviderModel.objects.create(team=team, type="openai", name=name, max_token_limit=128000)
 
 
-def _rule(team, *, name, kind, price, source=PricingSource.SEED):
-    return PricingRuleFactory.create(
-        team=team,
-        model_name=name,
-        service_kind=kind,
-        unit_price=price,
-        source=source,
-    )
+def _rule(team, **kwargs):
+    """Thin wrapper around PricingRuleFactory; maps test-readable kwarg
+    names (`name`, `kind`, `price`) to the factory's field names."""
+    if "name" in kwargs:
+        kwargs["model_name"] = kwargs.pop("name")
+    if "kind" in kwargs:
+        kwargs["service_kind"] = kwargs.pop("kind")
+    if "price" in kwargs:
+        kwargs["unit_price"] = kwargs.pop("price")
+    return PricingRuleFactory.create(team=team, **kwargs)
 
 
 @pytest.mark.parametrize(
@@ -61,11 +63,11 @@ class TestPricingLookup:
         team = TeamFactory.create()
         model = _model(team, name="test-model-b")
         _rule(team=None, name="test-model-b", kind=ServiceKind.LLM_INPUT, price="0.00250")
-        _rule(
+        PricingRuleFactory.create(
             team=team,
-            name="test-model-b",
-            kind=ServiceKind.LLM_INPUT,
-            price="0.00100",
+            model_name="test-model-b",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.00100",
             source=PricingSource.MANUAL,
         )
 
@@ -120,11 +122,11 @@ class TestPricingLookup:
         team = TeamFactory.create()
         other = TeamFactory.create()
         model = _model(team, name="test-model-g")
-        _rule(
+        PricingRuleFactory.create(
             team=other,
-            name="test-model-g",
-            kind=ServiceKind.LLM_INPUT,
-            price="0.00999",
+            model_name="test-model-g",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.00999",
         )
 
         result = _pricing_lookup(team, [model])

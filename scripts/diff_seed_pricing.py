@@ -156,20 +156,29 @@ def compute_changes(
             unmatched.add(model_name)
             continue
         source_url = detail.get("url") or LLM_STATS_PUBLIC_URL.format(model_id=model_name)
-        changes.extend(_changes_for_model(index, model_name, new_rates, source_url))
+        upstream = _UpstreamRates(model_name=model_name, new_rates=new_rates, source_url=source_url)
+        changes.extend(_changes_for_model(index, upstream))
     return changes, unmatched
+
+
+@dataclass(frozen=True)
+class _UpstreamRates:
+    """Bundle for an llm-stats lookup: the model id, its current per-1K
+    rates, and the source URL for the PR-body link."""
+
+    model_name: str
+    new_rates: dict[str, str]
+    source_url: str
 
 
 def _changes_for_model(
     index: dict[tuple[str, str], dict[str, str]],
-    model_name: str,
-    new_rates: dict[str, str],
-    source_url: str,
+    upstream: _UpstreamRates,
 ) -> list[RateChange]:
-    """Compare each diffable provider's seed rate to the new rate, model by model."""
+    """Compare each diffable provider's seed rate to the upstream rate, model by model."""
     out: list[RateChange] = []
-    for provider, seed_rates in _diffable_provider_rates(index, model_name):
-        out.extend(_provider_rate_changes(provider, model_name, seed_rates, new_rates, source_url))
+    for provider, seed_rates in _diffable_provider_rates(index, upstream.model_name):
+        out.extend(_provider_rate_changes(provider, seed_rates, upstream))
     return out
 
 
@@ -186,21 +195,19 @@ def _diffable_provider_rates(
 
 def _provider_rate_changes(
     provider: str,
-    model_name: str,
     seed_rates: dict[str, str],
-    new_rates: dict[str, str],
-    source_url: str,
+    upstream: _UpstreamRates,
 ) -> list[RateChange]:
     return [
         RateChange(
             provider_type=provider,
-            model_name=model_name,
+            model_name=upstream.model_name,
             service_kind=service_kind,
             old_price=seed_rates.get(service_kind),
             new_price=new_price,
-            source_url=source_url,
+            source_url=upstream.source_url,
         )
-        for service_kind, new_price in new_rates.items()
+        for service_kind, new_price in upstream.new_rates.items()
         if seed_rates.get(service_kind) != new_price
     ]
 

@@ -2,7 +2,6 @@
 Celery task email path."""
 
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 
 import pytest
 from django.core import mail
@@ -18,18 +17,14 @@ from apps.utils.factories.team import TeamFactory
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
 
-def _usage(team, *, when, unit_price="0.00015", model="gpt-4o-mini", **kwargs):
-    """Wrapper around UsageRecordFactory specialised for digest tests:
-    unit_price=None is the unpriced fixture; `extra` and `kind` flow
-    through factory kwargs.
-    """
-    return UsageRecordFactory.create(
-        team=team,
-        at=when,
-        model_name=model,
-        unit_price=Decimal(unit_price) if unit_price is not None else None,
-        **kwargs,
-    )
+def _usage(team, **kwargs):
+    """Thin wrapper that maps `when=` to the factory's `at=` post-generation
+    hook so test bodies read naturally."""
+    if "when" in kwargs:
+        kwargs["at"] = kwargs.pop("when")
+    if "model" in kwargs:
+        kwargs["model_name"] = kwargs.pop("model")
+    return UsageRecordFactory.create(team=team, **kwargs)
 
 
 @pytest.mark.django_db()
@@ -58,19 +53,19 @@ class TestBuildDigest:
 
     def test_unknown_calls_summed_from_extra(self):
         team = TeamFactory.create()
-        _usage(
-            team,
-            when=_NOW - timedelta(days=1),
+        UsageRecordFactory.create(
+            team=team,
+            at=_NOW - timedelta(days=1),
             confidence=Confidence.UNKNOWN,
             extra={"missing_usage_calls": 4},
-            model="test-unknown",
+            model_name="test-unknown",
         )
-        _usage(
-            team,
-            when=_NOW - timedelta(days=2),
+        UsageRecordFactory.create(
+            team=team,
+            at=_NOW - timedelta(days=2),
             confidence=Confidence.UNKNOWN,
             extra={"missing_usage_calls": 2},
-            model="test-unknown",
+            model_name="test-unknown",
         )
 
         summary = build_digest(_NOW - timedelta(days=7), _NOW)
