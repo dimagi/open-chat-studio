@@ -12,6 +12,7 @@ from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
 from apps.teams.models import Flag
+from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
 
 from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, GlobalSpec, entry_model
@@ -171,8 +172,11 @@ class Importer:
         # filled last: if anything before it fails, the row rolls back with it.
         instance, created = self._import_team_owned_row(model_label, model, source_pk, row)
 
-        if created and model_label == "users.customuser" and self.on_user_created:
-            self.on_user_created(instance)
+        if created:
+            if model_label == "users.customuser" and self.on_user_created:
+                self.on_user_created(instance)
+        if model_label == "teams.team":
+            set_current_team(instance)
 
     def _import_team_owned_row(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
