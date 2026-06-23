@@ -18,6 +18,17 @@
         },
       };
 
+      // Apply the version-specific header text and colour theme to a widget element. Shared by the
+      // new-chat launcher (openChatWidget) and the continue-session launcher below.
+      window.ocsApplyWidgetVersionTheme = function (widget, versionNumber) {
+        const isPublished = versionNumber === 0;
+        widget.setAttribute('header-text', isPublished ? 'Published Version' : `Working Version (v${versionNumber})`);
+        const styles = isPublished ? widgetStyles.published : widgetStyles.working;
+        for (const [prop, value] of Object.entries(styles)) {
+          widget.style.setProperty(prop, value);
+        }
+      };
+
       // Open an existing session in a fresh, session-bound widget. A new element is mounted each
       // time because the widget binds to its session during load and does not re-bind on prop changes.
       window.ocsContinueSessionChat = function (button) {
@@ -25,9 +36,6 @@
         if (existing) {
           existing.remove();
         }
-
-        const versionNumber = parseInt(button.dataset.versionNumber, 10);
-        const isPublished = versionNumber === 0;
 
         const widget = document.createElement('open-chat-studio-widget');
         widget.id = 'continue-chat-widget';
@@ -39,7 +47,6 @@
         widget.setAttribute('visible', 'true');
         widget.setAttribute('position', 'right');
         widget.setAttribute('persistent-session', 'false');
-        widget.setAttribute('header-text', isPublished ? 'Published Version' : `Working Version (v${versionNumber})`);
         if (button.dataset.allowAttachments === 'true') {
           widget.setAttribute('allow-attachments', 'true');
         }
@@ -49,10 +56,7 @@
         if (userName) {
           widget.setAttribute('user-name', userName);
         }
-        const styles = isPublished ? widgetStyles.published : widgetStyles.working;
-        for (const [prop, value] of Object.entries(styles)) {
-          widget.style.setProperty(prop, value);
-        }
+        ocsApplyWidgetVersionTheme(widget, parseInt(button.dataset.versionNumber, 10));
         document.body.appendChild(widget);
       };
     })();
