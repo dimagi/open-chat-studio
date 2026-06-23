@@ -106,7 +106,7 @@ class UsageRecord(BaseTeamModel):
     session = models.ForeignKey("experiments.ExperimentSession", null=True, on_delete=models.SET_NULL)
     participant = models.ForeignKey("experiments.Participant", null=True, on_delete=models.SET_NULL)
     trace = models.ForeignKey("trace.Trace", null=True, on_delete=models.SET_NULL)
-    # PROTECT so a rule with usage history can't be hard-deleted — keeps
+    # PROTECT so a rule with usage history can't be hard-deleted - keeps
     # `pricing_rule IS NOT NULL` as a stable historical "priced" anchor.
     pricing_rule = models.ForeignKey(PricingRule, null=True, on_delete=models.PROTECT)
 

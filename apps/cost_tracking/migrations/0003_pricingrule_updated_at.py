@@ -2,7 +2,7 @@
 
 PR 1's 0001_initial declared `updated_at` on `UsageRecord` (via BaseTeamModel)
 but not on `PricingRule`. Some legacy DBs already have the column from an
-earlier draft of 0001 — `IF NOT EXISTS` keeps this migration idempotent
+earlier draft of 0001 - `IF NOT EXISTS` keeps this migration idempotent
 across both fresh installs and those legacy states. State_operations
 mirrors the change into Django's migration graph so `makemigrations` no
 longer flags drift.

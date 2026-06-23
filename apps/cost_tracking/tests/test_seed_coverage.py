@@ -17,7 +17,7 @@ REQUIRED_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_OUTPUT)
 # reviewer can decide whether the gap should still hold. Adding a new line
 # here is a deliberate gesture, not a routine fix.
 KNOWN_UNPRICED: set[tuple[str, str]] = {
-    # Transcription model — billed per audio minute, not per token.
+    # Transcription model - billed per audio minute, not per token.
     ("groq", "whisper-large-v3-turbo"),
     # Pricing not yet in LiteLLM; rate-change workflow will fill these in.
     ("groq", "gemma2-9b-it"),
@@ -31,7 +31,7 @@ KNOWN_UNPRICED: set[tuple[str, str]] = {
 @pytest.mark.django_db()
 def test_every_global_model_has_input_and_output_pricing():
     """Load the seed, then assert that every non-deprecated global model
-    has rules for both required service kinds — except those explicitly
+    has rules for both required service kinds - except those explicitly
     allow-listed in KNOWN_UNPRICED.
     """
     call_command("load_ai_pricing", verbosity=0)

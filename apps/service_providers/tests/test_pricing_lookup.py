@@ -1,4 +1,4 @@
-"""Tests for `_pricing_lookup` — the bulk pricing-by-model helper that
+"""Tests for `_pricing_lookup` - the bulk pricing-by-model helper that
 powers the cost columns on the LLM provider form."""
 
 from decimal import Decimal

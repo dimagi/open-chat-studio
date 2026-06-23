@@ -395,12 +395,22 @@ def pricing_override_form(request, team_slug: str, pk: int):
 @permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
 def pricing_override(request, team_slug: str, pk: int):
     """POST handler for the override modal. Creates team-scoped rules,
-    superseding any existing team override for the same (kind)."""
+    superseding any existing team override for the same (kind). Invalid
+    submissions re-render the form (with field errors) into the modal
+    body via HX-Retarget so the user can correct in place."""
     _require_cost_tracking_flag(request.team)
     model = _resolve_model(request.team, pk)
     form = PricingOverrideForm(request.POST)
     if not form.is_valid():
-        return HttpResponseBadRequest(str(form.errors))
+        response = render(
+            request,
+            "service_providers/components/_pricing_override_form.html",
+            {"form": form, "model": model},
+        )
+        response.status_code = 400
+        response["HX-Retarget"] = "#pricing_override_modal_body"
+        response["HX-Reswap"] = "innerHTML"
+        return response
     with transaction.atomic():
         _persist_team_pricing_rules(request.team, model.type, model.name, form.cleaned_data, request.user)
     return _render_model_row(request, model)
@@ -448,7 +458,7 @@ def _form_initial_from_active_rates(team, model: LlmProviderModel) -> dict:
 
 def _format_per_million(unit_price: Decimal) -> str:
     """Convert a per-1K unit price to its per-1M display string. Plain
-    decimal — `.normalize()` collapses whole numbers to scientific notation
+    decimal - `.normalize()` collapses whole numbers to scientific notation
     (e.g. `30` → `3E+1`), which the form input renders verbatim."""
     text = format(unit_price * Decimal(1000), "f")
     if "." in text:
@@ -459,7 +469,7 @@ def _format_per_million(unit_price: Decimal) -> str:
 def _persist_team_pricing_rules(team, provider_type: str, model_name: str, cleaned: dict, user) -> None:
     """Close any active team rule for the (provider, model, kind) and insert
     a fresh team-scoped rule per non-empty form field. Globals are untouched
-    — resolution merges them with the team override at read time."""
+    - resolution merges them with the team override at read time."""
     now = timezone.now()
     for field_name, kind in _FORM_FIELD_TO_KIND.items():
         per_million = cleaned.get(field_name)

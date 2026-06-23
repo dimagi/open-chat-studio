@@ -22,7 +22,7 @@ DEFAULT_COST_PERIOD_DAYS = 30
 
 def _cost_tracking_context(team, filter_form: DashboardFilterForm) -> dict:
     """Return the cost-tracking panel context. When the flag is off the panel
-    is hidden entirely — no service calls are made.
+    is hidden entirely - no service calls are made.
     """
     if not Flag.get(COST_TRACKING_FLAG).is_active_for_team(team):
         return {"cost_tracking_enabled": False}

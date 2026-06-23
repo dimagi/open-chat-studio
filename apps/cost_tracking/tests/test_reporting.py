@@ -139,13 +139,26 @@ class TestCostSummary:
         with CaptureQueriesContext(connection) as ctx:
             cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
-        # One aggregate over UsageRecord + one for last_synced — no N+1.
+        # One aggregate over UsageRecord + one for last_synced - no N+1.
         assert len(ctx.captured_queries) == 2
 
 
 @pytest.mark.django_db()
 class TestTopNBots:
     """Ordering, exclusions, aggregation, team scoping."""
+
+    def test_single_query_for_aggregate(self):
+        team = TeamFactory.create()
+        exp_a = ExperimentFactory.create(team=team, name="bot-a")
+        exp_b = ExperimentFactory.create(team=team, name="bot-b")
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp_a)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp_b)
+
+        with CaptureQueriesContext(connection) as ctx:
+            top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        # Single GROUP BY query — no N+1 per experiment.
+        assert len(ctx.captured_queries) == 1
 
     def test_orders_by_cost_descending(self):
         team = TeamFactory.create()
@@ -224,7 +237,7 @@ class TestTopNBots:
 
 @pytest.mark.django_db()
 class TestLastSyncedAt:
-    """The seed migration always inserts global rules — these tests prune
+    """The seed migration always inserts global rules - these tests prune
     them first so the assertions speak only to behaviour under test.
     """
 

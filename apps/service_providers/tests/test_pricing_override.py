@@ -106,7 +106,12 @@ class TestPricingOverride:
 
         response = _client_for(team).post(url, {})
 
+        # 400 with the form re-rendered into the modal body via HX-Retarget so
+        # the user sees the validation error in place instead of a raw 400.
         assert response.status_code == 400
+        assert response["HX-Retarget"] == "#pricing_override_modal_body"
+        assert response["HX-Reswap"] == "innerHTML"
+        assert b"Set at least one rate." in response.content
 
 
 @pytest.mark.django_db()

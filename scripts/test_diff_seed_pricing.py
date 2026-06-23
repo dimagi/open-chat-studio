@@ -149,7 +149,7 @@ class TestComputeChanges:
         assert providers == {"openai", "azure"}
 
     def test_skips_non_diffable_provider(self):
-        """Groq isn't an llm-stats-tracked upstream — its seed rows aren't
+        """Groq isn't an llm-stats-tracked upstream - its seed rows aren't
         diffed regardless of what the fetcher would return."""
         index = {("groq", "gemma2-9b-it"): {"llm_input": "0.0002"}}
         fetcher = lambda _m: _detail({"llm_input": 99.0})  # noqa: E731
@@ -249,4 +249,4 @@ def test_render_pr_body_em_dash_for_missing_old_price():
     change = RateChange("openai", "new-model", "llm_input", None, "0.001", "https://llm-stats.com/models/new-model")
     body = render_pr_body([change], unmatched=set())
 
-    assert "| — | 0.001 |" in body
+    assert "| - | 0.001 |" in body

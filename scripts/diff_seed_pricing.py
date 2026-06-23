@@ -16,7 +16,7 @@ Usage (from the repo root)::
         --output pricing_changes.json
 
 Outputs:
-    pricing_changes.json — structured diff (has_changes, changes, unmatched).
+    pricing_changes.json - structured diff (has_changes, changes, unmatched).
     Updates seed_data/llm_pricing.json in place if has_changes.
     Creates apps/cost_tracking/migrations/NNNN_rate_update_YYYYMMDD.py if has_changes.
     Appends has_changes, change_count, pr_title, pr_body_path to $GITHUB_OUTPUT.
@@ -85,7 +85,7 @@ def seed_index(seed: list[dict]) -> dict[tuple[str, str], dict[str, str]]:
 def diffable_models(index: dict[tuple[str, str], dict[str, str]]) -> set[str]:
     """Unique `model_name`s in the seed whose providers we diff against
     llm-stats. Models behind non-diffable providers (groq, deepseek, ...)
-    are skipped — they have no upstream llm-stats source.
+    are skipped - they have no upstream llm-stats source.
     """
     return {model for (provider, model), _ in index.items() if provider in DIFFABLE_PROVIDERS}
 
@@ -266,7 +266,7 @@ def render_pr_body(changes: list[RateChange], unmatched: set[str]) -> str:
         "| --- | --- | --- | --- | --- | --- |",
     ]
     for c in changes:
-        old = c.old_price if c.old_price is not None else "—"
+        old = c.old_price if c.old_price is not None else "-"
         lines.append(
             f"| {c.provider_type} | {c.model_name} | {c.service_kind} | "
             f"{old} | {c.new_price} | [llm-stats]({c.source_url}) |"

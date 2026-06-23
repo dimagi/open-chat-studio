@@ -5,7 +5,7 @@ name: Auto Update LLM Models
 #
 # Job 1 runs scripts/fetch_model_updates.py, which fetches candidates, dedups
 # them against the already-registered models, and resolves per-1K-token pricing
-# (llm-stats primary, LiteLLM fallback) — all unit-tested. It emits
+# (llm-stats primary, LiteLLM fallback) - all unit-tested. It emits
 # candidate_models.json. Job 2 invokes Claude Code to make the judgement calls
 # (which models/providers to register, parameters class) following
 # docs/developer_guides/managing_models.md, paste the generated pricing into
@@ -56,7 +56,7 @@ jobs:
           # against models already in default_models.py / llm_pricing.json, and
           # resolves per-1K-token pricing. It writes candidate_models.json and
           # appends has_models / model_count / model_ids to $GITHUB_OUTPUT.
-          # stdlib-only — no dependency install needed.
+          # stdlib-only - no dependency install needed.
           python3 scripts/fetch_model_updates.py \
             --bearer-token "$LLM_STATS_BEARER_TOKEN" \
             --days "${{ inputs.days || '1' }}" \
@@ -94,7 +94,7 @@ jobs:
         env:
           LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
         run: |
-          # Stdlib-only — no dependency install needed.
+          # Stdlib-only - no dependency install needed.
           python3 scripts/diff_seed_pricing.py \
             --bearer-token "$LLM_STATS_BEARER_TOKEN" \
             --output pricing_changes.json
@@ -217,20 +217,20 @@ jobs:
             `scripts/fetch_model_updates.py` has already fetched candidates from
             llm-stats.com, removed models already registered in OCS, and resolved
             per-1K-token pricing. Its output is at `./candidate_models.json`. Do
-            NOT re-fetch, re-dedup, or re-derive pricing — that work is done and
+            NOT re-fetch, re-dedup, or re-derive pricing - that work is done and
             unit-tested.
 
             The payload covers the last ${{ inputs.days || '1' }} day(s). Key fields:
-            - `new_models[]` — candidates to consider. Each has: `id`, `org`,
+            - `new_models[]` - candidates to consider. Each has: `id`, `org`,
               `context_window`, `ocs_providers` (the default OCS provider mapping),
               `already_registered_providers`, `already_priced_providers`,
               `source_url`, `sources`, `details_error`, and `pricing`.
             - `pricing.has_pricing` / `pricing.rates` (per-1K-token) /
               `pricing.source` (`llm_stats` or `litellm`) /
-              `pricing.llm_pricing_entries` — ready-to-paste `llm_pricing.json`
+              `pricing.llm_pricing_entries` - ready-to-paste `llm_pricing.json`
               entries, one per provider that still needs pricing.
-            - `pricing_entries` — flat list of all generated pricing entries.
-            - `unpriced_models[]` — models the script could not price.
+            - `pricing_entries` - flat list of all generated pricing entries.
+            - `unpriced_models[]` - models the script could not price.
 
             ${{ needs.fetch-updates.outputs.model_count }} new model(s):
             ${{ needs.fetch-updates.outputs.model_ids }}
@@ -243,7 +243,7 @@ jobs:
                  image-only, or preview models already superseded).
                - Use `ocs_providers` as the default provider mapping. Apply
                  judgement: for an `openai` model keep `azure` only if it is
-                 generally available on Azure OpenAI — otherwise drop `azure` and
+                 generally available on Azure OpenAI - otherwise drop `azure` and
                  add to `openai` only. Skip any provider already in
                  `already_registered_providers`.
             3. Follow `docs/developer_guides/managing_models.md` exactly when adding:
@@ -259,13 +259,13 @@ jobs:
                `pricing.llm_pricing_entries` to
                `apps/cost_tracking/seed_data/llm_pricing.json`, keeping only the
                providers you actually registered. Trust the unit conversion but
-               sanity-check the magnitudes. Do NOT invent prices — any model in
+               sanity-check the magnitudes. Do NOT invent prices - any model in
                `unpriced_models` (or a provider with no generated entry) goes under
                `## Needs follow-up` instead. After editing, confirm the file is
                still valid JSON.
             5. If `context_window` or other essential info is missing, consult
                `sources` / `source_url` with WebFetch. If a model has a
-               `details_error`, the detail fetch failed — use the top-level fields
+               `details_error`, the detail fetch failed - use the top-level fields
                and what you know about the family. If you still can't determine
                `token_limit`, add the model with a conservative placeholder
                (e.g. 128000) and a `# TODO: verify token_limit` comment, and flag
@@ -287,18 +287,18 @@ jobs:
                    API.`
                  * Include a `## Needs follow-up` section for any unpriced models or
                    missing info.
-                 * Check the "The migrations are backwards compatible" box —
+                 * Check the "The migrations are backwards compatible" box -
                    `llm_model_migration()` is additive (only seeds new rows) so
                    these migrations are inherently backwards-compatible.
             9. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            10. If after review there is nothing to add, do NOT open an empty PR —
+            10. If after review there is nothing to add, do NOT open an empty PR -
                 print a short summary to stdout and exit.
             11. ALWAYS write a decision report to `./decision_report.md` before
                 exiting, regardless of outcome (PR opened, nothing to add, or
                 partial). Use this exact structure:
 
                 ```markdown
-                # Auto Update Models — Decision Report
+                # Auto Update Models - Decision Report
 
                 **Run date (UTC):** <YYYY-MM-DD HH:MM>
                 **Candidates considered:** <count>
@@ -311,14 +311,14 @@ jobs:
                 - **Verdict:** Added | Skipped | Needs follow-up
                 - **Mapped providers:** <e.g. openai, azure>  (if added)
                 - **Pricing:** <source: llm_stats | litellm | unpriced>
-                - **Reason:** <one-sentence rationale — why added/skipped, or
+                - **Reason:** <one-sentence rationale - why added/skipped, or
                   what info was missing>
                 - **Source:** <source_url>
 
                 <repeat for every model in new_models>
 
                 ## Notes
-                <any other context worth surfacing — sources consulted, edge
+                <any other context worth surfacing - sources consulted, edge
                 cases, decisions deferred to follow-up, etc.>
                 ```
 
@@ -338,7 +338,7 @@ jobs:
             cat decision_report.md >> "$GITHUB_STEP_SUMMARY"
           else
             {
-              echo "# Auto Update Models — Decision Report"
+              echo "# Auto Update Models - Decision Report"
               echo ""
               echo "**No decision report was produced.** Claude Code exited without"
               echo "writing \`decision_report.md\`. Check the Claude step logs above"
