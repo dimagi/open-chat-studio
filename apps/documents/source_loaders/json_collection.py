@@ -58,17 +58,11 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             )
             return
 
-        # Evaluate metadata filters against the raw item before any network I/O.
-        unmatched = next((f for f in self.config.metadata_filters if not f.matches(item)), None)
-        if unmatched is not None:
-            logger.debug(
-                "Skipping item %s: did not satisfy metadata filter on %r",
-                uri or title,
-                unmatched.field,
-            )
+        # All filtering happens before any network I/O.
+        if not self._passes_metadata_filters(item, label=uri or title):
             return
 
-        fetchable = [a for a in (item.get("attachments") or []) if a.get("link")]
+        fetchable = self._fetchable_attachments(item)
         if not fetchable:
             logger.debug(
                 "Skipping item %s: no attachments with a document link",
@@ -78,6 +72,18 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
 
         item_metadata = self._build_item_metadata(item, title=title, uri=uri)
         yield from self._yield_attachment_documents(item_metadata, fetchable, uri)
+
+    def _passes_metadata_filters(self, item: dict[str, Any], *, label: str | None) -> bool:
+        """Evaluate the configured metadata filters against the raw item."""
+        unmatched = next((f for f in self.config.metadata_filters if not f.matches(item)), None)
+        if unmatched is not None:
+            logger.debug("Skipping item %s: did not satisfy metadata filter on %r", label, unmatched.field)
+            return False
+        return True
+
+    @staticmethod
+    def _fetchable_attachments(item: dict[str, Any]) -> list[dict[str, Any]]:
+        return [a for a in (item.get("attachments") or []) if a.get("link")]
 
     def _build_item_metadata(self, item: dict[str, Any], *, title: str | None, uri: str | None) -> dict[str, Any]:
         metadata: dict[str, Any] = {
