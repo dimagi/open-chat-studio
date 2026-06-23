@@ -380,7 +380,7 @@ if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
     # use private storage by default
-    STORAGES["default"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["default"] = {
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
         "OPTIONS": {
             "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
@@ -392,7 +392,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["public"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
@@ -969,6 +969,7 @@ OAUTH2_PROVIDER = {
         "files:read": "Download file content",
         "participants:read": "Read Participant Data",
         "participants:write": "Update Participant Data",
+        "cost_tracking:read": "Read Cost Tracking usage and pricing data",
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
