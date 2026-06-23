@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 
 from django.apps import apps
+from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.models import Model, Q, QuerySet
 
@@ -190,13 +191,15 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
 
 
 def schema_checksum() -> str:
-    """Hash of the set of applied migration names; unaffected by apply order."""
-    from django.db import connection  # noqa: PLC0415
-
-    names = [n for n in MigrationRecorder(connection).migration_qs.order_by("name").values_list("name", flat=True)]
+    """Hash of the set of applied migration names; unaffected by apply order. Returns the hash of an
+    empty set when the migrations table is absent (e.g. tests run with --no-migrations); that's
+    consistent as long as the source and target both lack it."""
+    recorder = MigrationRecorder(connection)
+    names = []
+    if recorder.has_table():
+        names = list(recorder.migration_qs.order_by("name").values_list("name", flat=True))
     data = json.dumps(names)
-    hash_object = hashlib.sha256(data.encode("utf-8"))
-    return hash_object.hexdigest()
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
 def build_manifest() -> dict:
