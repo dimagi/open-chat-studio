@@ -104,6 +104,8 @@ def _parse_period(params) -> tuple[datetime, datetime]:
         start = _parse_iso(params.get("start"), default=end - timedelta(days=DEFAULT_PERIOD_DAYS))
     except ValueError as exc:
         raise ValidationError({"detail": f"Invalid date format: {exc}"}) from exc
+    if start > end:
+        raise ValidationError({"detail": "`start` must be less than or equal to `end`."})
     return start, end
 
 

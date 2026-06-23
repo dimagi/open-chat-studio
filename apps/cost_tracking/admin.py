@@ -72,3 +72,8 @@ class UsageRecordAdmin(admin.ModelAdmin):
         """UsageRecord is system-written from the tracer; admins shouldn't
         hand-author rows."""
         return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Cost history is audit data. Deletions would corrupt billing
+        evidence and the digest's coverage-gap reports."""
+        return False

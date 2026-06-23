@@ -31,6 +31,7 @@ import os
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -208,8 +209,16 @@ def _provider_rate_changes(
             source_url=upstream.source_url,
         )
         for service_kind, new_price in upstream.new_rates.items()
-        if seed_rates.get(service_kind) != new_price
+        if _price_differs(seed_rates.get(service_kind), new_price)
     ]
+
+
+def _price_differs(old: str | None, new: str) -> bool:
+    """Numeric comparison so format-only differences (e.g. `0.00250` vs
+    `0.0025`) don't generate spurious rate-change PRs."""
+    if old is None:
+        return True
+    return Decimal(old) != Decimal(new)
 
 
 # Apply changes to seed + generate migration
@@ -231,7 +240,13 @@ def _apply_to_entry(entry: dict, updates_by_key: dict[tuple[str, str], dict[str,
     if key not in updates_by_key:
         return entry
     updated_kinds = updates_by_key[key]
+    existing_kinds = {rule["service_kind"] for rule in entry["rules"]}
     new_rules = [_apply_to_rule(rule, updated_kinds) for rule in entry["rules"]]
+    # Append rules for service_kinds that weren't in the entry (the change
+    # represents a newly-priced kind, not a rate move).
+    for kind, price in updated_kinds.items():
+        if kind not in existing_kinds:
+            new_rules.append({"service_kind": kind, "unit_price": price})
     return {"provider_type": entry["provider_type"], "model_name": entry["model_name"], "rules": new_rules}
 
 

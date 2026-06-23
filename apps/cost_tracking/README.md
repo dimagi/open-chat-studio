@@ -50,7 +50,7 @@ A weekly Celery task `send_unpriced_usage_digest` (in `tasks.py`) emails `settin
 
 ## Layout
 
-```
+```text
 apps/cost_tracking/
   models.py                 PricingRule, UsageRecord, ServiceKind, Confidence
   signals.py                Cache invalidation on PricingRule mutations

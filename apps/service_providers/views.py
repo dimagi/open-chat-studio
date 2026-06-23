@@ -377,7 +377,7 @@ def create_llm_provider_model(request, team_slug: str):
         "service_providers/components/custom_llm_models.html",
         {
             "llm_models_by_type": _get_models_by_type(custom_models),
-            "embedding_models_by_type": _get_models_by_type(custom_models),
+            "embedding_models_by_type": _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None)),
             "for_type": form.cleaned_data["type"],
             "cost_tracking_enabled": cost_tracking_enabled,
             "pricing_lookup": _pricing_lookup(request.team, list(custom_models)) if cost_tracking_enabled else {},
@@ -480,28 +480,40 @@ def _format_per_million(unit_price: Decimal) -> str:
 def _persist_team_pricing_rules(team, provider_type: str, model_name: str, cleaned: dict, user) -> None:
     """Close any active team rule for the (provider, model, kind) and insert
     a fresh team-scoped rule per non-empty form field. Globals are untouched
-    - resolution merges them with the team override at read time."""
+    - resolution merges them with the team override at read time.
+    `select_for_update()` on the close-out query serialises concurrent
+    overrides so the partial-unique active-rule constraint never trips."""
     now = timezone.now()
-    for field_name, kind in _FORM_FIELD_TO_KIND.items():
-        per_million = cleaned.get(field_name)
-        if per_million is None:
-            continue
-        PricingRule.objects.filter(
-            team=team,
-            provider_type=provider_type,
-            model_name=model_name,
-            service_kind=kind,
-            effective_to__isnull=True,
-        ).update(effective_to=now)
-        PricingRule.objects.create(
-            team=team,
-            provider_type=provider_type,
-            model_name=model_name,
-            service_kind=kind,
-            unit_price=per_million * _PRICE_PER_1K_FROM_MILLION,
-            source=PricingSource.MANUAL,
-            created_by=user,
-        )
+    with transaction.atomic():
+        for field_name, kind in _FORM_FIELD_TO_KIND.items():
+            per_million = cleaned.get(field_name)
+            if per_million is None:
+                continue
+            list(
+                PricingRule.objects.select_for_update().filter(
+                    team=team,
+                    provider_type=provider_type,
+                    model_name=model_name,
+                    service_kind=kind,
+                    effective_to__isnull=True,
+                )
+            )
+            PricingRule.objects.filter(
+                team=team,
+                provider_type=provider_type,
+                model_name=model_name,
+                service_kind=kind,
+                effective_to__isnull=True,
+            ).update(effective_to=now)
+            PricingRule.objects.create(
+                team=team,
+                provider_type=provider_type,
+                model_name=model_name,
+                service_kind=kind,
+                unit_price=per_million * _PRICE_PER_1K_FROM_MILLION,
+                source=PricingSource.MANUAL,
+                created_by=user,
+            )
 
 
 def _render_model_row(request, model: LlmProviderModel) -> HttpResponse:
