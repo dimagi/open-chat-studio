@@ -70,6 +70,59 @@ jobs:
           path: candidate_models.json
           retention-days: 7
 
+  diff-pricing:
+    # Independent of fetch-updates: scans the existing seed for upstream rate
+    # moves on llm-stats.com and opens a separate "Pricing update" PR.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Diff seed pricing against llm-stats
+        id: diff
+        env:
+          LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
+        run: |
+          # Stdlib-only — no dependency install needed.
+          python3 scripts/diff_seed_pricing.py \
+            --bearer-token "$LLM_STATS_BEARER_TOKEN" \
+            --output pricing_changes.json
+
+      - name: Configure git author
+        if: steps.diff.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit, push, and open Pricing update PR
+        if: steps.diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ steps.diff.outputs.pr_title }}
+          PR_BODY_PATH: ${{ steps.diff.outputs.pr_body_path }}
+        run: |
+          BRANCH="auto-pricing/$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          git add apps/cost_tracking/seed_data/llm_pricing.json apps/cost_tracking/migrations/
+          git commit -m "$PR_TITLE"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$PR_TITLE" \
+            --body-file "$PR_BODY_PATH"
+
   update-models:
     needs: fetch-updates
     if: needs.fetch-updates.outputs.has_models == 'true'
