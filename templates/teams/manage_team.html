@@ -19,9 +19,9 @@
         </h3>
         <div class="flex gap-2">
           {% if request.user.is_staff %}
-            <a href="{% url "single_team:internal_metadata" request.team.slug %}" class="btn btn-primary">Internal Metadata</a>
+            <a href="{% url "single_team:internal_metadata" request.team.slug %}" class="btn btn-primary">{% translate "Internal Metadata" %}</a>
           {% endif %}
-          <a href="{% url "single_team:feature_flags" request.team.slug %}" class="btn btn-primary">Manage Feature Flags</a>
+          <a href="{% url "single_team:feature_flags" request.team.slug %}" class="btn btn-primary">{% translate "Manage Feature Flags" %}</a>
         </div>
       </div>
     {% endif %}
