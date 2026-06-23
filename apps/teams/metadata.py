@@ -12,13 +12,16 @@ def get_team_metadata_fields() -> list[dict[str, str]]:
     raw = settings.TEAM_METADATA_FIELDS
     if not isinstance(raw, list):
         raise ImproperlyConfigured("TEAM_METADATA_FIELDS must be a list of {'key', 'label'} objects.")
+    return [_validated_field(index, item) for index, item in enumerate(raw)]
 
-    fields = []
-    for index, item in enumerate(raw):
-        if not isinstance(item, dict):
-            raise ImproperlyConfigured(f"TEAM_METADATA_FIELDS[{index}] must be an object with 'key' and 'label'.")
-        key, label = item.get("key"), item.get("label")
-        if not (isinstance(key, str) and key and isinstance(label, str) and label):
-            raise ImproperlyConfigured(f"TEAM_METADATA_FIELDS[{index}] 'key' and 'label' must be non-empty strings.")
-        fields.append({"key": key, "label": label})
-    return fields
+
+def _validated_field(index: int, item) -> dict[str, str]:
+    if not isinstance(item, dict):
+        raise ImproperlyConfigured(f"TEAM_METADATA_FIELDS[{index}] must be an object with 'key' and 'label'.")
+    field = {}
+    for name in ("key", "label"):
+        value = item.get(name)
+        if not isinstance(value, str) or not value:
+            raise ImproperlyConfigured(f"TEAM_METADATA_FIELDS[{index}].{name} must be a non-empty string.")
+        field[name] = value
+    return field

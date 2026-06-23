@@ -32,7 +32,11 @@ def import_team_metadata_from_csv(uploaded_file) -> TeamMetadataImportResult:
     rows = list(reader)
     teams_by_slug = _teams_by_slug(rows)
     for line_number, row in enumerate(rows, start=2):  # row 1 is the header
-        _apply_row(line_number, row, present_fields, teams_by_slug, result)
+        slug, error = _apply_row(line_number, row, present_fields, teams_by_slug)
+        if error:
+            result.errors.append(error)
+        else:
+            result.updated.append(slug)
     return result
 
 
@@ -53,19 +57,18 @@ def _teams_by_slug(rows) -> dict[str, Team]:
     return {team.slug: team for team in Team.objects.filter(slug__in=[s for s in slugs if s])}
 
 
-def _apply_row(line_number, row, present_fields, teams_by_slug, result) -> None:
+def _apply_row(line_number, row, present_fields, teams_by_slug) -> tuple[str | None, str | None]:
+    """Update one team from a CSV row, returning ``(updated_slug, error)`` (one is always None)."""
     slug = (row.get(SLUG_COLUMN) or "").strip()
     if not slug:
-        result.errors.append(f"Row {line_number}: missing slug.")
-        return
+        return None, f"Row {line_number}: missing slug."
     team = teams_by_slug.get(slug)
     if team is None:
-        result.errors.append(f"Row {line_number}: no team with slug '{slug}'.")
-        return
+        return None, f"Row {line_number}: no team with slug '{slug}'."
 
     metadata = dict(team.metadata or {})
     for header, key in present_fields.items():
         metadata[key] = (row.get(header) or "").strip()
     team.metadata = metadata
     team.save(update_fields=["metadata"])
-    result.updated.append(slug)
+    return slug, None
