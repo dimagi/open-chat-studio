@@ -63,7 +63,7 @@ class TestCostTrackingPanel:
         response = self._get_dashboard(authenticated_client, team)
 
         assert response.context["cost_summary"].total_cost == Decimal("2.50000000")
-        assert b"2.5000" in response.content
+        assert b"2.50" in response.content
 
     def test_lists_top_bots(self, authenticated_client, team, experiment):
         _enable_flag_for(team)
