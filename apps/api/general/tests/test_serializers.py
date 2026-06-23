@@ -3,11 +3,11 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 
-from apps.api.general.serializers import build_sync_serializer
+from apps.api.general.serializers import build_resource_serializer
 from apps.experiments.models import Experiment, ParticipantData
 from apps.service_providers.models import LlmProvider
+from apps.teams.export import seal as seal_mod
 from apps.teams.models import Membership, Team
-from apps.teams.sync import seal as seal_mod
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -28,7 +28,7 @@ def keypair():
 
 
 def _serialize(model, instance, public_key=None):
-    serializer = build_sync_serializer(model)
+    serializer = build_resource_serializer(model)
     return serializer(instance, context={"public_key": public_key}).data
 
 

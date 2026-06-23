@@ -8,10 +8,10 @@ from django.contrib.auth.models import Group
 from apps.experiments.models import ConsentForm
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.teams.export import seal as seal_mod
+from apps.teams.export.importer import Importer
+from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
-from apps.teams.sync import seal as seal_mod
-from apps.teams.sync.importer import Importer
-from apps.teams.sync.translation import FKTranslationStore
 from apps.users.models import CustomUser
 
 

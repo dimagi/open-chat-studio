@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.experiments.models import Participant
-from apps.teams.sync import seal as seal_mod
+from apps.teams.export import seal as seal_mod
 from apps.utils.factories.experiment import ConsentFormFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from apps.teams.sync.translation import (
+from apps.teams.export.translation import (
     FKTranslationStore,
     derive_pk_cursor,
     derive_updated_at_cursor,

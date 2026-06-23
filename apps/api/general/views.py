@@ -1,4 +1,4 @@
-"""The two read endpoints the sync command consumes: the manifest (call order + per-model config)
+"""The two read endpoints the export command consumes: the manifest (call order + per-model config)
 and a generic, team-scoped, keyset-paginated resource endpoint. The manifest doubles as the
 allowlist: the resource endpoint refuses any resource not listed in it. ``resource_view`` is the
 factory the URLConf uses to mount one documented copy of the generic endpoint per resource."""
@@ -17,17 +17,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import IsTeamAdmin
-from apps.teams.sync.manifest import (
+from apps.teams.export.manifest import (
     ManifestEntry,
     build_manifest,
     entry_model,
     get_manifest_entry,
     team_scoped_queryset,
 )
-from apps.teams.sync.seal import load_public_key
+from apps.teams.export.seal import load_public_key
 
 from .schema import resource_responses
-from .serializers import ManifestSerializer, build_sync_serializer
+from .serializers import ManifestSerializer, build_resource_serializer
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
@@ -74,7 +74,7 @@ class ResourceView(APIView):
         queryset = team_scoped_queryset(entry, request.team)
         rows, next_cursor, has_more = _paginate(queryset, entry.cursor, request.query_params.get("cursor"), limit)
 
-        serializer = build_sync_serializer(entry_model(entry.model))(rows, many=True, context=context)
+        serializer = build_resource_serializer(entry_model(entry.model))(rows, many=True, context=context)
         return Response({"cursor": next_cursor, "has_more": has_more, "results": serializer.data})
 
 

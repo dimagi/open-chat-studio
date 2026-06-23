@@ -13,7 +13,7 @@ from apps.api.general.schema import (
 )
 from apps.api.general.serializers import ManifestEntrySerializer, ManifestSerializer
 from apps.api.general.views import ResourceView
-from apps.teams.sync.manifest import MANIFEST_ENTRIES, build_manifest, get_manifest_entry
+from apps.teams.export.manifest import MANIFEST_ENTRIES, build_manifest, get_manifest_entry
 
 
 def test_each_resource_resolves_to_a_resourceview_carrying_its_name():

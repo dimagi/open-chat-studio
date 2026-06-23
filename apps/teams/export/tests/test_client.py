@@ -1,7 +1,7 @@
 import pytest
 import requests
 
-from apps.teams.sync.client import SourceClient
+from apps.teams.export.client import SourceClient
 
 
 class FakeResponse:

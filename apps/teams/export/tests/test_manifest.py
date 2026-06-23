@@ -1,7 +1,7 @@
 import pytest
 from django.apps import apps
 
-from apps.teams.sync import manifest
+from apps.teams.export import manifest
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
 

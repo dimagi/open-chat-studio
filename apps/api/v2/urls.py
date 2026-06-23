@@ -3,7 +3,7 @@ from rest_framework import routers
 
 from apps.api.general import views as export_views
 from apps.api.v2 import views
-from apps.teams.sync.manifest import MANIFEST_ENTRIES
+from apps.teams.export.manifest import MANIFEST_ENTRIES
 
 app_name = "v2"
 

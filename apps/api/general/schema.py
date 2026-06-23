@@ -6,9 +6,9 @@ lives with the view in ``views.py``."""
 from drf_spectacular.utils import OpenApiResponse
 from rest_framework import serializers
 
-from apps.teams.sync.manifest import SECRET_REGISTRY, ManifestEntry, entry_model
+from apps.teams.export.manifest import SECRET_REGISTRY, ManifestEntry, entry_model
 
-from .serializers import build_sync_serializer
+from .serializers import build_resource_serializer
 
 
 class SyncErrorDetail(serializers.Serializer):
@@ -19,7 +19,7 @@ def build_docs_item_serializer(entry: ManifestEntry) -> type[serializers.Seriali
     """The runtime row serializer, with secret fields redeclared as the sealed base64 string they
     actually serialize to rather than their raw model type."""
     model = entry_model(entry.model)
-    base = build_sync_serializer(model)
+    base = build_resource_serializer(model)
     secret_fields = SECRET_REGISTRY.get(model._meta.label_lower, [])
     if not secret_fields:
         return base

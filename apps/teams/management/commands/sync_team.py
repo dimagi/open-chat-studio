@@ -10,17 +10,17 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.teams.models import Team
-from apps.teams.sync.client import SourceClient
-from apps.teams.sync.emails import send_password_reset_email
-from apps.teams.sync.importer import Importer
-from apps.teams.sync.manifest import entry_model, schema_checksum
-from apps.teams.sync.seal import load_private_key
-from apps.teams.sync.translation import (
+from apps.teams.export.client import SourceClient
+from apps.teams.export.emails import send_password_reset_email
+from apps.teams.export.importer import Importer
+from apps.teams.export.manifest import entry_model, schema_checksum
+from apps.teams.export.seal import load_private_key
+from apps.teams.export.translation import (
     FKTranslationStore,
     derive_pk_cursor,
     derive_updated_at_cursor,
 )
+from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 

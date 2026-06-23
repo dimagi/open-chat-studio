@@ -4,14 +4,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
 from django.core.management.base import CommandError
 
-from apps.api.general.serializers import build_sync_serializer
+from apps.api.general.serializers import build_resource_serializer
 from apps.service_providers.models import LlmProvider
+from apps.teams.export import seal as seal_mod
+from apps.teams.export.importer import Importer
+from apps.teams.export.manifest import schema_checksum
+from apps.teams.export.translation import FKTranslationStore
 from apps.teams.management.commands.sync_team import force_delete_team, run_sync
 from apps.teams.models import Team
-from apps.teams.sync import seal as seal_mod
-from apps.teams.sync.importer import Importer
-from apps.teams.sync.manifest import schema_checksum
-from apps.teams.sync.translation import FKTranslationStore
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 pytestmark = pytest.mark.django_db
@@ -190,7 +190,7 @@ def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
     """The serializer's output is exactly what the importer consumes."""
     public_key, private_key = keypair
     provider = LlmProviderFactory(config={"api_key": "sk-live"})
-    row = build_sync_serializer(LlmProvider)(provider, context={"public_key": public_key}).data
+    row = build_resource_serializer(LlmProvider)(provider, context={"public_key": public_key}).data
 
     store = FKTranslationStore(tmp_path / "t.sqlite")
     target_team = Team.objects.create(name="Target", slug="target-z")

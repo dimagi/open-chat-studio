@@ -1,7 +1,7 @@
 import pytest
 from django.core import mail
 
-from apps.teams.sync.emails import send_password_reset_email
+from apps.teams.export.emails import send_password_reset_email
 from apps.users.models import CustomUser
 
 pytestmark = pytest.mark.django_db

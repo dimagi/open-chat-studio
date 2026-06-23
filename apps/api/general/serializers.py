@@ -4,8 +4,8 @@ model and a new field is exported the moment it's added. Output-only; ``.save()`
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.teams.sync.manifest import EXCLUDE_REGISTRY, SECRET_REGISTRY
-from apps.teams.sync.seal import seal
+from apps.teams.export.manifest import EXCLUDE_REGISTRY, SECRET_REGISTRY
+from apps.teams.export.seal import seal
 
 
 class _SyncSecretMixin:
@@ -58,7 +58,7 @@ class ManifestSerializer(serializers.Serializer):
     entries = ManifestEntrySerializer(many=True)
 
 
-def build_sync_serializer(model):
+def build_resource_serializer(model):
     label = model._meta.label_lower
     meta_attrs = {"model": model}
     if label in EXCLUDE_REGISTRY:

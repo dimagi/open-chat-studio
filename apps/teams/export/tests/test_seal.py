@@ -5,7 +5,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from apps.teams.sync import seal as seal_mod
+from apps.teams.export import seal as seal_mod
 
 
 @pytest.fixture()

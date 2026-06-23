@@ -6,8 +6,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Node
-from apps.teams.sync import seal as seal_mod
-from apps.teams.sync.importer import (
+from apps.teams.export import seal as seal_mod
+from apps.teams.export.importer import (
     UnresolvedForeignKey,
     remap_node_params,
     remap_pipeline_data,
