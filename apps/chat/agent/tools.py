@@ -1,6 +1,7 @@
 import functools
 import json
 import logging
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -49,12 +50,60 @@ IMAGE_LINK_TEXT = "Reference link: `![](file:{team_slug}:{session_id}:{file_id})
 CHUNK_TEMPLATE = """
 <file>
   <file_id>{file_id}</file_id>
-  <filename>{file_name}</filename>
+  <filename>{file_name}</filename>{metadata}
   <context>
     <![CDATA[{chunk}]]>
   </context>
 </file>
 """
+
+# Keys stored on File.metadata that are OCS/loader internals or exact duplicates of other
+# fields (see JSONCollectionLoader). These are never surfaced to the LLM; every other
+# metadata key is included as-is so feeds can add useful fields without a code change.
+METADATA_BLOCKLIST = frozenset(
+    {
+        "collection_id",
+        "source_type",
+        "citation_text",  # duplicate of "title"
+        "citation_url",  # duplicate of "URI"
+        "source",  # langchain convention; duplicates "URI"/"link"
+    }
+)
+
+
+def _format_metadata_value(value: Any) -> str:
+    if isinstance(value, list | tuple):
+        return ", ".join(str(v) for v in value)
+    return str(value)
+
+
+def _sanitize_tag(key: str) -> str:
+    """Coerce an arbitrary metadata key into a valid XML tag name."""
+    tag = re.sub(r"[^A-Za-z0-9_.-]+", "_", key.strip())
+    if not tag or not re.match(r"[A-Za-z_]", tag):
+        tag = f"_{tag}"
+    return tag
+
+
+def _format_metadata_block(metadata: dict | None) -> str:
+    """Build a `<metadata>` XML block from the file metadata.
+
+    Every key is emitted except known internal/duplicate keys (see METADATA_BLOCKLIST)
+    and empty values. Returns an empty string when no relevant metadata is available.
+    """
+    if not metadata:
+        return ""
+    lines = []
+    for key, value in metadata.items():
+        if key in METADATA_BLOCKLIST or value in (None, "", [], {}):
+            continue
+        tag = _sanitize_tag(key)
+        lines.append(f"    <{tag}>{_format_metadata_value(value)}</{tag}>")
+    if not lines:
+        return ""
+    inner = "\n".join(lines)
+    return f"\n  <metadata>\n{inner}\n  </metadata>"
+
 
 CITATION_PROMPT = """**CRITICAL REQUIREMENT - MANDATORY CITATIONS:**
 
@@ -120,7 +169,7 @@ def _perform_collection_search(
         .filter(collection_id=collection.id)
         .order_by("distance")
         .select_related("file")
-        .only("text", "file__name")[:max_results]
+        .only("text", "file__name", "file__metadata")[:max_results]
     )
 
     if not embeddings:
@@ -140,7 +189,10 @@ def _perform_collection_search(
         retrieved_chunks = "\n".join(
             [
                 CHUNK_TEMPLATE.format(
-                    file_name=embedding.file.name, file_id=embedding.file_id, chunk=embedding.text
+                    file_name=embedding.file.name,
+                    file_id=embedding.file_id,
+                    metadata=_format_metadata_block(embedding.file.metadata),
+                    chunk=embedding.text,
                 ).strip()
                 for embedding in embeddings
             ]
@@ -170,7 +222,7 @@ def _format_result_with_collection(embedding: FileChunkEmbedding, collection) ->
   <file_id>{embedding.file_id}</file_id>
   <filename>{embedding.file.name}</filename>
   <collection_id>{collection.id}</collection_id>
-  <collection_name>{collection.name}</collection_name>
+  <collection_name>{collection.name}</collection_name>{_format_metadata_block(embedding.file.metadata)}
   <context>
     <![CDATA[{embedding.text}]]>
   </context>
