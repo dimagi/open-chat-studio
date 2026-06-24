@@ -846,14 +846,11 @@ components:
         name:
           type: string
           maxLength: 255
-        team:
-          type: integer
       required:
       - config
       - created_at
       - id
       - name
-      - team
       - type
       - updated_at
     AuthProviderExportItemTypeEnum:
@@ -991,12 +988,9 @@ components:
           nullable: true
           description: List of language codes for which translated text is available
         metadata: {}
-        team:
-          type: integer
       required:
       - created_at
       - id
-      - team
       - updated_at
     Chatbot:
       type: object
@@ -1224,8 +1218,6 @@ components:
             to give their consent
         is_archived:
           type: boolean
-        team:
-          type: integer
         working_version:
           type: integer
           nullable: true
@@ -1235,7 +1227,6 @@ components:
       - id
       - is_default
       - name
-      - team
       - updated_at
     CustomAction:
       type: object
@@ -1363,6 +1354,9 @@ components:
         id:
           type: integer
           readOnly: true
+        is_global:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1377,14 +1371,11 @@ components:
           type: string
           description: The name of the model. e.g. 'text-embedding-3-small'
           maxLength: 128
-        team:
-          type: integer
-          nullable: true
       required:
       - created_at
       - id
+      - is_global
       - name
-      - team
       - type
       - updated_at
     ExperimentExportPage:
@@ -1487,8 +1478,6 @@ components:
           format: date-time
           nullable: true
           description: Timestamp of the first user interaction
-        team:
-          type: integer
         participant:
           type: integer
         experiment:
@@ -1504,7 +1493,6 @@ components:
       - experiment
       - id
       - participant
-      - team
       - updated_at
     ExperimentSync:
       type: object
@@ -1577,8 +1565,6 @@ components:
         file_uploads_enabled:
           type: boolean
           description: Enables file attachments in the web chat interface.
-        team:
-          type: integer
         owner:
           type: integer
         pipeline:
@@ -1606,7 +1592,6 @@ components:
       - id
       - name
       - owner
-      - team
       - updated_at
       - working_version
     ExtractParticipantDataParams:
@@ -2239,14 +2224,11 @@ components:
         name:
           type: string
           maxLength: 255
-        team:
-          type: integer
       required:
       - config
       - created_at
       - id
       - name
-      - team
       - type
       - updated_at
     LlmProviderExportPage:
@@ -2291,6 +2273,9 @@ components:
         id:
           type: integer
           readOnly: true
+        is_global:
+          type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2309,20 +2294,16 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-          default: 8192
           description: When the message history for a session exceeds this limit (in
             tokens), it will be compressed. If 0, compression will be disabled which
             may result in errors or high LLM costs.
         deprecated:
           type: boolean
-        team:
-          type: integer
-          nullable: true
       required:
       - created_at
       - id
+      - is_global
       - name
-      - team
       - type
       - updated_at
     LlmProviderTypeEnum:
@@ -2478,15 +2459,12 @@ components:
           type: string
           format: date-time
           readOnly: true
-        team:
-          type: integer
         user:
           type: integer
       required:
       - created_at
       - groups
       - id
-      - team
       - updated_at
       - user
     MessagingProviderExportItem:
@@ -2512,14 +2490,11 @@ components:
           type: string
           maxLength: 255
         extra_data: {}
-        team:
-          type: integer
       required:
       - config
       - created_at
       - id
       - name
-      - team
       - type
       - updated_at
     MessagingProviderExportItemTypeEnum:
@@ -2677,8 +2652,6 @@ components:
           format: date-time
           readOnly: true
         system_metadata: {}
-        team:
-          type: integer
         participant:
           type: integer
         experiment:
@@ -2690,7 +2663,6 @@ components:
       - experiment
       - id
       - participant
-      - team
       - updated_at
     ParticipantDataExportPage:
       type: object
@@ -2757,17 +2729,13 @@ components:
         remote_id:
           type: string
           maxLength: 255
-        team:
-          type: integer
         user:
           type: integer
           nullable: true
       required:
       - created_at
       - id
-      - identifier
       - platform
-      - team
       - updated_at
     PipelineExportPage:
       type: object
@@ -2811,8 +2779,6 @@ components:
           minimum: 0
         is_archived:
           type: boolean
-        team:
-          type: integer
         working_version:
           type: integer
           nullable: true
@@ -2821,7 +2787,6 @@ components:
       - data
       - id
       - name
-      - team
       - updated_at
     PlatformEnum:
       enum:
@@ -3020,8 +2985,6 @@ components:
           type: string
         is_archived:
           type: boolean
-        team:
-          type: integer
         owner:
           type: integer
         working_version:
@@ -3032,7 +2995,6 @@ components:
       - id
       - material
       - owner
-      - team
       - topic
       - updated_at
     StaticRouterNodeParams:
@@ -3088,6 +3050,9 @@ components:
       properties:
         id:
           type: integer
+          readOnly: true
+        is_global:
+          type: boolean
           readOnly: true
         created_at:
           type: string
@@ -3155,6 +3120,7 @@ components:
       - external_id
       - gender
       - id
+      - is_global
       - language
       - language_code
       - name
@@ -3247,14 +3213,11 @@ components:
         name:
           type: string
           maxLength: 255
-        team:
-          type: integer
       required:
       - config
       - created_at
       - id
       - name
-      - team
       - type
       - updated_at
     TraceProviderExportItemTypeEnum:
@@ -3314,14 +3277,11 @@ components:
         name:
           type: string
           maxLength: 255
-        team:
-          type: integer
       required:
       - config
       - created_at
       - id
       - name
-      - team
       - type
       - updated_at
     VoiceProviderExportItemTypeEnum:

@@ -4,7 +4,7 @@ model and a new field is exported the moment it's added. Output-only; ``.save()`
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.teams.export.manifest import EXCLUDE_REGISTRY, SECRET_REGISTRY
+from apps.teams.export.manifest import EXCLUDE_REGISTRY, GLOBAL_CONFIG, SECRET_REGISTRY, model_has_team_field
 from apps.teams.export.seal import seal
 
 
@@ -29,6 +29,17 @@ def _feature_flags(self, team):
 @extend_schema_field(serializers.ListField(child=serializers.CharField()))
 def _group_names(self, instance):
     return [group.name for group in instance.groups.all()]
+
+
+def _is_global_resolver(null_field: str):
+    """Build the ``is_global`` method: a row is global when its scoping field (team or voice
+    provider) is null. Reads the ``*_id`` attribute so it never triggers a related-object query."""
+    attname = f"{null_field}_id"
+
+    def get_is_global(self, instance) -> bool:
+        return getattr(instance, attname) is None
+
+    return get_is_global
 
 
 # Per-model SerializerMethodFields for values that aren't a plain field dump.
@@ -57,11 +68,13 @@ class ManifestSerializer(serializers.Serializer):
 
 def build_resource_serializer(model):
     label = model._meta.label_lower
-    meta_attrs = {"model": model}
-    if label in EXCLUDE_REGISTRY:
-        meta_attrs["exclude"] = EXCLUDE_REGISTRY[label]
-    else:
-        meta_attrs["fields"] = "__all__"
+    # Every resource is imported into the single team named on the sync command, so the per-row team
+    # FK is redundant -- drop it. Global/shared models surface an `is_global` flag instead, since
+    # their team being null is what marks them shared.
+    exclude = list(EXCLUDE_REGISTRY.get(label, []))
+    if model_has_team_field(model):
+        exclude.append("team")
+    meta_attrs = {"model": model, "exclude": exclude} if exclude else {"model": model, "fields": "__all__"}
 
     attrs: dict[str, object] = {
         "Meta": type("Meta", (), meta_attrs),
@@ -70,5 +83,10 @@ def build_resource_serializer(model):
     for name, method in _FIELD_RESOLVERS.get(label, {}).items():
         attrs[name] = serializers.SerializerMethodField()
         attrs[f"get_{name}"] = method
+
+    spec = GLOBAL_CONFIG.get(label)
+    if spec:
+        attrs["is_global"] = serializers.SerializerMethodField()
+        attrs["get_is_global"] = _is_global_resolver(spec.null_field)
 
     return type(f"{model.__name__}SyncSerializer", (_SyncSecretMixin, serializers.ModelSerializer), attrs)

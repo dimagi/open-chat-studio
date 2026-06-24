@@ -5,7 +5,7 @@ from django.contrib.auth.models import Group
 
 from apps.api.general.serializers import build_resource_serializer
 from apps.experiments.models import Experiment, ParticipantData
-from apps.service_providers.models import LlmProvider
+from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
@@ -67,7 +67,7 @@ def test_llmprovider_config_is_sealed_and_round_trips(keypair):
     assert data["config"] != {"openai_api_key": "sk-secret"}
     assert "sk-secret" not in str(data["config"])
     assert seal_mod.unseal(data["config"], private_key) == {"openai_api_key": "sk-secret"}
-    assert data["team"] == provider.team_id  # FK as relation name + source pk
+    assert "team" not in data  # the per-row team FK is dropped; the importer assigns the synced team
 
 
 def test_participantdata_seals_data_and_encryption_key(keypair):
@@ -91,3 +91,12 @@ def test_experiment_fk_serializes_as_source_pk():
     experiment = ExperimentFactory(team=consent.team, consent_form=consent)
     data = _serialize(Experiment, experiment)
     assert data["consent_form"] == consent.id
+
+
+@pytest.mark.parametrize("is_global", [True, False])
+def test_global_able_model_exposes_is_global_flag_instead_of_team(is_global):
+    team = None if is_global else TeamFactory()
+    model = LlmProviderModel.objects.create(team=team, type="openai", name="gpt-x", max_token_limit=8192)
+    data = _serialize(LlmProviderModel, model)
+    assert data["is_global"] is is_global
+    assert "team" not in data

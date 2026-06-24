@@ -84,14 +84,13 @@ def test_import_resolves_fk_to_target_pk_and_unseals_secret(store, keypair):
         "name": "OpenAI",
         "type": "openai",
         "config": seal_mod.seal({"api_key": "sk-x"}, public_key),
-        "team": 9001,
         "created_at": PAST,
         "updated_at": PAST,
     }
     importer.import_rows("service_providers.llmprovider", [provider_row])
 
     provider = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5))
-    assert provider.team_id == target_team
+    assert provider.team_id == target_team  # assigned to the synced team, not read from the row
     assert provider.config == {"api_key": "sk-x"}
 
 
@@ -111,7 +110,7 @@ def test_global_row_matches_existing_and_is_not_recreated(store):
     count_before = LlmProviderModel.objects.count()
     row = {
         "id": 77,
-        "team": None,
+        "is_global": True,
         "type": "openai",
         "name": "gpt-glob",
         "max_token_limit": 8192,
@@ -131,7 +130,7 @@ def test_missing_global_row_raises_with_its_natural_key(store):
     not silently null the references that point at it or abort obscurely deep in FK resolution."""
     row = {
         "id": 77,
-        "team": None,
+        "is_global": True,
         "type": "openai",
         "name": "model-not-on-target",
         "max_token_limit": 8192,
@@ -153,7 +152,7 @@ def test_node_params_and_fk_columns_are_remapped(store):
     team_pk = store.get_target("teams.team", 9001)
     importer.import_rows(
         "service_providers.llmprovider",
-        [{"id": 7, "name": "P", "type": "openai", "config": {}, "team": 9001, "created_at": PAST, "updated_at": PAST}],
+        [{"id": 7, "name": "P", "type": "openai", "config": {}, "created_at": PAST, "updated_at": PAST}],
     )
     provider_pk = store.get_target("service_providers.llmprovider", 7)
     importer.import_rows(
@@ -162,7 +161,6 @@ def test_node_params_and_fk_columns_are_remapped(store):
             {
                 "id": 100,
                 "name": "Flow",
-                "team": 9001,
                 "data": {"nodes": [], "edges": []},
                 "version_number": 1,
                 "is_archived": False,
@@ -205,7 +203,7 @@ def test_membership_groups_are_linked_by_name(store):
 
     importer.import_rows(
         "teams.membership",
-        [{"id": 60, "team": 9001, "user": 50, "groups": ["Sync Role X"], "created_at": PAST, "updated_at": PAST}],
+        [{"id": 60, "user": 50, "groups": ["Sync Role X"], "created_at": PAST, "updated_at": PAST}],
     )
 
     membership = Membership.objects.get(pk=store.get_target("teams.membership", 60))
@@ -224,7 +222,6 @@ def test_default_consent_form_maps_to_auto_created_default(store):
         "name": "Imported Consent",
         "consent_text": "Source consent text",
         "is_default": True,
-        "team": 9001,
         "capture_identifier": True,
         "identifier_label": "Email Address",
         "identifier_type": "email",

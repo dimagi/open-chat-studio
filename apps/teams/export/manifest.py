@@ -6,9 +6,10 @@ import json
 from dataclasses import dataclass
 
 from django.apps import apps
+from django.core.exceptions import FieldDoesNotExist
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
-from django.db.models import Model, Q, QuerySet
+from django.db.models import ForeignKey, Model, Q, QuerySet
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,15 @@ def get_manifest_entry(resource: str) -> ManifestEntry | None:
 
 def entry_model(model_label: str) -> type[Model]:
     return apps.get_model(*model_label.split("."))
+
+
+def model_has_team_field(model: type[Model]) -> bool:
+    """Whether the model has a direct ``team`` FK -- the per-row team id that's dropped from the
+    export and re-assigned to the synced team on import."""
+    try:
+        return isinstance(model._meta.get_field("team"), ForeignKey)
+    except FieldDoesNotExist:
+        return False
 
 
 def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:

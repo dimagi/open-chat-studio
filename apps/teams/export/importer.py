@@ -15,7 +15,7 @@ from apps.teams.models import Flag
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
 
-from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, GlobalSpec, entry_model
+from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, GlobalSpec, entry_model, model_has_team_field
 from .manifest import MANIFEST_ENTRIES as _ENTRIES
 from .seal import unseal
 from .translation import FKTranslationStore
@@ -108,18 +108,17 @@ _NAMED_LINK_FIELDS = {
 }
 
 
-def _match_existing_user(model: type[models.Model], row: dict, store: FKTranslationStore) -> models.Model | None:
+def _match_existing_user(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
     """Map onto a user that already exists on the target rather than colliding on the unique username."""
     return model.objects.filter(username=row["username"]).first()
 
 
-def _match_default_consent_form(model: type[models.Model], row: dict, store: FKTranslationStore) -> models.Model | None:
+def _match_default_consent_form(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
     """The target team's default consent form is auto-created on team creation; map the source's
     default onto it instead of creating a second one (which the per-team unique constraint forbids)."""
-    if not row.get("is_default"):
+    if not row.get("is_default") or target_team is None:
         return None
-    target_team = store.get_target("teams.team", row.get("team"))
-    return model.objects.filter(team_id=target_team, is_default=True).first() if target_team else None
+    return model.objects.filter(team=target_team, is_default=True).first()
 
 
 # Rows matched to a pre-existing target row by natural key instead of created.
@@ -140,6 +139,9 @@ class Importer:
         self.store = store
         self.private_key = private_key
         self.on_user_created = on_user_created
+        # The single team every resource is imported into. Captured from the team row (first in the
+        # manifest) and assigned to every team-scoped row, since the per-row team FK isn't exported.
+        self.target_team = None
 
     def import_rows(self, model_label: str, rows: Iterable[dict]) -> None:
         """Import every row for one model, unsealing its secret fields first when we hold the key."""
@@ -157,9 +159,9 @@ class Importer:
         global_spec = GLOBAL_CONFIG.get(model_label)
         source_pk = row["id"]
 
-        # Global row (scoping field null): match the existing target row by natural key and just
+        # Global row (flagged by the export): match the existing target row by natural key and just
         # record the id translation -- these are shared, never recreated.
-        if global_spec and row.get(global_spec.null_field) is None:
+        if global_spec and row.get("is_global"):
             match = self._match_global(model, global_spec, row)
             if match is None:
                 raise MissingGlobalRow(model_label, global_spec, row)
@@ -177,6 +179,7 @@ class Importer:
                 self.on_user_created(instance)
         if model_label == "teams.team":
             set_current_team(instance)
+            self.target_team = instance
 
     def _import_team_owned_row(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
@@ -206,7 +209,7 @@ class Importer:
         if target_pk is not None and model.objects.filter(pk=target_pk).exists():
             instance = model.objects.get(pk=target_pk)
         elif model_label in _MATCH_EXISTING:
-            instance = _MATCH_EXISTING[model_label](model, row, self.store)
+            instance = _MATCH_EXISTING[model_label](model, row, self.store, self.target_team)
 
         if instance is not None:
             if model_label not in _NO_UPDATE_MODELS:
@@ -229,8 +232,18 @@ class Importer:
         for field in model._meta.concrete_fields:
             self._collect_concrete_field(field, row, named, field_values, timestamps)
         self._remap_embedded_resource_ids(model_label, field_values)
+        self._assign_team(model_label, model, field_values)
         m2m_values = self._build_m2m_values(model, row, named)
         return field_values, m2m_values, timestamps
+
+    def _assign_team(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
+        """Set a team-scoped row's team to the team being synced. The per-row team FK isn't exported
+        (everything belongs to one team), so it's assigned here from the team imported first."""
+        if model_label == "teams.team" or not model_has_team_field(model):
+            return
+        if self.target_team is None:
+            raise UnresolvedForeignKey(f"{model_label}.team: the team row must be imported before its data.")
+        field_values["team_id"] = self.target_team.pk
 
     def _collect_concrete_field(self, field, row: dict, named: set, field_values: dict, timestamps: dict) -> None:
         """Route one concrete field into ``field_values`` or ``timestamps`` (or skip it). Source

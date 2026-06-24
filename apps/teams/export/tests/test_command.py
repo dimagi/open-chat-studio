@@ -205,10 +205,11 @@ def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
 
     store = FKTranslationStore(tmp_path / "t.sqlite")
     target_team = Team.objects.create(name="Target", slug="target-z")
-    store.record("teams.team", provider.team_id, target_team.id)
 
-    Importer(store, private_key=private_key).import_rows("service_providers.llmprovider", [dict(row)])
+    importer = Importer(store, private_key=private_key)
+    importer.target_team = target_team  # normally captured when the team row is imported first
+    importer.import_rows("service_providers.llmprovider", [dict(row)])
 
     imported = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", provider.id))
-    assert imported.team_id == target_team.id
+    assert imported.team_id == target_team.id  # assigned from the synced team, not carried in the row
     assert imported.config == {"api_key": "sk-live"}
