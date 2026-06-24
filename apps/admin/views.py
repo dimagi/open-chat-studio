@@ -103,41 +103,86 @@ def _compute_growth(current, previous):
     return metrics
 
 
+def _validated_range(request):
+    """Return (start, end, start_timestamp, end_timestamp) for the request, or None if invalid.
+
+    Used by the dashboard skeleton and each section endpoint so they share a single
+    interpretation of the date-range form.
+    """
+    form = _get_form(request)
+    if not form.is_valid():
+        return None
+    start, end = form.get_date_range()
+    start_timestamp, end_timestamp = _make_aware_range(start, end)
+    return start, end, start_timestamp, end_timestamp
+
+
 @is_staff
 def usage_chart(request):
+    """Render the dashboard skeleton: export buttons plus placeholders that lazy-load each section.
+
+    This view runs no aggregation queries, so it returns immediately even when the
+    underlying data is expensive. Each section below loads independently, so a slow
+    or failing section can't take down the rest of the dashboard (or the buttons).
+    """
     form = _get_form(request)
     if not form.is_valid():
         return redirect("ocs_admin:home")
 
     start, end = form.get_date_range()
-    start_timestamp, end_timestamp = _make_aware_range(start, end)
-    usage_data = StatsSerializer(get_message_stats(start_timestamp, end_timestamp), many=True)
-    participant_data = StatsSerializer(get_participant_stats(start_timestamp, end_timestamp), many=True)
-    whatsapp_stats = get_whatsapp_message_stats(start_timestamp, end_timestamp)
-
-    period_length = end - start
-    prev_end = start
-    prev_start = prev_end - period_length
-    prev_start_timestamp, prev_end_timestamp = _make_aware_range(prev_start, prev_end)
-
-    current_totals = get_period_totals(start_timestamp, end_timestamp)
-    previous_totals = get_period_totals(prev_start_timestamp, prev_end_timestamp)
-    growth_metrics = _compute_growth(current_totals, previous_totals)
-
-    top_teams = get_top_teams(start_timestamp, end_timestamp)
-    platform_breakdown = get_platform_breakdown(start_timestamp, end_timestamp)
-    team_activity = get_team_activity_summary(start_timestamp, end_timestamp)
-    top_experiments = get_top_experiments(start_timestamp, end_timestamp)
-
     url = reverse("ocs_admin:home")
     query_data = {
         "start": start,
         "end": end,
         "range_type": form.cleaned_data["range_type"],
     }
-    response = TemplateResponse(
+    response = TemplateResponse(request, "admin/usage_chart.html", context={})
+    return push_url(response, f"{url}?{urlencode(query_data)}")
+
+
+@is_staff
+def section_growth(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    start, end, start_timestamp, end_timestamp = date_range
+    prev_start_timestamp, prev_end_timestamp = _make_aware_range(start - (end - start), start)
+    current_totals = get_period_totals(start_timestamp, end_timestamp)
+    previous_totals = get_period_totals(prev_start_timestamp, prev_end_timestamp)
+    return TemplateResponse(
         request,
-        "admin/usage_chart.html",
+        "admin/sections/growth.html",
+        context={"growth_metrics": _compute_growth(current_totals, previous_totals)},
+    )
+
+
+@is_staff
+def section_team_activity(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    _, _, start_timestamp, end_timestamp = date_range
+    return TemplateResponse(
+        request,
+        "admin/sections/team_activity.html",
+        context={"team_activity": get_team_activity_summary(start_timestamp, end_timestamp)},
+    )
+
+
+@is_staff
+def section_charts(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    start, end, start_timestamp, end_timestamp = date_range
+    usage_data = StatsSerializer(get_message_stats(start_timestamp, end_timestamp), many=True)
+    participant_data = StatsSerializer(get_participant_stats(start_timestamp, end_timestamp), many=True)
+    return TemplateResponse(
+        request,
+        "admin/sections/charts.html",
         context={
             "chart_data": {
                 "message_data": usage_data.data,
@@ -150,15 +195,64 @@ def usage_chart(request):
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
-            "whatsapp_stats": whatsapp_stats,
-            "growth_metrics": growth_metrics,
-            "top_teams": top_teams,
-            "platform_breakdown": platform_breakdown,
-            "team_activity": team_activity,
-            "top_experiments": top_experiments,
         },
     )
-    return push_url(response, f"{url}?{urlencode(query_data)}")
+
+
+@is_staff
+def section_top_teams(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    _, _, start_timestamp, end_timestamp = date_range
+    return TemplateResponse(
+        request,
+        "admin/sections/top_teams.html",
+        context={"top_teams": get_top_teams(start_timestamp, end_timestamp)},
+    )
+
+
+@is_staff
+def section_platform(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    _, _, start_timestamp, end_timestamp = date_range
+    return TemplateResponse(
+        request,
+        "admin/sections/platform.html",
+        context={"platform_breakdown": get_platform_breakdown(start_timestamp, end_timestamp)},
+    )
+
+
+@is_staff
+def section_top_experiments(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    _, _, start_timestamp, end_timestamp = date_range
+    return TemplateResponse(
+        request,
+        "admin/sections/top_experiments.html",
+        context={"top_experiments": get_top_experiments(start_timestamp, end_timestamp)},
+    )
+
+
+@is_staff
+def section_whatsapp(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    _, _, start_timestamp, end_timestamp = date_range
+    return TemplateResponse(
+        request,
+        "admin/sections/whatsapp.html",
+        context={"whatsapp_stats": get_whatsapp_message_stats(start_timestamp, end_timestamp)},
+    )
 
 
 @is_staff

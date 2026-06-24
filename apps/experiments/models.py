@@ -1176,6 +1176,8 @@ class Participant(BaseTeamModel):
         unique_together = [("team", "platform", "identifier")]
         indexes = [
             models.Index(fields=["team", "-created_at"], name="participant_team_created_idx"),
+            # Supports the global (cross-team) date-range scans in the admin dashboard.
+            models.Index(fields=["created_at"], name="participant_created_at_idx"),
         ]
 
     @classmethod
@@ -1500,6 +1502,8 @@ class ExperimentSession(BaseTeamModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["team", "-last_activity_at"], name="expsession_team_lastact_idx"),
+            # Supports the global (cross-team) date-range scans in the admin dashboard.
+            models.Index(fields=["created_at"], name="expsession_created_at_idx"),
         ]
 
     def __str__(self):
