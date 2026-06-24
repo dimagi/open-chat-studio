@@ -140,16 +140,31 @@ def usage_chart(request):
     return push_url(response, f"{url}?{urlencode(query_data)}")
 
 
+def _render_section(request, template, context_key, query_fn):
+    """Validate the date range and render a single-query dashboard section.
+
+    Returns an empty response on an invalid date range so a bad form value can't
+    500 a lazy-loaded fragment.
+    """
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+    _, _, start_timestamp, end_timestamp = date_range
+    return TemplateResponse(request, template, context={context_key: query_fn(start_timestamp, end_timestamp)})
+
+
 @is_staff
 def section_growth(request):
     date_range = _validated_range(request)
     if date_range is None:
         return HttpResponse("")
 
-    start, end, start_timestamp, end_timestamp = date_range
-    prev_start_timestamp, prev_end_timestamp = _make_aware_range(start - (end - start), start)
+    _, _, start_timestamp, end_timestamp = date_range
+    # Previous period: an equal-length window ending exactly where the current one begins
+    # (exclusive), so the boundary day isn't counted in both windows.
+    period = end_timestamp - start_timestamp
     current_totals = get_period_totals(start_timestamp, end_timestamp)
-    previous_totals = get_period_totals(prev_start_timestamp, prev_end_timestamp)
+    previous_totals = get_period_totals(start_timestamp - period, start_timestamp)
     return TemplateResponse(
         request,
         "admin/sections/growth.html",
@@ -159,16 +174,7 @@ def section_growth(request):
 
 @is_staff
 def section_team_activity(request):
-    date_range = _validated_range(request)
-    if date_range is None:
-        return HttpResponse("")
-
-    _, _, start_timestamp, end_timestamp = date_range
-    return TemplateResponse(
-        request,
-        "admin/sections/team_activity.html",
-        context={"team_activity": get_team_activity_summary(start_timestamp, end_timestamp)},
-    )
+    return _render_section(request, "admin/sections/team_activity.html", "team_activity", get_team_activity_summary)
 
 
 @is_staff
@@ -201,58 +207,22 @@ def section_charts(request):
 
 @is_staff
 def section_top_teams(request):
-    date_range = _validated_range(request)
-    if date_range is None:
-        return HttpResponse("")
-
-    _, _, start_timestamp, end_timestamp = date_range
-    return TemplateResponse(
-        request,
-        "admin/sections/top_teams.html",
-        context={"top_teams": get_top_teams(start_timestamp, end_timestamp)},
-    )
+    return _render_section(request, "admin/sections/top_teams.html", "top_teams", get_top_teams)
 
 
 @is_staff
 def section_platform(request):
-    date_range = _validated_range(request)
-    if date_range is None:
-        return HttpResponse("")
-
-    _, _, start_timestamp, end_timestamp = date_range
-    return TemplateResponse(
-        request,
-        "admin/sections/platform.html",
-        context={"platform_breakdown": get_platform_breakdown(start_timestamp, end_timestamp)},
-    )
+    return _render_section(request, "admin/sections/platform.html", "platform_breakdown", get_platform_breakdown)
 
 
 @is_staff
 def section_top_experiments(request):
-    date_range = _validated_range(request)
-    if date_range is None:
-        return HttpResponse("")
-
-    _, _, start_timestamp, end_timestamp = date_range
-    return TemplateResponse(
-        request,
-        "admin/sections/top_experiments.html",
-        context={"top_experiments": get_top_experiments(start_timestamp, end_timestamp)},
-    )
+    return _render_section(request, "admin/sections/top_experiments.html", "top_experiments", get_top_experiments)
 
 
 @is_staff
 def section_whatsapp(request):
-    date_range = _validated_range(request)
-    if date_range is None:
-        return HttpResponse("")
-
-    _, _, start_timestamp, end_timestamp = date_range
-    return TemplateResponse(
-        request,
-        "admin/sections/whatsapp.html",
-        context={"whatsapp_stats": get_whatsapp_message_stats(start_timestamp, end_timestamp)},
-    )
+    return _render_section(request, "admin/sections/whatsapp.html", "whatsapp_stats", get_whatsapp_message_stats)
 
 
 @is_staff
