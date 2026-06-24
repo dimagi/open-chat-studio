@@ -92,7 +92,7 @@ def test_team_scoped_queryset_isolates_teams_and_includes_globals():
     theirs = LlmProviderModelFactory(team=other)
     global_model = LlmProviderModelFactory(team=None)
 
-    entry = manifest.get_manifest_entry("llm_provider_model")
+    entry = manifest.get_manifest_entry("llm_provider_models")
     pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
     assert mine.pk in pks
     assert global_model.pk in pks

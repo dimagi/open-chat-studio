@@ -26,7 +26,7 @@ class SourceClient:
         params = {"limit": limit}
         if cursor is not None:
             params["cursor"] = cursor
-        return self._get(f"/api/v2/{resource}/", params)
+        return self._get(f"/api/v2/resources/{resource}/", params)
 
     def iter_rows(self, resource, start_cursor=None, limit=100):
         cursor = start_cursor

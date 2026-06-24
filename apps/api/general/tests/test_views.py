@@ -44,7 +44,7 @@ def test_manifest_url_resolves():
 
 
 def test_resource_url_resolves():
-    assert _resource_url("teams") == "/api/v2/teams/"
+    assert _resource_url("teams") == "/api/v2/resources/teams/"
 
 
 def test_manifest_requires_authentication():
@@ -81,7 +81,7 @@ def test_resource_rejects_unlisted_model():
     # Only manifested resources are routed, so an unlisted model 404s at routing.
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
-    assert client.get("/api/v2/assistant/").status_code == 404
+    assert client.get("/api/v2/resources/assistant/").status_code == 404
 
 
 def test_resource_isolates_other_teams_data():
@@ -90,7 +90,7 @@ def test_resource_isolates_other_teams_data():
     mine = LlmProviderModelFactory(team=team)
     theirs = LlmProviderModelFactory(team=other)
     client = ApiTestClient(_admin(team), team)
-    ids = [r["id"] for r in client.get(_resource_url("llm_provider_model")).json()["results"]]
+    ids = [r["id"] for r in client.get(_resource_url("llm_provider_models")).json()["results"]]
     assert mine.id in ids
     assert theirs.id not in ids
 
@@ -99,7 +99,7 @@ def test_secret_resource_fails_closed_without_public_key():
     team = TeamWithUsersFactory()
     LlmProviderFactory(team=team)
     client = ApiTestClient(_admin(team), team)
-    assert client.get(_resource_url("llm_provider")).status_code == 409
+    assert client.get(_resource_url("llm_providers")).status_code == 409
 
 
 def test_secret_resource_seals_config_with_team_public_key():
@@ -111,7 +111,7 @@ def test_secret_resource_seals_config_with_team_public_key():
     team = TeamWithUsersFactory(public_key=public_pem.decode())
     LlmProviderFactory(team=team, config={"key": "sk-xyz"})
     client = ApiTestClient(_admin(team), team)
-    response = client.get(_resource_url("llm_provider"))
+    response = client.get(_resource_url("llm_providers"))
     assert response.status_code == 200
     sealed = response.json()["results"][0]["config"]
     assert seal_mod.unseal(sealed, private) == {"key": "sk-xyz"}
@@ -124,14 +124,14 @@ def _b64(payload):
 @pytest.mark.parametrize(
     ("resource", "params"),
     [
-        pytest.param("consent_form", {"cursor": "abc"}, id="non-numeric-pk-cursor"),
-        pytest.param("consent_form", {"cursor": "1.5"}, id="float-pk-cursor"),
-        pytest.param("participant", {"cursor": "!!!not-base64"}, id="non-base64-keyset-cursor"),
-        pytest.param("participant", {"cursor": _b64(b"not json")}, id="non-json-keyset-cursor"),
-        pytest.param("participant", {"cursor": _b64(json.dumps({"id": 1}).encode())}, id="keyset-cursor-missing-key"),
-        pytest.param("consent_form", {"limit": "abc"}, id="non-integer-limit"),
-        pytest.param("consent_form", {"limit": "-5"}, id="negative-limit"),
-        pytest.param("consent_form", {"limit": "0"}, id="zero-limit"),
+        pytest.param("consent_forms", {"cursor": "abc"}, id="non-numeric-pk-cursor"),
+        pytest.param("consent_forms", {"cursor": "1.5"}, id="float-pk-cursor"),
+        pytest.param("participants", {"cursor": "!!!not-base64"}, id="non-base64-keyset-cursor"),
+        pytest.param("participants", {"cursor": _b64(b"not json")}, id="non-json-keyset-cursor"),
+        pytest.param("participants", {"cursor": _b64(json.dumps({"id": 1}).encode())}, id="keyset-cursor-missing-key"),
+        pytest.param("consent_forms", {"limit": "abc"}, id="non-integer-limit"),
+        pytest.param("consent_forms", {"limit": "-5"}, id="negative-limit"),
+        pytest.param("consent_forms", {"limit": "0"}, id="zero-limit"),
     ],
 )
 def test_malformed_pagination_input_returns_400(resource, params):
@@ -156,12 +156,12 @@ def test_membership_export_does_not_query_groups_per_row():
     for i in range(2):
         _add_membership_with_group(team, i)
     with CaptureQueriesContext(connection) as few:
-        assert client.get(_resource_url("membership"), {"limit": 1000}).status_code == 200
+        assert client.get(_resource_url("memberships"), {"limit": 1000}).status_code == 200
 
     for i in range(2, 7):
         _add_membership_with_group(team, i)
     with CaptureQueriesContext(connection) as many:
-        assert client.get(_resource_url("membership"), {"limit": 1000}).status_code == 200
+        assert client.get(_resource_url("memberships"), {"limit": 1000}).status_code == 200
 
     assert len(many.captured_queries) == len(few.captured_queries)  # query count is flat in row count
 
@@ -186,7 +186,7 @@ def test_working_version_always_served_before_its_published_copies():
 
     collected, cursor = [], None
     for _ in range(20):
-        page = client.get(_resource_url("pipeline"), {"limit": 1, **({"cursor": cursor} if cursor else {})}).json()
+        page = client.get(_resource_url("pipelines"), {"limit": 1, **({"cursor": cursor} if cursor else {})}).json()
         collected += [r["id"] for r in page["results"]]
         cursor = page["cursor"]
         if not page["has_more"]:
@@ -204,7 +204,7 @@ def test_pk_pagination_advances_via_cursor():
     c1 = ConsentFormFactory(team=team)
     c2 = ConsentFormFactory(team=team)
     client = ApiTestClient(_admin(team), team)
-    resource = "consent_form"
+    resource = "consent_forms"
 
     collected, cursor = [], None
     for _ in range(10):
@@ -224,7 +224,7 @@ def test_updated_at_id_cursor_pages_ties_without_skip_or_repeat():
     shared = timezone.now()
     Participant.objects.filter(id__in=[p.id for p in parts]).update(updated_at=shared)
     client = ApiTestClient(_admin(team), team)
-    resource = "participant"
+    resource = "participants"
 
     collected, cursor = [], None
     for _ in range(10):

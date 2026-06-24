@@ -4,99 +4,6 @@ info:
   version: v2
   description: Build, deploy and monitor chatbots.
 paths:
-  /api/v2/auth_provider/:
-    get:
-      operationId: auth_provider
-      summary: Auth Provider
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthProviderExportPage'
-          description: ''
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Team has no registered public key; secret data cannot be sealed.
-  /api/v2/chat/:
-    get:
-      operationId: chat
-      summary: Chat
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ChatExportPage'
-          description: ''
-  /api/v2/chatbot/:
-    get:
-      operationId: chatbot
-      summary: Chatbot
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExperimentExportPage'
-          description: ''
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
@@ -187,160 +94,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
-  /api/v2/consent_form/:
-    get:
-      operationId: consent_form
-      summary: Consent Form
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsentFormExportPage'
-          description: ''
-  /api/v2/embedding_provider_model/:
-    get:
-      operationId: embedding_provider_model
-      summary: Embedding Provider Model
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EmbeddingProviderModelExportPage'
-          description: ''
-  /api/v2/experiment_session/:
-    get:
-      operationId: experiment_session
-      description: 'Paginated by `updated_at`: a row modified while you page through
-        it can reappear on a later page, so clients must treat results as upserts
-        keyed by `id` rather than assuming each row is seen once.'
-      summary: Experiment Session
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ExperimentSessionExportPage'
-          description: ''
-  /api/v2/llm_provider/:
-    get:
-      operationId: llm_provider
-      summary: Llm Provider
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LlmProviderExportPage'
-          description: ''
-        '409':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncErrorDetail'
-          description: Team has no registered public key; secret data cannot be sealed.
-  /api/v2/llm_provider_model/:
-    get:
-      operationId: llm_provider_model
-      summary: Llm Provider Model
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LlmProviderModelExportPage'
-          description: ''
   /api/v2/manifest/:
     get:
       operationId: manifest
@@ -379,10 +132,225 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
-  /api/v2/membership/:
+  /api/v2/resources/auth_providers/:
     get:
-      operationId: membership
-      summary: Membership
+      operationId: auth_providers
+      summary: Auth Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthProviderExportPage'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/v2/resources/chatbots/:
+    get:
+      operationId: chatbots
+      summary: Chatbots
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentExportPage'
+          description: ''
+  /api/v2/resources/chats/:
+    get:
+      operationId: chats
+      summary: Chats
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatExportPage'
+          description: ''
+  /api/v2/resources/consent_forms/:
+    get:
+      operationId: consent_forms
+      summary: Consent Forms
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormExportPage'
+          description: ''
+  /api/v2/resources/embedding_provider_models/:
+    get:
+      operationId: embedding_provider_models
+      summary: Embedding Provider Models
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingProviderModelExportPage'
+          description: ''
+  /api/v2/resources/llm_provider_models/:
+    get:
+      operationId: llm_provider_models
+      summary: Llm Provider Models
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProviderModelExportPage'
+          description: ''
+  /api/v2/resources/llm_providers/:
+    get:
+      operationId: llm_providers
+      summary: Llm Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProviderExportPage'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/v2/resources/memberships/:
+    get:
+      operationId: memberships
+      summary: Memberships
       parameters:
       - in: query
         name: cursor
@@ -408,10 +376,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/MembershipExportPage'
           description: ''
-  /api/v2/messaging_provider/:
+  /api/v2/resources/messaging_providers/:
     get:
-      operationId: messaging_provider
-      summary: Messaging Provider
+      operationId: messaging_providers
+      summary: Messaging Providers
       parameters:
       - in: query
         name: cursor
@@ -443,68 +411,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SyncErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
-  /api/v2/node/:
-    get:
-      operationId: node
-      summary: Node
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NodeExportPage'
-          description: ''
-  /api/v2/participant/:
-    get:
-      operationId: participant
-      description: 'Paginated by `updated_at`: a row modified while you page through
-        it can reappear on a later page, so clients must treat results as upserts
-        keyed by `id` rather than assuming each row is seen once.'
-      summary: Participant
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Export
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ParticipantExportPage'
-          description: ''
-  /api/v2/participant_data/:
+  /api/v2/resources/participant_data/:
     get:
       operationId: participant_data
       description: 'Paginated by `updated_at`: a row modified while you page through
@@ -542,10 +449,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/SyncErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
-  /api/v2/pipeline/:
+  /api/v2/resources/participants/:
     get:
-      operationId: pipeline
-      summary: Pipeline
+      operationId: participants
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Participants
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantExportPage'
+          description: ''
+  /api/v2/resources/pipeline_nodes/:
+    get:
+      operationId: pipeline_nodes
+      summary: Pipeline Nodes
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeExportPage'
+          description: ''
+  /api/v2/resources/pipelines/:
+    get:
+      operationId: pipelines
+      summary: Pipelines
       parameters:
       - in: query
         name: cursor
@@ -571,10 +539,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/PipelineExportPage'
           description: ''
-  /api/v2/source_material/:
+  /api/v2/resources/sessions/:
     get:
-      operationId: source_material
-      summary: Source Material
+      operationId: sessions
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Sessions
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Export
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentSessionExportPage'
+          description: ''
+  /api/v2/resources/source_materials/:
+    get:
+      operationId: source_materials
+      summary: Source Materials
       parameters:
       - in: query
         name: cursor
@@ -600,10 +600,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/SourceMaterialExportPage'
           description: ''
-  /api/v2/synthetic_voice/:
+  /api/v2/resources/synthetic_voices/:
     get:
-      operationId: synthetic_voice
-      summary: Synthetic Voice
+      operationId: synthetic_voices
+      summary: Synthetic Voices
       parameters:
       - in: query
         name: cursor
@@ -629,7 +629,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SyntheticVoiceExportPage'
           description: ''
-  /api/v2/teams/:
+  /api/v2/resources/teams/:
     get:
       operationId: teams
       summary: Teams
@@ -658,10 +658,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/TeamExportPage'
           description: ''
-  /api/v2/trace_provider/:
+  /api/v2/resources/trace_providers/:
     get:
-      operationId: trace_provider
-      summary: Trace Provider
+      operationId: trace_providers
+      summary: Trace Providers
       parameters:
       - in: query
         name: cursor
@@ -693,10 +693,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/SyncErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
-  /api/v2/user/:
+  /api/v2/resources/users/:
     get:
-      operationId: user
-      summary: User
+      operationId: users
+      summary: Users
       parameters:
       - in: query
         name: cursor
@@ -722,10 +722,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomUserExportPage'
           description: ''
-  /api/v2/voice_provider/:
+  /api/v2/resources/voice_providers/:
     get:
-      operationId: voice_provider
-      summary: Voice Provider
+      operationId: voice_providers
+      summary: Voice Providers
       parameters:
       - in: query
         name: cursor

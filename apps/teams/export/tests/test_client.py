@@ -51,7 +51,7 @@ def test_get_page_passes_cursor_and_limit():
     session = FakeSession([FakeResponse(json_data={"results": [], "has_more": False, "cursor": "9"})])
     _client(session).get_page("teams", cursor="4", limit=50)
     call = session.calls[0]
-    assert call["url"] == "https://src.example/api/v2/teams/"
+    assert call["url"] == "https://src.example/api/v2/resources/teams/"
     assert call["params"] == {"cursor": "4", "limit": 50}
 
 

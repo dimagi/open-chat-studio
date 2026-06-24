@@ -10,9 +10,11 @@ app_name = "v2"
 router = routers.SimpleRouter()
 router.register(r"chatbots", views.ChatbotViewSet, basename="chatbot")
 
+# Team-export read endpoints live under ``resources/`` so they're clearly separated from the CRUD
+# API and don't collide with it (e.g. the export ``chatbots`` vs the ``chatbots`` viewset below).
 resource_patterns = [
     path(
-        f"{entry.resource}/",
+        f"resources/{entry.resource}/",
         export_views.resource_view(entry).as_view(),
         {"resource": entry.resource},
         name=f"resource-{entry.resource}",
@@ -27,5 +29,5 @@ urlpatterns = [
     path("manifest/", export_views.ManifestView.as_view(), name="manifest"),
     path("", include(router.urls)),
     *resource_patterns,
-    re_path(r"^(?P<resource>[a-z_]+)/$", export_views.UnknownResourceView.as_view(), name="resource"),
+    re_path(r"^resources/(?P<resource>[a-z_]+)/$", export_views.UnknownResourceView.as_view(), name="resource"),
 ]
