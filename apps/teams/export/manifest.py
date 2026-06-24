@@ -26,8 +26,13 @@ class ManifestEntry:
 # created before its published copies, so it has a lower id and is served -- and imported -- first,
 # letting the self-referential working_version FK resolve. Guarded by
 # test_working_version_always_served_before_its_published_copies.
+# The team itself is synced too, but not as a generic paginated resource. It's auto-resolved from
+# the API key, served as a single object at the ``team/`` root (see apps/api/general/views.TeamView),
+# and imported first as the anchor every other row is reassigned to -- so it's deliberately absent
+# from MANIFEST_ENTRIES. ``test_every_first_party_model_is_synced_or_ignored`` accounts for it.
+TEAM_MODEL = "teams.team"
+
 MANIFEST_ENTRIES: list[ManifestEntry] = [
-    ManifestEntry("teams.team", "teams", "structural", "pk"),
     ManifestEntry("users.customuser", "users", "structural", "pk"),
     ManifestEntry("teams.membership", "memberships", "structural", "pk"),
     ManifestEntry("service_providers.llmprovider", "llm_providers", "structural", "pk", secret=True),
@@ -148,7 +153,6 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).
 # Default is "team" (the direct FK on every BaseTeamModel); only models without one need an entry.
 TEAM_PATH_REGISTRY: dict[str, str] = {
-    "teams.team": "pk",
     "users.customuser": "teams",
     "pipelines.node": "pipeline__team",
     "experiments.syntheticvoice": "voice_provider__team",

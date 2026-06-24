@@ -47,11 +47,17 @@ def test_get_manifest_hits_endpoint_with_api_key_header():
     assert call["headers"]["X-Api-Key"] == "secret-key"
 
 
+def test_get_team_hits_root_endpoint():
+    session = FakeSession([FakeResponse(json_data={"id": 1, "name": "T"})])
+    assert _client(session).get_team() == {"id": 1, "name": "T"}
+    assert session.calls[0]["url"] == "https://src.example/api/v2/team/"
+
+
 def test_get_page_passes_cursor_and_limit():
     session = FakeSession([FakeResponse(json_data={"results": [], "has_more": False, "cursor": "9"})])
-    _client(session).get_page("teams", cursor="4", limit=50)
+    _client(session).get_page("chatbots", cursor="4", limit=50)
     call = session.calls[0]
-    assert call["url"] == "https://src.example/api/v2/resources/teams/"
+    assert call["url"] == "https://src.example/api/v2/team/chatbots/"
     assert call["params"] == {"cursor": "4", "limit": 50}
 
 
@@ -62,7 +68,7 @@ def test_iter_rows_follows_has_more():
             FakeResponse(json_data={"results": [{"id": 2}], "has_more": False, "cursor": "2"}),
         ]
     )
-    rows = list(_client(session).iter_rows("teams"))
+    rows = list(_client(session).iter_rows("chatbots"))
     assert [r["id"] for r in rows] == [1, 2]
     assert session.calls[1]["params"]["cursor"] == "1"
 

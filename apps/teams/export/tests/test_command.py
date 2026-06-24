@@ -38,6 +38,10 @@ class FakeClient:
     def get_manifest(self):
         return self.manifest
 
+    def get_team(self):
+        # The team is fetched on its own from the dedicated ``team/`` endpoint, not the manifest loop.
+        return self.rows_by_resource["teams"][0]
+
     def iter_rows(self, resource, start_cursor=None, limit=100):
         self.iter_calls.append((resource, start_cursor))
         return list(self.rows_by_resource.get(resource, []))
@@ -49,7 +53,6 @@ def _manifest(entries, checksum=None):
 
 def _scenario(public_key):
     entries = [
-        {"model": "teams.team", "resource": "teams", "phase": "structural", "cursor": "pk", "secret": False},
         {
             "model": "service_providers.llmprovider",
             "resource": "llm_provider",
@@ -115,7 +118,6 @@ def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
 
 def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
     entries = [
-        {"model": "teams.team", "resource": "teams", "phase": "structural", "cursor": "pk", "secret": False},
         {"model": "users.customuser", "resource": "user", "phase": "structural", "cursor": "pk", "secret": False},
     ]
     rows = {
@@ -175,7 +177,6 @@ def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(tmp_path, keypair):
 
     assert Team.objects.filter(slug="imported-team-z").count() == 1
     # the second run resumes each pk resource from its highest synced source key
-    assert dict(second.iter_calls)["teams"] == "9001"
     assert dict(second.iter_calls)["llm_provider"] == "5"
 
 

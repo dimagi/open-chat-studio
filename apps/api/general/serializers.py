@@ -4,7 +4,14 @@ model and a new field is exported the moment it's added. Output-only; ``.save()`
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.teams.export.manifest import EXCLUDE_REGISTRY, GLOBAL_CONFIG, SECRET_REGISTRY, model_has_team_field
+from apps.teams.export.manifest import (
+    EXCLUDE_REGISTRY,
+    GLOBAL_CONFIG,
+    SECRET_REGISTRY,
+    TEAM_MODEL,
+    entry_model,
+    model_has_team_field,
+)
 from apps.teams.export.seal import seal
 
 
@@ -90,3 +97,10 @@ def build_resource_serializer(model):
         attrs["get_is_global"] = _is_global_resolver(spec.null_field)
 
     return type(f"{model.__name__}SyncSerializer", (_SyncSecretMixin, serializers.ModelSerializer), attrs)
+
+
+def build_team_serializer():
+    """Serializer for the single-team endpoint (``GET /api/v2/team/``). The team anchors the export
+    surface and is served as one object rather than a page, but its fields are the same dynamic dump
+    as any other synced resource row."""
+    return build_resource_serializer(entry_model(TEAM_MODEL))

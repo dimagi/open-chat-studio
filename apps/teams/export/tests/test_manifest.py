@@ -53,7 +53,8 @@ def test_every_first_party_model_is_synced_or_ignored():
         # models leak in here under xdist depending on which tests share the worker.
         if m._meta.app_config.name.startswith("apps.") and "tests" not in m._meta.app_config.name.split(".")
     }
-    classified = {e.model for e in manifest.MANIFEST_ENTRIES} | manifest.IGNORED_MODELS
+    # The team is synced via a dedicated step (TEAM_MODEL), not as a generic manifest resource.
+    classified = {e.model for e in manifest.MANIFEST_ENTRIES} | manifest.IGNORED_MODELS | {manifest.TEAM_MODEL}
     unclassified = first_party - classified
     assert not unclassified, "Add these to MANIFEST_ENTRIES or IGNORED_MODELS: " + ", ".join(sorted(unclassified))
 
@@ -71,9 +72,11 @@ def test_registry_fields_exist_on_their_model():
 
 
 def test_get_manifest_entry_returns_matching_entry():
-    entry = manifest.get_manifest_entry("teams")
-    assert entry.resource == "teams"
-    assert entry.model == "teams.team"
+    entry = manifest.get_manifest_entry("users")
+    assert entry.resource == "users"
+    assert entry.model == "users.customuser"
+    # The team is not a generic resource -- it's served on its own at the ``team/`` root.
+    assert manifest.get_manifest_entry("teams") is None
     assert manifest.get_manifest_entry("not_a_resource") is None
 
 
@@ -97,15 +100,6 @@ def test_team_scoped_queryset_isolates_teams_and_includes_globals():
     assert mine.pk in pks
     assert global_model.pk in pks
     assert theirs.pk not in pks
-
-
-@pytest.mark.django_db()
-def test_team_scoped_queryset_scopes_team_to_itself():
-    team = TeamFactory()
-    other = TeamFactory()
-    pks = set(manifest.team_scoped_queryset(manifest.get_manifest_entry("teams"), team).values_list("pk", flat=True))
-    assert pks == {team.pk}
-    assert other.pk not in pks
 
 
 @pytest.mark.django_db()

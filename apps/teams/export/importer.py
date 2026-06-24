@@ -15,12 +15,14 @@ from apps.teams.models import Flag
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
 
-from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, GlobalSpec, entry_model, model_has_team_field
+from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, TEAM_MODEL, GlobalSpec, entry_model, model_has_team_field
 from .manifest import MANIFEST_ENTRIES as _ENTRIES
 from .seal import unseal
 from .translation import FKTranslationStore
 
-MANIFEST_LABELS = {entry.model for entry in _ENTRIES}
+# The team is synced via a dedicated step rather than from MANIFEST_ENTRIES, but it's still a synced
+# target -- include it so FKs pointing at it resolve to the imported team instead of being nulled.
+MANIFEST_LABELS = {entry.model for entry in _ENTRIES} | {TEAM_MODEL}
 
 
 class UnresolvedForeignKey(Exception):

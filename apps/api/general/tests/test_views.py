@@ -43,8 +43,13 @@ def test_manifest_url_resolves():
     assert resolve("/api/v2/manifest/").url_name == "manifest"
 
 
+def test_team_url_resolves():
+    assert reverse("api:v2:team") == "/api/v2/team/"
+    assert resolve("/api/v2/team/").url_name == "team"
+
+
 def test_resource_url_resolves():
-    assert _resource_url("teams") == "/api/v2/resources/teams/"
+    assert _resource_url("users") == "/api/v2/team/users/"
 
 
 def test_manifest_requires_authentication():
@@ -64,24 +69,33 @@ def test_manifest_returns_entries_for_admin():
     assert response.status_code == 200
     body = response.json()
     assert "schema_checksum" in body
-    assert any(e["resource"] == "teams" and e["model"] == "teams.team" for e in body["entries"])
+    resources = {e["resource"] for e in body["entries"]}
+    assert "chatbots" in resources
+    assert "teams" not in resources  # the team is served on its own, not as a manifest resource
 
 
-def test_resource_returns_team_scoped_rows():
+def test_team_endpoint_returns_the_single_resolved_team():
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
-    response = client.get(_resource_url("teams"))
+    response = client.get(reverse("api:v2:team"))
     assert response.status_code == 200
     body = response.json()
-    assert [r["id"] for r in body["results"]] == [team.id]
-    assert body["has_more"] is False
+    assert body["id"] == team.id
+    assert "results" not in body  # a single object, not a paginated page
+
+
+def test_team_endpoint_requires_admin():
+    assert APIClient().get(reverse("api:v2:team")).status_code == 401
+    team = TeamWithUsersFactory()
+    client = ApiTestClient(_non_admin(team), team)
+    assert client.get(reverse("api:v2:team")).status_code == 403
 
 
 def test_resource_rejects_unlisted_model():
     # Only manifested resources are routed, so an unlisted model 404s at routing.
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
-    assert client.get("/api/v2/resources/assistant/").status_code == 404
+    assert client.get("/api/v2/team/assistant/").status_code == 404
 
 
 def test_resource_isolates_other_teams_data():

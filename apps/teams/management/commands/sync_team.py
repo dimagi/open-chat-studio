@@ -13,7 +13,7 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.teams.export.client import SourceClient
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer
-from apps.teams.export.manifest import entry_model, schema_checksum
+from apps.teams.export.manifest import TEAM_MODEL, entry_model, schema_checksum
 from apps.teams.export.seal import load_private_key
 from apps.teams.export.translation import (
     FKTranslationStore,
@@ -63,6 +63,10 @@ def run_sync(
         )
 
     importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
+    # The team anchors everything else, so import it first. It's served as a single object from the
+    # dedicated ``team/`` endpoint rather than as a paginated resource in the manifest.
+    importer.import_rows(TEAM_MODEL, [client.get_team()])
+    write("synced team")
     for entry in manifest["entries"]:
         model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
         model = entry_model(model_label)

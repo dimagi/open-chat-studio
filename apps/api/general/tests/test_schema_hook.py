@@ -18,20 +18,20 @@ from apps.teams.export.manifest import MANIFEST_ENTRIES, build_manifest, get_man
 
 def test_each_resource_resolves_to_a_resourceview_carrying_its_name():
     for entry in MANIFEST_ENTRIES:
-        match = resolve(f"/api/v2/resources/{entry.resource}/")
+        match = resolve(f"/api/v2/team/{entry.resource}/")
         assert issubclass(match.func.cls, ResourceView)
         assert match.kwargs == {"resource": entry.resource}
 
 
 def test_unknown_resource_resolves_to_catchall_view():
     # A catch-all route lets the view return a JSON 404 rather than Django's HTML 404.
-    match = resolve("/api/v2/resources/not_a_real_resource/")
+    match = resolve("/api/v2/team/not_a_real_resource/")
     assert issubclass(match.func.cls, ResourceView)
     assert match.kwargs == {"resource": "not_a_real_resource"}
 
 
 def test_response_envelope_has_cursor_has_more_and_results():
-    fields = build_resource_response_serializer(get_manifest_entry("teams"))().fields
+    fields = build_resource_response_serializer(get_manifest_entry("users"))().fields
     assert set(fields) == {"cursor", "has_more", "results"}
     assert isinstance(fields["results"], serializers.ListSerializer)
 
@@ -40,7 +40,7 @@ def test_response_envelope_has_cursor_has_more_and_results():
     ("resource", "expect_409"),
     [
         pytest.param("llm_providers", True, id="secret-resource-documents-409"),
-        pytest.param("teams", False, id="plain-resource-has-no-409"),
+        pytest.param("users", False, id="plain-resource-has-no-409"),
     ],
 )
 def test_secret_resources_document_the_no_public_key_conflict(resource, expect_409):

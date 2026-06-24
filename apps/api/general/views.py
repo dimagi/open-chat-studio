@@ -27,7 +27,7 @@ from apps.teams.export.manifest import (
 from apps.teams.export.seal import load_public_key
 
 from .schema import resource_responses
-from .serializers import ManifestSerializer, build_resource_serializer
+from .serializers import ManifestSerializer, build_resource_serializer, build_team_serializer
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
@@ -48,6 +48,23 @@ class ManifestView(APIView):
     )
     def get(self, request):
         return Response(build_manifest())
+
+
+class TeamView(APIView):
+    """The team itself: auto-resolved from the API key and served as a single object at the
+    ``team/`` root -- the anchor of the export surface that every other resource nests under."""
+
+    permission_classes = [IsAuthenticated, IsTeamAdmin]
+
+    @extend_schema(
+        operation_id="team",
+        tags=["Team"],
+        summary="Team",
+        description="Returns the team resolved from the API key, as a single object.",
+        responses=build_team_serializer(),
+    )
+    def get(self, request):
+        return Response(build_team_serializer()(request.team).data)
 
 
 class ResourceView(APIView):
@@ -183,7 +200,7 @@ def resource_view(entry: ManifestEntry) -> type[ResourceView]:
             operation_id=entry.resource,
             summary=entry.resource.replace("_", " ").title(),
             description=description,
-            tags=["Export"],
+            tags=["Team"],
             parameters=_QUERY_PARAMETERS,
             responses=resource_responses(entry),
         )
@@ -196,3 +213,6 @@ class UnknownResourceView(ResourceView):
 
     Excluded from the OpenAPI schema; per-resource paths document the full API surface.
     """
+
+    def get(self, request, resource):
+        raise NotFound("Unknown resource.")

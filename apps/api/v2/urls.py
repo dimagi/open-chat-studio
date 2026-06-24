@@ -10,16 +10,21 @@ app_name = "v2"
 router = routers.SimpleRouter()
 router.register(r"chatbots", views.ChatbotViewSet, basename="chatbot")
 
-# Team-export read endpoints live under ``resources/`` so they're clearly separated from the CRUD
-# API and don't collide with it (e.g. the export ``chatbots`` vs the ``chatbots`` viewset below).
-resource_patterns = [
-    path(
-        f"resources/{entry.resource}/",
-        export_views.resource_view(entry).as_view(),
-        {"resource": entry.resource},
-        name=f"resource-{entry.resource}",
-    )
-    for entry in MANIFEST_ENTRIES
+# The team-export surface, all nested under ``team/``: the team itself at the root, each synced
+# resource at ``team/<resource>/``, and a catch-all that 404s any other ``team/<x>/`` (incl.
+# ``team/teams/``). Literal resource paths precede the catch-all so known resources match first.
+team_patterns = [
+    path("", export_views.TeamView.as_view(), name="team"),
+    *[
+        path(
+            f"{entry.resource}/",
+            export_views.resource_view(entry).as_view(),
+            {"resource": entry.resource},
+            name=f"resource-{entry.resource}",
+        )
+        for entry in MANIFEST_ENTRIES
+    ],
+    re_path(r"^(?P<resource>[a-z_]+)/$", export_views.UnknownResourceView.as_view(), name="resource"),
 ]
 
 # The v2 API surface: the renamed chatbot surface and all new endpoints (e.g. inspect).
@@ -28,6 +33,5 @@ urlpatterns = [
     path("me/", views.MeView.as_view(), name="me"),
     path("manifest/", export_views.ManifestView.as_view(), name="manifest"),
     path("", include(router.urls)),
-    *resource_patterns,
-    re_path(r"^resources/(?P<resource>[a-z_]+)/$", export_views.UnknownResourceView.as_view(), name="resource"),
+    path("team/", include(team_patterns)),
 ]
