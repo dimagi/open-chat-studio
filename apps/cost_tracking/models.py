@@ -60,7 +60,6 @@ class PricingRule(models.Model):
     notes = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey("users.CustomUser", null=True, blank=True, on_delete=models.DO_NOTHING)
 
     class Meta:

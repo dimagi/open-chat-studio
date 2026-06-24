@@ -26,7 +26,7 @@ class PricingRuleAdmin(admin.ModelAdmin):
     )
     list_filter = ("source", "service_kind", "currency", ("effective_to", admin.EmptyFieldListFilter))
     search_fields = ("provider_type", "model_name")
-    readonly_fields = ("created_at", "updated_at", "created_by")
+    readonly_fields = ("created_at", "created_by")
     raw_id_fields = ("team", "created_by")
     ordering = ("-effective_from",)
 
