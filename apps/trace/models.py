@@ -74,6 +74,8 @@ class Trace(models.Model):
                 fields=["session", "-timestamp"],
                 name="trace_session_timestamp_idx",
             ),
+            # Supports the global (cross-team) date-range scan in the admin usage export.
+            models.Index(fields=["timestamp"], name="trace_timestamp_idx"),
         ]
 
     def __str__(self):
