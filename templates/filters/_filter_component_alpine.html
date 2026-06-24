@@ -237,12 +237,12 @@
       loadFiltersFromQueryString(queryString) {
         const urlParams = new URLSearchParams(queryString);
         const filters = [];
-        const newFormatColumns = new Set();
+        const columns = new Set();
 
         // Detect columns using new format (f_*) vs old format (filter_*_column)
         for (const [key] of urlParams.entries()) {
           if (key.startsWith('f_')) {
-            newFormatColumns.add(key.substring(2));
+            columns.add(key.substring(2));
           }
         }
 
@@ -250,7 +250,7 @@
 
         // Load new format filters
         let filterIndex = 0;
-        for (const columnName of newFormatColumns) {
+        for (const columnName of columns) {
           const opKey = `op_${columnName}`;
           if (urlParams.has(`f_${columnName}`) && urlParams.has(opKey)) {
             const valueParam = urlParams.get(`f_${columnName}`);
@@ -276,7 +276,7 @@
 
         // Process new format filters
         let newFormatIndex = 0;
-        const validNewFormatColumns = Array.from(newFormatColumns)
+        const validNewFormatColumns = Array.from(columns)
           .filter(columnName =>
             urlParams.has(`f_${columnName}`) &&
             urlParams.has(`op_${columnName}`)
@@ -354,11 +354,6 @@
       updateUrlWithFilters() {
         let activeFilters = this.getActiveFilters(this.filterData.filters);
         const params = new URLSearchParams(window.location.search);
-        [...params.keys()].forEach(key => {
-          if (key.startsWith('filter_')) {
-            params.delete(key);
-          }
-        });
 
         // Remove old format new parameters
         [...params.keys()].forEach(key => {
