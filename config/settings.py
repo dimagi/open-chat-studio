@@ -464,10 +464,31 @@ SPECTACULAR_SETTINGS = {
     "PREPROCESSING_HOOKS": [
         "apps.api.schema.exclude_legacy_participants_path",
     ],
-    # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
-    # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
+    # Give enums stable names; otherwise drf-spectacular falls back to hashed names (e.g. the
+    # ExperimentSession ``status`` would collide with other "status" fields as "Status490Enum", and
+    # the provider ``type`` field generates "TypeB81Enum"). The provider-type and gender choices are
+    # given as explicit (value, label) pairs: LlmProviderTypes' members aren't sortable and GENDERS
+    # isn't an importable Choices class, and drf-spectacular matches overrides on the (value, label)
+    # set, so a bare import path or value list won't resolve.
     "ENUM_NAME_OVERRIDES": {
         "ChatbotSessionStatusEnum": "apps.experiments.models.SessionStatus",
+        "LlmProviderTypeEnum": [
+            ("openai", "OpenAI"),
+            ("azure", "Azure OpenAI"),
+            ("anthropic", "Anthropic"),
+            ("groq", "Groq"),
+            ("perplexity", "Perplexity"),
+            ("deepseek", "DeepSeek"),
+            ("google", "Google Gemini"),
+            ("google_vertex_ai", "Google Vertex AI"),
+            ("voyage", "Voyage AI"),
+        ],
+        "VoiceGenderEnum": [
+            ("male", "Male"),
+            ("female", "Female"),
+            ("male (child)", "Male (Child)"),
+            ("female (child)", "Female (Child)"),
+        ],
     },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,

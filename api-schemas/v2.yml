@@ -6,7 +6,7 @@ info:
 paths:
   /api/v2/auth_provider/:
     get:
-      operationId: sync_auth_provider
+      operationId: auth_provider
       summary: Auth Provider
       parameters:
       - in: query
@@ -41,7 +41,7 @@ paths:
           description: Team has no registered public key; secret data cannot be sealed.
   /api/v2/chat/:
     get:
-      operationId: sync_chat
+      operationId: chat
       summary: Chat
       parameters:
       - in: query
@@ -70,7 +70,7 @@ paths:
           description: ''
   /api/v2/chatbot/:
     get:
-      operationId: sync_chatbot
+      operationId: chatbot
       summary: Chatbot
       parameters:
       - in: query
@@ -189,7 +189,7 @@ paths:
           description: ''
   /api/v2/consent_form/:
     get:
-      operationId: sync_consent_form
+      operationId: consent_form
       summary: Consent Form
       parameters:
       - in: query
@@ -218,7 +218,7 @@ paths:
           description: ''
   /api/v2/embedding_provider_model/:
     get:
-      operationId: sync_embedding_provider_model
+      operationId: embedding_provider_model
       summary: Embedding Provider Model
       parameters:
       - in: query
@@ -247,7 +247,10 @@ paths:
           description: ''
   /api/v2/experiment_session/:
     get:
-      operationId: sync_experiment_session
+      operationId: experiment_session
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
       summary: Experiment Session
       parameters:
       - in: query
@@ -276,7 +279,7 @@ paths:
           description: ''
   /api/v2/llm_provider/:
     get:
-      operationId: sync_llm_provider
+      operationId: llm_provider
       summary: Llm Provider
       parameters:
       - in: query
@@ -311,7 +314,7 @@ paths:
           description: Team has no registered public key; secret data cannot be sealed.
   /api/v2/llm_provider_model/:
     get:
-      operationId: sync_llm_provider_model
+      operationId: llm_provider_model
       summary: Llm Provider Model
       parameters:
       - in: query
@@ -340,7 +343,7 @@ paths:
           description: ''
   /api/v2/manifest/:
     get:
-      operationId: sync_manifest
+      operationId: manifest
       description: 'Returns the resource manifest: resource call order, per-model
         config, and a schema checksum clients can use to detect schema compatability.'
       summary: Manifest
@@ -378,7 +381,7 @@ paths:
           description: ''
   /api/v2/membership/:
     get:
-      operationId: sync_membership
+      operationId: membership
       summary: Membership
       parameters:
       - in: query
@@ -407,7 +410,7 @@ paths:
           description: ''
   /api/v2/messaging_provider/:
     get:
-      operationId: sync_messaging_provider
+      operationId: messaging_provider
       summary: Messaging Provider
       parameters:
       - in: query
@@ -442,7 +445,7 @@ paths:
           description: Team has no registered public key; secret data cannot be sealed.
   /api/v2/node/:
     get:
-      operationId: sync_node
+      operationId: node
       summary: Node
       parameters:
       - in: query
@@ -471,7 +474,10 @@ paths:
           description: ''
   /api/v2/participant/:
     get:
-      operationId: sync_participant
+      operationId: participant
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
       summary: Participant
       parameters:
       - in: query
@@ -500,7 +506,10 @@ paths:
           description: ''
   /api/v2/participant_data/:
     get:
-      operationId: sync_participant_data
+      operationId: participant_data
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
       summary: Participant Data
       parameters:
       - in: query
@@ -535,7 +544,7 @@ paths:
           description: Team has no registered public key; secret data cannot be sealed.
   /api/v2/pipeline/:
     get:
-      operationId: sync_pipeline
+      operationId: pipeline
       summary: Pipeline
       parameters:
       - in: query
@@ -564,7 +573,7 @@ paths:
           description: ''
   /api/v2/source_material/:
     get:
-      operationId: sync_source_material
+      operationId: source_material
       summary: Source Material
       parameters:
       - in: query
@@ -593,7 +602,7 @@ paths:
           description: ''
   /api/v2/synthetic_voice/:
     get:
-      operationId: sync_synthetic_voice
+      operationId: synthetic_voice
       summary: Synthetic Voice
       parameters:
       - in: query
@@ -622,7 +631,7 @@ paths:
           description: ''
   /api/v2/teams/:
     get:
-      operationId: sync_teams
+      operationId: teams
       summary: Teams
       parameters:
       - in: query
@@ -651,7 +660,7 @@ paths:
           description: ''
   /api/v2/trace_provider/:
     get:
-      operationId: sync_trace_provider
+      operationId: trace_provider
       summary: Trace Provider
       parameters:
       - in: query
@@ -686,7 +695,7 @@ paths:
           description: Team has no registered public key; secret data cannot be sealed.
   /api/v2/user/:
     get:
-      operationId: sync_user
+      operationId: user
       summary: User
       parameters:
       - in: query
@@ -715,7 +724,7 @@ paths:
           description: ''
   /api/v2/voice_provider/:
     get:
-      operationId: sync_voice_provider
+      operationId: voice_provider
       summary: Voice Provider
       parameters:
       - in: query
@@ -1295,11 +1304,6 @@ components:
           type: string
           format: date-time
           nullable: true
-        is_superuser:
-          type: boolean
-          title: Superuser status
-          description: Designates that this user has all permissions without explicitly
-            assigning them.
         username:
           type: string
           description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
@@ -1317,10 +1321,6 @@ components:
           format: email
           title: Email address
           maxLength: 254
-        is_staff:
-          type: boolean
-          title: Staff status
-          description: Designates whether the user can log into this admin site.
         is_active:
           type: boolean
           title: Active
@@ -1372,7 +1372,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/LlmProviderTypeEnum'
         name:
           type: string
           description: The name of the model. e.g. 'text-embedding-3-small'
@@ -1724,18 +1724,6 @@ components:
           nullable: true
           description: Use the provider's neural (higher-quality) voice engine, where
             supported.
-    GenderEnum:
-      enum:
-      - male
-      - female
-      - male (child)
-      - female (child)
-      type: string
-      description: |-
-        * `male` - Male
-        * `female` - Female
-        * `male (child)` - Male (Child)
-        * `female (child)` - Female (Child)
     IdentifierTypeEnum:
       enum:
       - email
@@ -2247,7 +2235,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/LlmProviderTypeEnum'
         name:
           type: string
           maxLength: 255
@@ -2312,7 +2300,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/LlmProviderTypeEnum'
         name:
           type: string
           description: The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'
@@ -2337,6 +2325,28 @@ components:
       - team
       - type
       - updated_at
+    LlmProviderTypeEnum:
+      enum:
+      - openai
+      - azure
+      - anthropic
+      - groq
+      - perplexity
+      - deepseek
+      - google
+      - google_vertex_ai
+      - voyage
+      type: string
+      description: |-
+        * `openai` - OpenAI
+        * `azure` - Azure OpenAI
+        * `anthropic` - Anthropic
+        * `groq` - Groq
+        * `perplexity` - Perplexity
+        * `deepseek` - DeepSeek
+        * `google` - Google Gemini
+        * `google_vertex_ai` - Google Vertex AI
+        * `voyage` - Voyage AI
     Manifest:
       type: object
       description: 'The sync manifest: the call order and per-model config, plus a
@@ -3119,7 +3129,7 @@ components:
             * `male (child)` - Male (Child)
             * `female (child)` - Female (Child)
           oneOf:
-          - $ref: '#/components/schemas/GenderEnum'
+          - $ref: '#/components/schemas/VoiceGenderEnum'
           - $ref: '#/components/schemas/BlankEnum'
         service:
           allOf:
@@ -3270,28 +3280,18 @@ components:
       - cursor
       - has_more
       - results
-    TypeB81Enum:
+    VoiceGenderEnum:
       enum:
-      - openai
-      - azure
-      - anthropic
-      - groq
-      - perplexity
-      - deepseek
-      - google
-      - google_vertex_ai
-      - voyage
+      - male
+      - female
+      - male (child)
+      - female (child)
       type: string
       description: |-
-        * `openai` - OpenAI
-        * `azure` - Azure OpenAI
-        * `anthropic` - Anthropic
-        * `groq` - Groq
-        * `perplexity` - Perplexity
-        * `deepseek` - DeepSeek
-        * `google` - Google Gemini
-        * `google_vertex_ai` - Google Vertex AI
-        * `voyage` - Voyage AI
+        * `male` - Male
+        * `female` - Female
+        * `male (child)` - Male (Child)
+        * `female (child)` - Female (Child)
     VoiceProviderExportItem:
       type: object
       properties:

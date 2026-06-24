@@ -136,10 +136,12 @@ SECRET_REGISTRY: dict[str, list[str]] = {
     "experiments.participantdata": ["data", "encryption_key"],
 }
 
-# Fields dropped from the serialized row. Re-established on the target rather than copied.
+# Fields dropped from the serialized row. Either re-established on the target rather than copied
+# (password, groups), or deliberately not propagated: is_staff/is_superuser are crosscutting
+# permissions that shouldn't ride along with team data.
 EXCLUDE_REGISTRY: dict[str, list[str]] = {
     "teams.team": ["members", "public_key"],
-    "users.customuser": ["password", "groups", "user_permissions"],
+    "users.customuser": ["password", "groups", "user_permissions", "is_staff", "is_superuser"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).

@@ -37,7 +37,7 @@ class ManifestView(APIView):
     permission_classes = [IsAuthenticated, IsTeamAdmin]
 
     @extend_schema(
-        operation_id="sync_manifest",
+        operation_id="manifest",
         tags=["Manifest"],
         summary="Manifest",
         description=(
@@ -171,10 +171,18 @@ def resource_view(entry: ManifestEntry) -> type[ResourceView]:
     schemes) identical to the base view; the subclass exists only to carry the per-resource schema."""
     model = entry_model(entry.model)
     view = type(f"{model.__name__}ExportView", (ResourceView,), {})
+    description = None
+    if entry.cursor == "updated_at_id":
+        description = (
+            "Paginated by `updated_at`: a row modified while you page through it can reappear on a "
+            "later page, so clients must treat results as upserts keyed by `id` rather than assuming "
+            "each row is seen once."
+        )
     return extend_schema_view(
         get=extend_schema(
-            operation_id=f"sync_{entry.resource}",
+            operation_id=entry.resource,
             summary=entry.resource.replace("_", " ").title(),
+            description=description,
             tags=["Export"],
             parameters=_QUERY_PARAMETERS,
             responses=resource_responses(entry),
