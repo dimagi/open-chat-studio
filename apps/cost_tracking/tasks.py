@@ -23,15 +23,15 @@ def send_unpriced_usage_digest() -> None:
     """Email the platform team a weekly summary of unpriced models and
     unknown calls. Skips the email when the digest is empty so an inbox
     isn't filled with no-news messages."""
+    recipient = _operator_email()
+    if not recipient:
+        logger.warning("cost_tracking.digest.no_recipient")
+        return
     end = timezone.now()
     start = end - timedelta(days=_DIGEST_WINDOW_DAYS)
     summary = build_digest(start, end)
     if summary.is_empty:
         logger.info("cost_tracking.digest.skipped_empty", extra={"start": start.isoformat()})
-        return
-    recipient = _operator_email()
-    if not recipient:
-        logger.warning("cost_tracking.digest.no_recipient")
         return
     send_mail(
         subject=_subject(summary),
