@@ -43,7 +43,6 @@ Two daily jobs feed the seed (both live in `.github/workflows/auto-update-models
 Three places consume the data, all gated by `flag_ai_cost_monitoring`:
 
 - **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`.
-- **REST endpoints** under `/api/v2/cost_tracking/` (`usage/`, `pricing/`). Gated by the `cost_tracking:read` OAuth scope. Backed by `services/reporting.py`.
 - **LLM Provider page** shows each model's current per-1K rate inline. Admins can override at team scope via an HTMX modal (`pricing_override` view) or revert to global. The custom-model creation dialog accepts optional input/output rates that persist as team-scoped `PricingRule` rows in the same transaction as the model save.
 
 A weekly Celery task `send_unpriced_usage_digest` (in `tasks.py`) emails `settings.COST_TRACKING_OPERATOR_EMAIL` a cross-team roll-up of unpriced models and unknown-call coverage gaps.

@@ -1870,7 +1870,6 @@ components:
             files:read: Download file content
             participants:read: Read Participant Data
             participants:write: Update Participant Data
-            cost_tracking:read: Read Cost Tracking usage and pricing data
     apiKeyAuth:
       type: apiKey
       in: header

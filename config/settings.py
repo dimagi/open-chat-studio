@@ -1008,7 +1008,6 @@ OAUTH2_PROVIDER = {
         "files:read": "Download file content",
         "participants:read": "Read Participant Data",
         "participants:write": "Update Participant Data",
-        "cost_tracking:read": "Read Cost Tracking usage and pricing data",
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
