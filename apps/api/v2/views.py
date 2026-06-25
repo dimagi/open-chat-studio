@@ -49,7 +49,11 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         return build_resource_serializer(Experiment)
 
     def get_queryset(self):
-        return Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
+        # `versions` is nested by the serializer; prefetch it so a chatbot's version family doesn't
+        # cost a query per row.
+        return Experiment.objects.filter(team=self.request.team, working_version__isnull=True).prefetch_related(
+            "versions"
+        )
 
     @extend_schema(
         operation_id="chatbot_inspect",

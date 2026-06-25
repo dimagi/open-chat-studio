@@ -6,6 +6,7 @@ from functools import cache
 from drf_spectacular.utils import OpenApiResponse, extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 
+from apps.experiments.models import Experiment
 from apps.teams.export.manifest import (
     EXCLUDE_REGISTRY,
     GLOBAL_CONFIG,
@@ -74,11 +75,26 @@ def _session_chat(self, session):
     return {"name": chat.name, "translated_languages": chat.translated_languages, "metadata": chat.metadata}
 
 
+class ChatbotVersionSerializer(serializers.ModelSerializer):
+    """A chatbot's published version, nested on the working-version row so the version family is
+    visible without a follow-up query."""
+
+    class Meta:
+        model = Experiment
+        fields = ["name", "version_number", "is_default_version", "version_description"]
+
+
 # Per-model SerializerMethodFields for values that aren't a plain field dump.
 _FIELD_RESOLVERS: dict[str, dict] = {
     "teams.team": {"feature_flags": _feature_flags},
     "users.customuser": {"groups": _team_role_groups},
     "experiments.experimentsession": {"chat": _session_chat},
+}
+
+# Per-model extra serializer fields layered on top of the plain model dump -- nested relations the
+# dump won't surface on its own. Each value is a factory returning a fresh field instance per build.
+_EXTRA_FIELDS: dict[str, dict] = {
+    "experiments.experiment": {"versions": lambda: ChatbotVersionSerializer(many=True)},
 }
 
 
@@ -130,6 +146,9 @@ def build_resource_serializer(model):
     for name, method in _FIELD_RESOLVERS.get(label, {}).items():
         attrs[name] = serializers.SerializerMethodField()
         attrs[f"get_{name}"] = method
+
+    for name, field_factory in _EXTRA_FIELDS.get(label, {}).items():
+        attrs[name] = field_factory()
 
     spec = GLOBAL_CONFIG.get(label)
     if spec:

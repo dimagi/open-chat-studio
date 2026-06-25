@@ -81,6 +81,8 @@ TEAM_PATH_REGISTRY: dict[str, str] = {
 PREFETCH_REGISTRY: dict[str, list[str]] = {
     "users.customuser": ["membership_set", "membership_set__groups"],
     "experiments.experimentsession": ["chat"],
+    # The chatbot row nests its published versions; prefetch them to avoid a query per row.
+    "experiments.experiment": ["versions"],
 }
 
 

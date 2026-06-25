@@ -43,6 +43,21 @@ def test_retrieve_chatbot_by_public_id(auth_method, experiment):
 
 
 @pytest.mark.django_db()
+def test_retrieve_chatbot_nests_versions(experiment):
+    """The retrieve response nests the chatbot's published versions, so a consumer sees the version
+    family without a second call."""
+    user = experiment.team.members.first()
+    experiment.create_new_version(version_description="first cut")
+    client = ApiTestClient(user, experiment.team)
+    response = client.get(reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id}))
+    assert response.status_code == 200
+    versions = response.json()["versions"]
+    assert len(versions) == 1
+    assert versions[0]["version_number"] == 1
+    assert versions[0]["version_description"] == "first cut"
+
+
+@pytest.mark.django_db()
 def test_retrieve_only_returns_working_versions(experiment):
     """Published versions aren't addressable here; only the working (top-level) chatbot is."""
     user = experiment.team.members.first()
