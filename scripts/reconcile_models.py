@@ -794,31 +794,19 @@ def _price_change_outputs(
     body_path: Path | None,
 ) -> list[str]:
     count = len(changes)
-    if not count:
-        return [
-            "has_price_changes=false",
-            "price_change_count=0",
-            "pricing_pr_title=",
-            "pricing_pr_body_path=",
-        ]
+    title = f"Pricing update: {count} rate change(s) ({today.isoformat()})" if count else ""
     return [
-        "has_price_changes=true",
+        f"has_price_changes={'true' if count else 'false'}",
         f"price_change_count={count}",
-        f"pricing_pr_title=Pricing update: {count} rate change(s) ({today.isoformat()})",
+        f"pricing_pr_title={title}",
         f"pricing_pr_body_path={body_path or ''}",
     ]
 
 
 def _missing_pricing_outputs(missing: list[MissingPricingEntry], body_path: Path | None) -> list[str]:
     count = len(missing)
-    if not count:
-        return [
-            "has_missing_pricing=false",
-            "missing_pricing_count=0",
-            "missing_pricing_issue_body_path=",
-        ]
     return [
-        "has_missing_pricing=true",
+        f"has_missing_pricing={'true' if count else 'false'}",
         f"missing_pricing_count={count}",
         f"missing_pricing_issue_body_path={body_path or ''}",
     ]
