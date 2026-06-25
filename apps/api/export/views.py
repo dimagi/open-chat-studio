@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import IsTeamAdmin
+from apps.api.versioning import ExportVersioning
 from apps.teams.export.manifest import (
     ManifestEntry,
     build_manifest,
@@ -40,6 +41,7 @@ MAX_LIMIT = 1000
 
 class ManifestView(APIView):
     permission_classes = [IsAuthenticated, IsTeamAdmin]
+    versioning_class = ExportVersioning
 
     @extend_schema(
         operation_id="manifest",
@@ -60,6 +62,7 @@ class TeamView(APIView):
     ``team/`` root -- the anchor of the export surface that every other resource nests under."""
 
     permission_classes = [IsAuthenticated, IsTeamAdmin]
+    versioning_class = ExportVersioning
 
     @extend_schema(
         operation_id="team",
@@ -73,8 +76,9 @@ class TeamView(APIView):
 
 
 class ResourceView(APIView):
-    # The schema for this view is generated in apps/api/general/schema.py
+    # The per-resource OpenAPI schema is attached by ``resource_view`` (below), not here.
     permission_classes = [IsAuthenticated, IsTeamAdmin]
+    versioning_class = ExportVersioning
 
     def get(self, request, resource):
         entry = get_manifest_entry(resource)
@@ -165,7 +169,7 @@ def _paginate(queryset, cursor_type, cursor, limit):
 
 # --- OpenAPI documentation -------------------------------------------------------------------------
 # OpenAPI can't vary a response by the *value* of a path parameter, so the URLConf mounts one literal
-# path per synced resource (see ``apps/api/v2/urls.py``), each routed to a ResourceView subclass that
+# path per synced resource (see ``apps/api/export/urls.py``), each routed to a ResourceView subclass that
 # ``resource_view`` decorates with that resource's response schema. The response serializers
 # themselves are built in ``schema.py``.
 

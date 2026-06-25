@@ -27,7 +27,7 @@ class ManifestEntry:
 # letting the self-referential working_version FK resolve. Guarded by
 # test_working_version_always_served_before_its_published_copies.
 # The team itself is synced too, but not as a generic paginated resource. It's auto-resolved from
-# the API key, served as a single object at the ``team/`` root (see apps/api/general/views.TeamView),
+# the API key, served as a single object at the ``team/`` root (see apps/api/export/views.TeamView),
 # and imported first as the anchor every other row is reassigned to -- so it's deliberately absent
 # from MANIFEST_ENTRIES. ``test_every_first_party_model_is_synced_or_ignored`` accounts for it.
 TEAM_MODEL = "teams.team"

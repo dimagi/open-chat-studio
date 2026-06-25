@@ -4,7 +4,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
 from django.core.management.base import CommandError
 
-from apps.api.general.serializers import build_resource_serializer
+from apps.api.export.serializers import build_resource_serializer
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer

@@ -43,21 +43,21 @@ def test_get_manifest_hits_endpoint_with_api_key_header():
     client = _client(session)
     assert client.get_manifest() == {"entries": []}
     call = session.calls[0]
-    assert call["url"] == "https://src.example/api/v2/manifest/"
+    assert call["url"] == "https://src.example/api/export/manifest/"
     assert call["headers"]["X-Api-Key"] == "secret-key"
 
 
 def test_get_team_hits_root_endpoint():
     session = FakeSession([FakeResponse(json_data={"id": 1, "name": "T"})])
     assert _client(session).get_team() == {"id": 1, "name": "T"}
-    assert session.calls[0]["url"] == "https://src.example/api/v2/team/"
+    assert session.calls[0]["url"] == "https://src.example/api/export/team/"
 
 
 def test_get_page_passes_cursor_and_limit():
     session = FakeSession([FakeResponse(json_data={"results": [], "has_more": False, "cursor": "9"})])
     _client(session).get_page("chatbots", cursor="4", limit=50)
     call = session.calls[0]
-    assert call["url"] == "https://src.example/api/v2/team/chatbots/"
+    assert call["url"] == "https://src.example/api/export/chatbots/"
     assert call["params"] == {"cursor": "4", "limit": 50}
 
 

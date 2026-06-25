@@ -20,17 +20,17 @@ class SourceClient:
         self._sleep = sleep
 
     def get_manifest(self) -> dict:
-        return self._get("/api/v2/manifest/")
+        return self._get("/api/export/manifest/")
 
     def get_team(self) -> dict:
-        """The team itself, served as a single object at the ``team/`` root (not a paginated page)."""
-        return self._get("/api/v2/team/")
+        """The team itself, served as a single object at the ``export/team/`` path (not a page)."""
+        return self._get("/api/export/team/")
 
     def get_page(self, resource, cursor=None, limit=100) -> dict:
         params = {"limit": limit}
         if cursor is not None:
             params["cursor"] = cursor
-        return self._get(f"/api/v2/team/{resource}/", params)
+        return self._get(f"/api/export/{resource}/", params)
 
     def iter_rows(self, resource, start_cursor=None, limit=100):
         cursor = start_cursor

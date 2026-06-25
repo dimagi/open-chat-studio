@@ -30,37 +30,37 @@ def _non_admin(team):
 
 
 def _resource_url(resource):
-    return reverse(f"api:v2:resource-{resource}")
+    return reverse(f"api:export:resource-{resource}")
 
 
 def test_manifest_url_resolves():
-    assert reverse("api:v2:manifest") == "/api/v2/manifest/"
-    assert resolve("/api/v2/manifest/").url_name == "manifest"
+    assert reverse("api:export:manifest") == "/api/export/manifest/"
+    assert resolve("/api/export/manifest/").url_name == "manifest"
 
 
 def test_team_url_resolves():
-    assert reverse("api:v2:team") == "/api/v2/team/"
-    assert resolve("/api/v2/team/").url_name == "team"
+    assert reverse("api:export:team") == "/api/export/team/"
+    assert resolve("/api/export/team/").url_name == "team"
 
 
 def test_resource_url_resolves():
-    assert _resource_url("users") == "/api/v2/team/users/"
+    assert _resource_url("users") == "/api/export/users/"
 
 
 def test_manifest_requires_authentication():
-    assert APIClient().get(reverse("api:v2:manifest")).status_code == 401
+    assert APIClient().get(reverse("api:export:manifest")).status_code == 401
 
 
 def test_manifest_rejects_non_admin():
     team = TeamWithUsersFactory()
     client = ApiTestClient(_non_admin(team), team)
-    assert client.get(reverse("api:v2:manifest")).status_code == 403
+    assert client.get(reverse("api:export:manifest")).status_code == 403
 
 
 def test_manifest_returns_entries_for_admin():
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
-    response = client.get(reverse("api:v2:manifest"))
+    response = client.get(reverse("api:export:manifest"))
     assert response.status_code == 200
     body = response.json()
     assert "schema_checksum" in body
@@ -72,7 +72,7 @@ def test_manifest_returns_entries_for_admin():
 def test_team_endpoint_returns_the_single_resolved_team():
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
-    response = client.get(reverse("api:v2:team"))
+    response = client.get(reverse("api:export:team"))
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == team.id
@@ -80,17 +80,17 @@ def test_team_endpoint_returns_the_single_resolved_team():
 
 
 def test_team_endpoint_requires_admin():
-    assert APIClient().get(reverse("api:v2:team")).status_code == 401
+    assert APIClient().get(reverse("api:export:team")).status_code == 401
     team = TeamWithUsersFactory()
     client = ApiTestClient(_non_admin(team), team)
-    assert client.get(reverse("api:v2:team")).status_code == 403
+    assert client.get(reverse("api:export:team")).status_code == 403
 
 
 def test_resource_rejects_unlisted_model():
     # Only manifested resources are routed, so an unlisted model 404s at routing.
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
-    assert client.get("/api/v2/team/assistant/").status_code == 404
+    assert client.get("/api/export/assistant/").status_code == 404
 
 
 def test_resource_isolates_other_teams_data():

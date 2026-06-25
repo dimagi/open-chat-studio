@@ -7,7 +7,7 @@ from django.urls import resolve
 from drf_spectacular.generators import SchemaGenerator
 from rest_framework import serializers
 
-from apps.api.general.serializers import (
+from apps.api.export.serializers import (
     ManifestEntrySerializer,
     ManifestSerializer,
     build_resource_response_serializer,
@@ -15,13 +15,13 @@ from apps.api.general.serializers import (
     component_name,
     resource_responses,
 )
-from apps.api.general.views import ResourceView, resource_view
+from apps.api.export.views import ResourceView, resource_view
 from apps.teams.export.manifest import MANIFEST_ENTRIES, build_manifest, entry_model, get_manifest_entry
 
 
 def test_each_resource_resolves_to_a_resourceview_carrying_its_name():
     for entry in MANIFEST_ENTRIES:
-        match = resolve(f"/api/v2/team/{entry.resource}/")
+        match = resolve(f"/api/export/{entry.resource}/")
         assert issubclass(match.func.cls, ResourceView)
         assert match.kwargs == {"resource": entry.resource}
 
@@ -36,7 +36,7 @@ def test_resource_view_class_name_uses_the_component_name():
 
 def test_unknown_resource_resolves_to_catchall_view():
     # A catch-all route lets the view return a JSON 404 rather than Django's HTML 404.
-    match = resolve("/api/v2/team/not_a_real_resource/")
+    match = resolve("/api/export/not_a_real_resource/")
     assert issubclass(match.func.cls, ResourceView)
     assert match.kwargs == {"resource": "not_a_real_resource"}
 
@@ -80,26 +80,33 @@ def test_manifest_serializer_matches_build_manifest_payload():
 
 
 @pytest.fixture(scope="module")
+def export_components():
+    return SchemaGenerator(api_version="export").get_schema(request=None, public=True)["components"]["schemas"]
+
+
+@pytest.fixture(scope="module")
 def v2_components():
     return SchemaGenerator(api_version="v2").get_schema(request=None, public=True)["components"]["schemas"]
 
 
-def test_every_export_resource_publishes_its_row_component(v2_components):
+def test_every_export_resource_publishes_its_row_component(export_components):
     """Each synced resource's documented row serializer is published as a valid, space-free
-    '<Model>Detail' component -- secret resources included, since their secret fields are redeclared
-    as sealed strings on that same serializer. The user-facing rename flows through (Experiment ->
-    'ChatbotDetail')."""
+    '<Model>Detail' component in the standalone export schema -- secret resources included, since
+    their secret fields are redeclared as sealed strings on that same serializer. The user-facing
+    rename flows through (Experiment -> 'ChatbotDetail')."""
     missing = []
     for entry in MANIFEST_ENTRIES:
         expected = f"{component_name(entry_model(entry.model))}Detail"
-        if expected not in v2_components:
+        if expected not in export_components:
             missing.append(expected)
     assert not missing, f"export resources without a row component: {missing}"
 
 
 @pytest.mark.parametrize("model_name", ["Team", "ConsentForm", "SourceMaterial"])
-def test_export_detail_does_not_clobber_curated_serializer_of_same_model(v2_components, model_name):
-    """The export '<Model>Detail' coexists with the curated public/inspect serializer that holds the
-    bare model name -- the two are distinct components, not one colliding definition."""
-    assert model_name in v2_components, f"curated '{model_name}' component went missing"
-    assert f"{model_name}Detail" in v2_components
+def test_export_detail_and_curated_serializer_live_in_separate_schemas(export_components, v2_components, model_name):
+    """The export surface is its own schema, so the export '<Model>Detail' row serializer lives only
+    in the export schema while the curated public/inspect serializer (the bare model name) stays in
+    v2. The '<Model>Detail' naming keeps them distinct, and the export Detail never leaks into v2."""
+    assert f"{model_name}Detail" in export_components, f"export '{model_name}Detail' missing"
+    assert model_name in v2_components, f"curated '{model_name}' component went missing from v2"
+    assert f"{model_name}Detail" not in v2_components, f"export '{model_name}Detail' leaked into v2"

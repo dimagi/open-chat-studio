@@ -159,7 +159,7 @@ def build_resource_serializer(model):
 
 
 def build_team_serializer():
-    """Serializer for the single-team endpoint (``GET /api/v2/team/``). The team anchors the export
+    """Serializer for the single-team endpoint (``GET /api/export/team/``). The team anchors the export
     surface and is served as one object rather than a page, but its fields are the same dynamic dump
     as any other synced resource row."""
     return build_resource_serializer(entry_model(TEAM_MODEL))

@@ -3,7 +3,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 
-from apps.api.general.serializers import build_resource_serializer
+from apps.api.export.serializers import build_resource_serializer
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod

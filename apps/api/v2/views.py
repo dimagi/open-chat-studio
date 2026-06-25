@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.general.serializers import build_resource_serializer
+from apps.api.export.serializers import build_resource_serializer
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
