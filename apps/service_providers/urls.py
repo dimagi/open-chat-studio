@@ -13,12 +13,12 @@ urlpatterns = [
     ),
     path(
         "llm_provider_model/<int:pk>/pricing/override/",
-        views.pricing_override_form,
+        views.PricingOverrideView.as_view(),
         name="pricing_override_form",
     ),
     path(
         "llm_provider_model/<int:pk>/pricing/override/submit/",
-        views.pricing_override,
+        views.PricingOverrideView.as_view(),
         name="pricing_override",
     ),
     path(

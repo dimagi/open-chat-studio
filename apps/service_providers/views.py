@@ -385,46 +385,37 @@ def create_llm_provider_model(request, team_slug: str):
     )
 
 
-@login_and_team_required
-@permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
-def pricing_override_form(request, team_slug: str, pk: int):
-    """Render the override modal form. Pre-fills with the currently active
-    rate (team-scoped or global) converted back to per-million for display."""
-    _require_cost_tracking_flag(request.team)
-    model = _resolve_model(request.team, pk)
-    initial = _form_initial_from_active_rates(request.team, model)
-    form = PricingOverrideForm(initial=initial)
-    return render(
-        request,
-        "service_providers/components/_pricing_override_form.html",
-        {"form": form, "model": model},
-    )
-
-
-@require_POST
-@login_and_team_required
-@permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
-def pricing_override(request, team_slug: str, pk: int):
-    """POST handler for the override modal. Creates team-scoped rules,
-    superseding any existing team override for the same (kind). Invalid
-    submissions re-render the form (with field errors) into the modal
+class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, django_views.View):
+    """GET renders the override modal; POST persists team-scoped rules.
+    Invalid submissions re-render the form (with field errors) into the modal
     body via HX-Retarget so the user can correct in place."""
-    _require_cost_tracking_flag(request.team)
-    model = _resolve_model(request.team, pk)
-    form = PricingOverrideForm(request.POST)
-    if not form.is_valid():
-        response = render(
-            request,
-            "service_providers/components/_pricing_override_form.html",
-            {"form": form, "model": model},
-        )
-        response.status_code = 400
-        response["HX-Retarget"] = "#pricing_override_modal_body"
-        response["HX-Reswap"] = "innerHTML"
-        return response
-    with transaction.atomic():
-        _persist_team_pricing_rules(request.team, model.type, model.name, form.cleaned_data, request.user)
-    return _render_model_row(request, model)
+
+    template_name = "service_providers/components/_pricing_override_form.html"
+    permission_required = "service_providers.change_llmprovidermodel"
+    raise_exception = True
+
+    def get(self, request, team_slug: str, pk: int):
+        model = self._guard(request, pk)
+        form = PricingOverrideForm(initial=_form_initial_from_active_rates(request.team, model))
+        return render(request, self.template_name, {"form": form, "model": model})
+
+    def post(self, request, team_slug: str, pk: int):
+        model = self._guard(request, pk)
+        form = PricingOverrideForm(request.POST)
+        if not form.is_valid():
+            response = render(request, self.template_name, {"form": form, "model": model})
+            response.status_code = 400
+            response["HX-Retarget"] = "#pricing_override_modal_body"
+            response["HX-Reswap"] = "innerHTML"
+            return response
+        with transaction.atomic():
+            _persist_team_pricing_rules(request.team, model.type, model.name, form.cleaned_data, request.user)
+        return _render_model_row(request, model)
+
+    @staticmethod
+    def _guard(request, pk: int) -> LlmProviderModel:
+        _require_cost_tracking_flag(request.team)
+        return _resolve_model(request.team, pk)
 
 
 @require_POST
