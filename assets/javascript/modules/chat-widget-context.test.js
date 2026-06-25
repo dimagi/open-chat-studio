@@ -72,7 +72,7 @@ describe('initChatWidgetPageContext', () => {
 
 describe('setupNavigationListener', () => {
   it('re-initializes page context on popstate', async () => {
-    const { initChatWidgetPageContext, setupNavigationListener } = await import('./chat-widget-context.js');
+    const { setupNavigationListener } = await import('./chat-widget-context.js');
     const widget = makeWidget();
 
     setupNavigationListener({ team: 'acme' });
