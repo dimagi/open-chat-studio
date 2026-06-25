@@ -1800,6 +1800,8 @@ components:
           type: string
           maxLength: 50
           pattern: ^[-a-zA-Z0-9_]+$
+        metadata:
+          description: Internal staff-only metadata for this team.
       required:
       - created_at
       - feature_flags
