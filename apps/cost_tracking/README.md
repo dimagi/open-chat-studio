@@ -40,12 +40,12 @@ Two daily jobs feed the seed (both live in `.github/workflows/auto-update-models
 
 ## Surface
 
-Three places consume the data, all gated by `flag_ai_cost_monitoring`:
+Two places consume the data, both gated by `flag_ai_cost_monitoring`:
 
 - **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`.
 - **LLM Provider page** shows each model's current per-1K rate inline. Admins can override at team scope via an HTMX modal (`pricing_override` view) or revert to global. The custom-model creation dialog accepts optional input/output rates that persist as team-scoped `PricingRule` rows in the same transaction as the model save.
 
-A weekly Celery task `send_unpriced_usage_digest` (in `tasks.py`) emails `settings.COST_TRACKING_OPERATOR_EMAIL` a cross-team roll-up of unpriced models and unknown-call coverage gaps.
+Coverage gaps for OCS-managed models (entries in `default_models.py` missing pricing) are surfaced from `auto-update-models.yml` as a GitHub issue, not as a runtime task. See "Seed Data and Updates" above.
 
 ## Layout
 
@@ -53,7 +53,6 @@ A weekly Celery task `send_unpriced_usage_digest` (in `tasks.py`) emails `settin
 apps/cost_tracking/
   models.py                 PricingRule, UsageRecord, ServiceKind, Confidence
   signals.py                Cache invalidation on PricingRule mutations
-  tasks.py                  Weekly digest Celery task
   admin.py                  Django admin (PricingRule edit, UsageRecord read-only)
   management/commands/
     load_ai_pricing.py      Idempotent seed loader, called from migrations
@@ -65,5 +64,4 @@ apps/cost_tracking/
     recorder.py             record_usage_bulk + UsageEvent / TraceContext
     estimation.py           tiktoken + response_text helpers
     reporting.py            cost_summary, top_n_bots, last_synced_at
-    digest.py               build_digest for the weekly task
 ```
