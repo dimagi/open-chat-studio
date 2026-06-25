@@ -1,15 +1,18 @@
 name: Auto Update LLM Models
 
-# Daily check against llm-stats.com (via the zeroeval Stats API) for newly
-# released LLM models from providers we use in OCS.
+# Daily reconciliation against llm-stats.com (via the zeroeval Stats API):
+# scripts/reconcile_models.py runs once and produces three signals:
 #
-# Job 1 runs scripts/fetch_model_updates.py, which fetches candidates, dedups
-# them against the already-registered models, and resolves per-1K-token pricing
-# (llm-stats primary, LiteLLM fallback) - all unit-tested. It emits
-# candidate_models.json. Job 2 invokes Claude Code to make the judgement calls
-# (which models/providers to register, parameters class) following
-# docs/developer_guides/managing_models.md, paste the generated pricing into
-# llm_pricing.json, and open a PR.
+#   - new_models      candidates not yet registered in OCS
+#   - price_changes   existing seed entries whose upstream rate has moved
+#   - missing_pricing OCS-managed (default_models) models with no seed entry
+#
+# Job 1 (reconcile) runs the script. The price-change side effects (rewrite
+# seed + emit migration) are deterministic, so the same job opens the
+# "Pricing update" PR and the "missing pricing" issue. Job 2 (new-models-pr)
+# only runs when there are candidates and invokes Claude Code for the
+# judgement calls (which providers, which params class, deprecations) per
+# docs/developer_guides/managing_models.md.
 #
 # Model metadata is sourced from https://llm-stats.com (via api.zeroeval.com).
 
@@ -32,51 +35,16 @@ permissions:
   contents: read
 
 jobs:
-  fetch-updates:
-    runs-on: ubuntu-latest
-    outputs:
-      has_models: ${{ steps.fetch.outputs.has_models }}
-      model_count: ${{ steps.fetch.outputs.model_count }}
-      model_ids: ${{ steps.fetch.outputs.model_ids }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Fetch, dedup and price model updates
-        id: fetch
-        env:
-          LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
-        run: |
-          # The script fetches candidates from the zeroeval Stats API, dedups
-          # against models already in default_models.py / llm_pricing.json, and
-          # resolves per-1K-token pricing. It writes candidate_models.json and
-          # appends has_models / model_count / model_ids to $GITHUB_OUTPUT.
-          # stdlib-only - no dependency install needed.
-          python3 scripts/fetch_model_updates.py \
-            --bearer-token "$LLM_STATS_BEARER_TOKEN" \
-            --days "${{ inputs.days || '1' }}" \
-            --output candidate_models.json
-
-      - name: Upload candidate models payload
-        if: steps.fetch.outputs.has_models == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: candidate-models
-          path: candidate_models.json
-          retention-days: 7
-
-  diff-pricing:
-    # Independent of fetch-updates: scans the existing seed for upstream rate
-    # moves on llm-stats.com and opens a separate "Pricing update" PR.
+  reconcile:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      issues: write
+    outputs:
+      has_new_models: ${{ steps.reconcile.outputs.has_new_models }}
+      new_model_count: ${{ steps.reconcile.outputs.new_model_count }}
+      new_model_ids: ${{ steps.reconcile.outputs.new_model_ids }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -89,28 +57,38 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Diff seed pricing against llm-stats
-        id: diff
+      - name: Reconcile upstream model catalogue and pricing seed
+        id: reconcile
         env:
           LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
         run: |
           # Stdlib-only - no dependency install needed.
-          python3 scripts/diff_seed_pricing.py \
+          python3 scripts/reconcile_models.py \
             --bearer-token "$LLM_STATS_BEARER_TOKEN" \
-            --output pricing_changes.json
+            --days "${{ inputs.days || '1' }}" \
+            --output reconciliation.json
+
+      - name: Upload reconciliation payload
+        if: steps.reconcile.outputs.has_new_models == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: reconciliation-payload
+          path: |
+            reconciliation.json
+          retention-days: 7
 
       - name: Configure git author
-        if: steps.diff.outputs.has_changes == 'true'
+        if: steps.reconcile.outputs.has_price_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Commit, push, and open Pricing update PR
-        if: steps.diff.outputs.has_changes == 'true'
+        if: steps.reconcile.outputs.has_price_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_TITLE: ${{ steps.diff.outputs.pr_title }}
-          PR_BODY_PATH: ${{ steps.diff.outputs.pr_body_path }}
+          PR_TITLE: ${{ steps.reconcile.outputs.pricing_pr_title }}
+          PR_BODY_PATH: ${{ steps.reconcile.outputs.pricing_pr_body_path }}
         run: |
           BRANCH="auto-pricing/$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH"
@@ -123,9 +101,35 @@ jobs:
             --title "$PR_TITLE" \
             --body-file "$PR_BODY_PATH"
 
-  update-models:
-    needs: fetch-updates
-    if: needs.fetch-updates.outputs.has_models == 'true'
+      - name: Open or update missing-pricing issue
+        if: steps.reconcile.outputs.has_missing_pricing == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY_PATH: ${{ steps.reconcile.outputs.missing_pricing_issue_body_path }}
+          MISSING_COUNT: ${{ steps.reconcile.outputs.missing_pricing_count }}
+        run: |
+          # One open issue at a time. Edit it if it already exists so the body
+          # reflects the latest gap list; otherwise open a new one. Labelled
+          # `cost-tracking,auto-models` so it filters cleanly.
+          TITLE="Missing pricing for ${MISSING_COUNT} OCS-managed model(s)"
+          EXISTING=$(gh issue list \
+            --state open \
+            --label cost-tracking \
+            --search "Missing pricing for in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --title "$TITLE" --body-file "$ISSUE_BODY_PATH"
+          else
+            gh issue create \
+              --title "$TITLE" \
+              --body-file "$ISSUE_BODY_PATH" \
+              --label cost-tracking \
+              --label auto-models
+          fi
+
+  new-models-pr:
+    needs: reconcile
+    if: needs.reconcile.outputs.has_new_models == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -164,10 +168,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download candidate models payload
+      - name: Download reconciliation payload
         uses: actions/download-artifact@v8
         with:
-          name: candidate-models
+          name: reconciliation-payload
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -214,11 +218,13 @@ jobs:
             You are adding newly released LLM models to Open Chat Studio.
 
             ## Input
-            `scripts/fetch_model_updates.py` has already fetched candidates from
+            `scripts/reconcile_models.py` has already fetched candidates from
             llm-stats.com, removed models already registered in OCS, and resolved
-            per-1K-token pricing. Its output is at `./candidate_models.json`. Do
+            per-1K-token pricing. Its output is at `./reconciliation.json`. Do
             NOT re-fetch, re-dedup, or re-derive pricing - that work is done and
-            unit-tested.
+            unit-tested. You only care about the `new_models[]` section of the
+            payload here; the `price_changes` and `missing_pricing` sections are
+            handled in a separate job and are not your concern.
 
             The payload covers the last ${{ inputs.days || '1' }} day(s). Key fields:
             - `new_models[]` - candidates to consider. Each has: `id`, `org`,
@@ -232,11 +238,11 @@ jobs:
             - `pricing_entries` - flat list of all generated pricing entries.
             - `unpriced_models[]` - models the script could not price.
 
-            ${{ needs.fetch-updates.outputs.model_count }} new model(s):
-            ${{ needs.fetch-updates.outputs.model_ids }}
+            ${{ needs.reconcile.outputs.new_model_count }} new model(s):
+            ${{ needs.reconcile.outputs.new_model_ids }}
 
             ## Your task (judgement + applying the generated output)
-            1. Read `candidate_models.json` and
+            1. Read `reconciliation.json` and
                `apps/service_providers/llm_service/default_models.py`.
             2. For each model in `new_models`, decide whether to add it:
                - Skip models that don't make sense for OCS (embedding-only,
