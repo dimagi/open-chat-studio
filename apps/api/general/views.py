@@ -78,7 +78,7 @@ class ResourceView(APIView):
             # if the view is called directly (e.g. in tests) with a resource not in the manifest.
             raise NotFound("Unknown resource.")
 
-        context = {"public_key": None}
+        context = {"public_key": None, "team": request.team}
         if entry.secret:
             if not request.team.public_key:
                 return Response(

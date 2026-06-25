@@ -10,6 +10,88 @@ def _model(label):
     return apps.get_model(*label.split("."))
 
 
+# Test-only partition data (the sync code never reads these). First-party models deliberately left out
+# of the sync; the partition test asserts every model is in MANIFEST_ENTRIES, here, or embedded, so a
+# newly added model forces a sync/ignore decision.
+IGNORED_MODELS = frozenset(
+    {
+        "analysis.analysisquery",
+        "analysis.transcriptanalysis",
+        "annotations.customtaggeditem",
+        "annotations.tag",
+        "annotations.usercomment",
+        "api.userapikey",
+        "assessments.score",
+        "assistants.openaiassistant",
+        "assistants.toolresources",
+        "banners.banner",
+        "bot_channels.experimentchannel",
+        "chat.chatattachment",
+        "chat.chatmessage",
+        "cost_tracking.pricingrule",
+        "cost_tracking.usagerecord",
+        "custom_actions.customaction",
+        "custom_actions.customactionoperation",
+        "dashboard.dashboardcache",
+        "dashboard.dashboardfilter",
+        "data_migrations.custommigration",
+        "documents.collection",
+        "documents.collectionfile",
+        "documents.documentsource",
+        "documents.documentsourcesynclog",
+        "evaluations.appliedtag",
+        "evaluations.datasetautopopulationrule",
+        "evaluations.evaluationconfig",
+        "evaluations.evaluationdataset",
+        "evaluations.evaluationmessage",
+        "evaluations.evaluationresult",
+        "evaluations.evaluationrun",
+        "evaluations.evaluationrunaggregate",
+        "evaluations.evaluator",
+        "evaluations.evaluatortagrule",
+        "events.eventaction",
+        "events.eventlog",
+        "events.scheduledmessage",
+        "events.scheduledmessageattempt",
+        "events.statictrigger",
+        "events.timeouttrigger",
+        "experiments.promptbuilderhistory",
+        "experiments.survey",
+        "files.file",
+        "files.filechunkembedding",
+        "filters.filterset",
+        "human_annotations.annotation",
+        "human_annotations.annotationitem",
+        "human_annotations.annotationqueue",
+        "human_annotations.annotationqueueaggregate",
+        "mcp_integrations.mcpserver",
+        "oauth.oauth2accesstoken",
+        "oauth.oauth2application",
+        "oauth.oauth2grant",
+        "oauth.oauth2idtoken",
+        "oauth.oauth2refreshtoken",
+        "ocs_notifications.eventtype",
+        "ocs_notifications.eventuser",
+        "ocs_notifications.notificationevent",
+        "ocs_notifications.usernotificationpreferences",
+        "pipelines.pipelinechathistory",
+        "pipelines.pipelinechatmessages",
+        "site_admin.ocsconfiguration",
+        "slack.slackbot",
+        "slack.slackinstallation",
+        "slack.slackoauthstate",
+        "sso.ssosession",
+        "teams.flag",
+        "teams.invitation",
+        "trace.trace",
+    }
+)
+
+# Synced inside another resource's row, not as standalone resources: a membership rides in its user's
+# row (the team role), a chat in its session's.
+EMBEDDED_MODELS = frozenset({"teams.membership", "chat.chat"})
+
+
 def test_every_entry_resolves_to_a_model():
     for entry in manifest.MANIFEST_ENTRIES:
         assert _model(entry.model) is not None
@@ -38,7 +120,7 @@ def test_registry_keys_resolve_to_models():
         *manifest.SECRET_REGISTRY,
         *manifest.EXCLUDE_REGISTRY,
         *manifest.TEAM_PATH_REGISTRY,
-        *manifest.IGNORED_MODELS,
+        *IGNORED_MODELS,
     ):
         assert _model(label) is not None
 
@@ -53,15 +135,31 @@ def test_every_first_party_model_is_synced_or_ignored():
         # models leak in here under xdist depending on which tests share the worker.
         if m._meta.app_config.name.startswith("apps.") and "tests" not in m._meta.app_config.name.split(".")
     }
-    # The team is synced via a dedicated step (TEAM_MODEL), not as a generic manifest resource.
-    classified = {e.model for e in manifest.MANIFEST_ENTRIES} | manifest.IGNORED_MODELS | {manifest.TEAM_MODEL}
+    # The team is synced via a dedicated step (TEAM_MODEL); embedded models (membership, chat) ride
+    # inside another resource's rows rather than being served as generic manifest resources.
+    classified = {e.model for e in manifest.MANIFEST_ENTRIES} | IGNORED_MODELS | EMBEDDED_MODELS | {manifest.TEAM_MODEL}
     unclassified = first_party - classified
     assert not unclassified, "Add these to MANIFEST_ENTRIES or IGNORED_MODELS: " + ", ".join(sorted(unclassified))
 
 
-def test_manifest_and_ignored_models_are_disjoint():
+def test_manifest_ignored_and_embedded_models_are_disjoint():
     in_manifest = {e.model for e in manifest.MANIFEST_ENTRIES}
-    assert not (in_manifest & manifest.IGNORED_MODELS)
+    assert not (in_manifest & IGNORED_MODELS)
+    assert not (in_manifest & EMBEDDED_MODELS)
+    assert not (IGNORED_MODELS & EMBEDDED_MODELS)
+
+
+def test_embedded_models_resolve_to_models():
+    for label in EMBEDDED_MODELS:
+        assert _model(label) is not None
+
+
+def test_membership_and_chat_are_embedded_not_standalone_resources():
+    """Membership rides inside the user export (the team role); chat rides inside the session export."""
+    assert "teams.membership" in EMBEDDED_MODELS
+    assert "chat.chat" in EMBEDDED_MODELS
+    assert manifest.get_manifest_entry("memberships") is None
+    assert manifest.get_manifest_entry("chats") is None
 
 
 def test_registry_fields_exist_on_their_model():

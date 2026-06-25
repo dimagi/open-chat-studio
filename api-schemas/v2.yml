@@ -214,35 +214,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentExportPage'
           description: ''
-  /api/v2/team/chats/:
-    get:
-      operationId: chats
-      summary: Chats
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Team
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ChatExportPage'
-          description: ''
   /api/v2/team/consent_forms/:
     get:
       operationId: consent_forms
@@ -365,35 +336,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/SyncErrorDetail'
           description: Team has no registered public key; secret data cannot be sealed.
-  /api/v2/team/memberships/:
-    get:
-      operationId: memberships
-      summary: Memberships
-      parameters:
-      - in: query
-        name: cursor
-        schema:
-          type: string
-        description: Keyset pagination cursor returned as `cursor` by the previous
-          page.
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Maximum rows per page (default 100, capped at 1000).
-      tags:
-      - Team
-      security:
-      - {}
-      - apiKeyAuth: []
-      - tokenAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MembershipExportPage'
-          description: ''
   /api/v2/team/messaging_providers/:
     get:
       operationId: messaging_providers
@@ -934,53 +876,6 @@ components:
       required:
       - messaging_provider
       - name
-    ChatExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChatSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    ChatSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        name:
-          type: string
-          maxLength: 128
-        translated_languages:
-          type: array
-          items:
-            type: string
-            maxLength: 3
-          nullable: true
-          description: List of language codes for which translated text is available
-        metadata: {}
-      required:
-      - created_at
-      - id
-      - updated_at
     Chatbot:
       type: object
       description: |-
@@ -1269,56 +1164,11 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/CustomUserSync'
+            $ref: '#/components/schemas/User'
       required:
       - cursor
       - has_more
       - results
-    CustomUserSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        last_login:
-          type: string
-          format: date-time
-          nullable: true
-        username:
-          type: string
-          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
-            only.
-          pattern: ^[\w.@+-]+$
-          maxLength: 150
-        first_name:
-          type: string
-          maxLength: 150
-        last_name:
-          type: string
-          maxLength: 150
-        email:
-          type: string
-          format: email
-          title: Email address
-          maxLength: 254
-        is_active:
-          type: boolean
-          title: Active
-          description: Designates whether this user should be treated as active. Unselect
-            this instead of deleting accounts.
-        date_joined:
-          type: string
-          format: date-time
-        avatar:
-          type: string
-          format: uri
-        language:
-          type: string
-          nullable: true
-          maxLength: 10
-      required:
-      - id
-      - username
     EmbeddingProviderModelExportPage:
       type: object
       properties:
@@ -1409,6 +1259,10 @@ components:
         id:
           type: integer
           readOnly: true
+        chat:
+          allOf:
+          - $ref: '#/components/schemas/SessionChat'
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1470,8 +1324,6 @@ components:
         participant:
           type: integer
         experiment:
-          type: integer
-        chat:
           type: integer
         experiment_channel:
           type: integer
@@ -2411,51 +2263,6 @@ components:
       - files
       - id
       - name
-    MembershipExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/MembershipSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    MembershipSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        groups:
-          type: array
-          items:
-            type: string
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        user:
-          type: integer
-      required:
-      - created_at
-      - groups
-      - id
-      - updated_at
-      - user
     MessagingProviderExportItem:
       type: object
       properties:
@@ -2531,71 +2338,11 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/NodeSync'
+            $ref: '#/components/schemas/PipelineNode'
       required:
       - cursor
       - has_more
       - results
-    NodeSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        flow_id:
-          type: string
-          maxLength: 128
-        type:
-          type: string
-          maxLength: 128
-        label:
-          type: string
-          maxLength: 128
-        params: {}
-        is_archived:
-          type: boolean
-        working_version:
-          type: integer
-          nullable: true
-        pipeline:
-          type: integer
-        llm_provider:
-          type: integer
-          nullable: true
-        llm_provider_model:
-          type: integer
-          nullable: true
-        source_material:
-          type: integer
-          nullable: true
-        collection:
-          type: integer
-          nullable: true
-        assistant:
-          type: integer
-          nullable: true
-        synthetic_voice:
-          type: integer
-          nullable: true
-        collection_indexes:
-          type: array
-          items:
-            type: integer
-      required:
-      - created_at
-      - flow_id
-      - id
-      - pipeline
-      - type
-      - updated_at
     PaginatedChatbotList:
       type: object
       required:
@@ -2744,6 +2491,66 @@ components:
       - cursor
       - has_more
       - results
+    PipelineNode:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        flow_id:
+          type: string
+          maxLength: 128
+        type:
+          type: string
+          maxLength: 128
+        label:
+          type: string
+          maxLength: 128
+        params: {}
+        is_archived:
+          type: boolean
+        working_version:
+          type: integer
+          nullable: true
+        pipeline:
+          type: integer
+        llm_provider:
+          type: integer
+          nullable: true
+        llm_provider_model:
+          type: integer
+          nullable: true
+        source_material:
+          type: integer
+          nullable: true
+        collection:
+          type: integer
+          nullable: true
+        assistant:
+          type: integer
+          nullable: true
+        synthetic_voice:
+          type: integer
+          nullable: true
+        collection_indexes:
+          type: array
+          items:
+            type: integer
+      required:
+      - created_at
+      - flow_id
+      - id
+      - pipeline
+      - type
+      - updated_at
     PipelineSync:
       type: object
       properties:
@@ -2912,6 +2719,23 @@ components:
         * `OpenAIVoiceEngine` - OpenAIVoiceEngine
         * `ElevenLabs` - ElevenLabs
         * `Intron` - Intron
+    SessionChat:
+      type: object
+      description: The chat fields carried inline in a session row (chat isn't its
+        own synced resource).
+      properties:
+        name:
+          type: string
+        translated_languages:
+          type: array
+          items:
+            type: string
+          nullable: true
+        metadata: {}
+      required:
+      - metadata
+      - name
+      - translated_languages
     SourceMaterial:
       type: object
       properties:
@@ -3214,6 +3038,57 @@ components:
       - cursor
       - has_more
       - results
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        groups:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        date_joined:
+          type: string
+          format: date-time
+        avatar:
+          type: string
+          format: uri
+        language:
+          type: string
+          nullable: true
+          maxLength: 10
+      required:
+      - groups
+      - id
+      - username
     VoiceGenderEnum:
       enum:
       - male

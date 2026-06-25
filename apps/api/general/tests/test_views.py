@@ -5,9 +5,6 @@ from datetime import timedelta
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from django.contrib.auth.models import Group
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 from django.urls import resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -15,8 +12,6 @@ from rest_framework.test import APIClient
 from apps.experiments.models import Participant
 from apps.pipelines.models import Pipeline
 from apps.teams.export import seal as seal_mod
-from apps.teams.models import Membership
-from apps.users.models import CustomUser
 from apps.utils.factories.experiment import ConsentFormFactory, ParticipantFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
@@ -154,30 +149,6 @@ def test_malformed_pagination_input_returns_400(resource, params):
     team = TeamWithUsersFactory()
     client = ApiTestClient(_admin(team), team)
     assert client.get(_resource_url(resource), params).status_code == 400
-
-
-def _add_membership_with_group(team, i):
-    user = CustomUser.objects.create(username=f"member-{i}@example.com", email=f"member-{i}@example.com")
-    membership = Membership.objects.create(team=team, user=user)
-    membership.groups.add(Group.objects.create(name=f"grp-{team.id}-{i}"))
-
-
-def test_membership_export_does_not_query_groups_per_row():
-    """Exporting memberships must fetch their group names with a prefetch, not one query per row --
-    otherwise a 1000-row page issues ~1000 extra queries."""
-    team = TeamWithUsersFactory()
-    client = ApiTestClient(_admin(team), team)
-    for i in range(2):
-        _add_membership_with_group(team, i)
-    with CaptureQueriesContext(connection) as few:
-        assert client.get(_resource_url("memberships"), {"limit": 1000}).status_code == 200
-
-    for i in range(2, 7):
-        _add_membership_with_group(team, i)
-    with CaptureQueriesContext(connection) as many:
-        assert client.get(_resource_url("memberships"), {"limit": 1000}).status_code == 200
-
-    assert len(many.captured_queries) == len(few.captured_queries)  # query count is flat in row count
 
 
 def test_working_version_always_served_before_its_published_copies():

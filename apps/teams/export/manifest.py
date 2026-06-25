@@ -34,7 +34,6 @@ TEAM_MODEL = "teams.team"
 
 MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("users.customuser", "users", "structural", "pk"),
-    ManifestEntry("teams.membership", "memberships", "structural", "pk"),
     ManifestEntry("service_providers.llmprovider", "llm_providers", "structural", "pk", secret=True),
     ManifestEntry("service_providers.voiceprovider", "voice_providers", "structural", "pk", secret=True),
     ManifestEntry("service_providers.messagingprovider", "messaging_providers", "structural", "pk", secret=True),
@@ -50,87 +49,8 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("experiments.experiment", "chatbots", "structural", "pk"),
     ManifestEntry("experiments.participant", "participants", "live", "updated_at_id"),
     ManifestEntry("experiments.participantdata", "participant_data", "live", "updated_at_id", secret=True),
-    ManifestEntry("chat.chat", "chats", "live", "pk"),
     ManifestEntry("experiments.experimentsession", "sessions", "live", "updated_at_id"),
 ]
-
-# First-party models deliberately left out of the sync (infrastructure, platform state, or data
-# not yet covered by a sync phase). Every app model must appear here or in MANIFEST_ENTRIES;
-# ``test_every_first_party_model_is_synced_or_ignored`` enforces the partition so that adding a new
-# model forces a decision about whether it is team data worth syncing.
-IGNORED_MODELS: frozenset[str] = frozenset(
-    {
-        "analysis.analysisquery",
-        "analysis.transcriptanalysis",
-        "annotations.customtaggeditem",
-        "annotations.tag",
-        "annotations.usercomment",
-        "api.userapikey",
-        "assessments.score",
-        "assistants.openaiassistant",
-        "assistants.toolresources",
-        "banners.banner",
-        "bot_channels.experimentchannel",
-        "chat.chatattachment",
-        "chat.chatmessage",
-        "cost_tracking.pricingrule",
-        "cost_tracking.usagerecord",
-        "custom_actions.customaction",
-        "custom_actions.customactionoperation",
-        "dashboard.dashboardcache",
-        "dashboard.dashboardfilter",
-        "data_migrations.custommigration",
-        "documents.collection",
-        "documents.collectionfile",
-        "documents.documentsource",
-        "documents.documentsourcesynclog",
-        "evaluations.appliedtag",
-        "evaluations.datasetautopopulationrule",
-        "evaluations.evaluationconfig",
-        "evaluations.evaluationdataset",
-        "evaluations.evaluationmessage",
-        "evaluations.evaluationresult",
-        "evaluations.evaluationrun",
-        "evaluations.evaluationrunaggregate",
-        "evaluations.evaluator",
-        "evaluations.evaluatortagrule",
-        "events.eventaction",
-        "events.eventlog",
-        "events.scheduledmessage",
-        "events.scheduledmessageattempt",
-        "events.statictrigger",
-        "events.timeouttrigger",
-        "experiments.promptbuilderhistory",
-        "experiments.survey",
-        "files.file",
-        "files.filechunkembedding",
-        "filters.filterset",
-        "human_annotations.annotation",
-        "human_annotations.annotationitem",
-        "human_annotations.annotationqueue",
-        "human_annotations.annotationqueueaggregate",
-        "mcp_integrations.mcpserver",
-        "oauth.oauth2accesstoken",
-        "oauth.oauth2application",
-        "oauth.oauth2grant",
-        "oauth.oauth2idtoken",
-        "oauth.oauth2refreshtoken",
-        "ocs_notifications.eventtype",
-        "ocs_notifications.eventuser",
-        "ocs_notifications.notificationevent",
-        "ocs_notifications.usernotificationpreferences",
-        "pipelines.pipelinechathistory",
-        "pipelines.pipelinechatmessages",
-        "site_admin.ocsconfiguration",
-        "slack.slackbot",
-        "slack.slackinstallation",
-        "slack.slackoauthstate",
-        "sso.ssosession",
-        "teams.flag",
-        "teams.invitation",
-        "trace.trace",
-    }
-)
 
 # Fields sealed under the team's public key in transit (encrypted-at-rest or sensitive-by-policy).
 SECRET_REGISTRY: dict[str, list[str]] = {
@@ -142,12 +62,12 @@ SECRET_REGISTRY: dict[str, list[str]] = {
     "experiments.participantdata": ["data", "encryption_key"],
 }
 
-# Fields dropped from the serialized row. Either re-established on the target rather than copied
-# (password, groups), or deliberately not propagated: is_staff/is_superuser are crosscutting
-# permissions that shouldn't ride along with team data.
+# Fields dropped from the serialized row: re-established on the target (password) or deliberately
+# not propagated (is_staff/is_superuser are crosscutting perms). The user's auth ``groups`` stay in --
+# the serializer's ``groups`` method field overrides them with the team role.
 EXCLUDE_REGISTRY: dict[str, list[str]] = {
     "teams.team": ["members", "public_key"],
-    "users.customuser": ["password", "groups", "user_permissions", "is_staff", "is_superuser"],
+    "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).
@@ -158,10 +78,14 @@ TEAM_PATH_REGISTRY: dict[str, str] = {
     "experiments.syntheticvoice": "voice_provider__team",
 }
 
-# Relations to prefetch so the serializer's method fields (see general.serializers._FIELD_RESOLVERS)
-# don't issue a query per exported row.
 PREFETCH_REGISTRY: dict[str, list[str]] = {
-    "teams.membership": ["groups"],
+    "users.customuser": ["membership_set", "membership_set__groups"],
+    "experiments.experimentsession": ["chat"],
+}
+
+SCHEMA_NAME_OVERRIDES: dict[str, str] = {
+    "users.customuser": "User",
+    "pipelines.node": "PipelineNode",
 }
 
 

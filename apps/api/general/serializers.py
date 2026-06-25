@@ -1,12 +1,13 @@
 """A dynamically built DRF ModelSerializer per synced model, so a serializer can't drift from its
 model and a new field is exported the moment it's added. Output-only; ``.save()`` is never called."""
 
-from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 
 from apps.teams.export.manifest import (
     EXCLUDE_REGISTRY,
     GLOBAL_CONFIG,
+    SCHEMA_NAME_OVERRIDES,
     SECRET_REGISTRY,
     TEAM_MODEL,
     entry_model,
@@ -34,8 +35,15 @@ def _feature_flags(self, team):
 
 
 @extend_schema_field(serializers.ListField(child=serializers.CharField()))
-def _group_names(self, instance):
-    return [group.name for group in instance.groups.all()]
+def _team_role_groups(self, user):
+    """The user's role in the exported team: the group names on their membership for that team. Reads
+    the prefetched memberships, so no per-row query. Empty when no team is in the context."""
+    team = self.context.get("team")
+    team_id = team.id if team is not None else None
+    for membership in user.membership_set.all():
+        if membership.team_id == team_id:
+            return [group.name for group in membership.groups.all()]
+    return []
 
 
 def _is_global_resolver(null_field: str):
@@ -49,10 +57,26 @@ def _is_global_resolver(null_field: str):
     return get_is_global
 
 
+@extend_schema_serializer(component_name="SessionChat")
+class _EmbeddedChatSerializer(serializers.Serializer):
+    """The chat fields carried inline in a session row (chat isn't its own synced resource)."""
+
+    name = serializers.CharField()
+    translated_languages = serializers.ListField(child=serializers.CharField(), allow_null=True)
+    metadata = serializers.JSONField()
+
+
+@extend_schema_field(_EmbeddedChatSerializer)
+def _session_chat(self, session):
+    chat = session.chat
+    return {"name": chat.name, "translated_languages": chat.translated_languages, "metadata": chat.metadata}
+
+
 # Per-model SerializerMethodFields for values that aren't a plain field dump.
 _FIELD_RESOLVERS: dict[str, dict] = {
     "teams.team": {"feature_flags": _feature_flags},
-    "teams.membership": {"groups": _group_names},
+    "users.customuser": {"groups": _team_role_groups},
+    "experiments.experimentsession": {"chat": _session_chat},
 }
 
 
@@ -96,7 +120,11 @@ def build_resource_serializer(model):
         attrs["is_global"] = serializers.SerializerMethodField()
         attrs["get_is_global"] = _is_global_resolver(spec.null_field)
 
-    return type(f"{model.__name__}SyncSerializer", (_SyncSecretMixin, serializers.ModelSerializer), attrs)
+    serializer = type(f"{model.__name__}SyncSerializer", (_SyncSecretMixin, serializers.ModelSerializer), attrs)
+    component_name = SCHEMA_NAME_OVERRIDES.get(label)
+    if component_name:
+        serializer = extend_schema_serializer(component_name=component_name)(serializer)
+    return serializer
 
 
 def build_team_serializer():

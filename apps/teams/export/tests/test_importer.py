@@ -5,7 +5,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 
-from apps.experiments.models import ConsentForm
+from apps.chat.models import Chat
+from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
@@ -13,6 +14,7 @@ from apps.teams.export.importer import Importer, MissingGlobalRow
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
+from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 
 
 def _user_row(source_id, username, **extra):
@@ -27,6 +29,7 @@ def _user_row(source_id, username, **extra):
         "is_superuser": False,
         "date_joined": PAST,
         "last_login": None,
+        "groups": [],
         **extra,
     }
 
@@ -193,21 +196,93 @@ def test_node_params_and_fk_columns_are_remapped(store):
     assert Pipeline.objects.get(pk=pipeline_pk).team_id == team_pk
 
 
-def test_membership_groups_are_linked_by_name(store):
-    """Membership groups are re-linked to target groups matched by name."""
+def test_importing_user_creates_team_membership_with_role_groups(store):
+    """A user row carries the user's role in the synced team; importing it creates the membership
+    and links the role groups (matched by name) -- no separate membership resource needed."""
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
-    user = CustomUser.objects.create(username="synced@example.com", email="synced@example.com")
-    store.record("users.customuser", 50, user.id)
+    team_pk = store.get_target("teams.team", 9001)
     Group.objects.get_or_create(name="Sync Role X")
 
+    importer.import_rows("users.customuser", [_user_row(50, "u@example.com", groups=["Sync Role X"])])
+
+    user = CustomUser.objects.get(pk=store.get_target("users.customuser", 50))
+    membership = Membership.objects.get(team_id=team_pk, user=user)
+    assert list(membership.groups.values_list("name", flat=True)) == ["Sync Role X"]
+
+
+def test_reimporting_user_does_not_duplicate_membership(store):
+    """Re-running maps the user to the same membership rather than creating a second one."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    team_pk = store.get_target("teams.team", 9001)
+
+    importer.import_rows("users.customuser", [_user_row(50, "u@example.com")])
+    importer.import_rows("users.customuser", [_user_row(50, "u@example.com")])
+
+    user = CustomUser.objects.get(pk=store.get_target("users.customuser", 50))
+    assert Membership.objects.filter(team_id=team_pk, user=user).count() == 1
+
+
+def _session_row(source_id=33, experiment_src=11, participant_src=22, chat=None):
+    return {
+        "id": source_id,
+        "experiment": experiment_src,
+        "participant": participant_src,
+        "experiment_channel": None,
+        "chat": chat if chat is not None else {"name": "Imported Chat", "translated_languages": ["en"], "metadata": {}},
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def _seed_session_fks(store, team_pk):
+    """Stand in a target experiment and participant for a session row to reference, recording their
+    source->target translations so the session's FKs resolve."""
+    team = Team.objects.get(pk=team_pk)
+    experiment = ExperimentFactory(team=team)
+    participant = ParticipantFactory(team=team)
+    store.record("experiments.experiment", 11, experiment.id)
+    store.record("experiments.participant", 22, participant.id)
+
+
+def test_importing_session_creates_its_chat_inline(store):
+    """A session's chat isn't its own synced resource -- importing the session creates the chat in
+    the synced team from the fields embedded in the row."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    team_pk = store.get_target("teams.team", 9001)
+    _seed_session_fks(store, team_pk)
+
     importer.import_rows(
-        "teams.membership",
-        [{"id": 60, "user": 50, "groups": ["Sync Role X"], "created_at": PAST, "updated_at": PAST}],
+        "experiments.experimentsession",
+        [_session_row(chat={"name": "Imported Chat", "translated_languages": ["en"], "metadata": {"k": "v"}})],
     )
 
-    membership = Membership.objects.get(pk=store.get_target("teams.membership", 60))
-    assert list(membership.groups.values_list("name", flat=True)) == ["Sync Role X"]
+    session = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 33))
+    assert session.chat.name == "Imported Chat"
+    assert session.chat.translated_languages == ["en"]
+    assert session.chat.metadata == {"k": "v"}
+    assert session.chat.team_id == team_pk
+
+
+def test_reimporting_session_reuses_its_chat(store):
+    """Re-running updates the session's existing chat rather than creating a duplicate."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    team_pk = store.get_target("teams.team", 9001)
+    _seed_session_fks(store, team_pk)
+
+    importer.import_rows("experiments.experimentsession", [_session_row()])
+    session = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 33))
+    first_chat_pk = session.chat_id
+
+    importer.import_rows("experiments.experimentsession", [_session_row(chat={"name": "Renamed", "metadata": {}})])
+
+    session.refresh_from_db()
+    assert session.chat_id == first_chat_pk  # same chat row, not a new one
+    assert session.chat.name == "Renamed"
+    assert Chat.objects.filter(pk=first_chat_pk).count() == 1
 
 
 def test_default_consent_form_maps_to_auto_created_default(store):
@@ -240,10 +315,13 @@ def test_default_consent_form_maps_to_auto_created_default(store):
 
 
 def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):
-    """A user already on the target is mapped by username, left unchanged, and gets no reset email."""
+    """A user already on the target is mapped by username, left unchanged, and gets no reset email --
+    but is still given a membership in the synced team so they can access the imported data."""
     existing = CustomUser.objects.create(username="op@example.com", email="op@example.com", first_name="Original")
     created_users = []
     importer = Importer(store, on_user_created=created_users.append)
+    importer.import_rows("teams.team", [_team_row()])
+    team_pk = store.get_target("teams.team", 9001)
 
     importer.import_rows("users.customuser", [_user_row(50, "op@example.com", first_name="Source")])
 
@@ -251,12 +329,14 @@ def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):
     existing.refresh_from_db()
     assert existing.first_name == "Original"  # an existing account is mapped, never overwritten
     assert created_users == []  # not newly added -> no reset email
+    assert Membership.objects.filter(team_id=team_pk, user=existing).exists()  # joined to the synced team
 
 
 def test_new_user_triggers_on_user_created(store):
     """A newly created user fires the on_user_created callback (e.g. the reset email)."""
     created_users = []
     importer = Importer(store, on_user_created=created_users.append)
+    importer.import_rows("teams.team", [_team_row()])
 
     importer.import_rows("users.customuser", [_user_row(51, "fresh@example.com")])
 

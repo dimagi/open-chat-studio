@@ -4,14 +4,19 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 
 from apps.api.general.serializers import build_resource_serializer
-from apps.experiments.models import Experiment, ParticipantData
+from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
-from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory, ParticipantFactory
+from apps.utils.factories.experiment import (
+    ConsentFormFactory,
+    ExperimentFactory,
+    ExperimentSessionFactory,
+    ParticipantFactory,
+)
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
-from apps.utils.factories.team import MembershipFactory, TeamFactory
+from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -46,17 +51,26 @@ def test_team_serializer_excludes_members_and_public_key_and_lists_flags():
 def test_customuser_serializer_drops_password_and_perms():
     data = _serialize(CustomUser, UserFactory())
     assert "password" not in data
-    assert "groups" not in data
     assert "user_permissions" not in data
     assert "email" in data
+    assert data["groups"] == []  # the team-role field; empty with no team in context
 
 
-def test_membership_groups_serialize_as_names():
-    membership = MembershipFactory()
-    group, _ = Group.objects.get_or_create(name="Sync Test Role")
-    membership.groups.add(group)
-    data = _serialize(Membership, membership)
-    assert data["groups"] == ["Sync Test Role"]
+def test_user_serializer_includes_team_role_groups():
+    """The user export carries the user's role within the exported team (their membership's groups),
+    so the membership doesn't need its own resource. The user's own auth groups must not leak in."""
+    team = TeamFactory()
+    user = UserFactory()
+    membership = Membership.objects.create(team=team, user=user)
+    role, _ = Group.objects.get_or_create(name="Team Admin Role")
+    membership.groups.add(role)
+    auth_group, _ = Group.objects.get_or_create(name="Global Auth Group")
+    user.groups.add(auth_group)
+
+    serializer = build_resource_serializer(CustomUser)
+    data = serializer(user, context={"public_key": None, "team": team}).data
+
+    assert data["groups"] == ["Team Admin Role"]  # the team role, not the user's global auth groups
 
 
 def test_llmprovider_config_is_sealed_and_round_trips(keypair):
@@ -91,6 +105,21 @@ def test_experiment_fk_serializes_as_source_pk():
     experiment = ExperimentFactory(team=consent.team, consent_form=consent)
     data = _serialize(Experiment, experiment)
     assert data["consent_form"] == consent.id
+
+
+def test_session_serializer_embeds_chat_fields_instead_of_fk():
+    """A session's chat rides inline (name, translated_languages, metadata) rather than as a chat FK
+    id, since chat isn't its own synced resource."""
+    session = ExperimentSessionFactory()
+    session.chat.name = "My Chat"
+    session.chat.translated_languages = ["en", "fr"]
+    session.chat.metadata = {"k": "v"}
+    session.chat.save()
+
+    data = _serialize(ExperimentSession, session)
+
+    assert "chat_id" not in data
+    assert data["chat"] == {"name": "My Chat", "translated_languages": ["en", "fr"], "metadata": {"k": "v"}}
 
 
 @pytest.mark.parametrize("is_global", [True, False])
