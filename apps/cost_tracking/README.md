@@ -31,12 +31,13 @@ When `usage_metadata` is missing from the LangChain response, the collector fall
 
 The canonical pricing seed lives in `seed_data/llm_pricing.json` (per-1K-tokens, one entry per `(provider_type, model_name)`). Migration `0002_seed_pricing.py` and any subsequent `NNNN_rate_update_*.py` migrations load it via `load_pricing_data()` from `migration_utils.py`, which calls the `load_ai_pricing` management command. The loader is idempotent and handles supersession on rate changes.
 
-Two daily jobs feed the seed (both live in `.github/workflows/auto-update-models.yml`):
+`.github/workflows/auto-update-models.yml` runs `scripts/reconcile_models.py` daily; one upstream pass produces three signals that the workflow acts on:
 
-- `update-models` registers newly-released models from llm-stats.com and writes their pricing into the seed.
-- `diff-pricing` (script in `scripts/diff_seed_pricing.py`) diffs current llm-stats pricing against the seed and opens a "Pricing update" PR when rates have moved.
+- `new_models` - candidates not yet in `default_models.py`. Claude Code opens a PR to register them following `docs/developer_guides/managing_models.md`.
+- `price_changes` - upstream rates have moved for an existing seed entry. The script rewrites `llm_pricing.json` and emits a `NNNN_rate_update_YYYYMMDD.py` data migration; the workflow opens a mechanical "Pricing update" PR.
+- `missing_pricing` - active OCS-managed models (entries in `DEFAULT_LLM_PROVIDER_MODELS`) with no `llm_input`/`llm_output` seed rule. The workflow opens or updates a tracked GitHub issue.
 
-`backfill_pricing_seed` (in `management/commands/`) is a one-shot tool that walks `DEFAULT_LLM_PROVIDER_MODELS` and fills the seed from LiteLLM for any uncovered model.
+`backfill_pricing_seed` (in `management/commands/`) is a one-shot developer tool that walks `DEFAULT_LLM_PROVIDER_MODELS` and fills the seed from LiteLLM for any uncovered model.
 
 ## Surface
 
