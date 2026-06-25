@@ -33,7 +33,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedChatbotList'
+                $ref: '#/components/schemas/PaginatedChatbotDetailList'
           description: ''
   /api/v2/chatbots/{id}/:
     get:
@@ -59,7 +59,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Chatbot'
+                $ref: '#/components/schemas/ChatbotDetail'
           description: ''
   /api/v2/chatbots/{id}/inspect/:
     get:
@@ -148,7 +148,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TeamSync'
+                $ref: '#/components/schemas/TeamDetail'
           description: ''
   /api/v2/team/auth_providers/:
     get:
@@ -177,7 +177,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthProviderExportPage'
+                $ref: '#/components/schemas/AuthProviderList'
           description: ''
         '409':
           content:
@@ -212,7 +212,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExperimentExportPage'
+                $ref: '#/components/schemas/ChatbotList'
           description: ''
   /api/v2/team/consent_forms/:
     get:
@@ -241,7 +241,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConsentFormExportPage'
+                $ref: '#/components/schemas/ConsentFormList'
           description: ''
   /api/v2/team/embedding_provider_models/:
     get:
@@ -270,7 +270,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EmbeddingProviderModelExportPage'
+                $ref: '#/components/schemas/EmbeddingProviderModelList'
           description: ''
   /api/v2/team/llm_provider_models/:
     get:
@@ -299,7 +299,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LlmProviderModelExportPage'
+                $ref: '#/components/schemas/LlmProviderModelList'
           description: ''
   /api/v2/team/llm_providers/:
     get:
@@ -328,7 +328,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LlmProviderExportPage'
+                $ref: '#/components/schemas/LlmProviderList'
           description: ''
         '409':
           content:
@@ -363,7 +363,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MessagingProviderExportPage'
+                $ref: '#/components/schemas/MessagingProviderList'
           description: ''
         '409':
           content:
@@ -401,7 +401,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ParticipantDataExportPage'
+                $ref: '#/components/schemas/ParticipantDataList'
           description: ''
         '409':
           content:
@@ -439,7 +439,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ParticipantExportPage'
+                $ref: '#/components/schemas/ParticipantList'
           description: ''
   /api/v2/team/pipeline_nodes/:
     get:
@@ -468,7 +468,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NodeExportPage'
+                $ref: '#/components/schemas/NodeList'
           description: ''
   /api/v2/team/pipelines/:
     get:
@@ -497,7 +497,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PipelineExportPage'
+                $ref: '#/components/schemas/PipelineList'
           description: ''
   /api/v2/team/sessions/:
     get:
@@ -529,7 +529,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ExperimentSessionExportPage'
+                $ref: '#/components/schemas/ExperimentSessionList'
           description: ''
   /api/v2/team/source_materials/:
     get:
@@ -558,7 +558,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SourceMaterialExportPage'
+                $ref: '#/components/schemas/SourceMaterialList'
           description: ''
   /api/v2/team/synthetic_voices/:
     get:
@@ -587,7 +587,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyntheticVoiceExportPage'
+                $ref: '#/components/schemas/SyntheticVoiceList'
           description: ''
   /api/v2/team/trace_providers/:
     get:
@@ -616,7 +616,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TraceProviderExportPage'
+                $ref: '#/components/schemas/TraceProviderList'
           description: ''
         '409':
           content:
@@ -651,7 +651,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomUserExportPage'
+                $ref: '#/components/schemas/CustomUserList'
           description: ''
   /api/v2/team/voice_providers/:
     get:
@@ -680,7 +680,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VoiceProviderExportPage'
+                $ref: '#/components/schemas/VoiceProviderList'
           description: ''
         '409':
           content:
@@ -755,7 +755,7 @@ components:
           type: string
           description: Optional wrapper for the user input; use ``{input}`` as the
             placeholder.
-    AuthProviderExportItem:
+    AuthProviderDetail:
       type: object
       properties:
         id:
@@ -773,7 +773,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/AuthProviderExportItemTypeEnum'
+          $ref: '#/components/schemas/AuthProviderDetailTypeEnum'
         name:
           type: string
           maxLength: 255
@@ -784,7 +784,7 @@ components:
       - name
       - type
       - updated_at
-    AuthProviderExportItemTypeEnum:
+    AuthProviderDetailTypeEnum:
       enum:
       - basic
       - api_key
@@ -796,7 +796,7 @@ components:
         * `api_key` - API Key
         * `bearer` - Bearer Auth
         * `commcare` - CommCare
-    AuthProviderExportPage:
+    AuthProviderList:
       type: object
       properties:
         cursor:
@@ -809,7 +809,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/AuthProviderExportItem'
+            $ref: '#/components/schemas/AuthProviderDetail'
       required:
       - cursor
       - has_more
@@ -876,466 +876,7 @@ components:
       required:
       - messaging_provider
       - name
-    Chatbot:
-      type: object
-      description: |-
-        Basic chatbot fields for the list and retrieve endpoints.
-
-        The full configuration is served by the ``inspect`` action instead (ADR-0024). v2 calls these
-        "chatbots" rather than "experiments" (ADR-0023).
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-          maxLength: 128
-        url:
-          type: string
-          format: uri
-          readOnly: true
-          title: API URL
-        version_number:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        versions:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChatbotVersion'
-      required:
-      - id
-      - name
-      - url
-      - versions
-    ChatbotInspect:
-      type: object
-      description: |-
-        The whole chatbot configuration in one read-only response (ADR-0024).
-
-        The chatbot's fields sit at the top level — there's no wrapper key around them. Expects the
-        resolved :class:`~apps.experiments.models.Experiment`, and needs a ``fetcher`` in its context.
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-          maxLength: 128
-        description:
-          type: string
-          nullable: true
-          title: A longer description of the experiment.
-        version_number:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        is_unreleased:
-          type: boolean
-          description: True for the working (draft) version that has not been released;
-            never the published one.
-        is_published_version:
-          type: boolean
-          description: True for the version currently served to participants (the
-            live default).
-        version_description:
-          type: string
-          description: Free-text label for this version (e.g. 'latest'); not an enum.
-        team_slug:
-          type: string
-        settings:
-          $ref: '#/components/schemas/InspectSettings'
-        consent_form:
-          allOf:
-          - $ref: '#/components/schemas/ConsentForm'
-          nullable: true
-        voice:
-          allOf:
-          - $ref: '#/components/schemas/FlattenedVoice'
-          nullable: true
-          readOnly: true
-        trace_provider:
-          allOf:
-          - $ref: '#/components/schemas/Provider'
-          nullable: true
-        channels:
-          type: array
-          items:
-            $ref: '#/components/schemas/Channel'
-          readOnly: true
-        pipeline:
-          allOf:
-          - $ref: '#/components/schemas/InspectPipeline'
-          readOnly: true
-          nullable: true
-        events:
-          $ref: '#/components/schemas/InspectEvents'
-      required:
-      - channels
-      - consent_form
-      - events
-      - id
-      - is_published_version
-      - is_unreleased
-      - name
-      - pipeline
-      - settings
-      - team_slug
-      - trace_provider
-      - version_description
-      - voice
-    ChatbotSessionStatusEnum:
-      enum:
-      - setup
-      - pending
-      - active
-      - pending-review
-      - complete
-      - unknown
-      type: string
-      description: |-
-        * `setup` - Setting Up
-        * `pending` - Awaiting participant
-        * `active` - Active
-        * `pending-review` - Awaiting final review.
-        * `complete` - Complete
-        * `unknown` - Unknown
-    ChatbotVersion:
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 128
-        version_number:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        is_default_version:
-          type: boolean
-        version_description:
-          type: string
-      required:
-      - name
-    CodeNodeParams:
-      type: object
-      properties:
-        tag:
-          type: string
-          description: Tag applied to this node's output message; blank means no tag.
-        code:
-          type: string
-          description: Python source defining a ``main(input, **kwargs)`` function.
-    ConsentForm:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          maxLength: 128
-        consent_text:
-          type: string
-          description: Custom markdown text
-        capture_identifier:
-          type: boolean
-        identifier_label:
-          type: string
-          maxLength: 200
-        identifier_type:
-          $ref: '#/components/schemas/IdentifierTypeEnum'
-      required:
-      - consent_text
-      - id
-      - name
-    ConsentFormExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ConsentFormSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    ConsentFormSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        name:
-          type: string
-          maxLength: 128
-        consent_text:
-          type: string
-          description: Custom markdown text
-        capture_identifier:
-          type: boolean
-        identifier_label:
-          type: string
-          maxLength: 200
-        identifier_type:
-          $ref: '#/components/schemas/IdentifierTypeEnum'
-        is_default:
-          type: boolean
-          readOnly: true
-        confirmation_text:
-          type: string
-          description: Use this text to tell the user to respond with '1' in order
-            to give their consent
-        is_archived:
-          type: boolean
-        working_version:
-          type: integer
-          nullable: true
-      required:
-      - consent_text
-      - created_at
-      - id
-      - is_default
-      - name
-      - updated_at
-    CustomAction:
-      type: object
-      description: |-
-        A custom action as used at one reference site.
-
-        ``allowed_operations`` lists only the operations selected here, not every operation the action
-        defines, and ``api_schema`` is trimmed to just those operations' paths (to keep the response
-        small). The auth provider is reduced to ``{id, type, name}`` (ADR-0027). Expects a
-        :class:`CustomActionSelection`.
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-        description:
-          type: string
-        server_url:
-          type: string
-        allowed_operations:
-          type: array
-          items:
-            type: string
-          readOnly: true
-        api_schema:
-          allOf:
-          - $ref: '#/components/schemas/ApiSchemaDigest'
-          readOnly: true
-        auth_provider:
-          allOf:
-          - $ref: '#/components/schemas/Provider'
-          nullable: true
-      required:
-      - allowed_operations
-      - api_schema
-      - auth_provider
-      - description
-      - id
-      - name
-      - server_url
-    CustomUserExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-      required:
-      - cursor
-      - has_more
-      - results
-    EmbeddingProviderModelExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/EmbeddingProviderModelSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    EmbeddingProviderModelSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        is_global:
-          type: boolean
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        type:
-          $ref: '#/components/schemas/LlmProviderTypeEnum'
-        name:
-          type: string
-          description: The name of the model. e.g. 'text-embedding-3-small'
-          maxLength: 128
-      required:
-      - created_at
-      - id
-      - is_global
-      - name
-      - type
-      - updated_at
-    ExperimentExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ExperimentSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    ExperimentSessionExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ExperimentSessionSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    ExperimentSessionSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        chat:
-          allOf:
-          - $ref: '#/components/schemas/SessionChat'
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        external_id:
-          type: string
-          maxLength: 255
-        session_token_required:
-          type: boolean
-          description: Require a signed session token (or authenticated user) for
-            chat API access to this session.
-        status:
-          $ref: '#/components/schemas/ChatbotSessionStatusEnum'
-        consent_date:
-          type: string
-          format: date-time
-          nullable: true
-        ended_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: When the experiment (chat) ended.
-        reviewed_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: When the final review was submitted.
-        seed_task_id:
-          type: string
-          description: System ID of the seed message task, if present.
-          maxLength: 40
-        state: {}
-        platform:
-          type: string
-          nullable: true
-          maxLength: 128
-        experiment_versions:
-          type: array
-          items:
-            type: integer
-            maximum: 2147483647
-            minimum: 0
-          nullable: true
-          description: Array of unique experiment version numbers seen by this session
-        last_activity_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: Timestamp of the last user interaction
-        first_activity_at:
-          type: string
-          format: date-time
-          nullable: true
-          description: Timestamp of the first user interaction
-        participant:
-          type: integer
-        experiment:
-          type: integer
-        experiment_channel:
-          type: integer
-          nullable: true
-      required:
-      - chat
-      - created_at
-      - experiment
-      - id
-      - participant
-      - updated_at
-    ExperimentSync:
+    ChatbotDetail:
       type: object
       properties:
         id:
@@ -1435,6 +976,468 @@ components:
       - owner
       - updated_at
       - working_version
+    ChatbotInspect:
+      type: object
+      description: |-
+        The whole chatbot configuration in one read-only response (ADR-0024).
+
+        The chatbot's fields sit at the top level — there's no wrapper key around them. Expects the
+        resolved :class:`~apps.experiments.models.Experiment`, and needs a ``fetcher`` in its context.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_unreleased:
+          type: boolean
+          description: True for the working (draft) version that has not been released;
+            never the published one.
+        is_published_version:
+          type: boolean
+          description: True for the version currently served to participants (the
+            live default).
+        version_description:
+          type: string
+          description: Free-text label for this version (e.g. 'latest'); not an enum.
+        team_slug:
+          type: string
+        settings:
+          $ref: '#/components/schemas/InspectSettings'
+        consent_form:
+          allOf:
+          - $ref: '#/components/schemas/ConsentForm'
+          nullable: true
+        voice:
+          allOf:
+          - $ref: '#/components/schemas/FlattenedVoice'
+          nullable: true
+          readOnly: true
+        trace_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/Channel'
+          readOnly: true
+        pipeline:
+          allOf:
+          - $ref: '#/components/schemas/InspectPipeline'
+          readOnly: true
+          nullable: true
+        events:
+          $ref: '#/components/schemas/InspectEvents'
+      required:
+      - channels
+      - consent_form
+      - events
+      - id
+      - is_published_version
+      - is_unreleased
+      - name
+      - pipeline
+      - settings
+      - team_slug
+      - trace_provider
+      - version_description
+      - voice
+    ChatbotList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatbotDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ChatbotSessionStatusEnum:
+      enum:
+      - setup
+      - pending
+      - active
+      - pending-review
+      - complete
+      - unknown
+      type: string
+      description: |-
+        * `setup` - Setting Up
+        * `pending` - Awaiting participant
+        * `active` - Active
+        * `pending-review` - Awaiting final review.
+        * `complete` - Complete
+        * `unknown` - Unknown
+    CodeNodeParams:
+      type: object
+      properties:
+        tag:
+          type: string
+          description: Tag applied to this node's output message; blank means no tag.
+        code:
+          type: string
+          description: Python source defining a ``main(input, **kwargs)`` function.
+    ConsentForm:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+      required:
+      - consent_text
+      - id
+      - name
+    ConsentFormDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+        is_default:
+          type: boolean
+          readOnly: true
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_archived:
+          type: boolean
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - consent_text
+      - created_at
+      - id
+      - is_default
+      - name
+      - updated_at
+    ConsentFormList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsentFormDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    CustomAction:
+      type: object
+      description: |-
+        A custom action as used at one reference site.
+
+        ``allowed_operations`` lists only the operations selected here, not every operation the action
+        defines, and ``api_schema`` is trimmed to just those operations' paths (to keep the response
+        small). The auth provider is reduced to ``{id, type, name}`` (ADR-0027). Expects a
+        :class:`CustomActionSelection`.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        server_url:
+          type: string
+        allowed_operations:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        api_schema:
+          allOf:
+          - $ref: '#/components/schemas/ApiSchemaDigest'
+          readOnly: true
+        auth_provider:
+          allOf:
+          - $ref: '#/components/schemas/Provider'
+          nullable: true
+      required:
+      - allowed_operations
+      - api_schema
+      - auth_provider
+      - description
+      - id
+      - name
+      - server_url
+    CustomUserDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        groups:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        date_joined:
+          type: string
+          format: date-time
+        avatar:
+          type: string
+          format: uri
+        language:
+          type: string
+          nullable: true
+          maxLength: 10
+      required:
+      - groups
+      - id
+      - username
+    CustomUserList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomUserDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EmbeddingProviderModelDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        is_global:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/LlmProviderTypeEnum'
+        name:
+          type: string
+          description: The name of the model. e.g. 'text-embedding-3-small'
+          maxLength: 128
+      required:
+      - created_at
+      - id
+      - is_global
+      - name
+      - type
+      - updated_at
+    EmbeddingProviderModelList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmbeddingProviderModelDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ExperimentSessionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        chat:
+          allOf:
+          - $ref: '#/components/schemas/SessionChat'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        external_id:
+          type: string
+          maxLength: 255
+        session_token_required:
+          type: boolean
+          description: Require a signed session token (or authenticated user) for
+            chat API access to this session.
+        status:
+          $ref: '#/components/schemas/ChatbotSessionStatusEnum'
+        consent_date:
+          type: string
+          format: date-time
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the experiment (chat) ended.
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the final review was submitted.
+        seed_task_id:
+          type: string
+          description: System ID of the seed message task, if present.
+          maxLength: 40
+        state: {}
+        platform:
+          type: string
+          nullable: true
+          maxLength: 128
+        experiment_versions:
+          type: array
+          items:
+            type: integer
+            maximum: 2147483647
+            minimum: 0
+          nullable: true
+          description: Array of unique experiment version numbers seen by this session
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last user interaction
+        first_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the first user interaction
+        participant:
+          type: integer
+        experiment:
+          type: integer
+        experiment_channel:
+          type: integer
+          nullable: true
+      required:
+      - chat
+      - created_at
+      - experiment
+      - id
+      - participant
+      - updated_at
+    ExperimentSessionList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentSessionDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     ExtractParticipantDataParams:
       type: object
       properties:
@@ -2043,7 +2046,7 @@ components:
             type: string
           nullable: true
           description: MCP server tools enabled for the node.
-    LlmProviderExportItem:
+    LlmProviderDetail:
       type: object
       properties:
         id:
@@ -2072,7 +2075,7 @@ components:
       - name
       - type
       - updated_at
-    LlmProviderExportPage:
+    LlmProviderList:
       type: object
       properties:
         cursor:
@@ -2085,30 +2088,12 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/LlmProviderExportItem'
+            $ref: '#/components/schemas/LlmProviderDetail'
       required:
       - cursor
       - has_more
       - results
-    LlmProviderModelExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/LlmProviderModelSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    LlmProviderModelSync:
+    LlmProviderModelDetail:
       type: object
       properties:
         id:
@@ -2147,6 +2132,24 @@ components:
       - name
       - type
       - updated_at
+    LlmProviderModelList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmProviderModelDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     LlmProviderTypeEnum:
       enum:
       - openai
@@ -2263,7 +2266,7 @@ components:
       - files
       - id
       - name
-    MessagingProviderExportItem:
+    MessagingProviderDetail:
       type: object
       properties:
         id:
@@ -2281,7 +2284,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/MessagingProviderExportItemTypeEnum'
+          $ref: '#/components/schemas/MessagingProviderDetailTypeEnum'
         name:
           type: string
           maxLength: 255
@@ -2293,7 +2296,7 @@ components:
       - name
       - type
       - updated_at
-    MessagingProviderExportItemTypeEnum:
+    MessagingProviderDetailTypeEnum:
       enum:
       - twilio
       - turnio
@@ -2307,7 +2310,7 @@ components:
         * `sureadhere` - SureAdhere
         * `slack` - Slack
         * `meta_cloud_api` - Meta Cloud API (WhatsApp)
-    MessagingProviderExportPage:
+    MessagingProviderList:
       type: object
       properties:
         cursor:
@@ -2320,178 +2323,12 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/MessagingProviderExportItem'
+            $ref: '#/components/schemas/MessagingProviderDetail'
       required:
       - cursor
       - has_more
       - results
-    NodeExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/PipelineNode'
-      required:
-      - cursor
-      - has_more
-      - results
-    PaginatedChatbotList:
-      type: object
-      required:
-      - results
-      properties:
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/Chatbot'
-        count:
-          type: integer
-          description: Total number of items matching the query. Only present on the
-            first page (requests without a cursor).
-          example: 123
-    ParticipantDataExportItem:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        data:
-          type: string
-          description: Sealed under the team's public key (base64, RSA-OAEP).
-        encryption_key:
-          type: string
-          description: Sealed under the team's public key (base64, RSA-OAEP).
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        system_metadata: {}
-        participant:
-          type: integer
-        experiment:
-          type: integer
-      required:
-      - created_at
-      - data
-      - encryption_key
-      - experiment
-      - id
-      - participant
-      - updated_at
-    ParticipantDataExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ParticipantDataExportItem'
-      required:
-      - cursor
-      - has_more
-      - results
-    ParticipantExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ParticipantSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    ParticipantSync:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        name:
-          type: string
-          maxLength: 320
-        identifier:
-          type: string
-          maxLength: 320
-        public_id:
-          type: string
-          format: uuid
-        platform:
-          type: string
-          maxLength: 32
-        remote_id:
-          type: string
-          maxLength: 255
-        user:
-          type: integer
-          nullable: true
-      required:
-      - created_at
-      - id
-      - platform
-      - updated_at
-    PipelineExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/PipelineSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    PipelineNode:
+    NodeDetail:
       type: object
       properties:
         id:
@@ -2551,7 +2388,155 @@ components:
       - pipeline
       - type
       - updated_at
-    PipelineSync:
+    NodeList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    PaginatedChatbotDetailList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatbotDetail'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
+    ParticipantDataDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        data:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        encryption_key:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        system_metadata: {}
+        participant:
+          type: integer
+        experiment:
+          type: integer
+      required:
+      - created_at
+      - data
+      - encryption_key
+      - experiment
+      - id
+      - participant
+      - updated_at
+    ParticipantDataList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDataDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ParticipantDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 320
+        identifier:
+          type: string
+          maxLength: 320
+        public_id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+          maxLength: 32
+        remote_id:
+          type: string
+          maxLength: 255
+        user:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - platform
+      - updated_at
+    ParticipantList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    PipelineDetail:
       type: object
       properties:
         id:
@@ -2584,6 +2569,24 @@ components:
       - id
       - name
       - updated_at
+    PipelineList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     PlatformEnum:
       enum:
       - telegram
@@ -2755,25 +2758,7 @@ components:
       - id
       - material
       - topic
-    SourceMaterialExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/SourceMaterialSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    SourceMaterialSync:
+    SourceMaterialDetail:
       type: object
       properties:
         id:
@@ -2810,6 +2795,24 @@ components:
       - owner
       - topic
       - updated_at
+    SourceMaterialList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceMaterialDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     StaticRouterNodeParams:
       type: object
       properties:
@@ -2840,25 +2843,7 @@ components:
           type: string
       required:
       - detail
-    SyntheticVoiceExportPage:
-      type: object
-      properties:
-        cursor:
-          type: string
-          nullable: true
-          description: Cursor for the next page; null once the resource is exhausted.
-        has_more:
-          type: boolean
-          description: True while more rows remain beyond this page.
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/SyntheticVoiceSync'
-      required:
-      - cursor
-      - has_more
-      - results
-    SyntheticVoiceSync:
+    SyntheticVoiceDetail:
       type: object
       properties:
         id:
@@ -2940,6 +2925,24 @@ components:
       - service
       - updated_at
       - voice_provider
+    SyntheticVoiceList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyntheticVoiceDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     Team:
       type: object
       properties:
@@ -2953,7 +2956,7 @@ components:
       required:
       - name
       - slug
-    TeamSync:
+    TeamDetail:
       type: object
       properties:
         id:
@@ -2986,7 +2989,7 @@ components:
       - name
       - slug
       - updated_at
-    TraceProviderExportItem:
+    TraceProviderDetail:
       type: object
       properties:
         id:
@@ -3004,7 +3007,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TraceProviderExportItemTypeEnum'
+          $ref: '#/components/schemas/TraceProviderDetailTypeEnum'
         name:
           type: string
           maxLength: 255
@@ -3015,12 +3018,12 @@ components:
       - name
       - type
       - updated_at
-    TraceProviderExportItemTypeEnum:
+    TraceProviderDetailTypeEnum:
       enum:
       - langfuse
       type: string
       description: '* `langfuse` - Langfuse'
-    TraceProviderExportPage:
+    TraceProviderList:
       type: object
       properties:
         cursor:
@@ -3033,62 +3036,11 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/TraceProviderExportItem'
+            $ref: '#/components/schemas/TraceProviderDetail'
       required:
       - cursor
       - has_more
       - results
-    User:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        groups:
-          type: array
-          items:
-            type: string
-          readOnly: true
-        last_login:
-          type: string
-          format: date-time
-          nullable: true
-        username:
-          type: string
-          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
-            only.
-          pattern: ^[\w.@+-]+$
-          maxLength: 150
-        first_name:
-          type: string
-          maxLength: 150
-        last_name:
-          type: string
-          maxLength: 150
-        email:
-          type: string
-          format: email
-          title: Email address
-          maxLength: 254
-        is_active:
-          type: boolean
-          title: Active
-          description: Designates whether this user should be treated as active. Unselect
-            this instead of deleting accounts.
-        date_joined:
-          type: string
-          format: date-time
-        avatar:
-          type: string
-          format: uri
-        language:
-          type: string
-          nullable: true
-          maxLength: 10
-      required:
-      - groups
-      - id
-      - username
     VoiceGenderEnum:
       enum:
       - male
@@ -3101,7 +3053,7 @@ components:
         * `female` - Female
         * `male (child)` - Male (Child)
         * `female (child)` - Female (Child)
-    VoiceProviderExportItem:
+    VoiceProviderDetail:
       type: object
       properties:
         id:
@@ -3119,7 +3071,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/VoiceProviderExportItemTypeEnum'
+          $ref: '#/components/schemas/VoiceProviderDetailTypeEnum'
         name:
           type: string
           maxLength: 255
@@ -3130,7 +3082,7 @@ components:
       - name
       - type
       - updated_at
-    VoiceProviderExportItemTypeEnum:
+    VoiceProviderDetailTypeEnum:
       enum:
       - aws
       - azure
@@ -3146,7 +3098,7 @@ components:
         * `openaivoiceengine` - OpenAI Voice Engine Text to Speech
         * `elevenlabs` - ElevenLabs
         * `intron` - Intron
-    VoiceProviderExportPage:
+    VoiceProviderList:
       type: object
       properties:
         cursor:
@@ -3159,7 +3111,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/VoiceProviderExportItem'
+            $ref: '#/components/schemas/VoiceProviderDetail'
       required:
       - cursor
       - has_more
