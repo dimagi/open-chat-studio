@@ -1,0 +1,30 @@
+{% load i18n %}
+<div class="pg-subtitle">{% translate "Top Teams" %}</div>
+{% if top_teams %}
+<div class="overflow-x-auto mb-6">
+  <table class="table table-zebra table-sm">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>{% translate "Team" %}</th>
+        <th>{% translate "Messages" %}</th>
+        <th>{% translate "Sessions" %}</th>
+        <th>{% translate "Participants" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in top_teams %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td><a href="{% url 'web_team:home' row.team_slug %}" class="link">{{ row.team }}</a></td>
+        <td>{{ row.msg_count }}</td>
+        <td>{{ row.session_count }}</td>
+        <td>{{ row.participant_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm opacity-60 mb-6">{% translate "No data for the selected date range." %}</p>
+{% endif %}
