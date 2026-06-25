@@ -4,6 +4,37 @@ info:
   version: v2
   description: Build, deploy and monitor chatbots.
 paths:
+  /api/v2/chatbots/:
+    get:
+      operationId: chatbot_list
+      summary: List Chatbots
+      parameters:
+      - name: cursor
+        required: false
+        in: query
+        description: The pagination cursor value.
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChatbotDetailList'
+          description: ''
   /api/v2/chatbots/{id}/:
     get:
       operationId: chatbot_retrieve
@@ -1141,6 +1172,30 @@ components:
       - files
       - id
       - name
+    PaginatedChatbotDetailList:
+      type: object
+      required:
+      - results
+      properties:
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatbotDetail'
+        count:
+          type: integer
+          description: Total number of items matching the query. Only present on the
+            first page (requests without a cursor).
+          example: 123
     PlatformEnum:
       enum:
       - telegram

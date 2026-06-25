@@ -18,6 +18,11 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
 @extend_schema_view(
+    list=extend_schema(
+        operation_id="chatbot_list",
+        summary="List Chatbots",
+        tags=["Chatbots"],
+    ),
     retrieve=extend_schema(
         operation_id="chatbot_retrieve",
         summary="Retrieve Chatbot",
@@ -32,7 +37,7 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
         ],
     ),
 )
-class ChatbotViewSet(mixins.RetrieveModelMixin, GenericViewSet):
+class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
     lookup_field = "public_id"
