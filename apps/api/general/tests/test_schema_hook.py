@@ -7,15 +7,13 @@ from django.urls import resolve
 from drf_spectacular.generators import SchemaGenerator
 from rest_framework import serializers
 
-from apps.api.general.schema import (
-    build_resource_response_serializer,
-    resource_responses,
-)
 from apps.api.general.serializers import (
     ManifestEntrySerializer,
     ManifestSerializer,
+    build_resource_response_serializer,
     build_resource_serializer,
     component_name,
+    resource_responses,
 )
 from apps.api.general.views import ResourceView, resource_view
 from apps.teams.export.manifest import MANIFEST_ENTRIES, build_manifest, entry_model, get_manifest_entry

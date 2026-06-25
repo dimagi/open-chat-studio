@@ -3,7 +3,7 @@ model and a new field is exported the moment it's added. Output-only; ``.save()`
 
 from functools import cache
 
-from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
+from drf_spectacular.utils import OpenApiResponse, extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 
 from apps.teams.export.manifest import (
@@ -11,6 +11,7 @@ from apps.teams.export.manifest import (
     GLOBAL_CONFIG,
     SECRET_REGISTRY,
     TEAM_MODEL,
+    ManifestEntry,
     entry_model,
     model_has_team_field,
 )
@@ -143,3 +144,39 @@ def build_team_serializer():
     surface and is served as one object rather than a page, but its fields are the same dynamic dump
     as any other synced resource row."""
     return build_resource_serializer(entry_model(TEAM_MODEL))
+
+
+def resource_responses(entry: ManifestEntry) -> dict[int, type[serializers.Serializer] | OpenApiResponse]:
+    """Per-status responses for one resource: the 200 envelope, and a 409 (secret resources only)
+    when the team has no public key to seal against. No 404: routing prevents unknown resources from
+    reaching the view."""
+    responses: dict[int, type[serializers.Serializer] | OpenApiResponse] = {
+        200: build_resource_response_serializer(entry),
+    }
+    if entry.secret:
+        responses[409] = OpenApiResponse(
+            response=SyncErrorDetail,
+            description="Team has no registered public key; secret data cannot be sealed.",
+        )
+    return responses
+
+
+def build_resource_response_serializer(entry: ManifestEntry) -> type[serializers.Serializer]:
+    """The paginated envelope the resource endpoint returns: cursor, has_more, and the page of rows."""
+    model = entry_model(entry.model)
+    item = build_resource_serializer(model)
+    return type(
+        f"{component_name(model)}List",
+        (serializers.Serializer,),
+        {
+            "cursor": serializers.CharField(
+                allow_null=True, help_text="Cursor for the next page; null once the resource is exhausted."
+            ),
+            "has_more": serializers.BooleanField(help_text="True while more rows remain beyond this page."),
+            "results": item(many=True),
+        },
+    )
+
+
+class SyncErrorDetail(serializers.Serializer):
+    detail = serializers.CharField()
