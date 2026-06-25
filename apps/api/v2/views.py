@@ -8,11 +8,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.export.serializers import build_resource_serializer
 from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
-from apps.api.v2.serializers import MeSerializer
+from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
@@ -40,19 +39,15 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
 class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
     permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
+    serializer_class = ChatbotSerializer
     lookup_field = "public_id"
     lookup_url_kwarg = "id"
 
-    def get_serializer_class(self):
-        # Reuse the serializer the export `chatbots` resource is built from, so the single-chatbot
-        # retrieve and the export list can't drift to different field sets.
-        return build_resource_serializer(Experiment)
-
     def get_queryset(self):
-        # `versions` is nested by the serializer; prefetch it so a chatbot's version family doesn't
-        # cost a query per row.
-        return Experiment.objects.filter(team=self.request.team, working_version__isnull=True).prefetch_related(
-            "versions"
+        return (
+            Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
+            .select_related("team")
+            .prefetch_related("versions")
         )
 
     @extend_schema(

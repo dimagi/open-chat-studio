@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.permissions import IsTeamAdmin
+from apps.api.export.permissions import IsTeamAdmin
 from apps.api.versioning import ExportVersioning
 from apps.teams.export.manifest import (
     ManifestEntry,

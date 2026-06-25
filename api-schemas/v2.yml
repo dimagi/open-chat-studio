@@ -33,7 +33,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedChatbotDetailList'
+                $ref: '#/components/schemas/PaginatedChatbotList'
           description: ''
   /api/v2/chatbots/{id}/:
     get:
@@ -59,7 +59,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChatbotDetail'
+                $ref: '#/components/schemas/Chatbot'
           description: ''
   /api/v2/chatbots/{id}/inspect/:
     get:
@@ -239,111 +239,38 @@ components:
       required:
       - messaging_provider
       - name
-    ChatbotDetail:
+    Chatbot:
       type: object
+      description: |-
+        Basic chatbot fields for the list and retrieve endpoints.
+
+        The full configuration is served by the ``inspect`` action instead (ADR-0024). v2 calls these
+        "chatbots" rather than "experiments" (ADR-0023).
       properties:
         id:
-          type: integer
-          readOnly: true
-        versions:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChatbotVersion'
-        created_at:
           type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
+          format: uuid
         name:
           type: string
           maxLength: 128
-        description:
+        url:
           type: string
-          nullable: true
-          title: A longer description of the experiment.
-        seed_message:
-          type: string
-          description: If set, send this message to the bot when the session starts,
-            and prompt the user with the initial response.
-        public_id:
-          type: string
-          format: uuid
-        conversational_consent_enabled:
-          type: boolean
-          description: 'If enabled, the consent form will be sent at the start of
-            a conversation for external channels. Note: This requires the experiment
-            to have a seed message.'
-        voice_response_behaviour:
-          allOf:
-          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
-          description: |-
-            This tells the bot when to reply with voice messages
-
-            * `always` - Always
-            * `reciprocal` - Reciprocal
-            * `never` - Never
-        echo_transcript:
-          type: boolean
-          description: Whether or not the bot should tell the user what it heard when
-            the user sends voice messages
-        participant_allowlist:
-          type: array
-          items:
-            type: string
-            maxLength: 128
+          format: uri
+          readOnly: true
+          title: API URL
         version_number:
           type: integer
           maximum: 2147483647
           minimum: 0
-          default: 1
-        is_default_version:
-          type: boolean
-          default: false
-        is_archived:
-          type: boolean
-        version_description:
-          type: string
-        debug_mode_enabled:
-          type: boolean
-        create_version_task_id:
-          type: string
-          maxLength: 128
-        file_uploads_enabled:
-          type: boolean
-          description: Enables file attachments in the web chat interface.
-        owner:
-          type: integer
-        pipeline:
-          type: integer
-          nullable: true
-        consent_form:
-          type: integer
-          nullable: true
-          description: Consent form content to show to users before participation
-            in experiments.
-        voice_provider:
-          type: integer
-          nullable: true
-        synthetic_voice:
-          type: integer
-          nullable: true
-        trace_provider:
-          type: integer
-          nullable: true
-        working_version:
-          type: integer
-          nullable: true
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatbotVersion'
       required:
-      - created_at
       - id
       - name
-      - owner
-      - updated_at
+      - url
       - versions
-      - working_version
     ChatbotInspect:
       type: object
       description: |-
@@ -422,9 +349,6 @@ components:
       - voice
     ChatbotVersion:
       type: object
-      description: |-
-        A chatbot's published version, nested on the working-version row so the version family is
-        visible without a follow-up query.
       properties:
         name:
           type: string
@@ -1172,7 +1096,7 @@ components:
       - files
       - id
       - name
-    PaginatedChatbotDetailList:
+    PaginatedChatbotList:
       type: object
       required:
       - results
@@ -1190,7 +1114,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/ChatbotDetail'
+            $ref: '#/components/schemas/Chatbot'
         count:
           type: integer
           description: Total number of items matching the query. Only present on the
@@ -1370,16 +1294,6 @@ components:
       required:
       - name
       - slug
-    VoiceResponseBehaviourEnum:
-      enum:
-      - always
-      - reciprocal
-      - never
-      type: string
-      description: |-
-        * `always` - Always
-        * `reciprocal` - Reciprocal
-        * `never` - Never
   securitySchemes:
     OAuth2:
       type: oauth2

@@ -78,12 +78,6 @@ class WidgetDomainPermission(BasePermission):
         return validate_domain(origin_domain, allowed_domains)
 
 
-class IsTeamAdmin(BasePermission):
-    def has_permission(self, request, view):
-        membership = getattr(request, "team_membership", None)
-        return bool(membership and membership.is_team_admin())
-
-
 class SessionAccessPermission(BasePermission):
     """Object-capability check for chat session endpoints.
 
