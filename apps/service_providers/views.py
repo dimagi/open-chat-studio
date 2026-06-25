@@ -370,7 +370,7 @@ def create_llm_provider_model(request, team_slug: str):
         model.team = request.team
         model.save()
         if cost_tracking_enabled:
-            _persist_team_pricing_rules(request.team, model.type, model.name, form.cleaned_data, request.user)
+            _persist_team_pricing_rules(request.team, model, form.cleaned_data, request.user)
     custom_models = LlmProviderModel.objects.filter(team=request.team)
     return render(
         request,
@@ -409,7 +409,7 @@ class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, dj
             response["HX-Reswap"] = "innerHTML"
             return response
         with transaction.atomic():
-            _persist_team_pricing_rules(request.team, model.type, model.name, form.cleaned_data, request.user)
+            _persist_team_pricing_rules(request.team, model, form.cleaned_data, request.user)
         return _render_model_row(request, model)
 
     @staticmethod
@@ -468,7 +468,7 @@ def _format_per_million(unit_price: Decimal) -> str:
     return text or "0"
 
 
-def _persist_team_pricing_rules(team, provider_type: str, model_name: str, cleaned: dict, user) -> None:
+def _persist_team_pricing_rules(team, model: LlmProviderModel, cleaned: dict, user) -> None:
     """Close any active team rule for the (provider, model, kind) and insert
     a fresh team-scoped rule per non-empty form field. Globals are untouched
     - resolution merges them with the team override at read time. The UPDATE
@@ -483,15 +483,15 @@ def _persist_team_pricing_rules(team, provider_type: str, model_name: str, clean
                 continue
             PricingRule.objects.filter(
                 team=team,
-                provider_type=provider_type,
-                model_name=model_name,
+                provider_type=model.type,
+                model_name=model.name,
                 service_kind=kind,
                 effective_to__isnull=True,
             ).update(effective_to=now)
             PricingRule.objects.create(
                 team=team,
-                provider_type=provider_type,
-                model_name=model_name,
+                provider_type=model.type,
+                model_name=model.name,
                 service_kind=kind,
                 unit_price=per_million * _PRICE_PER_1K_FROM_MILLION,
                 source=PricingSource.MANUAL,

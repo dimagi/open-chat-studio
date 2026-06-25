@@ -727,40 +727,45 @@ def render_missing_pricing_issue_body(entries: list[MissingPricingEntry]) -> str
     return "\n".join(lines) + "\n"
 
 
+# Reconciliation run bundle
+
+
+@dataclass(frozen=True)
+class _ReconcileResults:
+    """All section data produced by one reconciliation pass."""
+
+    candidates: list[dict]
+    classification: dict
+    changes: list[RateChange]
+    unmatched_diff: set[str]
+    missing: list[MissingPricingEntry]
+
+
 # Output assembly + GitHub Actions integration
 
 
-def _assemble_payload(
-    *,
-    run_date: str,
-    days_lookback: int,
-    candidates: list[dict],
-    classification: dict,
-    changes: list[RateChange],
-    unmatched_diff: set[str],
-    missing: list[MissingPricingEntry],
-) -> dict:
+def _assemble_payload(results: _ReconcileResults, *, run_date: str, days_lookback: int) -> dict:
     return {
         "run_date": run_date,
         "days_lookback": days_lookback,
         "summary": {
-            "candidates_from_api": len(candidates),
-            "new_models": len(classification["new_models"]),
-            "already_registered": len(classification["already_registered"]),
-            "unpriced_candidates": len(classification["unpriced_models"]),
-            "pricing_entries_generated": len(classification["pricing_entries"]),
-            "price_changes": len(changes),
-            "missing_pricing": len(missing),
+            "candidates_from_api": len(results.candidates),
+            "new_models": len(results.classification["new_models"]),
+            "already_registered": len(results.classification["already_registered"]),
+            "unpriced_candidates": len(results.classification["unpriced_models"]),
+            "pricing_entries_generated": len(results.classification["pricing_entries"]),
+            "price_changes": len(results.changes),
+            "missing_pricing": len(results.missing),
         },
-        "new_models": classification["new_models"],
-        "already_registered": classification["already_registered"],
-        "unpriced_models": classification["unpriced_models"],
-        "pricing_entries": classification["pricing_entries"],
-        "price_changes": [c.__dict__ for c in changes],
-        "unmatched_diff_models": sorted(unmatched_diff),
+        "new_models": results.classification["new_models"],
+        "already_registered": results.classification["already_registered"],
+        "unpriced_models": results.classification["unpriced_models"],
+        "pricing_entries": results.classification["pricing_entries"],
+        "price_changes": [c.__dict__ for c in results.changes],
+        "unmatched_diff_models": sorted(results.unmatched_diff),
         "missing_pricing": [
             {"provider_type": e.provider_type, "model_name": e.model_name, "kinds_missing": list(e.kinds_missing)}
-            for e in missing
+            for e in results.missing
         ],
     }
 
@@ -846,81 +851,80 @@ def _load_litellm() -> dict[str, Any]:
         return {}
 
 
-def _maybe_write_pricing_pr_body(
-    changes: list[RateChange],
-    unmatched_diff: set[str],
-    seed: list[dict],
-    seed_path: Path,
+def _commit_price_changes(
+    results: _ReconcileResults,
     repo_root: Path,
     output_path: Path,
     today: datetime.date,
 ) -> Path | None:
-    if not changes:
+    """Rewrite seed JSON + emit rate-update migration + write PR body.
+    No-op (returns None) when there are no rate changes.
+    """
+    if not results.changes:
         return None
-    seed_path.write_text(json.dumps(apply_changes(seed, changes), indent=2) + "\n")
+    seed_path = repo_root / LLM_PRICING_REL_PATH
+    seed = load_seed(seed_path)
+    seed_path.write_text(json.dumps(apply_changes(seed, results.changes), indent=2) + "\n")
     migration_path = generate_migration(repo_root / MIGRATIONS_DIR_REL_PATH, today)
     print(f"  -> wrote {migration_path.name} + updated seed")
     body_path = output_path.with_name(output_path.stem + ".pricing-body.md")
-    body_path.write_text(render_pr_body(changes, unmatched_diff))
+    body_path.write_text(render_pr_body(results.changes, results.unmatched_diff))
     return body_path
 
 
-def _maybe_write_missing_body(missing: list[MissingPricingEntry], output_path: Path) -> Path | None:
-    if not missing:
+def _write_missing_body(results: _ReconcileResults, output_path: Path) -> Path | None:
+    if not results.missing:
         return None
     body_path = output_path.with_name(output_path.stem + ".missing-pricing-body.md")
-    body_path.write_text(render_missing_pricing_issue_body(missing))
+    body_path.write_text(render_missing_pricing_issue_body(results.missing))
     return body_path
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _build_arg_parser().parse_args(argv)
-    repo_root: Path = args.repo_root.resolve()
-    today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
-
-    print(f"[reconcile-models] repo_root={repo_root}")
-
+def _run_reconciliation(repo_root: Path, bearer: str, days: int) -> _ReconcileResults:
+    """Fetch + classify + diff + audit. The print()s narrate progress for CI logs."""
     print("  Loading registered models ...")
     registered = load_registered_models(repo_root)
     active = load_active_default_models(repo_root)
     print(f"  -> {sum(len(v) for v in registered.values())} registered entries; {len(active)} active OCS models")
 
     print("  Loading existing pricing seed ...")
-    seed_path = repo_root / LLM_PRICING_REL_PATH
-    seed = load_seed(seed_path)
-    index = seed_index(seed)
+    index = seed_index(load_seed(repo_root / LLM_PRICING_REL_PATH))
     priced = set(index)
     print(f"  -> {len(priced)} priced (provider, model) pairs")
 
     print("  Fetching LiteLLM pricing fallback ...")
     litellm_data = _load_litellm()
 
-    print(f"  Fetching candidates from zeroeval API (days={args.days}) ...")
-    candidates = fetch_candidates(args.bearer_token, args.days)
+    print(f"  Fetching candidates from zeroeval API (days={days}) ...")
+    candidates = fetch_candidates(bearer, days)
     print(f"  -> {len(candidates)} candidate(s) matched to OCS orgs")
     classification = process_candidates(candidates, registered, priced, litellm_data)
 
     print("  Diffing seed against llm-stats current pricing ...")
-    changes, unmatched_diff = compute_changes(index, lambda mid: fetch_detail(mid, args.bearer_token))
+    changes, unmatched_diff = compute_changes(index, lambda mid: fetch_detail(mid, bearer))
     print(f"  -> {len(changes)} rate change(s); {len(unmatched_diff)} unmatched")
 
     print("  Auditing missing pricing for OCS-managed models ...")
     missing = audit_missing_pricing(active, index)
     print(f"  -> {len(missing)} model(s) missing seed pricing")
 
-    pricing_body_path = _maybe_write_pricing_pr_body(
-        changes, unmatched_diff, seed, seed_path, repo_root, args.output, today
-    )
-    missing_body_path = _maybe_write_missing_body(missing, args.output)
+    return _ReconcileResults(candidates, classification, changes, unmatched_diff, missing)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_arg_parser().parse_args(argv)
+    repo_root: Path = args.repo_root.resolve()
+    today = datetime.date.fromisoformat(args.today) if args.today else datetime.date.today()
+    print(f"[reconcile-models] repo_root={repo_root}")
+
+    results = _run_reconciliation(repo_root, args.bearer_token, args.days)
+    pricing_body_path = _commit_price_changes(results, repo_root, args.output, today)
+    missing_body_path = _write_missing_body(results, args.output)
 
     payload = _assemble_payload(
+        results,
         run_date=datetime.datetime.now(datetime.UTC).isoformat(),
         days_lookback=args.days,
-        candidates=candidates,
-        classification=classification,
-        changes=changes,
-        unmatched_diff=unmatched_diff,
-        missing=missing,
     )
     args.output.write_text(json.dumps(payload, indent=2))
 
@@ -930,9 +934,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {key}: {value}")
 
     _write_github_output(
-        _new_models_outputs(classification["new_models"])
-        + _price_change_outputs(changes, today, pricing_body_path)
-        + _missing_pricing_outputs(missing, missing_body_path)
+        _new_models_outputs(results.classification["new_models"])
+        + _price_change_outputs(results.changes, today, pricing_body_path)
+        + _missing_pricing_outputs(results.missing, missing_body_path)
     )
     return 0
 
