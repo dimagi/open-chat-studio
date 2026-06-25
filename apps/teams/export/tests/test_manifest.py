@@ -87,9 +87,9 @@ IGNORED_MODELS = frozenset(
     }
 )
 
-# Synced inside another resource's row, not as standalone resources: a membership rides in its user's
-# row (the team role), a chat in its session's.
-EMBEDDED_MODELS = frozenset({"teams.membership", "chat.chat"})
+# Synced inside another resource's row, not as a standalone resource: a membership rides in its
+# user's row (the team role).
+EMBEDDED_MODELS = frozenset({"teams.membership"})
 
 
 def test_every_entry_resolves_to_a_model():
@@ -135,7 +135,7 @@ def test_every_first_party_model_is_synced_or_ignored():
         # models leak in here under xdist depending on which tests share the worker.
         if m._meta.app_config.name.startswith("apps.") and "tests" not in m._meta.app_config.name.split(".")
     }
-    # The team is synced via a dedicated step (TEAM_MODEL); embedded models (membership, chat) ride
+    # The team is synced via a dedicated step (TEAM_MODEL); embedded models (membership) ride
     # inside another resource's rows rather than being served as generic manifest resources.
     classified = {e.model for e in manifest.MANIFEST_ENTRIES} | IGNORED_MODELS | EMBEDDED_MODELS | {manifest.TEAM_MODEL}
     unclassified = first_party - classified
@@ -154,12 +154,17 @@ def test_embedded_models_resolve_to_models():
         assert _model(label) is not None
 
 
-def test_membership_and_chat_are_embedded_not_standalone_resources():
-    """Membership rides inside the user export (the team role); chat rides inside the session export."""
+def test_membership_is_embedded_and_chat_is_a_standalone_resource():
+    """Membership rides inside the user export (the team role); chat is its own synced resource."""
     assert "teams.membership" in EMBEDDED_MODELS
-    assert "chat.chat" in EMBEDDED_MODELS
     assert manifest.get_manifest_entry("memberships") is None
-    assert manifest.get_manifest_entry("chats") is None
+    assert manifest.get_manifest_entry("chats") is not None
+
+
+def test_chat_is_served_before_sessions():
+    """A session references its chat by FK, so the chat must be served (and imported) first."""
+    models_in_order = [e.model for e in manifest.MANIFEST_ENTRIES]
+    assert models_in_order.index("chat.chat") < models_in_order.index("experiments.experimentsession")
 
 
 def test_registry_fields_exist_on_their_model():

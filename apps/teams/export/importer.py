@@ -235,28 +235,8 @@ class Importer:
             self._collect_concrete_field(field, row, named, field_values, timestamps)
         self._remap_embedded_resource_ids(model_label, field_values)
         self._assign_team(model_label, model, field_values)
-        self._attach_session_chat(model_label, row, field_values)
         m2m_values = self._build_m2m_values(model, row, named)
         return field_values, m2m_values, timestamps
-
-    def _attach_session_chat(self, model_label: str, row: dict, field_values: dict) -> None:
-        """Recreate the session's chat (or update an already-imported session's chat) and point the
-        session at it. Chat isn't a synced resource -- its fields ride in the session row."""
-        if model_label != "experiments.experimentsession":
-            return
-        from apps.chat.models import Chat  # noqa: PLC0415 - models load lazily
-
-        chat_fields = row.get("chat") or {}
-        target_pk = self.store.get_target(model_label, row["id"])
-        existing = entry_model(model_label).objects.filter(pk=target_pk).first() if target_pk else None
-        if existing is not None:
-            chat = existing.chat
-            for key, value in chat_fields.items():
-                setattr(chat, key, value)
-            chat.save()
-        else:
-            chat = Chat.objects.create(team=self.target_team, **chat_fields)
-        field_values["chat_id"] = chat.pk
 
     def _assign_team(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
         """Set a team-scoped row's team to the team being synced. The per-row team FK isn't exported

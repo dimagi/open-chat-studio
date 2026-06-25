@@ -3,7 +3,7 @@ model and a new field is exported the moment it's added. Output-only; ``.save()`
 
 from functools import cache
 
-from drf_spectacular.utils import OpenApiResponse, extend_schema_field, extend_schema_serializer
+from drf_spectacular.utils import OpenApiResponse, extend_schema_field
 from rest_framework import serializers
 
 from apps.teams.export.manifest import (
@@ -59,26 +59,10 @@ def _is_global_resolver(null_field: str):
     return get_is_global
 
 
-@extend_schema_serializer(component_name="SessionChat")
-class _EmbeddedChatSerializer(serializers.Serializer):
-    """The chat fields carried inline in a session row (chat isn't its own synced resource)."""
-
-    name = serializers.CharField()
-    translated_languages = serializers.ListField(child=serializers.CharField(), allow_null=True)
-    metadata = serializers.JSONField()
-
-
-@extend_schema_field(_EmbeddedChatSerializer)
-def _session_chat(self, session):
-    chat = session.chat
-    return {"name": chat.name, "translated_languages": chat.translated_languages, "metadata": chat.metadata}
-
-
 # Per-model SerializerMethodFields for values that aren't a plain field dump.
 _FIELD_RESOLVERS: dict[str, dict] = {
     "teams.team": {"feature_flags": _feature_flags},
     "users.customuser": {"groups": _team_role_groups},
-    "experiments.experimentsession": {"chat": _session_chat},
 }
 
 

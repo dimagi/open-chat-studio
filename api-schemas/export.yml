@@ -68,6 +68,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentList'
           description: ''
+  /api/export/chats/:
+    get:
+      operationId: chats
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Chats
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - {}
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatList'
+          description: ''
   /api/export/consent_forms/:
     get:
       operationId: consent_forms
@@ -643,6 +675,53 @@ components:
     BlankEnum:
       enum:
       - ''
+    ChatDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        translated_languages:
+          type: array
+          items:
+            type: string
+            maxLength: 3
+          nullable: true
+          description: List of language codes for which translated text is available
+        metadata: {}
+      required:
+      - created_at
+      - id
+      - updated_at
+    ChatList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     ChatbotSessionStatusEnum:
       enum:
       - setup
@@ -964,10 +1043,6 @@ components:
         id:
           type: integer
           readOnly: true
-        chat:
-          allOf:
-          - $ref: '#/components/schemas/SessionChat'
-          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1029,6 +1104,8 @@ components:
         participant:
           type: integer
         experiment:
+          type: integer
+        chat:
           type: integer
         experiment_channel:
           type: integer
@@ -1535,23 +1612,6 @@ components:
         * `OpenAIVoiceEngine` - OpenAIVoiceEngine
         * `ElevenLabs` - ElevenLabs
         * `Intron` - Intron
-    SessionChat:
-      type: object
-      description: The chat fields carried inline in a session row (chat isn't its
-        own synced resource).
-      properties:
-        name:
-          type: string
-        translated_languages:
-          type: array
-          items:
-            type: string
-          nullable: true
-        metadata: {}
-      required:
-      - metadata
-      - name
-      - translated_languages
     SourceMaterialDetail:
       type: object
       properties:

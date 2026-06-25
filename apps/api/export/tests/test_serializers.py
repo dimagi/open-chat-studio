@@ -4,12 +4,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 
 from apps.api.export.serializers import build_resource_serializer
+from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import (
+    ChatFactory,
     ConsentFormFactory,
     ExperimentFactory,
     ExperimentSessionFactory,
@@ -107,19 +109,22 @@ def test_experiment_fk_serializes_as_source_pk():
     assert data["consent_form"] == consent.id
 
 
-def test_session_serializer_embeds_chat_fields_instead_of_fk():
-    """A session's chat rides inline (name, translated_languages, metadata) rather than as a chat FK
-    id, since chat isn't its own synced resource."""
+def test_session_serializer_references_chat_by_fk():
+    """A session's chat is its own synced resource, so the session row carries the chat as a plain
+    FK pk rather than embedding its fields."""
     session = ExperimentSessionFactory()
-    session.chat.name = "My Chat"
-    session.chat.translated_languages = ["en", "fr"]
-    session.chat.metadata = {"k": "v"}
-    session.chat.save()
-
     data = _serialize(ExperimentSession, session)
+    assert data["chat"] == session.chat_id
 
-    assert "chat_id" not in data
-    assert data["chat"] == {"name": "My Chat", "translated_languages": ["en", "fr"], "metadata": {"k": "v"}}
+
+def test_chat_serializer_dumps_its_fields_and_drops_team():
+    """Chat is a standalone resource: it dumps its own fields and, like every team-scoped row, omits
+    the redundant team FK."""
+    chat = ChatFactory(translated_languages=["en", "fr"], metadata={"k": "v"})
+    data = _serialize(Chat, chat)
+    assert data["translated_languages"] == ["en", "fr"]
+    assert data["metadata"] == {"k": "v"}
+    assert "team" not in data
 
 
 @pytest.mark.parametrize("is_global", [True, False])

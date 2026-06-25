@@ -49,6 +49,7 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("experiments.experiment", "chatbots", "structural", "pk"),
     ManifestEntry("experiments.participant", "participants", "live", "updated_at_id"),
     ManifestEntry("experiments.participantdata", "participant_data", "live", "updated_at_id", secret=True),
+    ManifestEntry("chat.chat", "chats", "live", "updated_at_id"),
     ManifestEntry("experiments.experimentsession", "sessions", "live", "updated_at_id"),
 ]
 
@@ -80,9 +81,6 @@ TEAM_PATH_REGISTRY: dict[str, str] = {
 
 PREFETCH_REGISTRY: dict[str, list[str]] = {
     "users.customuser": ["membership_set", "membership_set__groups"],
-    "experiments.experimentsession": ["chat"],
-    # The chatbot row nests its published versions; prefetch them to avoid a query per row.
-    "experiments.experiment": ["versions"],
 }
 
 

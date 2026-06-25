@@ -224,13 +224,24 @@ def test_reimporting_user_does_not_duplicate_membership(store):
     assert Membership.objects.filter(team_id=team_pk, user=user).count() == 1
 
 
-def _session_row(source_id=33, experiment_src=11, participant_src=22, chat=None):
+def _chat_row(source_id=77, translated_languages=None, metadata=None):
+    return {
+        "id": source_id,
+        "name": "Imported Chat",
+        "translated_languages": translated_languages if translated_languages is not None else ["en"],
+        "metadata": metadata if metadata is not None else {},
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def _session_row(source_id=33, experiment_src=11, participant_src=22, chat_src=77):
     return {
         "id": source_id,
         "experiment": experiment_src,
         "participant": participant_src,
         "experiment_channel": None,
-        "chat": chat if chat is not None else {"name": "Imported Chat", "translated_languages": ["en"], "metadata": {}},
+        "chat": chat_src,
         "created_at": PAST,
         "updated_at": PAST,
     }
@@ -246,43 +257,34 @@ def _seed_session_fks(store, team_pk):
     store.record("experiments.participant", 22, participant.id)
 
 
-def test_importing_session_creates_its_chat_inline(store):
-    """A session's chat isn't its own synced resource -- importing the session creates the chat in
-    the synced team from the fields embedded in the row."""
+def test_importing_chat_creates_it_in_the_synced_team(store):
+    """Chat is its own synced resource now -- importing a chat row creates it in the synced team and
+    records its id translation."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    team_pk = store.get_target("teams.team", 9001)
+
+    importer.import_rows("chat.chat", [_chat_row(translated_languages=["en"], metadata={"k": "v"})])
+
+    chat = Chat.objects.get(pk=store.get_target("chat.chat", 77))
+    assert chat.team_id == team_pk
+    assert chat.translated_languages == ["en"]
+    assert chat.metadata == {"k": "v"}
+
+
+def test_session_chat_fk_resolves_to_the_imported_chat(store):
+    """A session references its chat by FK; with the chat imported first, the session's chat_id
+    resolves to the target chat."""
     importer = Importer(store)
     importer.import_rows("teams.team", [_team_row()])
     team_pk = store.get_target("teams.team", 9001)
     _seed_session_fks(store, team_pk)
+    importer.import_rows("chat.chat", [_chat_row(source_id=77)])
 
-    importer.import_rows(
-        "experiments.experimentsession",
-        [_session_row(chat={"name": "Imported Chat", "translated_languages": ["en"], "metadata": {"k": "v"}})],
-    )
+    importer.import_rows("experiments.experimentsession", [_session_row(chat_src=77)])
 
     session = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 33))
-    assert session.chat.name == "Imported Chat"
-    assert session.chat.translated_languages == ["en"]
-    assert session.chat.metadata == {"k": "v"}
-    assert session.chat.team_id == team_pk
-
-
-def test_reimporting_session_reuses_its_chat(store):
-    """Re-running updates the session's existing chat rather than creating a duplicate."""
-    importer = Importer(store)
-    importer.import_rows("teams.team", [_team_row()])
-    team_pk = store.get_target("teams.team", 9001)
-    _seed_session_fks(store, team_pk)
-
-    importer.import_rows("experiments.experimentsession", [_session_row()])
-    session = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 33))
-    first_chat_pk = session.chat_id
-
-    importer.import_rows("experiments.experimentsession", [_session_row(chat={"name": "Renamed", "metadata": {}})])
-
-    session.refresh_from_db()
-    assert session.chat_id == first_chat_pk  # same chat row, not a new one
-    assert session.chat.name == "Renamed"
-    assert Chat.objects.filter(pk=first_chat_pk).count() == 1
+    assert session.chat_id == store.get_target("chat.chat", 77)
 
 
 def test_default_consent_form_maps_to_auto_created_default(store):
