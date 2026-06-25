@@ -471,24 +471,16 @@ def _format_per_million(unit_price: Decimal) -> str:
 def _persist_team_pricing_rules(team, provider_type: str, model_name: str, cleaned: dict, user) -> None:
     """Close any active team rule for the (provider, model, kind) and insert
     a fresh team-scoped rule per non-empty form field. Globals are untouched
-    - resolution merges them with the team override at read time.
-    `select_for_update()` on the close-out query serialises concurrent
-    overrides so the partial-unique active-rule constraint never trips."""
+    - resolution merges them with the team override at read time. The UPDATE
+    takes per-row exclusive locks under Postgres READ COMMITTED, so concurrent
+    overrides serialise on the active row and the partial-unique active-rule
+    constraint can't trip."""
     now = timezone.now()
     with transaction.atomic():
         for field_name, kind in _FORM_FIELD_TO_KIND.items():
             per_million = cleaned.get(field_name)
             if per_million is None:
                 continue
-            list(
-                PricingRule.objects.select_for_update().filter(
-                    team=team,
-                    provider_type=provider_type,
-                    model_name=model_name,
-                    service_kind=kind,
-                    effective_to__isnull=True,
-                )
-            )
             PricingRule.objects.filter(
                 team=team,
                 provider_type=provider_type,
