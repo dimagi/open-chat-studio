@@ -427,6 +427,107 @@ describe('ocs-chat', () => {
     });
   });
 
+  describe('Navigation-triggered page context updates', () => {
+    let originalHref: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      // Allow tests to control window.location.href
+      originalHref = Object.getOwnPropertyDescriptor(window, 'location');
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    function setUrl(url: string) {
+      Object.defineProperty(window, 'location', {
+        value: { href: url, pathname: new URL(url).pathname, hash: new URL(url).hash },
+        writable: true,
+        configurable: true,
+      });
+    }
+
+    it('sets internalPageContext to minimal URL context on popstate when no pageContext prop is set', async () => {
+      setUrl('https://example.com/page-a');
+
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      // No pageContext prop set
+      expect(component.pageContext).toBeUndefined();
+
+      // Simulate SPA navigation
+      setUrl('https://example.com/page-b');
+      window.dispatchEvent(new Event('popstate'));
+      await page.waitForChanges();
+
+      expect((component as any).internalPageContext).toEqual({ url: 'https://example.com/page-b' });
+    });
+
+    it('re-loads pageContext prop on popstate when pageContext is set', async () => {
+      setUrl('https://example.com/page-a');
+
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      const ctx = { url: '/page-a', title: 'Page A' };
+      component.pageContext = ctx;
+      await page.waitForChanges();
+
+      // Clear internalPageContext as if a message was already sent
+      (component as any).internalPageContext = undefined;
+
+      // Simulate SPA navigation
+      setUrl('https://example.com/page-b');
+      const newCtx = { url: '/page-b', title: 'Page B' };
+      component.pageContext = newCtx;
+      window.dispatchEvent(new Event('popstate'));
+      await page.waitForChanges();
+
+      expect((component as any).internalPageContext).toEqual(newCtx);
+    });
+
+    it('does not update internalPageContext when URL has not changed', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      // componentDidLoad already set currentPageUrl = window.location.href.
+      // Clearing internalPageContext simulates a state after a message was sent.
+      (component as any).internalPageContext = undefined;
+
+      // Dispatch popstate without changing the URL — should be a no-op.
+      window.dispatchEvent(new Event('popstate'));
+      await page.waitForChanges();
+
+      expect((component as any).internalPageContext).toBeUndefined();
+    });
+
+    it('responds to ocs-navigation custom event', async () => {
+      setUrl('https://example.com/page-a');
+
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      setUrl('https://example.com/page-b');
+      window.dispatchEvent(new CustomEvent('ocs-navigation'));
+      await page.waitForChanges();
+
+      expect((component as any).internalPageContext).toEqual({ url: 'https://example.com/page-b' });
+    });
+  });
+
   describe('Combined Welcome Messages and Starter Questions', () => {
     it('should display both welcome messages and starter questions from translations', async () => {
       const page = await newSpecPage({

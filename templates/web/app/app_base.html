@@ -43,8 +43,8 @@
     >
     </open-chat-studio-widget>
     <script type="module">
-      import { initChatWidgetPageContext } from '{% static "js/modules/chat-widget-context.js" %}';
-      initChatWidgetPageContext({
+      import { initChatWidgetPageContext, setupNavigationListener } from '{% static "js/modules/chat-widget-context.js" %}';
+      const serverContext = {
         team: {% if request.team %}"{{ request.team.slug }}"{% else %}null{% endif %},
         activeTab: {% if active_tab %}"{{ active_tab }}"{% else %}null{% endif %},
         pageTitle: {% if page_title %}"{{ page_title|escapejs }}"{% else %}null{% endif %},
@@ -53,7 +53,9 @@
             { text: "{{ message.message|escapejs }}", level: "{{ message.tags|escapejs }}" }{% if not forloop.last %},{% endif %}
           {% endfor %}
         ]
-      });
+      };
+      initChatWidgetPageContext(serverContext);
+      setupNavigationListener(serverContext);
     </script>
   {% endif %}
 {% endblock footer %}

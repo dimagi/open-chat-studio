@@ -277,6 +277,8 @@ export class OcsChat {
   private chatWindowFullscreenWidth: number = 1024;
   private positionInitialized: boolean = false;
   private internalPageContext?: Record<string, any>;
+  private currentPageUrl: string = '';
+  private navigationCleanupFn?: () => void;
   private sessionEpoch: number = 0;
   private currentSessionToken?: string;
   @Element() host: HTMLElement;
@@ -349,6 +351,9 @@ export class OcsChat {
     }, 0);
 
     window.addEventListener('resize', this.handleWindowResize);
+
+    this.currentPageUrl = window.location.href;
+    this.setupNavigationListeners();
   }
 
   disconnectedCallback() {
@@ -356,6 +361,8 @@ export class OcsChat {
     this.removeEventListeners();
     this.removeButtonEventListeners();
     window.removeEventListener('resize', this.handleWindowResize);
+    this.navigationCleanupFn?.();
+    this.navigationCleanupFn = undefined;
   }
 
   private applySessionToken(token?: string): void {
@@ -1096,6 +1103,53 @@ export class OcsChat {
   private endDrag(): void {
     this.isDragging = false;
     this.removeEventListeners();
+  }
+
+  /**
+   * Set up listeners for client-side navigation so that page context is
+   * re-sent to the bot whenever the URL changes (e.g. in SPAs).
+   *
+   * Listens for:
+   * - `popstate` — browser back/forward button
+   * - `ocs-navigation` — custom event dispatched by chat-widget-context.js
+   *   when `setupNavigationListener()` detects a pushState/replaceState call
+   */
+  private setupNavigationListeners(): void {
+    const handler = () => this.handleNavigationChange();
+    window.addEventListener('popstate', handler);
+    window.addEventListener('ocs-navigation', handler);
+    this.navigationCleanupFn = () => {
+      window.removeEventListener('popstate', handler);
+      window.removeEventListener('ocs-navigation', handler);
+    };
+  }
+
+  /**
+   * Called when a client-side navigation event is detected. If the URL has
+   * changed, marks the page context as stale so it is re-sent with the next
+   * outgoing message.
+   *
+   * - When `pageContext` prop is set: re-loads it (the host page is expected
+   *   to have already updated the prop via `setupNavigationListener`).
+   * - When no `pageContext` prop is configured: falls back to a minimal
+   *   context containing the new URL so the bot always knows where the user is.
+   */
+  private handleNavigationChange(): void {
+    const newUrl = window.location.href;
+    if (newUrl === this.currentPageUrl) {
+      return;
+    }
+    this.currentPageUrl = newUrl;
+
+    if (this.pageContext) {
+      // The host page (via setupNavigationListener) will have already updated
+      // the pageContext prop, triggering @Watch. Re-calling loadInternalPageContext
+      // here ensures we pick up the new value even if the Watch hasn't fired yet.
+      this.loadInternalPageContext();
+    } else {
+      // No external pageContext configured: send the new URL as minimal context.
+      this.internalPageContext = { url: newUrl };
+    }
   }
 
   private addEventListeners(): void {
