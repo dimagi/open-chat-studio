@@ -17,4 +17,12 @@ export default tseslint.config(
       }
     },
   },
+  {
+    files: ["**/*.test.js", "**/*.test.ts", "**/*.spec.ts", "**/*.spec.tsx"],
+    "languageOptions": {
+      "globals": {
+        ...globals.jest,
+      }
+    },
+  },
 );

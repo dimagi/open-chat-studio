@@ -436,6 +436,9 @@ describe('ocs-chat', () => {
     });
 
     afterEach(() => {
+      if (originalHref) {
+        Object.defineProperty(window, 'location', originalHref);
+      }
       jest.restoreAllMocks();
     });
 
