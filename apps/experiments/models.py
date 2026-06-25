@@ -681,6 +681,7 @@ class Experiment(BaseTeamModel, VersionsMixin):
         indexes = [
             models.Index(fields=["team", "is_archived", "working_version"]),
         ]
+        verbose_name = "Chatbot"
 
     def __str__(self):
         if self.working_version_id is None:

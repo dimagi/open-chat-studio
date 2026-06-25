@@ -83,11 +83,6 @@ PREFETCH_REGISTRY: dict[str, list[str]] = {
     "experiments.experimentsession": ["chat"],
 }
 
-SCHEMA_NAME_OVERRIDES: dict[str, str] = {
-    "users.customuser": "User",
-    "pipelines.node": "PipelineNode",
-}
-
 
 @dataclass(frozen=True)
 class GlobalSpec:

@@ -4,16 +4,21 @@ subclass carrying that schema."""
 
 import pytest
 from django.urls import resolve
+from drf_spectacular.generators import SchemaGenerator
 from rest_framework import serializers
 
 from apps.api.general.schema import (
-    build_docs_item_serializer,
     build_resource_response_serializer,
     resource_responses,
 )
-from apps.api.general.serializers import ManifestEntrySerializer, ManifestSerializer
-from apps.api.general.views import ResourceView
-from apps.teams.export.manifest import MANIFEST_ENTRIES, build_manifest, get_manifest_entry
+from apps.api.general.serializers import (
+    ManifestEntrySerializer,
+    ManifestSerializer,
+    build_resource_serializer,
+    component_name,
+)
+from apps.api.general.views import ResourceView, resource_view
+from apps.teams.export.manifest import MANIFEST_ENTRIES, build_manifest, entry_model, get_manifest_entry
 
 
 def test_each_resource_resolves_to_a_resourceview_carrying_its_name():
@@ -21,6 +26,14 @@ def test_each_resource_resolves_to_a_resourceview_carrying_its_name():
         match = resolve(f"/api/v2/team/{entry.resource}/")
         assert issubclass(match.func.cls, ResourceView)
         assert match.kwargs == {"resource": entry.resource}
+
+
+def test_resource_view_class_name_uses_the_component_name():
+    """The generated view's class name is PascalCased and space-free (e.g. 'ChatbotResourceView'),
+    matching how the rest of the export subsystem names things off the model's verbose_name."""
+    for entry in MANIFEST_ENTRIES:
+        expected = f"{component_name(entry_model(entry.model))}ResourceView"
+        assert resource_view(entry).__name__ == expected
 
 
 def test_unknown_resource_resolves_to_catchall_view():
@@ -53,7 +66,8 @@ def test_secret_resources_document_the_no_public_key_conflict(resource, expect_4
 
 def test_secret_fields_documented_as_sealed_strings():
     # llm_providers' `config` is sealed to a base64 string at runtime, not its raw model type.
-    fields = build_docs_item_serializer(get_manifest_entry("llm_providers"))().fields
+    model = entry_model(get_manifest_entry("llm_providers").model)
+    fields = build_resource_serializer(model)().fields
     assert isinstance(fields["config"], serializers.CharField)
 
 
@@ -65,3 +79,29 @@ def test_manifest_serializer_matches_build_manifest_payload():
     declared = set(ManifestEntrySerializer().fields)
     actual_keys = set().union(*(entry.keys() for entry in manifest["entries"]))
     assert declared == actual_keys
+
+
+@pytest.fixture(scope="module")
+def v2_components():
+    return SchemaGenerator(api_version="v2").get_schema(request=None, public=True)["components"]["schemas"]
+
+
+def test_every_export_resource_publishes_its_row_component(v2_components):
+    """Each synced resource's documented row serializer is published as a valid, space-free
+    '<Model>Detail' component -- secret resources included, since their secret fields are redeclared
+    as sealed strings on that same serializer. The user-facing rename flows through (Experiment ->
+    'ChatbotDetail')."""
+    missing = []
+    for entry in MANIFEST_ENTRIES:
+        expected = f"{component_name(entry_model(entry.model))}Detail"
+        if expected not in v2_components:
+            missing.append(expected)
+    assert not missing, f"export resources without a row component: {missing}"
+
+
+@pytest.mark.parametrize("model_name", ["Team", "ConsentForm", "SourceMaterial"])
+def test_export_detail_does_not_clobber_curated_serializer_of_same_model(v2_components, model_name):
+    """The export '<Model>Detail' coexists with the curated public/inspect serializer that holds the
+    bare model name -- the two are distinct components, not one colliding definition."""
+    assert model_name in v2_components, f"curated '{model_name}' component went missing"
+    assert f"{model_name}Detail" in v2_components

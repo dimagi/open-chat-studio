@@ -1,13 +1,14 @@
 """A dynamically built DRF ModelSerializer per synced model, so a serializer can't drift from its
 model and a new field is exported the moment it's added. Output-only; ``.save()`` is never called."""
 
+from functools import cache
+
 from drf_spectacular.utils import extend_schema_field, extend_schema_serializer
 from rest_framework import serializers
 
 from apps.teams.export.manifest import (
     EXCLUDE_REGISTRY,
     GLOBAL_CONFIG,
-    SCHEMA_NAME_OVERRIDES,
     SECRET_REGISTRY,
     TEAM_MODEL,
     entry_model,
@@ -16,7 +17,7 @@ from apps.teams.export.manifest import (
 from apps.teams.export.seal import seal
 
 
-class _SyncSecretMixin:
+class _SecretMixin:
     secret_fields: list[str] = []
 
     def to_representation(self, instance):
@@ -97,7 +98,16 @@ class ManifestSerializer(serializers.Serializer):
     entries = ManifestEntrySerializer(many=True)
 
 
+def component_name(model) -> str:
+    """The base name for a synced model's OpenAPI components: its ``verbose_name`` PascalCased."""
+    return "".join(word[:1].upper() + word[1:] for word in str(model._meta.verbose_name).split())
+
+
+@cache
 def build_resource_serializer(model):
+    # Cached so every caller (the export resource endpoint and the v2 chatbot retrieve) shares one
+    # serializer class per model. drf-spectacular keys components by class identity, so a fresh class
+    # per call would collide on the component name and produce an incorrect schema.
     label = model._meta.label_lower
     # Every resource is imported into the single team named on the sync command, so the per-row team
     # FK is redundant -- drop it. Global/shared models surface an `is_global` flag instead, since
@@ -107,10 +117,15 @@ def build_resource_serializer(model):
         exclude.append("team")
     meta_attrs = {"model": model, "exclude": exclude} if exclude else {"model": model, "fields": "__all__"}
 
+    secret_fields = SECRET_REGISTRY.get(label, [])
     attrs: dict[str, object] = {
         "Meta": type("Meta", (), meta_attrs),
-        "secret_fields": SECRET_REGISTRY.get(label, []),
+        "secret_fields": secret_fields,
     }
+    # Secret fields are sealed to a base64 string at runtime (see _SecretMixin), so document them as
+    # that string rather than their raw model field type.
+    for field in secret_fields:
+        attrs[field] = serializers.CharField(help_text="Sealed under the team's public key (base64, RSA-OAEP).")
     for name, method in _FIELD_RESOLVERS.get(label, {}).items():
         attrs[name] = serializers.SerializerMethodField()
         attrs[f"get_{name}"] = method
@@ -120,11 +135,7 @@ def build_resource_serializer(model):
         attrs["is_global"] = serializers.SerializerMethodField()
         attrs["get_is_global"] = _is_global_resolver(spec.null_field)
 
-    serializer = type(f"{model.__name__}SyncSerializer", (_SyncSecretMixin, serializers.ModelSerializer), attrs)
-    component_name = SCHEMA_NAME_OVERRIDES.get(label)
-    if component_name:
-        serializer = extend_schema_serializer(component_name=component_name)(serializer)
-    return serializer
+    return type(f"{component_name(model)}DetailSerializer", (_SecretMixin, serializers.ModelSerializer), attrs)
 
 
 def build_team_serializer():

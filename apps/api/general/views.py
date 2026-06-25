@@ -27,7 +27,7 @@ from apps.teams.export.manifest import (
 from apps.teams.export.seal import load_public_key
 
 from .schema import resource_responses
-from .serializers import ManifestSerializer, build_resource_serializer, build_team_serializer
+from .serializers import ManifestSerializer, build_resource_serializer, build_team_serializer, component_name
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
@@ -187,7 +187,7 @@ def resource_view(entry: ManifestEntry) -> type[ResourceView]:
     resource's literal path. Subclassing keeps the auth and permissions (and therefore the security
     schemes) identical to the base view; the subclass exists only to carry the per-resource schema."""
     model = entry_model(entry.model)
-    view = type(f"{model.__name__}ExportView", (ResourceView,), {})
+    view = type(f"{component_name(model)}ResourceView", (ResourceView,), {})
     description = None
     if entry.cursor == "updated_at_id":
         description = (
