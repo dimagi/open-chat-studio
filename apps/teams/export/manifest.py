@@ -16,7 +16,6 @@ from django.db.models import ForeignKey, Model, Q, QuerySet
 class ManifestEntry:
     model: str  # "app_label.model" — the internal key (matches Model._meta.label_lower)
     resource: str  # the URL-facing name the sync endpoint is mounted at
-    phase: str  # structural | live | structural+live
     cursor: str  # pk | updated_at_id
     secret: bool = False
 
@@ -33,24 +32,24 @@ class ManifestEntry:
 TEAM_MODEL = "teams.team"
 
 MANIFEST_ENTRIES: list[ManifestEntry] = [
-    ManifestEntry("users.customuser", "users", "structural", "pk"),
-    ManifestEntry("service_providers.llmprovider", "llm_providers", "structural", "pk", secret=True),
-    ManifestEntry("service_providers.voiceprovider", "voice_providers", "structural", "pk", secret=True),
-    ManifestEntry("service_providers.messagingprovider", "messaging_providers", "structural", "pk", secret=True),
-    ManifestEntry("service_providers.authprovider", "auth_providers", "structural", "pk", secret=True),
-    ManifestEntry("service_providers.traceprovider", "trace_providers", "structural", "pk", secret=True),
-    ManifestEntry("service_providers.llmprovidermodel", "llm_provider_models", "structural", "pk"),
-    ManifestEntry("service_providers.embeddingprovidermodel", "embedding_provider_models", "structural", "pk"),
-    ManifestEntry("experiments.syntheticvoice", "synthetic_voices", "structural", "pk"),
-    ManifestEntry("experiments.sourcematerial", "source_materials", "structural", "pk"),
-    ManifestEntry("experiments.consentform", "consent_forms", "structural", "pk"),
-    ManifestEntry("pipelines.pipeline", "pipelines", "structural", "pk"),
-    ManifestEntry("pipelines.node", "pipeline_nodes", "structural", "pk"),
-    ManifestEntry("experiments.experiment", "chatbots", "structural", "pk"),
-    ManifestEntry("experiments.participant", "participants", "live", "updated_at_id"),
-    ManifestEntry("experiments.participantdata", "participant_data", "live", "updated_at_id", secret=True),
-    ManifestEntry("chat.chat", "chats", "live", "updated_at_id"),
-    ManifestEntry("experiments.experimentsession", "sessions", "live", "updated_at_id"),
+    ManifestEntry("users.customuser", "users", "pk"),
+    ManifestEntry("service_providers.llmprovider", "llm_providers", "pk", secret=True),
+    ManifestEntry("service_providers.voiceprovider", "voice_providers", "pk", secret=True),
+    ManifestEntry("service_providers.messagingprovider", "messaging_providers", "pk", secret=True),
+    ManifestEntry("service_providers.authprovider", "auth_providers", "pk", secret=True),
+    ManifestEntry("service_providers.traceprovider", "trace_providers", "pk", secret=True),
+    ManifestEntry("service_providers.llmprovidermodel", "llm_provider_models", "pk"),
+    ManifestEntry("service_providers.embeddingprovidermodel", "embedding_provider_models", "pk"),
+    ManifestEntry("experiments.syntheticvoice", "synthetic_voices", "pk"),
+    ManifestEntry("experiments.sourcematerial", "source_materials", "pk"),
+    ManifestEntry("experiments.consentform", "consent_forms", "pk"),
+    ManifestEntry("pipelines.pipeline", "pipelines", "pk"),
+    ManifestEntry("pipelines.node", "pipeline_nodes", "pk"),
+    ManifestEntry("experiments.experiment", "chatbots", "pk"),
+    ManifestEntry("experiments.participant", "participants", "updated_at_id"),
+    ManifestEntry("experiments.participantdata", "participant_data", "updated_at_id", secret=True),
+    ManifestEntry("chat.chat", "chats", "updated_at_id"),
+    ManifestEntry("experiments.experimentsession", "sessions", "updated_at_id"),
 ]
 
 # Fields sealed under the team's public key in transit (encrypted-at-rest or sensitive-by-policy).
@@ -153,7 +152,6 @@ def build_manifest() -> dict:
             {
                 "model": e.model,
                 "resource": e.resource,
-                "phase": e.phase,
                 "cursor": e.cursor,
                 "secret": e.secret,
             }

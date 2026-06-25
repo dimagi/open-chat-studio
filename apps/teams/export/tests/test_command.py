@@ -56,7 +56,6 @@ def _scenario(public_key):
         {
             "model": "service_providers.llmprovider",
             "resource": "llm_provider",
-            "phase": "structural",
             "cursor": "pk",
             "secret": True,
         },
@@ -118,7 +117,7 @@ def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
 
 def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
     entries = [
-        {"model": "users.customuser", "resource": "user", "phase": "structural", "cursor": "pk", "secret": False},
+        {"model": "users.customuser", "resource": "user", "cursor": "pk", "secret": False},
     ]
     rows = {
         "teams": [

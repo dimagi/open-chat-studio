@@ -1284,9 +1284,6 @@ components:
         resource:
           type: string
           description: URL-facing resource name the endpoint is mounted at.
-        phase:
-          type: string
-          description: structural | live | structural+live.
         cursor:
           type: string
           description: 'Pagination cursor type: pk | updated_at_id.'
@@ -1296,7 +1293,6 @@ components:
       required:
       - cursor
       - model
-      - phase
       - resource
       - secret
     MessagingProviderDetail:

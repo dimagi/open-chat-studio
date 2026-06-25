@@ -97,10 +97,9 @@ def test_every_entry_resolves_to_a_model():
         assert _model(entry.model) is not None
 
 
-def test_entry_cursor_and_phase_values_are_valid():
+def test_entry_cursor_values_are_valid():
     for entry in manifest.MANIFEST_ENTRIES:
         assert entry.cursor in {"pk", "updated_at_id"}
-        assert entry.phase in {"structural", "live", "structural+live"}
 
 
 def test_models_and_resources_are_unique():
@@ -211,4 +210,4 @@ def test_build_manifest_payload_shape():
     assert isinstance(payload["schema_checksum"], str)
     assert {e["resource"] for e in payload["entries"]} == {e.resource for e in manifest.MANIFEST_ENTRIES}
     first = payload["entries"][0]
-    assert set(first) >= {"model", "resource", "phase", "cursor", "secret"}
+    assert set(first) >= {"model", "resource", "cursor", "secret"}
