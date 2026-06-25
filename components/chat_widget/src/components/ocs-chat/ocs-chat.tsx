@@ -358,6 +358,27 @@ export class OcsChat {
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
+  // ---------------------------------------------------------------------------
+  // Public event API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Dispatch a composed, bubbling CustomEvent on the host element so that
+   * embedders can listen with plain addEventListener outside the shadow root.
+   *
+   * All events are dispatched synchronously so that handlers can update
+   * reactive props (e.g. `pageContext`) before the calling code reads them.
+   */
+  private dispatchWidgetEvent<T extends Record<string, unknown> | null>(name: string, detail: T = null as unknown as T): void {
+    this.host.dispatchEvent(
+      new CustomEvent<T>(name, {
+        bubbles: true,
+        composed: true,
+        detail,
+      }),
+    );
+  }
+
   private applySessionToken(token?: string): void {
     this.currentSessionToken = token;
     this.chatService?.setSessionToken(token);
@@ -425,6 +446,7 @@ export class OcsChat {
       return;
     }
     this.sessionEnded = true;
+    this.dispatchWidgetEvent('ocs:session:ended', { sessionId: this.activeSessionId });
     this.stopMessagePolling();
     this.isTyping = false;
     this.typingProgressMessage = '';
@@ -556,6 +578,7 @@ export class OcsChat {
       this.activeSessionId = data.session_id;
       this.applySessionToken(data.session_token ?? undefined);
       this.saveSessionToStorage();
+      this.dispatchWidgetEvent('ocs:session:started', { sessionId: this.activeSessionId });
 
       this.startMessagePolling();
     } catch (_error) {
@@ -684,6 +707,13 @@ export class OcsChat {
       }
       this.scrollToBottom();
 
+      // Fire before-send first so handlers can update pageContext synchronously
+      // before we read internalPageContext into the request body.
+      this.dispatchWidgetEvent('ocs:message:before-send', {
+        message: message.trim(),
+        sessionId: this.activeSessionId ?? '',
+      });
+
       const requestBody: any = { message: message.trim() };
       if (this.allowAttachments && attachmentIds.length > 0) {
         requestBody.attachment_ids = attachmentIds;
@@ -703,6 +733,10 @@ export class OcsChat {
       }
 
       this.internalPageContext = undefined;
+      this.dispatchWidgetEvent('ocs:message:sent', {
+        message: message.trim(),
+        sessionId: this.activeSessionId,
+      });
       this.startTaskPolling(data.task_id);
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;
@@ -831,6 +865,7 @@ export class OcsChat {
     }
 
     this.saveVisibleState(visible);
+    this.dispatchWidgetEvent(visible ? 'ocs:open' : 'ocs:close');
 
     if (this.isButtonDragging) {
       this.isButtonDragging = false;
@@ -873,6 +908,10 @@ export class OcsChat {
       onMessage: message => {
         this.messages = [...this.messages, message];
         this.saveSessionToStorage();
+        this.dispatchWidgetEvent('ocs:message:received', {
+          message: { ...message },
+          sessionId: this.activeSessionId ?? '',
+        });
         this.scrollToBottom();
         this.isTyping = false;
         this.typingProgressMessage = '';
