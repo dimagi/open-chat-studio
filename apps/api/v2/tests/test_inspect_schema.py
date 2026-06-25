@@ -1,5 +1,5 @@
 """The documented schema for the inspect response must match what it actually returns, rather than
-falling back to the viewset's ``ChatbotSerializer``."""
+falling back to the viewset's row serializer (the export ``ChatbotDetail`` serializer)."""
 
 import pytest
 from drf_spectacular.generators import SchemaGenerator

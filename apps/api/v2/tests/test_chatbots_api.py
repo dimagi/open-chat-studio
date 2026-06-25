@@ -15,11 +15,6 @@ def experiment(db):
     return exp
 
 
-def test_v2_chatbot_reverse_is_versioned():
-    """The v2 chatbots route lives under its own namespace and keeps the /api/v2/ prefix."""
-    assert reverse("api:v2:chatbot-list") == "/api/v2/chatbots/"
-
-
 def test_v2_chatbot_detail_resolves():
     match = resolve("/api/v2/chatbots/123e4567-e89b-12d3-a456-426614174000/")
     assert match.url_name == "chatbot-detail"
@@ -35,37 +30,26 @@ def test_v2_experiments_still_404(experiment):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_list_chatbots(auth_method, experiment):
+def test_retrieve_chatbot_by_public_id(auth_method, experiment):
+    """Retrieve serves the full chatbot row via the same dynamic serializer as the export resource,
+    so ``id`` is the integer pk and the UUID is its own ``public_id`` field."""
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team, auth_method=auth_method)
-    response = client.get(reverse("api:v2:chatbot-list"))
-    assert response.status_code == 200
-    results = response.json()["results"]
-    assert len(results) == 1
-    assert results[0]["id"] == str(experiment.public_id)
-    assert results[0]["name"] == experiment.name
-
-
-@pytest.mark.django_db()
-def test_retrieve_chatbot_by_public_id(experiment):
-    user = experiment.team.members.first()
-    client = ApiTestClient(user, experiment.team)
     response = client.get(reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id}))
     assert response.status_code == 200
-    assert response.json()["id"] == str(experiment.public_id)
+    body = response.json()
+    assert body["public_id"] == str(experiment.public_id)
+    assert body["name"] == experiment.name
 
 
 @pytest.mark.django_db()
-def test_list_chatbots_only_working_versions(experiment):
-    """Versions (non-working) are not listed at the top level."""
+def test_retrieve_only_returns_working_versions(experiment):
+    """Published versions aren't addressable here; only the working (top-level) chatbot is."""
     user = experiment.team.members.first()
-    experiment.create_new_version()
+    version = experiment.create_new_version()
     client = ApiTestClient(user, experiment.team)
-    response = client.get(reverse("api:v2:chatbot-list"))
-    assert response.status_code == 200
-    results = response.json()["results"]
-    assert len(results) == 1
-    assert results[0]["id"] == str(experiment.public_id)
+    response = client.get(reverse("api:v2:chatbot-detail", kwargs={"id": version.public_id}))
+    assert response.status_code == 404
 
 
 @pytest.mark.django_db()
@@ -78,6 +62,6 @@ def test_chatbot_other_team_404(experiment):
 
 
 @pytest.mark.django_db()
-def test_chatbot_anonymous_401():
-    response = APIClient().get("/api/v2/chatbots/")
+def test_chatbot_anonymous_401(experiment):
+    response = APIClient().get(reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id}))
     assert response.status_code == 401
