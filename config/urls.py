@@ -87,13 +87,31 @@ urlpatterns = [
     path("banners/", include("apps.banners.urls")),
     # API docs. The version is read from the request path by apps.api.versioning.URLPathVersioning,
     # so each schema view emits only its version's surface. The unversioned ``/api/schema/`` is the
-    # permanent v1 alias; ``/api/v2/...`` serves the renamed v2 surface (ADR-0022). ``/api/docs/`` is
-    # a landing page linking to the per-version Redoc references and the guides site.
+    # permanent v1 alias; ``/api/v2/...`` serves the renamed v2 surface (ADR-0022). The export surface
+    # is standalone (not v1/v2): its views report an ``"export"`` pseudo-version, so the export schema
+    # is served with ``api_version="export"`` to isolate it. ``/api/docs/`` is a landing page linking
+    # to the per-surface Redoc references and the guides site. These must precede the ``api/`` include
+    # below so the schema/docs paths aren't routed into the API itself.
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/v2/schema/", SpectacularAPIView.as_view(), name="schema-v2"),
+    path(
+        "api/export/schema/",
+        SpectacularAPIView.as_view(
+            api_version="export",
+            custom_settings={
+                "DESCRIPTION": (
+                    "Read-only, team-scoped endpoints for the Open Chat Studio data sync/export. "
+                    "**Unversioned and intended only for OCS export** — it carries no "
+                    "backwards-compatibility guarantee and may change without notice."
+                ),
+            },
+        ),
+        name="schema-export",
+    ),
     path("api/docs/", TemplateView.as_view(template_name="api/docs_landing.html"), name="api-docs"),
     path("api/v1/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc-v1"),
     path("api/v2/docs/", SpectacularRedocView.as_view(url_name="schema-v2"), name="redoc-v2"),
+    path("api/export/docs/", SpectacularRedocView.as_view(url_name="schema-export"), name="redoc-export"),
     path("channels/", include("apps.channels.urls", namespace="channels")),
     path("anymail/", include("anymail.urls")),
     path("api/", include("apps.api.urls", namespace="api")),

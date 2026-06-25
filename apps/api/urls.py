@@ -59,5 +59,8 @@ v1_patterns = [
 # reverse("api:v2:...") keeps the ``/api/v2/`` prefix.
 urlpatterns = [
     path("v2/", include("apps.api.v2.urls")),
+    # The team-export surface: a standalone, unversioned API at ``/api/export/`` (not v1/v2). Mounted
+    # before the v1 catch-all so ``export/`` isn't swallowed by the optional-``v1/``-prefix match.
+    path("export/", include("apps.api.export.urls")),
     re_path(r"^(?:v1/)?", include(v1_patterns)),
 ]
