@@ -65,7 +65,7 @@ class ParticipantDataInline(ReadonlyAdminMixin, admin.TabularInline):
 class ParticipantAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("identifier", "team", "public_id", "platform")
     list_filter = ("team", "platform")
-    search_fields = ("external_chat_id",)
+    search_fields = ("identifier",)
     inlines = [ParticipantDataInline]
 
 
