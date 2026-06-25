@@ -659,25 +659,6 @@ components:
         * `pending-review` - Awaiting final review.
         * `complete` - Complete
         * `unknown` - Unknown
-    ChatbotVersion:
-      type: object
-      description: |-
-        A chatbot's published version, nested on the working-version row so the version family is
-        visible without a follow-up query.
-      properties:
-        name:
-          type: string
-          maxLength: 128
-        version_number:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-        is_default_version:
-          type: boolean
-        version_description:
-          type: string
-      required:
-      - name
     ConsentFormDetail:
       type: object
       properties:
@@ -865,10 +846,6 @@ components:
         id:
           type: integer
           readOnly: true
-        versions:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChatbotVersion'
         created_at:
           type: string
           format: date-time
@@ -962,7 +939,6 @@ components:
       - name
       - owner
       - updated_at
-      - versions
       - working_version
     ExperimentList:
       type: object

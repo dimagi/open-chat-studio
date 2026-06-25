@@ -107,20 +107,6 @@ def test_experiment_fk_serializes_as_source_pk():
     assert data["consent_form"] == consent.id
 
 
-def test_experiment_serializer_nests_published_versions():
-    """A working-version chatbot row carries its published versions inline (name, number, default
-    flag, description), so a consumer sees the version family from the row itself."""
-    experiment = ExperimentFactory()
-    experiment.create_new_version(version_description="first cut")
-    data = _serialize(Experiment, experiment)
-    assert len(data["versions"]) == 1
-    version = data["versions"][0]
-    assert set(version) == {"name", "version_number", "is_default_version", "version_description"}
-    assert version["version_number"] == 1
-    assert version["is_default_version"] is True
-    assert version["version_description"] == "first cut"
-
-
 def test_session_serializer_embeds_chat_fields_instead_of_fk():
     """A session's chat rides inline (name, translated_languages, metadata) rather than as a chat FK
     id, since chat isn't its own synced resource."""
