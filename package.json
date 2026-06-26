@@ -72,7 +72,7 @@
     "js-cookie": "^3.0.7",
     "js-tiktoken": "^1.0.21",
     "lodash": "^4.17.23",
-    "open-chat-studio-widget": "^0.9.1",
+    "open-chat-studio-widget": "^0.10.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-error-boundary": "^6.0.1",
