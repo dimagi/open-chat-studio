@@ -40,15 +40,11 @@ def _start_cursor(model_label, cursor_type, store, model):
     return derive_updated_at_cursor(pairs)
 
 
-def run_sync(
-    client,
-    store,
-    private_key,
-    write=lambda _m: None,
-    page_limit=100,
-    enforce_schema=True,
-    on_user_created=send_password_reset_email,
-):
+def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
+    """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
+    its schema matches, and we hold a key for any sealed secrets. Returns the manifest. Raises
+    CommandError on any failure -- call this *before* any destructive local change (--force-delete)
+    so a wrong key path, unreachable source, or schema mismatch can't leave the team deleted."""
     manifest = client.get_manifest()
     if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
         raise CommandError(
@@ -61,6 +57,19 @@ def run_sync(
             "The source exports sealed secret fields but no private key was provided; the secrets "
             "would be imported as unreadable tokens. Pass --private-key-path with the team's key."
         )
+    return manifest
+
+
+def run_sync(
+    client,
+    store,
+    private_key,
+    write=lambda _m: None,
+    page_limit=100,
+    enforce_schema=True,
+    on_user_created=send_password_reset_email,
+):
+    manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
     importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
     # The team anchors everything else, so import it first. It's served as a single object from the
@@ -118,6 +127,18 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        private_key = None
+        if options["private_key_path"]:
+            private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
+
+        store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
+        client = SourceClient(options["source_url"], options["api_key"])
+        enforce_schema = not options["skip_schema_check"]
+
+        # Preflight before the destructive --force-delete: a bad key path (read above), an
+        # unreachable source, or a schema mismatch must fail while the existing team is still intact.
+        check_sync_preconditions(client, private_key, enforce_schema)
+
         if options["force_delete"]:
             force_delete_team(
                 options["team_slug"],
@@ -125,20 +146,13 @@ class Command(BaseCommand):
                 write=lambda message: self.stdout.write(self.style.WARNING(message)),
             )
 
-        private_key = None
-        if options["private_key_path"]:
-            private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
-
-        store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
-        client = SourceClient(options["source_url"], options["api_key"])
-
         run_sync(
             client,
             store,
             private_key,
             write=self.stdout.write,
             page_limit=options["limit"],
-            enforce_schema=not options["skip_schema_check"],
+            enforce_schema=enforce_schema,
         )
 
         if store.has_unfilled_targets():

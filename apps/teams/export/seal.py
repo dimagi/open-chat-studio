@@ -7,7 +7,7 @@ import json
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 _OAEP = padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
 
@@ -17,11 +17,21 @@ def _as_bytes(pem) -> bytes:
 
 
 def load_public_key(pem):
-    return serialization.load_pem_public_key(_as_bytes(pem))
+    # seal() encrypts with RSA-OAEP, so reject other key types (EC, Ed25519) at load time -- they'd
+    # otherwise blow up with an AttributeError deep inside an export rather than failing fast here.
+    key = serialization.load_pem_public_key(_as_bytes(pem))
+    if not isinstance(key, rsa.RSAPublicKey):
+        raise ValueError("Only RSA public keys are supported for sealing.")
+    if key.key_size < 2048:
+        raise ValueError("RSA public key must be at least 2048 bits.")
+    return key
 
 
 def load_private_key(pem, password=None):
-    return serialization.load_pem_private_key(_as_bytes(pem), password=password)
+    key = serialization.load_pem_private_key(_as_bytes(pem), password=password)
+    if not isinstance(key, rsa.RSAPrivateKey):
+        raise ValueError("Only RSA private keys are supported for unsealing.")
+    return key
 
 
 def seal(value, public_key) -> str:

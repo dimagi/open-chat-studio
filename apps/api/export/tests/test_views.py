@@ -138,6 +138,11 @@ def _b64(payload):
         pytest.param("participants", {"cursor": "!!!not-base64"}, id="non-base64-keyset-cursor"),
         pytest.param("participants", {"cursor": _b64(b"not json")}, id="non-json-keyset-cursor"),
         pytest.param("participants", {"cursor": _b64(json.dumps({"id": 1}).encode())}, id="keyset-cursor-missing-key"),
+        pytest.param(
+            "participants",
+            {"cursor": _b64(json.dumps({"updated_at": "2020-01-01T00:00:00+00:00", "id": "oops"}).encode())},
+            id="keyset-cursor-non-integer-id",
+        ),
         pytest.param("consent_forms", {"limit": "abc"}, id="non-integer-limit"),
         pytest.param("consent_forms", {"limit": "-5"}, id="negative-limit"),
         pytest.param("consent_forms", {"limit": "0"}, id="zero-limit"),
@@ -201,6 +206,26 @@ def test_pk_pagination_advances_via_cursor():
 
     assert {c1.id, c2.id} <= set(collected)
     assert len(collected) == len(set(collected))  # no row served twice
+
+
+@pytest.mark.parametrize(
+    "resource",
+    [
+        pytest.param("consent_forms", id="pk-cursor"),
+        pytest.param("participants", id="updated_at_id-cursor"),
+    ],
+)
+def test_cursor_is_null_once_the_resource_is_exhausted(resource):
+    """The response contract documents ``cursor`` as null once the resource is exhausted, rather than
+    echoing a stale resume token on the final page."""
+    team = TeamWithUsersFactory()
+    ConsentFormFactory(team=team)
+    ParticipantFactory(team=team)
+    client = ApiTestClient(_admin(team), team)
+
+    page = client.get(_resource_url(resource), {"limit": 100}).json()
+    assert page["has_more"] is False
+    assert page["cursor"] is None
 
 
 def test_updated_at_id_cursor_pages_ties_without_skip_or_repeat():

@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.export.permissions import IsTeamAdmin
+from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.versioning import ExportVersioning
 from apps.teams.export.manifest import (
     ManifestEntry,
@@ -39,10 +40,23 @@ DEFAULT_LIMIT = 100
 MAX_LIMIT = 1000
 
 
-class ManifestView(APIView):
+class _ExportAPIView(APIView):
+    # Shared auth/permissions for every export endpoint. (A comment, not a docstring: drf-spectacular
+    # walks the MRO for an operation description, so a docstring here would leak onto every endpoint.)
+    # Authentication is API key (the sync client) or bearer token only. OAuth2 is deliberately
+    # excluded: these views carry no OAuth scope permission, so the OAuth2 scheme would emit an empty
+    # ``{}`` security requirement, which OpenAPI reads as "no auth required". Dropping it also means no
+    # authenticator advertises a challenge, so ``get_authenticate_header`` keeps an unauthenticated
+    # request a 401 rather than letting DRF downgrade it to a 403.
+    authentication_classes = [ApiKeyAuthentication, BearerTokenAuthentication]
     permission_classes = [IsAuthenticated, IsTeamAdmin]
     versioning_class = ExportVersioning
 
+    def get_authenticate_header(self, request):
+        return "Api-Key"
+
+
+class ManifestView(_ExportAPIView):
     @extend_schema(
         operation_id="manifest",
         tags=["Manifest"],
@@ -57,12 +71,9 @@ class ManifestView(APIView):
         return Response(build_manifest())
 
 
-class TeamView(APIView):
+class TeamView(_ExportAPIView):
     """The team itself: auto-resolved from the API key and served as a single object at the
     ``team/`` root -- the anchor of the export surface that every other resource nests under."""
-
-    permission_classes = [IsAuthenticated, IsTeamAdmin]
-    versioning_class = ExportVersioning
 
     @extend_schema(
         operation_id="team",
@@ -75,11 +86,8 @@ class TeamView(APIView):
         return Response(build_team_serializer()(request.team).data)
 
 
-class ResourceView(APIView):
+class ResourceView(_ExportAPIView):
     # The per-resource OpenAPI schema is attached by ``resource_view`` (below), not here.
-    permission_classes = [IsAuthenticated, IsTeamAdmin]
-    versioning_class = ExportVersioning
-
     def get(self, request, resource):
         entry = get_manifest_entry(resource)
         if entry is None:
@@ -113,11 +121,15 @@ class CursorHelper:
 
     @staticmethod
     def decode(cursor: str) -> dict:
+        # One try/except covers every malformed shape: bad base64 (binascii.Error) or bad JSON
+        # (ValueError), a non-dict or missing ``id`` (TypeError/KeyError on the subscript), and a
+        # non-integer ``id`` (ValueError) -- the last would otherwise 500 in the ORM filter below.
         try:
             keyset = json.loads(base64.b64decode(cursor))
-        except (ValueError, TypeError) as e:  # bad base64 (binascii.Error) or bad JSON
+            keyset["id"] = int(keyset["id"])
+        except (ValueError, TypeError, KeyError) as e:
             raise ValidationError("Invalid pagination cursor.") from e
-        if not isinstance(keyset, dict) or "updated_at" not in keyset or "id" not in keyset:
+        if "updated_at" not in keyset:
             raise ValidationError("Invalid pagination cursor.")
         return keyset
 
@@ -147,7 +159,7 @@ def _paginate(queryset, cursor_type, cursor, limit):
         rows = list(queryset[: limit + 1])
         has_more = len(rows) > limit
         rows = rows[:limit]
-        next_cursor = str(rows[-1].id) if rows else cursor
+        next_cursor = str(rows[-1].id) if has_more and rows else None
         return rows, next_cursor, has_more
 
     queryset = queryset.order_by("updated_at", "id")
@@ -160,10 +172,10 @@ def _paginate(queryset, cursor_type, cursor, limit):
     rows = list(queryset[: limit + 1])
     has_more = len(rows) > limit
     rows = rows[:limit]
-    if rows:
+    if has_more and rows:
         next_cursor = CursorHelper.encode({"updated_at": rows[-1].updated_at.isoformat(), "id": rows[-1].id})
     else:
-        next_cursor = cursor
+        next_cursor = None
     return rows, next_cursor, has_more
 
 

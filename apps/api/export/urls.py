@@ -23,5 +23,5 @@ urlpatterns = [
         )
         for entry in MANIFEST_ENTRIES
     ],
-    re_path(r"^(?P<resource>[a-z_]+)/$", views.UnknownResourceView.as_view(), name="resource"),
+    re_path(r"^(?P<resource>[^/]+)/$", views.UnknownResourceView.as_view(), name="resource"),
 ]

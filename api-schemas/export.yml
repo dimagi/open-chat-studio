@@ -23,7 +23,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -58,7 +57,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -90,7 +88,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -119,7 +116,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -148,7 +144,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -177,7 +172,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -206,7 +200,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -231,7 +224,6 @@ paths:
       tags:
       - Manifest
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -260,7 +252,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -298,7 +289,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -336,7 +326,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -365,7 +354,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -394,7 +382,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -426,7 +413,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -455,7 +441,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -484,7 +469,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -502,7 +486,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -531,7 +514,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -566,7 +548,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -595,7 +576,6 @@ paths:
       tags:
       - Team
       security:
-      - {}
       - apiKeyAuth: []
       - tokenAuth: []
       responses:
@@ -1953,20 +1933,6 @@ components:
         * `reciprocal` - Reciprocal
         * `never` - Never
   securitySchemes:
-    OAuth2:
-      type: oauth2
-      flows:
-        authorizationCode:
-          authorizationUrl: /o/authorize/
-          tokenUrl: /o/token/
-          scopes:
-            chatbots:read: List and Retrieve Chatbot Data
-            chatbots:interact: Converse with a Chatbot and trigger bot messages
-            sessions:read: List and Read Sessions
-            sessions:write: Manage Sessions
-            files:read: Download file content
-            participants:read: Read Participant Data
-            participants:write: Update Participant Data
     apiKeyAuth:
       type: apiKey
       in: header

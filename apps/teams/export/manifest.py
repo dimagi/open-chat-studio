@@ -134,14 +134,16 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
 
 
 def schema_checksum() -> str:
-    """Hash of the set of applied migration names; unaffected by apply order. Returns the hash of an
-    empty set when the migrations table is absent (e.g. tests run with --no-migrations); that's
-    consistent as long as the source and target both lack it."""
+    """Hash of the set of applied migrations, identified by ``(app, name)`` -- the same key
+    ``MigrationRecorder`` uses, so schemas that share a filename like ``0001_initial`` across apps
+    don't collide. Unaffected by apply order. Returns the hash of an empty set when the migrations
+    table is absent (e.g. tests run with --no-migrations); that's consistent as long as the source
+    and target both lack it."""
     recorder = MigrationRecorder(connection)
-    names = []
+    applied = []
     if recorder.has_table():
-        names = list(recorder.migration_qs.order_by("name").values_list("name", flat=True))
-    data = json.dumps(names)
+        applied = list(recorder.migration_qs.order_by("app", "name").values_list("app", "name"))
+    data = json.dumps(applied, separators=(",", ":"))
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 

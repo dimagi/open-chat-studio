@@ -10,7 +10,8 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
 from apps.teams.export.translation import FKTranslationStore
-from apps.teams.management.commands.sync_team import force_delete_team, run_sync
+from apps.teams.management.commands import sync_team
+from apps.teams.management.commands.sync_team import Command, force_delete_team, run_sync
 from apps.teams.models import Team
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
@@ -195,6 +196,30 @@ def test_force_delete_team_removes_team_and_resets_state(tmp_path):
 
 def test_force_delete_team_is_a_no_op_when_team_missing(tmp_path):
     force_delete_team("never-synced", tmp_path)  # no team, no state DB -- must not raise
+
+
+def test_force_delete_is_not_reached_when_preconditions_fail(tmp_path, keypair, monkeypatch):
+    """A failing precondition (here, a schema mismatch) must abort before --force-delete runs, so a
+    bad source can't leave the operator with no team."""
+    Team.objects.create(name="Keep", slug="imported-team-z")
+    manifest, rows = _scenario(keypair[0])
+    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
+    monkeypatch.setattr(sync_team, "SourceClient", lambda *a, **k: FakeClient(manifest, rows))
+
+    options = {
+        "source_url": "http://src",
+        "api_key": "k",
+        "team_slug": "imported-team-z",
+        "private_key_path": None,
+        "state_dir": str(tmp_path),
+        "limit": 100,
+        "skip_schema_check": False,
+        "force_delete": True,
+    }
+    with pytest.raises(CommandError, match="schema"):
+        Command().handle(**options)
+
+    assert Team.objects.filter(slug="imported-team-z").exists()  # the destructive delete never ran
 
 
 def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
