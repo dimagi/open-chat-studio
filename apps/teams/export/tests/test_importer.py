@@ -8,13 +8,16 @@ from django.contrib.auth.models import Group
 from apps.chat.models import Chat
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.pipelines.models import Node, Pipeline
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer, MissingGlobalRow
+from apps.teams.export.manifest import GLOBAL_CONFIG, entry_model
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
+from apps.utils.factories.service_provider_factories import VoiceProviderFactory
+from apps.utils.factories.team import TeamFactory
 
 
 def _user_row(source_id, username, **extra):
@@ -107,25 +110,49 @@ def test_rerun_does_not_duplicate(store):
     assert Team.objects.filter(slug="imported-team-xyz").count() == 1
 
 
-def test_global_row_matches_existing_and_is_not_recreated(store):
-    """A global (teamless) row is matched to the shared target by natural key, not recreated."""
-    existing = LlmProviderModel.objects.create(team=None, type="openai", name="gpt-glob", max_token_limit=8192)
-    count_before = LlmProviderModel.objects.count()
-    row = {
-        "id": 77,
-        "is_global": True,
-        "type": "openai",
-        "name": "gpt-glob",
-        "max_token_limit": 8192,
-        "deprecated": False,
-        "created_at": PAST,
-        "updated_at": PAST,
-    }
+# A natural-key sample per GLOBAL_CONFIG model, used to build a matching pair of rows. Keyed by
+# model label so a newly added global model fails the test below until it gets a sample here.
+_GLOBAL_MATCH_SAMPLES = {
+    "service_providers.llmprovidermodel": {"type": "openai", "name": "shared", "max_token_limit": 8192},
+    "service_providers.embeddingprovidermodel": {"type": "openai", "name": "shared"},
+    "experiments.syntheticvoice": {
+        "name": "shared",
+        "language_code": "en",
+        "language": "English",
+        "gender": "male",
+        "neural": True,
+        "service": "AWS",
+    },
+}
 
-    Importer(store).import_rows("service_providers.llmprovidermodel", [row])
 
-    assert store.get_target("service_providers.llmprovidermodel", 77) == existing.pk
-    assert LlmProviderModel.objects.count() == count_before
+def _scoping_owner(null_field):
+    """A real owner for the team-scoped twin -- the value whose absence (null) marks a row global."""
+    if null_field == "team":
+        return TeamFactory()
+    if null_field == "voice_provider":
+        return VoiceProviderFactory()
+    raise AssertionError(f"no scoping-owner factory for global null_field {null_field!r}")
+
+
+@pytest.mark.parametrize("model_label", list(GLOBAL_CONFIG))
+def test_global_row_matches_the_single_shared_record_not_a_team_scoped_twin(store, model_label):
+    """Every GLOBAL_CONFIG model resolves a global row to the one shared (teamless) target by natural
+    key. A team-scoped row sharing that natural key must be ignored, and nothing is recreated."""
+    spec = GLOBAL_CONFIG[model_label]
+    natural_key = _GLOBAL_MATCH_SAMPLES.get(model_label)
+    assert natural_key is not None, f"add a natural-key sample for new GLOBAL_CONFIG entry {model_label!r}"
+    model = entry_model(model_label)
+
+    model.objects.create(**{spec.null_field: _scoping_owner(spec.null_field)}, **natural_key)  # team-scoped twin
+    global_row = model.objects.create(**{spec.null_field: None}, **natural_key)
+    count_before = model.objects.count()
+
+    Importer(store).import_rows(model_label, [{"id": 77, "is_global": True, **natural_key}])
+
+    assert model.objects.filter(**{f"{spec.null_field}__isnull": True}, **natural_key).count() == 1
+    assert store.get_target(model_label, 77) == global_row.pk
+    assert model.objects.count() == count_before  # matched, not recreated
 
 
 def test_missing_global_row_raises_with_its_natural_key(store):
