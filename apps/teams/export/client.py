@@ -10,12 +10,14 @@ _API_KEY_HEADER = "X-Api-Key"
 
 
 class ResourceFetcher:
-    def __init__(self, base_url, api_key, *, timeout=30, max_retries=5, backoff=1.0, session=None, sleep=time.sleep):
+    def __init__(self, base_url, api_key, *, session=None, sleep=time.sleep):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        self.timeout = timeout
-        self.max_retries = max_retries
-        self.backoff = backoff
+        # Transport tuning -- fixed defaults that no caller overrides (only session/sleep are
+        # injected, by tests). Promote one to an __init__ argument if a need to vary it shows up.
+        self.timeout = 30
+        self.max_retries = 5
+        self.backoff = 1.0
         self._session = session or requests.Session()
         self._sleep = sleep
 
