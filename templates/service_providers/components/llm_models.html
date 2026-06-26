@@ -14,7 +14,7 @@
         </div>
       {% endfor %}
       {% for model in models %}
-        {% include "service_providers/components/_llm_model_row.html" with model=model show_delete=show_delete cost_tracking_enabled=cost_tracking_enabled pricing_lookup=pricing_lookup %}
+        {% include "service_providers/components/llm_model_row.html" with model=model show_delete=show_delete cost_tracking_enabled=cost_tracking_enabled pricing_lookup=pricing_lookup %}
       {% endfor %}
     </div>
   </div>

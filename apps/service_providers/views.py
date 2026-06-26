@@ -390,7 +390,7 @@ class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, dj
     Invalid submissions re-render the form (with field errors) into the modal
     body via HX-Retarget so the user can correct in place."""
 
-    template_name = "service_providers/components/_pricing_override_form.html"
+    template_name = "service_providers/components/pricing_override_form.html"
     permission_required = "service_providers.change_llmprovidermodel"
     raise_exception = True
 
@@ -503,7 +503,7 @@ def _render_model_row(request, model: LlmProviderModel) -> HttpResponse:
     """Re-render a single row partial after an HTMX swap."""
     return render(
         request,
-        "service_providers/components/_llm_model_row.html",
+        "service_providers/components/llm_model_row.html",
         {
             "model": model,
             "show_delete": model.team_id == request.team.id,
