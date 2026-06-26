@@ -184,6 +184,7 @@ def test_schema_checksum_is_reproducible():
 
 @pytest.mark.django_db()
 def test_team_scoped_queryset_isolates_teams_and_includes_globals():
+    """team_scoped_queryset returns the team's own rows plus shared global rows, never another team's."""
     team = TeamFactory()
     other = TeamFactory()
     mine = LlmProviderModelFactory(team=team)
