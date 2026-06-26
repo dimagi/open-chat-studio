@@ -126,6 +126,60 @@ def test_list_participants_filter_by_experiment():
 
 
 @pytest.mark.django_db()
+def test_list_participants_filter_by_chatbot():
+    """The documented `chatbot` query param filters to that chatbot's participants/data."""
+    team = TeamWithUsersFactory.create()
+    experiment1 = ExperimentFactory.create(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
+
+    p1 = ParticipantFactory.create(team=team, identifier="alice", platform="api")
+    p2 = ParticipantFactory.create(team=team, identifier="bob", platform="api")
+    p3 = ParticipantFactory.create(team=team, identifier="carol", platform="api")
+    ParticipantData.objects.create(team=team, participant=p1, experiment=experiment1, data={"x": 1})
+    ParticipantData.objects.create(team=team, participant=p2, experiment=experiment2, data={"x": 2})
+    ParticipantData.objects.create(team=team, participant=p3, experiment=experiment1, data={"x": 3})
+    ParticipantData.objects.create(team=team, participant=p3, experiment=experiment2, data={"x": 4})
+
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+    url = reverse("api:participant-data") + f"?chatbot={experiment1.public_id}"
+    response = client.get(url)
+    assert response.status_code == 200
+    results = response.json()["results"]
+    by_identifier = {p["identifier"]: p for p in results}
+    assert set(by_identifier) == {"alice", "carol"}
+    # alice only has data for experiment1
+    assert len(by_identifier["alice"]["data"]) == 1
+    assert by_identifier["alice"]["data"][0]["chatbot_id"] == str(experiment1.public_id)
+    assert by_identifier["alice"]["data"][0]["data"] == {"x": 1}
+    # carol has data for both chatbots but only experiment1's data should be returned
+    assert len(by_identifier["carol"]["data"]) == 1
+    assert by_identifier["carol"]["data"][0]["chatbot_id"] == str(experiment1.public_id)
+    assert by_identifier["carol"]["data"][0]["data"] == {"x": 3}
+
+
+@pytest.mark.django_db()
+def test_list_participants_chatbot_takes_precedence_over_experiment_alias():
+    """When both are supplied, the documented `chatbot` param wins over the legacy `experiment` alias."""
+    team = TeamWithUsersFactory.create()
+    experiment1 = ExperimentFactory.create(team=team)
+    experiment2 = ExperimentFactory.create(team=team)
+
+    p1 = ParticipantFactory.create(team=team, identifier="alice", platform="api")
+    p2 = ParticipantFactory.create(team=team, identifier="bob", platform="api")
+    ParticipantData.objects.create(team=team, participant=p1, experiment=experiment1, data={"x": 1})
+    ParticipantData.objects.create(team=team, participant=p2, experiment=experiment2, data={"x": 2})
+
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+    url = reverse("api:participant-data") + f"?chatbot={experiment1.public_id}&experiment={experiment2.public_id}"
+    response = client.get(url)
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert {p["identifier"] for p in results} == {"alice"}
+
+
+@pytest.mark.django_db()
 def test_list_participants_filter_by_experiment_unknown_returns_empty():
     team = TeamWithUsersFactory.create()
     experiment = ExperimentFactory.create(team=team)

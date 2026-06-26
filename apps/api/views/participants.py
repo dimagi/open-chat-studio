@@ -100,7 +100,10 @@ class ParticipantView(APIView):
             qs = qs.filter(identifier=identifier)
         if platform := request.query_params.get("platform"):
             qs = qs.filter(platform=platform)
-        if experiment_uuid := _parse_experiment_uuid(request.query_params.get("experiment")):
+        # "chatbot" is the documented (OpenApiParameter) name; "experiment" is kept as a
+        # deprecated fallback alias for older callers. Both take a chatbot/experiment public UUID.
+        chatbot_param = request.query_params.get("chatbot") or request.query_params.get("experiment")
+        if experiment_uuid := _parse_experiment_uuid(chatbot_param):
             data_qs = data_qs.filter(experiment__public_id=experiment_uuid)
             qs = qs.filter(id__in=data_qs.values_list("participant_id", flat=True))
         qs = qs.prefetch_related(Prefetch("data_set", queryset=data_qs, to_attr="_prefetched_participant_data"))
