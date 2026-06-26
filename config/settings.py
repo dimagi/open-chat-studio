@@ -475,10 +475,6 @@ SPECTACULAR_SETTINGS = {
     "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
         {
-            "name": "Export",
-            "description": "Read team-scoped data one resource at a time for the team data sync/export.",
-        },
-        {
             "name": "Channels",
             "description": "Trigger bot messages or deliver messages directly to users on a channel.",
         },
