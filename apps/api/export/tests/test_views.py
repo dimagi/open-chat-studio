@@ -47,20 +47,10 @@ def test_resource_url_resolves():
     assert _resource_url("users") == "/api/export/users/"
 
 
-def test_manifest_requires_authentication():
-    assert APIClient().get(reverse("api:export:manifest")).status_code == 401
-
-
-def test_manifest_rejects_non_admin():
-    team = TeamWithUsersFactory()
-    client = ApiTestClient(_non_admin(team), team)
-    assert client.get(reverse("api:export:manifest")).status_code == 403
-
-
-def test_manifest_returns_entries_for_admin():
-    team = TeamWithUsersFactory()
-    client = ApiTestClient(_admin(team), team)
-    response = client.get(reverse("api:export:manifest"))
+def test_manifest_is_public_and_returns_entries():
+    """The manifest is non-sensitive (static resource list + schema checksum), so it's served
+    without authentication."""
+    response = APIClient().get(reverse("api:export:manifest"))
     assert response.status_code == 200
     body = response.json()
     assert "schema_checksum" in body

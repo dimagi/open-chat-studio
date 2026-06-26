@@ -12,7 +12,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -56,7 +56,15 @@ class _ExportAPIView(APIView):
         return "Api-Key"
 
 
-class ManifestView(_ExportAPIView):
+class ManifestView(APIView):
+    """The manifest is non-sensitive -- a static list of resources/per-model config plus a schema
+    checksum -- so it's served without authentication. Clients fetch it to discover the surface (and
+    check schema compatibility) before authenticating for the actual team data."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    versioning_class = ExportVersioning
+
     @extend_schema(
         operation_id="manifest",
         tags=["Manifest"],

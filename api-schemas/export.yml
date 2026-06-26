@@ -224,8 +224,7 @@ paths:
       tags:
       - Manifest
       security:
-      - apiKeyAuth: []
-      - tokenAuth: []
+      - {}
       responses:
         '200':
           content:
