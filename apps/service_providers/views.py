@@ -13,9 +13,11 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpRespo
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 from waffle import flag_is_active
+from waffle.decorators import waffle_flag
 
 from apps.assistants.models import OpenAiAssistant
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
@@ -29,7 +31,6 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
-from apps.teams.models import Flag
 from apps.utils.deletion import get_related_objects
 
 from ..generics.chips import Chip
@@ -386,6 +387,7 @@ def create_llm_provider_model(request, team_slug: str):
     )
 
 
+@method_decorator(waffle_flag(COST_TRACKING_FLAG), name="dispatch")
 class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, django_views.View):
     """GET renders the override modal; POST persists team-scoped rules.
     Invalid submissions re-render the form (with field errors) into the modal
@@ -396,12 +398,12 @@ class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, dj
     raise_exception = True
 
     def get(self, request, team_slug: str, pk: int):
-        model = self._guard(request, pk)
+        model = _resolve_model(request.team, pk)
         form = PricingOverrideForm(initial=_form_initial_from_active_rates(request.team, model))
         return render(request, self.template_name, {"form": form, "model": model})
 
     def post(self, request, team_slug: str, pk: int):
-        model = self._guard(request, pk)
+        model = _resolve_model(request.team, pk)
         form = PricingOverrideForm(request.POST)
         if not form.is_valid():
             response = render(request, self.template_name, {"form": form, "model": model})
@@ -413,19 +415,14 @@ class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, dj
             _persist_team_pricing_rules(request.team, model, form.cleaned_data, request.user)
         return _render_model_row(request, model)
 
-    @staticmethod
-    def _guard(request, pk: int) -> LlmProviderModel:
-        _require_cost_tracking_flag(request.team)
-        return _resolve_model(request.team, pk)
-
 
 @require_POST
 @login_and_team_required
 @permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
+@waffle_flag(COST_TRACKING_FLAG)
 def pricing_revert(request, team_slug: str, pk: int):
     """Close every active team-scoped rule for this (provider, model_name).
     Resolution falls back to the matching global rule on the next read."""
-    _require_cost_tracking_flag(request.team)
     model = _resolve_model(request.team, pk)
     PricingRule.objects.filter(
         team=request.team,
@@ -439,11 +436,6 @@ def pricing_revert(request, team_slug: str, pk: int):
 def _resolve_model(team, pk: int) -> LlmProviderModel:
     """Both team-scoped customs and the global defaults are addressable."""
     return get_object_or_404(LlmProviderModel, Q(team=team) | Q(team__isnull=True), pk=pk)
-
-
-def _require_cost_tracking_flag(team) -> None:
-    if not Flag.get(COST_TRACKING_FLAG).is_active_for_team(team):
-        raise Http404("Cost tracking is not enabled for this team.")
 
 
 def _form_initial_from_active_rates(team, model: LlmProviderModel) -> dict:
