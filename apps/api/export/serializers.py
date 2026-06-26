@@ -89,9 +89,9 @@ def component_name(model) -> str:
 
 @cache
 def build_resource_serializer(model):
-    # Cached so every caller (the export resource endpoint and the v2 chatbot retrieve) shares one
-    # serializer class per model. drf-spectacular keys components by class identity, so a fresh class
-    # per call would collide on the component name and produce an incorrect schema.
+    # Cached so repeated calls for the same model share one serializer class. drf-spectacular keys
+    # components by class identity, so a fresh class per call would collide on the component name and
+    # produce an incorrect schema.
     label = model._meta.label_lower
     # Every resource is imported into the single team named on the sync command, so the per-row team
     # FK is redundant -- drop it. Global/shared models surface an `is_global` flag instead, since
