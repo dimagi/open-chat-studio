@@ -344,7 +344,11 @@ class ChannelBase(ABC):
 
             channel_cls = NewApiChannel
         elif platform == "sureadhere":
-            channel_cls = SureAdhereChannel
+            from apps.channels.channels_v2.sureadhere_channel import (  # noqa: PLC0415
+                SureAdhereChannel as NewSureAdhereChannel,
+            )
+
+            channel_cls = NewSureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
@@ -1243,23 +1247,6 @@ class WhatsappChannel(ChannelBase):
             )
         except Exception:
             logger.exception("Failed to send typing indicator")
-
-
-class SureAdhereChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
-        from_ = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
-        to_patient = self.participant_identifier
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_,
-            to=to_patient,
-            platform=ChannelPlatform.SUREADHERE,
-            last_activity_at=self.last_activity_at,
-        )
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
 
 
 class FacebookMessengerChannel(ChannelBase):
