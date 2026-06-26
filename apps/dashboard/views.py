@@ -6,11 +6,11 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
+from waffle import flag_is_active
 
 from apps.cost_tracking.services.reporting import cost_summary, top_n_bots
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.teams.models import Flag
 
 from .forms import DashboardFilterForm, SavedFilterForm
 from .models import DashboardFilter
@@ -20,17 +20,17 @@ COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 DEFAULT_COST_PERIOD_DAYS = 30
 
 
-def _cost_tracking_context(team, filter_form: DashboardFilterForm) -> dict:
+def _cost_tracking_context(request, filter_form: DashboardFilterForm) -> dict:
     """Return the cost-tracking panel context. When the flag is off the panel
     is hidden entirely - no service calls are made.
     """
-    if not Flag.get(COST_TRACKING_FLAG).is_active_for_team(team):
+    if not flag_is_active(request, COST_TRACKING_FLAG):
         return {"cost_tracking_enabled": False}
     start, end = _cost_panel_period(filter_form)
     return {
         "cost_tracking_enabled": True,
-        "cost_summary": cost_summary(team, start=start, end=end),
-        "cost_top_bots": top_n_bots(team, start=start, end=end),
+        "cost_summary": cost_summary(request.team, start=start, end=end),
+        "cost_top_bots": top_n_bots(request.team, start=start, end=end),
     }
 
 
@@ -74,7 +74,7 @@ class DashboardView(LoginAndTeamRequiredMixin, TemplateView):
                 "page_title": "Dashboard",
             }
         )
-        context.update(_cost_tracking_context(self.request.team, filter_form))
+        context.update(_cost_tracking_context(self.request, filter_form))
 
         return context
 
@@ -91,7 +91,7 @@ class CostTrackingPanelView(LoginAndTeamRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         filter_form = DashboardFilterForm(data=self.request.GET, team=self.request.team)
-        context.update(_cost_tracking_context(self.request.team, filter_form))
+        context.update(_cost_tracking_context(self.request, filter_form))
         return context
 
     def render_to_response(self, context, **response_kwargs):

@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.assistants.models import OpenAiAssistant
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
@@ -278,7 +279,7 @@ class CreateServiceProvider(
             default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
             embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
             custom_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
-            cost_tracking_enabled = Flag.get("flag_ai_cost_monitoring").is_active_for_team(self.request.team)
+            cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
             ctx.update(
                 {
                     "default_llm_models_by_type": default_llm_models_by_type,
@@ -364,7 +365,7 @@ def create_llm_provider_model(request, team_slug: str):
         if len(form.errors) == 1 and "__all__" in form.errors:
             return HttpResponseBadRequest(", ".join([str(v) for v in form.errors.values()]))
         return HttpResponseBadRequest(str(form.errors))
-    cost_tracking_enabled = Flag.get(COST_TRACKING_FLAG).is_active_for_team(request.team)
+    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
     with transaction.atomic():
         model = form.save(commit=False)
         model.team = request.team
