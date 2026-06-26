@@ -127,7 +127,13 @@ def test_chat_serializer_dumps_its_fields_and_drops_team():
     assert "team" not in data
 
 
-@pytest.mark.parametrize("is_global", [True, False])
+@pytest.mark.parametrize(
+    "is_global",
+    [
+        pytest.param(True, id="global"),
+        pytest.param(False, id="team_scoped"),
+    ],
+)
 def test_global_able_model_exposes_is_global_flag_instead_of_team(is_global):
     team = None if is_global else TeamFactory()
     model = LlmProviderModel.objects.create(team=team, type="openai", name="gpt-x", max_token_limit=8192)
