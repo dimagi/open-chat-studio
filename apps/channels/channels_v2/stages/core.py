@@ -3,6 +3,9 @@ from __future__ import annotations
 import logging
 import re
 from io import BytesIO
+from typing import TYPE_CHECKING
+
+from django.db.models import Q
 
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
@@ -10,7 +13,12 @@ from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.datamodels import Attachment
 from apps.chat.bots import EvalsBot, EventBot, get_bot
-from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
+from apps.chat.channels import (
+    MARKDOWN_REF_PATTERN,
+    MESSAGE_TYPES,
+    _start_experiment_session,
+    strip_urls_and_emojis,
+)
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
@@ -32,9 +40,62 @@ from apps.service_providers.llm_service.history_managers import ExperimentHistor
 from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
 
+if TYPE_CHECKING:
+    from apps.users.models import CustomUser
+
 logger = logging.getLogger("ocs.channels")
 
 RESET_COMMAND = "/reset"
+
+
+def participant_identifier_filter(identifier: str, phone_number: str | None) -> Q:
+    """Build the participant lookup filter for the BSUID rollout.
+
+    Matches on the canonical identifier (the BSUID, post-rollout), plus the legacy
+    phone-number identifier when one is available, so a returning user previously keyed
+    by phone is linked to their messages now keyed by BSUID.
+    """
+    if phone_number and phone_number != identifier:
+        return Q(identifier=identifier) | Q(identifier=phone_number)
+    return Q(identifier=identifier)
+
+
+def get_or_create_participant(
+    team,
+    normalized_identifier: str,
+    platform: str,
+    participant_user: CustomUser | None,
+    participant_id_filter: Q,
+) -> Participant:
+    """Look up or create a participant, handling disjunctive (BSUID OR legacy phone) filters.
+
+    For a simple equality filter (the common case) this delegates straight to get_or_create.
+    For a disjunction it probes first, so a match reuses the existing row (oldest wins) while
+    a miss still creates the row keyed by the canonical normalized identifier -- never the phone.
+    """
+    is_simple_filter = len(participant_id_filter.children) == 1
+    if not is_simple_filter:
+        existing = (
+            Participant.objects.filter(participant_id_filter, team=team, platform=platform)
+            .order_by("created_at")
+            .first()
+        )
+        if existing is not None:
+            if participant_user and existing.user is None:
+                existing.user = participant_user
+                existing.save()
+            return existing
+
+    participant, created = Participant.objects.get_or_create(
+        team=team,
+        identifier=normalized_identifier,
+        platform=platform,
+        defaults={"user": participant_user},
+    )
+    if not created and participant_user and participant.user is None:
+        participant.user = participant_user
+        participant.save()
+    return participant
 
 
 # ---------------------------------------------------------------------------
@@ -75,15 +136,15 @@ class ParticipantResolverStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         normalized = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
         participant_user = ctx.channel_context.get("participant_user")
-        ctx.participant, created = Participant.objects.get_or_create(
+        phone_number = getattr(ctx.message, "phone_number", None)
+        ctx.participant = get_or_create_participant(
             team=ctx.experiment.team,
-            identifier=normalized,
+            normalized_identifier=normalized,
             platform=ctx.experiment_channel.platform,
-            defaults={"user": participant_user},
+            participant_user=participant_user,
+            participant_id_filter=participant_identifier_filter(normalized, phone_number),
         )
-        if not created and participant_user and ctx.participant.user is None:
-            ctx.participant.user = participant_user
-            ctx.participant.save()
+        self._store_phone_number(ctx, phone_number)
 
         try:
             ctx.participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
@@ -91,6 +152,15 @@ class ParticipantResolverStage(ProcessingStage):
             )
         except ParticipantData.DoesNotExist:
             ctx.participant_data = None
+
+    def _store_phone_number(self, ctx: MessageProcessingContext, phone_number: str | None) -> None:
+        """Persist the user's phone number on the participant's remote_id so it can be used as
+        the send recipient -- the participant identifier may be a (non-sendable) BSUID."""
+        participant = ctx.participant
+        if not phone_number or participant is None or participant.remote_id == phone_number:
+            return
+        participant.remote_id = phone_number
+        participant.save(update_fields=["remote_id"])
 
 
 # ---------------------------------------------------------------------------
@@ -156,13 +226,18 @@ class SessionResolutionStage(ProcessingStage):
         raise EarlyExitResponse("Conversation reset")
 
     def _create_session(self, ctx: MessageProcessingContext):
-        """Delegates to the existing _start_experiment_session helper."""
+        """Delegates to the existing _start_experiment_session helper.
+
+        Reuses the participant ParticipantResolverStage already resolved (e.g. a legacy
+        phone-keyed row) so the session attaches to it rather than a new BSUID-keyed one.
+        """
         return _start_experiment_session(
             working_experiment=ctx.experiment.get_working_version(),
             experiment_channel=ctx.experiment_channel,
             participant_identifier=ctx.participant_identifier,
             participant_user=ctx.channel_context.get("participant_user"),
             session_status=SessionStatus.SETUP,
+            participant=ctx.participant,
         )
 
 

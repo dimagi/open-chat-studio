@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 import emoji
 import httpx
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
@@ -1455,6 +1456,7 @@ def _start_experiment_session(
     timezone: str | None = None,
     session_external_id: str | None = None,
     metadata: dict | None = None,
+    participant: Participant | None = None,
 ) -> ExperimentSession:
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
@@ -1469,16 +1471,22 @@ def _start_experiment_session(
         # This should technically never happen, since we disable the input for logged in users
         raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
 
+    # Inline import to avoid circular import: channels_v2.stages.core imports from chat.channels
+    from apps.channels.channels_v2.stages.core import get_or_create_participant  # noqa: PLC0415
+
+    normalized_identifier = experiment_channel.platform_enum.normalize_identifier(participant_identifier)
+
     with transaction.atomic():
-        participant, created = Participant.objects.get_or_create(
-            team=team,
-            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
-            platform=experiment_channel.platform,
-            defaults={"user": participant_user},
-        )
-        if not created and participant_user and participant.user is None:
-            participant.user = participant_user
-            participant.save()
+        # Callers that already resolved the participant (e.g. the v2 pipeline) pass it in directly;
+        # otherwise look it up by the normalized identifier.
+        if participant is None:
+            participant = get_or_create_participant(
+                team=team,
+                normalized_identifier=normalized_identifier,
+                platform=experiment_channel.platform,
+                participant_user=participant_user,
+                participant_id_filter=Q(identifier=normalized_identifier),
+            )
 
         chat = Chat.objects.create(
             team=team,
