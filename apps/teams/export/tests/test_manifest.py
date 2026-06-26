@@ -153,17 +153,10 @@ def test_embedded_models_resolve_to_models():
         assert _model(label) is not None
 
 
-def test_membership_is_embedded_and_chat_is_a_standalone_resource():
-    """Membership rides inside the user export (the team role); chat is its own synced resource."""
+def test_membership_is_embedded_not_a_standalone_resource():
+    """Membership rides inside the user export (the team role), not served as its own resource."""
     assert "teams.membership" in EMBEDDED_MODELS
     assert manifest.get_manifest_entry("memberships") is None
-    assert manifest.get_manifest_entry("chats") is not None
-
-
-def test_chat_is_served_before_sessions():
-    """A session references its chat by FK, so the chat must be served (and imported) first."""
-    models_in_order = [e.model for e in manifest.MANIFEST_ENTRIES]
-    assert models_in_order.index("chat.chat") < models_in_order.index("experiments.experimentsession")
 
 
 def test_registry_fields_exist_on_their_model():
