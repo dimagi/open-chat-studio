@@ -599,6 +599,49 @@ describe('ocs-chat', () => {
       expect(capturedRequestBody.context).toEqual(freshCtx);
     });
 
+    it('dispatches ocs:message:received for each non-user message via startMessagePolling', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'poll-session';
+
+      const receivedEvents: CustomEvent[] = [];
+      page.root!.addEventListener('ocs:message:received', (e: Event) => {
+        receivedEvents.push(e as CustomEvent);
+      });
+
+      let capturedCallbacks: any = null;
+      (component as any).chatService = {
+        sendMessage: jest.fn(),
+        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
+        stopMessagePolling: jest.fn(),
+        startMessagePolling: jest.fn().mockImplementation((_sessionId: string, callbacks: any) => {
+          capturedCallbacks = callbacks;
+          return { stop: jest.fn() };
+        }),
+        setSessionToken: jest.fn(),
+      };
+
+      // Trigger startMessagePolling by calling the private method directly
+      (component as any).startMessagePolling();
+
+      const assistantMessage = { created_at: '2026-01-01T00:00:00Z', role: 'assistant', content: 'Hello!' };
+      const userMessage = { created_at: '2026-01-01T00:00:01Z', role: 'user', content: 'Hi' };
+
+      capturedCallbacks.onMessages([assistantMessage, userMessage]);
+      await page.waitForChanges();
+
+      // Only the assistant message should fire ocs:message:received
+      expect(receivedEvents).toHaveLength(1);
+      expect(receivedEvents[0].detail).toEqual({
+        message: { ...assistantMessage },
+        sessionId: 'poll-session',
+      });
+    });
+
     // ocs:session:started is tested in ocs-chat_session_handling.spec.tsx
     // which has the full ChatSessionService module mock wired up.
 

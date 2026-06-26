@@ -968,6 +968,14 @@ export class OcsChat {
         if (messages.length === 0) return;
         this.messages = [...this.messages, ...messages];
         this.saveSessionToStorage();
+        for (const message of messages) {
+          if (message.role !== 'user') {
+            this.dispatchWidgetEvent('ocs:message:received', {
+              message: { ...message },
+              sessionId: this.activeSessionId ?? '',
+            });
+          }
+        }
         this.scrollToBottom();
         this.focusInput();
       },
