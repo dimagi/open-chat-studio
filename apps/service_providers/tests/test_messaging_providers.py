@@ -624,6 +624,7 @@ class TestMetaCloudAPIServiceWindow:
         )
         assert mock_post.call_args.kwargs["json"] == {
             "messaging_product": "whatsapp",
+            "recipient_type": "individual",
             "to": "+27826419977",
             "type": "text",
             "text": {"body": "Hello"},

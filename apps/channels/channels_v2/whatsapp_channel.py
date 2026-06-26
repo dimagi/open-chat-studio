@@ -25,6 +25,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.channels")
 
 
+def _resolve_recipient(ctx: MessageProcessingContext | None, fallback: str) -> str:
+    """Return the WhatsApp send recipient: the phone number stored on the participant's
+    remote_id if we have one, else the given identifier. The participant identifier may be a
+    BSUID, which Meta/Twilio cannot yet accept as an outbound recipient, so we prefer the phone
+    captured on inbound."""
+    if ctx is not None and ctx.participant is not None and ctx.participant.remote_id:
+        return ctx.participant.remote_id
+    return fallback
+
+
 class WhatsappSender(ChannelSender):
     """Delivers messages over WhatsApp via the configured messaging service.
 
@@ -49,7 +59,7 @@ class WhatsappSender(ChannelSender):
         self._service.send_text_message(
             message=text,
             from_=self._from,
-            to=recipient,
+            to=_resolve_recipient(self._ctx, recipient),
             platform=ChannelPlatform.WHATSAPP,
             last_activity_at=self._last_activity_at,
         )
@@ -58,7 +68,7 @@ class WhatsappSender(ChannelSender):
         self._service.send_voice_message(
             audio,
             from_=self._from,
-            to=recipient,
+            to=_resolve_recipient(self._ctx, recipient),
             platform=ChannelPlatform.WHATSAPP,
             last_activity_at=self._last_activity_at,
         )
@@ -66,7 +76,7 @@ class WhatsappSender(ChannelSender):
     def send_file(self, file: File, recipient: str, session_id: int) -> None:
         self._service.send_file_to_user(
             from_=self._from,
-            to=recipient,
+            to=_resolve_recipient(self._ctx, recipient),
             platform=ChannelPlatform.WHATSAPP,
             file=file,
             download_link=file.download_link(experiment_session_id=session_id),
@@ -90,7 +100,7 @@ class WhatsappCallbacks(ChannelCallbacks):
         self._service.send_text_message(
             message=f'I heard: "{transcript}"',
             from_=self._from,
-            to=recipient,
+            to=_resolve_recipient(self._ctx, recipient),
             platform=ChannelPlatform.WHATSAPP,
             last_activity_at=last_activity_at,
         )
