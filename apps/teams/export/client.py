@@ -9,7 +9,7 @@ import requests
 _API_KEY_HEADER = "X-Api-Key"
 
 
-class SourceClient:
+class ResourceFetcher:
     def __init__(self, base_url, api_key, *, timeout=30, max_retries=5, backoff=1.0, session=None, sleep=time.sleep):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key

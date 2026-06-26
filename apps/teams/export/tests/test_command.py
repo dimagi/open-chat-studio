@@ -204,7 +204,7 @@ def test_force_delete_is_not_reached_when_preconditions_fail(tmp_path, keypair, 
     Team.objects.create(name="Keep", slug="imported-team-z")
     manifest, rows = _scenario(keypair[0])
     manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
-    monkeypatch.setattr(sync_team, "SourceClient", lambda *a, **k: FakeClient(manifest, rows))
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(manifest, rows))
 
     options = {
         "source_url": "http://src",

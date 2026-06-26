@@ -1,7 +1,7 @@
 import pytest
 import requests
 
-from apps.teams.export.client import SourceClient
+from apps.teams.export.client import ResourceFetcher
 
 
 class FakeResponse:
@@ -35,7 +35,7 @@ class FakeSession:
 
 
 def _client(session):
-    return SourceClient("https://src.example/", "secret-key", session=session, sleep=lambda _s: None)
+    return ResourceFetcher("https://src.example/", "secret-key", session=session, sleep=lambda _s: None)
 
 
 def test_get_manifest_hits_endpoint_with_api_key_header():

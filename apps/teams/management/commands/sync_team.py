@@ -2,7 +2,7 @@
 
     manage.py sync_team --source-url=<src> --api-key=<key> --team-slug=<slug> [--private-key-path=<path>]
 
-The command is a thin shell: it wires the source client to the import engine and the local FK
+The command is a thin shell: it wires the resource fetcher to the import engine and the local FK
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 """
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.teams.export.client import SourceClient
+from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import TEAM_MODEL, entry_model, schema_checksum
@@ -132,7 +132,7 @@ class Command(BaseCommand):
             private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
 
         store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
-        client = SourceClient(options["source_url"], options["api_key"])
+        client = ResourceFetcher(options["source_url"], options["api_key"])
         enforce_schema = not options["skip_schema_check"]
 
         # Preflight before the destructive --force-delete: a bad key path (read above), an
