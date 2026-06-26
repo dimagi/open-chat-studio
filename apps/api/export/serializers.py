@@ -114,8 +114,7 @@ def build_resource_serializer(model):
         attrs[name] = serializers.SerializerMethodField()
         attrs[f"get_{name}"] = method
 
-    spec = GLOBAL_CONFIG.get(label)
-    if spec:
+    if spec := GLOBAL_CONFIG.get(label):
         attrs["is_global"] = serializers.SerializerMethodField()
         attrs["get_is_global"] = _is_global_resolver(spec.null_field)
 
