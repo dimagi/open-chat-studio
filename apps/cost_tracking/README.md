@@ -2,7 +2,7 @@
 
 This app records the cost of every LLM call OCS makes and surfaces it to the team that owns the chat. The whole feature is gated by the `flag_ai_cost_monitoring` team-scoped Waffle flag, so teams opt in.
 
-There are two halves: the capture path (record what happened) and the resolution path (price what was recorded). A small operational layer (seed loader, auto-update workflow, weekly digest) keeps pricing data fresh.
+There are two halves: the capture path (record what happened) and the resolution path (price what was recorded). A small operational layer (seed loader, auto-update workflow) keeps pricing data fresh.
 
 
 ## Data Model
@@ -20,7 +20,7 @@ The `OCSTracer` (in `apps/service_providers/tracing/`) collects `UsageEvent`s du
 
 Provider identity is propagated via `model.metadata["ocs_provider_type"]` (stamped in `LlmService.get_chat_model` via a template method). The collector uses that to bucket usage by `(provider, model)`, so the same model name routed through different providers gets billed separately.
 
-When `usage_metadata` is missing from the LangChain response, the collector falls back: `tiktoken` for the OpenAI family, `count_tokens_approximately` for everything else. Confidence is set to `ESTIMATED`. When there are no prompts to count either, the row is emitted as `UNKNOWN` with `extra["missing_usage_calls"]` so the weekly digest can flag the coverage gap.
+When `usage_metadata` is missing from the LangChain response, the collector falls back: `tiktoken` for the OpenAI family, `count_tokens_approximately` for everything else. Confidence is set to `ESTIMATED`. When there are no prompts to count either, the row is emitted as `UNKNOWN` with `extra["missing_usage_calls"]` so the dashboard's `unknown_call_count` flags the coverage gap.
 
 ## Resolution Path
 
