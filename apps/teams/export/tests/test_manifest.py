@@ -92,13 +92,9 @@ IGNORED_MODELS = frozenset(
 EMBEDDED_MODELS = frozenset({"teams.membership"})
 
 
-def test_every_entry_resolves_to_a_model():
+def test_entries_resolve_to_models_with_valid_cursors():
     for entry in manifest.MANIFEST_ENTRIES:
         assert _model(entry.model) is not None
-
-
-def test_entry_cursor_values_are_valid():
-    for entry in manifest.MANIFEST_ENTRIES:
         assert entry.cursor in {"pk", "updated_at_id"}
 
 
