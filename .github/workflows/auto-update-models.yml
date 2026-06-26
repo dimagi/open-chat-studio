@@ -110,19 +110,25 @@ jobs:
         run: |
           # One open issue at a time. Edit it if it already exists so the body
           # reflects the latest gap list; otherwise open a new one. Labelled
-          # `cost-tracking,auto-models` so it filters cleanly.
+          # `cost-tracking,auto-models` so it filters cleanly. Body is
+          # prefixed with a team @-mention so the platform team is notified.
           TITLE="Missing pricing for ${MISSING_COUNT} OCS-managed model(s)"
+          {
+            echo "cc @dimagi/open-chat-studio"
+            echo
+            cat "$ISSUE_BODY_PATH"
+          } > issue-body.md
           EXISTING=$(gh issue list \
             --state open \
             --label cost-tracking \
             --search "Missing pricing for in:title" \
             --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
-            gh issue edit "$EXISTING" --title "$TITLE" --body-file "$ISSUE_BODY_PATH"
+            gh issue edit "$EXISTING" --title "$TITLE" --body-file issue-body.md
           else
             gh issue create \
               --title "$TITLE" \
-              --body-file "$ISSUE_BODY_PATH" \
+              --body-file issue-body.md \
               --label cost-tracking \
               --label auto-models
           fi

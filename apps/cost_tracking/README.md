@@ -45,8 +45,6 @@ Two places consume the data, both gated by `flag_ai_cost_monitoring`:
 - **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`.
 - **LLM Provider page** shows each model's current per-1K rate inline. Admins can override at team scope via an HTMX modal (`pricing_override` view) or revert to global. The custom-model creation dialog accepts optional input/output rates that persist as team-scoped `PricingRule` rows in the same transaction as the model save.
 
-Coverage gaps for OCS-managed models (entries in `default_models.py` missing pricing) are surfaced from `auto-update-models.yml` as a GitHub issue, not as a runtime task. See "Seed Data and Updates" above.
-
 ## Layout
 
 ```text
