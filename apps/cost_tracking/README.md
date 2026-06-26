@@ -4,7 +4,6 @@ This app records the cost of every LLM call OCS makes and surfaces it to the tea
 
 There are two halves: the capture path (record what happened) and the resolution path (price what was recorded). A small operational layer (seed loader, auto-update workflow, weekly digest) keeps pricing data fresh.
 
-The source of truth is the code so [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## Data Model
 
