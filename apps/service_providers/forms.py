@@ -373,23 +373,20 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     host = forms.URLField(label=_("Host"))
 
 
+def _price_per_million_field(label):
+    """Per-million-token decimal field used by both the custom-model creation
+    form and the team-scoped pricing-override form. Single source of truth
+    for the (required, min_value, decimal_places) contract."""
+    return forms.DecimalField(label=label, required=False, min_value=Decimal("0"), decimal_places=6)
+
+
 class LlmProviderModelForm(forms.ModelForm):
     """Custom-model creation form. Optional pricing fields are shown only
     when `flag_ai_cost_monitoring` is on for the team; the view converts
     per-million to per-1K tokens before persisting `PricingRule` rows."""
 
-    input_price_per_million_tokens = forms.DecimalField(
-        label=_("Input price ($ / 1M tokens)"),
-        required=False,
-        min_value=Decimal("0"),
-        decimal_places=6,
-    )
-    output_price_per_million_tokens = forms.DecimalField(
-        label=_("Output price ($ / 1M tokens)"),
-        required=False,
-        min_value=Decimal("0"),
-        decimal_places=6,
-    )
+    input_price_per_million_tokens = _price_per_million_field(_("Input price ($ / 1M tokens)"))
+    output_price_per_million_tokens = _price_per_million_field(_("Output price ($ / 1M tokens)"))
 
     class Meta:
         model = LlmProviderModel
@@ -424,24 +421,9 @@ class PricingOverrideForm(forms.Form):
     Leave a field blank to omit a service_kind from the override.
     """
 
-    input_price_per_million_tokens = forms.DecimalField(
-        label=_("Input price ($ / 1M tokens)"),
-        required=False,
-        min_value=Decimal("0"),
-        decimal_places=6,
-    )
-    output_price_per_million_tokens = forms.DecimalField(
-        label=_("Output price ($ / 1M tokens)"),
-        required=False,
-        min_value=Decimal("0"),
-        decimal_places=6,
-    )
-    cached_input_price_per_million_tokens = forms.DecimalField(
-        label=_("Cached input price ($ / 1M tokens)"),
-        required=False,
-        min_value=Decimal("0"),
-        decimal_places=6,
-    )
+    input_price_per_million_tokens = _price_per_million_field(_("Input price ($ / 1M tokens)"))
+    output_price_per_million_tokens = _price_per_million_field(_("Output price ($ / 1M tokens)"))
+    cached_input_price_per_million_tokens = _price_per_million_field(_("Cached input price ($ / 1M tokens)"))
 
     def clean(self):
         cleaned = super().clean()
