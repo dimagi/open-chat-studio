@@ -93,8 +93,17 @@ def test_list_participants_scoped_to_team():
     assert "t2user" not in identifiers
 
 
+# The endpoint accepts both the documented `chatbot` param and the deprecated `experiment`
+# alias; the same filtering behaviour must hold for either name.
+FILTER_PARAM_CASES = [
+    pytest.param("chatbot", id="documented_chatbot_param"),
+    pytest.param("experiment", id="deprecated_experiment_alias"),
+]
+
+
 @pytest.mark.django_db()
-def test_list_participants_filter_by_experiment():
+@pytest.mark.parametrize("filter_param", FILTER_PARAM_CASES)
+def test_list_participants_filter_by_chatbot(filter_param):
     team = TeamWithUsersFactory.create()
     experiment1 = ExperimentFactory.create(team=team)
     experiment2 = ExperimentFactory.create(team=team)
@@ -109,40 +118,7 @@ def test_list_participants_filter_by_experiment():
 
     user = team.members.first()
     client = ApiTestClient(user, team)
-    url = reverse("api:participant-data") + f"?experiment={experiment1.public_id}"
-    response = client.get(url)
-    assert response.status_code == 200
-    results = response.json()["results"]
-    by_identifier = {p["identifier"]: p for p in results}
-    assert set(by_identifier) == {"alice", "carol"}
-    # alice only has data for experiment1
-    assert len(by_identifier["alice"]["data"]) == 1
-    assert by_identifier["alice"]["data"][0]["chatbot_id"] == str(experiment1.public_id)
-    assert by_identifier["alice"]["data"][0]["data"] == {"x": 1}
-    # carol has data for both experiments but only experiment1's data should be returned
-    assert len(by_identifier["carol"]["data"]) == 1
-    assert by_identifier["carol"]["data"][0]["chatbot_id"] == str(experiment1.public_id)
-    assert by_identifier["carol"]["data"][0]["data"] == {"x": 3}
-
-
-@pytest.mark.django_db()
-def test_list_participants_filter_by_chatbot():
-    """The documented `chatbot` query param filters to that chatbot's participants/data."""
-    team = TeamWithUsersFactory.create()
-    experiment1 = ExperimentFactory.create(team=team)
-    experiment2 = ExperimentFactory.create(team=team)
-
-    p1 = ParticipantFactory.create(team=team, identifier="alice", platform="api")
-    p2 = ParticipantFactory.create(team=team, identifier="bob", platform="api")
-    p3 = ParticipantFactory.create(team=team, identifier="carol", platform="api")
-    ParticipantData.objects.create(team=team, participant=p1, experiment=experiment1, data={"x": 1})
-    ParticipantData.objects.create(team=team, participant=p2, experiment=experiment2, data={"x": 2})
-    ParticipantData.objects.create(team=team, participant=p3, experiment=experiment1, data={"x": 3})
-    ParticipantData.objects.create(team=team, participant=p3, experiment=experiment2, data={"x": 4})
-
-    user = team.members.first()
-    client = ApiTestClient(user, team)
-    url = reverse("api:participant-data") + f"?chatbot={experiment1.public_id}"
+    url = reverse("api:participant-data") + f"?{filter_param}={experiment1.public_id}"
     response = client.get(url)
     assert response.status_code == 200
     results = response.json()["results"]
@@ -180,7 +156,8 @@ def test_list_participants_chatbot_takes_precedence_over_experiment_alias():
 
 
 @pytest.mark.django_db()
-def test_list_participants_filter_by_experiment_unknown_returns_empty():
+@pytest.mark.parametrize("filter_param", FILTER_PARAM_CASES)
+def test_list_participants_filter_unknown_returns_empty(filter_param):
     team = TeamWithUsersFactory.create()
     experiment = ExperimentFactory.create(team=team)
     p1 = ParticipantFactory.create(team=team, identifier="alice", platform="api")
@@ -188,22 +165,24 @@ def test_list_participants_filter_by_experiment_unknown_returns_empty():
 
     user = team.members.first()
     client = ApiTestClient(user, team)
-    # nil UUID, no experiment owns this id
-    url = reverse("api:participant-data") + "?experiment=00000000-0000-0000-0000-000000000000"
+    # nil UUID, no chatbot owns this id
+    url = reverse("api:participant-data") + f"?{filter_param}=00000000-0000-0000-0000-000000000000"
     response = client.get(url)
     assert response.status_code == 200
     assert response.json()["results"] == []
 
 
 @pytest.mark.django_db()
-def test_list_participants_filter_by_experiment_invalid_uuid():
+@pytest.mark.parametrize("filter_param", FILTER_PARAM_CASES)
+def test_list_participants_filter_invalid_uuid(filter_param):
     team = TeamWithUsersFactory.create()
     user = team.members.first()
     client = ApiTestClient(user, team)
-    url = reverse("api:participant-data") + "?experiment=not-a-uuid"
+    url = reverse("api:participant-data") + f"?{filter_param}=not-a-uuid"
     response = client.get(url)
     assert response.status_code == 400
-    assert "experiment" in response.json()
+    # the validation error is reported under the param the caller actually used
+    assert filter_param in response.json()
 
 
 @pytest.mark.django_db()

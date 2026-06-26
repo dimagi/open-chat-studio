@@ -102,8 +102,11 @@ class ParticipantView(APIView):
             qs = qs.filter(platform=platform)
         # "chatbot" is the documented (OpenApiParameter) name; "experiment" is kept as a
         # deprecated fallback alias for older callers. Both take a chatbot/experiment public UUID.
-        chatbot_param = request.query_params.get("chatbot") or request.query_params.get("experiment")
-        if experiment_uuid := _parse_experiment_uuid(chatbot_param):
+        # Report validation errors under whichever param the caller actually used.
+        chatbot_param = request.query_params.get("chatbot")
+        param_name = "chatbot" if chatbot_param else "experiment"
+        chatbot_param = chatbot_param or request.query_params.get("experiment")
+        if experiment_uuid := _parse_experiment_uuid(chatbot_param, param_name=param_name):
             data_qs = data_qs.filter(experiment__public_id=experiment_uuid)
             qs = qs.filter(id__in=data_qs.values_list("participant_id", flat=True))
         qs = qs.prefetch_related(Prefetch("data_set", queryset=data_qs, to_attr="_prefetched_participant_data"))
@@ -192,13 +195,13 @@ class ParticipantView(APIView):
         return _update_participant_data(request)
 
 
-def _parse_experiment_uuid(value):
+def _parse_experiment_uuid(value, *, param_name="chatbot"):
     if not value:
         return None
     try:
         return uuid.UUID(value)
     except ValueError as e:
-        raise ValidationError({"experiment": "Must be a valid UUID."}) from e
+        raise ValidationError({param_name: "Must be a valid UUID."}) from e
 
 
 def _update_participant_data(request):
