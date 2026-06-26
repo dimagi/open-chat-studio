@@ -40,7 +40,13 @@ def get_participant_stats(start: datetime, end: datetime):
 
 
 def usage_to_csv(start: datetime, end: datetime):
-    return _write_data_to_csv(["Team", "Run Count", "Total Tokens"], get_usage_data(start, end))
+    metadata_fields = get_team_metadata_fields()
+    headers = ["Team", "Run Count", "Total Tokens"] + [field["label"] for field in metadata_fields]
+    rows = (
+        (team_name, run_count, total_tokens, *(metadata.get(field["key"], "") for field in metadata_fields))
+        for team_name, run_count, total_tokens, metadata in get_usage_data(start, end)
+    )
+    return _write_data_to_csv(headers, rows)
 
 
 def get_usage_data(start: datetime, end: datetime):
@@ -54,7 +60,7 @@ def get_usage_data(start: datetime, end: datetime):
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
         .exclude(session__platform=ChannelPlatform.EVALUATIONS)
-        .values("team_id", "team__name")
+        .values("team_id", "team__name", "team__metadata")
         .annotate(
             run_count=Count("id"),
             total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
@@ -62,7 +68,7 @@ def get_usage_data(start: datetime, end: datetime):
         .order_by("-run_count", "team__name")
     )
     for data in usage_data:
-        yield data["team__name"], data["run_count"], data["total_tokens"]
+        yield data["team__name"], data["run_count"], data["total_tokens"], data["team__metadata"] or {}
 
 
 def get_whatsapp_numbers():
