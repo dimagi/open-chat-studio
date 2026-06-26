@@ -40,7 +40,8 @@ class TestTwilio:
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(message)
         assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
-        assert whatsapp_message.participant_id == "+27456897512"
+        assert whatsapp_message.participant_id == "US.13491208655302741918"
+        assert whatsapp_message.phone_number == "+27456897512"
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
             assert whatsapp_message.media_url is None
@@ -129,7 +130,8 @@ class TestTurnio:
     )
     def test_parse_text_message(self, message, message_type):
         message = WhatsAppMessage.parse(message)
-        assert message.participant_id == "27456897512"
+        assert message.participant_id == "US.13491208655302741918"
+        assert message.phone_number == "27456897512"
         if message_type == "text":
             assert message.message_text == "Hi there!"
             assert message.content_type == MESSAGE_TYPES.TEXT
@@ -246,7 +248,8 @@ class TestMetaCloudApi:
     )
     def test_parse_messages(self, message, message_type):
         parsed = WhatsAppMessage.parse(message)
-        assert parsed.participant_id == "27456897512"
+        assert parsed.participant_id == "US.13491208655302741918"
+        assert parsed.phone_number == "27456897512"
         if message_type == "text":
             assert parsed.message_text == "Hello"
             assert parsed.content_type == MESSAGE_TYPES.TEXT
