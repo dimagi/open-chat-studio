@@ -2,12 +2,19 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
+from rest_framework import serializers
 
-from apps.api.export.serializers import build_resource_serializer
+from apps.api.export.serializers import (
+    ManifestEntrySerializer,
+    ManifestSerializer,
+    build_resource_response_serializer,
+    build_resource_serializer,
+)
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
+from apps.teams.export.manifest import build_manifest, entry_model, get_manifest_entry
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import (
@@ -140,3 +147,25 @@ def test_global_able_model_exposes_is_global_flag_instead_of_team(is_global):
     data = _serialize(LlmProviderModel, model)
     assert data["is_global"] is is_global
     assert "team" not in data
+
+
+def test_response_envelope_has_cursor_has_more_and_results():
+    fields = build_resource_response_serializer(get_manifest_entry("users"))().fields
+    assert set(fields) == {"cursor", "has_more", "results"}
+    assert isinstance(fields["results"], serializers.ListSerializer)
+
+
+def test_secret_fields_documented_as_sealed_strings():
+    # llm_providers' `config` is sealed to a base64 string at runtime, not its raw model type.
+    model = entry_model(get_manifest_entry("llm_providers").model)
+    fields = build_resource_serializer(model)().fields
+    assert isinstance(fields["config"], serializers.CharField)
+
+
+def test_manifest_serializer_matches_build_manifest_payload():
+    """The documented manifest response must stay in step with what the view actually returns."""
+    manifest = build_manifest()
+    assert set(ManifestSerializer().fields) == set(manifest)
+    declared = set(ManifestEntrySerializer().fields)
+    actual_keys = set().union(*(entry.keys() for entry in manifest["entries"]))
+    assert declared == actual_keys
