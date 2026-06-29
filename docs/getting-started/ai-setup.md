@@ -3,7 +3,7 @@
 New to AI-assisted development on this project? Complete this setup first for your local environment, then follow the [AI development workflow](../developer_guides/ai_development.md).
 
 !!! NOTE
-    The core principle of this project's AI workflow is **design before code**, built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). If you don't use Claude Code, see the [section below](#other-ai-coding-tools).
+    The core principle of this project's AI development workflow is **design before code**, built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). If you don't use Claude Code, see the [section below](#other-ai-coding-tools).
 
 ## Do I need this?
 
@@ -20,13 +20,17 @@ New to AI-assisted development on this project? Complete this setup first for yo
 
 ## Set Up Claude Skills and Plugins
 
+Skills are reusable instruction sets that guide Claude through specific workflows. Plugins are collections of skills installed from a marketplace. OCS uses both.
+
 ### OCS project-specific skills
 
 These are in the `.claude/skills/` folder and are active automatically — no installation needed.
 
+Refer to relevant documentation for details on the skills in this folder.
+
 ### Superpowers plugin for design-before-code skills
 
-The OCS team's recommended [AI development workflow](../developer_guides/ai_development.md) depends on core skills (`brainstorming`, `writing-plans`, `executing-plans`, etc.) provided by the **superpowers** plugin.
+The OCS team's recommended [AI development workflow](../developer_guides/ai_development.md) follows a design-before-code process. The **superpowers** plugin provides the skills that guide Claude through each phase — exploring the problem, planning the implementation, executing it, and reviewing the result.
 
 Install it from the official Claude plugin marketplace: https://claude.com/plugins/superpowers
 
@@ -68,7 +72,7 @@ Other agentic coding tools (Gemini CLI, Codex CLI, OpenCode, Aider, Cline, etc.)
 
 - **AGENTS.md** — Most AI tools load this automatically.
 - **VISION.md and CONTEXT.md** — tool-agnostic; can be referenced by any AI coding tool.
-- **Domain guides** (`docs/agents/`) — Contextual guidance for specific areas.
+- **Domain guides** (`docs/agents/`) — Contextual guidance for specific code areas. Tool-agnostic.
 
 ### What is Claude-specific
 
