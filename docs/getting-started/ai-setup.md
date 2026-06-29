@@ -1,16 +1,19 @@
-# AI Tool Setup
+# Setup for AI-Assisted Development
 
-New to AI-assisted development on this project? Complete this setup first, then follow the [AI development workflow](../developer_guides/ai_development.md).
+New to AI-assisted development on this project? Complete this setup first for your local environment, then follow the [AI development workflow](../developer_guides/ai_development.md).
+
+!!! NOTE
+    The core principle of this project's AI workflow is **design before code**, built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). If you don't use Claude Code, see the [section below](#other-ai-coding-tools).
 
 ## Do I need this?
 
 | Situation | Action |
 |-----------|--------|
-| You plan to use Claude Code or another AI coding agent for feature work | **Required** — complete this page, then follow the [AI development workflow](../developer_guides/ai_development.md) |
-| You want occasional AI assistance but won't adopt the full workflow | **Optional** — at minimum, install Claude Code; skip the dimagi-claude-workflows plugins |
+| You plan to use Claude Code for feature work | **Required** — complete this page, then follow the recommended [AI development workflow](../developer_guides/ai_development.md) |
+| You want occasional AI assistance and plan to use the [Claude Agents](../developer_guides/claude_code_agent.md), but won't adopt the full workflow | **Optional** — at minimum, [install Claude Code](#install-claude-code); skip the skills plugin setup below |
 | You're getting the project running, fixing a quick bug, or don't plan to use AI tooling | **Skip for now** — nothing here is needed to run the project or contribute code |
 
-## Set Up Claude Code
+## Install Claude Code
 
 1. Purchase a Claude subscription.
 2. Install Claude Code by following the [official docs](https://docs.anthropic.com/en/docs/claude-code/overview).
@@ -54,6 +57,7 @@ OCS ships with instruction files that shape how AI agents work in this codebase.
 Contextual guides for specific areas of the codebase. `AGENTS.md` tells the agent which file to read and when — they are **not** all loaded at startup, keeping agent context lean while providing depth on demand.
 
 ### Claude Code settings
+
 `.claude/settings.json` pre-approves safe commands (pytest, ruff, git, gh, etc.) so Claude Code runs them without prompting, and configures hooks for session startup.
 
 ## Other AI coding tools
@@ -67,6 +71,7 @@ Other agentic coding tools (Gemini CLI, Codex CLI, OpenCode, Aider, Cline, etc.)
 - **Domain guides** (`docs/agents/`) — Contextual guidance for specific areas.
 
 ### What is Claude-specific
+
 - **Skills** — Claude-specific and not available in other AI tools.
 - **Safe commands** — `.claude/settings.json` contains pre-approved automation-friendly commands (for tests, linting, version control, file search). Refer to your tool's documentation to configure similar permissions.
 
