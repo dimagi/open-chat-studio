@@ -6,7 +6,6 @@ import pytest
 from django.test import RequestFactory, override_settings
 from django.utils import timezone
 
-from apps.chat.channels import _start_experiment_session
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
@@ -18,6 +17,7 @@ from apps.events.models import (
 )
 from apps.events.views import _delete_event_view
 from apps.experiments.models import Participant
+from apps.experiments.services import start_experiment_session
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import (
     ExperimentFactory,
@@ -130,7 +130,7 @@ def test_start_session_fires_participant_joined_event(team):
 
 def _assert_participant_joined_event_fired(experiment, expected_events):
     with mock.patch("apps.events.tasks.enqueue_static_triggers.run") as mock_fire_trigger:
-        session = _start_experiment_session(
+        session = start_experiment_session(
             working_experiment=experiment,
             experiment_channel=ExperimentChannelFactory.create(team=experiment.team, experiment=experiment),
             participant=Participant(identifier="test_participant"),

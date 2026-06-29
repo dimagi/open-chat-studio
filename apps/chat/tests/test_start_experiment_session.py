@@ -1,8 +1,8 @@
 import pytest
 
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import _start_experiment_session
 from apps.experiments.models import Participant
+from apps.experiments.services import start_experiment_session
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 
@@ -26,7 +26,7 @@ class TestStartExperimentSessionParticipant:
     """Covers how the session is linked to its participant."""
 
     def test_creates_participant_with_normalized_identifier(self, experiment, whatsapp_channel):
-        session = _start_experiment_session(
+        session = start_experiment_session(
             working_experiment=experiment,
             experiment_channel=whatsapp_channel,
             participant=Participant(identifier="bsuid_user_1"),
@@ -42,7 +42,7 @@ class TestStartExperimentSessionParticipant:
             identifier="bsuid_user_2",
         )
 
-        session = _start_experiment_session(
+        session = start_experiment_session(
             working_experiment=experiment,
             experiment_channel=whatsapp_channel,
             participant=Participant(identifier="bsuid_user_2"),
@@ -60,7 +60,7 @@ class TestStartExperimentSessionParticipant:
             identifier="+15551234567",
         )
 
-        session = _start_experiment_session(
+        session = start_experiment_session(
             working_experiment=experiment,
             experiment_channel=whatsapp_channel,
             participant=resolved,

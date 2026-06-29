@@ -20,10 +20,11 @@ from apps.channels.channels_v2.stages.core import (
 )
 from apps.channels.channels_v2.stages.terminal import ActivityTrackingStage, PersistenceStage
 from apps.channels.models import ExperimentChannel
-from apps.chat.channels import MESSAGE_TYPES, _start_experiment_session
+from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, Participant, SessionStatus
+from apps.experiments.services import start_experiment_session
 
 if TYPE_CHECKING:
     from apps.experiments.models import ExperimentSession
@@ -103,7 +104,7 @@ class WebChannel(ChannelBase):
         **kwargs,
     ):
         experiment_channel = ExperimentChannel.objects.get_team_web_channel(working_experiment.team)
-        session = _start_experiment_session(
+        session = start_experiment_session(
             working_experiment,
             experiment_channel,
             Participant(identifier=participant_identifier, user=participant_user),

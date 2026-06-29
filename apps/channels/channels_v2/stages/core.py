@@ -16,7 +16,6 @@ from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.channels import (
     MARKDOWN_REF_PATTERN,
     MESSAGE_TYPES,
-    _start_experiment_session,
     strip_urls_and_emojis,
 )
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
@@ -31,6 +30,7 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
+from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -226,7 +226,7 @@ class SessionResolutionStage(ProcessingStage):
         raise EarlyExitResponse("Conversation reset")
 
     def _create_session(self, ctx: MessageProcessingContext):
-        """Delegates to the existing _start_experiment_session helper.
+        """Delegates to the start_experiment_session service.
 
         Reuses the participant ParticipantResolverStage already resolved (e.g. a legacy
         phone-keyed row) so the session attaches to it rather than a new BSUID-keyed one.
@@ -235,7 +235,7 @@ class SessionResolutionStage(ProcessingStage):
             identifier=ctx.participant_identifier,
             user=ctx.channel_context.get("participant_user"),
         )
-        return _start_experiment_session(
+        return start_experiment_session(
             working_experiment=ctx.experiment.get_working_version(),
             experiment_channel=ctx.experiment_channel,
             participant=participant,

@@ -3,9 +3,9 @@ from unittest.mock import Mock
 from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
-from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.services import start_experiment_session
 from apps.service_providers.models import LlmProvider, TraceProvider
 from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -65,7 +65,7 @@ class TasksTest(TestCase):
         assert "trace_info" in messages[0].metadata
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
-        return _start_experiment_session(
+        return start_experiment_session(
             experiment,
             experiment_channel=self.experiment_channel,
             participant=Participant(identifier=self.telegram_chat_id),
