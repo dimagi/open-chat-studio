@@ -123,10 +123,18 @@ def _match_default_consent_form(model, row: dict, store: FKTranslationStore, tar
     return model.objects.filter(team=target_team, is_default=True).first()
 
 
+def _match_queue_aggregate(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """A queue's aggregate is recreated as a side effect of importing its annotations, so map the
+    source row onto that existing one rather than creating a second (the queue OneToOne forbids two)."""
+    target_queue = store.get_target("human_annotations.annotationqueue", row.get("queue"))
+    return model.objects.filter(queue_id=target_queue).first() if target_queue else None
+
+
 # Rows matched to a pre-existing target row by natural key instead of created.
 _MATCH_EXISTING = {
     "users.customuser": _match_existing_user,
     "experiments.consentform": _match_default_consent_form,
+    "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator
