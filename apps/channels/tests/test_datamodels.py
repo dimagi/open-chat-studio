@@ -97,12 +97,12 @@ class TestWhatsAppMessageParseBSUID:
     def test_meta_payload_uses_bsuid_as_participant_id_and_captures_phone(self):
         parsed = WhatsAppMessage.parse(meta_cloud_api_messages.text_message_value())
         assert parsed.participant_id == self.BSUID
-        assert parsed.phone_number == "27456897512"
+        assert parsed.remote_id == "27456897512"
 
     def test_turnio_payload_uses_bsuid_as_participant_id_and_captures_phone(self):
         parsed = WhatsAppMessage.parse(turnio_messages.text_message())
         assert parsed.participant_id == self.BSUID
-        assert parsed.phone_number == "27456897512"
+        assert parsed.remote_id == "27456897512"
 
     def test_falls_back_to_phone_when_no_bsuid(self):
         message_data = {
@@ -111,7 +111,7 @@ class TestWhatsAppMessageParseBSUID:
         }
         parsed = WhatsAppMessage.parse(message_data)
         assert parsed.participant_id == "27456897512"
-        assert parsed.phone_number == "27456897512"
+        assert parsed.remote_id == "27456897512"
 
 
 class TestTwilioMessageParseBSUID:
@@ -127,7 +127,7 @@ class TestTwilioMessageParseBSUID:
         }
         parsed = TwilioMessage.parse(message)
         assert parsed.participant_id == self.BSUID
-        assert parsed.phone_number == "+27456897512"
+        assert parsed.remote_id == "+27456897512"
 
     def test_whatsapp_without_external_user_id_falls_back_to_phone(self):
         """Pre-rollout Twilio webhooks carry no ExternalUserId; the phone becomes the
@@ -135,11 +135,11 @@ class TestTwilioMessageParseBSUID:
         message = {"From": "whatsapp:+27456897512", "To": self.BUSINESS, "Body": "Hello"}
         parsed = TwilioMessage.parse(message)
         assert parsed.participant_id == "+27456897512"
-        assert parsed.phone_number == "+27456897512"
+        assert parsed.remote_id == "+27456897512"
 
-    def test_facebook_messenger_has_no_phone_number(self):
+    def test_facebook_messenger_has_no_remote_id(self):
         message = {"From": "messenger:1234567890", "To": "messenger:9876543210", "Body": "Hi"}
         parsed = TwilioMessage.parse(message)
         assert parsed.platform == ChannelPlatform.FACEBOOK
         assert parsed.participant_id == "1234567890"
-        assert parsed.phone_number is None
+        assert parsed.remote_id is None

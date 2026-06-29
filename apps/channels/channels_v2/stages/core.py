@@ -48,15 +48,15 @@ logger = logging.getLogger("ocs.channels")
 RESET_COMMAND = "/reset"
 
 
-def participant_identifier_filter(identifier: str, phone_number: str | None) -> Q:
+def participant_identifier_filter(identifier: str, remote_id: str | None) -> Q:
     """Build the participant lookup filter for the BSUID rollout.
 
     Matches on the canonical identifier (the BSUID, post-rollout), plus the legacy
-    phone-number identifier when one is available, so a returning user previously keyed
-    by phone is linked to their messages now keyed by BSUID.
+    identifier when one is available, so a returning user
+    previously keyed by phone is linked to their messages now keyed by BSUID.
     """
-    if phone_number and phone_number != identifier:
-        return Q(identifier=identifier) | Q(identifier=phone_number)
+    if remote_id and remote_id != identifier:
+        return Q(identifier=identifier) | Q(identifier=remote_id)
     return Q(identifier=identifier)
 
 
@@ -140,15 +140,15 @@ class ParticipantResolverStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         normalized = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
         participant_user = ctx.channel_context.get("participant_user")
-        phone_number = getattr(ctx.message, "phone_number", None)
+        remote_id = ctx.message.remote_id if ctx.message else None
         ctx.participant = get_or_create_participant(
             team=ctx.experiment.team,
             normalized_identifier=normalized,
             platform=ctx.experiment_channel.platform,
             participant_user=participant_user,
-            participant_id_filter=participant_identifier_filter(normalized, phone_number),
+            participant_id_filter=participant_identifier_filter(normalized, remote_id),
         )
-        self._store_phone_number(ctx, phone_number)
+        self._store_remote_id(ctx, remote_id)
 
         try:
             ctx.participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
@@ -157,15 +157,15 @@ class ParticipantResolverStage(ProcessingStage):
         except ParticipantData.DoesNotExist:
             ctx.participant_data = None
 
-    def _store_phone_number(self, ctx: MessageProcessingContext, phone_number: str | None) -> None:
-        """Persist the user's phone number on the participant's remote_id so it can be used as
-        the send recipient -- the participant identifier may be a (non-sendable) BSUID."""
+    def _store_remote_id(self, ctx: MessageProcessingContext, remote_id: str | None) -> None:
+        """Persist the message's remote_id (e.g. the user's phone number) on the participant so it
+        can be used as the send recipient -- the participant identifier may be a (non-sendable) BSUID."""
         participant = ctx.participant
-        if not phone_number or participant is None:
+        if not remote_id or participant is None:
             return
-        if participant.remote_id == phone_number:
+        if participant.remote_id == remote_id:
             return
-        participant.remote_id = phone_number
+        participant.remote_id = remote_id
         participant.save(update_fields=["remote_id"])
 
 

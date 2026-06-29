@@ -105,6 +105,7 @@ class BaseMessage(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     participant_id: str
+    remote_id: str | None = Field(default=None)
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
@@ -149,10 +150,6 @@ class TwilioMessage(BaseMessage):
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
     attachment_filename: str | None = Field(default=None)
-    phone_number: str | None = Field(default=None)
-    """The user's phone number (E.164) when present in the WhatsApp webhook (Twilio `From`).
-    `None` for non-WhatsApp platforms (Facebook Messenger). Stored on the participant's
-    `remote_id` and used as the send recipient, since `participant_id` may be a BSUID."""
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -219,7 +216,7 @@ class TwilioMessage(BaseMessage):
             media_url=message_data.get("MediaUrl0"),
             attachment_mime_type=message_data.get("MediaContentType0"),
             platform=platform,
-            phone_number=phone_number,
+            remote_id=phone_number,
         )
 
 
@@ -261,10 +258,6 @@ class WhatsAppMessage(BaseMessage):
     attachment_mime_type: str | None = Field(default=None)
     attachment_filename: str | None = Field(default=None)
     whatsapp_message_id: str | None = Field(default=None)
-    phone_number: str | None = Field(default=None)
-    """The user's phone number when present in the webhook (Meta `wa_id`). `None` when only a
-    BSUID is exposed. Stored on the participant's `remote_id` and used as the send recipient,
-    since `participant_id` may be a BSUID."""
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -329,7 +322,7 @@ class WhatsAppMessage(BaseMessage):
             attachment_mime_type=attachment_mime_type,
             attachment_filename=media_payload.get("filename") if message_type == "document" else None,
             whatsapp_message_id=message.get("id"),
-            phone_number=phone_number,
+            remote_id=phone_number,
         )
 
 
