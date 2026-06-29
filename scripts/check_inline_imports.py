@@ -53,6 +53,16 @@ DJANGO_SETTINGS_RE = re.compile(r"""DJANGO_SETTINGS_MODULE['"]\s*,\s*['"](?P<mod
 SUBPROCESS_TIMEOUT = 600
 
 
+def log(message: str) -> None:
+    """Emit a diagnostic line to stderr.
+
+    Always on (no flag): the script's pass/fail signal is its exit code and the
+    findings it prints to stdout, so these lines never pollute that contract and
+    are there to prove in CI logs that each stage actually ran.
+    """
+    print(f"[inline-imports] {message}", file=sys.stderr)
+
+
 @dataclass
 class InlineImport:
     lineno: int
@@ -355,7 +365,7 @@ def _bootstrap_code(tmp: str, ctx: PackageContext, modules: list[str]) -> str:
     return "\n".join(lines)
 
 
-def _import_all_from_copy(ctx: PackageContext, mutate=None) -> HoistResult:
+def _import_all_from_copy(ctx: PackageContext, mutate=None, label: str = "import run") -> HoistResult:
     """Copy the top-level package to a temp dir, optionally mutate it, import
     everything.
 
@@ -370,7 +380,9 @@ def _import_all_from_copy(ctx: PackageContext, mutate=None) -> HoistResult:
         shutil.copytree(ctx.top_package, pkg_copy)
         if mutate is not None:
             mutate(pkg_copy)
-        code = _bootstrap_code(tmp, ctx, discover_modules(pkg_copy, ctx))
+        modules = discover_modules(pkg_copy, ctx)
+        log(f"{label}: importing {len(modules)} modules from a copy of `{ctx.top_package.name}`")
+        code = _bootstrap_code(tmp, ctx, modules)
         try:
             proc = subprocess.run(
                 [sys.executable, "-c", code],
@@ -380,9 +392,12 @@ def _import_all_from_copy(ctx: PackageContext, mutate=None) -> HoistResult:
                 timeout=SUBPROCESS_TIMEOUT,
             )
         except subprocess.TimeoutExpired:
+            log(f"{label}: timed out after {SUBPROCESS_TIMEOUT}s")
             return HoistResult(ok=False, error="import run timed out")
         if proc.returncode == 0:
+            log(f"{label}: all modules imported cleanly")
             return HoistResult(ok=True, error="")
+        log(f"{label}: import failed (exit {proc.returncode})")
         return HoistResult(ok=False, error=proc.stderr.strip())
 
 
@@ -401,7 +416,7 @@ def verify_hoists(ctx: PackageContext, candidates: list[Candidate]) -> HoistResu
                 source = hoist_import(source, statement)
             target.write_text(source)
 
-    return _import_all_from_copy(ctx, mutate=apply_hoists)
+    return _import_all_from_copy(ctx, mutate=apply_hoists, label=f"hoist test ({len(candidates)} candidates)")
 
 
 def classify_candidates(
@@ -421,8 +436,11 @@ def classify_candidates(
     if result.ok:
         return [(c, True, "") for c in candidates]
     if len(candidates) == 1:
-        return [(candidates[0], False, result.error)]
+        c = candidates[0]
+        log(f"isolated non-hoistable import: {c.path}:{c.inline_import.lineno} `{c.inline_import.statement}`")
+        return [(c, False, result.error)]
     mid = len(candidates) // 2
+    log(f"hoisting {len(candidates)} candidates together failed; bisecting into {mid} + {len(candidates) - mid}")
     return classify_candidates(candidates[:mid], verify) + classify_candidates(candidates[mid:], verify)
 
 
@@ -451,7 +469,7 @@ def _scan_paths(package_dir: Path, files: tuple[Path, ...] | None) -> list[Path]
     paths = []
     for path in sorted(files):
         if path.suffix != ".py" or not path.exists():
-            print(f"note: skipping {path} (missing or not a .py file)", file=sys.stderr)
+            log(f"skipping {path} (missing or not a .py file)")
             continue
         if not path.resolve().is_relative_to(package_dir.resolve()):
             raise ValueError(f"{path} is not inside {package_dir}")
@@ -480,15 +498,19 @@ def _classify_lazy_claims(candidates: list[Candidate], ctx: "PackageContext") ->
     time elsewhere costs nothing extra to hoist, so the claim is dubious."""
     if not candidates:
         return []
+    log(f"fact-checking {len(candidates)} `lazy:` claim(s) against module-time imports")
     index = module_time_import_index(ctx)
+    log(f"module-time import index: {len(index)} dotted names imported at startup")
     findings = []
     for c in candidates:
         hit = loaded_at_module_time(c.inline_import.modules, index)
         if hit is None:
+            log(f"lazy OK {c.path}:{c.inline_import.lineno} `{c.inline_import.statement}` not loaded at startup")
             findings.append(Finding(c.path, c.inline_import, "justified"))
             continue
         module, importer = hit
         rel_importer = importer.relative_to(ctx.import_root)
+        log(f"lazy DUBIOUS {c.path}:{c.inline_import.lineno} `{module}` already loaded at startup in {rel_importer}")
         findings.append(
             Finding(
                 c.path,
@@ -513,14 +535,18 @@ def _classify_empirical(candidates: list[Candidate], ctx: "PackageContext") -> l
     proven and every candidate is inconclusive."""
     if not candidates:
         return []
-    baseline = _import_all_from_copy(ctx)
+    log(f"hoist-testing {len(candidates)} empirical candidate(s); running baseline import first")
+    baseline = _import_all_from_copy(ctx, label="baseline")
     if not baseline.ok:
+        log("baseline import failed: nothing can be proven, marking all candidates inconclusive")
         return [Finding(c.path, c.inline_import, "inconclusive", baseline.error) for c in candidates]
     classified = classify_candidates(candidates, lambda cands: verify_hoists(ctx, cands))
-    return [
-        Finding(c.path, c.inline_import, _empirical_verdict(c.inline_import, hoistable), error)
-        for c, hoistable, error in classified
-    ]
+    findings = []
+    for c, hoistable, error in classified:
+        verdict = _empirical_verdict(c.inline_import, hoistable)
+        log(f"{verdict.upper()} {c.path}:{c.inline_import.lineno} `{c.inline_import.statement}`")
+        findings.append(Finding(c.path, c.inline_import, verdict, error))
+    return findings
 
 
 def check_package(
@@ -535,22 +561,39 @@ def check_package(
     top-level package, since import cycles span sub-packages.
     """
     ctx = PackageContext.resolve(package_dir, exclude)
+    log(f"package `{package_dir}` -> import root {ctx.import_root}, top package `{ctx.top_package.name}`")
+    if ctx.banned_imports:
+        log(f"ruff banned-module-level-imports (config-blessed): {', '.join(ctx.banned_imports)}")
     findings = []
     empirical: list[Candidate] = []  # unjustified, or a (testable) cycle claim
     lazy_claimed: list[Candidate] = []
     routes = {"empirical": empirical, "lazy": lazy_claimed}
-    for path in _scan_paths(package_dir, files):
+    scan_paths = _scan_paths(package_dir, files)
+    log(f"scanning {len(scan_paths)} file(s) for inline imports")
+    scanned = blessed = 0
+    for path in scan_paths:
         if ctx.skip(path.resolve().relative_to(package_dir.resolve())):
+            log(f"skip {path} (excluded or a migration)")
             continue
+        scanned += 1
         rel_path = str(path.resolve().relative_to(ctx.top_package))
         # utf-8-sig: tolerate files saved with a UTF-8 BOM
-        for imp in find_inline_imports(path.read_text(encoding="utf-8-sig")):
+        imports = find_inline_imports(path.read_text(encoding="utf-8-sig"))
+        if imports:
+            log(f"{path}: {len(imports)} inline import(s)")
+        for imp in imports:
             route = _route_import(imp, ctx)
+            log(f"  line {imp.lineno} -> {route}: `{imp.statement}`")
             if route == "justified":
+                blessed += 1
                 findings.append(Finding(path, imp, "justified"))
             else:
                 routes[route].append(Candidate(path, rel_path, imp))
 
+    log(
+        f"routed inline imports from {scanned} scanned file(s): "
+        f"{len(empirical)} empirical, {len(lazy_claimed)} lazy, {blessed} justified-on-sight"
+    )
     findings += _classify_lazy_claims(lazy_claimed, ctx)
     findings += _classify_empirical(empirical, ctx)
     findings.sort(key=lambda f: (str(f.path), f.inline_import.lineno))
@@ -608,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
 
     django_settings = detect_django_settings(find_import_root(args.package.resolve()))
     if django_settings:
-        print(f"Django project detected (settings: {django_settings})", file=sys.stderr)
+        log(f"Django project detected (settings: {django_settings})")
 
     files = tuple(args.files) if args.files is not None else None
     findings = check_package(args.package, exclude=tuple(args.exclude), files=files)
