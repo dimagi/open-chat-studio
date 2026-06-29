@@ -7,6 +7,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("bot_channels", "0027_notify_widget_deprecation_below_0_6_0"),
         ("data_migrations", "0001_initial"),
+        ("teams", "0012_team_metadata"),
     ]
 
     operations = [
