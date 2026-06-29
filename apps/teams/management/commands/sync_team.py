@@ -125,6 +125,13 @@ class Command(BaseCommand):
             action="store_true",
             help="Delete the local team and its sync state before syncing, for a clean re-import.",
         )
+        parser.add_argument(
+            "--noinput",
+            "--no-input",
+            action="store_false",
+            dest="interactive",
+            help="Skip the --force-delete confirmation prompt (for non-interactive runs).",
+        )
 
     def handle(self, *args, **options):
         private_key = None
@@ -140,6 +147,8 @@ class Command(BaseCommand):
         check_sync_preconditions(client, private_key, enforce_schema)
 
         if options["force_delete"]:
+            if options.get("interactive", True) and not self._confirm_force_delete(options["team_slug"]):
+                raise CommandError("Aborted: --force-delete not confirmed.")
             force_delete_team(
                 options["team_slug"],
                 options["state_dir"],
@@ -159,3 +168,12 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Some rows are not yet synced; rerun to complete."))
         else:
             self.stdout.write(self.style.SUCCESS("Sync complete."))
+
+    def _confirm_force_delete(self, team_slug) -> bool:
+        self.stdout.write(
+            self.style.WARNING(
+                f"--force-delete will permanently delete the local team '{team_slug}' and all its data "
+                "before re-importing."
+            )
+        )
+        return input("Type 'yes' to continue: ") == "yes"

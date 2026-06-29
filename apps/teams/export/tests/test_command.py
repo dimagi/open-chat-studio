@@ -222,6 +222,49 @@ def test_force_delete_is_not_reached_when_preconditions_fail(tmp_path, keypair, 
     assert Team.objects.filter(slug="imported-team-z").exists()  # the destructive delete never ran
 
 
+def _force_delete_options(tmp_path, **overrides):
+    options = {
+        "source_url": "http://src",
+        "api_key": "k",
+        "team_slug": "imported-team-z",
+        "private_key_path": None,
+        "state_dir": str(tmp_path),
+        "limit": 100,
+        "skip_schema_check": False,
+        "force_delete": True,
+        "interactive": True,
+    }
+    options.update(overrides)
+    return options
+
+
+def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
+    """An interactive --force-delete that isn't confirmed must abort before deleting anything."""
+    Team.objects.create(name="Keep", slug="imported-team-z")
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
+    monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
+    monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: pytest.fail("sync ran despite aborted delete"))
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
+
+    with pytest.raises(CommandError, match="not confirmed"):
+        Command().handle(**_force_delete_options(tmp_path))
+
+    assert Team.objects.filter(slug="imported-team-z").exists()  # declined -> nothing deleted
+
+
+def test_force_delete_noinput_skips_confirmation(tmp_path, monkeypatch):
+    """--no-input deletes without prompting, for non-interactive (CI) runs."""
+    Team.objects.create(name="Old", slug="imported-team-z")
+    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
+    monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
+    monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: None)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted despite --no-input"))
+
+    Command().handle(**_force_delete_options(tmp_path, interactive=False))
+
+    assert not Team.objects.filter(slug="imported-team-z").exists()  # deleted without prompting
+
+
 def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
     """The serializer's output is exactly what the importer consumes."""
     public_key, private_key = keypair
