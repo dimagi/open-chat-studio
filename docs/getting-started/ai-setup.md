@@ -53,7 +53,7 @@ OCS ships with instruction files that shape how AI agents work in this codebase.
 - **`AGENTS.md`** — the primary instruction file. Covers architecture, conventions, key paths, do/don't rules, and which docs to consult for specific areas.
 - **`CLAUDE.md`** — a file named for Claude Code; a one-line file that points to `AGENTS.md`.
 - **`VISION.md`** — project philosophy. Available for reference when making architectural decisions.
-- **`CONTEXT.md`** — domain glossary for the project's terminology. Agents use it to name things consistently. Referred to by `AGENTS.md`. Created lazily via `/grill-with-docs` as terms get resolved; may not exist yet on a fresh clone.
+- **`CONTEXT.md`** — domain glossary for the project's terminology. Agents use it to name things consistently. Referred to by `AGENTS.md`.
 - **`docs/agents/domain.md`** — describes how agents use the domain glossary (`CONTEXT.md`) and Architecture Decision Records (`docs/adr/`) when exploring the codebase.
 
 #### Domain guides (`docs/agents/`)
