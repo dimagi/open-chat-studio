@@ -7,6 +7,9 @@ class Migration(migrations.Migration):
     dependencies = [
         ("bot_channels", "0027_notify_widget_deprecation_below_0_6_0"),
         ("data_migrations", "0001_initial"),
+        # The command loads the live Team model (all columns), so the schema
+        # for those fields must be in place before it runs.
+        ("teams", "0012_team_metadata"),
     ]
 
     operations = [
