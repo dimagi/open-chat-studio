@@ -10,15 +10,32 @@ New to AI-assisted development on this project? Complete this setup first, then 
 | You want occasional AI assistance but won't adopt the full workflow | **Optional** — at minimum, install Claude Code; skip the dimagi-claude-workflows plugins |
 | You're getting the project running, fixing a quick bug, or don't plan to use AI tooling | **Skip for now** — nothing here is needed to run the project or contribute code |
 
-## Claude Code
+## Set Up Claude Code
 
-This project's AI workflow is built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
+1. Purchase a Claude subscription.
+2. Install Claude Code by following the [official docs](https://docs.anthropic.com/en/docs/claude-code/overview).
 
-1. Install Claude Code following the [official docs](https://docs.anthropic.com/en/docs/claude-code/overview).
-2. Install the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) plugin collection, which extends Claude Code with Dimagi-specific workflows and skills.
-    - Refer to `plugins/README.md` in that repository for setup instructions, including the `/plugin marketplace add dimagi/dimagi-claude-workflows` command.
-    - The collection includes the `code-review` and `dev-utils` plugins, and makes the Superpowers plugin available via its marketplace.
-    - Superpowers provides the skills (`brainstorming`, `writing-plans`, `executing-plans`, etc.) that the [AI development workflow](../developer_guides/ai_development.md) depends on.
+## Set Up Claude Skills and Plugins
+
+### OCS project-specific skills
+
+These are in the `.claude/skills/` folder and are active automatically — no installation needed.
+
+### Superpowers plugin for design-before-code skills
+
+The OCS team's recommended [AI development workflow](../developer_guides/ai_development.md) depends on core skills (`brainstorming`, `writing-plans`, `executing-plans`, etc.) provided by the **superpowers** plugin.
+
+Install it from the official Claude plugin marketplace: https://claude.com/plugins/superpowers
+
+### Dimagi plugin skills
+
+The [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository contains reusable Dimagi Claude workflows, commands, and configuration. OCS uses the `dev-utils` plugin so its skills (`create-pr`, `iterate-pr`, `review-plan`, etc.) are auto-loaded by `claude-code-action` in CI as well as in local sessions.
+
+The project's `.claude/settings.json` already registers the `dimagi-claude-workflows` marketplace and enables the `dev-utils` plugin automatically — no installation needed.
+
+To enable other recommended plugins, open the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository and follow the setup instructions in `plugins/README.md` for:
+
+- `code-review` — AI code review workflows with specialist agents
 
 ## Project AI Instructions
 
