@@ -849,8 +849,8 @@ def test_supported_and_unsupported_attachments(experiment):
 
     session = ExperimentSessionFactory.create(experiment=experiment)
     channel = CustomChannel(experiment, experiment_channel=Mock(), experiment_session=session)
-    channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
-    channel.send_file_to_user = Mock()  # ty: ignore[invalid-assignment]
+    channel.send_text_to_user = Mock()
+    channel.send_file_to_user = Mock()
 
     file1 = FileFactory.create(name="f1", content_type="image/jpeg")
     file2 = FileFactory.create(name="f2", content_type="image/jpeg")
@@ -870,8 +870,8 @@ def test_supported_and_unsupported_attachments(experiment):
 def test_chat_message_returned_for_cancelled_generate():
     session = ExperimentSessionFactory.create()
     channel = TestChannel(session.experiment, None, session)
-    channel._add_message = Mock()  # ty: ignore[invalid-assignment]
-    channel._new_user_message = Mock()  # ty: ignore[invalid-assignment]
+    channel._add_message = Mock()
+    channel._new_user_message = Mock()
     channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
     channel.message = base_messages.text_message("123", "hi")
     response = channel.new_user_message(channel.message)
@@ -899,7 +899,7 @@ class TestNotifications:
         """Test that file delivery exception triggers a notification."""
         session = ExperimentSessionFactory.build()
         channel = TestChannel(session.experiment, session.experiment_channel, session)
-        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+        channel.send_text_to_user = Mock()
 
         # Create a test file
         test_file = FileFactory.build(name="test.jpg", content_type="image/jpeg")
@@ -925,8 +925,8 @@ class TestNotifications:
         channel = TestChannel(session.experiment, session.experiment_channel, session)
 
         # Mock transcription_started and get_message_audio
-        channel.transcription_started = Mock()  # ty: ignore[invalid-assignment]
-        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))  # ty: ignore[invalid-assignment]
+        channel.transcription_started = Mock()
+        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))
 
         # Mock _transcribe_audio to raise an exception
         with patch.object(channel, "_transcribe_audio", side_effect=Exception("Transcription failed")):
@@ -943,7 +943,7 @@ class TestNotifications:
         """Test that multiple file delivery failures create separate notifications."""
         session = ExperimentSessionFactory.build()
         channel = TestChannel(session.experiment, session.experiment_channel, session)
-        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+        channel.send_text_to_user = Mock()
 
         # Create test files
         file1 = FileFactory.build(name="test1.jpg", content_type="image/jpeg")
