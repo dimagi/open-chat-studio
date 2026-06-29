@@ -16,6 +16,7 @@ from apps.api.export.serializers import (
     build_resource_response_serializer,
     build_resource_serializer,
 )
+from apps.assessments.models import Score
 from apps.chat.models import Chat
 from apps.documents.models import CollectionFile
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
@@ -25,6 +26,7 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.manifest import build_manifest, entry_model, get_manifest_entry, team_scoped_queryset
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
+from apps.utils.factories.assessments import ScoreFactory
 from apps.utils.factories.documents import CollectionFileFactory
 from apps.utils.factories.experiment import (
     ChatFactory,
@@ -194,6 +196,16 @@ def test_global_able_model_exposes_is_global_flag_instead_of_team(is_global):
     data = _serialize(LlmProviderModel, model)
     assert data["is_global"] is is_global
     assert "team" not in data
+
+
+def test_generic_fk_content_type_serializes_as_model_label():
+    """A generic FK's content type is emitted as its ``app_label.model`` label, not the source
+    ContentType pk (which is server-specific). The object id stays the source target-row pk; the
+    importer resolves both on the target."""
+    score = ScoreFactory()  # target is an ExperimentSession
+    data = _serialize(Score, score)
+    assert data["target_content_type"] == "experiments.experimentsession"
+    assert data["target_object_id"] == score.target_object_id
 
 
 def test_response_envelope_has_cursor_has_more_and_results():

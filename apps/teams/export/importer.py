@@ -7,6 +7,7 @@ import functools
 from collections.abc import Iterable
 
 from django.contrib.auth.models import Group
+from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
@@ -15,7 +16,15 @@ from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
 
-from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, TEAM_MODEL, GlobalSpec, entry_model, model_has_team_field
+from .manifest import (
+    GLOBAL_CONFIG,
+    SECRET_REGISTRY,
+    TEAM_MODEL,
+    GlobalSpec,
+    entry_model,
+    generic_fk_fields,
+    model_has_team_field,
+)
 from .manifest import MANIFEST_ENTRIES as _ENTRIES
 from .seal import unseal
 from .translation import FKTranslationStore
@@ -238,13 +247,33 @@ class Importer:
         timestamps). FKs are remapped to target ids, pipeline/node resource ids are rewritten, and
         named-link fields are left out for ``_apply_named_links`` to handle."""
         named = set(_NAMED_LINK_FIELDS.get(model_label, []))
+        # A generic FK's two columns are resolved together by _resolve_generic_fks, so skip them in
+        # the per-field loop (the content-type column would otherwise be nulled and the object id
+        # copied verbatim as the untranslated source pk).
+        gfk_pairs = generic_fk_fields(model)
+        gfk_columns = {name for pair in gfk_pairs for name in pair}
         field_values, timestamps = {}, {}
         for field in model._meta.concrete_fields:
+            if field.name in gfk_columns:
+                continue
             self._collect_concrete_field(field, row, named, field_values, timestamps)
+        self._resolve_generic_fks(gfk_pairs, row, field_values)
         self._remap_embedded_resource_ids(model_label, field_values)
         self._assign_team(model_label, model, field_values)
         m2m_values = self._build_m2m_values(model, row, named)
         return field_values, m2m_values, timestamps
+
+    def _resolve_generic_fks(self, gfk_pairs: list[tuple[str, str]], row: dict, field_values: dict) -> None:
+        """Fill each generic FK's content-type and object-id columns. The content type is matched by
+        name (built into Django, identical across servers); the object id is translated through the
+        store. Every model a generic FK can point at is itself synced and imported first (the columns
+        are non-null and generic-FK models come last in the manifest), so the lookup always resolves.
+        Guarded by test_generic_fk_target_models_are_synced."""
+        for ct_field, fk_field in gfk_pairs:
+            type_label = row[ct_field]
+            app_label, model_name = type_label.split(".")
+            field_values[f"{ct_field}_id"] = ContentType.objects.get_by_natural_key(app_label, model_name).pk
+            field_values[fk_field] = self.store.get_target(type_label, row[fk_field])
 
     def _assign_team(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
         """Set a team-scoped row's team to the team being synced. The per-row team FK isn't exported

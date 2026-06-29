@@ -4,6 +4,7 @@ model and a new field is exported the moment it's added. Output-only; ``.save()`
 from functools import cache
 
 import pydantic
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django_pydantic_field.fields import PydanticSchemaField
 from drf_spectacular.utils import OpenApiResponse, extend_schema_field
@@ -17,6 +18,7 @@ from apps.teams.export.manifest import (
     TEAM_MODEL,
     ManifestEntry,
     entry_model,
+    generic_fk_fields,
     model_has_team_field,
 )
 from apps.teams.export.seal import seal
@@ -96,6 +98,23 @@ def _team_role_groups(self, user):
     return []
 
 
+def _content_type_label_resolver(ct_field: str):
+    """Build the method that emits a generic FK's content type as its ``app_label.model`` label
+    instead of the source ContentType pk (which differs between servers). Reads the ``*_id`` attribute
+    and looks the type up by id (cached), so it never triggers a related-object query."""
+    attname = f"{ct_field}_id"
+
+    @extend_schema_field(serializers.CharField())
+    def get_content_type_label(self, instance) -> str | None:
+        type_id = getattr(instance, attname)
+        if type_id is None:
+            return None
+        ct = ContentType.objects.get_for_id(type_id)
+        return f"{ct.app_label}.{ct.model}"
+
+    return get_content_type_label
+
+
 def _is_global_resolver(null_field: str):
     """Build the ``is_global`` method: a row is global when its scoping field (team or voice
     provider) is null. Reads the ``*_id`` attribute so it never triggers a related-object query."""
@@ -173,6 +192,12 @@ def build_resource_serializer(model):
     if spec := GLOBAL_CONFIG.get(label):
         attrs["is_global"] = serializers.SerializerMethodField()
         attrs["get_is_global"] = _is_global_resolver(spec.null_field)
+
+    # A generic FK's content type goes out as its model label, not the source ContentType pk. The
+    # object-id column keeps its default (the source target-row pk); the importer resolves both.
+    for ct_field, _fk_field in generic_fk_fields(model):
+        attrs[ct_field] = serializers.SerializerMethodField()
+        attrs[f"get_{ct_field}"] = _content_type_label_resolver(ct_field)
 
     return type(f"{component_name(model)}DetailSerializer", (_SecretMixin, serializers.ModelSerializer), attrs)
 

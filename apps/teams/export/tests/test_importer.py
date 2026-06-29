@@ -4,21 +4,26 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
+from apps.annotations.models import UserComment
 from apps.api.export.serializers import build_resource_serializer
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer, MissingGlobalRow
-from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model
+from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
+from apps.utils.factories.annotations import CustomTaggedItemFactory, UserCommentFactory
+from apps.utils.factories.assessments import ScoreFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.cost_tracking import PricingRuleFactory, UsageRecordFactory
 from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
 from apps.utils.factories.evaluations import (
@@ -473,6 +478,55 @@ def test_rerun_after_interruption_creates_exactly_one_row(store, monkeypatch):
     assert Team.objects.filter(slug="imported-team-xyz").count() == 1
 
 
+def _comment_row(source_id, user_src, content_type="chat.chatmessage", object_id=88):
+    return {
+        "id": source_id,
+        "user": user_src,
+        "comment": "nice",
+        "content_type": content_type,
+        "object_id": object_id,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def test_generic_fk_resolves_content_type_and_object_id(store):
+    """A generic FK names its own target model; the importer maps the content type by name and
+    translates the object id through the store, so the new row points at the target's row."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    team_pk = store.get_target("teams.team", 9001)
+
+    user = UserFactory()
+    store.record("users.customuser", 60, user.id)
+    message = ChatMessageFactory(chat=ChatFactory())
+    store.record("chat.chatmessage", 88, message.id)
+
+    importer.import_rows("annotations.usercomment", [_comment_row(source_id=500, user_src=60)])
+
+    comment = UserComment.objects.get(pk=store.get_target("annotations.usercomment", 500))
+    assert comment.content_type == ContentType.objects.get_for_model(ChatMessage)
+    assert comment.object_id == message.id
+    assert comment.user_id == user.id
+    assert comment.team_id == team_pk
+
+
+def test_rerun_does_not_duplicate_generic_fk_row(store):
+    """Re-importing a generic-FK row maps it to the existing target via the translation table rather
+    than creating a second row."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    store.record("users.customuser", 60, UserFactory().id)
+    store.record("chat.chatmessage", 88, ChatMessageFactory(chat=ChatFactory()).id)
+
+    importer.import_rows("annotations.usercomment", [_comment_row(source_id=500, user_src=60)])
+    first = store.get_target("annotations.usercomment", 500)
+    importer.import_rows("annotations.usercomment", [_comment_row(source_id=500, user_src=60)])
+
+    assert store.get_target("annotations.usercomment", 500) == first
+    assert UserComment.objects.count() == 1
+
+
 # ---------------------------------------------------------------------------
 # Whole-manifest round-trip test
 # ---------------------------------------------------------------------------
@@ -534,6 +588,11 @@ FACTORIES = {
     "human_annotations.annotationqueueaggregate": AnnotationQueueAggregateFactory,
     "analysis.transcriptanalysis": TranscriptAnalysisFactory,
     "analysis.analysisquery": AnalysisQueryFactory,
+    "cost_tracking.pricingrule": PricingRuleFactory,
+    "cost_tracking.usagerecord": UsageRecordFactory,
+    "annotations.customtaggeditem": CustomTaggedItemFactory,
+    "annotations.usercomment": UserCommentFactory,
+    "assessments.score": ScoreFactory,
 }
 
 BUILD_OVERRIDES = {
@@ -564,11 +623,19 @@ def _serialized_row(model_label, mock_ids, manifest_labels, public_key):
     model = entry_model(model_label)
     obj = FACTORIES[model_label].build(**BUILD_OVERRIDES.get(model_label, {}))
     obj.pk = mock_ids[model_label]
+    gfk_pairs = generic_fk_fields(model)
+    gfk_columns = {name for pair in gfk_pairs for name in pair}
     for field in model._meta.concrete_fields:
-        if isinstance(field, models.ForeignKey) and not field.primary_key:
+        if isinstance(field, models.ForeignKey) and not field.primary_key and field.name not in gfk_columns:
             related = field.related_model._meta.label_lower
             target = mock_ids[related] if related != model_label and related in manifest_labels else None
             setattr(obj, field.attname, target)
+    # Point each generic FK at the mock source id of whatever model its content type names, so the
+    # importer's translation resolves it (the factory's content_type stays; only the id is mocked).
+    for ct_field, fk_field in gfk_pairs:
+        ct = getattr(obj, ct_field)
+        label = f"{ct.app_label}.{ct.model}"
+        setattr(obj, fk_field, mock_ids[label] if label in manifest_labels else None)
     _commit_file_fields(obj)
     return dict(build_resource_serializer(model)(obj, context={"public_key": public_key}).data)
 

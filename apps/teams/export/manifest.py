@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from django.apps import apps
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import FieldDoesNotExist
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
@@ -41,6 +42,9 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("service_providers.traceprovider", "trace_providers", "pk", secret=True),
     ManifestEntry("service_providers.llmprovidermodel", "llm_provider_models", "pk"),
     ManifestEntry("service_providers.embeddingprovidermodel", "embedding_provider_models", "pk"),
+    # Team-specific pricing overrides only; global rules (team=NULL) are excluded by the team filter
+    # and seeded on the target via load_ai_pricing. Before usage_records, which reference it.
+    ManifestEntry("cost_tracking.pricingrule", "pricing_rules", "pk"),
     ManifestEntry("documents.collection", "collections", "pk"),
     ManifestEntry("files.file", "files", "pk"),
     ManifestEntry("experiments.syntheticvoice", "synthetic_voices", "pk"),
@@ -89,6 +93,12 @@ MANIFEST_ENTRIES: list[ManifestEntry] = [
     ManifestEntry("human_annotations.annotationqueueaggregate", "annotation_queue_aggregates", "updated_at_id"),
     ManifestEntry("analysis.transcriptanalysis", "transcript_analyses", "updated_at_id"),
     ManifestEntry("analysis.analysisquery", "analysis_queries", "pk"),
+    ManifestEntry("cost_tracking.usagerecord", "usage_records", "pk"),
+    # Generic-FK models last: their content_object can point at many models, so every possible target
+    # is imported before them.
+    ManifestEntry("annotations.customtaggeditem", "custom_tagged_items", "pk"),
+    ManifestEntry("annotations.usercomment", "user_comments", "updated_at_id"),
+    ManifestEntry("assessments.score", "scores", "updated_at_id"),
 ]
 
 # Fields sealed under the team's public key in transit (encrypted-at-rest or sensitive-by-policy).
@@ -193,6 +203,14 @@ def get_manifest_entry(resource: str) -> ManifestEntry | None:
 
 def entry_model(model_label: str) -> type[Model]:
     return apps.get_model(*model_label.split("."))
+
+
+def generic_fk_fields(model: type[Model]) -> list[tuple[str, str]]:
+    """(content_type field, object_id field) name pairs for each GenericForeignKey on the model. Read
+    off the GFK itself so the differing column names (``content_type``/``object_id`` vs
+    ``target_content_type``/``target_object_id``) need no hardcoding -- the serializer and importer
+    both drive their generic-FK handling from this."""
+    return [(f.ct_field, f.fk_field) for f in model._meta.private_fields if isinstance(f, GenericForeignKey)]
 
 
 def model_has_team_field(model: type[Model]) -> bool:

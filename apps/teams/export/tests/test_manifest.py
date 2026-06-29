@@ -1,8 +1,10 @@
 import pytest
 from django.apps import apps
 
+from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.api.export.serializers import build_resource_serializer
 from apps.teams.export import manifest
+from apps.utils.factories.cost_tracking import PricingRuleFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -11,20 +13,25 @@ def _model(label):
     return apps.get_model(*label.split("."))
 
 
+def _first_party_models():
+    """First-party app models only. Test-scaffolding apps register as ``apps.<x>.tests`` and their
+    models leak into ``apps.get_models()`` under xdist depending on which tests share a worker."""
+    return [
+        m
+        for m in apps.get_models()
+        if m._meta.app_config.name.startswith("apps.") and "tests" not in m._meta.app_config.name.split(".")
+    ]
+
+
 # Test-only partition data (the sync code never reads these). First-party models deliberately left out
 # of the sync; the partition test asserts every model is in MANIFEST_ENTRIES, here, or embedded, so a
 # newly added model forces a sync/ignore decision.
 IGNORED_MODELS = frozenset(
     {
-        "annotations.customtaggeditem",
-        "annotations.usercomment",
         "api.userapikey",
-        "assessments.score",
         "assistants.openaiassistant",
         "assistants.toolresources",
         "banners.banner",
-        "cost_tracking.pricingrule",
-        "cost_tracking.usagerecord",
         "dashboard.dashboardcache",
         "dashboard.dashboardfilter",
         "data_migrations.custommigration",
@@ -86,18 +93,29 @@ def test_registry_keys_resolve_to_models():
 def test_every_first_party_model_is_synced_or_ignored():
     """Every app model is either in the manifest or explicitly ignored, so a newly added model
     can't slip past the sync unnoticed -- it forces a choice between syncing and ignoring it."""
-    first_party = {
-        m._meta.label_lower
-        for m in apps.get_models()
-        # Real first-party apps only; test-scaffolding apps register as ``apps.<x>.tests`` and their
-        # models leak in here under xdist depending on which tests share the worker.
-        if m._meta.app_config.name.startswith("apps.") and "tests" not in m._meta.app_config.name.split(".")
-    }
+    first_party = {m._meta.label_lower for m in _first_party_models()}
     # The team is synced via a dedicated step (TEAM_MODEL); embedded models (membership) ride
     # inside another resource's rows rather than being served as generic manifest resources.
     classified = {e.model for e in manifest.MANIFEST_ENTRIES} | IGNORED_MODELS | EMBEDDED_MODELS | {manifest.TEAM_MODEL}
     unclassified = first_party - classified
     assert not unclassified, "Add these to MANIFEST_ENTRIES or IGNORED_MODELS: " + ", ".join(sorted(unclassified))
+
+
+def test_generic_fk_target_models_are_synced():
+    """Every model a synced generic-FK row (a tag, comment, or score) can point at must itself be in
+    the manifest. The importer translates a generic FK straight through the store with no runtime
+    guard, so an unsynced target would write a null object_id into a non-null column and the row would
+    fail to import -- this pins the invariant at CI time instead."""
+    # Taggable and commentable models declare those relations via mixins; the session is the only
+    # Score target (see assessments.score_writers, v1).
+    target_models = {"experiments.experimentsession"}
+    for model in _first_party_models():
+        if issubclass(model, (TaggedModelMixin, UserCommentsMixin)):
+            target_models.add(model._meta.label_lower)
+
+    synced = {entry.model for entry in manifest.MANIFEST_ENTRIES} | {manifest.TEAM_MODEL}
+    missing = target_models - synced
+    assert not missing, "Generic-FK target models must be in MANIFEST_ENTRIES: " + ", ".join(sorted(missing))
 
 
 def test_manifest_ignored_and_embedded_models_are_disjoint():
@@ -155,6 +173,21 @@ def test_team_scoped_queryset_isolates_teams_and_includes_globals():
     assert mine.pk in pks
     assert global_model.pk in pks
     assert theirs.pk not in pks
+
+
+@pytest.mark.django_db()
+def test_pricing_rules_queryset_excludes_global_rules():
+    """Global pricing rules (team=NULL) are seeded on the target via load_ai_pricing, not synced, so
+    the team-scoped queryset must return only the team's own override rules. pricing_rules is left out
+    of GLOBAL_CONFIG deliberately -- this pins that decision."""
+    team = TeamFactory()
+    mine = PricingRuleFactory(team=team)
+    global_rule = PricingRuleFactory(team=None)
+
+    entry = manifest.get_manifest_entry("pricing_rules")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert mine.pk in pks
+    assert global_rule.pk not in pks
 
 
 @pytest.mark.django_db()
