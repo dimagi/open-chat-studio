@@ -3,13 +3,14 @@ and the per-model config (secrets, team scoping, global matching) the endpoint a
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from django.apps import apps
 from django.core.exceptions import FieldDoesNotExist
 from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
-from django.db.models import ForeignKey, Model, Q, QuerySet
+from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 
 
 @dataclass(frozen=True)
@@ -78,8 +79,18 @@ TEAM_PATH_REGISTRY: dict[str, str] = {
     "experiments.syntheticvoice": "voice_provider__team",
 }
 
-PREFETCH_REGISTRY: dict[str, list[str]] = {
-    "users.customuser": ["membership_set", "membership_set__groups"],
+
+def _customuser_prefetch(team) -> list:
+    """Prefetch only the exported team's membership and its role groups, filtered in the DB. Keeps the
+    user's role-group field from pulling in the user's other-team memberships (and from querying per
+    row in the serializer)."""
+    membership = apps.get_model("teams", "membership")
+    return [Prefetch("membership_set", queryset=membership.objects.filter(team=team).prefetch_related("groups"))]
+
+
+# Per-model prefetches, built per request because some are scoped to the team being synced.
+PREFETCH_REGISTRY: dict[str, Callable[[object], list]] = {
+    "users.customuser": _customuser_prefetch,
 }
 
 
@@ -129,8 +140,8 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     if spec:
         team_q |= Q(**{f"{spec.null_field}__isnull": True})
     queryset = model.objects.filter(team_q)
-    prefetch = PREFETCH_REGISTRY.get(entry.model)
-    return queryset.prefetch_related(*prefetch) if prefetch else queryset
+    prefetch_factory = PREFETCH_REGISTRY.get(entry.model)
+    return queryset.prefetch_related(*prefetch_factory(team)) if prefetch_factory else queryset
 
 
 def schema_checksum() -> str:

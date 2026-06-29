@@ -2,6 +2,8 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework import serializers
 
 from apps.api.export.serializers import (
@@ -14,7 +16,7 @@ from apps.chat.models import Chat
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
-from apps.teams.export.manifest import build_manifest, entry_model, get_manifest_entry
+from apps.teams.export.manifest import build_manifest, entry_model, get_manifest_entry, team_scoped_queryset
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.experiment import (
@@ -80,6 +82,43 @@ def test_user_serializer_includes_team_role_groups():
     data = serializer(user, context={"public_key": None, "team": team}).data
 
     assert data["groups"] == ["Team Admin Role"]  # the team role, not the user's global auth groups
+
+
+def test_user_role_groups_via_export_queryset_is_team_scoped():
+    """Through the export queryset the membership prefetch is filtered to the exported team, so a user
+    in several teams exports only the context team's role groups -- not the others'."""
+    team_a = TeamFactory()
+    team_b = TeamFactory()
+    user = UserFactory()
+    Membership.objects.create(team=team_a, user=user).groups.add(Group.objects.get_or_create(name="Role A")[0])
+    Membership.objects.create(team=team_b, user=user).groups.add(Group.objects.get_or_create(name="Role B")[0])
+
+    qs = team_scoped_queryset(get_manifest_entry("users"), team_a)
+    rows = build_resource_serializer(CustomUser)(qs, many=True, context={"team": team_a, "public_key": None}).data
+    row = next(r for r in rows if r["id"] == user.id)
+
+    assert row["groups"] == ["Role A"]
+
+
+def test_user_role_groups_prefetch_avoids_n_plus_one():
+    """The role-group field reads a prefetch, so total query count is constant regardless of how many
+    users the page holds (no per-row membership/group query)."""
+    serializer = build_resource_serializer(CustomUser)
+
+    def export_query_count(team):
+        qs = team_scoped_queryset(get_manifest_entry("users"), team)
+        with CaptureQueriesContext(connection) as ctx:
+            _ = serializer(qs, many=True, context={"team": team, "public_key": None}).data
+        return len(ctx.captured_queries)
+
+    role = Group.objects.get_or_create(name="Role")[0]
+    few = TeamFactory()
+    many = TeamFactory()
+    for team, count in [(few, 2), (many, 12)]:
+        for _ in range(count):
+            Membership.objects.create(team=team, user=UserFactory()).groups.add(role)
+
+    assert export_query_count(few) == export_query_count(many)
 
 
 def test_llmprovider_config_is_sealed_and_round_trips(keypair):

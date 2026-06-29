@@ -37,8 +37,11 @@ def _feature_flags(self, team):
 
 @extend_schema_field(serializers.ListField(child=serializers.CharField()))
 def _team_role_groups(self, user):
-    """The user's role in the exported team: the group names on their membership for that team. Reads
-    the prefetched memberships, so no per-row query. Empty when no team is in the context."""
+    """The user's role in the exported team: the group names on their membership for that team. The
+    export queryset prefetches only the exported team's membership, filtered in the DB (see
+    ``_customuser_prefetch``), so this reads the cache without a per-row query. The ``team_id`` guard
+    keeps the field correct when a user is serialized outside that queryset (e.g. in unit tests).
+    Empty when no team is in the context."""
     team = self.context.get("team")
     team_id = team.id if team is not None else None
     for membership in user.membership_set.all():
