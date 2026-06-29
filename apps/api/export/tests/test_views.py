@@ -133,6 +133,11 @@ def _b64(payload):
             {"cursor": _b64(json.dumps({"updated_at": "2020-01-01T00:00:00+00:00", "id": "oops"}).encode())},
             id="keyset-cursor-non-integer-id",
         ),
+        pytest.param(
+            "participants",
+            {"cursor": _b64(json.dumps({"updated_at": "not-a-timestamp", "id": 1}).encode())},
+            id="keyset-cursor-unparseable-updated-at",
+        ),
         pytest.param("consent_forms", {"limit": "abc"}, id="non-integer-limit"),
         pytest.param("consent_forms", {"limit": "-5"}, id="negative-limit"),
         pytest.param("consent_forms", {"limit": "0"}, id="zero-limit"),

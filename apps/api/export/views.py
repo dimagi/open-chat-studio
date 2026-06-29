@@ -99,8 +99,6 @@ class ResourceView(_ExportAPIView):
     def get(self, request, resource):
         entry = get_manifest_entry(resource)
         if entry is None:
-            # Defense-in-depth: routing only mounts manifested resources, so this can only fire
-            # if the view is called directly (e.g. in tests) with a resource not in the manifest.
             raise NotFound("Unknown resource.")
 
         context = {"public_key": None, "team": request.team}
@@ -129,15 +127,13 @@ class CursorHelper:
 
     @staticmethod
     def decode(cursor: str) -> dict:
-        # One try/except covers every malformed shape: bad base64 (binascii.Error) or bad JSON
-        # (ValueError), a non-dict or missing ``id`` (TypeError/KeyError on the subscript), and a
-        # non-integer ``id`` (ValueError) -- the last would otherwise 500 in the ORM filter below.
         try:
             keyset = json.loads(base64.b64decode(cursor))
             keyset["id"] = int(keyset["id"])
+            keyset["updated_at"] = parse_datetime(keyset["updated_at"])
         except (ValueError, TypeError, KeyError) as e:
             raise ValidationError("Invalid pagination cursor.") from e
-        if "updated_at" not in keyset:
+        if keyset["updated_at"] is None:
             raise ValidationError("Invalid pagination cursor.")
         return keyset
 
@@ -173,9 +169,7 @@ def _paginate(queryset, cursor_type, cursor, limit):
     queryset = queryset.order_by("updated_at", "id")
     if cursor:
         keyset = CursorHelper.decode(cursor)
-        timestamp = parse_datetime(keyset["updated_at"])
-        if timestamp is None:
-            raise ValidationError("Invalid pagination cursor.")
+        timestamp = keyset["updated_at"]
         queryset = queryset.filter(Q(updated_at__gt=timestamp) | Q(updated_at=timestamp, id__gt=keyset["id"]))
     rows = list(queryset[: limit + 1])
     has_more = len(rows) > limit

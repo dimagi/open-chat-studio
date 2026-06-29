@@ -16,6 +16,7 @@ from apps.teams.export.manifest import (
     model_has_team_field,
 )
 from apps.teams.export.seal import seal
+from apps.teams.models import Flag
 
 
 class _SecretMixin:
@@ -31,8 +32,6 @@ class _SecretMixin:
 
 @extend_schema_field(serializers.ListField(child=serializers.CharField()))
 def _feature_flags(self, team):
-    from apps.teams.models import Flag  # noqa: PLC0415 - avoid import cycle at module load
-
     return list(Flag.objects.filter(teams=team).values_list("name", flat=True))
 
 
