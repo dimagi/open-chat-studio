@@ -176,8 +176,7 @@ class ChannelBase(ABC):
         return _start_experiment_session(
             working_experiment,
             experiment_channel,
-            participant_identifier,
-            participant_user,
+            Participant(identifier=participant_identifier, user=participant_user),
             session_status,
             timezone,
             session_external_id,
@@ -1450,13 +1449,11 @@ class CommCareConnectChannel(ChannelBase):
 def _start_experiment_session(
     working_experiment: Experiment,
     experiment_channel: ExperimentChannel,
-    participant_identifier: str,
-    participant_user: CustomUser | None = None,
+    participant: Participant,
     session_status: SessionStatus = SessionStatus.ACTIVE,
     timezone: str | None = None,
     session_external_id: str | None = None,
     metadata: dict | None = None,
-    participant: Participant | None = None,
 ) -> ExperimentSession:
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
@@ -1464,6 +1461,8 @@ def _start_experiment_session(
         )
 
     team = working_experiment.team
+    participant_identifier = participant.identifier
+    participant_user = participant.user
     if not participant_identifier and not participant_user:
         raise ValueError("Either participant_identifier or participant_user must be specified!")
 
@@ -1477,9 +1476,9 @@ def _start_experiment_session(
     normalized_identifier = experiment_channel.platform_enum.normalize_identifier(participant_identifier)
 
     with transaction.atomic():
-        # Callers that already resolved the participant (e.g. the v2 pipeline) pass it in directly;
-        # otherwise look it up by the normalized identifier.
-        if participant is None:
+        # An unstored wrapper is resolved to (or created as) a real record here; a stored
+        # participant (e.g. one the v2 pipeline already resolved) is used directly.
+        if participant.pk is None:
             participant = get_or_create_participant(
                 team=team,
                 normalized_identifier=normalized_identifier,

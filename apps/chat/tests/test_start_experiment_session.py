@@ -29,7 +29,7 @@ class TestStartExperimentSessionParticipant:
         session = _start_experiment_session(
             working_experiment=experiment,
             experiment_channel=whatsapp_channel,
-            participant_identifier="bsuid_user_1",
+            participant=Participant(identifier="bsuid_user_1"),
         )
 
         assert session.participant.identifier == "bsuid_user_1"
@@ -45,15 +45,15 @@ class TestStartExperimentSessionParticipant:
         session = _start_experiment_session(
             working_experiment=experiment,
             experiment_channel=whatsapp_channel,
-            participant_identifier="bsuid_user_2",
+            participant=Participant(identifier="bsuid_user_2"),
         )
 
         assert session.participant.id == existing.id
         assert Participant.objects.filter(team=experiment.team, identifier="bsuid_user_2").count() == 1
 
     def test_uses_provided_participant(self, experiment, whatsapp_channel):
-        """When the caller already resolved the participant (e.g. the v2 pipeline) it is used
-        directly -- no second lookup, no new participant created for the inbound identifier."""
+        """When the caller passes a stored participant (e.g. the v2 pipeline) it is used
+        directly -- no second lookup, no new participant created."""
         resolved = ParticipantFactory(
             team=experiment.team,
             platform=ChannelPlatform.WHATSAPP,
@@ -63,11 +63,8 @@ class TestStartExperimentSessionParticipant:
         session = _start_experiment_session(
             working_experiment=experiment,
             experiment_channel=whatsapp_channel,
-            participant_identifier="bsuid_new",
             participant=resolved,
         )
 
         assert session.participant.id == resolved.id
-        assert not Participant.objects.filter(
-            team=experiment.team, platform=ChannelPlatform.WHATSAPP, identifier="bsuid_new"
-        ).exists()
+        assert Participant.objects.filter(team=experiment.team, platform=ChannelPlatform.WHATSAPP).count() == 1

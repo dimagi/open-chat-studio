@@ -231,13 +231,15 @@ class SessionResolutionStage(ProcessingStage):
         Reuses the participant ParticipantResolverStage already resolved (e.g. a legacy
         phone-keyed row) so the session attaches to it rather than a new BSUID-keyed one.
         """
+        participant = ctx.participant or Participant(
+            identifier=ctx.participant_identifier,
+            user=ctx.channel_context.get("participant_user"),
+        )
         return _start_experiment_session(
             working_experiment=ctx.experiment.get_working_version(),
             experiment_channel=ctx.experiment_channel,
-            participant_identifier=ctx.participant_identifier,
-            participant_user=ctx.channel_context.get("participant_user"),
+            participant=participant,
             session_status=SessionStatus.SETUP,
-            participant=ctx.participant,
         )
 
 

@@ -24,7 +24,7 @@ from apps.channels.channels_v2.stages.terminal import ActivityTrackingStage, Per
 from apps.chat.channels import MESSAGE_TYPES, _start_experiment_session
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
-from apps.experiments.models import Experiment, SessionStatus
+from apps.experiments.models import Experiment, Participant, SessionStatus
 
 if TYPE_CHECKING:
     from apps.channels.models import ExperimentChannel
@@ -123,8 +123,7 @@ class ApiChannel(ChannelBase):
         session = _start_experiment_session(
             working_experiment,
             experiment_channel,
-            participant_identifier,
-            participant_user,
+            Participant(identifier=participant_identifier, user=participant_user),
             session_status,
             timezone,
             session_external_id,

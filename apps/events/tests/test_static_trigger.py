@@ -17,6 +17,7 @@ from apps.events.models import (
     TimeoutTrigger,
 )
 from apps.events.views import _delete_event_view
+from apps.experiments.models import Participant
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import (
     ExperimentFactory,
@@ -132,7 +133,7 @@ def _assert_participant_joined_event_fired(experiment, expected_events):
         session = _start_experiment_session(
             working_experiment=experiment,
             experiment_channel=ExperimentChannelFactory.create(team=experiment.team, experiment=experiment),
-            participant_identifier="test_participant",
+            participant=Participant(identifier="test_participant"),
         )
 
         mock_fire_trigger.assert_has_calls([call(session.id, event) for event in expected_events])

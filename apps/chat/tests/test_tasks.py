@@ -5,7 +5,7 @@ from django.test import TestCase
 from apps.channels.models import ExperimentChannel
 from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Participant, SessionStatus
 from apps.service_providers.models import LlmProvider, TraceProvider
 from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TraceInfo, TracingService
@@ -68,7 +68,7 @@ class TasksTest(TestCase):
         return _start_experiment_session(
             experiment,
             experiment_channel=self.experiment_channel,
-            participant_identifier=self.telegram_chat_id,
+            participant=Participant(identifier=self.telegram_chat_id),
             session_status=session_status,
         )
 
