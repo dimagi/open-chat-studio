@@ -19,7 +19,7 @@
       {% endif %}
     </div>
 
-    {% if cost_summary.total_cost %}
+    {% if cost_summary.total_cost or cost_summary.unknown_call_count or cost_summary.unpriced_call_count %}
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
         <div>
           <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "LLM spend" %}</div>
@@ -41,6 +41,11 @@
           {% if cost_summary.unknown_call_count %}
             <div class="text-xs text-amber-600 mt-1">
               {% blocktranslate count counter=cost_summary.unknown_call_count %}{{ counter }} call with no usage data{% plural %}{{ counter }} calls with no usage data{% endblocktranslate %}
+            </div>
+          {% endif %}
+          {% if cost_summary.unpriced_call_count %}
+            <div class="text-xs text-amber-600 mt-1">
+              {% blocktranslate count counter=cost_summary.unpriced_call_count %}{{ counter }} call missing pricing{% plural %}{{ counter }} calls missing pricing{% endblocktranslate %}
             </div>
           {% endif %}
         </div>

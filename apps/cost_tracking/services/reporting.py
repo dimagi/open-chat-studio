@@ -33,6 +33,7 @@ class CostSummary:
     exact_cost: Decimal
     estimated_cost: Decimal
     unknown_call_count: int
+    unpriced_call_count: int
     last_synced: datetime | None
 
 
@@ -71,6 +72,11 @@ def cost_summary(team: Team, *, start: datetime, end: datetime) -> CostSummary:
             output_field=_COST_FIELD,
         ),
         unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
+        # Rows that got recorded but the resolver couldn't price (no matching
+        # PricingRule). Excludes UNKNOWN-confidence rows because those have
+        # their own counter. Distinct row counter, not a sum - these rows
+        # contribute $0 to total_cost.
+        unpriced_rows=Count("id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)),
     )
 
     return CostSummary(
@@ -82,6 +88,7 @@ def cost_summary(team: Team, *, start: datetime, end: datetime) -> CostSummary:
         exact_cost=agg["exact"],
         estimated_cost=agg["estimated"],
         unknown_call_count=agg["unknown_rows"],
+        unpriced_call_count=agg["unpriced_rows"],
         last_synced=last_synced_at(),
     )
 

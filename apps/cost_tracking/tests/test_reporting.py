@@ -94,6 +94,33 @@ class TestCostSummary:
         assert summary.estimated_cost == Decimal("0.20")
         assert summary.unknown_call_count == 2
 
+    def test_counts_unpriced_rows_excluding_unknown(self):
+        """EXACT/ESTIMATED rows that the resolver couldn't price (pricing_rule
+        is NULL) feed `unpriced_call_count`. UNKNOWN-confidence rows are
+        excluded because they have their own counter."""
+        team = TeamFactory.create()
+        rule = PricingRule.objects.create(
+            team=None,
+            provider_type="openai",
+            model_name="gpt-4o-mini",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.0001",
+        )
+        # Two EXACT rows with no pricing rule - the lead's failure mode.
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=2), confidence=Confidence.EXACT)
+        # One ESTIMATED row, also unpriced.
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=3), confidence=Confidence.ESTIMATED)
+        # One UNKNOWN-confidence row, also unpriced - must NOT count here.
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=4), confidence=Confidence.UNKNOWN)
+        # A priced EXACT row - must not count.
+        _usage(team, cost="0.50", when=_NOW - timedelta(days=5), confidence=Confidence.EXACT, pricing_rule=rule)
+
+        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert summary.unpriced_call_count == 3
+        assert summary.unknown_call_count == 1
+
     def test_last_synced_returned_in_summary(self):
         team = TeamFactory.create()
         newer = PricingRule.objects.create(
