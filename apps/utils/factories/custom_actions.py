@@ -48,3 +48,13 @@ class CustomActionFactory(factory.django.DjangoModelFactory):
     api_schema = ACTION_SCHEMA
     allowed_operations = ["weather_get"]
     server_url = "https://api.weather.com"
+
+
+class CustomActionOperationFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "custom_actions.CustomActionOperation"
+
+    custom_action = factory.SubFactory(CustomActionFactory)
+    # Attached to a node (not an assistant) -- the model's check constraint requires one of them.
+    node = factory.SubFactory("apps.utils.factories.pipelines.NodeFactory")
+    operation_id = "weather_get"
