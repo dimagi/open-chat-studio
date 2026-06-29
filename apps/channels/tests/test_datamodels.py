@@ -67,20 +67,20 @@ class TestIsNonConversationalWhatsAppMessage:
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        ("US.13491208655302741918", True),
-        ("US.ENT.11815799212886844830", True),
-        ("ZA.abc123XYZ", True),  # Alphanumeric tail, not just digits.
-        ("US." + "a" * 128, True),  # Spec maximum.
-        ("+1.212.555.2368", False),
-        ("us.13491208655302741918", False),  # Lowercase country.
-        ("USA.13491208655302741918", False),  # 3-letter country.
-        ("US.13491208655302741918.extra", False),  # Tail contains period.
-        ("US.has-dash", False),  # Non-alphanumeric in tail.
-        ("US." + "a" * 129, False),  # Tail exceeds 128 chars.
-        ("US.", False),  # Empty tail.
-        ("27456897512", False),  # Plain wa_id.
-        ("+27456897512", False),  # E.164.
-        ("", False),
+        pytest.param("US.13491208655302741918", True, id="standard_bsuid"),
+        pytest.param("US.ENT.11815799212886844830", True, id="parent_bsuid"),
+        pytest.param("ZA.abc123XYZ", True, id="alphanumeric_tail"),
+        pytest.param("US." + "a" * 128, True, id="max_tail_length"),
+        pytest.param("+1.212.555.2368", False, id="phone_like_value"),
+        pytest.param("us.13491208655302741918", False, id="lowercase_country"),
+        pytest.param("USA.13491208655302741918", False, id="three_letter_country"),
+        pytest.param("US.13491208655302741918.extra", False, id="period_in_tail"),
+        pytest.param("US.has-dash", False, id="dash_in_tail"),
+        pytest.param("US." + "a" * 129, False, id="tail_exceeds_128_chars"),
+        pytest.param("US.", False, id="empty_tail"),
+        pytest.param("27456897512", False, id="plain_wa_id"),
+        pytest.param("+27456897512", False, id="e164_number"),
+        pytest.param("", False, id="empty_string"),
     ],
 )
 def test_looks_like_bsuid(value, expected):
