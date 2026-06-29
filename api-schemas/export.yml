@@ -512,6 +512,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomActionList'
           description: ''
+  /api/export/custom_tagged_items/:
+    get:
+      operationId: custom_tagged_items
+      summary: Custom Tagged Items
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomTaggedItemList'
+          description: ''
   /api/export/dataset_auto_population_rules/:
     get:
       operationId: dataset_auto_population_rules
@@ -1317,6 +1345,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/PipelineList'
           description: ''
+  /api/export/pricing_rules/:
+    get:
+      operationId: pricing_rules
+      summary: Pricing Rules
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRuleList'
+          description: ''
   /api/export/scheduled_messages/:
     get:
       operationId: scheduled_messages
@@ -1347,6 +1403,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScheduledMessageList'
+          description: ''
+  /api/export/scores/:
+    get:
+      operationId: scores
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Scores
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreList'
           description: ''
   /api/export/sessions/:
     get:
@@ -1628,6 +1715,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TranscriptAnalysisList'
+          description: ''
+  /api/export/usage_records/:
+    get:
+      operationId: usage_records
+      summary: Usage Records
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageRecordList'
+          description: ''
+  /api/export/user_comments/:
+    get:
+      operationId: user_comments
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: User Comments
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCommentList'
           description: ''
   /api/export/user_notification_preferences/:
     get:
@@ -2455,6 +2601,16 @@ components:
       description: |-
         * `equals` - Equals
         * `range` - Range
+    ConfidenceEnum:
+      enum:
+      - exact
+      - estimated
+      - unknown
+      type: string
+      description: |-
+        * `exact` - Exact
+        * `estimated` - Estimated
+        * `unknown` - Unknown
     ConsentFormDetail:
       type: object
       properties:
@@ -2644,6 +2800,57 @@ components:
       - cursor
       - has_more
       - results
+    CustomTaggedItemDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content_type:
+          type: string
+          readOnly: true
+        object_id:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        user:
+          type: integer
+          nullable: true
+        tag:
+          type: integer
+      required:
+      - content_type
+      - created_at
+      - id
+      - object_id
+      - tag
+      - updated_at
+    CustomTaggedItemList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomTaggedItemDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     CustomUserDetail:
       type: object
       properties:
@@ -2712,6 +2919,16 @@ components:
       - cursor
       - has_more
       - results
+    DataTypeEnum:
+      enum:
+      - numeric
+      - categorical
+      - boolean
+      type: string
+      description: |-
+        * `numeric` - Numeric
+        * `categorical` - Categorical
+        * `boolean` - Boolean
     DatasetAutoPopulationRuleDetail:
       type: object
       properties:
@@ -4626,6 +4843,80 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
         * `email` - Email
+    PricingRuleDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        provider_type:
+          type: string
+          maxLength: 64
+        model_name:
+          type: string
+          maxLength: 128
+        service_kind:
+          $ref: '#/components/schemas/ServiceKindEnum'
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        currency:
+          type: string
+          maxLength: 3
+        effective_from:
+          type: string
+          format: date-time
+        effective_to:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          $ref: '#/components/schemas/PricingRuleDetailSourceEnum'
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - model_name
+      - provider_type
+      - service_kind
+      - unit_price
+    PricingRuleDetailSourceEnum:
+      enum:
+      - seed
+      - manual
+      - import
+      type: string
+      description: |-
+        * `seed` - Seed
+        * `manual` - Manual
+        * `import` - Import
+    PricingRuleList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PricingRuleDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     PurposeEnum:
       enum:
       - assistant
@@ -4716,6 +5007,94 @@ components:
       - cursor
       - has_more
       - results
+    ScoreDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        target_content_type:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        target_object_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        name:
+          type: string
+          maxLength: 255
+        data_type:
+          $ref: '#/components/schemas/DataTypeEnum'
+        value_numeric:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,14}(?:\.\d{0,6})?$
+          nullable: true
+        value_string:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/ScoreDetailSourceEnum'
+        automated_result:
+          type: integer
+          nullable: true
+        review:
+          type: integer
+          nullable: true
+        author:
+          type: integer
+          nullable: true
+      required:
+      - automated_result
+      - created_at
+      - data_type
+      - id
+      - name
+      - review
+      - source
+      - target_content_type
+      - target_object_id
+      - updated_at
+    ScoreDetailSourceEnum:
+      enum:
+      - llm_judge
+      - programmatic
+      - human_review
+      - user_feedback
+      - system
+      type: string
+      description: |-
+        * `llm_judge` - LLM judge
+        * `programmatic` - Programmatic
+        * `human_review` - Human review
+        * `user_feedback` - User feedback
+        * `system` - System
+    ScoreList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     ServiceEnum:
       enum:
       - AWS
@@ -4732,6 +5111,18 @@ components:
         * `OpenAIVoiceEngine` - OpenAIVoiceEngine
         * `ElevenLabs` - ElevenLabs
         * `Intron` - Intron
+    ServiceKindEnum:
+      enum:
+      - llm_input
+      - llm_output
+      - llm_cached_input
+      - llm_cache_write
+      type: string
+      description: |-
+        * `llm_input` - Llm Input
+        * `llm_output` - Llm Output
+        * `llm_cached_input` - Llm Cached Input
+        * `llm_cache_write` - Llm Cache Write
     SourceMaterialDetail:
       type: object
       properties:
@@ -5433,6 +5824,143 @@ components:
         * `google` - Google Gemini
         * `google_vertex_ai` - Google Vertex AI
         * `voyage` - Voyage AI
+    UsageRecordDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        service_kind:
+          $ref: '#/components/schemas/ServiceKindEnum'
+        provider_type:
+          type: string
+          maxLength: 64
+        model_name:
+          type: string
+          maxLength: 128
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,14}(?:\.\d{0,4})?$
+          nullable: true
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+          nullable: true
+        cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        currency:
+          type: string
+          maxLength: 3
+        confidence:
+          $ref: '#/components/schemas/ConfidenceEnum'
+        extra: {}
+        experiment:
+          type: integer
+          nullable: true
+        session:
+          type: integer
+          nullable: true
+        participant:
+          type: integer
+          nullable: true
+        trace:
+          type: integer
+          nullable: true
+        pricing_rule:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - model_name
+      - provider_type
+      - service_kind
+      - timestamp
+      - updated_at
+    UsageRecordList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageRecordDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    UserCommentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content_type:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        comment:
+          type: string
+        object_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        user:
+          type: integer
+      required:
+      - content_type
+      - created_at
+      - id
+      - object_id
+      - updated_at
+      - user
+    UserCommentList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserCommentDetail'
+      required:
+      - cursor
+      - has_more
+      - results
     UserNotificationPreferencesDetail:
       type: object
       properties:
