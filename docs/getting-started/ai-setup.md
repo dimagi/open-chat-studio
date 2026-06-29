@@ -56,21 +56,26 @@ Contextual guides for specific areas of the codebase. `AGENTS.md` tells the agen
 ### Claude Code settings
 `.claude/settings.json` pre-approves safe commands (pytest, ruff, git, gh, etc.) so Claude Code runs them without prompting, and configures hooks for session startup.
 
-## Other Tools
+## Other AI coding tools
 
-Other agentic coding tools (Gemini CLI, Codex CLI, OpenCode, Aider, Cline, etc.) can follow the same [AI development workflow](../developer_guides/ai_development.md).
+Other agentic coding tools (Gemini CLI, Codex CLI, OpenCode, Aider, Cline, etc.) can follow a similar [AI development workflow](../developer_guides/ai_development.md). Refer to your tool's documentation for details.
 
-### For Gemini CLI
-Google's CLI agent; reads GEMINI.md natively. Create a `GEMINI.md` symlink pointing to `AGENTS.md`:
+### What works with any AI tool
+
+- **AGENTS.md** — Most AI tools load this automatically.
+- **VISION.md and CONTEXT.md** — tool-agnostic; can be referenced by any AI coding tool.
+- **Domain guides** (`docs/agents/`) — Contextual guidance for specific areas.
+
+### What is Claude-specific
+- **Skills** — Claude-specific and not available in other AI tools.
+- **Safe commands** — `.claude/settings.json` contains pre-approved automation-friendly commands (for tests, linting, version control, file search). Refer to your tool's documentation to configure similar permissions.
+
+### Example: Gemini CLI
+
+Google's CLI agent reads `GEMINI.md` natively. Create a symlink:
 
 ```bash
 ln -s AGENTS.md GEMINI.md
 ```
 
 Add the symlink to `.gitignore` — don't commit it.
-
-### For Codex CLI
-OpenAI's open-source CLI agent; reads AGENTS.md natively.
-
-### For other tools
-Refer to your tool's documentation on how to specify instruction files.
