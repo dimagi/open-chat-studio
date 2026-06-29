@@ -4,20 +4,85 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
+from django.db import models
 
+from apps.api.export.serializers import build_resource_serializer
 from apps.chat.models import Chat
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer, MissingGlobalRow
-from apps.teams.export.manifest import GLOBAL_CONFIG, entry_model
+from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
-from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
-from apps.utils.factories.service_provider_factories import VoiceProviderFactory
+from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.custom_actions import CustomActionFactory, CustomActionOperationFactory
+from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
+from apps.utils.factories.evaluations import (
+    AppliedTagFactory,
+    DatasetAutoPopulationRuleFactory,
+    EvaluationConfigFactory,
+    EvaluationDatasetFactory,
+    EvaluationMessageFactory,
+    EvaluationResultFactory,
+    EvaluationRunAggregateFactory,
+    EvaluationRunFactory,
+    EvaluationTagFactory,
+    EvaluatorFactory,
+    EvaluatorTagRuleFactory,
+)
+from apps.utils.factories.events import (
+    EventActionFactory,
+    ScheduledMessageFactory,
+    StaticTriggerFactory,
+    TimeoutTriggerFactory,
+)
+from apps.utils.factories.experiment import (
+    ChatAttachmentFactory,
+    ChatFactory,
+    ChatMessageFactory,
+    ConsentFormFactory,
+    ExperimentFactory,
+    ExperimentSessionFactory,
+    ParticipantDataFactory,
+    ParticipantFactory,
+    SourceMaterialFactory,
+    SyntheticVoiceFactory,
+)
+from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
+from apps.utils.factories.human_annotations import (
+    AnnotationFactory,
+    AnnotationItemFactory,
+    AnnotationQueueAggregateFactory,
+    AnnotationQueueFactory,
+)
+from apps.utils.factories.notifications import (
+    EventTypeFactory,
+    EventUserFactory,
+    NotificationEventFactory,
+    UserNotificationPreferencesFactory,
+)
+from apps.utils.factories.pipelines import (
+    NodeFactory,
+    PipelineChatHistoryFactory,
+    PipelineChatMessagesFactory,
+    PipelineFactory,
+)
+from apps.utils.factories.service_provider_factories import (
+    AuthProviderFactory,
+    EmbeddingProviderModelFactory,
+    LlmProviderFactory,
+    LlmProviderModelFactory,
+    MessagingProviderFactory,
+    TraceProviderFactory,
+    VoiceProviderFactory,
+)
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.traces import TraceFactory
+from apps.utils.factories.user import UserFactory
 
 
 def _user_row(source_id, username, **extra):
@@ -406,3 +471,138 @@ def test_rerun_after_interruption_creates_exactly_one_row(store, monkeypatch):
     Importer(store).import_rows("teams.team", [_team_row()])
 
     assert Team.objects.filter(slug="imported-team-xyz").count() == 1
+
+
+# ---------------------------------------------------------------------------
+# Whole-manifest round-trip test
+# ---------------------------------------------------------------------------
+
+FACTORIES = {
+    "users.customuser": UserFactory,
+    "service_providers.llmprovider": LlmProviderFactory,
+    "service_providers.voiceprovider": VoiceProviderFactory,
+    "service_providers.messagingprovider": MessagingProviderFactory,
+    "service_providers.authprovider": AuthProviderFactory,
+    "service_providers.traceprovider": TraceProviderFactory,
+    "service_providers.llmprovidermodel": LlmProviderModelFactory,
+    "service_providers.embeddingprovidermodel": EmbeddingProviderModelFactory,
+    "experiments.syntheticvoice": SyntheticVoiceFactory,
+    "custom_actions.customaction": CustomActionFactory,
+    "experiments.sourcematerial": SourceMaterialFactory,
+    "experiments.consentform": ConsentFormFactory,
+    "annotations.tag": EvaluationTagFactory,
+    "documents.collection": CollectionFactory,
+    "files.file": FileFactory,
+    "documents.collectionfile": CollectionFileFactory,
+    "documents.documentsource": DocumentSourceFactory,
+    "files.filechunkembedding": FileChunkEmbeddingFactory,
+    "ocs_notifications.eventtype": EventTypeFactory,
+    "ocs_notifications.usernotificationpreferences": UserNotificationPreferencesFactory,
+    "pipelines.pipeline": PipelineFactory,
+    "pipelines.node": NodeFactory,
+    "custom_actions.customactionoperation": CustomActionOperationFactory,
+    "experiments.experiment": ExperimentFactory,
+    "bot_channels.experimentchannel": ExperimentChannelFactory,
+    "events.eventaction": EventActionFactory,
+    "events.statictrigger": StaticTriggerFactory,
+    "events.timeouttrigger": TimeoutTriggerFactory,
+    "experiments.participant": ParticipantFactory,
+    "experiments.participantdata": ParticipantDataFactory,
+    "chat.chat": ChatFactory,
+    "experiments.experimentsession": ExperimentSessionFactory,
+    "chat.chatattachment": ChatAttachmentFactory,
+    "chat.chatmessage": ChatMessageFactory,
+    "trace.trace": TraceFactory,
+    "pipelines.pipelinechathistory": PipelineChatHistoryFactory,
+    "pipelines.pipelinechatmessages": PipelineChatMessagesFactory,
+    "events.scheduledmessage": ScheduledMessageFactory,
+    "ocs_notifications.notificationevent": NotificationEventFactory,
+    "ocs_notifications.eventuser": EventUserFactory,
+    "evaluations.evaluator": EvaluatorFactory,
+    "evaluations.evaluationmessage": EvaluationMessageFactory,
+    "evaluations.evaluationdataset": EvaluationDatasetFactory,
+    "evaluations.datasetautopopulationrule": DatasetAutoPopulationRuleFactory,
+    "evaluations.evaluationconfig": EvaluationConfigFactory,
+    "evaluations.evaluatortagrule": EvaluatorTagRuleFactory,
+    "evaluations.evaluationrun": EvaluationRunFactory,
+    "evaluations.evaluationresult": EvaluationResultFactory,
+    "evaluations.evaluationrunaggregate": EvaluationRunAggregateFactory,
+    "evaluations.appliedtag": AppliedTagFactory,
+    "human_annotations.annotationqueue": AnnotationQueueFactory,
+    "human_annotations.annotationitem": AnnotationItemFactory,
+    "human_annotations.annotation": AnnotationFactory,
+    "human_annotations.annotationqueueaggregate": AnnotationQueueAggregateFactory,
+    "analysis.transcriptanalysis": TranscriptAnalysisFactory,
+    "analysis.analysisquery": AnalysisQueryFactory,
+}
+
+BUILD_OVERRIDES = {
+    "human_annotations.annotationqueue": {"created_by": None},
+    "human_annotations.annotationitem": {"queue__created_by": None},
+    "human_annotations.annotation": {"item__queue__created_by": None},
+    "human_annotations.annotationqueueaggregate": {"queue__created_by": None},
+    "events.scheduledmessage": {
+        "custom_schedule_params": {"name": "Test", "time_period": "days", "frequency": 1, "repetitions": 1}
+    },
+}
+
+
+def _commit_file_fields(obj) -> None:
+    """Persist factory-built in-memory files to storage so the serialized row carries a real stored
+    path and a model whose save() reads file.size (e.g. File) finds the blob on import."""
+    for field in obj._meta.concrete_fields:
+        if isinstance(field, models.FileField):
+            fieldfile = getattr(obj, field.attname)
+            if fieldfile and not fieldfile._committed:
+                fieldfile.save(fieldfile.name, fieldfile, save=False)
+
+
+def _serialized_row(model_label, mock_ids, manifest_labels, public_key):
+    """The row exactly as the endpoint would serve it: a factory-built instance carrying mock source
+    ids -- its own pk and every synced FK (self-refs and FKs to unsynced models nulled) -- run
+    through the model's real export serializer."""
+    model = entry_model(model_label)
+    obj = FACTORIES[model_label].build(**BUILD_OVERRIDES.get(model_label, {}))
+    obj.pk = mock_ids[model_label]
+    for field in model._meta.concrete_fields:
+        if isinstance(field, models.ForeignKey) and not field.primary_key:
+            related = field.related_model._meta.label_lower
+            target = mock_ids[related] if related != model_label and related in manifest_labels else None
+            setattr(obj, field.attname, target)
+    _commit_file_fields(obj)
+    return dict(build_resource_serializer(model)(obj, context={"public_key": public_key}).data)
+
+
+def test_registry_covers_every_manifest_entry():
+    """Adding a manifest entry without a factory here must fail loudly rather than silently skip it."""
+    assert {e.model for e in MANIFEST_ENTRIES} - set(FACTORIES) == set()
+
+
+def test_every_manifest_entry_imports(store, keypair):
+    """Serialize one factory-built row per manifest model through its real export serializer (exactly
+    as the endpoint would), import them all in manifest order, and assert every entry landed -- a
+    round-trip smoke test over the whole manifest."""
+    public_key, private_key = keypair
+    manifest_labels = {e.model for e in MANIFEST_ENTRIES} | {"teams.team"}
+    importer = Importer(store, private_key=private_key)
+
+    team = TeamFactory.build()
+    team.pk = 999
+    team_row = dict(build_resource_serializer(Team)(team, context={"public_key": public_key}).data)
+    importer.import_rows("teams.team", [team_row])
+
+    mock_ids = {entry.model: 1000 + i for i, entry in enumerate(MANIFEST_ENTRIES)}
+    mock_ids["teams.team"] = 999  # the anchor team's source pk
+    for entry in MANIFEST_ENTRIES:
+        row = _serialized_row(entry.model, mock_ids, manifest_labels, public_key)
+        importer.import_rows(entry.model, [row])
+
+    not_imported = []
+    for entry in MANIFEST_ENTRIES:
+        target = store.get_target(entry.model, mock_ids[entry.model])
+        if target is None:
+            not_imported.append(f"{entry.model}: no target recorded")
+        elif not entry_model(entry.model).objects.filter(pk=target).exists():
+            not_imported.append(f"{entry.model}: target {target} not in the database")
+    assert not not_imported, "Manifest entries that failed to import:\n" + "\n".join(not_imported)
+    assert store.has_unfilled_targets() is False

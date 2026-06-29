@@ -1,10 +1,14 @@
+import json
+
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from django.conf import settings
 from django.contrib.auth.models import Group
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from rest_framework import serializers
+from rest_framework.renderers import JSONRenderer
 
 from apps.api.export.serializers import (
     ManifestEntrySerializer,
@@ -13,12 +17,15 @@ from apps.api.export.serializers import (
     build_resource_serializer,
 )
 from apps.chat.models import Chat
+from apps.documents.models import CollectionFile
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
+from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.manifest import build_manifest, entry_model, get_manifest_entry, team_scoped_queryset
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
+from apps.utils.factories.documents import CollectionFileFactory
 from apps.utils.factories.experiment import (
     ChatFactory,
     ConsentFormFactory,
@@ -26,6 +33,7 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     ParticipantFactory,
 )
+from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
@@ -208,3 +216,34 @@ def test_manifest_serializer_matches_build_manifest_payload():
     declared = set(ManifestEntrySerializer().fields)
     actual_keys = set().union(*(entry.keys() for entry in manifest["entries"]))
     assert declared == actual_keys
+
+
+def test_file_field_serializes_as_relative_name_not_media_url():
+    """A FileField serializes to its stored relative name so the importer can assign it straight
+    back; the default ``/media/...`` URL is an absolute path Django's storage rejects on save."""
+    file = FileFactory()
+    data = build_resource_serializer(File)(file, context={"public_key": None}).data
+    assert data["file"] == file.file.name
+    assert not data["file"].startswith("/")
+
+
+def test_halfvector_field_serializes_as_list_of_floats():
+    """A pgvector column reads back as a non-iterable HalfVector object; the serializer must still
+    emit a plain list of floats the importer can assign straight back."""
+    size = settings.EMBEDDING_VECTOR_SIZE
+    created = FileChunkEmbeddingFactory(embedding=[0.5] * size)
+    instance = FileChunkEmbedding.objects.get(pk=created.pk)  # re-fetch so embedding is the DB object
+    data = build_resource_serializer(FileChunkEmbedding)(instance, context={"public_key": None}).data
+    assert data["embedding"] == [0.5] * size
+
+
+def test_pydantic_schema_field_serializes_as_json_object():
+    """A SchemaField (pydantic) serializes to a JSON object. The default JSONField mapping leaves the
+    pydantic instance in place, which DRF's JSON encoder mangles into (field, value) pairs the
+    importer can't read back. The corruption is at encode time, so render to JSON to catch it."""
+    metadata = {"chunking_strategy": {"chunk_size": 400, "chunk_overlap": 200}}
+    cf = CollectionFileFactory(metadata=metadata)
+    instance = CollectionFile.objects.get(pk=cf.pk)
+    data = build_resource_serializer(CollectionFile)(instance, context={"public_key": None}).data
+    rendered = json.loads(JSONRenderer().render(data))
+    assert rendered["metadata"] == metadata

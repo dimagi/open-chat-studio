@@ -1,6 +1,7 @@
 import pytest
 from django.apps import apps
 
+from apps.api.export.serializers import build_resource_serializer
 from apps.teams.export import manifest
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
@@ -15,67 +16,30 @@ def _model(label):
 # newly added model forces a sync/ignore decision.
 IGNORED_MODELS = frozenset(
     {
-        "analysis.analysisquery",
-        "analysis.transcriptanalysis",
         "annotations.customtaggeditem",
-        "annotations.tag",
         "annotations.usercomment",
         "api.userapikey",
         "assessments.score",
         "assistants.openaiassistant",
         "assistants.toolresources",
         "banners.banner",
-        "bot_channels.experimentchannel",
-        "chat.chatattachment",
-        "chat.chatmessage",
         "cost_tracking.pricingrule",
         "cost_tracking.usagerecord",
-        "custom_actions.customaction",
-        "custom_actions.customactionoperation",
         "dashboard.dashboardcache",
         "dashboard.dashboardfilter",
         "data_migrations.custommigration",
-        "documents.collection",
-        "documents.collectionfile",
-        "documents.documentsource",
         "documents.documentsourcesynclog",
-        "evaluations.appliedtag",
-        "evaluations.datasetautopopulationrule",
-        "evaluations.evaluationconfig",
-        "evaluations.evaluationdataset",
-        "evaluations.evaluationmessage",
-        "evaluations.evaluationresult",
-        "evaluations.evaluationrun",
-        "evaluations.evaluationrunaggregate",
-        "evaluations.evaluator",
-        "evaluations.evaluatortagrule",
-        "events.eventaction",
         "events.eventlog",
-        "events.scheduledmessage",
         "events.scheduledmessageattempt",
-        "events.statictrigger",
-        "events.timeouttrigger",
         "experiments.promptbuilderhistory",
         "experiments.survey",
-        "files.file",
-        "files.filechunkembedding",
         "filters.filterset",
-        "human_annotations.annotation",
-        "human_annotations.annotationitem",
-        "human_annotations.annotationqueue",
-        "human_annotations.annotationqueueaggregate",
         "mcp_integrations.mcpserver",
         "oauth.oauth2accesstoken",
         "oauth.oauth2application",
         "oauth.oauth2grant",
         "oauth.oauth2idtoken",
         "oauth.oauth2refreshtoken",
-        "ocs_notifications.eventtype",
-        "ocs_notifications.eventuser",
-        "ocs_notifications.notificationevent",
-        "ocs_notifications.usernotificationpreferences",
-        "pipelines.pipelinechathistory",
-        "pipelines.pipelinechatmessages",
         "site_admin.ocsconfiguration",
         "slack.slackbot",
         "slack.slackinstallation",
@@ -83,7 +47,6 @@ IGNORED_MODELS = frozenset(
         "sso.ssosession",
         "teams.flag",
         "teams.invitation",
-        "trace.trace",
     }
 )
 
@@ -201,3 +164,12 @@ def test_build_manifest_payload_shape():
     assert {e["resource"] for e in payload["entries"]} == {e.resource for e in manifest.MANIFEST_ENTRIES}
     first = payload["entries"][0]
     assert set(first) >= {"model", "resource", "cursor", "secret"}
+
+
+def test_every_resource_serializer_builds():
+    """Building every entry's serializer forces DRF field mapping, so an unmapped field type (file,
+    vector, pydantic) on any synced model fails here rather than at schema generation or request time."""
+
+    for entry in manifest.MANIFEST_ENTRIES:
+        serializer = build_resource_serializer(manifest.entry_model(entry.model))()
+        assert serializer.fields  # accessing .fields builds them; raises on an unmapped field type
