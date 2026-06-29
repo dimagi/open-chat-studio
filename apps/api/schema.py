@@ -18,6 +18,26 @@ def exclude_legacy_participants_path(endpoints):
     return [endpoint for endpoint in endpoints if endpoint[0] != "/api/participants/"]
 
 
+EXPORT_DESCRIPTION = (
+    "Read-only, team-scoped endpoints for the Open Chat Studio data sync/export. "
+    "**Unversioned and intended only for OCS export** — it carries no "
+    "backwards-compatibility guarantee and may change without notice."
+)
+
+
+def set_export_description(result, generator, **kwargs):
+    """Give the export schema its own ``info.description``.
+
+    Lives here rather than in the served view's ``custom_settings`` so the committed
+    ``api-schemas/export.yml`` matches what ``/api/export/schema/`` serves: that file is built by the
+    ``spectacular`` management command, which reads the global ``SPECTACULAR_SETTINGS`` and ignores
+    per-view ``custom_settings``. A postprocessing hook runs for both, keyed on the api version.
+    """
+    if generator.api_version == "export":
+        result["info"]["description"] = EXPORT_DESCRIPTION
+    return result
+
+
 def prune_unused_tags(result, **kwargs):
     """Drop top-level tag definitions not referenced by any operation.
 

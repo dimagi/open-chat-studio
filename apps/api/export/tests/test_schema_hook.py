@@ -8,6 +8,7 @@ from drf_spectacular.generators import SchemaGenerator
 
 from apps.api.export.serializers import component_name, resource_responses
 from apps.api.export.views import ResourceView, resource_view
+from apps.api.schema import EXPORT_DESCRIPTION
 from apps.teams.export.manifest import MANIFEST_ENTRIES, entry_model, get_manifest_entry
 
 
@@ -34,18 +35,27 @@ def test_unknown_resource_resolves_to_catchall_view():
 
 
 @pytest.mark.parametrize(
-    ("resource", "expect_409"),
+    ("resource", "expect_400"),
     [
-        pytest.param("llm_providers", True, id="secret-resource-documents-409"),
-        pytest.param("users", False, id="plain-resource-has-no-409"),
+        pytest.param("llm_providers", True, id="secret-resource-documents-400"),
+        pytest.param("users", False, id="plain-resource-has-no-400"),
     ],
 )
-def test_secret_resources_document_the_no_public_key_conflict(resource, expect_409):
+def test_secret_resources_document_the_no_public_key_error(resource, expect_400):
     # Routing prevents unknown resources from reaching the view, so 404 is not a documented response.
     statuses = resource_responses(get_manifest_entry(resource))
     assert 200 in statuses
     assert 404 not in statuses
-    assert (409 in statuses) is expect_409
+    assert (400 in statuses) is expect_400
+
+
+def test_export_schema_carries_its_own_description():
+    """The generated export schema (and the served one) gets an export-specific ``info.description``
+    via the postprocessing hook, not the global SPECTACULAR_SETTINGS default the v2 schema keeps."""
+    export = SchemaGenerator(api_version="export").get_schema(request=None, public=True)
+    v2 = SchemaGenerator(api_version="v2").get_schema(request=None, public=True)
+    assert export["info"]["description"] == EXPORT_DESCRIPTION
+    assert v2["info"]["description"] != EXPORT_DESCRIPTION
 
 
 @pytest.fixture(scope="module")

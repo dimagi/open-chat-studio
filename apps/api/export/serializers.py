@@ -129,14 +129,14 @@ def build_team_serializer():
 
 
 def resource_responses(entry: ManifestEntry) -> dict[int, type[serializers.Serializer] | OpenApiResponse]:
-    """Per-status responses for one resource: the 200 envelope, and a 409 (secret resources only)
+    """Per-status responses for one resource: the 200 envelope, and a 400 (secret resources only)
     when the team has no public key to seal against. No 404: routing prevents unknown resources from
     reaching the view."""
     responses: dict[int, type[serializers.Serializer] | OpenApiResponse] = {
         200: build_resource_response_serializer(entry),
     }
     if entry.secret:
-        responses[409] = OpenApiResponse(
+        responses[400] = OpenApiResponse(
             response=SyncErrorDetail,
             description="Team has no registered public key; secret data cannot be sealed.",
         )

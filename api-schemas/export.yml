@@ -2,7 +2,9 @@ openapi: 3.0.3
 info:
   title: Open Chat Studio
   version: export
-  description: Build, deploy and monitor chatbots.
+  description: Read-only, team-scoped endpoints for the Open Chat Studio data sync/export.
+    **Unversioned and intended only for OCS export** — it carries no backwards-compatibility
+    guarantee and may change without notice.
 paths:
   /api/export/auth_providers/:
     get:
@@ -32,7 +34,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthProviderList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:
@@ -209,7 +211,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LlmProviderList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:
@@ -260,7 +262,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessagingProviderList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:
@@ -297,7 +299,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ParticipantDataList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:
@@ -522,7 +524,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TraceProviderList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:
@@ -584,7 +586,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/VoiceProviderList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:

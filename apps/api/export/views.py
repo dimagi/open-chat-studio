@@ -108,7 +108,7 @@ class ResourceView(_ExportAPIView):
             if not request.team.public_key:
                 return Response(
                     {"detail": "Team has no registered public key; secret data cannot be sealed."},
-                    status=status.HTTP_409_CONFLICT,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             context["public_key"] = load_public_key(request.team.public_key)
 

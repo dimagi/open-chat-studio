@@ -98,7 +98,7 @@ def test_secret_resource_fails_closed_without_public_key():
     team = TeamWithUsersFactory()
     LlmProviderFactory(team=team)
     client = ApiTestClient(_admin(team), team)
-    assert client.get(_resource_url("llm_providers")).status_code == 409
+    assert client.get(_resource_url("llm_providers")).status_code == 400
 
 
 def test_secret_resource_seals_config_with_team_public_key():
