@@ -77,7 +77,7 @@ def get_or_create_participant(
     if not is_simple_filter:
         existing = (
             Participant.objects.filter(participant_id_filter, team=team, platform=platform)
-            .order_by("created_at")
+            .order_by("created_at", "id")
             .first()
         )
         if existing is not None:

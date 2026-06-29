@@ -81,6 +81,7 @@ class TestMetaCloudAPIServiceBSUIDRecipient:
         )
         sent = mock_post.call_args.kwargs["json"]
         assert sent["recipient"] == self.BSUID
+        assert sent["recipient_type"] == "individual"
         assert "to" not in sent
 
     @patch("apps.service_providers.messaging_service.httpx.post")
@@ -97,6 +98,7 @@ class TestMetaCloudAPIServiceBSUIDRecipient:
         )
         sent = mock_post.call_args_list[1].kwargs["json"]
         assert sent["recipient"] == self.BSUID
+        assert sent["recipient_type"] == "individual"
         assert "to" not in sent
 
     @patch("apps.service_providers.messaging_service.httpx.post")
@@ -116,4 +118,5 @@ class TestMetaCloudAPIServiceBSUIDRecipient:
         )
         sent = mock_post.call_args_list[1].kwargs["json"]
         assert sent["recipient"] == self.BSUID
+        assert sent["recipient_type"] == "individual"
         assert "to" not in sent
