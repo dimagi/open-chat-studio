@@ -80,6 +80,12 @@ def get_or_create_participant(
     For a disjunction it probes first, so a match reuses the existing row (oldest wins) while
     a miss still creates the row keyed by the canonical normalized identifier -- never the phone.
     """
+    if not normalized_identifier and not participant_user:
+        raise ValueError("Either an identifier or a user must be specified!")
+    if participant_user and normalized_identifier != participant_user.email:
+        # This should technically never happen, since we disable the input for logged in users
+        raise Exception(f"User {participant_user.email} cannot impersonate participant {normalized_identifier}")
+
     is_simple_filter = len(participant_id_filter.children) == 1
     if not is_simple_filter:
         existing = (

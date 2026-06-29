@@ -5,6 +5,7 @@ from apps.experiments.models import Participant
 from apps.experiments.services import start_experiment_session
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
+from apps.utils.factories.user import UserFactory
 
 
 @pytest.fixture()
@@ -68,3 +69,24 @@ class TestStartExperimentSessionParticipant:
 
         assert session.participant.id == resolved.id
         assert Participant.objects.filter(team=experiment.team, platform=ChannelPlatform.WHATSAPP).count() == 1
+
+    def test_skips_validation_for_stored_participant(self, experiment, whatsapp_channel):
+        """Identifier/user validation only runs on the create path (get_or_create_participant).
+        A stored participant is trusted, so a mismatched identifier/user is not re-checked."""
+        user = UserFactory(username="real@example.com")
+        resolved = ParticipantFactory(
+            team=experiment.team,
+            platform=ChannelPlatform.WHATSAPP,
+            identifier="not_the_user_email",
+            user=user,
+        )
+
+        # An unstored wrapper with this identifier/user would trip the impersonation guard,
+        # but the stored participant skips get_or_create_participant entirely.
+        session = start_experiment_session(
+            working_experiment=experiment,
+            experiment_channel=whatsapp_channel,
+            participant=resolved,
+        )
+
+        assert session.participant.id == resolved.id

@@ -210,3 +210,27 @@ class TestGetOrCreateParticipant:
         legacy.refresh_from_db()
         assert participant.id == legacy.id
         assert legacy.user_id == user.id
+
+    def test_raises_when_neither_identifier_nor_user(self):
+        experiment = ExperimentFactory()
+        with pytest.raises(ValueError, match="identifier or a user"):
+            get_or_create_participant(
+                team=experiment.team,
+                normalized_identifier="",
+                platform=ChannelPlatform.WHATSAPP,
+                participant_user=None,
+                participant_id_filter=Q(identifier=""),
+            )
+
+    def test_raises_when_user_does_not_match_identifier(self):
+        """A logged-in user may not be keyed to an identifier other than their email."""
+        experiment = ExperimentFactory()
+        user = UserFactory(username="real@example.com")
+        with pytest.raises(Exception, match="cannot impersonate"):
+            get_or_create_participant(
+                team=experiment.team,
+                normalized_identifier="someone_else",
+                platform=ChannelPlatform.WHATSAPP,
+                participant_user=user,
+                participant_id_filter=Q(identifier="someone_else"),
+            )

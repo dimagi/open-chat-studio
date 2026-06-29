@@ -34,12 +34,6 @@ def start_experiment_session(
     team = working_experiment.team
     participant_identifier = participant.identifier
     participant_user = participant.user
-    if not participant_identifier and not participant_user:
-        raise ValueError("Either participant_identifier or participant_user must be specified!")
-
-    if participant_user and participant_identifier != participant_user.email:
-        # This should technically never happen, since we disable the input for logged in users
-        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
 
     # Inline import to avoid circular import: channels_v2.stages.core imports from experiments.services
     from apps.channels.channels_v2.stages.core import get_or_create_participant  # noqa: PLC0415
