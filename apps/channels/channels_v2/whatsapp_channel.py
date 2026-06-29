@@ -30,9 +30,9 @@ def _resolve_recipient(ctx: MessageProcessingContext | None, fallback: str) -> s
     remote_id if we have one, else the given identifier. The participant identifier may be a
     BSUID, which Meta/Twilio cannot yet accept as an outbound recipient, so we prefer the phone
     captured on inbound."""
-    if ctx is not None and ctx.participant is not None and ctx.participant.remote_id:
-        return ctx.participant.remote_id
-    return fallback
+    if ctx is None or ctx.participant is None:
+        return fallback
+    return ctx.participant.remote_id or fallback
 
 
 class WhatsappSender(ChannelSender):

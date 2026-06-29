@@ -60,6 +60,13 @@ def participant_identifier_filter(identifier: str, phone_number: str | None) -> 
     return Q(identifier=identifier)
 
 
+def _associate_user(participant: Participant, participant_user: CustomUser | None) -> None:
+    """Backfill the participant's user on first contact if it isn't set yet."""
+    if participant_user and participant.user is None:
+        participant.user = participant_user
+        participant.save()
+
+
 def get_or_create_participant(
     team,
     normalized_identifier: str,
@@ -81,9 +88,7 @@ def get_or_create_participant(
             .first()
         )
         if existing is not None:
-            if participant_user and existing.user is None:
-                existing.user = participant_user
-                existing.save()
+            _associate_user(existing, participant_user)
             return existing
 
     participant, created = Participant.objects.get_or_create(
@@ -92,9 +97,8 @@ def get_or_create_participant(
         platform=platform,
         defaults={"user": participant_user},
     )
-    if not created and participant_user and participant.user is None:
-        participant.user = participant_user
-        participant.save()
+    if not created:
+        _associate_user(participant, participant_user)
     return participant
 
 
@@ -157,7 +161,9 @@ class ParticipantResolverStage(ProcessingStage):
         """Persist the user's phone number on the participant's remote_id so it can be used as
         the send recipient -- the participant identifier may be a (non-sendable) BSUID."""
         participant = ctx.participant
-        if not phone_number or participant is None or participant.remote_id == phone_number:
+        if not phone_number or participant is None:
+            return
+        if participant.remote_id == phone_number:
             return
         participant.remote_id = phone_number
         participant.save(update_fields=["remote_id"])
