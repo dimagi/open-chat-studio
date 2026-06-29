@@ -37,20 +37,24 @@ To enable other recommended plugins, open the [dimagi-claude-workflows](https://
 
 - `code-review` — AI code review workflows with specialist agents
 
-## Project AI Instructions
+## What's in the project for Claude-assisted development
 
-The project's `AGENTS.md` file provides project-specific context that guides AI agent behavior. It covers project architecture, conventions, key file paths, and which docs to consult for specific features. This file is loaded automatically — you do not need to reference it manually.
+OCS ships with instruction files that shape how AI agents work in this codebase. They are already checked in and active — you don't need to configure them.
 
-`CLAUDE.md` is a one-line file that points to `AGENTS.md`. Some tools read `AGENTS.md` directly, while others require a tool-specific filename (see [Other Tools](#other-tools) below).
+### Code Agent instruction files
 
-## Project Configuration
+- **`AGENTS.md`** — the primary instruction file. Covers architecture, conventions, key paths, do/don't rules, and which docs to consult for specific areas.
+- **`CLAUDE.md`** — a file named for Claude Code; a one-line file that points to `AGENTS.md`.
+- **`VISION.md`** — project philosophy. Available for reference when making architectural decisions.
+- **`CONTEXT.md`** — domain glossary for the project's terminology. Agents use it to name things consistently. Referred to by `AGENTS.md`. Created lazily via `/grill-with-docs` as terms get resolved; may not exist yet on a fresh clone.
+- **`docs/agents/domain.md`** — describes how agents use the domain glossary (`CONTEXT.md`) and Architecture Decision Records (`docs/adr/`) when exploring the codebase.
 
-The project includes a `.claude/settings.json` that configures Claude Code's behavior in this repo:
+#### Domain guides (`docs/agents/`)
 
-- **Permissions** — pre-approved safe commands (pytest, ruff, git, gh, etc.) so Claude Code can run them without prompting.
-- **Hooks** — see the `.claude/hooks/` directory and the [Claude documentation on hooks](https://code.claude.com/docs/en/agent-sdk/hooks).
+Contextual guides for specific areas of the codebase. `AGENTS.md` tells the agent which file to read and when — they are **not** all loaded at startup, keeping agent context lean while providing depth on demand.
 
-You do not need to configure these — they are already checked in and active as soon as you open the project in Claude Code.
+### Claude Code settings
+`.claude/settings.json` pre-approves safe commands (pytest, ruff, git, gh, etc.) so Claude Code runs them without prompting, and configures hooks for session startup.
 
 ## Other Tools
 
