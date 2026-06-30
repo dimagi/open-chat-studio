@@ -3116,6 +3116,7 @@ dependencies = [
     { name = "twilio" },
     { name = "urllib3" },
     { name = "whitenoise", extra = ["brotli"] },
+    { name = "zipstream-ng" },
 ]
 
 [package.dev-dependencies]
@@ -3234,6 +3235,7 @@ requires-dist = [
     { name = "twilio" },
     { name = "urllib3", specifier = ">=2.7.0" },
     { name = "whitenoise", extras = ["brotli"] },
+    { name = "zipstream-ng", specifier = ">=1.9.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -5207,6 +5209,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e3/02/0f2892c661036d50ede074e376733dca2ae7c6eb617489437771209d4180/zipp-3.23.0.tar.gz", hash = "sha256:a07157588a12518c9d4034df3fbbee09c814741a33ff63c05fa29d26a2404166", size = 25547, upload-time = "2025-06-08T17:06:39.4Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2e/54/647ade08bf0db230bfea292f893923872fd20be6ac6f53b2b936ba839d75/zipp-3.23.0-py3-none-any.whl", hash = "sha256:071652d6115ed432f5ce1d34c336c0adfd6a884660d1e9712a256d3d3bd4b14e", size = 10276, upload-time = "2025-06-08T17:06:38.034Z" },
+]
+
+[[package]]
+name = "zipstream-ng"
+version = "1.9.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/33/fce793430e56888cfe3d61199b0116fa42b95d54c2e0fe87b85829507d10/zipstream_ng-1.9.2.tar.gz", hash = "sha256:116b7304b00f3251328cb300fa90f0f09d523b7faf2a06b3eaf7277dcb82cc3e", size = 32446, upload-time = "2026-05-17T16:09:26.934Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/6e/103ba2f47ae052a9d91e4c3d4d7b1d45128045675325d99a476e9171fa2e/zipstream_ng-1.9.2-py3-none-any.whl", hash = "sha256:7292efc812a437ec688cef2c9523a4e710cd669e4b5abc7d5a15eb4d5e68e4ea", size = 23407, upload-time = "2026-05-17T16:09:25.874Z" },
 ]
 
 [[package]]
