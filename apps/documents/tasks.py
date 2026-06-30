@@ -284,13 +284,14 @@ def delete_document_source_task(self, document_source_id: int):
 
     tb_task = TaskbadgerTaskWrapper(self)
     paginator = Paginator(document_source.collectionfile_set.all(), per_page=100, orphans=25)
-    for page in paginator:
-        with transaction.atomic():
-            bulk_delete_collection_files(document_source.collection, page.object_list)
-        tb_task.set_progress(page.number, paginator.num_pages)
+    with current_team(document_source.team):
+        for page in paginator:
+            with transaction.atomic():
+                bulk_delete_collection_files(document_source.collection, page.object_list)
+            tb_task.set_progress(page.number, paginator.num_pages)
 
-    if not document_source.has_versions:
-        document_source.delete()
+        if not document_source.has_versions:
+            document_source.delete()
 
 
 def _resolve_filename(name: str, used_filenames: dict[str, int]) -> str:
