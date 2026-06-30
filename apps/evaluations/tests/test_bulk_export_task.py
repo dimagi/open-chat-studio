@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.evaluations.evaluators import EvaluatorResult
 from apps.evaluations.models import EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import export_evaluation_bulk_results_task
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -50,6 +50,10 @@ def test_export_evaluation_bulk_results_task_creates_csv_file():
     )
 
     result = export_evaluation_bulk_results_task(config.id, team.id)
+
+    file = File.objects.get(id=result["file_id"])
+    assert file.purpose == FilePurpose.DATA_EXPORT
+    assert file.expiry_date is not None
 
     rows = _read_csv_rows(result["file_id"])
     assert len(rows) == 1

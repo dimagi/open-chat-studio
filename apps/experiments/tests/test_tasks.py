@@ -4,7 +4,7 @@ import pytest
 from django.test import override_settings
 
 from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 
@@ -12,7 +12,9 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 def test_async_export_chat_returns_file_id():
     session = ExperimentSessionFactory.create()
     result = async_export_chat.run(session.experiment_id, {}, "UTC")
-    assert result == {"file_id": File.objects.first().id}
+    file = File.objects.get(id=result["file_id"])
+    assert file.purpose == FilePurpose.DATA_EXPORT
+    assert file.expiry_date is not None
 
 
 @pytest.mark.django_db()
