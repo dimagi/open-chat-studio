@@ -39,7 +39,7 @@ from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
@@ -155,7 +155,7 @@ def chat_upload_file(request, session_id):
             content_size=file.size,
             content_type=File.get_content_type(file),
             expiry_date=expiry_date,
-            purpose="assistant",
+            purpose=FilePurpose.ASSISTANT,
             metadata={
                 "session_id": str(session_id),
                 "uploaded_by": uploaded_by,
