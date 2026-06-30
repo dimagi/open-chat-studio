@@ -6,13 +6,13 @@
   Required context: `model`, `show_delete`, `cost_tracking_enabled`,
   `pricing_lookup`.
 {% endcomment %}
-<div class="grid grid-cols-4 grid-flow-col-dense" id="model_{{ model.id }}">
+<div class="grid grid-cols-4 grid-flow-col-dense{% if model.deprecated %} text-base-content/50{% endif %}" id="model_{{ model.id }}">
   <div class="col-span-2">
     {{ model.display_name }}
     {% if cost_tracking_enabled %}
       {% with rates=pricing_lookup|get_item:model.id %}
         {% if rates %}
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <div class="text-xs {% if not model.deprecated %}text-gray-500 dark:text-gray-400 {% endif %}mt-0.5">
             {% if rates.llm_input %}in&nbsp;${{ rates.llm_input.unit_price|per_million }}/1M{% endif %}
             {% if rates.llm_output %} · out&nbsp;${{ rates.llm_output.unit_price|per_million }}/1M{% endif %}
             {% if rates.llm_cached_input %} · cached&nbsp;${{ rates.llm_cached_input.unit_price|per_million }}/1M{% endif %}
@@ -24,35 +24,39 @@
                 {{ rates.primary.source }}
               </span>
             {% endif %}
-            <button class="btn btn-xs btn-ghost ml-1"
-                    title="Override pricing for this team"
-                    hx-get="{% url 'service_providers:pricing_override_form' request.team.slug model.id %}"
-                    hx-target="#pricing_override_modal_body"
-                    hx-swap="innerHTML"
-                    onclick="pricing_override_modal.showModal()">
-              <i class="fa-solid fa-pencil"></i>
-            </button>
-            {% if rates.has_team_override %}
-              <button class="btn btn-xs btn-ghost"
-                      title="Revert to global pricing"
-                      hx-post="{% url 'service_providers:pricing_revert' request.team.slug model.id %}"
-                      hx-target="#model_{{ model.id }}"
-                      hx-swap="outerHTML"
-                      hx-confirm="Remove the team override and fall back to the global rate?">
-                <i class="fa-solid fa-rotate-left"></i>
+            {% if not model.deprecated %}
+              <button class="btn btn-xs btn-ghost ml-1"
+                      title="Override pricing for this team"
+                      hx-get="{% url 'service_providers:pricing_override_form' request.team.slug model.id %}"
+                      hx-target="#pricing_override_modal_body"
+                      hx-swap="innerHTML"
+                      onclick="pricing_override_modal.showModal()">
+                <i class="fa-solid fa-pencil"></i>
               </button>
+              {% if rates.has_team_override %}
+                <button class="btn btn-xs btn-ghost"
+                        title="Revert to global pricing"
+                        hx-post="{% url 'service_providers:pricing_revert' request.team.slug model.id %}"
+                        hx-target="#model_{{ model.id }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Remove the team override and fall back to the global rate?">
+                  <i class="fa-solid fa-rotate-left"></i>
+                </button>
+              {% endif %}
             {% endif %}
           </div>
         {% else %}
-          <div class="text-xs text-yellow-800 mt-0.5" data-testid="unpriced-{{ model.id }}">
+          <div class="text-xs {% if not model.deprecated %}text-yellow-800 {% endif %}mt-0.5" data-testid="unpriced-{{ model.id }}">
             No pricing configured
-            <button class="btn btn-xs btn-ghost ml-1"
-                    hx-get="{% url 'service_providers:pricing_override_form' request.team.slug model.id %}"
-                    hx-target="#pricing_override_modal_body"
-                    hx-swap="innerHTML"
-                    onclick="pricing_override_modal.showModal()">
-              Set pricing
-            </button>
+            {% if not model.deprecated %}
+              <button class="btn btn-xs btn-ghost ml-1"
+                      hx-get="{% url 'service_providers:pricing_override_form' request.team.slug model.id %}"
+                      hx-target="#pricing_override_modal_body"
+                      hx-swap="innerHTML"
+                      onclick="pricing_override_modal.showModal()">
+                Set pricing
+              </button>
+            {% endif %}
           </div>
         {% endif %}
       {% endwith %}
