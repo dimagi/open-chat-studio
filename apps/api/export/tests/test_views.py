@@ -9,9 +9,11 @@ from django.urls import resolve, reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig
 from apps.experiments.models import Participant
 from apps.pipelines.models import Pipeline
 from apps.teams.export import seal as seal_mod
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ParticipantFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
@@ -240,3 +242,27 @@ def test_updated_at_id_cursor_pages_ties_without_skip_or_repeat():
             break
 
     assert sorted(collected) == sorted(p.id for p in parts)  # each tied row exactly once
+
+
+def test_document_sources_resource_seals_config():
+    """A document_sources row seals its config field through the HTTP layer and is team-scoped."""
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_pem = private.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    team = TeamWithUsersFactory(public_key=public_pem.decode())
+    collection = CollectionFactory(team=team)
+    secret_token = "ghp_supersecrettoken"
+    config = DocumentSourceConfig(
+        github=GitHubSourceConfig(repo_url="https://github.com/dimagi/open-chat-studio", branch=secret_token)
+    )
+    DocumentSourceFactory(team=team, collection=collection, config=config)
+    client = ApiTestClient(_admin(team), team)
+    response = client.get(_resource_url("document_sources"))
+    assert response.status_code == 200
+    sealed = response.json()["results"][0]["config"]
+    # The response must be an opaque sealed token, not plaintext config.
+    assert secret_token not in str(sealed)
+    unsealed = seal_mod.unseal(sealed, private)
+    assert unsealed["github"]["branch"] == secret_token

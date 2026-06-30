@@ -130,3 +130,11 @@ class ExperimentSessionFactory(factory.django.DjangoModelFactory):
         "apps.utils.factories.channels.ExperimentChannelFactory", team=factory.SelfAttribute("..team")
     )
     platform = factory.LazyAttribute(lambda obj: obj.experiment_channel.platform)
+
+
+class ChatAttachmentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "chat.ChatAttachment"
+
+    chat = factory.SubFactory(ChatFactory)
+    tool_type = "code_interpreter"

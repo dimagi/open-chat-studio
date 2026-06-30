@@ -1,4 +1,5 @@
 import factory
+from django.utils import timezone
 from factory.django import DjangoModelFactory
 
 from apps.annotations.models import Tag
@@ -12,6 +13,7 @@ from apps.evaluations.models import (
     EvaluationMessage,
     EvaluationResult,
     EvaluationRun,
+    EvaluationRunAggregate,
     Evaluator,
     EvaluatorTagRule,
 )
@@ -186,3 +188,12 @@ class DatasetAutoPopulationRuleFactory(DjangoModelFactory):
         evaluation_mode="session",
     )
     source_experiment = factory.SubFactory(ExperimentFactory, team=factory.SelfAttribute("..team"))
+
+
+class EvaluationRunAggregateFactory(DjangoModelFactory):
+    class Meta:
+        model = EvaluationRunAggregate
+
+    run = factory.SubFactory(EvaluationRunFactory)
+    evaluator = factory.SubFactory(EvaluatorFactory, team=factory.SelfAttribute("..run.team"))
+    computed_at = factory.LazyFunction(timezone.now)

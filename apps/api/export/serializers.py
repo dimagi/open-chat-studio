@@ -3,7 +3,12 @@ model and a new field is exported the moment it's added. Output-only; ``.save()`
 
 from functools import cache
 
+import pydantic
+from django.contrib.contenttypes.models import ContentType
+from django.db import models
+from django_pydantic_field.fields import PydanticSchemaField
 from drf_spectacular.utils import OpenApiResponse, extend_schema_field
+from pgvector.django import HalfVectorField, VectorField
 from rest_framework import serializers
 
 from apps.teams.export.manifest import (
@@ -13,10 +18,54 @@ from apps.teams.export.manifest import (
     TEAM_MODEL,
     ManifestEntry,
     entry_model,
+    generic_fk_fields,
     model_has_team_field,
 )
 from apps.teams.export.seal import seal
 from apps.teams.models import Flag
+
+
+def _json_safe(value):
+    """Reduce a pydantic object (e.g. CollectionFile.metadata, DocumentSource.config) to plain JSON
+    data. Non-pydantic values are already JSON-native and pass through."""
+    return value.model_dump(mode="json") if isinstance(value, pydantic.BaseModel) else value
+
+
+class _RelativeFileField(serializers.FileField):
+    """Serialize a file as its stored relative path (``value.name``) rather than the default
+    ``/media/...`` URL. The URL is a presentation form; the importer needs the raw name so it
+    assigns straight back into a FileField -- an absolute ``/media/`` path is rejected by Django's
+    storage safe-join (SuspiciousFileOperation)."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("use_url", False)
+        super().__init__(*args, **kwargs)
+
+
+@extend_schema_field(serializers.ListField(child=serializers.FloatField()))
+class _VectorField(serializers.Field):
+    """Serialize a pgvector column as a plain list of floats. Its DB string form (e.g. ``[0.1,0.2]``)
+    isn't accepted as input, so the importer needs the list to assign it straight back."""
+
+    def to_representation(self, value):
+        # A HalfVectorField reads back as a pgvector HalfVector object, which isn't iterable but
+        # exposes .to_list(); a VectorField reads back as an (iterable) numpy array.
+        if hasattr(value, "to_list"):
+            return value.to_list()
+        return [float(x) for x in value]
+
+    def to_internal_value(self, data):
+        return data
+
+
+class _PydanticSchemaField(serializers.JSONField):
+    """Serialize a django_pydantic_field SchemaField to a plain JSON object. The default JSONField
+    mapping leaves the pydantic model instance in place, which DRF's JSON encoder then mangles into a
+    list of (field, value) pairs (it falls back to iterating the model) that the importer can't read
+    back into the schema. Subclasses JSONField so DRF's encoder/decoder kwargs are still accepted."""
+
+    def to_representation(self, value):
+        return _json_safe(value)
 
 
 class _SecretMixin:
@@ -26,7 +75,7 @@ class _SecretMixin:
         data = super().to_representation(instance)
         public_key = self.context.get("public_key")
         for field in self.secret_fields:
-            data[field] = seal(getattr(instance, field), public_key)
+            data[field] = seal(_json_safe(getattr(instance, field)), public_key)
         return data
 
 
@@ -48,6 +97,23 @@ def _team_role_groups(self, user):
         if membership.team_id == team_id:
             return [group.name for group in membership.groups.all()]
     return []
+
+
+def _content_type_label_resolver(ct_field: str):
+    """Build the method that emits a generic FK's content type as its ``app_label.model`` label
+    instead of the source ContentType pk (which differs between servers). Reads the ``*_id`` attribute
+    and looks the type up by id (cached), so it never triggers a related-object query."""
+    attname = f"{ct_field}_id"
+
+    @extend_schema_field(serializers.CharField())
+    def get_content_type_label(self, instance) -> str | None:
+        type_id = getattr(instance, attname)
+        if type_id is None:
+            return None
+        ct = ContentType.objects.get_for_id(type_id)
+        return f"{ct.app_label}.{ct.model}"
+
+    return get_content_type_label
 
 
 def _is_global_resolver(null_field: str):
@@ -107,6 +173,14 @@ def build_resource_serializer(model):
     attrs: dict[str, object] = {
         "Meta": type("Meta", (), meta_attrs),
         "secret_fields": secret_fields,
+        "serializer_field_mapping": {
+            **serializers.ModelSerializer.serializer_field_mapping,
+            models.FileField: _RelativeFileField,
+            models.ImageField: _RelativeFileField,
+            HalfVectorField: _VectorField,
+            VectorField: _VectorField,
+            PydanticSchemaField: _PydanticSchemaField,
+        },
     }
     # Secret fields are sealed to a base64 string at runtime (see _SecretMixin), so document them as
     # that string rather than their raw model field type.
@@ -119,6 +193,12 @@ def build_resource_serializer(model):
     if spec := GLOBAL_CONFIG.get(label):
         attrs["is_global"] = serializers.SerializerMethodField()
         attrs["get_is_global"] = _is_global_resolver(spec.null_field)
+
+    # A generic FK's content type goes out as its model label, not the source ContentType pk. The
+    # object-id column keeps its default (the source target-row pk); the importer resolves both.
+    for ct_field, _fk_field in generic_fk_fields(model):
+        attrs[ct_field] = serializers.SerializerMethodField()
+        attrs[f"get_{ct_field}"] = _content_type_label_resolver(ct_field)
 
     return type(f"{component_name(model)}DetailSerializer", (_SecretMixin, serializers.ModelSerializer), attrs)
 
