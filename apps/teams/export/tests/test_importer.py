@@ -6,15 +6,17 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.db.models.signals import post_save
 
 from apps.annotations.models import UserComment
 from apps.api.export.serializers import build_resource_serializer
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ConsentForm, ExperimentSession
+from apps.human_annotations.models import AnnotationQueue
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
-from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey
+from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
@@ -332,7 +334,7 @@ def _chat_row(source_id=77, translated_languages=None, metadata=None):
     }
 
 
-def _session_row(source_id=33, experiment_src=11, participant_src=22, chat_src=77):
+def _session_row(source_id=33, experiment_src=11, participant_src=22, chat_src=77, **extra):
     return {
         "id": source_id,
         "experiment": experiment_src,
@@ -341,6 +343,7 @@ def _session_row(source_id=33, experiment_src=11, participant_src=22, chat_src=7
         "chat": chat_src,
         "created_at": PAST,
         "updated_at": PAST,
+        **extra,
     }
 
 
@@ -398,39 +401,55 @@ def _chat_message_row(source_id, chat_src, message_type, created_at):
     }
 
 
-def test_import_chat_messages_sets_last_activity_at_to_last_human_message_timestamp(store):
-    """After importing chat messages, each session's last_activity_at should be set
-    independently to its own most recent HUMAN message timestamp, not the import time."""
-    session1_newest_human = datetime(2022, 6, 15, tzinfo=UTC)
-    session1_ai_after = datetime(2023, 1, 1, tzinfo=UTC)
-    session2_newest_human = datetime(2021, 11, 30, tzinfo=UTC)
+def test_muted_import_keeps_session_activity_timestamps_from_source(store):
+    """Within mute_signals, importing chat messages no longer fires the ChatMessage post_save handler
+    that would otherwise stamp the session's activity timestamps to the import time -- so the session
+    keeps the first/last_activity_at copied straight from its source row."""
+    source_first = datetime(2020, 5, 1, tzinfo=UTC)
+    source_last = datetime(2022, 6, 15, tzinfo=UTC)
 
     importer = Importer(store)
-    importer.import_rows("teams.team", [_team_row()])
-    team_pk = store.get_target("teams.team", 9001)
-    _seed_session_fks(store, team_pk)
-    importer.import_rows("chat.chat", [_chat_row(source_id=77), _chat_row(source_id=78)])
-    importer.import_rows(
-        "experiments.experimentsession",
-        [_session_row(source_id=33, chat_src=77), _session_row(source_id=34, chat_src=78)],
-    )
+    with mute_signals():
+        importer.import_rows("teams.team", [_team_row()])
+        team_pk = store.get_target("teams.team", 9001)
+        _seed_session_fks(store, team_pk)
+        importer.import_rows("chat.chat", [_chat_row(source_id=77)])
+        importer.import_rows(
+            "experiments.experimentsession",
+            [
+                _session_row(
+                    source_id=33,
+                    chat_src=77,
+                    first_activity_at=source_first.isoformat(),
+                    last_activity_at=source_last.isoformat(),
+                )
+            ],
+        )
+        importer.import_rows("chat.chatmessage", [_chat_message_row(101, 77, "human", PAST)])
 
-    importer.import_rows(
-        "chat.chatmessage",
-        [
-            # Session 1: two human messages; newest_human is the expected last_activity_at
-            _chat_message_row(101, 77, "human", datetime(2020, 5, 1, tzinfo=UTC).isoformat()),
-            _chat_message_row(102, 77, "human", session1_newest_human.isoformat()),
-            _chat_message_row(103, 77, "ai", session1_ai_after.isoformat()),  # AI after newest human
-            # Session 2: one human message
-            _chat_message_row(104, 78, "human", session2_newest_human.isoformat()),
-        ],
-    )
+    session = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 33))
+    assert session.first_activity_at == source_first
+    assert session.last_activity_at == source_last
 
-    session1 = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 33))
-    session2 = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 34))
-    assert session1.last_activity_at == session1_newest_human
-    assert session2.last_activity_at == session2_newest_human
+
+def test_mute_signals_suppresses_then_restores_receivers(store):
+    """mute_signals clears model-signal receivers inside the block and restores them afterwards, so
+    normal app behaviour resumes once the import is done."""
+    fired = []
+
+    def _record(sender, instance, **kwargs):
+        fired.append(instance)
+
+    post_save.connect(_record, sender=Team, dispatch_uid="test-mute-signals")
+    try:
+        with mute_signals():
+            TeamFactory()
+        assert fired == []  # suppressed inside the block
+
+        TeamFactory()
+        assert len(fired) == 1  # reconnected after the block
+    finally:
+        post_save.disconnect(_record, sender=Team, dispatch_uid="test-mute-signals")
 
 
 def test_default_consent_form_maps_to_auto_created_default(store):
@@ -588,6 +607,44 @@ def test_generic_fk_with_untranslated_target_raises(store):
         importer.import_rows("annotations.usercomment", [_comment_row(source_id=500, user_src=60)])
 
 
+def _annotation_queue_row(source_id, assignees, name="Queue"):
+    return {
+        "id": source_id,
+        "name": name,
+        "assignees": assignees,
+        "created_by": None,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+
+
+def test_m2m_members_translate_to_target_pks(store):
+    """An m2m field's members are remapped from source pks to their imported target pks, so the link
+    is recreated against the target's rows rather than the (meaningless) source ids."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    user_a, user_b = UserFactory(), UserFactory()
+    store.record("users.customuser", 71, user_a.id)
+    store.record("users.customuser", 72, user_b.id)
+
+    importer.import_rows("human_annotations.annotationqueue", [_annotation_queue_row(600, assignees=[71, 72])])
+
+    queue = AnnotationQueue.objects.get(pk=store.get_target("human_annotations.annotationqueue", 600))
+    assert set(queue.assignees.values_list("id", flat=True)) == {user_a.id, user_b.id}
+
+
+def test_m2m_member_with_untranslated_target_raises(store):
+    """A populated m2m member whose (synced) target was never imported fails loudly rather than
+    silently dropping the link -- matching scalar FK resolution."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    store.record("users.customuser", 71, UserFactory().id)
+    # source user 72 is deliberately never recorded.
+
+    with pytest.raises(UnresolvedForeignKey):
+        importer.import_rows("human_annotations.annotationqueue", [_annotation_queue_row(600, assignees=[71, 72])])
+
+
 # ---------------------------------------------------------------------------
 # Whole-manifest round-trip test
 # ---------------------------------------------------------------------------
@@ -709,21 +766,23 @@ def test_registry_covers_every_manifest_entry():
 def test_every_manifest_entry_imports(store, keypair):
     """Serialize one factory-built row per manifest model through its real export serializer (exactly
     as the endpoint would), import them all in manifest order, and assert every entry landed -- a
-    round-trip smoke test over the whole manifest."""
+    round-trip smoke test over the whole manifest. Runs under mute_signals like the real command, so
+    it also catches any model that secretly relies on a signal to populate a field on import."""
     public_key, private_key = keypair
     manifest_labels = {e.model for e in MANIFEST_ENTRIES} | {"teams.team"}
     importer = Importer(store, private_key=private_key)
 
-    team = TeamFactory.build()
-    team.pk = 999
-    team_row = dict(build_resource_serializer(Team)(team, context={"public_key": public_key}).data)
-    importer.import_rows("teams.team", [team_row])
-
     mock_ids = {entry.model: 1000 + i for i, entry in enumerate(MANIFEST_ENTRIES)}
     mock_ids["teams.team"] = 999  # the anchor team's source pk
-    for entry in MANIFEST_ENTRIES:
-        row = _serialized_row(entry.model, mock_ids, manifest_labels, public_key)
-        importer.import_rows(entry.model, [row])
+    with mute_signals():
+        team = TeamFactory.build()
+        team.pk = 999
+        team_row = dict(build_resource_serializer(Team)(team, context={"public_key": public_key}).data)
+        importer.import_rows("teams.team", [team_row])
+
+        for entry in MANIFEST_ENTRIES:
+            row = _serialized_row(entry.model, mock_ids, manifest_labels, public_key)
+            importer.import_rows(entry.model, [row])
 
     not_imported = []
     for entry in MANIFEST_ENTRIES:

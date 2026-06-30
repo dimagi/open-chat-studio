@@ -2,6 +2,7 @@
 create or update the row locally, restore its timestamps, and record the FK translation. Kept as
 plain functions plus a thin loop so the transforms can be unit-tested without a database."""
 
+import contextlib
 import copy
 import functools
 from collections.abc import Iterable
@@ -9,12 +10,10 @@ from collections.abc import Iterable
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
-from django.db.models import Exists, OuterRef, Subquery
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
-from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
 from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
@@ -35,6 +34,28 @@ from .translation import FKTranslationStore
 # The team is synced via a dedicated step rather than from MANIFEST_ENTRIES, but it's still a synced
 # target -- include it so FKs pointing at it resolve to the imported team instead of being nulled.
 MANIFEST_LABELS = {entry.model for entry in _ENTRIES} | {TEAM_MODEL}
+
+SIGNALS_TO_MUTE = (pre_save, post_save, pre_delete, post_delete, m2m_changed)
+
+
+@contextlib.contextmanager
+def mute_signals():
+    """Silence Django model signals while importing. The importer replays historical rows, so live
+    side effects keyed on these signals -- session-activity stamping, default-consent-form creation,
+    cache invalidation, m2m audit logging -- would only overwrite imported values or add noise.
+    Receivers are restored on exit. Process-global, so it must not wrap live request handling."""
+    saved = [(sig, sig.receivers) for sig in SIGNALS_TO_MUTE]
+    for sig in SIGNALS_TO_MUTE:
+        with sig.lock:
+            sig.receivers = []
+            sig.sender_receivers_cache.clear()
+    try:
+        yield
+    finally:
+        for sig, receivers in saved:
+            with sig.lock:
+                sig.receivers = receivers
+                sig.sender_receivers_cache.clear()
 
 
 class UnresolvedForeignKey(Exception):
@@ -173,8 +194,6 @@ class Importer:
             if self.private_key and secret_fields:
                 row = unseal_secrets(row, secret_fields, self.private_key)
             self._import_row(model_label, model, row)
-        if model_label == "chat.chatmessage":
-            self._backfill_session_last_activity()
 
     def _import_row(self, model_label: str, model: type[models.Model], row: dict) -> None:
         """Import a single row. A global row is matched to its shared target and only its id
@@ -316,28 +335,30 @@ class Importer:
             field_values["params"] = remap_node_params(field_values["params"], self.store)
 
     def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
-        """Translate each m2m field's source pks to target pks, skipping name-linked fields."""
+        """Translate each m2m field's source pks to target pks, skipping name-linked fields. A member
+        of a synced model that has no translation is an ordering/interruption bug -- raise rather than
+        silently drop the link, matching resolve_fk. Members of deliberately-unsynced models can't be
+        translated and become None for the caller to filter out."""
         m2m_values = {}
         for field in model._meta.many_to_many:
             if field.name in row and field.name not in named:
                 label = field.related_model._meta.label_lower
-                m2m_values[field.name] = [self.store.get_target(label, as_int(pk)) for pk in row[field.name]]
+                m2m_values[field.name] = [self._resolve_m2m_member(field, label, pk) for pk in row[field.name]]
         return m2m_values
+
+    def _resolve_m2m_member(self, field, label: str, source_pk) -> int | None:
+        if label not in MANIFEST_LABELS:
+            return None  # target model deliberately not synced; leave the member out
+        target = self.store.get_target(label, as_int(source_pk))
+        if target is None:
+            raise UnresolvedForeignKey(f"{field.model._meta.label_lower}.{field.name} (m2m) -> {label}:{source_pk}")
+        return target
 
     def _match_global(self, model: type[models.Model], spec: GlobalSpec, row: dict) -> models.Model | None:
         """Find the shared global row on the target by its natural key (scoping field null)."""
         lookup = {f"{spec.null_field}__isnull": True}
         lookup.update({key: row[key] for key in spec.natural_key})
         return model.objects.filter(**lookup).first()
-
-    def _backfill_session_last_activity(self) -> None:
-        human_msgs = ChatMessage.objects.filter(
-            chat=OuterRef("chat_id"),
-            message_type=ChatMessageType.HUMAN,
-        )
-        ExperimentSession.objects.filter(team=self.target_team).filter(Exists(human_msgs)).update(
-            last_activity_at=Subquery(human_msgs.order_by("-created_at").values("created_at")[:1])
-        )
 
     def _apply_named_links(self, model_label: str, instance: models.Model, row: dict) -> None:
         """Re-link the m2m fields serialized as names (see ``_NAMED_LINK_FIELDS``). Their targets --
