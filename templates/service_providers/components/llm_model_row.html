@@ -1,4 +1,4 @@
-{% load default_tags %}
+{% load cost_tracking default_tags %}
 {% comment %}
   One row in the LLM provider model list. Rendered both inside the bulk
   list (llm_models.html) and standalone after HTMX swaps (override / revert
@@ -13,10 +13,10 @@
       {% with rates=pricing_lookup|get_item:model.id %}
         {% if rates %}
           <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            {% if rates.llm_input %}in&nbsp;${{ rates.llm_input.unit_price|floatformat:5 }}/1K{% endif %}
-            {% if rates.llm_output %} · out&nbsp;${{ rates.llm_output.unit_price|floatformat:5 }}/1K{% endif %}
-            {% if rates.llm_cached_input %} · cached&nbsp;${{ rates.llm_cached_input.unit_price|floatformat:5 }}/1K{% endif %}
-            {% if rates.llm_cache_write %} · cache‑write&nbsp;${{ rates.llm_cache_write.unit_price|floatformat:5 }}/1K{% endif %}
+            {% if rates.llm_input %}in&nbsp;${{ rates.llm_input.unit_price|per_million }}/1M{% endif %}
+            {% if rates.llm_output %} · out&nbsp;${{ rates.llm_output.unit_price|per_million }}/1M{% endif %}
+            {% if rates.llm_cached_input %} · cached&nbsp;${{ rates.llm_cached_input.unit_price|per_million }}/1M{% endif %}
+            {% if rates.llm_cache_write %} · cache‑write&nbsp;${{ rates.llm_cache_write.unit_price|per_million }}/1M{% endif %}
             <span class="badge badge-xs badge-outline ml-1" data-testid="pricing-source-{{ model.id }}">
               {{ rates.primary.source }}{% if rates.primary.scope == "team" %} (override){% endif %}
             </span>
