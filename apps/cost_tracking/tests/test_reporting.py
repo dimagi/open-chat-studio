@@ -102,7 +102,7 @@ class TestCostSummary:
         rule = PricingRule.objects.create(
             team=None,
             provider_type="openai",
-            model_name="gpt-4o-mini",
+            model_name="test-priced-model",
             service_kind=ServiceKind.LLM_INPUT,
             unit_price="0.0001",
         )
