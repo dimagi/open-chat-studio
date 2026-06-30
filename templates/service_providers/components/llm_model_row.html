@@ -44,7 +44,7 @@
             {% endif %}
           </div>
         {% else %}
-          <div class="text-xs text-amber-600 mt-0.5" data-testid="unpriced-{{ model.id }}">
+          <div class="text-xs text-yellow-800 mt-0.5" data-testid="unpriced-{{ model.id }}">
             No pricing configured
             <button class="btn btn-xs btn-ghost ml-1"
                     hx-get="{% url 'service_providers:pricing_override_form' request.team.slug model.id %}"
