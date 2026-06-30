@@ -17,9 +17,13 @@
             {% if rates.llm_output %} · out&nbsp;${{ rates.llm_output.unit_price|per_million }}/1M{% endif %}
             {% if rates.llm_cached_input %} · cached&nbsp;${{ rates.llm_cached_input.unit_price|per_million }}/1M{% endif %}
             {% if rates.llm_cache_write %} · cache‑write&nbsp;${{ rates.llm_cache_write.unit_price|per_million }}/1M{% endif %}
-            <span class="badge badge-xs badge-outline ml-1" data-testid="pricing-source-{{ model.id }}">
-              {{ rates.primary.source }}{% if rates.primary.scope == "team" %} (override){% endif %}
-            </span>
+            {% if rates.primary.source != 'seed' or rates.primary.scope == 'team' %}
+              <span class="badge badge-xs badge-outline ml-1 tooltip"
+                    data-testid="pricing-source-{{ model.id }}"
+                    {% if rates.primary.scope == "team" %}data-tip="Custom pricing override set for this team"{% elif rates.primary.source == "manual" %}data-tip="Pricing was entered manually"{% elif rates.primary.source == "import" %}data-tip="Pricing was imported from an external source"{% endif %}>
+                {{ rates.primary.source }}
+              </span>
+            {% endif %}
             <button class="btn btn-xs btn-ghost ml-1"
                     title="Override pricing for this team"
                     hx-get="{% url 'service_providers:pricing_override_form' request.team.slug model.id %}"
