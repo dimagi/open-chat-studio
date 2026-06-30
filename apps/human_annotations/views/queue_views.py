@@ -142,6 +142,7 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Up
             return self.form_invalid(form)
         return super().form_valid(form)
 
+
 class DeleteAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "human_annotations.delete_annotationqueue"
 
