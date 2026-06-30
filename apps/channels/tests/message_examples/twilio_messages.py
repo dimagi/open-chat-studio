@@ -42,10 +42,15 @@ def _document_message(message: dict, mime_type: str = "application/pdf"):
 class Whatsapp:
     to = "whatsapp:+14155238886"
     from_ = "whatsapp:+27456897512"
+    bsuid = "US.13491208655302741918"
 
     @staticmethod
     def text_message():
-        return _text_message(to=Whatsapp.to, from_=Whatsapp.from_)
+        # Post-rollout (June 2026+) Twilio webhooks include the BSUID in ExternalUserId
+        # (prefixed with the channel, like From/To) alongside the phone in From.
+        message = _text_message(to=Whatsapp.to, from_=Whatsapp.from_)
+        message["ExternalUserId"] = f"whatsapp:{Whatsapp.bsuid}"
+        return message
 
     @staticmethod
     def image_message():

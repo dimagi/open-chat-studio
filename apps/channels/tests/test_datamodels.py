@@ -1,6 +1,13 @@
 import pytest
 
-from apps.channels.datamodels import BaseMessage, is_non_conversational_whatsapp_message
+from apps.channels.datamodels import (
+    BaseMessage,
+    TwilioMessage,
+    WhatsAppMessage,
+    is_non_conversational_whatsapp_message,
+    looks_like_bsuid,
+)
+from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import meta_cloud_api_messages, turnio_messages
 
 
@@ -55,3 +62,84 @@ class TestIsNonConversationalWhatsAppMessage:
     def test_false_when_no_messages(self):
         assert is_non_conversational_whatsapp_message({}) is False
         assert is_non_conversational_whatsapp_message({"messages": []}) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("US.13491208655302741918", True, id="standard_bsuid"),
+        pytest.param("US.ENT.11815799212886844830", True, id="parent_bsuid"),
+        pytest.param("ZA.abc123XYZ", True, id="alphanumeric_tail"),
+        pytest.param("US." + "a" * 128, True, id="max_tail_length"),
+        pytest.param("+1.212.555.2368", False, id="phone_like_value"),
+        pytest.param("us.13491208655302741918", False, id="lowercase_country"),
+        pytest.param("USA.13491208655302741918", False, id="three_letter_country"),
+        pytest.param("US.13491208655302741918.extra", False, id="period_in_tail"),
+        pytest.param("US.has-dash", False, id="dash_in_tail"),
+        pytest.param("US." + "a" * 129, False, id="tail_exceeds_128_chars"),
+        pytest.param("US.", False, id="empty_tail"),
+        pytest.param("27456897512", False, id="plain_wa_id"),
+        pytest.param("+27456897512", False, id="e164_number"),
+        pytest.param("", False, id="empty_string"),
+    ],
+)
+def test_looks_like_bsuid(value, expected):
+    assert looks_like_bsuid(value) is expected
+
+
+class TestWhatsAppMessageParseBSUID:
+    """When the webhook carries a BSUID (from_user_id) it is the participant_id and the phone
+    (wa_id) is captured separately for sending. When it doesn't (Turn.io, pre-rollout traffic),
+    the participant_id falls back to the phone, as participants were historically keyed."""
+
+    BSUID = "US.13491208655302741918"
+
+    def test_meta_payload_uses_bsuid_as_participant_id_and_captures_phone(self):
+        parsed = WhatsAppMessage.parse(meta_cloud_api_messages.text_message_value())
+        assert parsed.participant_id == self.BSUID
+        assert parsed.remote_id == "27456897512"
+
+    def test_turnio_payload_uses_bsuid_as_participant_id_and_captures_phone(self):
+        parsed = WhatsAppMessage.parse(turnio_messages.text_message())
+        assert parsed.participant_id == self.BSUID
+        assert parsed.remote_id == "27456897512"
+
+    def test_falls_back_to_phone_when_no_bsuid(self):
+        message_data = {
+            "contacts": [{"wa_id": "27456897512", "profile": {"name": "User"}}],
+            "messages": [{"from": "27456897512", "id": "x", "timestamp": "1", "type": "text", "text": {"body": "Hi"}}],
+        }
+        parsed = WhatsAppMessage.parse(message_data)
+        assert parsed.participant_id == "27456897512"
+        assert parsed.remote_id == "27456897512"
+
+
+class TestTwilioMessageParseBSUID:
+    BUSINESS = "whatsapp:+14155238886"
+    BSUID = "US.13491208655302741918"
+
+    def test_whatsapp_uses_external_user_id_bsuid_and_captures_phone(self):
+        message = {
+            "From": "whatsapp:+27456897512",
+            "To": self.BUSINESS,
+            "Body": "Hello",
+            "ExternalUserId": f"whatsapp:{self.BSUID}",
+        }
+        parsed = TwilioMessage.parse(message)
+        assert parsed.participant_id == self.BSUID
+        assert parsed.remote_id == "+27456897512"
+
+    def test_whatsapp_without_external_user_id_falls_back_to_phone(self):
+        """Pre-rollout Twilio webhooks carry no ExternalUserId; the phone becomes the
+        participant_id, matching how participants were historically keyed."""
+        message = {"From": "whatsapp:+27456897512", "To": self.BUSINESS, "Body": "Hello"}
+        parsed = TwilioMessage.parse(message)
+        assert parsed.participant_id == "+27456897512"
+        assert parsed.remote_id == "+27456897512"
+
+    def test_facebook_messenger_has_no_remote_id(self):
+        message = {"From": "messenger:1234567890", "To": "messenger:9876543210", "Body": "Hi"}
+        parsed = TwilioMessage.parse(message)
+        assert parsed.platform == ChannelPlatform.FACEBOOK
+        assert parsed.participant_id == "1234567890"
+        assert parsed.remote_id is None

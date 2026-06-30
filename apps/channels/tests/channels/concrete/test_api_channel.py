@@ -176,7 +176,7 @@ class TestApiChannelParticipantUser:
 
 @pytest.mark.django_db()
 class TestApiChannelStartNewSession:
-    @patch("apps.channels.channels_v2.api_channel._start_experiment_session")
+    @patch("apps.channels.channels_v2.api_channel.start_experiment_session")
     def test_start_new_session_delegates(self, mock_start):
         mock_session = MagicMock()
         mock_session.chat = MagicMock()
@@ -194,7 +194,7 @@ class TestApiChannelStartNewSession:
         mock_start.assert_called_once()
         assert result == mock_session
 
-    @patch("apps.channels.channels_v2.api_channel._start_experiment_session")
+    @patch("apps.channels.channels_v2.api_channel.start_experiment_session")
     def test_start_new_session_with_version_sets_metadata(self, mock_start):
         mock_session = MagicMock()
         mock_start.return_value = mock_session
@@ -208,7 +208,7 @@ class TestApiChannelStartNewSession:
 
         mock_session.chat.set_metadata.assert_called_once()
 
-    @patch("apps.channels.channels_v2.api_channel._start_experiment_session")
+    @patch("apps.channels.channels_v2.api_channel.start_experiment_session")
     def test_start_new_session_default_version_no_metadata(self, mock_start):
         mock_session = MagicMock()
         mock_start.return_value = mock_session

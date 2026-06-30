@@ -105,7 +105,7 @@ class TestWebChannelCapabilities:
         assert caps.supported_message_types == [MESSAGE_TYPES.TEXT]
 
 
-_START_SESSION = "apps.channels.channels_v2.web_channel._start_experiment_session"
+_START_SESSION = "apps.channels.channels_v2.web_channel.start_experiment_session"
 _CHECK_SEED = "apps.channels.channels_v2.web_channel.WebChannel.check_and_process_seed_message"
 _GET_WEB_CHANNEL = "apps.channels.models.ExperimentChannelObjectManager.get_team_web_channel"
 
@@ -145,7 +145,7 @@ class TestWebChannelStartNewSession:
         )
 
         mock_get_channel.assert_called_once_with(mock_experiment.team)
-        # Verify the web channel was passed to _start_experiment_session
+        # Verify the web channel was passed to start_experiment_session
         call_args = mock_start.call_args
         assert call_args[0][1] == mock_channel  # second positional arg is experiment_channel
 
@@ -234,7 +234,7 @@ class TestWebChannelStartNewSession:
             metadata=metadata,
         )
 
-        # metadata should be passed through to _start_experiment_session
+        # metadata should be passed through to start_experiment_session
         assert mock_start.call_args.kwargs.get("metadata") == metadata
 
 
