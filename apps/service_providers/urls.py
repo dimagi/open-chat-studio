@@ -11,6 +11,21 @@ urlpatterns = [
         views.delete_llm_provider_model,
         name="llm_provider_model_delete",
     ),
+    path(
+        "llm_provider_model/<int:pk>/pricing/override/",
+        views.PricingOverrideView.as_view(),
+        name="pricing_override_form",
+    ),
+    path(
+        "llm_provider_model/<int:pk>/pricing/override/submit/",
+        views.PricingOverrideView.as_view(),
+        name="pricing_override",
+    ),
+    path(
+        "llm_provider_model/<int:pk>/pricing/revert/",
+        views.pricing_revert,
+        name="pricing_revert",
+    ),
     path("<slug:provider_type>/table/", views.ServiceProviderTableView.as_view(), name="table"),
     path("<slug:provider_type>/create/<str:subtype>/", views.CreateServiceProvider.as_view(), name="new"),
     path("<slug:provider_type>/<int:pk>/", views.CreateServiceProvider.as_view(), name="edit"),
