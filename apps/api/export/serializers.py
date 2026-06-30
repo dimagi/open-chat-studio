@@ -42,6 +42,7 @@ class _RelativeFileField(serializers.FileField):
         super().__init__(*args, **kwargs)
 
 
+@extend_schema_field(serializers.ListField(child=serializers.FloatField()))
 class _VectorField(serializers.Field):
     """Serialize a pgvector column as a plain list of floats. Its DB string form (e.g. ``[0.1,0.2]``)
     isn't accepted as input, so the importer needs the list to assign it straight back."""
