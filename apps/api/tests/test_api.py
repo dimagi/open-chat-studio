@@ -184,8 +184,7 @@ def test_update_participant_data_returns_404():
     assert experiment.participantdata_set.filter(participant=participant).exists() is False
 
 
-@pytest.mark.django_db()
-def test_create_participant_schedules(experiment):
+def _create_participant_schedules(experiment):
     identifier = "part1"
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
@@ -238,8 +237,13 @@ def test_create_participant_schedules(experiment):
 
 
 @pytest.mark.django_db()
+def test_create_participant_schedules(experiment):
+    _create_participant_schedules(experiment)
+
+
+@pytest.mark.django_db()
 def test_update_participant_schedules(experiment):
-    schedules = test_create_participant_schedules(experiment)
+    schedules = _create_participant_schedules(experiment)
 
     identifier = "part1"
     user = experiment.team.members.first()
