@@ -79,8 +79,8 @@ def translations(c: Context):
 
 @task
 def schema(c: Context):
-    """Generate a per-version OpenAPI schema file for each API version."""
-    for version in ("v1", "v2"):
+    """Generate an OpenAPI schema file per API surface (v1/v2, plus the standalone export surface)."""
+    for version in ("v1", "v2", "export"):
         c.run(f"python manage.py spectacular --api-version {version} --file api-schemas/{version}.yml --validate")
 
 

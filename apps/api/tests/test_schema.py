@@ -11,7 +11,14 @@ def test_schema_filters():
     assert "/cms/" not in response_yaml
 
 
-@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize(
+    "version",
+    [
+        pytest.param("v1", id="v1"),
+        pytest.param("v2", id="v2"),
+        pytest.param("export", id="export"),
+    ],
+)
 def test_schema_is_up_to_date_and_valid(pytestconfig, tmp_path, version):
     """If this test fails run `inv schema` to update the schema."""
     path = tmp_path / f"{version}.yml"

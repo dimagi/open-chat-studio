@@ -41,3 +41,19 @@ class URLPathVersioning(DRFURLPathVersioning):
         # Skip DRF's version-kwarg injection: our version lives in the path text, not a kwarg, so
         # always emit the canonical unversioned URL (BaseVersioning's behaviour).
         return BaseVersioning.reverse(self, *args, **kwargs)
+
+
+class ExportVersioning(URLPathVersioning):
+    """Versioning for the standalone export surface at ``/api/export/`` (the team data sync).
+
+    The export API isn't part of the versioned v1/v2 surface -- it sits at its own root-level path.
+    But drf-spectacular separates schemas by version, so to give export its own schema (and keep it
+    out of the v1/v2 schemas) we report a constant ``"export"`` pseudo-version. The export schema
+    view is served with ``api_version="export"``, so only these views land in it. At runtime the
+    value is harmless: the export views never read ``request.version``.
+    """
+
+    EXPORT_VERSION = "export"
+
+    def determine_version(self, request, *args, **kwargs):
+        return self.EXPORT_VERSION
