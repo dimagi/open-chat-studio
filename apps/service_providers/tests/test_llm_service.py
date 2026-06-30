@@ -80,6 +80,33 @@ def test_voyage_ai_service_returns_local_index_manager():
     assert isinstance(manager, VoyageAILocalIndexManager)
 
 
+@pytest.mark.parametrize(
+    ("provider_type", "config", "expected_slug"),
+    [
+        pytest.param(LlmProviderTypes.openai, {"openai_api_key": "test"}, "openai", id="openai"),
+        pytest.param(
+            LlmProviderTypes.anthropic,
+            {"anthropic_api_key": "test", "anthropic_api_base": "https://api.anthropic.com"},
+            "anthropic",
+            id="anthropic",
+        ),
+        pytest.param(LlmProviderTypes.groq, {"openai_api_key": "test"}, "groq", id="groq"),
+        pytest.param(LlmProviderTypes.perplexity, {"openai_api_key": "test"}, "perplexity", id="perplexity"),
+    ],
+)
+def test_get_llm_service_sets_provider_type_post_construction(provider_type, config, expected_slug):
+    """Regression: Pydantic v2 silently drops the leading-underscore `_type`
+    from init kwargs, so the factory has to assign it post-construction.
+    Without that, every service ends up with `_type='unknown'` and
+    `metadata['ocs_provider_type']` is wrong - cost tracking misattributes
+    every UsageRecord to the unknown bucket and no PricingRule matches.
+    """
+    service = provider_type.get_llm_service(config)
+    assert service._type == expected_slug
+    chat_model = service.get_chat_model("some-model")
+    assert chat_model.metadata["ocs_provider_type"] == expected_slug
+
+
 def test_anthropic_service_returns_prompt_caching_middleware():
     from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 

@@ -125,28 +125,39 @@ class LlmProviderTypes(LlmProviderType, Enum):
     def get_llm_service(self, config: dict) -> "llm_service.LlmService":
         from . import llm_service  # noqa: PLC0415 - lazy: avoids loading heavy langchain deps at startup
 
-        config = {**config, **self.additional_config, "_type": self.slug}
+        config = {**config, **self.additional_config}
         try:
-            match self:
-                case LlmProviderTypes.openai:
-                    return llm_service.OpenAILlmService(**config)
-                case LlmProviderTypes.azure:
-                    return llm_service.AzureLlmService(**config)
-                case LlmProviderTypes.anthropic:
-                    return llm_service.AnthropicLlmService(**config)
-                case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
-                    return llm_service.OpenAIGenericService(**config)
-                case LlmProviderTypes.deepseek:
-                    return llm_service.DeepSeekLlmService(**config)
-                case LlmProviderTypes.google:
-                    return llm_service.GoogleLlmService(**config)
-                case LlmProviderTypes.google_vertex_ai:
-                    return llm_service.GoogleVertexAILlmService(**config)
-                case LlmProviderTypes.voyage:
-                    return llm_service.VoyageAILlmService(**config)
+            service = self._build_llm_service(llm_service, config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self.slug, str(e)) from e
-        raise ServiceProviderConfigError(self.slug, "No chat model configured")
+        if service is None:
+            raise ServiceProviderConfigError(self.slug, "No chat model configured")
+        # Pydantic v2 silently drops leading-underscore kwargs at init time, so
+        # `_type` must be assigned post-construction. The chat-model metadata
+        # tag in `LlmService._tag_chat_model` depends on this being the OCS
+        # provider slug, not the class default of "unknown".
+        service._type = self.slug
+        return service
+
+    def _build_llm_service(self, llm_service, config: dict) -> "llm_service.LlmService | None":
+        match self:
+            case LlmProviderTypes.openai:
+                return llm_service.OpenAILlmService(**config)
+            case LlmProviderTypes.azure:
+                return llm_service.AzureLlmService(**config)
+            case LlmProviderTypes.anthropic:
+                return llm_service.AnthropicLlmService(**config)
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+                return llm_service.OpenAIGenericService(**config)
+            case LlmProviderTypes.deepseek:
+                return llm_service.DeepSeekLlmService(**config)
+            case LlmProviderTypes.google:
+                return llm_service.GoogleLlmService(**config)
+            case LlmProviderTypes.google_vertex_ai:
+                return llm_service.GoogleVertexAILlmService(**config)
+            case LlmProviderTypes.voyage:
+                return llm_service.VoyageAILlmService(**config)
+        return None
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
