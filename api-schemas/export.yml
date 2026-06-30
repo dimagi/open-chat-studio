@@ -307,7 +307,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExperimentChannelList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:
@@ -599,7 +599,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DocumentSourceList'
           description: ''
-        '409':
+        '400':
           content:
             application/json:
               schema:
@@ -4050,7 +4050,10 @@ components:
           maximum: 2147483647
           minimum: 0
         embedding:
-          type: string
+          type: array
+          items:
+            type: number
+            format: double
         is_archived:
           type: boolean
         file:
