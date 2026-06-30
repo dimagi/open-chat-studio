@@ -5,6 +5,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 import httpx
+import requests
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from telebot.util import antiflood, smart_split
@@ -37,11 +38,17 @@ class TelegramCallbacks(ChannelCallbacks):
     def __init__(self, telegram_bot: TeleBot):
         self.telegram_bot = telegram_bot
 
+    def _safe_send_chat_action(self, recipient: str, action: str) -> None:
+        try:
+            self.telegram_bot.send_chat_action(chat_id=recipient, action=action)
+        except (requests.exceptions.RequestException, ConnectionError) as e:
+            logger.warning("Failed to send chat action '%s' to %s: %s", action, recipient, e)
+
     def transcription_started(self, recipient: str) -> None:
-        self.telegram_bot.send_chat_action(chat_id=recipient, action="upload_voice")
+        self._safe_send_chat_action(recipient, "upload_voice")
 
     def on_submit_input_to_llm(self, recipient: str) -> None:
-        self.telegram_bot.send_chat_action(chat_id=recipient, action="typing")
+        self._safe_send_chat_action(recipient, "typing")
 
     def echo_transcript(self, recipient: str, transcript: str) -> None:
         # Telegram supports reply-to threading via the inbound message id, but
