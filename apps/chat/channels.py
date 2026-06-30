@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 import emoji
 import httpx
-from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
@@ -32,7 +31,6 @@ from apps.chat.exceptions import (
     ParticipantNotAllowedException,
     ServiceWindowExpiredException,
     UserReportableError,
-    VersionedExperimentSessionsNotAllowedException,
 )
 from apps.chat.models import Chat, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
@@ -45,6 +43,7 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
+from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -172,11 +171,10 @@ class ChannelBase(ABC):
         session_external_id: str | None = None,
         metadata: dict | None = None,
     ):
-        return _start_experiment_session(
+        return start_experiment_session(
             working_experiment,
             experiment_channel,
-            participant_identifier,
-            participant_user,
+            Participant(identifier=participant_identifier, user=participant_user),
             session_status,
             timezone,
             session_external_id,
@@ -344,7 +342,11 @@ class ChannelBase(ABC):
 
             channel_cls = NewApiChannel
         elif platform == "sureadhere":
-            channel_cls = SureAdhereChannel
+            from apps.channels.channels_v2.sureadhere_channel import (  # noqa: PLC0415
+                SureAdhereChannel as NewSureAdhereChannel,
+            )
+
+            channel_cls = NewSureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
@@ -1245,23 +1247,6 @@ class WhatsappChannel(ChannelBase):
             logger.exception("Failed to send typing indicator")
 
 
-class SureAdhereChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
-        from_ = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
-        to_patient = self.participant_identifier
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_,
-            to=to_patient,
-            platform=ChannelPlatform.SUREADHERE,
-            last_activity_at=self.last_activity_at,
-        )
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
-
-
 class FacebookMessengerChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
@@ -1444,70 +1429,6 @@ class CommCareConnectChannel(ChannelBase):
         if not self.participant_data.encryption_key:
             self.participant_data.generate_encryption_key()
         return self.participant_data.get_encryption_key_bytes()
-
-
-def _start_experiment_session(
-    working_experiment: Experiment,
-    experiment_channel: ExperimentChannel,
-    participant_identifier: str,
-    participant_user: CustomUser | None = None,
-    session_status: SessionStatus = SessionStatus.ACTIVE,
-    timezone: str | None = None,
-    session_external_id: str | None = None,
-    metadata: dict | None = None,
-) -> ExperimentSession:
-    if working_experiment.is_a_version:
-        raise VersionedExperimentSessionsNotAllowedException(
-            message="A session cannot be linked to an experiment version. "
-        )
-
-    team = working_experiment.team
-    if not participant_identifier and not participant_user:
-        raise ValueError("Either participant_identifier or participant_user must be specified!")
-
-    if participant_user and participant_identifier != participant_user.email:
-        # This should technically never happen, since we disable the input for logged in users
-        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
-
-    with transaction.atomic():
-        participant, created = Participant.objects.get_or_create(
-            team=team,
-            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
-            platform=experiment_channel.platform,
-            defaults={"user": participant_user},
-        )
-        if not created and participant_user and participant.user is None:
-            participant.user = participant_user
-            participant.save()
-
-        chat = Chat.objects.create(
-            team=team,
-            name=f"{participant_identifier} - {experiment_channel.name}",
-            metadata=metadata or {},
-        )
-
-        session, _ = ExperimentSession.objects.get_or_create(
-            external_id=session_external_id,
-            defaults={
-                "team": team,
-                "experiment": working_experiment,
-                "experiment_channel": experiment_channel,
-                "status": session_status,
-                "participant": participant,
-                "chat": chat,
-                "platform": experiment_channel.platform,
-            },
-        )
-
-        # Record the participant's timezone
-        if timezone:
-            participant.update_memory(data={"timezone": timezone}, experiment=working_experiment)
-
-    if experiment_channel.platform != ChannelPlatform.EVALUATIONS:
-        if participant.experimentsession_set.filter(experiment=working_experiment).count() == 1:
-            enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
-        enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
-    return session
 
 
 # TODO: remove after channels refactor

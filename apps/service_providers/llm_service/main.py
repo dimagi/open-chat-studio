@@ -51,8 +51,10 @@ class AnthropicBuiltinTool(dict):
 
 
 class LlmService(pydantic.BaseModel):
-    # Production paths set this via LlmProviderTypes.get_llm_service; the
-    # default lets direct instantiation (mostly tests) read it without raising.
+    # Pydantic v2 treats leading-underscore class attributes as private and
+    # silently drops them from init kwargs, so LlmProviderTypes.get_llm_service
+    # assigns this *post-construction* (not via the config dict). Direct
+    # instantiation - mostly tests - falls back to the "unknown" default.
     _type: str = "unknown"
     supports_transcription: bool = False
     supports_assistants: bool = False

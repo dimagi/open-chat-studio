@@ -1,36 +1,49 @@
-"""
-Unit tests for scripts/fetch_model_updates.py.
+"""Unit tests for scripts/reconcile_models.py.
 
-Run with:  pytest scripts/test_fetch_model_updates.py -v
+Run with:  pytest scripts/test_reconcile_models.py -v
 """
 
 from __future__ import annotations
 
+import datetime
 import json
 import textwrap
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fetch_model_updates import (
+from reconcile_models import (
+    REQUIRED_SERVICE_KINDS,
+    MissingPricingEntry,
+    RateChange,
     _fmt,
+    _format_per_1k,
+    _next_migration_number,
     _per_million_to_per_1k,
     _per_token_to_per_1k,
+    apply_changes,
+    audit_missing_pricing,
     build_pricing_entries,
+    compute_changes,
+    diffable_models,
+    generate_migration,
+    load_active_default_models,
     load_priced_models,
     load_registered_models,
     process_candidates,
+    rates_from_detail,
+    render_missing_pricing_issue_body,
+    render_pr_body,
     resolve_pricing_from_litellm,
     resolve_pricing_from_llm_stats,
+    seed_index,
 )
 
-# ---------------------------------------------------------------------------
 # Unit-conversion helpers
-# ---------------------------------------------------------------------------
 
 
 def test_per_million_to_per_1k():
-    """$2.50 per million → $0.0025 per 1K."""
+    """$2.50 per million -> $0.0025 per 1K."""
     assert _per_million_to_per_1k(2.5) == pytest.approx(0.0025)
 
 
@@ -39,7 +52,7 @@ def test_per_million_to_per_1k_none():
 
 
 def test_per_token_to_per_1k():
-    """$0.0000025 per token → $0.0025 per 1K."""
+    """$0.0000025 per token -> $0.0025 per 1K."""
     assert _per_token_to_per_1k(0.0000025) == pytest.approx(0.0025)
 
 
@@ -47,9 +60,20 @@ def test_per_token_to_per_1k_none():
     assert _per_token_to_per_1k(None) is None
 
 
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("per_million", "expected"),
+    [
+        pytest.param(2.5, "0.0025", id="dollar-per-million"),
+        pytest.param(0.15, "0.00015", id="cent-per-million"),
+        pytest.param(0.0, "0", id="zero"),
+        pytest.param(0.075, "0.000075", id="sub-cent"),
+    ],
+)
+def test_format_per_1k(per_million, expected):
+    assert _format_per_1k(per_million) == expected
+
+
 # _fmt
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -63,7 +87,6 @@ def test_per_token_to_per_1k_none():
     ],
 )
 def test_fmt(value, expected):
-    """_fmt converts per-1K token prices to compact decimal strings."""
     assert _fmt(value) == expected
 
 
@@ -74,9 +97,7 @@ def test_fmt_decimal_roundtrip():
     assert Decimal(val) > 0
 
 
-# ---------------------------------------------------------------------------
 # resolve_pricing_from_llm_stats
-# ---------------------------------------------------------------------------
 
 
 def test_resolve_llm_stats_full_pricing():
@@ -95,7 +116,7 @@ def test_resolve_llm_stats_full_pricing():
 
 
 def test_resolve_llm_stats_partial_pricing_no_output():
-    """input present, output missing → still returns a result."""
+    """Input present, output missing - still returns a result."""
     result = resolve_pricing_from_llm_stats({"input_price": 1.0})
     assert result is not None
     assert "llm_input" in result
@@ -122,9 +143,22 @@ def test_resolve_llm_stats_returns_none(details):
     assert resolve_pricing_from_llm_stats(details) is None
 
 
-# ---------------------------------------------------------------------------
+def test_rates_from_detail_extracts_known_kinds():
+    detail = {
+        "input_price": 2.5,
+        "output_price": 10.0,
+        "cached_input_price": 1.25,
+        "cache_write_price": None,
+        "unrelated_field": "ignored",
+    }
+    assert rates_from_detail(detail) == {
+        "llm_input": "0.0025",
+        "llm_output": "0.01",
+        "llm_cached_input": "0.00125",
+    }
+
+
 # resolve_pricing_from_litellm
-# ---------------------------------------------------------------------------
 
 
 def test_resolve_litellm_full_pricing():
@@ -143,7 +177,7 @@ def test_resolve_litellm_full_pricing():
 
 
 def test_resolve_litellm_per_token_conversion():
-    """$0.000003/token input → $0.003/1K."""
+    """$0.000003/token input -> $0.003/1K."""
     litellm_data = {
         "claude-sonnet": {
             "input_cost_per_token": 0.000003,
@@ -168,9 +202,7 @@ def test_resolve_litellm_returns_none(model_id, litellm_data):
     assert resolve_pricing_from_litellm(model_id, litellm_data) is None
 
 
-# ---------------------------------------------------------------------------
 # build_pricing_entries
-# ---------------------------------------------------------------------------
 
 
 def test_build_pricing_entries_single_provider():
@@ -204,12 +236,10 @@ def test_build_pricing_entries_empty(providers, pricing):
     assert build_pricing_entries("x", providers, pricing) == []
 
 
-# ---------------------------------------------------------------------------
 # Fixtures for file-system tests
-# ---------------------------------------------------------------------------
 
-# Includes both single-line Model() entries and a multi-line form, plus 2- and
-# 3-tuple DELETED_MODELS entries — all of which the ast parser must handle.
+# Single-line and multi-line Model() entries plus 2- and 3-tuple DELETED_MODELS,
+# so the ast parser is exercised against all the forms it has to handle.
 SAMPLE_DEFAULT_MODELS = textwrap.dedent(
     """\
     DEFAULT_LLM_PROVIDER_MODELS = {
@@ -271,9 +301,7 @@ def repo_root(tmp_path: Path) -> Path:
     return tmp_path
 
 
-# ---------------------------------------------------------------------------
 # load_registered_models
-# ---------------------------------------------------------------------------
 
 
 def test_registered_openai(repo_root):
@@ -318,14 +346,12 @@ def test_unknown_provider_not_present(repo_root):
     assert "deepseek" not in registered
 
 
-# ---------------------------------------------------------------------------
-# load_registered_models — awkward formatting robustness
+# load_registered_models - awkward formatting robustness
 #
-# These exercise formatting that a line-by-line regex parser misses but a real
-# Python parser handles: a comment between ``Model(`` and the name, a provider
-# whose ``[`` sits on the next line, and a DELETED_MODELS tuple split over
-# several lines.
-# ---------------------------------------------------------------------------
+# These exercise formatting that a line-by-line regex parser would miss but a
+# real Python parser handles: a comment between Model( and the name, a provider
+# whose [ sits on the next line, and a DELETED_MODELS tuple split over several
+# lines.
 
 SAMPLE_AWKWARD_MODELS = textwrap.dedent(
     """\
@@ -368,13 +394,13 @@ def awkward_repo_root(tmp_path: Path) -> Path:
 
 
 def test_registered_comment_between_model_and_name(awkward_repo_root):
-    """A comment line between ``Model(`` and the name doesn't hide the model."""
+    """A comment line between Model( and the name doesn't hide the model."""
     registered = load_registered_models(awkward_repo_root)
     assert "commented-model" in registered["openai"]
 
 
 def test_registered_provider_bracket_on_next_line(awkward_repo_root):
-    """A provider whose opening ``[`` is on the next line is still parsed."""
+    """A provider whose opening [ is on the next line is still parsed."""
     registered = load_registered_models(awkward_repo_root)
     assert "bracket-on-next-line" in registered["newprov"]
 
@@ -391,9 +417,21 @@ def test_deleted_models_n_tuple(awkward_repo_root):
     assert "claude-x" in registered.get("anthropic", set())
 
 
-# ---------------------------------------------------------------------------
+# load_active_default_models - active vs deleted distinction
+
+
+def test_load_active_default_models_excludes_deleted(repo_root):
+    """DELETED_MODELS are folded into registered (for new-candidate dedup)
+    but excluded from active (the missing-pricing audit only flags live
+    OCS-managed models)."""
+    active = load_active_default_models(repo_root)
+    assert ("openai", "gpt-4o") in active
+    assert ("anthropic", "claude-sonnet-4-6") in active
+    assert ("azure", "gpt-4") not in active
+    assert ("anthropic", "claude-2.0") not in active
+
+
 # load_priced_models
-# ---------------------------------------------------------------------------
 
 
 def test_load_priced_models(repo_root):
@@ -403,9 +441,7 @@ def test_load_priced_models(repo_root):
     assert ("openai", "claude-sonnet-4-6") not in priced
 
 
-# ---------------------------------------------------------------------------
 # process_candidates
-# ---------------------------------------------------------------------------
 
 
 def _candidate(model_id, org, context_window=128000, details=None):
@@ -449,7 +485,7 @@ def test_process_fully_registered_model_is_skipped():
 
 
 def test_process_partially_registered_model_still_processed():
-    """Registered in openai but not azure → still a new_model."""
+    """Registered in openai but not azure -> still a new_model."""
     candidates = [_candidate("gpt-4o", "openai")]
     registered = {"openai": {"gpt-4o"}, "azure": set()}
     result = process_candidates(candidates, registered, set(), {})
@@ -498,7 +534,7 @@ def test_process_already_priced_providers_excluded():
 
 
 def test_process_pricing_entries_flat_list():
-    """anthropic: 1 provider, google: 2 providers → 3 pricing entries total."""
+    """anthropic: 1 provider, google: 2 providers -> 3 pricing entries total."""
     candidates = [
         _candidate("model-a", "anthropic"),
         _candidate("model-b", "google"),
@@ -526,3 +562,273 @@ def test_process_details_error_falls_back_to_litellm():
     m = result["new_models"][0]
     assert m["pricing"]["has_pricing"] is True
     assert m["pricing"]["source"] == "litellm"
+
+
+# seed_index + diffable_models
+
+
+def test_seed_index_keys_by_provider_and_model():
+    seed = [
+        {
+            "provider_type": "openai",
+            "model_name": "gpt-4o",
+            "rules": [{"service_kind": "llm_input", "unit_price": "0.0025"}],
+        },
+        {
+            "provider_type": "azure",
+            "model_name": "gpt-4o",
+            "rules": [{"service_kind": "llm_input", "unit_price": "0.0025"}],
+        },
+    ]
+    index = seed_index(seed)
+    assert index[("openai", "gpt-4o")] == {"llm_input": "0.0025"}
+    assert index[("azure", "gpt-4o")] == {"llm_input": "0.0025"}
+
+
+def test_diffable_models_skips_non_upstream_providers():
+    index = {
+        ("openai", "gpt-4o"): {},
+        ("azure", "gpt-4o"): {},
+        ("groq", "llama-3.3-70b-versatile"): {},
+        ("deepseek", "deepseek-chat"): {},
+    }
+    assert diffable_models(index) == {"gpt-4o"}
+
+
+# compute_changes
+
+
+def _detail(rates: dict[str, float]) -> dict:
+    """llm-stats detail-shaped dict with `*_price` keys (per million)."""
+    keys = {
+        "llm_input": "input_price",
+        "llm_output": "output_price",
+        "llm_cached_input": "cached_input_price",
+        "llm_cache_write": "cache_write_price",
+    }
+    return {**{keys[k]: v for k, v in rates.items()}, "url": "https://llm-stats.com/models/test"}
+
+
+class TestComputeChanges:
+    def test_returns_change_when_rate_differs(self):
+        index = {
+            ("openai", "gpt-4o"): {"llm_input": "0.0025"},
+        }
+        fetcher = lambda _m: _detail({"llm_input": 5.0})  # $5/M = $0.005/1K  # noqa: E731
+
+        changes, unmatched = compute_changes(index, fetcher)
+
+        assert unmatched == set()
+        assert changes == [
+            RateChange(
+                provider_type="openai",
+                model_name="gpt-4o",
+                service_kind="llm_input",
+                old_price="0.0025",
+                new_price="0.005",
+                source_url="https://llm-stats.com/models/test",
+            )
+        ]
+
+    def test_no_change_when_rate_matches(self):
+        index = {("openai", "gpt-4o"): {"llm_input": "0.0025"}}
+        fetcher = lambda _m: _detail({"llm_input": 2.5})  # noqa: E731
+
+        changes, unmatched = compute_changes(index, fetcher)
+
+        assert changes == []
+        assert unmatched == set()
+
+    def test_records_unmatched_when_fetcher_returns_none(self):
+        index = {("openai", "ghost-model"): {"llm_input": "0.0025"}}
+        fetcher = lambda _m: None  # noqa: E731
+
+        changes, unmatched = compute_changes(index, fetcher)
+
+        assert changes == []
+        assert unmatched == {"ghost-model"}
+
+    def test_change_applied_to_each_diffable_provider(self):
+        """One llm-stats rate change applies to every OCS provider wrapping
+        that upstream (openai + azure both consume the same gpt-4o pricing)."""
+        index = {
+            ("openai", "gpt-4o"): {"llm_input": "0.0025"},
+            ("azure", "gpt-4o"): {"llm_input": "0.0025"},
+        }
+        fetcher = lambda _m: _detail({"llm_input": 5.0})  # noqa: E731
+
+        changes, _ = compute_changes(index, fetcher)
+
+        providers = {c.provider_type for c in changes}
+        assert providers == {"openai", "azure"}
+
+    def test_skips_non_diffable_provider(self):
+        """Groq isn't an llm-stats-tracked upstream - its seed rows aren't
+        diffed regardless of what the fetcher would return."""
+        index = {("groq", "gemma2-9b-it"): {"llm_input": "0.0002"}}
+        fetcher = lambda _m: _detail({"llm_input": 99.0})  # noqa: E731
+
+        changes, unmatched = compute_changes(index, fetcher)
+
+        assert changes == []
+        assert unmatched == set()
+
+
+# apply_changes
+
+
+class TestApplyChanges:
+    def test_replaces_matching_rule(self):
+        seed = [
+            {
+                "provider_type": "openai",
+                "model_name": "gpt-4o",
+                "rules": [
+                    {"service_kind": "llm_input", "unit_price": "0.0025"},
+                    {"service_kind": "llm_output", "unit_price": "0.01"},
+                ],
+            },
+        ]
+        change = RateChange("openai", "gpt-4o", "llm_input", "0.0025", "0.005", "url")
+
+        updated = apply_changes(seed, [change])
+
+        assert updated[0]["rules"][0] == {"service_kind": "llm_input", "unit_price": "0.005"}
+        assert updated[0]["rules"][1] == {"service_kind": "llm_output", "unit_price": "0.01"}
+
+    def test_preserves_unaffected_entries(self):
+        seed = [
+            {
+                "provider_type": "openai",
+                "model_name": "gpt-4o",
+                "rules": [{"service_kind": "llm_input", "unit_price": "0.0025"}],
+            },
+            {
+                "provider_type": "anthropic",
+                "model_name": "claude-haiku",
+                "rules": [{"service_kind": "llm_input", "unit_price": "0.001"}],
+            },
+        ]
+        change = RateChange("openai", "gpt-4o", "llm_input", "0.0025", "0.005", "url")
+
+        updated = apply_changes(seed, [change])
+
+        assert updated[1] == seed[1]
+
+
+# Migration generation
+
+
+def test_next_migration_number_increments(tmp_path):
+    (tmp_path / "0001_initial.py").touch()
+    (tmp_path / "0002_seed_pricing.py").touch()
+    (tmp_path / "__init__.py").touch()  # should be ignored
+    assert _next_migration_number(tmp_path) == 3
+
+
+def test_generate_migration_writes_file_with_correct_dependency(tmp_path):
+    (tmp_path / "0001_initial.py").touch()
+    (tmp_path / "0002_seed_pricing.py").touch()
+
+    written = generate_migration(tmp_path, datetime.date(2026, 6, 17))
+
+    assert written.name == "0003_rate_update_20260617.py"
+    body = written.read_text()
+    assert '("cost_tracking", "0002_seed_pricing")' in body
+    assert "load_pricing_data()" in body
+
+
+# render_pr_body
+
+
+def test_render_pr_body_includes_table_row_per_change():
+    changes = [
+        RateChange("openai", "gpt-4o", "llm_input", "0.0025", "0.005", "https://llm-stats.com/models/gpt-4o"),
+    ]
+    body = render_pr_body(changes, unmatched=set())
+
+    assert "| openai | gpt-4o | llm_input | 0.0025 | 0.005 |" in body
+    assert "llm-stats" in body
+    assert "## Unmatched models" not in body
+
+
+def test_render_pr_body_lists_unmatched_when_present():
+    body = render_pr_body(changes=[], unmatched={"ghost-model"})
+
+    assert "## Unmatched models" in body
+    assert "`ghost-model`" in body
+
+
+def test_render_pr_body_hyphen_for_missing_old_price():
+    change = RateChange("openai", "new-model", "llm_input", None, "0.001", "https://llm-stats.com/models/new-model")
+    body = render_pr_body([change], unmatched=set())
+
+    assert "| - | 0.001 |" in body
+
+
+# audit_missing_pricing
+
+
+def test_audit_empty_when_every_required_kind_priced():
+    active = {("openai", "gpt-4o")}
+    index = {("openai", "gpt-4o"): {"llm_input": "0.0025", "llm_output": "0.01"}}
+    assert audit_missing_pricing(active, index) == []
+
+
+def test_audit_flags_both_kinds_missing_when_seed_has_no_entry():
+    active = {("openai", "gpt-mystery")}
+    assert audit_missing_pricing(active, {}) == [
+        MissingPricingEntry("openai", "gpt-mystery", ("llm_input", "llm_output"))
+    ]
+
+
+def test_audit_flags_only_kind_actually_missing():
+    """A seed entry with llm_input but not llm_output flags only llm_output."""
+    active = {("openai", "gpt-half")}
+    index = {("openai", "gpt-half"): {"llm_input": "0.001"}}
+    assert audit_missing_pricing(active, index) == [MissingPricingEntry("openai", "gpt-half", ("llm_output",))]
+
+
+def test_audit_ignores_models_outside_active():
+    """A seed entry for an inactive (e.g. deleted) model doesn't suppress
+    the flag for an active model with no entry, and the inactive model is
+    not itself audited."""
+    active = {("openai", "active-model")}
+    index = {("openai", "deleted-model"): {"llm_input": "0.001", "llm_output": "0.002"}}
+    result = audit_missing_pricing(active, index)
+    assert result == [MissingPricingEntry("openai", "active-model", ("llm_input", "llm_output"))]
+
+
+def test_audit_required_kinds_are_input_and_output_only():
+    """A cached-input-only entry doesn't satisfy the audit."""
+    active = {("openai", "cache-only")}
+    index = {("openai", "cache-only"): {"llm_cached_input": "0.0001"}}
+    result = audit_missing_pricing(active, index)
+    assert result == [MissingPricingEntry("openai", "cache-only", ("llm_input", "llm_output"))]
+    assert "llm_cached_input" not in REQUIRED_SERVICE_KINDS
+
+
+def test_audit_results_sorted_by_provider_and_model():
+    active = {
+        ("openai", "z-model"),
+        ("anthropic", "a-model"),
+        ("openai", "a-model"),
+    }
+    result = audit_missing_pricing(active, {})
+    keys = [(e.provider_type, e.model_name) for e in result]
+    assert keys == sorted(keys)
+
+
+# render_missing_pricing_issue_body
+
+
+def test_render_missing_pricing_issue_body_one_row_per_entry():
+    entries = [
+        MissingPricingEntry("openai", "gpt-mystery", ("llm_input", "llm_output")),
+        MissingPricingEntry("anthropic", "claude-mystery", ("llm_output",)),
+    ]
+    body = render_missing_pricing_issue_body(entries)
+
+    assert "| openai | gpt-mystery | llm_input, llm_output |" in body
+    assert "| anthropic | claude-mystery | llm_output |" in body
+    assert "backfill_pricing_seed" in body

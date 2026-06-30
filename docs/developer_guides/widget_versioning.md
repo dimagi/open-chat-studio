@@ -18,6 +18,31 @@ version policy lives in `apps/channels/widget_versions.py`.
 2. In the same PR, bump `LATEST_VERSION` in `apps/channels/widget_versions.py`.
    The embed snippet (`{% widget_script_url %}`) and the "update available"
    badges follow automatically.
+3. Optionally announce the release in-app. Add a data migration in
+   `apps/channels/migrations/` that triggers the notification on deploy, with the
+   version and release notes inline:
+
+        from apps.data_migrations.utils.migrations import RunDataMigration
+
+        operations = [
+            RunDataMigration(
+                "notify_widget_version_release",
+                command_options={
+                    "force": True,
+                    "widget_version": "0.10.0",
+                    "notes": "Adds dark mode and faster load times.",
+                    "changelog_url": "https://docs.openchatstudio.com/chat_widget/",
+                },
+            ),
+        ]
+
+   `widget_version` defaults to `LATEST_VERSION` and `changelog_url` to the chat
+   widget docs, so both can be omitted. Every team with an embedded-widget
+   channel gets an INFO notification linking to their widget chatbots and the
+   changelog. The command slug is fixed; Django tracks each migration's single
+   run, so `force=True` is required and nothing needs bumping. Preview with:
+
+        python manage.py notify_widget_version_release --dry-run --widget-version 0.10.0
 
 ## Deprecating old versions
 

@@ -903,6 +903,23 @@ describe('ocs-chat session tokens', () => {
     expect(systemMessage).toBeDefined();
   });
 
+  it('dispatches ocs:session:started when a new session is created', async () => {
+    // beforeEach configures mockStartSession to return session_id: 'test-session-id'
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+
+    const dispatched: CustomEvent[] = [];
+    page.root!.addEventListener('ocs:session:started', (e: Event) => dispatched.push(e as CustomEvent));
+
+    await page.rootInstance.sendMessage('hello');
+    await page.waitForChanges();
+
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0].detail).toEqual({ sessionId: 'test-session-id' });
+  });
+
   it('on a bound 403 it surfaces an error and stays bound', async () => {
     const page = await newSpecPage({
       components: [OcsChat],

@@ -82,7 +82,7 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
+        manager._index_files = Mock()
         result = manager.sync_collection()
 
         assert result.success
@@ -104,8 +104,8 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
-        manager._update_file = Mock(wraps=manager._update_file)  # ty: ignore[invalid-assignment]
+        manager._index_files = Mock()
+        manager._update_file = Mock(wraps=manager._update_file)
         result = manager.sync_collection()
 
         assert result.success
@@ -150,8 +150,8 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
-        manager._remove_files = Mock()  # ty: ignore[invalid-assignment]
+        manager._index_files = Mock()
+        manager._remove_files = Mock()
         result = manager.sync_collection()
 
         assert result.success
@@ -191,7 +191,7 @@ class TestDocumentSourceManager:
         docs = [Mock(page_content="v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
         create_loader.return_value = MockLoader(collection, docs)
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
+        manager._index_files = Mock()
         manager.sync_collection()
 
         updated_docs = [Mock(page_content="v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
