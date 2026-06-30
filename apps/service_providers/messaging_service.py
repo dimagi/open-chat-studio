@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
-from apps.channels.datamodels import MediaCache, TwilioMessage, WhatsAppMessage
+from apps.channels.datamodels import MediaCache, TwilioMessage, WhatsAppMessage, looks_like_bsuid
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
@@ -33,6 +33,13 @@ from apps.service_providers.speech_service import SynthesizedAudio
 logger = logging.getLogger("ocs.messaging")
 
 MEDIA_DOWNLOAD_TIMEOUT = 30
+
+
+def _recipient_kwarg(recipient: str) -> dict:
+    """Build the recipient half of a Meta Cloud API send payload."""
+    if looks_like_bsuid(recipient):
+        return {"recipient": recipient}
+    return {"to": recipient}
 
 
 def _normalize_content_type(content_type: str | None) -> str:
@@ -598,7 +605,7 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
             data = {
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
-                "to": to,
+                **_recipient_kwarg(to),
                 "type": "template",
                 "template": {
                     "name": self.TEMPLATE_NAME,
@@ -642,7 +649,8 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
         for chunk in chunks:
             data = {
                 "messaging_product": "whatsapp",
-                "to": to,
+                "recipient_type": "individual",
+                **_recipient_kwarg(to),
                 "type": "text",
                 "text": {"body": chunk},
             }
@@ -668,7 +676,8 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
-            "to": to,
+            "recipient_type": "individual",
+            **_recipient_kwarg(to),
             "type": "audio",
             "audio": {"id": media_id},
         }
@@ -737,7 +746,8 @@ class MetaCloudAPIService(HttpMediaDownloadMixin, MessagingService):
         url = f"{self.META_API_BASE_URL}/{from_}/messages"
         data = {
             "messaging_product": "whatsapp",
-            "to": to,
+            "recipient_type": "individual",
+            **_recipient_kwarg(to),
             "type": media_type,
             media_type: {"id": media_id},
         }

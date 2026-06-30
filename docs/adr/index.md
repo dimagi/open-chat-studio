@@ -62,3 +62,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0040](0040-stateless-signed-session-tokens-with-inactivity-expiry.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Stateless signed session tokens with server-side inactivity expiry |
 | [0041](0041-fail-closed-session-token-enforcement-rollout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Fail-closed session-token enforcement rollout |
 | [0042](0042-settings-driven-internal-team-metadata.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Settings-driven internal team metadata in a JSON field |
+| [0043](0043-whatsapp-bsuid-participant-identity.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | BSUID participant identity for WhatsApp |

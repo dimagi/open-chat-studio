@@ -15,6 +15,11 @@ def _wrap_in_webhook_payload(value, phone_number_id="12345"):
     }
 
 
+# Post-rollout Meta payloads carry the user's business-scoped user ID (BSUID) as
+# `from_user_id` on the message and `user_id` on the contact, alongside the phone (`wa_id`/`from`).
+BSUID = "US.13491208655302741918"
+
+
 def _message_value(*, phone_number_id: str, message_id: str, message_type: str, payload: dict) -> dict:
     return {
         "messaging_product": "whatsapp",
@@ -22,10 +27,11 @@ def _message_value(*, phone_number_id: str, message_id: str, message_type: str, 
             "display_phone_number": "+15551234567",
             "phone_number_id": phone_number_id,
         },
-        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512"}],
+        "contacts": [{"profile": {"name": "User"}, "wa_id": "27456897512", "user_id": BSUID}],
         "messages": [
             {
                 "from": "27456897512",
+                "from_user_id": BSUID,
                 "id": message_id,
                 "timestamp": "1706709716",
                 "type": message_type,

@@ -27,11 +27,11 @@ from apps.channels.channels_v2.stages.terminal import (
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
-from apps.chat.channels import _start_experiment_session
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
+from apps.experiments.services import start_experiment_session
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TracingService
 from apps.teams.utils import current_team
@@ -187,11 +187,10 @@ class ChannelBase(ABC):
         session_external_id: str | None = None,
         metadata: dict | None = None,
     ) -> ExperimentSession:
-        return _start_experiment_session(
+        return start_experiment_session(
             working_experiment,
             experiment_channel,
-            participant_identifier,
-            participant_user,
+            Participant(identifier=participant_identifier, user=participant_user),
             session_status,
             timezone,
             session_external_id,
@@ -229,10 +228,10 @@ class ChannelBase(ABC):
             existing_session = None
 
         if existing_session is None:
-            existing_session = _start_experiment_session(
+            existing_session = start_experiment_session(
                 working_experiment=working_experiment,
                 experiment_channel=self.experiment_channel,
-                participant_identifier=identifier,
+                participant=Participant(identifier=identifier),
                 session_status=SessionStatus.SETUP,
             )
 

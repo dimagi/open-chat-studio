@@ -117,6 +117,7 @@ nav:
       - 0040 Stateless signed session tokens with server-side inactivity expiry: adr/0040-stateless-signed-session-tokens-with-inactivity-expiry.md
       - 0041 Fail-closed session-token enforcement rollout: adr/0041-fail-closed-session-token-enforcement-rollout.md
       - 0042 Settings-driven internal team metadata in a JSON field: adr/0042-settings-driven-internal-team-metadata.md
+      - 0043 BSUID participant identity for WhatsApp: adr/0043-whatsapp-bsuid-participant-identity.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
