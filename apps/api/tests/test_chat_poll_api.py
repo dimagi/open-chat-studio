@@ -109,10 +109,10 @@ def test_chat_poll_task_response_processing_with_progress(mock_progress, api_cli
 
 @pytest.mark.django_db()
 def test_chat_poll_user_facing_error_returns_400(api_client, mock_session, mock_task_response):
-    """MessageTooLargeError (user_facing_error=True) must return HTTP 400, not 500."""
+    """User-facing errors (user_facing_error=True) must return HTTP 400, not 500."""
     mock_task_response.return_value = {
         "complete": True,
-        "error_msg": "Your message is too large for this model.",
+        "error_msg": "Voice transcription is not available for this chatbot.",
         "user_facing_error": True,
         "message": None,
     }
@@ -123,7 +123,7 @@ def test_chat_poll_user_facing_error_returns_400(api_client, mock_session, mock_
     assert response.status_code == 400
     data = response.json()
     assert data["status"] == "error"
-    assert "too large" in data["error"]
+    assert "transcription" in data["error"]
 
 
 @pytest.mark.django_db()

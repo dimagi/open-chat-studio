@@ -47,7 +47,7 @@ from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
     start_session_public,
 )
-from apps.experiments.views.utils import get_channels_context, get_max_char_limit
+from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -691,7 +691,6 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
         "experiment_name": experiment_version.name,
         "experiment_version": experiment_version,
         "experiment_version_number": experiment_version.version_number,
-        "max_char_limit": get_max_char_limit(experiment_version),
     }
     return TemplateResponse(
         request,
@@ -841,7 +840,6 @@ def _chatbot_chat_ui(request, embedded=False):
         "chatbot_name": chatbot_version.name,
         "experiment_version": chatbot_version,
         "experiment_version_number": chatbot_version.version_number,
-        "max_char_limit": get_max_char_limit(chatbot_version),
     }
     return TemplateResponse(
         request,

@@ -14,5 +14,4 @@ export type PipelineType = {
   date_created?: string;
   updated_at?: string;
   errors: {[nodeId: string]: {[name: string]: string}},
-  max_char_limit?: number | null;
 };
