@@ -9,6 +9,12 @@ Open Chat Studio is a platform for building, deploying, and evaluating AI-powere
 
 We welcome contributions to Open Chat Studio! If you're interested in contributing, please check out our [contributing guidelines](https://developers.openchatstudio.com/contributing/) for more information on how to get started.
 
+## Tech Stack
+- **Backend:** Python 3.13+, Django, Celery, PostgreSQL (with pgvector), Redis
+- **Frontend:** React, TypeScript, HTMX, Alpine.js, webpack
+- **LLM integrations:** OpenAI, Anthropic, Groq, Gemini, Azure, and more
+- **Deployment:** Docker, Heroku
+
 ## Quick Start Setup
 
 Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installation/) and [Invoke](https://www.pyinvoke.org/) for dev automation.
@@ -59,6 +65,6 @@ To deploy your own production instance to Heroku:
 
 ## Getting Help
 
-- **Bug reports & feature requests:** [GitHub Issues](https://github.com/dimagi/open-chat-studio/issues)
+- **Bug reports & feature requests:** [How to provide feedback](https://developers.openchatstudio.com/contributing/)
 - **Developer docs:** [developers.openchatstudio.com](https://developers.openchatstudio.com/)
 - **User docs:** [docs.openchatstudio.com](https://docs.openchatstudio.com)
