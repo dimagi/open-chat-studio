@@ -138,7 +138,6 @@ class Command(BaseCommand):
         if options["private_key_path"]:
             private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
 
-        store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
         client = ResourceFetcher(options["source_url"], options["api_key"])
         enforce_schema = not options["skip_schema_check"]
 
@@ -154,6 +153,8 @@ class Command(BaseCommand):
                 options["state_dir"],
                 write=lambda message: self.stdout.write(self.style.WARNING(message)),
             )
+
+        store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
 
         run_sync(
             client,
