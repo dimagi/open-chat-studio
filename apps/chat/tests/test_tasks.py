@@ -48,7 +48,7 @@ class TasksTest(TestCase):
         expected_ping_message = "Hey, answer me!"
 
         provider = TraceProvider()
-        provider.get_service = Mock(return_value=MockTracer())  # ty: ignore[invalid-assignment]
+        provider.get_service = Mock(return_value=MockTracer())
         self.experiment_session.experiment.trace_provider = provider
         trace_service = TracingService.empty()
         trace_service.get_trace_metadata = lambda: {"trace_info": True}  # ty: ignore[invalid-assignment]

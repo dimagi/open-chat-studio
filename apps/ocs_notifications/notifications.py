@@ -292,6 +292,32 @@ def deprecated_widget_version_notification(
     )
 
 
+@silence_exceptions(logger, log_message="Failed to create widget version release notification")
+def widget_version_release_notification(
+    team,
+    version: str,
+    notes: str,
+    changelog_url: str,
+    affected_chatbots: dict[str, str],
+) -> None:
+    """Notify a team that a new embedded chat widget version is available."""
+    message = f"Version {version} of the embedded chat widget is now available."
+    if notes:
+        message += f" {notes}"
+    message += " Update the embed snippet on your site to use the latest version."
+    create_notification(
+        title=f"Chat Widget {version} Released",
+        message=message,
+        level=LevelChoices.INFO,
+        team=team,
+        slug="widget-version-release",
+        # Keyed on the version so each release opens its own notification thread.
+        event_data={"version": version},
+        permissions=["bot_channels.change_experimentchannel"],
+        links={**affected_chatbots, "Release Notes": changelog_url},
+    )
+
+
 @silence_exceptions(logger, log_message="Failed to create deleted model notification")
 def deleted_model_notification(
     team,
