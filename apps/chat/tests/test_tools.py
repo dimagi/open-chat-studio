@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 from inspect import signature
-from typing import Annotated, get_args, get_origin
+from typing import Annotated, ClassVar, get_args, get_origin
 from unittest import mock
 
 import pytest
@@ -807,7 +807,7 @@ class TestNotificationOnToolError:
         class CustomBaseTool(tools.CustomBaseTool):
             name: str = "Test Tool"
             description: str = "A testing tool that raises an error when run"
-            requires_callbacks: bool = False
+            requires_callbacks: ClassVar[bool] = False
 
             def action(self, *args, **kwargs):
                 raise Exception("Test error")
