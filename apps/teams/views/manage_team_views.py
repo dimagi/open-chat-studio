@@ -1,16 +1,18 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import ValidationError
-from django.http import HttpResponse, HttpResponseRedirect
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import HttpResponse, HttpResponseRedirect, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.assistants.models import OpenAiAssistant
 from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
+from apps.teams.file_export import stream_team_files_zip
 from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm, TeamPublicKeyForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
@@ -163,3 +165,15 @@ def cancel_invitation_view(request, team_slug, invitation_id):
     invitation = get_object_or_404(Invitation, team=request.team, id=invitation_id)
     invitation.delete()
     return HttpResponse("")
+
+
+@require_GET
+@login_and_team_required
+def download_team_files(request, team_slug):
+    if not request.team_membership.is_team_admin():
+        raise PermissionDenied
+    team = request.team
+    filename = f"team-{team.slug}-files-{timezone.now().date().isoformat()}.zip"
+    response = StreamingHttpResponse(stream_team_files_zip(team), content_type="application/zip")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

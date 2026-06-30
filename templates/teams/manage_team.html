@@ -106,6 +106,15 @@
             <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
           </div>
         </form>
+        <hr class="my-4">
+        <p class="my-2 text-muted">
+          {% translate "Download a zip archive of every file belonging to this team." %}
+        </p>
+        <div class="pg-inline-buttons">
+          <a class="btn btn-outline" href="{% url 'single_team:download_team_files' request.team.slug %}">
+            {% translate "Download team files" %}
+          </a>
+        </div>
       </section>
       <section class="app-card">
         <h3 class="pg-subtitle">
