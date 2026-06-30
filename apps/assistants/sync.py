@@ -72,7 +72,7 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.assistants.utils import get_assistant_tool_options
 from apps.documents.models import CollectionFile
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import UnableToLinkFileException
 from apps.service_providers.llm_service.index_managers import OpenAIRemoteIndexManager
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
@@ -353,7 +353,9 @@ def _fetch_file_from_openai(assistant: OpenAiAssistant, file_id: str) -> File:
 
     # Can't retrieve content from openai assistant files
     # content = client.files.retrieve_content(openai_file.id)
-    return File.from_external_source(filename, None, file_id, "openai", assistant.team_id)
+    return File.from_external_source(
+        filename, None, file_id, "openai", assistant.team_id, purpose=FilePurpose.ASSISTANT
+    )
 
 
 def _sync_tool_resources_from_openai(openai_assistant: Assistant, assistant: OpenAiAssistant):
@@ -586,4 +588,6 @@ def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
 
     file_content_obj = client.files.content(file_id)
 
-    return File.from_external_source(filename, file_content_obj, file_id, "openai", team_id)
+    return File.from_external_source(
+        filename, file_content_obj, file_id, "openai", team_id, purpose=FilePurpose.ASSISTANT
+    )
