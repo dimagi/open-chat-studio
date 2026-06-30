@@ -3,11 +3,7 @@
 
 Open Chat Studio is a platform for building, deploying, and evaluating AI-powered chat applications. It provides tools for working with various LLMs (Large Language Models), creating chatbots, managing conversations, and integrating with different messaging platforms.
 
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/dimagi/open-chat-studio)
-
-[User Documentation](https://docs.openchatstudio.com)
-
-[Developer Documentation](https://developers.openchatstudio.com/)
+[User Documentation](https://docs.openchatstudio.com) | [Developer Documentation](https://developers.openchatstudio.com/)
 
 ## Contributing
 
@@ -54,3 +50,15 @@ docker compose up
 ```
 
 For the full setup guide, available services, useful commands, and troubleshooting, see the [Docker Development Setup guide](https://developers.openchatstudio.com/getting-started/docker-setup/).
+
+## Deployment
+
+To deploy your own production instance to Heroku:
+
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/dimagi/open-chat-studio)
+
+## Getting Help
+
+- **Bug reports & feature requests:** [GitHub Issues](https://github.com/dimagi/open-chat-studio/issues)
+- **Developer docs:** [developers.openchatstudio.com](https://developers.openchatstudio.com/)
+- **User docs:** [docs.openchatstudio.com](https://docs.openchatstudio.com)
