@@ -44,7 +44,7 @@ def _manage_team_context(request, team, *, team_form=None, public_key_form=None)
 def manage_team(request, team_slug):
     team = request.team
     team_form = None
-    is_team_admin = request.team_membership.is_team_admin
+    is_team_admin = request.team_membership.is_team_admin()
     if request.method == "POST":
         if is_team_admin:
             team_form = TeamChangeForm(request.POST, instance=team)

@@ -45,6 +45,10 @@ def stream_team_files_zip(team) -> Iterator[bytes]:
         if not file.file:
             continue
         arcname = file.file.name
+        storage = file.file.storage
+        bare_name = file.file.name
+        location = getattr(storage, "location", "") or ""
+        arcname = (location.rstrip("/") + "/" + bare_name) if (location and not location.startswith("/")) else bare_name
         if arcname in seen:
             logger.warning("Skipping duplicate export path %s (file id=%s)", arcname, file.id)
             continue
@@ -52,7 +56,7 @@ def stream_team_files_zip(team) -> Iterator[bytes]:
         # round-trips up front, but it lets us cleanly skip missing files rather
         # than emit a zero-byte entry. Acceptable here: gunicorn runs with no
         # request timeout and teams aren't expected to have pathologically many files.
-        if not file.file.storage.exists(arcname):
+        if not file.file.storage.exists(bare_name):
             logger.warning("Skipping missing file %s (id=%s) from export", arcname, file.id)
             continue
         seen.add(arcname)
