@@ -384,6 +384,55 @@ def test_session_chat_fk_resolves_to_the_imported_chat(store):
     assert session.chat_id == store.get_target("chat.chat", 77)
 
 
+def _chat_message_row(source_id, chat_src, message_type, created_at):
+    return {
+        "id": source_id,
+        "chat": chat_src,
+        "message_type": message_type,
+        "content": "test message",
+        "summary": None,
+        "translations": {},
+        "metadata": {},
+        "created_at": created_at,
+        "updated_at": created_at,
+    }
+
+
+def test_import_chat_messages_sets_last_activity_at_to_last_human_message_timestamp(store):
+    """After importing chat messages, each session's last_activity_at should be set
+    independently to its own most recent HUMAN message timestamp, not the import time."""
+    session1_newest_human = datetime(2022, 6, 15, tzinfo=UTC)
+    session1_ai_after = datetime(2023, 1, 1, tzinfo=UTC)
+    session2_newest_human = datetime(2021, 11, 30, tzinfo=UTC)
+
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    team_pk = store.get_target("teams.team", 9001)
+    _seed_session_fks(store, team_pk)
+    importer.import_rows("chat.chat", [_chat_row(source_id=77), _chat_row(source_id=78)])
+    importer.import_rows(
+        "experiments.experimentsession",
+        [_session_row(source_id=33, chat_src=77), _session_row(source_id=34, chat_src=78)],
+    )
+
+    importer.import_rows(
+        "chat.chatmessage",
+        [
+            # Session 1: two human messages; newest_human is the expected last_activity_at
+            _chat_message_row(101, 77, "human", datetime(2020, 5, 1, tzinfo=UTC).isoformat()),
+            _chat_message_row(102, 77, "human", session1_newest_human.isoformat()),
+            _chat_message_row(103, 77, "ai", session1_ai_after.isoformat()),  # AI after newest human
+            # Session 2: one human message
+            _chat_message_row(104, 78, "human", session2_newest_human.isoformat()),
+        ],
+    )
+
+    session1 = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 33))
+    session2 = ExperimentSession.objects.get(pk=store.get_target("experiments.experimentsession", 34))
+    assert session1.last_activity_at == session1_newest_human
+    assert session2.last_activity_at == session2_newest_human
+
+
 def test_default_consent_form_maps_to_auto_created_default(store):
     """The source's default consent form maps onto the team's auto-created default, not a second one."""
     importer = Importer(store)

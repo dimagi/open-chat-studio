@@ -9,9 +9,12 @@ from collections.abc import Iterable
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
+from django.db.models import Exists, OuterRef, Subquery
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
+from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import ExperimentSession
 from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
@@ -170,6 +173,8 @@ class Importer:
             if self.private_key and secret_fields:
                 row = unseal_secrets(row, secret_fields, self.private_key)
             self._import_row(model_label, model, row)
+        if model_label == "chat.chatmessage":
+            self._backfill_session_last_activity()
 
     def _import_row(self, model_label: str, model: type[models.Model], row: dict) -> None:
         """Import a single row. A global row is matched to its shared target and only its id
@@ -319,6 +324,15 @@ class Importer:
         lookup = {f"{spec.null_field}__isnull": True}
         lookup.update({key: row[key] for key in spec.natural_key})
         return model.objects.filter(**lookup).first()
+
+    def _backfill_session_last_activity(self) -> None:
+        human_msgs = ChatMessage.objects.filter(
+            chat=OuterRef("chat_id"),
+            message_type=ChatMessageType.HUMAN,
+        )
+        ExperimentSession.objects.filter(team=self.target_team).filter(Exists(human_msgs)).update(
+            last_activity_at=Subquery(human_msgs.order_by("-created_at").values("created_at")[:1])
+        )
 
     def _apply_named_links(self, model_label: str, instance: models.Model, row: dict) -> None:
         """Re-link the m2m fields serialized as names (see ``_NAMED_LINK_FIELDS``). Their targets --
