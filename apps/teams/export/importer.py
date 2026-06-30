@@ -273,12 +273,17 @@ class Importer:
         name (built into Django, identical across servers); the object id is translated through the
         store. Every model a generic FK can point at is itself synced and imported first (the columns
         are non-null and generic-FK models come last in the manifest), so the lookup always resolves.
-        Guarded by test_generic_fk_target_models_are_synced."""
+        Guarded by test_generic_fk_target_models_are_synced; if the invariant is ever violated we
+        fail fast here rather than silently null the relation, matching regular-FK resolution."""
         for ct_field, fk_field in gfk_pairs:
             type_label = row[ct_field]
             app_label, model_name = type_label.split(".")
             field_values[f"{ct_field}_id"] = ContentType.objects.get_by_natural_key(app_label, model_name).pk
-            field_values[fk_field] = self.store.get_target(type_label, row[fk_field])
+            source_pk = row[fk_field]
+            target_pk = self.store.get_target(type_label, source_pk)
+            if target_pk is None:
+                raise UnresolvedForeignKey(f"generic FK {ct_field}/{fk_field} -> {type_label}:{source_pk}")
+            field_values[fk_field] = target_pk
 
     def _assign_team(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
         """Set a team-scoped row's team to the team being synced. The per-row team FK isn't exported

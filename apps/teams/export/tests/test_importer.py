@@ -14,7 +14,7 @@ from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
-from apps.teams.export.importer import Importer, MissingGlobalRow
+from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
@@ -574,6 +574,18 @@ def test_rerun_does_not_duplicate_generic_fk_row(store):
 
     assert store.get_target("annotations.usercomment", 500) == first
     assert UserComment.objects.count() == 1
+
+
+def test_generic_fk_with_untranslated_target_raises(store):
+    """If a generic FK's target was never imported, resolution must fail loudly rather than silently
+    nulling the relation -- matching how regular FKs behave."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    store.record("users.customuser", 60, UserFactory().id)
+    # chat.chatmessage 88 (the comment's object_id) is deliberately never recorded.
+
+    with pytest.raises(UnresolvedForeignKey):
+        importer.import_rows("annotations.usercomment", [_comment_row(source_id=500, user_src=60)])
 
 
 # ---------------------------------------------------------------------------
