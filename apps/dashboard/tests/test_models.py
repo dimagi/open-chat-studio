@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
+from ..filter_format import convert_saved_filter_data
 from ..models import DashboardCache, DashboardFilter
 
 
@@ -73,3 +74,23 @@ class TestDashboardFilter:
         assert dashboard_filter.filter_data == filter_data
         assert dashboard_filter.team == team
         assert dashboard_filter.user == user
+
+    def test_convert_saved_filter_data_to_new_format(self):
+        """Legacy filter payloads should be converted to the new f_/op_ query-style format."""
+        legacy_filter_data = {
+            "filter_0_column": "status",
+            "filter_0_operator": "equals",
+            "filter_0_value": "active",
+            "filter_1_column": "tags",
+            "filter_1_operator": "any of",
+            "filter_1_value": '["tag1", "tag2"]',
+        }
+
+        converted = convert_saved_filter_data(legacy_filter_data)
+
+        assert converted == {
+            "f_status": "active",
+            "op_status": "equals",
+            "f_tags": "tag1~tag2",
+            "op_tags": "any of",
+        }
