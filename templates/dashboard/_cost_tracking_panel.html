@@ -39,12 +39,12 @@
           <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Estimated" %}</div>
           <div class="text-xl font-semibold text-gray-900 dark:text-gray-100">${{ cost_summary.estimated_cost|cost_display }}</div>
           {% if cost_summary.unknown_call_count %}
-            <div class="text-xs text-amber-600 mt-1">
+            <div class="text-xs text-yellow-800 mt-1">
               {% blocktranslate count counter=cost_summary.unknown_call_count %}{{ counter }} call with no usage data{% plural %}{{ counter }} calls with no usage data{% endblocktranslate %}
             </div>
           {% endif %}
           {% if cost_summary.unpriced_call_count %}
-            <div class="text-xs text-amber-600 mt-1">
+            <div class="text-xs text-yellow-800 mt-1">
               {% blocktranslate count counter=cost_summary.unpriced_call_count %}{{ counter }} call missing pricing{% plural %}{{ counter }} calls missing pricing{% endblocktranslate %}
             </div>
           {% endif %}

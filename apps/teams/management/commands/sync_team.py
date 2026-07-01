@@ -12,7 +12,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
-from apps.teams.export.importer import Importer
+from apps.teams.export.importer import Importer, mute_signals
 from apps.teams.export.manifest import TEAM_MODEL, entry_model, schema_checksum
 from apps.teams.export.seal import load_private_key
 from apps.teams.export.translation import (
@@ -72,16 +72,15 @@ def run_sync(
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
     importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
-    # The team anchors everything else, so import it first. It's served as a single object from the
-    # dedicated ``team/`` endpoint rather than as a paginated resource in the manifest.
-    importer.import_rows(TEAM_MODEL, [client.get_team()])
-    write("synced team")
-    for entry in manifest["entries"]:
-        model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
-        model = entry_model(model_label)
-        cursor = _start_cursor(model_label, cursor_type, store, model)
-        importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
-        write(f"synced {resource}")
+    with mute_signals():
+        importer.import_rows(TEAM_MODEL, [client.get_team()])
+        write("synced team")
+        for entry in manifest["entries"]:
+            model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
+            model = entry_model(model_label)
+            cursor = _start_cursor(model_label, cursor_type, store, model)
+            importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
+            write(f"synced {resource}")
     return importer
 
 
@@ -138,7 +137,6 @@ class Command(BaseCommand):
         if options["private_key_path"]:
             private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
 
-        store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
         client = ResourceFetcher(options["source_url"], options["api_key"])
         enforce_schema = not options["skip_schema_check"]
 
@@ -154,6 +152,8 @@ class Command(BaseCommand):
                 options["state_dir"],
                 write=lambda message: self.stdout.write(self.style.WARNING(message)),
             )
+
+        store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
 
         run_sync(
             client,

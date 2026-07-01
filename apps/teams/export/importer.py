@@ -2,12 +2,15 @@
 create or update the row locally, restore its timestamps, and record the FK translation. Kept as
 plain functions plus a thin loop so the transforms can be unit-tested without a database."""
 
+import contextlib
 import copy
 import functools
 from collections.abc import Iterable
 
 from django.contrib.auth.models import Group
+from django.contrib.contenttypes.models import ContentType
 from django.db import models, transaction
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
@@ -15,7 +18,15 @@ from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
 
-from .manifest import GLOBAL_CONFIG, SECRET_REGISTRY, TEAM_MODEL, GlobalSpec, entry_model, model_has_team_field
+from .manifest import (
+    GLOBAL_CONFIG,
+    SECRET_REGISTRY,
+    TEAM_MODEL,
+    GlobalSpec,
+    entry_model,
+    generic_fk_fields,
+    model_has_team_field,
+)
 from .manifest import MANIFEST_ENTRIES as _ENTRIES
 from .seal import unseal
 from .translation import FKTranslationStore
@@ -23,6 +34,28 @@ from .translation import FKTranslationStore
 # The team is synced via a dedicated step rather than from MANIFEST_ENTRIES, but it's still a synced
 # target -- include it so FKs pointing at it resolve to the imported team instead of being nulled.
 MANIFEST_LABELS = {entry.model for entry in _ENTRIES} | {TEAM_MODEL}
+
+SIGNALS_TO_MUTE = (pre_save, post_save, pre_delete, post_delete, m2m_changed)
+
+
+@contextlib.contextmanager
+def mute_signals():
+    """Silence Django model signals while importing. The importer replays historical rows, so live
+    side effects keyed on these signals -- session-activity stamping, default-consent-form creation,
+    cache invalidation, m2m audit logging -- would only overwrite imported values or add noise.
+    Receivers are restored on exit. Process-global, so it must not wrap live request handling."""
+    saved = [(sig, sig.receivers) for sig in SIGNALS_TO_MUTE]
+    for sig in SIGNALS_TO_MUTE:
+        with sig.lock:
+            sig.receivers = []
+            sig.sender_receivers_cache.clear()
+    try:
+        yield
+    finally:
+        for sig, receivers in saved:
+            with sig.lock:
+                sig.receivers = receivers
+                sig.sender_receivers_cache.clear()
 
 
 class UnresolvedForeignKey(Exception):
@@ -123,10 +156,18 @@ def _match_default_consent_form(model, row: dict, store: FKTranslationStore, tar
     return model.objects.filter(team=target_team, is_default=True).first()
 
 
+def _match_queue_aggregate(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """A queue's aggregate is recreated as a side effect of importing its annotations, so map the
+    source row onto that existing one rather than creating a second (the queue OneToOne forbids two)."""
+    target_queue = store.get_target("human_annotations.annotationqueue", row.get("queue"))
+    return model.objects.filter(queue_id=target_queue).first() if target_queue else None
+
+
 # Rows matched to a pre-existing target row by natural key instead of created.
 _MATCH_EXISTING = {
     "users.customuser": _match_existing_user,
     "experiments.consentform": _match_default_consent_form,
+    "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator
@@ -230,13 +271,38 @@ class Importer:
         timestamps). FKs are remapped to target ids, pipeline/node resource ids are rewritten, and
         named-link fields are left out for ``_apply_named_links`` to handle."""
         named = set(_NAMED_LINK_FIELDS.get(model_label, []))
+        # A generic FK's two columns are resolved together by _resolve_generic_fks, so skip them in
+        # the per-field loop (the content-type column would otherwise be nulled and the object id
+        # copied verbatim as the untranslated source pk).
+        gfk_pairs = generic_fk_fields(model)
+        gfk_columns = {name for pair in gfk_pairs for name in pair}
         field_values, timestamps = {}, {}
         for field in model._meta.concrete_fields:
+            if field.name in gfk_columns:
+                continue
             self._collect_concrete_field(field, row, named, field_values, timestamps)
+        self._resolve_generic_fks(gfk_pairs, row, field_values)
         self._remap_embedded_resource_ids(model_label, field_values)
         self._assign_team(model_label, model, field_values)
         m2m_values = self._build_m2m_values(model, row, named)
         return field_values, m2m_values, timestamps
+
+    def _resolve_generic_fks(self, gfk_pairs: list[tuple[str, str]], row: dict, field_values: dict) -> None:
+        """Fill each generic FK's content-type and object-id columns. The content type is matched by
+        name (built into Django, identical across servers); the object id is translated through the
+        store. Every model a generic FK can point at is itself synced and imported first (the columns
+        are non-null and generic-FK models come last in the manifest), so the lookup always resolves.
+        Guarded by test_generic_fk_target_models_are_synced; if the invariant is ever violated we
+        fail fast here rather than silently null the relation, matching regular-FK resolution."""
+        for ct_field, fk_field in gfk_pairs:
+            type_label = row[ct_field]
+            app_label, model_name = type_label.split(".")
+            field_values[f"{ct_field}_id"] = ContentType.objects.get_by_natural_key(app_label, model_name).pk
+            source_pk = row[fk_field]
+            target_pk = self.store.get_target(type_label, source_pk)
+            if target_pk is None:
+                raise UnresolvedForeignKey(f"generic FK {ct_field}/{fk_field} -> {type_label}:{source_pk}")
+            field_values[fk_field] = target_pk
 
     def _assign_team(self, model_label: str, model: type[models.Model], field_values: dict) -> None:
         """Set a team-scoped row's team to the team being synced. The per-row team FK isn't exported
@@ -269,13 +335,24 @@ class Importer:
             field_values["params"] = remap_node_params(field_values["params"], self.store)
 
     def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
-        """Translate each m2m field's source pks to target pks, skipping name-linked fields."""
+        """Translate each m2m field's source pks to target pks, skipping name-linked fields. A member
+        of a synced model that has no translation is an ordering/interruption bug -- raise rather than
+        silently drop the link, matching resolve_fk. Members of deliberately-unsynced models can't be
+        translated and become None for the caller to filter out."""
         m2m_values = {}
         for field in model._meta.many_to_many:
             if field.name in row and field.name not in named:
                 label = field.related_model._meta.label_lower
-                m2m_values[field.name] = [self.store.get_target(label, as_int(pk)) for pk in row[field.name]]
+                m2m_values[field.name] = [self._resolve_m2m_member(field, label, pk) for pk in row[field.name]]
         return m2m_values
+
+    def _resolve_m2m_member(self, field, label: str, source_pk) -> int | None:
+        if label not in MANIFEST_LABELS:
+            return None  # target model deliberately not synced; leave the member out
+        target = self.store.get_target(label, as_int(source_pk))
+        if target is None:
+            raise UnresolvedForeignKey(f"{field.model._meta.label_lower}.{field.name} (m2m) -> {label}:{source_pk}")
+        return target
 
     def _match_global(self, model: type[models.Model], spec: GlobalSpec, row: dict) -> models.Model | None:
         """Find the shared global row on the target by its natural key (scoping field null)."""

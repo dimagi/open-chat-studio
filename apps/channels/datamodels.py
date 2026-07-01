@@ -252,7 +252,7 @@ def is_non_conversational_whatsapp_message(message_data: dict) -> bool:
 class WhatsAppMessage(BaseMessage):
     """Base class for WhatsApp messages (Turn.io and Meta Cloud API)."""
 
-    to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
+    to_number: str = Field(default="")  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)

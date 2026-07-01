@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from apps.cost_tracking.templatetags.cost_tracking import cost_display
+from apps.cost_tracking.templatetags.cost_tracking import cost_display, per_million
 
 
 @pytest.mark.parametrize(
@@ -23,3 +23,18 @@ from apps.cost_tracking.templatetags.cost_tracking import cost_display
 )
 def test_cost_display(value, expected):
     assert cost_display(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param(None, "0.00", id="none"),
+        pytest.param(Decimal("0"), "0.00", id="zero"),
+        pytest.param(Decimal("0.003"), "3.00", id="per-1k-to-per-1m"),
+        pytest.param(Decimal("0.00001"), "0.01", id="sub-cent-per-million"),
+        pytest.param(Decimal("0.015"), "15.00", id="fifteen-per-million"),
+        pytest.param(Decimal("0.0000045720"), "0.00", id="rounds-to-zero"),
+    ],
+)
+def test_per_million(value, expected):
+    assert per_million(value) == expected

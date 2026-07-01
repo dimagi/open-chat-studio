@@ -1,6 +1,3 @@
-from apps.chat.exceptions import UserReportableError
-
-
 class PipelineBuildError(Exception):
     """Exception to raise for errors detected at build time."""
 
@@ -65,9 +62,3 @@ class AbortPipeline(Exception):
 
     def to_json(self):
         return {"message": self.message, "tag_name": self.tag_name}
-
-
-class MessageTooLargeError(PipelineNodeRunError, UserReportableError):
-    """Raised when a user message exceeds the model's available token budget."""
-
-    pass

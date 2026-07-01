@@ -45,6 +45,8 @@ from .message_examples import base_messages
 
 
 class TestChannel(ChannelBase):
+    __test__ = False  # tell pytest not to collect this as a test class
+
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
