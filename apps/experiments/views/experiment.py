@@ -149,9 +149,13 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             chat_id=session.chat_id,
             tool_type=resource_type,
         )
+
+        purpose = (
+            FilePurpose.ASSISTANT if resource_type in ("code_interpreter", "file_search") else FilePurpose.MESSAGE_MEDIA
+        )
         for uploaded_file in uploaded_files.getlist(resource_type):
             new_file = File.objects.create(
-                name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.ASSISTANT
+                name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=purpose
             )
             attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
             created_files.append(new_file)
