@@ -6,10 +6,14 @@ The command is a thin shell: it wires the resource fetcher to the import engine 
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 """
 
+import logging
+from dataclasses import dataclass
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.channels.models import ExperimentChannel
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, mute_signals
@@ -23,6 +27,10 @@ from apps.teams.export.translation import (
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
+
+logger = logging.getLogger(__name__)
+
+CHANNEL_SETUP_DOCS_URL = f"{settings.DOCUMENTATION_BASE_URL}{settings.DOCUMENTATION_LINKS['deploy_channels']}"
 
 
 def _start_cursor(model_label, cursor_type, store, model):
@@ -100,6 +108,52 @@ def force_delete_team(team_slug, state_dir, write=lambda _m: None):
     Path(state_dir).joinpath(f"{team_slug}.sqlite").unlink(missing_ok=True)
 
 
+@dataclass
+class WebhookReregistrationReport:
+    """Outcome of re-registering channel webhooks after a sync.
+
+    ``updated``: labels of channels whose webhook was repointed automatically.
+    ``manual``: (label, webhook_url) pairs for channels the operator must configure by hand.
+    """
+
+    updated: list[str]
+    manual: list[tuple[str, str]]
+
+
+def _channel_label(channel: ExperimentChannel) -> str:
+    """Human label for the report: the chatbot name (falling back to the channel name) and platform."""
+    return f"{channel.experiment.name} / {channel.platform_enum.label}"
+
+
+def reregister_webhooks(team) -> WebhookReregistrationReport:
+    """Repoint every one of the team's channel webhooks at this server via its WebhookManager.
+
+    An imported channel's webhook at the provider still points at the source server; re-registering
+    swaps in this server's ``webhook_url`` (built from the local site domain). This covers all of the
+    team's channels rather than just the ones this run created: a sync interrupted partway through
+    would otherwise lose track of which channels still need it. Re-registering an already-correct
+    webhook is harmless, so covering the whole team is preferable to under-covering it. Channels whose
+    provider can't manage webhooks -- or where the provider call fails -- are collected for manual
+    setup rather than raising, so one bad channel can't fail the whole sync. Channels with no webhook
+    to configure (web, API, evaluations, widget) are skipped."""
+    report = WebhookReregistrationReport(updated=[], manual=[])
+    channels = ExperimentChannel.objects.filter(team=team).select_related("experiment", "messaging_provider")
+    for channel in channels:
+        manager = channel.get_webhook_manager()
+        if not manager or not manager.supports_webhook_management:
+            if channel.webhook_url:  # a webhook is needed but we can't set it automatically
+                report.manual.append((_channel_label(channel), channel.webhook_url))
+            continue
+        try:
+            manager.set_incoming_webhook(channel.extra_data or {}, channel.webhook_url)
+        except Exception:
+            logger.exception("Error re-registering webhook for channel %s", channel.id)
+            report.manual.append((_channel_label(channel), channel.webhook_url))
+        else:
+            report.updated.append(_channel_label(channel))
+    return report
+
+
 class Command(BaseCommand):
     help = "Sync a team's data from a source OCS server into this one."
 
@@ -155,7 +209,7 @@ class Command(BaseCommand):
 
         store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
 
-        run_sync(
+        importer = run_sync(
             client,
             store,
             private_key,
@@ -164,10 +218,25 @@ class Command(BaseCommand):
             enforce_schema=enforce_schema,
         )
 
+        report = reregister_webhooks(importer.target_team)
+        self._report_webhooks(report)
+
         if store.has_unfilled_targets():
             self.stdout.write(self.style.WARNING("Some rows are not yet synced; rerun to complete."))
         else:
             self.stdout.write(self.style.SUCCESS("Sync complete."))
+
+    def _report_webhooks(self, report: WebhookReregistrationReport) -> None:
+        """Print which channel webhooks were repointed automatically and which need manual setup."""
+        if report.updated:
+            self.stdout.write(self.style.SUCCESS("Re-registered webhooks automatically for:"))
+            for label in report.updated:
+                self.stdout.write(f"  - {label}")
+        if report.manual:
+            self.stdout.write(self.style.WARNING("These channels need their webhooks re-registered manually:"))
+            for label, url in report.manual:
+                self.stdout.write(f"  - {label}: {url}")
+            self.stdout.write(f"See {CHANNEL_SETUP_DOCS_URL} for channel setup instructions.")
 
     def _confirm_force_delete(self, team_slug) -> bool:
         self.stdout.write(
