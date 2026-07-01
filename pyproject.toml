@@ -92,7 +92,6 @@ dependencies = [
     "djlint>=1.39.5",
     "transformers",
     "packaging>=23.2",
-    "zipstream-ng>=1.9.2",
 ]
 
 [project.urls]
