@@ -215,7 +215,7 @@ When no replacement is specified:
 
 ## User Notifications
 
-Both the deprecation notification and the deletion command use the OCS notifications system (see [notifications guide](notifications.md)) rather than admin emails. Notifications are sent to team members with the `service_providers.change_llmprovidermodel` permission.
+Both the deprecation notification and the deletion command use the OCS notifications system (see [notifications guide](../developer_guides/code_systems/notifications.md)) rather than admin emails. Notifications are sent to team members with the `service_providers.change_llmprovidermodel` permission.
 
 Notifications include:
 - Which model was deprecated/deleted
