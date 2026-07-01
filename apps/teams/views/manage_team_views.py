@@ -1,29 +1,48 @@
+from celery.result import AsyncResult
+from celery_progress.backend import PROGRESS_STATE
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import HttpResponse, HttpResponseRedirect, StreamingHttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_POST
 
 from apps.assistants.models import OpenAiAssistant
 from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
-from apps.teams.file_export import stream_team_files_zip
 from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm, TeamPublicKeyForm
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
-from apps.teams.tasks import delete_team_async
+from apps.teams.tasks import delete_team_async, start_team_files_export
 from apps.teams.utils import current_team
 from apps.web.forms import set_form_fields_disabled
+
+_ACTIVE_EXPORT_STATES = {"PENDING", "STARTED", PROGRESS_STATE}
 
 
 def get_related_assistants(team):
     related_assistants = OpenAiAssistant.objects.filter(team=team)
     return [Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in related_assistants]
+
+
+def _team_files_export_context(team):
+    """Resume progress for an in-flight export, or surface the last completed one.
+
+    An in-flight task_id takes priority: it may be replacing an older
+    `files_export` file, and the progress UI is mutually exclusive with the
+    ready-to-download state.
+    """
+    task_id = team.files_export_task_id
+    if task_id:
+        if AsyncResult(task_id).state in _ACTIVE_EXPORT_STATES:
+            return {"files_export_task_id": task_id}
+        team.mark_files_export_finished()
+    if team.files_export_id and team.files_export.file:
+        return {"files_export_file": team.files_export}
+    return {}
 
 
 def _manage_team_context(request, team, *, team_form=None, public_key_form=None):
@@ -37,6 +56,7 @@ def _manage_team_context(request, team, *, team_form=None, public_key_form=None)
         "related_assistants": get_related_assistants(team),
         "notify_recipients_form": NotifyRecipientsForm,
         "public_key_form": public_key_form or TeamPublicKeyForm(instance=team),
+        **_team_files_export_context(team),
     }
 
 
@@ -167,13 +187,22 @@ def cancel_invitation_view(request, team_slug, invitation_id):
     return HttpResponse("")
 
 
-@require_GET
+@require_POST
 @login_and_team_required
 def download_team_files(request, team_slug):
+    """Start a background task that zips up the team's files.
+
+    If an export is already in flight for this team, resumes tracking it
+    instead of starting a second one. Returns a progress partial that polls
+    for completion and then links to the generated zip, which is served via a
+    pre-signed URL (see FileView).
+    """
     if not request.team_membership.is_team_admin():
         raise PermissionDenied
     team = request.team
-    filename = f"team-{team.slug}-files-{timezone.now().date().isoformat()}.zip"
-    response = StreamingHttpResponse(stream_team_files_zip(team), content_type="application/zip")
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    return response
+    task_id = start_team_files_export(team)
+    return render(
+        request,
+        "teams/partials/download_files_progress.html",
+        {"task_id": task_id, "team": team},
+    )
