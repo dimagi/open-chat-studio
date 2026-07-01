@@ -3,8 +3,10 @@ from django.apps import apps
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.api.export.serializers import build_resource_serializer
+from apps.files.models import FilePurpose
 from apps.teams.export import manifest
 from apps.utils.factories.cost_tracking import PricingRuleFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -188,6 +190,20 @@ def test_pricing_rules_queryset_excludes_global_rules():
     pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
     assert mine.pk in pks
     assert global_rule.pk not in pks
+
+
+@pytest.mark.django_db()
+def test_files_queryset_excludes_data_export_files():
+    """Data-export files are transient download bundles (24h expiry), not shareable content, so the
+    team-scoped queryset must leave them out while keeping every other purpose."""
+    team = TeamFactory()
+    kept = FileFactory(team=team, purpose=FilePurpose.COLLECTION)
+    export_file = FileFactory(team=team, purpose=FilePurpose.DATA_EXPORT)
+
+    entry = manifest.get_manifest_entry("files")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert kept.pk in pks
+    assert export_file.pk not in pks
 
 
 @pytest.mark.django_db()
