@@ -80,6 +80,21 @@ def test_backfill_leaves_ambiguous_and_already_set_files_untouched():
 
 
 @pytest.mark.django_db()
+def test_backfill_does_not_treat_uploaded_zip_attachments_as_exports():
+    # A user-uploaded ZIP attached to a chat is indistinguishable from a real
+    # export by content_type alone, so it must not be classified (and expired).
+    attachment = ChatAttachmentFactory.create(tool_type="ocs_attachments")
+    zip_upload = FileFactory.create(content_type="application/zip", team=attachment.chat.team)
+    attachment.files.add(zip_upload)
+
+    _run()
+
+    zip_upload.refresh_from_db()
+    assert zip_upload.purpose == ""
+    assert zip_upload.expiry_date is None
+
+
+@pytest.mark.django_db()
 def test_backfill_is_idempotent():
     openai_file = FileFactory.create(external_source="openai")
 
