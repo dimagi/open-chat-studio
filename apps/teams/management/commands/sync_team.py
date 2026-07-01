@@ -68,6 +68,20 @@ def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
     return manifest
 
 
+def _style_synced_line(message: str, count: int, style) -> str:
+    """Colour a progress line by how much it moved: green when rows were synced, muted (ANSI faint)
+    when zero so the eye skips the no-op lines. Returns the message unchanged when no style is given
+    or colour is disabled (--no-color / non-tty, where the style funcs are the identity), so
+    redirected logs stay clean."""
+    if style is None:
+        return message
+    if count > 0:
+        return style.SUCCESS(message)
+    if style.SUCCESS("") == "":  # colour disabled -- leave it plain rather than emit raw escapes
+        return message
+    return f"\x1b[2m{message}\x1b[0m"
+
+
 def run_sync(
     client,
     store,
@@ -76,6 +90,7 @@ def run_sync(
     page_limit=100,
     enforce_schema=True,
     on_user_created=send_password_reset_email,
+    style=None,
 ):
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
@@ -87,8 +102,8 @@ def run_sync(
             model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
             model = entry_model(model_label)
             cursor = _start_cursor(model_label, cursor_type, store, model)
-            importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
-            write(f"synced {resource}")
+            count = importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
+            write(_style_synced_line(f"synced {count} new {resource}", count, style))
     return importer
 
 
@@ -121,7 +136,8 @@ class WebhookReregistrationReport:
 
 
 def _channel_label(channel: ExperimentChannel) -> str:
-    """Human label for the report: the chatbot name (falling back to the channel name) and platform."""
+    """Human label for the report: the chatbot name and platform. Team-scoped channels always have an
+    experiment, so ``experiment`` is never null here (global channels, which lack one, have no team)."""
     return f"{channel.experiment.name} / {channel.platform_enum.label}"
 
 
@@ -216,27 +232,48 @@ class Command(BaseCommand):
             write=self.stdout.write,
             page_limit=options["limit"],
             enforce_schema=enforce_schema,
+            style=self.style,
         )
 
         report = reregister_webhooks(importer.target_team)
-        self._report_webhooks(report)
+        self._report(report, sync_complete=not store.has_unfilled_targets())
 
-        if store.has_unfilled_targets():
-            self.stdout.write(self.style.WARNING("Some rows are not yet synced; rerun to complete."))
-        else:
-            self.stdout.write(self.style.SUCCESS("Sync complete."))
+    def _report(self, webhook_report: WebhookReregistrationReport, *, sync_complete: bool) -> None:
+        """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
+        which channel webhooks were repointed automatically, which channels and un-synced resources
+        need manual setup, and whether the sync finished or must be rerun. Sections are headed and
+        blank-line separated so the report stands apart from the row-by-row progress log above it."""
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING("Sync report"))
+        self.stdout.write(self.style.MIGRATE_HEADING("=" * 60))
 
-    def _report_webhooks(self, report: WebhookReregistrationReport) -> None:
-        """Print which channel webhooks were repointed automatically and which need manual setup."""
-        if report.updated:
+        if webhook_report.updated:
+            self.stdout.write("")
             self.stdout.write(self.style.SUCCESS("Re-registered webhooks automatically for:"))
-            for label in report.updated:
+            for label in webhook_report.updated:
                 self.stdout.write(f"  - {label}")
-        if report.manual:
+
+        if webhook_report.manual:
+            self.stdout.write("")
             self.stdout.write(self.style.WARNING("These channels need their webhooks re-registered manually:"))
-            for label, url in report.manual:
-                self.stdout.write(f"  - {label}: {url}")
-            self.stdout.write(f"See {CHANNEL_SETUP_DOCS_URL} for channel setup instructions.")
+            for label, url in webhook_report.manual:
+                self.stdout.write(f"  - {label}")
+                self.stdout.write(f"      {url}")
+            self.stdout.write(f"  See {CHANNEL_SETUP_DOCS_URL} for channel setup instructions.")
+
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING("These resources are not migrated and must be recreated manually on this server:")
+        )
+        self.stdout.write("  - OAuth applications")
+        self.stdout.write("  - Slack bots")
+        self.stdout.write("  - User API keys")
+
+        self.stdout.write("")
+        if sync_complete:
+            self.stdout.write(self.style.SUCCESS("Sync complete."))
+        else:
+            self.stdout.write(self.style.WARNING("Some rows are not yet synced; rerun to complete."))
 
     def _confirm_force_delete(self, team_slug) -> bool:
         self.stdout.write(

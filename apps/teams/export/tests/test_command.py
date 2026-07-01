@@ -354,9 +354,9 @@ def test_reregister_webhooks_flags_channel_when_registration_fails(monkeypatch):
     assert report.manual == [(f"{channel.experiment.name} / {ChannelPlatform.TELEGRAM.label}", channel.webhook_url)]
 
 
-def test_report_webhooks_lists_manual_channels_and_docs_link():
-    """The final report names the auto-updated channels and, when any need manual setup, lists them
-    with their URL and a link to the channel-setup docs."""
+def test_report_lists_manual_channels_and_docs_link():
+    """The report names the auto-updated channels and, when any need manual setup, lists them with
+    their URL and a link to the channel-setup docs."""
     out = io.StringIO()
     command = Command(stdout=out)
     report = WebhookReregistrationReport(
@@ -364,7 +364,7 @@ def test_report_webhooks_lists_manual_channels_and_docs_link():
         manual=[("Bot B / WhatsApp", "https://example.com/hook")],
     )
 
-    command._report_webhooks(report)
+    command._report(report, sync_complete=True)
 
     text = out.getvalue()
     assert "Bot A / Telegram" in text
