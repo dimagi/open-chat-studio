@@ -342,6 +342,23 @@ def test_reregister_webhooks_skips_channels_without_a_webhook():
     assert report.manual == []
 
 
+def test_reregister_webhooks_labels_channel_without_experiment_by_name(monkeypatch):
+    """A channel with a webhook but no linked experiment (e.g. a team-global channel) is reported by
+    its own name rather than crashing on the missing experiment."""
+    channel = ExperimentChannelFactory(
+        platform=ChannelPlatform.TELEGRAM, experiment=None, name="Orphan channel", extra_data={"bot_token": "tok"}
+    )
+    monkeypatch.setattr(
+        "apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook",
+        lambda self, extra_data, webhook_url: None,
+    )
+
+    report = reregister_webhooks(channel.team)
+
+    assert report.updated == [f"Orphan channel / {ChannelPlatform.TELEGRAM.label}"]
+    assert report.manual == []
+
+
 def test_reregister_webhooks_flags_channel_when_registration_fails(monkeypatch):
     """A failure talking to the provider is downgraded to a manual-setup entry, not raised -- the
     sync as a whole must still complete."""

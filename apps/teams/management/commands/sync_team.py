@@ -136,9 +136,10 @@ class WebhookReregistrationReport:
 
 
 def _channel_label(channel: ExperimentChannel) -> str:
-    """Human label for the report: the chatbot name and platform. Team-scoped channels always have an
-    experiment, so ``experiment`` is never null here (global channels, which lack one, have no team)."""
-    return f"{channel.experiment.name} / {channel.platform_enum.label}"
+    """Human label for the report: the chatbot name and platform. Falls back to the channel's own name
+    when it has no linked experiment (team-global channels -- web, API, evaluations -- have none)."""
+    name = channel.experiment.name if channel.experiment_id else channel.name
+    return f"{name} / {channel.platform_enum.label}"
 
 
 def reregister_webhooks(team) -> WebhookReregistrationReport:
