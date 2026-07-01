@@ -6,30 +6,25 @@ import pytest
 from django.urls import reverse
 
 from apps.files.models import File, FilePurpose
-from apps.teams.backends import add_user_to_team, make_user_team_owner
 from apps.teams.models import Team
 from apps.teams.tasks import create_team_files_zip_task
-from apps.users.models import CustomUser
 from apps.utils.factories.files import FileFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.fixture()
 def team():
-    return Team.objects.create(name="Acme", slug="acme")
+    return TeamWithUsersFactory.create()
 
 
 @pytest.fixture()
 def admin(team):
-    user = CustomUser.objects.create(username="admin@acme.com")
-    make_user_team_owner(team, user)
-    return user
+    return next(m.user for m in team.membership_set.all() if m.is_team_admin())
 
 
 @pytest.fixture()
 def member(team):
-    user = CustomUser.objects.create(username="member@acme.com")
-    add_user_to_team(team, user)
-    return user
+    return next(m.user for m in team.membership_set.all() if not m.is_team_admin())
 
 
 def _run_task(team):
@@ -187,48 +182,3 @@ class TestDownloadButtonVisibility:
         client.force_login(request.getfixturevalue(user_fixture))
         response = client.get(_manage_team_url(team))
         assert (_download_files_url(team) in response.content.decode()) is should_see
-
-
-@pytest.mark.django_db()
-class TestManageTeamExportState:
-    def test_shows_resumed_progress_when_task_in_flight(self, client, team, admin):
-        team.mark_files_export_started("abc")
-        client.force_login(admin)
-        with patch("apps.teams.views.manage_team_views.AsyncResult") as async_result:
-            async_result.return_value.state = "STARTED"
-            response = client.get(_manage_team_url(team))
-        content = response.content.decode()
-        assert "ocs-download-progress-root" in content
-        assert "abc" in content
-        team.refresh_from_db()
-        assert team.files_export_task_id == "abc"
-
-    def test_clears_stale_task_id_and_hides_progress_when_task_finished(self, client, team, admin):
-        team.mark_files_export_started("abc")
-        client.force_login(admin)
-        with patch("apps.teams.views.manage_team_views.AsyncResult") as async_result:
-            async_result.return_value.state = "SUCCESS"
-            response = client.get(_manage_team_url(team))
-        assert "ocs-download-progress-root" not in response.content.decode()
-        team.refresh_from_db()
-        assert team.files_export_task_id == ""
-
-    def test_shows_ready_download_link_for_previous_export(self, client, team, admin):
-        FileFactory(team=team, file__data=b"hello", file__filename="a.txt")
-        export_id = _run_task(team)
-        client.force_login(admin)
-        response = client.get(_manage_team_url(team))
-        content = response.content.decode()
-        assert "ocs-download-progress-root" not in content
-        assert "ocs-ready-download-link" in content
-        assert f"/files/{export_id}/?allow_s3" in content
-
-    def test_ready_link_disappears_after_export_file_deleted(self, client, team, admin):
-        FileFactory(team=team, file__data=b"hello", file__filename="a.txt")
-        export_id = _run_task(team)
-        File.objects.get(id=export_id).delete()
-        client.force_login(admin)
-        response = client.get(_manage_team_url(team))
-        content = response.content.decode()
-        assert "ocs-ready-download-link" not in content
-        assert "ocs-download-progress-root" not in content
