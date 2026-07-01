@@ -20,6 +20,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.experiments.views.experiment import _verify_user_or_start_session
+from apps.files.models import FilePurpose
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.experiment import (
     ConsentFormFactory,
@@ -343,13 +344,27 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     file_search_file.name = "fs.text"
     code_interpreter_file = BytesIO(b"some content")
     code_interpreter_file.name = "ci.text"
-    data = {"message": "Hi there", "file_search": [file_search_file], "code_interpreter": [code_interpreter_file]}
+    ocs_attachment_file = BytesIO(b"some content")
+    ocs_attachment_file.name = "ocs.text"
+    data = {
+        "message": "Hi there",
+        "file_search": [file_search_file],
+        "code_interpreter": [code_interpreter_file],
+        "ocs_attachments": [ocs_attachment_file],
+    }
     client.post(url, data=data)
-    # Check if tool resources were created with the files
+    # Check if tool resources were created with the files, with the purpose matching the resource type
     ci_resource = session.chat.attachments.get(tool_type="code_interpreter")
-    assert ci_resource.files.filter(name="ci.text").exists()
+    ci_file = ci_resource.files.get(name="ci.text")
+    assert ci_file.purpose == FilePurpose.ASSISTANT
+
     fs_resource = session.chat.attachments.get(tool_type="file_search")
-    assert fs_resource.files.filter(name="fs.text").exists()
+    fs_file = fs_resource.files.get(name="fs.text")
+    assert fs_file.purpose == FilePurpose.ASSISTANT
+
+    ocs_resource = session.chat.attachments.get(tool_type="ocs_attachments")
+    ocs_file = ocs_resource.files.get(name="ocs.text")
+    assert ocs_file.purpose == FilePurpose.MESSAGE_MEDIA
 
 
 @pytest.mark.django_db()
