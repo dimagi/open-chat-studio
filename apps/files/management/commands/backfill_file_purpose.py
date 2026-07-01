@@ -22,7 +22,9 @@ RULES: list[tuple[str, Q]] = [
     (FilePurpose.ASSISTANT, Q(external_source="openai")),
     (FilePurpose.DATA_EXPORT, Q(content_type="application/gzip", name__icontains="Chat Export")),
     (FilePurpose.DATA_EXPORT, Q(content_type="text/csv", name__icontains="_latest_results_")),
-    (FilePurpose.DATA_EXPORT, Q(content_type="application/zip")),
+    # Generated collection exports are the only ZIPs we create with a purpose;
+    # exclude ZIPs attached to a chat so user uploads aren't classified (and expired).
+    (FilePurpose.DATA_EXPORT, Q(content_type="application/zip") & Q(chatattachment__isnull=True)),
 ]
 
 UPDATE_BATCH_SIZE = 5000
