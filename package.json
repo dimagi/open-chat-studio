@@ -69,7 +69,7 @@
     "dompurify": "^3.4.11",
     "htmx.org": "^2.0.8",
     "immer": "^10.1.1",
-    "js-cookie": "^3.0.7",
+    "js-cookie": "^3.0.8",
     "js-tiktoken": "^1.0.21",
     "lodash": "^4.17.23",
     "open-chat-studio-widget": "^0.10.0",
