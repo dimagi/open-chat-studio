@@ -5470,6 +5470,14 @@ components:
           pattern: ^[-a-zA-Z0-9_]+$
         metadata:
           description: Internal staff-only metadata for this team.
+        files_export_task_id:
+          type: string
+          description: Celery task id of an in-progress team-files export, if any.
+          maxLength: 255
+        files_export:
+          type: integer
+          nullable: true
+          description: Most recently generated team-files export, if any.
       required:
       - created_at
       - feature_flags
