@@ -81,6 +81,28 @@
   },
   {
     "provider_type": "anthropic",
+    "model_name": "claude-sonnet-5",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.015"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0003"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00375"
+      }
+    ]
+  },
+  {
+    "provider_type": "anthropic",
     "model_name": "claude-fable-5",
     "rules": [
       {
