@@ -22,3 +22,16 @@ def cost_display(value) -> str:
     if value == 0 or value >= Decimal("0.01"):
         return f"{value:.2f}"
     return f"{value:.4f}"
+
+
+@register.filter
+def per_million(value) -> str:
+    """Render a per-1K unit price as a per-1M display string (e.g. "3.00").
+
+    Model pricing is conventionally quoted per million tokens, matching the
+    override form's labels. Stored unit prices are per 1K tokens, so scale by
+    1000 and show 2 decimal places.
+    """
+    if value is None:
+        return "0.00"
+    return f"{Decimal(str(value)) * 1000:.2f}"

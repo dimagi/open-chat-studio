@@ -306,7 +306,11 @@ def _get_models_by_type(queryset):
     models_by_type = defaultdict(list)
     for model in queryset:
         models_by_type[model.type].append(model)
-    return {key: sorted(value, key=lambda x: x.name) for key, value in models_by_type.items()}
+    # Deprecated models sink to the bottom; otherwise newest first.
+    return {
+        key: sorted(value, key=lambda x: (getattr(x, "deprecated", False), -x.created_at.timestamp()))
+        for key, value in models_by_type.items()
+    }
 
 
 def _flatten(models_by_type: dict) -> list:
