@@ -17,6 +17,8 @@ from reconcile_models import (
     Candidate,
     MissingPricingEntry,
     RateChange,
+    _ReconcileResults,
+    _commit_price_changes,
     _fmt,
     _format_per_1k,
     _next_migration_number,
@@ -32,6 +34,7 @@ from reconcile_models import (
     load_active_default_models,
     load_priced_models,
     load_registered_models,
+    load_seed,
     process_candidates,
     rates_from_detail,
     render_missing_pricing_issue_body,
@@ -829,8 +832,9 @@ def test_render_pr_body_includes_backfill_section():
     body = render_pr_body(changes=[], unmatched=set(), backfilled=backfilled)
 
     assert "## Backfilled from LiteLLM" in body
-    assert "gemma-7b-it" in body
-    assert "groq" in body
+    # Each rule gets its own row with 4 cells.
+    assert "| groq | gemma-7b-it | llm_input | 0.00005 |" in body
+    assert "| groq | gemma-7b-it | llm_output | 0.00008 |" in body
 
 
 def test_commit_price_changes_merges_backfill_into_partial_entry(repo_root, tmp_path):
@@ -838,13 +842,6 @@ def test_commit_price_changes_merges_backfill_into_partial_entry(repo_root, tmp_
     (e.g. with only llm_cached_input) should have its rules merged in rather
     than silently dropped.
     """
-    from reconcile_models import (
-        _ReconcileResults,
-        _commit_price_changes,
-        load_seed,
-    )
-    import datetime
-
     # Seed the file with a partial entry (cached_input only, no input/output).
     seed_path = repo_root / "apps/cost_tracking/seed_data/llm_pricing.json"
     partial_seed = [

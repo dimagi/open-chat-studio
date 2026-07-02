@@ -740,7 +740,7 @@ def render_pr_body(changes: list[RateChange], unmatched: set[str], backfilled: l
         lines += [
             "## Backfilled from LiteLLM",
             "",
-            "The following models had no seed entry and were auto-priced using the",
+            "The following models had missing or partial seed pricing and were auto-priced using the",
             "[LiteLLM model price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).",
             "Verify the rates before merging.",
             "",
@@ -763,8 +763,11 @@ def _change_row(c: RateChange) -> str:
 
 
 def _backfill_rows(entry: dict) -> str:
-    rules_str = ", ".join(f"{r['service_kind']}: {r['unit_price']}" for r in entry["rules"])
-    return f"| {entry['provider_type']} | {entry['model_name']} | {rules_str} |"
+    """Return one table row per pricing rule, matching the 4-column header."""
+    return "\n".join(
+        f"| {entry['provider_type']} | {entry['model_name']} | {r['service_kind']} | {r['unit_price']} |"
+        for r in entry["rules"]
+    )
 
 
 def _unmatched_section(unmatched: set[str]) -> list[str]:
