@@ -11,20 +11,20 @@ from apps.files.models import File, FilePurpose
 EXPORT_EXPIRY = timezone.timedelta(days=7)
 
 # Conditions that reliably identify a file's purpose, in precedence order. A
-# file is assigned to the first rule it matches; anything that matches nothing
-# (e.g. inbound media attached as "ocs_attachments", which is indistinguishable
-# from a user upload after the fact) is left untouched.
+# file is assigned to the first rule it matches; anything that matches nothing is
+# left untouched. ASSISTANT is reserved for bot-configuration files (assistant
+# tool resources and openai-synced files); any file attached to a conversation
+# (ChatAttachment, any tool_type) is MESSAGE_MEDIA. The conversation rule sits
+# above the export patterns so a user-uploaded ZIP attached to a chat is treated
+# as media rather than a (short-lived) export.
 RULES: list[tuple[str, Q]] = [
     (FilePurpose.COLLECTION, Q(collections__isnull=False) | Q(document_sources__isnull=False)),
     (FilePurpose.ASSISTANT, Q(toolresources__isnull=False)),
-    (FilePurpose.MESSAGE_MEDIA, Q(chatattachment__tool_type="voice_message")),
-    (FilePurpose.ASSISTANT, Q(chatattachment__tool_type__in=["code_interpreter", "file_search"])),
+    (FilePurpose.MESSAGE_MEDIA, Q(chatattachment__isnull=False)),
     (FilePurpose.ASSISTANT, Q(external_source="openai")),
     (FilePurpose.DATA_EXPORT, Q(content_type="application/gzip", name__icontains="Chat Export")),
     (FilePurpose.DATA_EXPORT, Q(content_type="text/csv", name__icontains="_latest_results_")),
-    # Generated collection exports are the only ZIPs we create with a purpose;
-    # exclude ZIPs attached to a chat so user uploads aren't classified (and expired).
-    (FilePurpose.DATA_EXPORT, Q(content_type="application/zip") & Q(chatattachment__isnull=True)),
+    (FilePurpose.DATA_EXPORT, Q(content_type="application/zip")),
 ]
 
 UPDATE_BATCH_SIZE = 5000

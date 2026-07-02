@@ -154,8 +154,10 @@ def chat_upload_file(request, session_id):
             team=session.team,
             content_size=file.size,
             content_type=File.get_content_type(file),
+            # 24h expiry is an abandoned-upload guard; it is cleared once the file is
+            # attached to a message (see the send handler below).
             expiry_date=expiry_date,
-            purpose=FilePurpose.ASSISTANT,
+            purpose=FilePurpose.MESSAGE_MEDIA,
             metadata={
                 "session_id": str(session_id),
                 "uploaded_by": uploaded_by,

@@ -353,14 +353,15 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
         "ocs_attachments": [ocs_attachment_file],
     }
     client.post(url, data=data)
-    # Check if tool resources were created with the files, with the purpose matching the resource type
+    # Tool resources are created with the files. Participant uploads are conversation
+    # media regardless of which tool they feed; ASSISTANT is reserved for bot config.
     ci_resource = session.chat.attachments.get(tool_type="code_interpreter")
     ci_file = ci_resource.files.get(name="ci.text")
-    assert ci_file.purpose == FilePurpose.ASSISTANT
+    assert ci_file.purpose == FilePurpose.MESSAGE_MEDIA
 
     fs_resource = session.chat.attachments.get(tool_type="file_search")
     fs_file = fs_resource.files.get(name="fs.text")
-    assert fs_file.purpose == FilePurpose.ASSISTANT
+    assert fs_file.purpose == FilePurpose.MESSAGE_MEDIA
 
     ocs_resource = session.chat.attachments.get(tool_type="ocs_attachments")
     ocs_file = ocs_resource.files.get(name="ocs.text")

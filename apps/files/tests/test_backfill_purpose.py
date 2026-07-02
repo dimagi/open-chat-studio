@@ -31,6 +31,10 @@ def test_backfill_assigns_purpose_by_relation_and_pattern():
     code_file = FileFactory.create(team=code_attachment.chat.team)
     code_attachment.files.add(code_file)
 
+    ocs_attachment = ChatAttachmentFactory.create(tool_type="ocs_attachments")
+    ocs_file = FileFactory.create(team=ocs_attachment.chat.team)
+    ocs_attachment.files.add(ocs_file)
+
     openai_file = FileFactory.create(external_source="openai")
     gzip_export = FileFactory.create(content_type="application/gzip", name="My Bot Chat Export 2026-06-30.csv.gz")
     eval_export = FileFactory.create(content_type="text/csv", name="config_latest_results_2026-06-30.csv")
@@ -39,10 +43,13 @@ def test_backfill_assigns_purpose_by_relation_and_pattern():
     _run()
 
     assert File.objects.get(pk=collection_file.file.pk).purpose == FilePurpose.COLLECTION
+    # ASSISTANT is reserved for bot config (tool resources + openai sync); every
+    # conversation-attached file is MESSAGE_MEDIA regardless of tool_type.
     assert File.objects.get(pk=tool_file.pk).purpose == FilePurpose.ASSISTANT
-    assert File.objects.get(pk=voice_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
-    assert File.objects.get(pk=code_file.pk).purpose == FilePurpose.ASSISTANT
     assert File.objects.get(pk=openai_file.pk).purpose == FilePurpose.ASSISTANT
+    assert File.objects.get(pk=voice_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
+    assert File.objects.get(pk=code_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
+    assert File.objects.get(pk=ocs_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
     assert File.objects.get(pk=gzip_export.pk).purpose == FilePurpose.DATA_EXPORT
     assert File.objects.get(pk=eval_export.pk).purpose == FilePurpose.DATA_EXPORT
     assert File.objects.get(pk=zip_export.pk).purpose == FilePurpose.DATA_EXPORT
@@ -64,25 +71,23 @@ def test_backfill_sets_expiry_on_exports_relative_to_creation():
 
 @pytest.mark.django_db()
 def test_backfill_leaves_ambiguous_and_already_set_files_untouched():
+    # An unlinked file with a generic content type matches no rule.
     ambiguous = FileFactory.create(content_type="text/plain")
-    ocs_attachment = ChatAttachmentFactory.create(tool_type="ocs_attachments")
-    ocs_file = FileFactory.create(team=ocs_attachment.chat.team)
-    ocs_attachment.files.add(ocs_file)
 
     already_set = FileFactory.create(external_source="openai", purpose=FilePurpose.MESSAGE_MEDIA)
 
     _run()
 
     assert File.objects.get(pk=ambiguous.pk).purpose == ""
-    assert File.objects.get(pk=ocs_file.pk).purpose == ""
     # an explicit purpose is never overwritten, even when a rule would match
     assert File.objects.get(pk=already_set.pk).purpose == FilePurpose.MESSAGE_MEDIA
 
 
 @pytest.mark.django_db()
-def test_backfill_does_not_treat_uploaded_zip_attachments_as_exports():
-    # A user-uploaded ZIP attached to a chat is indistinguishable from a real
-    # export by content_type alone, so it must not be classified (and expired).
+def test_backfill_treats_chat_attached_zip_as_media_not_export():
+    # A user-uploaded ZIP attached to a chat matches the application/zip export
+    # pattern, but the conversation rule takes precedence: it is media, and must
+    # not get an export expiry.
     attachment = ChatAttachmentFactory.create(tool_type="ocs_attachments")
     zip_upload = FileFactory.create(content_type="application/zip", team=attachment.chat.team)
     attachment.files.add(zip_upload)
@@ -90,7 +95,7 @@ def test_backfill_does_not_treat_uploaded_zip_attachments_as_exports():
     _run()
 
     zip_upload.refresh_from_db()
-    assert zip_upload.purpose == ""
+    assert zip_upload.purpose == FilePurpose.MESSAGE_MEDIA
     assert zip_upload.expiry_date is None
 
 
