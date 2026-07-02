@@ -47,6 +47,10 @@ class Team(BaseModel):
         blank=True,
         help_text="Internal staff-only metadata for this team.",
     )
+    is_migrating = models.BooleanField(
+        default=False,
+        help_text="When set, the team's outbound message firing is frozen while its data is migrated.",
+    )
 
     def save(self, *args, **kwargs):
         from .helpers import get_next_unique_team_slug  # noqa: PLC0415 - circular: teams.helpers imports teams.models

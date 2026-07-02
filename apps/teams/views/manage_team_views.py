@@ -11,7 +11,13 @@ from apps.assistants.models import OpenAiAssistant
 from apps.generics.chips import Chip
 from apps.teams.backends import make_user_team_owner
 from apps.teams.decorators import login_and_team_required
-from apps.teams.forms import InvitationForm, NotifyRecipientsForm, TeamChangeForm, TeamPublicKeyForm
+from apps.teams.forms import (
+    InvitationForm,
+    NotifyRecipientsForm,
+    TeamChangeForm,
+    TeamMigrationForm,
+    TeamPublicKeyForm,
+)
 from apps.teams.invitations import send_invitation
 from apps.teams.models import Invitation
 from apps.teams.tasks import delete_team_async
@@ -154,6 +160,23 @@ def set_public_key(request, team_slug):
         request,
         "teams/manage_team.html",
         _manage_team_context(request, request.team, public_key_form=form),
+    )
+
+
+@require_POST
+@permission_required("teams.change_team", raise_exception=True)
+def set_migration_lock(request, team_slug):
+    form = TeamMigrationForm(request.POST, instance=request.team)
+    if form.is_valid():
+        form.save()
+        armed = form.cleaned_data["is_migrating"]
+        messages.success(request, _("Migration mode enabled.") if armed else _("Migration mode disabled."))
+    else:
+        messages.error(request, _("Could not update migration mode."))
+    return render(
+        request,
+        "teams/manage_team.html",
+        _manage_team_context(request, request.team),
     )
 
 

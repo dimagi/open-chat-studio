@@ -63,6 +63,8 @@ def test_team_serializer_excludes_members_and_public_key_and_lists_flags():
     data = _serialize(Team, team)
     assert "members" not in data
     assert "public_key" not in data
+    # is_migrating is an internal operational flag; it must not be replicated to an import target.
+    assert "is_migrating" not in data
     assert isinstance(data["feature_flags"], list)
     assert data["id"] == team.id
     assert "created_at" in data
