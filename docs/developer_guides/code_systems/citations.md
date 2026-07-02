@@ -26,7 +26,7 @@ This processing step occurs in `_process_agent_output()` in `apps/pipelines/node
 Example transformation:
 
 **Input from LLM:**
-```
+```text
 The sky is blue <CIT 123 />. The grass is green <CIT 456 />.
 ```
 
