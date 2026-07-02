@@ -802,6 +802,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data-node",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
+    "deploy_channels": "/how-to/deploy_to_different_channels/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",
