@@ -79,7 +79,7 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
@@ -149,8 +149,14 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             chat_id=session.chat_id,
             tool_type=resource_type,
         )
+
+        purpose = (
+            FilePurpose.ASSISTANT if resource_type in ("code_interpreter", "file_search") else FilePurpose.MESSAGE_MEDIA
+        )
         for uploaded_file in uploaded_files.getlist(resource_type):
-            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
+            new_file = File.objects.create(
+                name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=purpose
+            )
             attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
             created_files.append(new_file)
 
