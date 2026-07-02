@@ -16,7 +16,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.export.permissions import IsTeamAdmin
+from apps.api.export.permissions import IsTeamAdmin, TeamIsMigrating
 from apps.api.permissions import ApiKeyAuthentication, BearerTokenAuthentication
 from apps.api.versioning import ExportVersioning
 from apps.teams.export.manifest import (
@@ -49,7 +49,7 @@ class _ExportAPIView(APIView):
     # authenticator advertises a challenge, so ``get_authenticate_header`` keeps an unauthenticated
     # request a 401 rather than letting DRF downgrade it to a 403.
     authentication_classes = [ApiKeyAuthentication, BearerTokenAuthentication]
-    permission_classes = [IsAuthenticated, IsTeamAdmin]
+    permission_classes = [IsAuthenticated, IsTeamAdmin, TeamIsMigrating]
     versioning_class = ExportVersioning
 
     def get_authenticate_header(self, request):
