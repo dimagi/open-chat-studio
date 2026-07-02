@@ -115,10 +115,16 @@ class Command(BaseCommand):
         """Webhook URLs are built from this server's domain (the Site record, or SITE_URL_ROOT under
         DEBUG); show it so the operator can catch a wrong domain before it gets registered with every
         channel's provider."""
-        self.stdout.write(f"Channel webhooks will be pointed at: {absolute_url('', is_secure=True)}")
+        self.stdout.write(
+            self.style.WARNING(f"Channel webhooks will be pointed at: {absolute_url('', is_secure=True)}")
+        )
         return input("Is this correct? Type 'yes' to continue: ") == "yes"
 
     def _report(self, report: WebhookReregistrationReport) -> None:
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING("Webhook re-registration report"))
+        self.stdout.write(self.style.MIGRATE_HEADING("=" * 60))
+
         if report.updated:
             self.stdout.write("")
             self.stdout.write(self.style.SUCCESS("Re-registered webhooks automatically for:"))
@@ -134,4 +140,5 @@ class Command(BaseCommand):
             self.stdout.write(f"  See {CHANNEL_SETUP_DOCS_URL} for channel setup instructions.")
 
         if not report.updated and not report.manual:
-            self.stdout.write("No channels needed a webhook update.")
+            self.stdout.write("")
+            self.stdout.write(self.style.SUCCESS("No channels needed a webhook update."))
