@@ -52,9 +52,25 @@ class Command(IdempotentCommand):
         return f"Notified {len(affected_by_team)} team(s)"
 
     def _collect_affected_teams(self) -> dict:
-        channels = ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False
-        ).select_related("experiment", "team")
+        # The query is restricted to the columns this migration needs, rather than loading every
+        # column via a plain select_related(). As a data migration this can run on a fresh database
+        # before later column migrations are applied (e.g. teams.0013_team_is_migrating), so
+        # pulling all columns would fail with UndefinedColumn.
+        channels = (
+            ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False)
+            .select_related("experiment", "team")
+            .only(
+                "team_id",
+                "experiment_id",
+                "team__name",
+                "team__slug",
+                # name plus what Experiment.get_absolute_url() reads
+                "experiment__name",
+                "experiment__team_id",
+                "experiment__working_version_id",
+                "experiment__version_number",
+            )
+        )
 
         affected_by_team = {}
         for channel in channels:
