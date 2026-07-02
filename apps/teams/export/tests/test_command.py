@@ -8,24 +8,15 @@ from django.core import mail
 from django.core.management.base import CommandError
 
 from apps.api.export.serializers import build_resource_serializer
-from apps.channels.models import ChannelPlatform
-from apps.service_providers.models import LlmProvider, MessagingProviderType
+from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.management.commands import sync_team
-from apps.teams.management.commands.sync_team import (
-    CHANNEL_SETUP_DOCS_URL,
-    Command,
-    WebhookReregistrationReport,
-    force_delete_team,
-    reregister_webhooks,
-    run_sync,
-)
+from apps.teams.management.commands.sync_team import Command, force_delete_team, run_sync
 from apps.teams.models import Team
-from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory, MessagingProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -295,96 +286,14 @@ def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
     assert imported.config == {"api_key": "sk-live"}
 
 
-def _always_raises(*args, **kwargs):
-    raise RuntimeError("provider unreachable")
-
-
-def test_reregister_webhooks_registers_supported_channel(monkeypatch):
-    """A channel whose manager can manage webhooks has its webhook (re)pointed at this server and is
-    reported as updated."""
-    channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"})
-    registered = []
-    monkeypatch.setattr(
-        "apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook",
-        lambda self, extra_data, webhook_url: registered.append(webhook_url),
-    )
-
-    report = reregister_webhooks(channel.team)
-
-    assert registered == [channel.webhook_url]  # webhook actually re-registered at the provider
-    assert len(report.updated) == 1
-    assert report.manual == []
-
-
-def test_reregister_webhooks_flags_unsupported_channel_for_manual_setup():
-    """A provider-backed channel whose service can't manage webhooks is flagged for manual setup,
-    carrying the URL the operator must configure."""
-    provider = MessagingProviderFactory(
-        type=MessagingProviderType.meta_cloud_api, config={"access_token": "x", "business_id": "1"}
-    )
-    channel = ExperimentChannelFactory(
-        platform=ChannelPlatform.WHATSAPP, messaging_provider=provider, extra_data={"number": "+123"}
-    )
-
-    report = reregister_webhooks(channel.team)
-
-    assert report.updated == []
-    assert report.manual == [(f"{channel.experiment.name} / {ChannelPlatform.WHATSAPP.label}", channel.webhook_url)]
-
-
-def test_reregister_webhooks_skips_channels_without_a_webhook():
-    """Web/API-style channels have no upstream webhook to register; they land in neither bucket."""
-    channel = ExperimentChannelFactory(platform=ChannelPlatform.WEB, messaging_provider=None, extra_data={})
-
-    report = reregister_webhooks(channel.team)
-
-    assert report.updated == []
-    assert report.manual == []
-
-
-def test_reregister_webhooks_labels_channel_without_experiment_by_name(monkeypatch):
-    """A channel with a webhook but no linked experiment (e.g. a team-global channel) is reported by
-    its own name rather than crashing on the missing experiment."""
-    channel = ExperimentChannelFactory(
-        platform=ChannelPlatform.TELEGRAM, experiment=None, name="Orphan channel", extra_data={"bot_token": "tok"}
-    )
-    monkeypatch.setattr(
-        "apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook",
-        lambda self, extra_data, webhook_url: None,
-    )
-
-    report = reregister_webhooks(channel.team)
-
-    assert report.updated == [f"Orphan channel / {ChannelPlatform.TELEGRAM.label}"]
-    assert report.manual == []
-
-
-def test_reregister_webhooks_flags_channel_when_registration_fails(monkeypatch):
-    """A failure talking to the provider is downgraded to a manual-setup entry, not raised -- the
-    sync as a whole must still complete."""
-    channel = ExperimentChannelFactory(platform=ChannelPlatform.TELEGRAM, extra_data={"bot_token": "tok"})
-    monkeypatch.setattr("apps.channels.webhooks.TelegramWebhookManager.set_incoming_webhook", _always_raises)
-
-    report = reregister_webhooks(channel.team)
-
-    assert report.updated == []
-    assert report.manual == [(f"{channel.experiment.name} / {ChannelPlatform.TELEGRAM.label}", channel.webhook_url)]
-
-
-def test_report_lists_manual_channels_and_docs_link():
-    """The report names the auto-updated channels and, when any need manual setup, lists them with
-    their URL and a link to the channel-setup docs."""
+def test_report_points_to_reregister_webhooks_command():
+    """The sync report no longer re-registers webhooks itself; it tells the operator which follow-up
+    command to run, with the team slug already filled in."""
     out = io.StringIO()
     command = Command(stdout=out)
-    report = WebhookReregistrationReport(
-        updated=["Bot A / Telegram"],
-        manual=[("Bot B / WhatsApp", "https://example.com/hook")],
-    )
 
-    command._report(report, sync_complete=True)
+    command._report(sync_complete=True, team_slug="imported-team-z")
 
     text = out.getvalue()
-    assert "Bot A / Telegram" in text
-    assert "Bot B / WhatsApp" in text
-    assert "https://example.com/hook" in text
-    assert CHANNEL_SETUP_DOCS_URL in text
+    assert "reregister_webhooks --team-slug=imported-team-z" in text
+    assert "Sync complete." in text
