@@ -412,7 +412,9 @@ def resolve_pricing(candidate: Candidate, litellm_data: dict[str, Any]) -> Prici
         rates = resolve_pricing_from_llm_stats(candidate.details)
         if rates:
             return PricingResult(rates, "llm_stats")
-    rates = resolve_pricing_from_litellm(candidate.id, litellm_data)
+    # Pass the upstream org (e.g. "groq") so provider-namespaced keys like
+    # "groq/gemma-7b-it" are tried as a fallback.
+    rates = resolve_pricing_from_litellm(candidate.id, litellm_data, provider=candidate.org)
     return PricingResult(rates, "litellm" if rates else None)
 
 
@@ -940,11 +942,22 @@ def _commit_price_changes(
     seed = load_seed(seed_path)
     updated = apply_changes(seed, results.changes)
     if results.backfilled:
-        # Append new entries that weren't in the seed at all.
-        existing_keys = {(e["provider_type"], e["model_name"]) for e in updated}
-        for entry in results.backfilled:
-            if (entry["provider_type"], entry["model_name"]) not in existing_keys:
-                updated.append(entry)
+        # Merge backfilled entries into the seed.  A model may already have a
+        # partial entry (e.g. only llm_cached_input); in that case we update its
+        # rules in place rather than silently skipping the backfilled data.
+        entry_index: dict[tuple[str, str], int] = {
+            (e["provider_type"], e["model_name"]): i for i, e in enumerate(updated)
+        }
+        for bf_entry in results.backfilled:
+            key = (bf_entry["provider_type"], bf_entry["model_name"])
+            if key in entry_index:
+                existing = updated[entry_index[key]]
+                rules_by_kind = {r["service_kind"]: r for r in existing["rules"]}
+                for rule in bf_entry["rules"]:
+                    rules_by_kind[rule["service_kind"]] = rule
+                existing["rules"] = list(rules_by_kind.values())
+            else:
+                updated.append(bf_entry)
     seed_path.write_text(json.dumps(updated, indent=2) + "\n")
     migration_path = generate_migration(repo_root / MIGRATIONS_DIR_REL_PATH, today)
     print(f"  -> wrote {migration_path.name} + updated seed")

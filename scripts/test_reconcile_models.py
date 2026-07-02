@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from reconcile_models import (
     REQUIRED_SERVICE_KINDS,
+    Candidate,
     MissingPricingEntry,
     RateChange,
     _fmt,
@@ -35,6 +36,7 @@ from reconcile_models import (
     rates_from_detail,
     render_missing_pricing_issue_body,
     render_pr_body,
+    resolve_pricing,
     resolve_pricing_from_litellm,
     resolve_pricing_from_llm_stats,
     seed_index,
@@ -831,6 +833,64 @@ def test_render_pr_body_includes_backfill_section():
     assert "groq" in body
 
 
+def test_commit_price_changes_merges_backfill_into_partial_entry(repo_root, tmp_path):
+    """A backfilled entry whose (provider, model) already exists in the seed
+    (e.g. with only llm_cached_input) should have its rules merged in rather
+    than silently dropped.
+    """
+    from reconcile_models import (
+        _ReconcileResults,
+        _commit_price_changes,
+        load_seed,
+    )
+    import datetime
+
+    # Seed the file with a partial entry (cached_input only, no input/output).
+    seed_path = repo_root / "apps/cost_tracking/seed_data/llm_pricing.json"
+    partial_seed = [
+        {
+            "provider_type": "openai",
+            "model_name": "gpt-partial",
+            "rules": [{"service_kind": "llm_cached_input", "unit_price": "0.00025"}],
+        }
+    ]
+    seed_path.write_text(json.dumps(partial_seed))
+
+    # Ensure migrations dir exists.
+    migrations_dir = repo_root / "apps/cost_tracking/migrations"
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    (migrations_dir / "0001_initial.py").touch()
+
+    backfilled = [
+        {
+            "provider_type": "openai",
+            "model_name": "gpt-partial",
+            "rules": [
+                {"service_kind": "llm_input", "unit_price": "0.0005"},
+                {"service_kind": "llm_output", "unit_price": "0.0015"},
+            ],
+        }
+    ]
+    results = _ReconcileResults(
+        candidates=[],
+        classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
+        changes=[],
+        unmatched_diff=set(),
+        missing=[],
+        backfilled=backfilled,
+    )
+
+    _commit_price_changes(results, repo_root, tmp_path / "out.json", datetime.date(2026, 7, 1))
+
+    written = load_seed(seed_path)
+    assert len(written) == 1
+    rules_by_kind = {r["service_kind"]: r["unit_price"] for r in written[0]["rules"]}
+    # All three kinds should be present after the merge.
+    assert rules_by_kind["llm_cached_input"] == "0.00025"  # preserved
+    assert rules_by_kind["llm_input"] == "0.0005"  # backfilled
+    assert rules_by_kind["llm_output"] == "0.0015"  # backfilled
+
+
 def test_render_pr_body_backfill_only_no_changes_section():
     backfilled = [
         {
@@ -852,7 +912,7 @@ def test_render_pr_body_backfill_only_no_changes_section():
 # backfill_missing_from_litellm
 
 
-class TestBackfillMissingFromLitellm:
+class TestBackfillMissingFromLitellm:  # noqa: D101
     def _entry(self, provider, model, kinds=("llm_input", "llm_output")):
         return MissingPricingEntry(provider, model, tuple(kinds))
 
@@ -889,21 +949,25 @@ class TestBackfillMissingFromLitellm:
         assert len(backfilled) == 1
         assert still_missing == []
 
-    def test_stays_missing_when_not_in_litellm(self):
-        missing = [self._entry("openai", "gpt-5.3")]
-        backfilled, still_missing = backfill_missing_from_litellm(missing, {})
-
-        assert backfilled == []
-        assert len(still_missing) == 1
-
-    def test_stays_missing_when_litellm_entry_lacks_required_kinds(self):
-        """A litellm entry with only cached_input (no input/output) isn't enough."""
-        missing = [self._entry("openai", "partial-model")]
-        litellm_data = {
-            "partial-model": {
-                "cache_read_input_token_cost": 0.000001,
-            }
-        }
+    @pytest.mark.parametrize(
+        ("model_id", "litellm_data"),
+        [
+            pytest.param("gpt-5.3", {}, id="not_in_litellm"),
+            pytest.param(
+                "partial-model",
+                {"partial-model": {"cache_read_input_token_cost": 0.000001}},
+                id="cached_input_only_not_enough",
+            ),
+            pytest.param(
+                "groq-model",
+                {},  # neither bare nor prefixed key exists
+                id="provider_prefix_also_missing",
+            ),
+        ],
+    )
+    def test_stays_missing(self, model_id, litellm_data):
+        """Entry remains in still_missing when litellm can't fully resolve it."""
+        missing = [self._entry("openai", model_id)]
         backfilled, still_missing = backfill_missing_from_litellm(missing, litellm_data)
 
         assert backfilled == []
@@ -930,6 +994,32 @@ class TestBackfillMissingFromLitellm:
         backfilled, still_missing = backfill_missing_from_litellm([], {})
         assert backfilled == []
         assert still_missing == []
+
+
+# resolve_pricing — provider forwarding to litellm
+
+
+def test_resolve_pricing_passes_org_as_provider_to_litellm():
+    """resolve_pricing() forwards candidate.org so provider-namespaced litellm
+    keys (e.g. ``groq/gemma-7b-it``) are found via the prefix fallback.
+    """
+    candidate = Candidate(
+        {
+            "id": "gemma-7b-it",
+            "organization": {"id": "groq"},
+            "details_error": "HTTP 404: Not Found",  # force litellm path
+        }
+    )
+    litellm_data = {
+        "groq/gemma-7b-it": {
+            "input_cost_per_token": 5e-08,
+            "output_cost_per_token": 8e-08,
+        }
+    }
+    result = resolve_pricing(candidate, litellm_data)
+    assert result.rates is not None
+    assert result.source == "litellm"
+    assert result.rates["llm_input"] == "0.00005"
 
 
 # audit_missing_pricing
