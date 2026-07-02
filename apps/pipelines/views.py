@@ -36,6 +36,7 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
+from apps.utils.deletion import is_bulk_archiveable
 from apps.web.waf import WafRule, waf_allow
 
 from ..generics.chips import Chip
@@ -195,9 +196,23 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             messages.success(request, "Pipeline Archived")
             return HttpResponse()
         else:
-            experiments = [
-                Chip(label=experiment.name, url=experiment.get_absolute_url())
-                for experiment in pipeline.get_related_experiments_queryset()
+            all_experiments = list(pipeline.get_related_experiments_queryset())
+            manual_experiments = [
+                Chip(
+                    label=(
+                        f"{e.name} [{e.get_version_name()}]"
+                        if e.is_working_version
+                        else f"{e.name} {e.get_version_name()} [published]"
+                    ),
+                    url=e.get_absolute_url(),
+                )
+                for e in all_experiments
+                if not is_bulk_archiveable(e)
+            ]
+            bulk_archiveable_experiments = [
+                Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
+                for e in all_experiments
+                if is_bulk_archiveable(e)
             ]
 
             query = pipeline.get_static_trigger_experiment_ids()
@@ -208,8 +223,12 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 
             return render_referenced_objects_modal(
                 "pipeline",
-                experiments=experiments,
+                request=request,
+                experiments=manual_experiments,
                 static_trigger_experiments=static_trigger_experiments,
+                bulk_archiveable_experiments=bulk_archiveable_experiments,
+                bulk_archiveable_ids=[e.id for e in all_experiments if is_bulk_archiveable(e)],
+                bulk_archive_url=reverse("experiments:bulk_archive_versions", args=[team_slug]),
             )
 
 
