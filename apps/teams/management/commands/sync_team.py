@@ -8,13 +8,15 @@ translation store. Each run makes one pass over the manifest and exits; rerun to
 
 from pathlib import Path
 
+import requests
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.api.export.permissions import TeamIsMigrating
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, mute_signals
 from apps.teams.export.manifest import TEAM_MODEL, entry_model, schema_checksum
-from apps.teams.export.seal import load_private_key
+from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_private_key
 from apps.teams.export.translation import (
     FKTranslationStore,
     derive_pk_cursor,
@@ -23,6 +25,39 @@ from apps.teams.export.translation import (
 from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
+
+
+def _migration_lock_message(exc: requests.HTTPError) -> str | None:
+    """None unless this 403 is the source's TeamIsMigrating check -- in which case the friendly
+    message to show the operator instead of a raw HTTP traceback."""
+    response = exc.response
+    if response is None or response.status_code != 403:
+        return None
+    try:
+        detail = response.json().get("detail", "")
+    except ValueError:
+        return None
+    if TeamIsMigrating.message not in detail:
+        return None
+    return "Migration mode needs to be enabled on the team before you can continue"
+
+
+def _missing_public_key_message(exc: requests.HTTPError) -> str | None:
+    """None unless this 400 is the source refusing to seal secrets because the source team has no
+    public key -- in which case the friendly message telling the operator to set it."""
+    response = exc.response
+    if response is None or response.status_code != 400:
+        return None
+    try:
+        detail = response.json().get("detail", "")
+    except ValueError:
+        return None
+    if MISSING_PUBLIC_KEY_DETAIL not in detail:
+        return None
+    return (
+        "The source team has no public key registered, so its secret data cannot be exported. "
+        "Set the team's public key on the source server before syncing."
+    )
 
 
 def _start_cursor(model_label, cursor_type, store, model):
@@ -113,14 +148,22 @@ def run_sync(
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
     importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
-    with mute_signals():
-        load_team(importer, client, store, write)
-        for entry in manifest["entries"]:
-            model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
-            model = entry_model(model_label)
-            cursor = _start_cursor(model_label, cursor_type, store, model)
-            count = importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
-            write(_style_synced_line(f"synced {count} {resource} rows", count, style))
+    try:
+        with mute_signals():
+            load_team(importer, client, store, write)
+            for entry in manifest["entries"]:
+                model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
+                model = entry_model(model_label)
+                cursor = _start_cursor(model_label, cursor_type, store, model)
+                count = importer.import_rows(
+                    model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit)
+                )
+                write(_style_synced_line(f"synced {count} {resource} rows", count, style))
+    except requests.HTTPError as exc:
+        friendly = _migration_lock_message(exc) or _missing_public_key_message(exc)
+        if friendly is None:
+            raise
+        raise CommandError(friendly) from exc
     return importer
 
 

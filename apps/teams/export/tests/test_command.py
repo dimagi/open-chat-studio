@@ -2,11 +2,13 @@ import io
 from types import SimpleNamespace
 
 import pytest
+import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
 from django.core.management.base import CommandError
 
+from apps.api.export.permissions import TeamIsMigrating
 from apps.api.export.serializers import build_resource_serializer
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
@@ -229,6 +231,93 @@ def test_first_time_import_creates_team(tmp_path, keypair):
     run_sync(FakeClient(manifest, rows), store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").exists()
+
+
+class _FakeHTTPResponse:
+    def __init__(self, status_code, detail):
+        self.status_code = status_code
+        self._detail = detail
+
+    def json(self):
+        return {"detail": self._detail}
+
+
+def _http_error(status_code, detail):
+    return requests.HTTPError(response=_FakeHTTPResponse(status_code, detail))
+
+
+class _RaisingClient(FakeClient):
+    """A FakeClient whose ``get_team`` or ``iter_rows`` raises instead of returning data, to simulate
+    an HTTP error surfacing from the source server mid-sync."""
+
+    def __init__(self, manifest, rows, error, raise_on):
+        super().__init__(manifest, rows)
+        self._error = error
+        self._raise_on = raise_on
+
+    def get_team(self):
+        if self._raise_on == "get_team":
+            raise self._error
+        return super().get_team()
+
+    def iter_rows(self, resource, start_cursor=None, limit=100):
+        if self._raise_on == "iter_rows":
+            raise self._error
+        return super().iter_rows(resource, start_cursor, limit)
+
+
+def test_migration_lock_403_from_get_team_raises_friendly_error(tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    client = _RaisingClient(manifest, rows, _http_error(403, TeamIsMigrating.message), raise_on="get_team")
+
+    with pytest.raises(CommandError, match="Migration mode"):
+        run_sync(client, store, keypair[1])
+
+
+def test_migration_lock_403_from_resource_page_raises_friendly_error(tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    client = _RaisingClient(manifest, rows, _http_error(403, TeamIsMigrating.message), raise_on="iter_rows")
+
+    with pytest.raises(CommandError, match="Migration mode"):
+        run_sync(client, store, keypair[1])
+
+
+def test_unrelated_403_is_not_mistaken_for_migration_lock(tmp_path, keypair):
+    """A 403 for some other reason (e.g. a revoked API key) must surface as-is, not be reworded into
+    a misleading 'enable migration mode' message."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    error = _http_error(403, "You do not have permission to perform this action.")
+    client = _RaisingClient(manifest, rows, error, raise_on="get_team")
+
+    with pytest.raises(requests.HTTPError):
+        run_sync(client, store, keypair[1])
+
+
+def test_missing_public_key_400_raises_friendly_error(tmp_path, keypair):
+    """The source returns a 400 when a secret resource is requested but its team has no public key to
+    seal against; surface a friendly message instead of a raw HTTP traceback."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    error = _http_error(400, seal_mod.MISSING_PUBLIC_KEY_DETAIL)
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+
+    with pytest.raises(CommandError, match="no public key"):
+        run_sync(client, store, keypair[1])
+
+
+def test_unrelated_400_is_not_mistaken_for_missing_public_key(tmp_path, keypair):
+    """A 400 for some other reason must surface as-is, not be reworded into a misleading
+    'set the public key' message."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    error = _http_error(400, "Invalid cursor.")
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+
+    with pytest.raises(requests.HTTPError):
+        run_sync(client, store, keypair[1])
 
 
 def test_force_delete_team_removes_team_and_resets_state(tmp_path):
