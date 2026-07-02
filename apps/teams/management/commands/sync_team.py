@@ -74,6 +74,32 @@ def _style_synced_line(message: str, count: int, style) -> str:
     return f"\x1b[2m{message}\x1b[0m"
 
 
+def load_team(importer, client, store, write):
+    """Set the importer's target team, doing the least work needed to anchor the sync.
+
+    Three cases, by where the team is already known:
+    - Recorded in the sync store: a prior run imported it, so load it straight from the target DB --
+      no source fetch, so the ``team/`` endpoint (and the source migration lock) isn't hit again.
+    - Present in the target DB under the same slug but not in the store: a team this sync doesn't track
+      (created by hand, or its state DB was lost). Refuse to import over it and tell the operator to
+      re-run with --force-delete, rather than silently overwriting a team we didn't create.
+    - Neither: a first-time import; fetch and create the team from the source."""
+    committed = store.committed_targets(TEAM_MODEL)
+    if committed:
+        target_pk = next(iter(committed.values()))
+        importer.set_target_team(Team.objects.get(pk=target_pk))
+        return
+
+    team_row = client.get_team()
+    if Team.objects.filter(slug=team_row["slug"]).exists():
+        raise CommandError(
+            f"A team with slug '{team_row['slug']}' already exists locally but isn't tracked by this "
+            "sync's state. Re-run with --force-delete to delete it and re-import from scratch."
+        )
+    importer.import_rows(TEAM_MODEL, [team_row])
+    write("synced team")
+
+
 def run_sync(
     client,
     store,
@@ -88,8 +114,7 @@ def run_sync(
 
     importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
     with mute_signals():
-        importer.import_rows(TEAM_MODEL, [client.get_team()])
-        write("synced team")
+        load_team(importer, client, store, write)
         for entry in manifest["entries"]:
             model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
             model = entry_model(model_label)

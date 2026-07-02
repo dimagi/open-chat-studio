@@ -38,12 +38,14 @@ class FakeClient:
         self.manifest = manifest
         self.rows_by_resource = rows_by_resource
         self.iter_calls = []
+        self.get_team_calls = 0
 
     def get_manifest(self):
         return self.manifest
 
     def get_team(self):
         # The team is fetched on its own from the dedicated ``team/`` endpoint, not the manifest loop.
+        self.get_team_calls += 1
         return self.rows_by_resource["teams"][0]
 
     def iter_rows(self, resource, start_cursor=None, limit=100):
@@ -173,14 +175,60 @@ def test_run_sync_builds_team_and_resolves_secret_provider(tmp_path, keypair):
 def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
     store = FKTranslationStore(tmp_path / "t.sqlite")
-    run_sync(FakeClient(manifest, rows), store, keypair[1])
+    first = FakeClient(manifest, rows)
+    run_sync(first, store, keypair[1])
+    assert first.get_team_calls == 1  # first run fetches and imports the team
 
     second = FakeClient(manifest, rows)
     run_sync(second, store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").count() == 1
+    # the team is already synced, so the rerun loads it from the target DB instead of re-fetching it
+    assert second.get_team_calls == 0
     # the second run resumes each pk resource from its highest synced source key
     assert dict(second.iter_calls)["llm_provider"] == "5"
+
+
+def test_rerun_reanchors_scoped_rows_to_the_existing_team(tmp_path, keypair):
+    """On rerun the team is loaded from the target DB (not re-fetched), and it still anchors the
+    team-scoped rows -- the provider stays attached to the same imported team."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+    team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+
+    importer = run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    assert importer.target_team == team
+    provider = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5))
+    assert provider.team_id == team.id
+
+
+def test_untracked_existing_team_aborts_and_suggests_force_delete(tmp_path, keypair):
+    """A team already present locally but absent from the sync store must not be imported over: the
+    sync aborts and points the operator at --force-delete, leaving the team and store untouched."""
+    manifest, rows = _scenario(keypair[0])
+    existing = Team.objects.create(name="Old name", slug="imported-team-z")
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    with pytest.raises(CommandError, match="--force-delete"):
+        run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    existing.refresh_from_db()
+    assert existing.name == "Old name"  # left untouched
+    assert Team.objects.filter(slug="imported-team-z").count() == 1  # no duplicate created
+    assert store.get_target("teams.team", 9001) is None  # not linked
+    assert not LlmProvider.objects.filter(team=existing).exists()  # no scoped rows imported
+
+
+def test_first_time_import_creates_team(tmp_path, keypair):
+    """A brand-new import (no local team with that slug) creates the team from the source."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    assert Team.objects.filter(slug="imported-team-z").exists()
 
 
 def test_force_delete_team_removes_team_and_resets_state(tmp_path):

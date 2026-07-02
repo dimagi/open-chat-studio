@@ -226,8 +226,14 @@ class Importer:
             if model_label == "users.customuser" and self.on_user_created:
                 self.on_user_created(instance)
         if model_label == "teams.team":
-            set_current_team(instance)
-            self.target_team = instance
+            self.set_target_team(instance)
+
+    def set_target_team(self, team) -> None:
+        """Adopt ``team`` as the anchor every team-scoped row is reassigned to, and make it the current
+        team for the rest of the import. Called with the freshly imported team row, or with a team a
+        previous run already synced (loaded straight from the target DB rather than re-fetched)."""
+        set_current_team(team)
+        self.target_team = team
 
     def _import_team_owned_row(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict
