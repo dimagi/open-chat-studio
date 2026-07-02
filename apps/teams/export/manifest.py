@@ -126,6 +126,10 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     # that for explicit through models. CollectionFile rows (their own entry) carry the link.
     "documents.collection": ["files"],
     "documents.documentsource": ["files"],
+    # Tag slugs are unique across the whole server (taggit) while tags are team-scoped, so a source
+    # slug may already be taken by another team on the target. TagBase.save() regenerates a
+    # collision-free slug when it's absent.
+    "annotations.tag": ["slug"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).

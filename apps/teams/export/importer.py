@@ -19,6 +19,7 @@ from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
 
 from .manifest import (
+    EXCLUDE_REGISTRY,
     GLOBAL_CONFIG,
     SECRET_REGISTRY,
     TEAM_MODEL,
@@ -275,6 +276,10 @@ class Importer:
         timestamps). FKs are remapped to target ids, pipeline/node resource ids are rewritten, and
         named-link fields are left out for ``_apply_named_links`` to handle."""
         named = set(_NAMED_LINK_FIELDS.get(model_label, []))
+        # Excluded fields aren't exported, but a source on older code may still send them (e.g. a
+        # tag's slug, which must be regenerated on the target) -- drop them here too.
+        if excluded := EXCLUDE_REGISTRY.get(model_label):
+            row = {key: value for key, value in row.items() if key not in excluded}
         # A generic FK's two columns are resolved together by _resolve_generic_fks, so skip them in
         # the per-field loop (the content-type column would otherwise be nulled and the object id
         # copied verbatim as the untranslated source pk).

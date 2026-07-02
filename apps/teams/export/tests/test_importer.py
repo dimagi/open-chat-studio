@@ -8,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models.signals import post_save
 
-from apps.annotations.models import UserComment
+from apps.annotations.models import Tag, UserComment
 from apps.api.export.serializers import build_resource_serializer
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ConsentForm, ExperimentSession
@@ -22,7 +22,7 @@ from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
-from apps.utils.factories.annotations import CustomTaggedItemFactory, UserCommentFactory
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory, UserCommentFactory
 from apps.utils.factories.assessments import ScoreFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import PricingRuleFactory, UsageRecordFactory
@@ -479,6 +479,32 @@ def test_default_consent_form_maps_to_auto_created_default(store):
     auto_default.refresh_from_db()
     assert auto_default.consent_text == "Source consent text"
     assert ConsentForm.objects.filter(team_id=team_pk, is_default=True).count() == 1
+
+
+def test_tag_slug_taken_by_another_team_gets_a_fresh_slug(store):
+    """Tag slugs are unique across the whole server (taggit) while tags are team-scoped, so a source
+    tag's slug may already be taken by another team on the target. The slug is regenerated on import
+    rather than copied, so the create can't collide -- even when an older source still sends it."""
+    TagFactory(name="urgent")  # another team already holds slug "urgent"
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    row = {
+        "id": 55,
+        "name": "urgent",
+        "slug": "urgent",
+        "is_system_tag": False,
+        "category": "",
+        "created_by": None,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("annotations.tag", [row])
+
+    tag = Tag.objects.get(pk=store.get_target("annotations.tag", 55))
+    assert tag.name == "urgent"
+    assert tag.slug
+    assert tag.slug != "urgent"
 
 
 def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):
