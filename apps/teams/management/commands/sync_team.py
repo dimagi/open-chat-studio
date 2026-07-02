@@ -95,7 +95,7 @@ def run_sync(
             model = entry_model(model_label)
             cursor = _start_cursor(model_label, cursor_type, store, model)
             count = importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
-            write(_style_synced_line(f"synced {count} new {resource}", count, style))
+            write(_style_synced_line(f"synced {count} {resource} rows", count, style))
     return importer
 
 
