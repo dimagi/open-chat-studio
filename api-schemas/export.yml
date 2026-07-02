@@ -5394,10 +5394,6 @@ components:
         id:
           type: integer
           readOnly: true
-        slug:
-          type: string
-          pattern: ^[-\w]+$
-          maxLength: 100
         created_at:
           type: string
           format: date-time
@@ -5422,7 +5418,6 @@ components:
       - created_at
       - id
       - name
-      - slug
       - updated_at
     TagList:
       type: object
