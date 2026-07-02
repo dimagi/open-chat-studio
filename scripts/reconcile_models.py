@@ -957,7 +957,8 @@ def _commit_price_changes(
                 existing = updated[entry_index[key]]
                 rules_by_kind = {r["service_kind"]: r for r in existing["rules"]}
                 for rule in bf_entry["rules"]:
-                    rules_by_kind[rule["service_kind"]] = rule
+                    # Only fill gaps; never overwrite prices already curated in the seed.
+                    rules_by_kind.setdefault(rule["service_kind"], rule)
                 existing["rules"] = list(rules_by_kind.values())
             else:
                 updated.append(bf_entry)

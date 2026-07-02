@@ -888,6 +888,54 @@ def test_commit_price_changes_merges_backfill_into_partial_entry(repo_root, tmp_
     assert rules_by_kind["llm_output"] == "0.0015"  # backfilled
 
 
+def test_commit_price_changes_backfill_does_not_overwrite_curated_prices(repo_root, tmp_path):
+    """When the seed already has a curated price for a kind that LiteLLM also
+    returns, the curated value must be preserved — backfill only fills *gaps*.
+    """
+    # Seed has a curated llm_input; llm_output is missing.
+    seed_path = repo_root / "apps/cost_tracking/seed_data/llm_pricing.json"
+    curated_input = "0.00999"  # deliberately different from LiteLLM's value
+    partial_seed = [
+        {
+            "provider_type": "openai",
+            "model_name": "gpt-curated",
+            "rules": [{"service_kind": "llm_input", "unit_price": curated_input}],
+        }
+    ]
+    seed_path.write_text(json.dumps(partial_seed))
+
+    migrations_dir = repo_root / "apps/cost_tracking/migrations"
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    (migrations_dir / "0001_initial.py").touch()
+
+    # LiteLLM backfill returns BOTH input and output — input should not clobber
+    # the curated value.
+    backfilled = [
+        {
+            "provider_type": "openai",
+            "model_name": "gpt-curated",
+            "rules": [
+                {"service_kind": "llm_input", "unit_price": "0.00001"},  # different
+                {"service_kind": "llm_output", "unit_price": "0.00004"},
+            ],
+        }
+    ]
+    results = _ReconcileResults(
+        candidates=[],
+        classification={"new_models": [], "already_registered": [], "unpriced_models": [], "pricing_entries": []},
+        changes=[],
+        unmatched_diff=set(),
+        missing=[],
+        backfilled=backfilled,
+    )
+    _commit_price_changes(results, repo_root, tmp_path / "out.json", datetime.date(2026, 7, 1))
+
+    written = load_seed(seed_path)
+    rules_by_kind = {r["service_kind"]: r["unit_price"] for r in written[0]["rules"]}
+    assert rules_by_kind["llm_input"] == curated_input, "curated price must not be overwritten"
+    assert rules_by_kind["llm_output"] == "0.00004", "missing kind should be filled"
+
+
 def test_render_pr_body_backfill_only_no_changes_section():
     backfilled = [
         {
