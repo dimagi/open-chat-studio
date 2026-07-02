@@ -139,7 +139,7 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
         related_assistants = [
             Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in assistant_objects
         ]
-        if manual_experiments or bulk_archiveable_experiments or related_assistants:
+        if experiment_objects or assistant_objects:
             return render_referenced_objects_modal(
                 "service provider",
                 request=request,
