@@ -23,6 +23,7 @@ from reconcile_models import (
     _per_token_to_per_1k,
     apply_changes,
     audit_missing_pricing,
+    backfill_missing_from_litellm,
     build_pricing_entries,
     compute_changes,
     diffable_models,
@@ -200,6 +201,52 @@ def test_resolve_litellm_per_token_conversion():
 def test_resolve_litellm_returns_none(model_id, litellm_data):
     """Returns None when model is absent or has no pricing fields."""
     assert resolve_pricing_from_litellm(model_id, litellm_data) is None
+
+
+def test_resolve_litellm_provider_prefix_fallback():
+    """When the bare model ID is absent, tries ``provider/model_id``.
+    This is the groq/gemma-7b-it case: litellm keys it as ``groq/gemma-7b-it``
+    but OCS stores the model name as just ``gemma-7b-it``.
+    """
+    litellm_data = {
+        "groq/gemma-7b-it": {
+            "input_cost_per_token": 5e-08,
+            "output_cost_per_token": 8e-08,
+        }
+    }
+    result = resolve_pricing_from_litellm("gemma-7b-it", litellm_data, provider="groq")
+    assert result is not None
+    assert result["llm_input"] == "0.00005"
+    assert result["llm_output"] == "0.00008"
+
+
+def test_resolve_litellm_bare_name_takes_priority_over_prefix():
+    """If both bare and prefixed keys exist, bare wins."""
+    litellm_data = {
+        "some-model": {
+            "input_cost_per_token": 0.000001,
+            "output_cost_per_token": 0.000004,
+        },
+        "openai/some-model": {
+            "input_cost_per_token": 0.000009,
+            "output_cost_per_token": 0.000036,
+        },
+    }
+    result = resolve_pricing_from_litellm("some-model", litellm_data, provider="openai")
+    assert result is not None
+    assert result["llm_input"] == "0.001"  # bare: 0.000001 * 1000
+
+
+def test_resolve_litellm_no_provider_ignores_prefix():
+    """Without a provider, only the bare name is tried."""
+    litellm_data = {
+        "groq/gemma-7b-it": {
+            "input_cost_per_token": 5e-08,
+            "output_cost_per_token": 8e-08,
+        }
+    }
+    result = resolve_pricing_from_litellm("gemma-7b-it", litellm_data)
+    assert result is None
 
 
 # build_pricing_entries
@@ -764,6 +811,125 @@ def test_render_pr_body_hyphen_for_missing_old_price():
     body = render_pr_body([change], unmatched=set())
 
     assert "| - | 0.001 |" in body
+
+
+def test_render_pr_body_includes_backfill_section():
+    backfilled = [
+        {
+            "provider_type": "groq",
+            "model_name": "gemma-7b-it",
+            "rules": [
+                {"service_kind": "llm_input", "unit_price": "0.00005"},
+                {"service_kind": "llm_output", "unit_price": "0.00008"},
+            ],
+        }
+    ]
+    body = render_pr_body(changes=[], unmatched=set(), backfilled=backfilled)
+
+    assert "## Backfilled from LiteLLM" in body
+    assert "gemma-7b-it" in body
+    assert "groq" in body
+
+
+def test_render_pr_body_backfill_only_no_changes_section():
+    backfilled = [
+        {
+            "provider_type": "openai",
+            "model_name": "gpt-3.5-turbo",
+            "rules": [
+                {"service_kind": "llm_input", "unit_price": "0.0005"},
+                {"service_kind": "llm_output", "unit_price": "0.0015"},
+            ],
+        }
+    ]
+    body = render_pr_body(changes=[], unmatched=set(), backfilled=backfilled)
+
+    # There are no rate changes, so the changes table header should be absent
+    assert "Old (per 1K)" not in body
+    assert "## Backfilled from LiteLLM" in body
+
+
+# backfill_missing_from_litellm
+
+
+class TestBackfillMissingFromLitellm:
+    def _entry(self, provider, model, kinds=("llm_input", "llm_output")):
+        return MissingPricingEntry(provider, model, tuple(kinds))
+
+    def test_resolves_bare_name_match(self):
+        missing = [self._entry("openai", "gpt-3.5-turbo")]
+        litellm_data = {
+            "gpt-3.5-turbo": {
+                "input_cost_per_token": 5e-07,
+                "output_cost_per_token": 1.5e-06,
+            }
+        }
+        backfilled, still_missing = backfill_missing_from_litellm(missing, litellm_data)
+
+        assert len(backfilled) == 1
+        assert still_missing == []
+        entry = backfilled[0]
+        assert entry["provider_type"] == "openai"
+        assert entry["model_name"] == "gpt-3.5-turbo"
+        rules = {r["service_kind"]: r["unit_price"] for r in entry["rules"]}
+        assert rules["llm_input"] == "0.0005"
+        assert rules["llm_output"] == "0.0015"
+
+    def test_resolves_provider_prefixed_key(self):
+        """groq/gemma-7b-it: bare lookup misses, prefixed lookup hits."""
+        missing = [self._entry("groq", "gemma-7b-it")]
+        litellm_data = {
+            "groq/gemma-7b-it": {
+                "input_cost_per_token": 5e-08,
+                "output_cost_per_token": 8e-08,
+            }
+        }
+        backfilled, still_missing = backfill_missing_from_litellm(missing, litellm_data)
+
+        assert len(backfilled) == 1
+        assert still_missing == []
+
+    def test_stays_missing_when_not_in_litellm(self):
+        missing = [self._entry("openai", "gpt-5.3")]
+        backfilled, still_missing = backfill_missing_from_litellm(missing, {})
+
+        assert backfilled == []
+        assert len(still_missing) == 1
+
+    def test_stays_missing_when_litellm_entry_lacks_required_kinds(self):
+        """A litellm entry with only cached_input (no input/output) isn't enough."""
+        missing = [self._entry("openai", "partial-model")]
+        litellm_data = {
+            "partial-model": {
+                "cache_read_input_token_cost": 0.000001,
+            }
+        }
+        backfilled, still_missing = backfill_missing_from_litellm(missing, litellm_data)
+
+        assert backfilled == []
+        assert len(still_missing) == 1
+
+    def test_mixed_resolved_and_unresolved(self):
+        missing = [
+            self._entry("openai", "gpt-3.5-turbo"),
+            self._entry("openai", "gpt-unknown"),
+        ]
+        litellm_data = {
+            "gpt-3.5-turbo": {
+                "input_cost_per_token": 5e-07,
+                "output_cost_per_token": 1.5e-06,
+            }
+        }
+        backfilled, still_missing = backfill_missing_from_litellm(missing, litellm_data)
+
+        assert len(backfilled) == 1
+        assert len(still_missing) == 1
+        assert still_missing[0].model_name == "gpt-unknown"
+
+    def test_empty_missing_list(self):
+        backfilled, still_missing = backfill_missing_from_litellm([], {})
+        assert backfilled == []
+        assert still_missing == []
 
 
 # audit_missing_pricing

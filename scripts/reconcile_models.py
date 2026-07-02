@@ -267,19 +267,33 @@ def resolve_pricing_from_llm_stats(details: dict[str, Any]) -> dict[str, str] | 
     )
 
 
-def resolve_pricing_from_litellm(model_id: str, litellm_data: dict[str, Any]) -> dict[str, str] | None:
-    entry = litellm_data.get(model_id)
-    if entry is None:
-        return None
-    return _rates_from_raw(
-        {
-            "llm_input": entry.get("input_cost_per_token"),
-            "llm_output": entry.get("output_cost_per_token"),
-            "llm_cached_input": entry.get("cache_read_input_token_cost"),
-            "llm_cache_write": entry.get("cache_creation_input_token_cost"),
-        },
-        _per_token_to_per_1k,
-    )
+def resolve_pricing_from_litellm(
+    model_id: str,
+    litellm_data: dict[str, Any],
+    provider: str | None = None,
+) -> dict[str, str] | None:
+    """Look up ``model_id`` in the LiteLLM pricing table.
+
+    Tries the bare model ID first, then ``{provider}/{model_id}`` when a
+    provider is supplied.  This catches provider-namespaced entries such as
+    ``groq/gemma-7b-it`` that would be missed by a bare lookup.
+    """
+    candidates = [model_id]
+    if provider:
+        candidates.append(f"{provider}/{model_id}")
+    for key in candidates:
+        entry = litellm_data.get(key)
+        if entry is not None:
+            return _rates_from_raw(
+                {
+                    "llm_input": entry.get("input_cost_per_token"),
+                    "llm_output": entry.get("output_cost_per_token"),
+                    "llm_cached_input": entry.get("cache_read_input_token_cost"),
+                    "llm_cache_write": entry.get("cache_creation_input_token_cost"),
+                },
+                _per_token_to_per_1k,
+            )
+    return None
 
 
 def rates_from_detail(detail: dict) -> dict[str, str]:
@@ -640,7 +654,7 @@ def _migration_template(prev_name: str) -> str:
     )
 
 
-# Missing-pricing audit (digest replacement)
+# Missing-pricing audit + LiteLLM backfill
 
 
 @dataclass(frozen=True)
@@ -650,6 +664,40 @@ class MissingPricingEntry:
     provider_type: str
     model_name: str
     kinds_missing: tuple[str, ...]
+
+
+def backfill_missing_from_litellm(
+    missing: list[MissingPricingEntry],
+    litellm_data: dict[str, Any],
+) -> tuple[list[dict], list[MissingPricingEntry]]:
+    """Try to resolve missing-pricing entries from the LiteLLM price table.
+
+    For each entry in *missing*, attempts a litellm lookup (bare model ID first,
+    then ``provider/model_id`` as a fallback).  Entries whose required kinds are
+    all resolved are converted into seed-JSON dicts and returned in
+    *backfilled*; anything that can't be fully resolved stays in *still_missing*.
+
+    Returns:
+        (backfilled, still_missing)
+    """
+    backfilled: list[dict] = []
+    still_missing: list[MissingPricingEntry] = []
+
+    for entry in missing:
+        rates = resolve_pricing_from_litellm(entry.model_name, litellm_data, provider=entry.provider_type)
+        if rates and not (REQUIRED_SERVICE_KINDS - rates.keys()):
+            rules = [{"service_kind": k, "unit_price": v} for k, v in rates.items()]
+            backfilled.append(
+                {
+                    "provider_type": entry.provider_type,
+                    "model_name": entry.model_name,
+                    "rules": rules,
+                }
+            )
+        else:
+            still_missing.append(entry)
+
+    return backfilled, still_missing
 
 
 def audit_missing_pricing(
@@ -672,17 +720,35 @@ def audit_missing_pricing(
 # PR / issue body rendering
 
 
-def render_pr_body(changes: list[RateChange], unmatched: set[str]) -> str:
-    lines = [
-        "Detected rate changes on llm-stats.com against the in-repo seed.",
-        "The data migration loads them on deploy; the seed loader supersedes",
-        "each affected `PricingRule` (closes the old row, inserts a fresh one).",
-        "",
-        "| Provider | Model | Service | Old (per 1K) | New (per 1K) | Source |",
-        "| --- | --- | --- | --- | --- | --- |",
-        *(_change_row(c) for c in changes),
-        *_unmatched_section(unmatched),
-    ]
+def render_pr_body(changes: list[RateChange], unmatched: set[str], backfilled: list[dict] | None = None) -> str:
+    lines = []
+    if changes:
+        lines += [
+            "Detected rate changes on llm-stats.com against the in-repo seed.",
+            "The data migration loads them on deploy; the seed loader supersedes",
+            "each affected `PricingRule` (closes the old row, inserts a fresh one).",
+            "",
+            "| Provider | Model | Service | Old (per 1K) | New (per 1K) | Source |",
+            "| --- | --- | --- | --- | --- | --- |",
+            *(_change_row(c) for c in changes),
+        ]
+    if backfilled:
+        if lines:
+            lines.append("")
+        lines += [
+            "## Backfilled from LiteLLM",
+            "",
+            "The following models had no seed entry and were auto-priced using the",
+            "[LiteLLM model price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json).",
+            "Verify the rates before merging.",
+            "",
+            "| Provider | Model | Service | Price (per 1K) |",
+            "| --- | --- | --- | --- |",
+            *(_backfill_rows(e) for e in backfilled),
+        ]
+    lines += _unmatched_section(unmatched)
+    if not lines:
+        lines = ["No rate changes or new pricing entries."]
     return "\n".join(lines) + "\n"
 
 
@@ -692,6 +758,11 @@ def _change_row(c: RateChange) -> str:
         f"| {c.provider_type} | {c.model_name} | {c.service_kind} | "
         f"{old} | {c.new_price} | [llm-stats]({c.source_url}) |"
     )
+
+
+def _backfill_rows(entry: dict) -> str:
+    rules_str = ", ".join(f"{r['service_kind']}: {r['unit_price']}" for r in entry["rules"])
+    return f"| {entry['provider_type']} | {entry['model_name']} | {rules_str} |"
 
 
 def _unmatched_section(unmatched: set[str]) -> list[str]:
@@ -738,7 +809,8 @@ class _ReconcileResults:
     classification: dict
     changes: list[RateChange]
     unmatched_diff: set[str]
-    missing: list[MissingPricingEntry]
+    missing: list[MissingPricingEntry]  # truly unresolvable after litellm backfill
+    backfilled: list[dict]  # new seed entries resolved from litellm
 
 
 # Output assembly + GitHub Actions integration
@@ -755,6 +827,7 @@ def _assemble_payload(results: _ReconcileResults, *, run_date: str, days_lookbac
             "unpriced_candidates": len(results.classification["unpriced_models"]),
             "pricing_entries_generated": len(results.classification["pricing_entries"]),
             "price_changes": len(results.changes),
+            "backfilled_from_litellm": len(results.backfilled),
             "missing_pricing": len(results.missing),
         },
         "new_models": results.classification["new_models"],
@@ -763,6 +836,7 @@ def _assemble_payload(results: _ReconcileResults, *, run_date: str, days_lookbac
         "pricing_entries": results.classification["pricing_entries"],
         "price_changes": [c.__dict__ for c in results.changes],
         "unmatched_diff_models": sorted(results.unmatched_diff),
+        "backfilled_pricing": results.backfilled,
         "missing_pricing": [
             {"provider_type": e.provider_type, "model_name": e.model_name, "kinds_missing": list(e.kinds_missing)}
             for e in results.missing
@@ -789,15 +863,23 @@ def _new_models_outputs(new_models: list[dict]) -> list[str]:
 
 
 def _price_change_outputs(
-    changes: list[RateChange],
+    results: _ReconcileResults,
     today: datetime.date,
     body_path: Path | None,
 ) -> list[str]:
-    count = len(changes)
-    title = f"Pricing update: {count} rate change(s) ({today.isoformat()})" if count else ""
+    change_count = len(results.changes)
+    backfill_count = len(results.backfilled)
+    has_any = bool(change_count or backfill_count)
+    parts = []
+    if change_count:
+        parts.append(f"{change_count} rate change(s)")
+    if backfill_count:
+        parts.append(f"{backfill_count} backfilled from LiteLLM")
+    title = f"Pricing update: {', '.join(parts)} ({today.isoformat()})" if has_any else ""
     return [
-        f"has_price_changes={'true' if count else 'false'}",
-        f"price_change_count={count}",
+        f"has_price_changes={'true' if has_any else 'false'}",
+        f"price_change_count={change_count}",
+        f"backfilled_count={backfill_count}",
         f"pricing_pr_title={title}",
         f"pricing_pr_body_path={body_path or ''}",
     ]
@@ -846,17 +928,28 @@ def _commit_price_changes(
     today: datetime.date,
 ) -> Path | None:
     """Rewrite seed JSON + emit rate-update migration + write PR body.
-    No-op (returns None) when there are no rate changes.
+
+    Handles both upstream rate changes and LiteLLM-backfilled entries.  A
+    migration is generated whenever *either* list is non-empty so both kinds
+    of update are applied in the same deploy.
+    No-op (returns None) when both lists are empty.
     """
-    if not results.changes:
+    if not results.changes and not results.backfilled:
         return None
     seed_path = repo_root / LLM_PRICING_REL_PATH
     seed = load_seed(seed_path)
-    seed_path.write_text(json.dumps(apply_changes(seed, results.changes), indent=2) + "\n")
+    updated = apply_changes(seed, results.changes)
+    if results.backfilled:
+        # Append new entries that weren't in the seed at all.
+        existing_keys = {(e["provider_type"], e["model_name"]) for e in updated}
+        for entry in results.backfilled:
+            if (entry["provider_type"], entry["model_name"]) not in existing_keys:
+                updated.append(entry)
+    seed_path.write_text(json.dumps(updated, indent=2) + "\n")
     migration_path = generate_migration(repo_root / MIGRATIONS_DIR_REL_PATH, today)
     print(f"  -> wrote {migration_path.name} + updated seed")
     body_path = output_path.with_name(output_path.stem + ".pricing-body.md")
-    body_path.write_text(render_pr_body(results.changes, results.unmatched_diff))
+    body_path.write_text(render_pr_body(results.changes, results.unmatched_diff, results.backfilled))
     return body_path
 
 
@@ -893,10 +986,12 @@ def _run_reconciliation(repo_root: Path, bearer: str, days: int) -> _ReconcileRe
     print(f"  -> {len(changes)} rate change(s); {len(unmatched_diff)} unmatched")
 
     print("  Auditing missing pricing for OCS-managed models ...")
-    missing = audit_missing_pricing(active, index)
-    print(f"  -> {len(missing)} model(s) missing seed pricing")
+    all_missing = audit_missing_pricing(active, index)
+    print(f"  -> {len(all_missing)} model(s) missing seed pricing; attempting LiteLLM backfill ...")
+    backfilled, still_missing = backfill_missing_from_litellm(all_missing, litellm_data)
+    print(f"  -> backfilled {len(backfilled)}, still missing {len(still_missing)}")
 
-    return _ReconcileResults(candidates, classification, changes, unmatched_diff, missing)
+    return _ReconcileResults(candidates, classification, changes, unmatched_diff, still_missing, backfilled)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -914,6 +1009,7 @@ def main(argv: list[str] | None = None) -> int:
         run_date=datetime.datetime.now(datetime.UTC).isoformat(),
         days_lookback=args.days,
     )
+
     args.output.write_text(json.dumps(payload, indent=2))
 
     print()
@@ -923,7 +1019,7 @@ def main(argv: list[str] | None = None) -> int:
 
     _write_github_output(
         _new_models_outputs(results.classification["new_models"])
-        + _price_change_outputs(results.changes, today, pricing_body_path)
+        + _price_change_outputs(results, today, pricing_body_path)
         + _missing_pricing_outputs(results.missing, missing_body_path)
     )
     return 0
