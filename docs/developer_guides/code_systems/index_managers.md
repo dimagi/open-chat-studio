@@ -1,8 +1,15 @@
 # Index Manager Classes
 
-Index managers provide an abstraction layer for managing document embeddings and vector stores in Open Chat Studio. They are LLM provider-specific implementations that enable both remote (provider-hosted) and local (self-hosted) indexing strategies for document collections.
+Index managers provide an abstraction layer for managing document embeddings and vector stores in Open Chat Studio. They are LLM provider-specific implementations that enable both remote (provider-hosted) and local (self-hosted) indexing strategies for [document collections](https://docs.openchatstudio.com/concepts/collections/indexed/).
+
+For AI-generated technical documentation on indexed collections, RAG and index managers, visit
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio/7-document-collections-and-rag)
 
 ## Architecture Overview
+
+The system supports two indexing strategies:
+- **Remote indexing**: Vector stores are created and managed by external providers (e.g.,OpenAI)
+- **Local indexing**: Embeddings are generated locally and stored in the application database
 
 The index manager system follows an abstract base class pattern with two main hierarchies:
 
@@ -16,9 +23,6 @@ LocalIndexManager (ABC)
 └── VoyageAILocalIndexManager
 ```
 
-The system supports two indexing strategies:
-- **Remote indexing**: Vector stores are created and managed by external providers (e.g., OpenAI)
-- **Local indexing**: Embeddings are generated locally and stored in the application database
 
 ## Core Classes
 
@@ -28,7 +32,7 @@ Abstract base class for managing vector stores in remote indexing services. Prov
 
 ### OpenAIRemoteIndexManager
 
-OpenAI-specific implementation for managing vector stores using OpenAI's vector store API.
+OpenAI-specific implementation for managing file uploads and vector stores using [OpenAI's vector store API](https://developers.openai.com/api/reference/resources/vector_stores).
 
 ### LocalIndexManager
 
