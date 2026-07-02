@@ -183,7 +183,7 @@ dev = [
     # the CommCare Connect backend for local development.
 ]
 docs = [
-    "zensical>=0.0.40",
+    "zensical>=0.0.46",
 ]
 
 prod = [
