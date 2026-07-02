@@ -21,7 +21,7 @@ from apps.teams.export.manifest import (
     generic_fk_fields,
     model_has_team_field,
 )
-from apps.teams.export.seal import seal
+from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, seal
 from apps.teams.models import Flag
 
 
@@ -220,7 +220,7 @@ def resource_responses(entry: ManifestEntry) -> dict[int, type[serializers.Seria
     if entry.secret:
         responses[400] = OpenApiResponse(
             response=SyncErrorDetail,
-            description="Team has no registered public key; secret data cannot be sealed.",
+            description=MISSING_PUBLIC_KEY_DETAIL,
         )
     return responses
 
