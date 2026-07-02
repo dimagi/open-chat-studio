@@ -6,6 +6,8 @@ The command is a thin shell: it wires the resource fetcher to the import engine 
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 """
 
+import time
+from datetime import timedelta
 from pathlib import Path
 
 import requests
@@ -216,6 +218,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        start_time = time.monotonic()
         private_key = None
         if options["private_key_path"]:
             private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
@@ -248,17 +251,21 @@ class Command(BaseCommand):
             style=self.style,
         )
 
-        self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"])
+        duration = timedelta(seconds=round(time.monotonic() - start_time))
+        self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"], duration=duration)
 
-    def _report(self, *, sync_complete: bool, team_slug: str) -> None:
+    def _report(self, *, sync_complete: bool, team_slug: str, duration: timedelta | None = None) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
-        which resources need manual setup, whether the sync finished or must be rerun, and the
-        follow-up step for channel webhooks (a separate command -- see ``reregister_webhooks``). Sections
-        are headed and blank-line separated so the report stands apart from the row-by-row progress log
-        above it."""
+        which resources need manual setup, whether the sync finished or must be rerun, how long the
+        run took, and the follow-up step for channel webhooks (a separate command -- see
+        ``reregister_webhooks``). Sections are headed and blank-line separated so the report stands
+        apart from the row-by-row progress log above it."""
         self.stdout.write("")
         self.stdout.write(self.style.MIGRATE_HEADING("Sync report"))
         self.stdout.write(self.style.MIGRATE_HEADING("=" * 60))
+
+        if duration is not None:
+            self.stdout.write(f"Duration: {duration}")
 
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Channel webhooks were not re-registered."))
