@@ -9,8 +9,9 @@ See also: [DeepWiki: Document Collections and RAG](https://deepwiki.com/dimagi/o
 ## Architecture Overview
 
 The system supports two indexing strategies:
+
 - **Remote indexing**: Vector stores are created and managed by external providers (e.g., OpenAI)
-- **Local indexing**: Embeddings are generated locally and stored in the application database
+- **Local indexing**: Embeddings are generated locally and stored in the application database - PostgreSQL with the pgvector extension.
 
 The index manager system follows an abstract base class pattern with two main hierarchies:
 
@@ -24,22 +25,21 @@ LocalIndexManager (ABC)
 └── VoyageAILocalIndexManager
 ```
 
+### Core Classes
 
-## Core Classes
-
-### RemoteIndexManager
+#### RemoteIndexManager
 
 Abstract base class for managing vector stores in remote indexing services. Provides a common interface for interacting with external vector store providers.
 
-### OpenAIRemoteIndexManager
+- **OpenAIRemoteIndexManager**: OpenAI-specific implementation for managing file uploads and vector stores using [OpenAI's vector store API](https://developers.openai.com/api/reference/resources/vector_stores).
 
-OpenAI-specific implementation for managing file uploads and vector stores using [OpenAI's vector store API](https://developers.openai.com/api/reference/resources/vector_stores).
-
-### LocalIndexManager
+#### LocalIndexManager
 
 Abstract base class for managing local embedding operations. Handles text processing and embedding generation on the application side.
 
-## Usage Example
+- **OpenAILocalIndexManager, GoogleLocalIndexManager, VoyageAILocalIndexManager**: wrap LangChain's embedding integrations.
+
+## Usage Examples
 
 ### Getting an Index Manager
 
@@ -56,8 +56,9 @@ index_manager = collection.get_index_manager()
 ```
 
 The method returns:
-- `RemoteIndexManager` instance if `collection.is_remote_index` is `True`
-- `LocalIndexManager` instance if `collection.is_remote_index` is `False`
+
+- `RemoteIndexManager` instance if the collection is an index (`is_index`) and `is_remote_index` is `True`
+- `LocalIndexManager` instance otherwise
 
 ### Remote Index Operations
 
