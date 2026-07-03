@@ -49,6 +49,7 @@ class Team(BaseModel):
     )
     is_migrating = models.BooleanField(
         default=False,
+        db_default=False,
         help_text="When set, the team's outbound message firing is frozen while its data is migrated.",
     )
 
