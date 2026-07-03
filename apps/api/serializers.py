@@ -13,6 +13,29 @@ from apps.files.models import File
 from apps.teams.models import Team
 
 
+class ApiUrlField(serializers.HyperlinkedIdentityField):
+    """``HyperlinkedIdentityField`` that documents a concrete ``example`` URL in the OpenAPI schema.
+
+    Without an example, ReDoc samples a ``format: uri`` field as ``http://example.com``. The schema
+    (with the example) is emitted by ``apps.api.schema.ApiUrlFieldExtension``; the placeholder host
+    in ``openapi_example`` is then rewritten to the serving deployment's host by
+    ``apps.api.schema.set_example_urls``.
+
+    ``openapi_example`` is kept off ``_kwargs`` (so ``HyperlinkedIdentityField.__init__`` doesn't
+    reject it) and re-applied in ``__deepcopy__``, since DRF clones declared fields per serializer
+    instance by re-instantiating from ``_args``/``_kwargs`` alone.
+    """
+
+    def __init__(self, *args, openapi_example: str = "", **kwargs):
+        self.openapi_example = openapi_example
+        super().__init__(*args, **kwargs)
+
+    def __deepcopy__(self, memo):
+        clone = super().__deepcopy__(memo)
+        clone.openapi_example = self.openapi_example
+        return clone
+
+
 class ExperimentVersionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Experiment
@@ -20,8 +43,12 @@ class ExperimentVersionSerializer(serializers.ModelSerializer):
 
 
 class ExperimentSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(
-        view_name="api:experiment-detail", lookup_field="public_id", lookup_url_kwarg="id", label="API URL"
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:experiment-detail",
+        lookup_field="public_id",
+        lookup_url_kwarg="id",
+        label="API URL",
     )
     id = serializers.UUIDField(source="public_id")
     versions = ExperimentVersionSerializer(many=True)
@@ -77,8 +104,11 @@ class TeamSerializer(serializers.ModelSerializer):
 
 class FileSerializer(serializers.ModelSerializer):
     size = serializers.IntegerField(source="content_size")
-    content_url = serializers.HyperlinkedIdentityField(
-        view_name="api:file-content", lookup_field="id", lookup_url_kwarg="pk"
+    content_url = ApiUrlField(
+        openapi_example="https://example.com/api/files/42/content",
+        view_name="api:file-content",
+        lookup_field="id",
+        lookup_url_kwarg="pk",
     )
 
     class Meta:
@@ -124,8 +154,11 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
 
 
 class ExperimentSessionSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(
-        view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:session-detail",
+        lookup_field="external_id",
+        lookup_url_kwarg="id",
     )
     id = serializers.ReadOnlyField(source="external_id")
     team = TeamSerializer(read_only=True)
@@ -347,8 +380,11 @@ class TriggerBotMessageRequest(serializers.Serializer):
 
 class TriggerBotMessageResponse(serializers.ModelSerializer):
     session_id = serializers.ReadOnlyField(source="external_id")
-    url = serializers.HyperlinkedIdentityField(
-        view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:session-detail",
+        lookup_field="external_id",
+        lookup_url_kwarg="id",
     )
     team = TeamSerializer(read_only=True)
     channel = serializers.CharField(source="platform", read_only=True)

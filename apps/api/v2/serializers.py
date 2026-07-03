@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from apps.api.serializers import TeamSerializer
+from apps.api.serializers import ApiUrlField, TeamSerializer
 from apps.experiments.models import Experiment
 from apps.users.helpers import user_has_confirmed_email_address
 from apps.users.models import CustomUser
@@ -20,8 +20,12 @@ class ChatbotSerializer(serializers.ModelSerializer):
     "chatbots" rather than "experiments" (ADR-0023).
     """
 
-    url = serializers.HyperlinkedIdentityField(
-        view_name="api:v2:chatbot-detail", lookup_field="public_id", lookup_url_kwarg="id", label="API URL"
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/v2/chatbots/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:v2:chatbot-detail",
+        lookup_field="public_id",
+        lookup_url_kwarg="id",
+        label="API URL",
     )
     id = serializers.UUIDField(source="public_id")
     versions = ChatbotVersionSerializer(many=True)
