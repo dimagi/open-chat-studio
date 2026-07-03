@@ -222,6 +222,18 @@ def test_untracked_existing_team_aborts_and_suggests_force_delete(tmp_path, keyp
     assert not LlmProvider.objects.filter(team=existing).exists()  # no scoped rows imported
 
 
+def test_stale_sync_state_pointing_at_deleted_team_suggests_force_delete(tmp_path, keypair):
+    """If the synced team was deleted locally but the sync state still references it, a rerun must
+    abort with a CommandError pointing at --force-delete, not a raw Team.DoesNotExist traceback."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+    Team.objects.get(slug="imported-team-z").delete()
+
+    with pytest.raises(CommandError, match="--force-delete"):
+        run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+
 def test_first_time_import_creates_team(tmp_path, keypair):
     """A brand-new import (no local team with that slug) creates the team from the source."""
     manifest, rows = _scenario(keypair[0])

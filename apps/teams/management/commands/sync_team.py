@@ -111,6 +111,22 @@ def _style_synced_line(message: str, count: int, style) -> str:
     return f"\x1b[2m{message}\x1b[0m"
 
 
+def _committed_team(store) -> Team | None:
+    """The target team a prior run already imported, or None on a first-time import. A recorded
+    team that no longer exists locally means the team was deleted outside this sync, so abort with
+    the fix rather than a raw DoesNotExist traceback."""
+    committed = store.committed_targets(TEAM_MODEL)
+    if not committed:
+        return None
+    team = Team.objects.filter(pk=next(iter(committed.values()))).first()
+    if team is None:
+        raise CommandError(
+            "The sync state references a team that no longer exists locally; the state is stale. "
+            "Re-run with --force-delete to reset it and re-import from scratch."
+        )
+    return team
+
+
 def load_team(importer, client, store, write):
     """Set the importer's target team, doing the least work needed to anchor the sync.
 
@@ -121,10 +137,9 @@ def load_team(importer, client, store, write):
       (created by hand, or its state DB was lost). Refuse to import over it and tell the operator to
       re-run with --force-delete, rather than silently overwriting a team we didn't create.
     - Neither: a first-time import; fetch and create the team from the source."""
-    committed = store.committed_targets(TEAM_MODEL)
-    if committed:
-        target_pk = next(iter(committed.values()))
-        importer.set_target_team(Team.objects.get(pk=target_pk))
+    team = _committed_team(store)
+    if team is not None:
+        importer.set_target_team(team)
         return
 
     team_row = client.get_team()
