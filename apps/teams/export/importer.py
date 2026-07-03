@@ -186,14 +186,18 @@ class Importer:
         # manifest) and assigned to every team-scoped row, since the per-row team FK isn't exported.
         self.target_team = None
 
-    def import_rows(self, model_label: str, rows: Iterable[dict]) -> None:
-        """Import every row for one model, unsealing its secret fields first when we hold the key."""
+    def import_rows(self, model_label: str, rows: Iterable[dict]) -> int:
+        """Import every row for one model, unsealing its secret fields first when we hold the key.
+        Returns the number of rows imported this pass (for the sync's progress report)."""
         model = entry_model(model_label)
         secret_fields = SECRET_REGISTRY.get(model_label, [])
+        count = 0
         for row in rows:
             if self.private_key and secret_fields:
                 row = unseal_secrets(row, secret_fields, self.private_key)
             self._import_row(model_label, model, row)
+            count += 1
+        return count
 
     def _import_row(self, model_label: str, model: type[models.Model], row: dict) -> None:
         """Import a single row. A global row is matched to its shared target and only its id

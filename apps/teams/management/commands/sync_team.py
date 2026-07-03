@@ -60,6 +60,20 @@ def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
     return manifest
 
 
+def _style_synced_line(message: str, count: int, style) -> str:
+    """Colour a progress line by how much it moved: green when rows were synced, muted (ANSI faint)
+    when zero so the eye skips the no-op lines. Returns the message unchanged when no style is given
+    or colour is disabled (--no-color / non-tty, where the style funcs are the identity), so
+    redirected logs stay clean."""
+    if style is None:
+        return message
+    if count > 0:
+        return style.SUCCESS(message)
+    if style.SUCCESS("") == "":  # colour disabled -- leave it plain rather than emit raw escapes
+        return message
+    return f"\x1b[2m{message}\x1b[0m"
+
+
 def run_sync(
     client,
     store,
@@ -68,6 +82,7 @@ def run_sync(
     page_limit=100,
     enforce_schema=True,
     on_user_created=send_password_reset_email,
+    style=None,
 ):
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
@@ -79,8 +94,8 @@ def run_sync(
             model_label, resource, cursor_type = entry["model"], entry["resource"], entry["cursor"]
             model = entry_model(model_label)
             cursor = _start_cursor(model_label, cursor_type, store, model)
-            importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
-            write(f"synced {resource}")
+            count = importer.import_rows(model_label, client.iter_rows(resource, start_cursor=cursor, limit=page_limit))
+            write(_style_synced_line(f"synced {count} {resource} rows", count, style))
     return importer
 
 
@@ -162,12 +177,41 @@ class Command(BaseCommand):
             write=self.stdout.write,
             page_limit=options["limit"],
             enforce_schema=enforce_schema,
+            style=self.style,
         )
 
-        if store.has_unfilled_targets():
-            self.stdout.write(self.style.WARNING("Some rows are not yet synced; rerun to complete."))
-        else:
+        self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"])
+
+    def _report(self, *, sync_complete: bool, team_slug: str) -> None:
+        """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
+        which resources need manual setup, whether the sync finished or must be rerun, and the
+        follow-up step for channel webhooks (a separate command -- see ``reregister_webhooks``). Sections
+        are headed and blank-line separated so the report stands apart from the row-by-row progress log
+        above it."""
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING("Sync report"))
+        self.stdout.write(self.style.MIGRATE_HEADING("=" * 60))
+
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING("Channel webhooks were not re-registered."))
+        self.stdout.write(
+            f"  Run `manage.py reregister_webhooks --team-slug={team_slug}` to point this team's "
+            "channel webhooks at this server."
+        )
+
+        self.stdout.write("")
+        self.stdout.write(
+            self.style.WARNING("These resources are not migrated and must be recreated manually on this server:")
+        )
+        self.stdout.write("  - OAuth applications")
+        self.stdout.write("  - Slack bots")
+        self.stdout.write("  - User API keys")
+
+        self.stdout.write("")
+        if sync_complete:
             self.stdout.write(self.style.SUCCESS("Sync complete."))
+        else:
+            self.stdout.write(self.style.WARNING("Some rows are not yet synced; rerun to complete."))
 
     def _confirm_force_delete(self, team_slug) -> bool:
         self.stdout.write(

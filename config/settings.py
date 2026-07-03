@@ -461,6 +461,7 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
         "apps.api.schema.set_export_description",
+        "apps.api.schema.set_example_urls",
     ],
     "PREPROCESSING_HOOKS": [
         "apps.api.schema.exclude_legacy_participants_path",
@@ -802,6 +803,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data-node",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
+    "deploy_channels": "/how-to/deploy_to_different_channels/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",

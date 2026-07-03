@@ -487,8 +487,8 @@ paths:
               examples:
                 ListParticipants:
                   value:
-                    next: http://api.example.org/accounts/?cursor=cD00ODY%3D"
-                    previous: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+                    next: https://example.com/api/?cursor=cD00ODY%3D
+                    previous: https://example.com/api/?cursor=cj0xJnA9NDg3
                     results:
                     - id: e172ff63-2469-419f-a828-783fc9291bc7
                       identifier: part1
@@ -1283,6 +1283,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
           title: API URL
         version_number:
@@ -1304,6 +1305,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
         id:
           type: string
@@ -1377,6 +1379,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
         id:
           type: string
@@ -1456,6 +1459,7 @@ components:
         content_url:
           type: string
           format: uri
+          example: https://example.com/api/files/42/content
           readOnly: true
       required:
       - content_url
@@ -1519,12 +1523,12 @@ components:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+          example: https://example.com/api/?cursor=cD00ODY%3D
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:
@@ -1543,12 +1547,12 @@ components:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+          example: https://example.com/api/?cursor=cD00ODY%3D
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:
@@ -1567,12 +1571,12 @@ components:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+          example: https://example.com/api/?cursor=cD00ODY%3D
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:
@@ -1799,6 +1803,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
         team:
           allOf:

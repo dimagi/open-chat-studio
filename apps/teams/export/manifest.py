@@ -13,6 +13,8 @@ from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 
+from apps.files.models import FilePurpose
+
 
 @dataclass(frozen=True)
 class ManifestEntry:
@@ -160,6 +162,8 @@ EXTRA_FILTERS: dict[str, Q] = {
     # Assistant-attached operations can't be synced (assistants are excluded). Only node-attached
     # operations, so the check constraint (assistant OR node non-null) is satisfied on import.
     "custom_actions.customactionoperation": Q(node__isnull=False),
+    # Data-export files are transient download bundles, so they're never shared across servers.
+    "files.file": ~Q(purpose=FilePurpose.DATA_EXPORT),
 }
 
 

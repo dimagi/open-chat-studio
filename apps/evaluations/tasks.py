@@ -44,7 +44,7 @@ from apps.evaluations.models import (
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.teams.utils import current_team
 from apps.web.dynamic_filters.datastructures import FilterParams
 
@@ -999,6 +999,8 @@ def export_evaluation_bulk_results_task(evaluation_config_id, team_id):
                 team=team,
                 content_type="text/csv",
                 file=ContentFile(csv_buffer.getvalue().encode("utf-8"), name=filename),
+                purpose=FilePurpose.DATA_EXPORT,
+                expiry_date=timezone.now() + timedelta(days=7),
             )
 
             return {"file_id": file_obj.id}

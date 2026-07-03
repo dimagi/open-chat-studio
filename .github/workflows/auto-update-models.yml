@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload reconciliation payload
         if: steps.reconcile.outputs.has_new_models == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: reconciliation-payload
           path: |

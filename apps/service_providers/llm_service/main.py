@@ -15,7 +15,7 @@ from openai._base_client import SyncAPIClient
 from pydantic import BaseModel
 
 from apps.experiments.models import ExperimentSession
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.index_managers import (
@@ -344,6 +344,7 @@ class OpenAILlmService(OpenAIGenericService):
                     external_id=file_external_id,
                     external_source="openai",
                     team_id=team_id,
+                    purpose=FilePurpose.MESSAGE_MEDIA,
                 )
                 generated_files.append(new_file)
 
