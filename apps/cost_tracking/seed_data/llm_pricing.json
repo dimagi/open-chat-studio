@@ -1020,5 +1020,181 @@
         "unit_price": "0.008"
       }
     ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-3-7-sonnet-20250219",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.015"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0003"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00375"
+      }
+    ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-opus-4-20250514",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.015"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.075"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0015"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.01875"
+      }
+    ]
+  },
+  {
+    "provider_type": "anthropic",
+    "model_name": "claude-sonnet-4-20250514",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.015"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0003"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00375"
+      }
+    ]
+  },
+  {
+    "provider_type": "azure",
+    "model_name": "gpt-4.1-nano",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0004"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000025"
+      }
+    ]
+  },
+  {
+    "provider_type": "google",
+    "model_name": "gemini-2.0-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0004"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000025"
+      }
+    ]
+  },
+  {
+    "provider_type": "groq",
+    "model_name": "gemma-7b-it",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00005"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00008"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "chatgpt-4o-latest",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.005"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.015"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-3.5-turbo",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0005"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0015"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-3.5-turbo-1106",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.002"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-4.1-nano",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0004"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000025"
+      }
+    ]
   }
 ]

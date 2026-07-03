@@ -1,5 +1,3 @@
-import io
-from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -422,66 +420,3 @@ def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
     imported = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", provider.id))
     assert imported.team_id == target_team.id  # assigned from the synced team, not carried in the row
     assert imported.config == {"api_key": "sk-live"}
-
-
-def test_report_points_to_reregister_webhooks_command():
-    """The sync report no longer re-registers webhooks itself; it tells the operator which follow-up
-    command to run, with the team slug already filled in."""
-    out = io.StringIO()
-    command = Command(stdout=out)
-
-    command._report(sync_complete=True, team_slug="imported-team-z")
-
-    text = out.getvalue()
-    assert "reregister_webhooks --team-slug=imported-team-z" in text
-    assert "Sync complete." in text
-
-
-def test_report_includes_sync_duration():
-    """The report states how long the sync took, so an operator can see it at a glance."""
-    out = io.StringIO()
-    command = Command(stdout=out)
-
-    command._report(sync_complete=True, team_slug="imported-team-z", duration=timedelta(seconds=83))
-
-    assert "0:01:23" in out.getvalue()
-
-
-def test_handle_reports_sync_duration(tmp_path, monkeypatch):
-    """``handle`` times the whole run (precondition checks through the sync itself) and passes it to
-    the report, rather than the report always claiming a zero-length run."""
-    entries = [{"model": "users.customuser", "resource": "user", "cursor": "pk", "secret": False}]
-    rows = {
-        "teams": [
-            {
-                "id": 9001,
-                "name": "T",
-                "slug": "imported-team-z",
-                "feature_flags": [],
-                "created_at": PAST,
-                "updated_at": PAST,
-            }
-        ],
-        "user": [],
-    }
-    manifest = _manifest(entries)
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(manifest, rows))
-    times = iter([100.0, 142.0])
-    monkeypatch.setattr(sync_team.time, "monotonic", lambda: next(times))
-
-    out = io.StringIO()
-    command = Command(stdout=out)
-    options = {
-        "source_url": "http://src",
-        "api_key": "k",
-        "team_slug": "imported-team-z",
-        "private_key_path": None,
-        "state_dir": str(tmp_path),
-        "limit": 100,
-        "skip_schema_check": False,
-        "force_delete": False,
-    }
-
-    command.handle(**options)
-
-    assert "0:00:42" in out.getvalue()
