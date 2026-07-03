@@ -352,7 +352,7 @@ def test_queue_items_table_filters_by_status(client, team_with_users, queue):
     # Filter by pending using dynamic filter params
     response = client.get(
         url,
-        {"filter_0_column": "status", "filter_0_operator": "any of", "filter_0_value": '["Pending"]'},
+        {"f_status": "Pending", "op_status": "any of"},
     )
     assert response.status_code == 200
     content = response.content.decode()
@@ -362,7 +362,7 @@ def test_queue_items_table_filters_by_status(client, team_with_users, queue):
     # Filter by completed
     response = client.get(
         url,
-        {"filter_0_column": "status", "filter_0_operator": "any of", "filter_0_value": '["Completed"]'},
+        {"f_status": "Completed", "op_status": "any of"},
     )
     assert response.status_code == 200
     content = response.content.decode()
@@ -394,7 +394,7 @@ def test_queue_items_table_filters_by_reviewer(client, team_with_users, queue, u
     # Filter by reviewer
     response = client.get(
         url,
-        {"filter_0_column": "reviewer", "filter_0_operator": "any of", "filter_0_value": f'["{user.pk}"]'},
+        {"f_reviewer": str(user.pk), "op_reviewer": "any of"},
     )
     assert response.status_code == 200
     content = response.content.decode()
@@ -411,7 +411,7 @@ def test_queue_items_table_filters_by_session_id(client, team_with_users, queue)
     url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])
     response = client.get(
         url,
-        {"filter_0_column": "session_id", "filter_0_operator": "equals", "filter_0_value": target_id},
+        {"f_session_id": target_id, "op_session_id": "equals"},
     )
     assert response.status_code == 200
     content = response.content.decode()

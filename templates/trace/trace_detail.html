@@ -36,7 +36,7 @@
         {# This view already requires trace.view_trace, so no extra permission check is needed here. #}
         <div class="flex flex-wrap gap-2">
           {% if trace.session %}
-            <a href="{% url 'trace:home' request.team.slug %}{% querystring filter_0_column='session_id' filter_0_operator='equals' filter_0_value=trace.session.external_id %}"
+            <a href="{% url 'trace:home' request.team.slug %}{% querystring f_session_id=trace.session.external_id op_session_id='equals' %}"
                class="btn btn-sm">
               <i class="fas fa-stream"></i> View session traces
             </a>
@@ -44,14 +44,14 @@
           {% if trace.experiment %}
             {# The experiment filter matches on the working version id and expects a JSON-array value. #}
             {% with exp_id=trace.experiment.working_version_id|default:trace.experiment_id|stringformat:'s' %}
-              <a href="{% url 'trace:home' request.team.slug %}{% querystring filter_0_column='experiment' filter_0_operator='any of' filter_0_value='['|add:exp_id|add:']' %}"
+              <a href="{% url 'trace:home' request.team.slug %}{% querystring f_experiment=exp_id op_experiment='any of' %}"
                  class="btn btn-sm">
                 <i class="fas fa-robot"></i> View chatbot traces
               </a>
             {% endwith %}
           {% endif %}
           {% if trace.participant %}
-            <a href="{% url 'trace:home' request.team.slug %}{% querystring filter_0_column='participant' filter_0_operator='equals' filter_0_value=trace.participant.identifier %}"
+            <a href="{% url 'trace:home' request.team.slug %}{% querystring f_participant=trace.participant.identifier op_participant='equals' %}"
                class="btn btn-sm">
               <i class="fas fa-user"></i> View participant traces
             </a>

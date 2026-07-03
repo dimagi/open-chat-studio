@@ -117,9 +117,8 @@ def test_post_reads_filter_params_from_post_body(client_with_user, team_with_use
                 "mode": "selected",
                 "session_ids": str(session.external_id),
                 "message_scope": "filtered",
-                "filter_0_column": "tags",
-                "filter_0_operator": "any of",
-                "filter_0_value": '["+1"]',
+                "f_tags": "+1",
+                "op_tags": "any of",
             },
         )
     assert response.status_code == 302
@@ -127,5 +126,5 @@ def test_post_reads_filter_params_from_post_body(client_with_user, team_with_use
     # 5th positional arg is the filter_query string passed to the Celery task.
     filter_query = mock_delay.call_args.args[4]
     assert filter_query, "filter_query should be populated from POST body, not empty"
-    assert "filter_0_column=tags" in filter_query
-    assert "filter_0_operator=any" in filter_query
+    assert "f_tags=+1" in filter_query
+    assert "op_tags=any" in filter_query

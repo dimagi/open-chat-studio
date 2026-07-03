@@ -42,19 +42,25 @@ def test_trace_detail_view_renders_filter_links(client, team_with_users):
     links = {}
     for href in re.findall(rf'href="({re.escape(home_url)}\?[^"]+)"', content):
         params = parse_qs(urlparse(unescape(href)).query)
-        links[params["filter_0_column"][0]] = params
+        links[
+            params["f_session_id"][0]
+            if "f_session_id" in params
+            else params["f_experiment"][0]
+            if "f_experiment" in params
+            else params["f_participant"][0]
+        ] = params
 
     session_link = links["session_id"]
-    assert session_link["filter_0_operator"] == ["equals"]
-    assert session_link["filter_0_value"] == [str(trace.session.external_id)]
+    assert session_link["op_session_id"] == ["equals"]
+    assert session_link["f_session_id"] == [str(trace.session.external_id)]
 
     experiment_link = links["experiment"]
-    assert experiment_link["filter_0_operator"] == ["any of"]
-    assert experiment_link["filter_0_value"] == [f"[{trace.experiment_id}]"]
+    assert experiment_link["op_experiment"] == ["any of"]
+    assert experiment_link["f_experiment"] == [str(trace.experiment_id)]
 
     participant_link = links["participant"]
-    assert participant_link["filter_0_operator"] == ["equals"]
-    assert participant_link["filter_0_value"] == [trace.participant.identifier]
+    assert participant_link["op_participant"] == ["equals"]
+    assert participant_link["f_participant"] == [trace.participant.identifier]
 
 
 @pytest.mark.django_db()

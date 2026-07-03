@@ -26,9 +26,8 @@ def test_annotation_session_filter_message_date_no_duplicates():
 
     today = timezone.now().date().isoformat()
     params = {
-        "filter_0_column": "message_date",
-        "filter_0_operator": Operators.ON,
-        "filter_0_value": today,
+        "f_message_date": today,
+        "op_message_date": Operators.ON,
     }
     filtered = AnnotationSessionFilter().apply(session.experiment.sessions.all(), FilterParams(_get_querydict(params)))
 

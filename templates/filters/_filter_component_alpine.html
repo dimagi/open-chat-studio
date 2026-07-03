@@ -341,11 +341,11 @@
       },
 
       serializeCSVTildeValues(values) {
-        // Serialize values for tilde-separated format, quoting values containing ~
+        // Serialize values for tilde-separated format, quoting values containing ~ or "
         return values.map(v => {
           const str = String(v);
-          if (str.includes('~')) {
-            return `"${str.replace(/"/g, '\\"')}"`;
+          if (str.includes('~') || str.includes('"')) {
+            return `"${str.replace(/"/g, '""')}"`;
           }
           return str;
         }).join('~');
@@ -531,6 +531,8 @@
           this.selectedLabel = found?.label || '';
           return;
         }
+
+        this.selectedLabel = '';
       },
 
       selectOption(option) {

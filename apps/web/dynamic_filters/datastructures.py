@@ -11,6 +11,46 @@ from pydantic import BaseModel, model_validator
 _LIST_OPERATORS = frozenset({"any of", "all of", "excludes"})
 
 
+def _parse_csv_tilde_values(value: str) -> list[str]:
+    if not isinstance(value, str):
+        return []
+
+    reader = csv.reader(StringIO(value), delimiter="~", quotechar='"')
+    try:
+        row = next(reader)
+    except StopIteration:
+        return []
+    return row
+
+
+def _serialize_csv_tilde_values(values: list[str] | tuple[str, ...] | list[object]) -> str:
+    output = StringIO()
+    writer = csv.writer(output, delimiter="~", quotechar='"', quoting=csv.QUOTE_MINIMAL, lineterminator="")
+    writer.writerow([str(item) for item in values])
+    return output.getvalue().rstrip("\r\n")
+
+
+def _try_parse_json_string_list(value: str) -> list[str] | None:
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
+        return parsed
+    return None
+
+
+def _coerce_list_filter_values(value: str) -> list[str] | None:
+    parsed = _try_parse_json_string_list(value)
+    if parsed is not None:
+        if len(parsed) == 1:
+            if inner := _try_parse_json_string_list(parsed[0]):
+                return inner
+        return parsed
+    return None
+
+
 class ColumnFilterData(BaseModel):
     """Data class representing a single column's filter data."""
 
@@ -20,24 +60,19 @@ class ColumnFilterData(BaseModel):
 
     @model_validator(mode="after")
     def _normalize_list_value(self) -> Self:
-        """Wrap bare strings or tilde-separated values in a JSON array for operators that expect lists."""
+        """Normalize list-based filter values to JSON arrays for operators that expect lists."""
         if self.operator in _LIST_OPERATORS:
             if isinstance(self.value, str):
-                try:
-                    parsed = json.loads(self.value)
-                except (json.JSONDecodeError, TypeError):
-                    parsed = None
-
-                if isinstance(parsed, list):
-                    self.value = json.dumps(parsed)
-                elif "~" in self.value:
-                    # Use CSV reader to handle special characters in values
-                    reader = csv.reader(StringIO(self.value), delimiter="~")
-                    try:
-                        row = next(reader)
-                        self.value = json.dumps(row)
-                    except StopIteration:
-                        self.value = json.dumps([self.value])
+                if "~" in self.value:
+                    parsed = _coerce_list_filter_values(self.value)
+                    if parsed is not None:
+                        self.value = json.dumps(parsed)
+                    else:
+                        parsed = _parse_csv_tilde_values(self.value)
+                        if parsed:
+                            self.value = json.dumps(parsed)
+                        else:
+                            self.value = json.dumps([self.value])
                 else:
                     self.value = json.dumps([self.value])
             else:
@@ -96,16 +131,8 @@ class FilterParams:
         for filter_data in self.filters.values():
             query_value = filter_data.value
             if filter_data.operator in _LIST_OPERATORS:
-                try:
-                    parsed = json.loads(query_value)
-                except json.JSONDecodeError:
-                    parsed = None
-                if isinstance(parsed, list):
-                    # Use CSV writer to handle special characters in values
-                    output = StringIO()
-                    writer = csv.writer(output, delimiter="~")
-                    writer.writerow(str(item) for item in parsed)
-                    query_value = output.getvalue().rstrip("\r\n")
+                if parsed := _coerce_list_filter_values(query_value):
+                    query_value = _serialize_csv_tilde_values(parsed)
 
             query_data[f"f_{filter_data.column}"] = query_value
             query_data[f"op_{filter_data.column}"] = filter_data.operator

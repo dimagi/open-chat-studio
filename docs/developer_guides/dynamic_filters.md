@@ -42,16 +42,12 @@ Filter values are passed through URL query parameters using a modern format that
 - Multiple values (separated by `~`): `?f_tags=tag1~tag2&op_tags=any%20of`
 - Values containing `~` are quoted: `?f_tags=tag1~"tag~2"~tag3&op_tags=any%20of`
 
-#### Old Format (Deprecated)
-- **`filter_{i}_column`** - Specifies which column to filter on
-- **`filter_{i}_operator`** - Defines the filter operation
-- **`filter_{i}_value`** - Contains the actual filter value (JSON encoded for lists)
+#### Legacy Format (No Longer Supported)
+The old `filter_{i}_*` query-string format is no longer accepted. Existing stored values should be migrated to the new `f_*`/`op_*` format before they are used.
 
-**Examples:**
-- `?filter_0_column=status&filter_0_operator=equals&filter_0_value=active`
-- `?filter_0_column=tags&filter_0_operator=any%20of&filter_0_value=%5B%22tag1%22%2C%22tag2%22%5D`
-
-The `{i}` represents the filter index (0 to `MAX_FILTER_PARAMS-1`), allowing multiple filters to be applied simultaneously.
+**Example:**
+- `?f_status=active&op_status=equals`
+- `?f_tags=tag1~tag2&op_tags=any%20of`
 
 #### Value Encoding for Multiple Values
 

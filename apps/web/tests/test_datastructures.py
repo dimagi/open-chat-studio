@@ -15,9 +15,9 @@ def test_column_filter_data():
 
 def test_column_filter_data_list_normalization():
     """Test that list operators normalize tilde-separated values."""
-    # JSON array input
+    # Bracketed strings are treated as literal single values, not JSON arrays.
     cf = ColumnFilterData(column="tags", operator="any of", value='["tag1", "tag2"]')
-    assert cf.value == '["tag1", "tag2"]'
+    assert cf.value == '["[\\"tag1\\", \\"tag2\\"]"]'
 
     # Tilde-separated values
     cf = ColumnFilterData(column="tags", operator="any of", value="tag1~tag2")
@@ -79,3 +79,9 @@ def test_filter_params_to_query_with_special_chars():
     # Now parse it back and verify it normalizes correctly
     params2 = FilterParams(query_dict)
     assert params2.get("tags").value == '["tag~1", "tag2"]'
+
+
+def test_column_filter_data_does_not_reinterpret_bracketed_strings_as_json():
+    cf = ColumnFilterData(column="tags", operator="any of", value="[1,2]")
+
+    assert cf.value == '["[1,2]"]'
