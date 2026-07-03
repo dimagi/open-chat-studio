@@ -580,7 +580,12 @@ def _openai_create_file_with_retries(client, filename, bytesio):
 
 
 def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
-    """Retrieve the content of the openai file with id=`file_id` and create a new `File` instance"""
+    """Retrieve the content of the openai file with id=`file_id` and create a new `File` instance.
+
+    This is used at runtime to pull down files the assistant generates during a run
+    (code-interpreter outputs, generated images), which are attached to the chat as
+    conversation media — hence MESSAGE_MEDIA rather than ASSISTANT (bot config).
+    """
     file = client.files.retrieve(file_id)
     filename = file.filename
     with contextlib.suppress(Exception):
@@ -589,5 +594,5 @@ def get_and_store_openai_file(client, file_id: str, team_id: int) -> File:
     file_content_obj = client.files.content(file_id)
 
     return File.from_external_source(
-        filename, file_content_obj, file_id, "openai", team_id, purpose=FilePurpose.ASSISTANT
+        filename, file_content_obj, file_id, "openai", team_id, purpose=FilePurpose.MESSAGE_MEDIA
     )
