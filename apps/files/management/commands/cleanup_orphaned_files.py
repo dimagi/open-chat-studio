@@ -15,9 +15,12 @@ EXPORT_NAME_PATTERNS = (
 # A file is an orphan-cleanup candidate only if it has no live reference of any
 # kind: no collection/document-source membership, no assistant tool resource, no
 # chat attachment, no voice sample FK, no external (OpenAI) source, and no version
-# relationship (a working copy or a version of one is retained for history, not
-# deleted). purpose="" restricts this to the legacy rows the backfill left behind.
+# relationship. Archived files are excluded outright — archiving is how the app
+# deliberately retains a file (e.g. version history) after its references are
+# removed, so an unreferenced archived file is preserved, not garbage.
+# purpose="" restricts this to the legacy rows the backfill left behind.
 UNREFERENCED = Q(
+    is_archived=False,
     collections__isnull=True,
     document_sources__isnull=True,
     toolresources__isnull=True,

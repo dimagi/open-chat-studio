@@ -60,6 +60,18 @@ def test_keeps_versioned_files():
 
 
 @pytest.mark.django_db()
+def test_keeps_archived_files():
+    # Archiving is how the app retains a file after its references are removed,
+    # so an unreferenced archived file must not be treated as an orphan.
+    archived = FileFactory.create(is_archived=True)
+
+    _run()
+
+    # get_all() bypasses the manager's default is_archived=False filter.
+    assert File.objects.get_all().filter(pk=archived.pk).exists()
+
+
+@pytest.mark.django_db()
 def test_dry_run_deletes_nothing():
     orphan = FileFactory.create()
 
