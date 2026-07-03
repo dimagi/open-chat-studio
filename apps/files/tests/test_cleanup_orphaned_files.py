@@ -6,7 +6,7 @@ from apps.files.models import File, FilePurpose
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFileFactory
 from apps.utils.factories.experiment import ChatAttachmentFactory, SyntheticVoiceFactory
-from apps.utils.factories.files import FileFactory
+from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
 
 
 def _run():
@@ -38,13 +38,27 @@ def test_keeps_referenced_and_special_files():
     voice_file = FileFactory.create()
     SyntheticVoiceFactory.create(file=voice_file)
 
+    # Referenced only by a chunk embedding (reverse FK, not m2m), and not a
+    # collection member — the case the generic m2m re-check cannot catch.
+    embedding_file = FileChunkEmbeddingFactory.create().file
+
     openai_file = FileFactory.create(external_source="openai")
     export = FileFactory.create(content_type="text/csv", name="My Bot Chat Export 2025-08-21.csv")
     classified = FileFactory.create(purpose=FilePurpose.MESSAGE_MEDIA)
 
     _run()
 
-    for kept in [collection_file.file, tool_file, attached_file, voice_file, openai_file, export, classified]:
+    kept_files = [
+        collection_file.file,
+        tool_file,
+        attached_file,
+        voice_file,
+        embedding_file,
+        openai_file,
+        export,
+        classified,
+    ]
+    for kept in kept_files:
         assert File.objects.filter(pk=kept.pk).exists(), kept.name
 
 

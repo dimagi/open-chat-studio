@@ -14,11 +14,14 @@ EXPORT_NAME_PATTERNS = (
 
 # A file is an orphan-cleanup candidate only if it has no live reference of any
 # kind: no collection/document-source membership, no assistant tool resource, no
-# chat attachment, no voice sample FK, no external (OpenAI) source, and no version
-# relationship. Archived files are excluded outright — archiving is how the app
-# deliberately retains a file (e.g. version history) after its references are
-# removed, so an unreferenced archived file is preserved, not garbage.
-# purpose="" restricts this to the legacy rows the backfill left behind.
+# chat attachment, no voice sample FK, no chunk embedding, no external (OpenAI)
+# source, and no version relationship. Archived files are excluded outright —
+# archiving is how the app deliberately retains a file (e.g. version history)
+# after its references are removed, so an unreferenced archived file is preserved,
+# not garbage. purpose="" restricts this to the legacy rows the backfill left
+# behind. Reverse FKs (e.g. filechunkembedding) must be listed explicitly: the
+# get_related_m2m_objects re-check below only covers m2m relations, not plain
+# reverse foreign keys.
 UNREFERENCED = Q(
     is_archived=False,
     collections__isnull=True,
@@ -26,6 +29,7 @@ UNREFERENCED = Q(
     toolresources__isnull=True,
     chatattachment__isnull=True,
     syntheticvoice__isnull=True,
+    filechunkembedding__isnull=True,
     working_version__isnull=True,
     versions__isnull=True,
 )
