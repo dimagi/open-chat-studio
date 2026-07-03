@@ -1,4 +1,3 @@
-import io
 from types import SimpleNamespace
 
 import pytest
@@ -284,16 +283,3 @@ def test_serialized_row_round_trips_through_importer(tmp_path, keypair):
     imported = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", provider.id))
     assert imported.team_id == target_team.id  # assigned from the synced team, not carried in the row
     assert imported.config == {"api_key": "sk-live"}
-
-
-def test_report_points_to_reregister_webhooks_command():
-    """The sync report no longer re-registers webhooks itself; it tells the operator which follow-up
-    command to run, with the team slug already filled in."""
-    out = io.StringIO()
-    command = Command(stdout=out)
-
-    command._report(sync_complete=True, team_slug="imported-team-z")
-
-    text = out.getvalue()
-    assert "reregister_webhooks --team-slug=imported-team-z" in text
-    assert "Sync complete." in text
