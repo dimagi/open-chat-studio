@@ -28,38 +28,37 @@ from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
-
-def _migration_lock_message(exc: requests.HTTPError) -> str | None:
-    """None unless this 403 is the source's TeamIsMigrating check -- in which case the friendly
-    message to show the operator instead of a raw HTTP traceback."""
-    response = exc.response
-    if response is None or response.status_code != 403:
-        return None
-    try:
-        detail = response.json().get("detail", "")
-    except ValueError:
-        return None
-    if TeamIsMigrating.message not in detail:
-        return None
-    return "Migration mode needs to be enabled on the team before you can continue"
-
-
-def _missing_public_key_message(exc: requests.HTTPError) -> str | None:
-    """None unless this 400 is the source refusing to seal secrets because the source team has no
-    public key -- in which case the friendly message telling the operator to set it."""
-    response = exc.response
-    if response is None or response.status_code != 400:
-        return None
-    try:
-        detail = response.json().get("detail", "")
-    except ValueError:
-        return None
-    if MISSING_PUBLIC_KEY_DETAIL not in detail:
-        return None
-    return (
+# Known source-server refusals, matched by status code and detail marker, with the friendly
+# message to show the operator instead of a raw HTTP traceback.
+_FRIENDLY_HTTP_ERRORS = (
+    (
+        403,
+        TeamIsMigrating.message,
+        "Migration mode needs to be enabled on the team before you can continue",
+    ),
+    (
+        400,
+        MISSING_PUBLIC_KEY_DETAIL,
         "The source team has no public key registered, so its secret data cannot be exported. "
-        "Set the team's public key on the source server before syncing."
-    )
+        "Set the team's public key on the source server before syncing.",
+    ),
+)
+
+
+def _friendly_http_error_message(exc: requests.HTTPError) -> str | None:
+    """The operator-friendly message for a known source refusal, or None when the error is
+    unrelated and should surface as-is."""
+    response = exc.response
+    if response is None:
+        return None
+    try:
+        detail = response.json().get("detail", "")
+    except ValueError:
+        return None
+    for status_code, marker, message in _FRIENDLY_HTTP_ERRORS:
+        if response.status_code == status_code and marker in detail:
+            return message
+    return None
 
 
 def _start_cursor(model_label, cursor_type, store, model):
@@ -177,7 +176,7 @@ def run_sync(
                 )
                 write(_style_synced_line(f"synced {count} {resource} rows", count, style))
     except requests.HTTPError as exc:
-        friendly = _migration_lock_message(exc) or _missing_public_key_message(exc)
+        friendly = _friendly_http_error_message(exc)
         if friendly is None:
             raise
         raise CommandError(friendly) from exc
@@ -246,13 +245,7 @@ class Command(BaseCommand):
         check_sync_preconditions(client, private_key, enforce_schema)
 
         if options["force_delete"]:
-            if options.get("interactive", True) and not self._confirm_force_delete(options["team_slug"]):
-                raise CommandError("Aborted: --force-delete not confirmed.")
-            force_delete_team(
-                options["team_slug"],
-                options["state_dir"],
-                write=lambda message: self.stdout.write(self.style.WARNING(message)),
-            )
+            self._run_force_delete(options)
 
         store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
 
@@ -268,6 +261,16 @@ class Command(BaseCommand):
 
         duration = timedelta(seconds=round(time.monotonic() - start_time))
         self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"], duration=duration)
+
+    def _run_force_delete(self, options):
+        """Confirm (unless --no-input) and delete the local team plus its sync state."""
+        if options.get("interactive", True) and not self._confirm_force_delete(options["team_slug"]):
+            raise CommandError("Aborted: --force-delete not confirmed.")
+        force_delete_team(
+            options["team_slug"],
+            options["state_dir"],
+            write=lambda message: self.stdout.write(self.style.WARNING(message)),
+        )
 
     def _report(self, *, sync_complete: bool, team_slug: str, duration: timedelta | None = None) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
