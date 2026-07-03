@@ -111,8 +111,11 @@
           <label class="label cursor-pointer justify-start gap-2">
             <input type="checkbox" name="is_migrating" class="checkbox"
                    {% if request.team.is_migrating %}checked{% endif %}>
-            <span>{% translate "Migration mode (freeze this team for data migration)" %}</span>
+            <span>{% translate "Migration mode" %}</span>
           </label>
+          <p class="my-2 text-muted">
+            {% translate "While enabled, scheduled messages and event triggers (including timeout triggers) for this team are paused and will not fire." %}
+          </p>
           <div class="pg-inline-buttons">
             <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
           </div>
