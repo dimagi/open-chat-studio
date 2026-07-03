@@ -37,6 +37,7 @@ def test_backfill_assigns_purpose_by_relation_and_pattern():
 
     openai_file = FileFactory.create(external_source="openai")
     gzip_export = FileFactory.create(content_type="application/gzip", name="My Bot Chat Export 2026-06-30.csv.gz")
+    csv_export = FileFactory.create(content_type="text/csv", name="My Bot Chat Export 2025-08-21_09-51-47.csv")
     eval_export = FileFactory.create(content_type="text/csv", name="config_latest_results_2026-06-30.csv")
     zip_export = FileFactory.create(content_type="application/zip", name="my-collection_files_20260630.zip")
 
@@ -51,6 +52,7 @@ def test_backfill_assigns_purpose_by_relation_and_pattern():
     assert File.objects.get(pk=code_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
     assert File.objects.get(pk=ocs_file.pk).purpose == FilePurpose.MESSAGE_MEDIA
     assert File.objects.get(pk=gzip_export.pk).purpose == FilePurpose.DATA_EXPORT
+    assert File.objects.get(pk=csv_export.pk).purpose == FilePurpose.DATA_EXPORT
     assert File.objects.get(pk=eval_export.pk).purpose == FilePurpose.DATA_EXPORT
     assert File.objects.get(pk=zip_export.pk).purpose == FilePurpose.DATA_EXPORT
 
