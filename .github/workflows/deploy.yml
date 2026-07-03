@@ -109,7 +109,25 @@ jobs:
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
         echo "image_latest=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> "$GITHUB_OUTPUT"
 
+    - name: Check for pre-built image
+      # The Lint and Test workflow pre-builds the prod image (tagged by SHA) in
+      # parallel with the tests, so the common main->prod deploy can skip the
+      # build entirely. Manual dev deploys (and the rare case where the pre-build
+      # hasn't finished) fall through to the build step below.
+      id: check-image
+      run: |
+        if aws ecr describe-images \
+             --repository-name "$ECR_REPOSITORY" \
+             --image-ids imageTag="${{ github.sha }}" >/dev/null 2>&1; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          echo "Image ${{ github.sha }} already in ECR — skipping build"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+          echo "Image ${{ github.sha }} not found in ECR — building"
+        fi
+
     - name: Build and push
+      if: steps.check-image.outputs.exists != 'true'
       uses: docker/build-push-action@v7
       with:
         tags: |
@@ -118,7 +136,7 @@ jobs:
         file: Dockerfile
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
+        outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3
 
 
     - name: Update ECS task def for Django web container
