@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -257,7 +259,7 @@ def test_force_delete_noinput_skips_confirmation(tmp_path, monkeypatch):
     Team.objects.create(name="Old", slug="imported-team-z")
     monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
     monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
-    monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: None)
+    monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: SimpleNamespace(target_team=None))
     monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted despite --no-input"))
 
     Command().handle(**_force_delete_options(tmp_path, interactive=False))
