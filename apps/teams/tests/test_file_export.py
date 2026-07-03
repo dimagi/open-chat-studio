@@ -54,10 +54,10 @@ class TestCreateTeamFilesZipTask:
         FileFactory(team=team, is_archived=True, file__data=b"y", file__filename="drop.txt")
         assert _zip_from_task(team).namelist() == [keep.file.name]
 
-    def test_excludes_versioned_copies(self, team):
+    def test_includes_versioned_copies(self, team):
         working = FileFactory(team=team, file__data=b"w", file__filename="w.txt")
-        FileFactory(team=team, working_version=working, file__data=b"v", file__filename="v.txt")
-        assert _zip_from_task(team).namelist() == [working.file.name]
+        versioned = FileFactory(team=team, working_version=working, file__data=b"v", file__filename="v.txt")
+        assert set(_zip_from_task(team).namelist()) == {working.file.name, versioned.file.name}
 
     def test_excludes_data_export_artifacts(self, team):
         keep = FileFactory(team=team, file__data=b"x", file__filename="keep.txt")
