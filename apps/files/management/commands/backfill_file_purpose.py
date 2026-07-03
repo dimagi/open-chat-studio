@@ -22,7 +22,9 @@ RULES: list[tuple[str, Q]] = [
     (FilePurpose.ASSISTANT, Q(toolresources__isnull=False)),
     (FilePurpose.MESSAGE_MEDIA, Q(chatattachment__isnull=False)),
     (FilePurpose.ASSISTANT, Q(external_source="openai")),
-    (FilePurpose.DATA_EXPORT, Q(content_type="application/gzip", name__icontains="Chat Export")),
+    # Chat exports are named "<experiment> Chat Export <timestamp>.csv[.gz]". Current
+    # exports are gzipped (application/gzip); older ones are plain text/csv. Match both.
+    (FilePurpose.DATA_EXPORT, Q(name__icontains="Chat Export") & Q(content_type__in=["application/gzip", "text/csv"])),
     (FilePurpose.DATA_EXPORT, Q(content_type="text/csv", name__icontains="_latest_results_")),
     # Collection exports are named "<slug>_files_<timestamp>.zip"; match that pattern
     # so an arbitrary user-uploaded ZIP isn't classified as an export (and expired).
