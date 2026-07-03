@@ -66,14 +66,16 @@ jobs:
         # you can't reference the `env` context when defining other env vars to do it here
         APP_NAME="${{ fromJSON(vars.DEPLOY_APP_NAME)[env.DEPLOY_ENV] }}"
         AWS_REGION="${{ fromJSON(vars.DEPLOY_AWS_REGION)[env.DEPLOY_ENV] }}"
-        echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
-        echo "AWS_REGION=$AWS_REGION" >> "$GITHUB_ENV"
-        echo "ECR_REPOSITORY=$APP_NAME-${{ env.DEPLOY_ENV }}-ecr-repo" >> "$GITHUB_ENV"
-        echo "ECS_CLUSTER=$APP_NAME-${{ env.DEPLOY_ENV }}-Cluster" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_DJANGO=$APP_NAME-${{ env.DEPLOY_ENV }}-Django" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_CELERY=$APP_NAME-${{ env.DEPLOY_ENV }}-Celery" >> "$GITHUB_ENV"
-        echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat" >> "$GITHUB_ENV"
-        echo "DJANGO_STACK_NAME=$APP_NAME-${{ env.DEPLOY_ENV }}-$AWS_REGION-django-stack" >> "$GITHUB_ENV"
+        {
+          echo "APP_NAME=$APP_NAME"
+          echo "AWS_REGION=$AWS_REGION"
+          echo "ECR_REPOSITORY=$APP_NAME-${{ env.DEPLOY_ENV }}-ecr-repo"
+          echo "ECS_CLUSTER=$APP_NAME-${{ env.DEPLOY_ENV }}-Cluster"
+          echo "ECS_SERVICE_DJANGO=$APP_NAME-${{ env.DEPLOY_ENV }}-Django"
+          echo "ECS_SERVICE_CELERY=$APP_NAME-${{ env.DEPLOY_ENV }}-Celery"
+          echo "ECS_SERVICE_CELERY_BEAT=$APP_NAME-${{ env.DEPLOY_ENV }}-CeleryBeat"
+          echo "DJANGO_STACK_NAME=$APP_NAME-${{ env.DEPLOY_ENV }}-$AWS_REGION-django-stack"
+        } >> "$GITHUB_ENV"
 
     - name: Create GitHub deployment
       uses: chrnorm/deployment-action@v2
@@ -104,8 +106,8 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "image_latest=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> $GITHUB_OUTPUT
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+        echo "image_latest=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> "$GITHUB_OUTPUT"
 
     - name: Build and push
       uses: docker/build-push-action@v7
@@ -166,8 +168,8 @@ jobs:
         [[ -z "$SUBNETS" ]] && { echo "Error: Could not find subnets in stack outputs"; exit 1; }
         [[ -z "$SG" ]] && { echo "Error: Could not find security group in stack outputs"; exit 1; }
 
-        echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
-        echo "security_group=$SG" >> $GITHUB_OUTPUT
+        echo "subnets=$SUBNETS" >> "$GITHUB_OUTPUT"
+        echo "security_group=$SG" >> "$GITHUB_OUTPUT"
 
     - name: Run migration task
       id: run-migration
@@ -191,7 +193,7 @@ jobs:
           --query 'tasks[0].taskArn' \
           --output text)
 
-        echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
+        echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
         echo "Started migration task: $TASK_ARN"
 
     - name: Wait for migration & output logs
@@ -242,18 +244,22 @@ jobs:
           echo "$LOGS"
           echo "\`\`\`"
           echo "</details>"
-        } >> $GITHUB_STEP_SUMMARY
+        } >> "$GITHUB_STEP_SUMMARY"
 
         if [ "$EXIT_CODE" != "0" ]; then
           echo "Migration failed with exit code: $EXIT_CODE"
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "❌ **Migration failed with exit code: $EXIT_CODE**" >> $GITHUB_STEP_SUMMARY
+          {
+            echo ""
+            echo "❌ **Migration failed with exit code: $EXIT_CODE**"
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1
         fi
 
         echo "Migration completed successfully"
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "✅ **Migration completed successfully**" >> $GITHUB_STEP_SUMMARY
+        {
+          echo ""
+          echo "✅ **Migration completed successfully**"
+        } >> "$GITHUB_STEP_SUMMARY"
       env:
         LOG_GROUP: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-DjangoMigrationLogs
         LOG_STREAM_PREFIX: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-migrate/migrate
