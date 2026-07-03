@@ -1,4 +1,5 @@
 import time
+from datetime import timedelta
 from uuid import uuid4
 
 from celery.app import shared_task
@@ -14,7 +15,7 @@ from apps.chat.bots import create_conversation
 from apps.chat.exceptions import UserReportableError
 from apps.experiments.export import export_to_tempfile, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
@@ -39,6 +40,8 @@ def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -
             team=experiment.team,
             content_type="application/gzip",
             file=ContentFile(tmp.read(), name=filename),
+            purpose=FilePurpose.DATA_EXPORT,
+            expiry_date=timezone.now() + timedelta(days=7),
         )
     return {"file_id": file_obj.id}
 
