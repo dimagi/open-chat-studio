@@ -16,6 +16,59 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _score_value_for_choice(raw_value: Any) -> tuple[Score.DataType, Decimal | None, str | None]:
+    return Score.DataType.CATEGORICAL, None, str(raw_value)
+
+
+def _score_value_for_bool(raw_value: bool) -> tuple[Score.DataType, Decimal | None, str | None]:
+    return Score.DataType.BOOLEAN, Decimal(1) if raw_value else Decimal(0), None
+
+
+def _score_value_for_number(name: str, raw_value: int | float | Decimal) -> tuple[Score.DataType, Decimal | None, str | None] | None:
+    try:
+        value_numeric = Decimal(str(raw_value))
+    except InvalidOperation:
+        logger.warning("Score field %s: cannot convert %r to Decimal; skipping", name, raw_value)
+        return None
+
+    if value_numeric is None:
+        # Normalize edge cases where a numeric data_type would be created without
+        # a numeric value (violates DB CheckConstraint `score_value_present`).
+        # Treat empty/unset values as categorical instead of writing an invalid
+        # numeric row. This avoids IntegrityError at insert time for cases like
+        # raw_value in ("", "empty").
+        if raw_value in ("", None, "empty"):
+            return Score.DataType.CATEGORICAL, None, ""
+        return Score.DataType.CATEGORICAL, None, str(raw_value)
+
+    return Score.DataType.NUMERIC, value_numeric, None
+
+
+def _score_value_components(name: str, raw_value: Any, schema_field: dict | None) -> tuple[Score.DataType, Decimal | None, str | None] | None:
+    if raw_value is None:
+        return None
+
+    schema_type = (schema_field or {}).get("type")
+
+    # Force categorical when the schema declares a choice — handles numeric-looking
+    # choice values like "0" / "1" without misclassifying them as numeric.
+    if schema_type == "choice":
+        return _score_value_for_choice(raw_value)
+    if isinstance(raw_value, bool):
+        return _score_value_for_bool(raw_value)
+    if isinstance(raw_value, int | float | Decimal):
+        return _score_value_for_number(name, raw_value)
+    if isinstance(raw_value, str):
+        return Score.DataType.CATEGORICAL, None, raw_value
+
+    logger.warning(
+        "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
+        name,
+        type(raw_value).__name__,
+    )
+    return None
+
+
 def _score_from_field(
     *,
     team,
@@ -29,52 +82,11 @@ def _score_from_field(
     schema_field: dict | None = None,
 ) -> Score | None:
     """Build an unsaved Score for one schema field. Returns None for unsupported values."""
-    if raw_value is None:
+    components = _score_value_components(name, raw_value, schema_field)
+    if components is None:
         return None
 
-    schema_type = (schema_field or {}).get("type")
-    value_numeric: Decimal | None = None
-    value_string: str | None = None
-
-    # Force categorical when the schema declares a choice — handles numeric-looking
-    # choice values like "0" / "1" without misclassifying them as numeric.
-    if schema_type == "choice":
-        data_type = Score.DataType.CATEGORICAL
-        value_string = str(raw_value)
-    elif isinstance(raw_value, bool):
-        data_type = Score.DataType.BOOLEAN
-        value_numeric = Decimal(1) if raw_value else Decimal(0)
-    elif isinstance(raw_value, int | float | Decimal):
-        try:
-            value_numeric = Decimal(str(raw_value))
-        except InvalidOperation:
-            logger.warning("Score field %s: cannot convert %r to Decimal; skipping", name, raw_value)
-            return None
-        data_type = Score.DataType.NUMERIC
-    elif isinstance(raw_value, str):
-        data_type = Score.DataType.CATEGORICAL
-        value_string = raw_value
-    else:
-        logger.warning(
-            "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
-            name,
-            type(raw_value).__name__,
-        )
-        return None
-
-    # Normalize edge cases where a numeric data_type would be created without
-    # a numeric value (violates DB CheckConstraint `score_value_present`).
-    # Treat empty/unset values as categorical instead of writing an invalid
-    # numeric row. This avoids IntegrityError at insert time for cases like
-    # raw_value in ("", "empty").
-    if data_type == Score.DataType.NUMERIC and value_numeric is None:
-        # Map empty-like values to a string representation; if raw_value is an
-        # empty sentinel, store empty string to preserve intent.
-        data_type = Score.DataType.CATEGORICAL
-        if raw_value in ("", None, "empty"):
-            value_string = ""
-        else:
-            value_string = str(raw_value)
+    data_type, value_numeric, value_string = components
 
     return Score(
         team=team,
