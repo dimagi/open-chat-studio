@@ -337,6 +337,32 @@ class TestArchivingNodes:
 
 class TestPipeline:
     @pytest.mark.django_db()
+    def test_edit_revision_defaults_to_one(self):
+        pipeline = PipelineFactory.create()
+
+        assert pipeline.edit_revision == 1
+
+    @pytest.mark.django_db()
+    def test_save_does_not_change_edit_revision(self):
+        pipeline = PipelineFactory.create(edit_revision=3)
+
+        pipeline.name = "Updated Pipeline"
+        pipeline.save()
+
+        pipeline.refresh_from_db()
+        assert pipeline.edit_revision == 3
+
+    @pytest.mark.django_db()
+    def test_create_new_version_does_not_change_edit_revision(self):
+        pipeline = PipelineFactory.create(edit_revision=3)
+
+        pipeline.create_new_version()
+
+        pipeline.refresh_from_db()
+        assert pipeline.version_number == 2
+        assert pipeline.edit_revision == 3
+
+    @pytest.mark.django_db()
     @pytest.mark.parametrize("participant_exists", [True, False])
     def test_simple_invoke(self, participant_exists, team_with_users):
         """Test that the mock data is not being persisted when doing a simple invoke"""
