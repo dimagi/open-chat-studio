@@ -24,7 +24,9 @@ def _score_value_for_bool(raw_value: bool) -> tuple[Score.DataType, Decimal | No
     return Score.DataType.BOOLEAN, Decimal(1) if raw_value else Decimal(0), None
 
 
-def _score_value_for_number(name: str, raw_value: int | float | Decimal) -> tuple[Score.DataType, Decimal | None, str | None] | None:
+def _score_value_for_number(
+    name: str, raw_value: int | float | Decimal
+) -> tuple[Score.DataType, Decimal | None, str | None] | None:
     try:
         value_numeric = Decimal(str(raw_value))
     except InvalidOperation:
@@ -44,7 +46,9 @@ def _score_value_for_number(name: str, raw_value: int | float | Decimal) -> tupl
     return Score.DataType.NUMERIC, value_numeric, None
 
 
-def _score_value_components(name: str, raw_value: Any, schema_field: dict | None) -> tuple[Score.DataType, Decimal | None, str | None] | None:
+def _score_value_components(
+    name: str, raw_value: Any, schema_field: dict | None
+) -> tuple[Score.DataType, Decimal | None, str | None] | None:
     if raw_value is None:
         return None
 
@@ -67,6 +71,12 @@ def _score_value_components(name: str, raw_value: Any, schema_field: dict | None
         type(raw_value).__name__,
     )
     return None
+
+
+def _write_scores(*, result_filter, scores: list[Score], transaction_model=transaction) -> None:
+    with transaction_model.atomic():
+        result_filter.delete()
+        Score.objects.bulk_create(scores)
 
 
 def _score_from_field(
@@ -145,9 +155,7 @@ def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
         if score is not None:
             scores.append(score)
 
-    with transaction.atomic():
-        Score.objects.filter(automated_result=result).delete()
-        Score.objects.bulk_create(scores)
+    _write_scores(result_filter=Score.objects.filter(automated_result=result), scores=scores)
 
 
 def write_scores_from_annotation(annotation: Annotation) -> None:
@@ -182,6 +190,4 @@ def write_scores_from_annotation(annotation: Annotation) -> None:
         if score is not None:
             scores.append(score)
 
-    with transaction.atomic():
-        Score.objects.filter(review=annotation).delete()
-        Score.objects.bulk_create(scores)
+    _write_scores(result_filter=Score.objects.filter(review=annotation), scores=scores)
