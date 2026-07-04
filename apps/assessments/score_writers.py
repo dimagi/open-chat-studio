@@ -62,6 +62,20 @@ def _score_from_field(
         )
         return None
 
+    # Normalize edge cases where a numeric data_type would be created without
+    # a numeric value (violates DB CheckConstraint `score_value_present`).
+    # Treat empty/unset values as categorical instead of writing an invalid
+    # numeric row. This avoids IntegrityError at insert time for cases like
+    # raw_value in ("", "empty").
+    if data_type == Score.DataType.NUMERIC and value_numeric is None:
+        # Map empty-like values to a string representation; if raw_value is an
+        # empty sentinel, store empty string to preserve intent.
+        data_type = Score.DataType.CATEGORICAL
+        if raw_value in ("", None, "empty"):
+            value_string = ""
+        else:
+            value_string = str(raw_value)
+
     return Score(
         team=team,
         target_content_type=ContentType.objects.get_for_model(target),
