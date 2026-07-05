@@ -18,7 +18,7 @@ from apps.documents.models import (
 from apps.documents.source_loaders.base import SyncResult
 from apps.documents.source_loaders.registry import create_loader
 from apps.documents.utils import bulk_delete_collection_files
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 
 logger = logging.getLogger("ocs.document_source")
 
@@ -156,6 +156,7 @@ class DocumentSourceManager:
             file_obj=content_file,
             team_id=self.document_source.team_id,
             metadata=document.metadata,
+            purpose=FilePurpose.COLLECTION,
         )
 
         # Create CollectionFile relationship

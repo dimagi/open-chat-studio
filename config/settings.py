@@ -461,6 +461,7 @@ SPECTACULAR_SETTINGS = {
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
         "apps.api.schema.set_export_description",
+        "apps.api.schema.set_example_urls",
     ],
     "PREPROCESSING_HOOKS": [
         "apps.api.schema.exclude_legacy_participants_path",
