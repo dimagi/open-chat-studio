@@ -1,4 +1,5 @@
 import hashlib
+from decimal import Decimal
 
 from django import forms
 from django.core.validators import URLValidator
@@ -237,6 +238,7 @@ def obfuscate_value(value):
 
 class AWSVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["aws_secret_access_key"]
+    additional_searchable_fields = ["aws_access_key_id"]
 
     aws_access_key_id = forms.CharField(label=_("Access Key ID"))
     aws_secret_access_key = forms.CharField(label=_("Secret Access Key"))
@@ -252,6 +254,7 @@ class AzureVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["auth_token"]
+    additional_searchable_fields = ["account_sid"]
 
     account_sid = forms.CharField(label=_("Account SID"))
     auth_token = forms.CharField(label=_("Auth Token"))
@@ -265,6 +268,7 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["client_secret"]
+    additional_searchable_fields = ["client_id"]
 
     client_id = forms.CharField(
         label=_("Client ID"), help_text=_("Azure AD B2C Application ID used for authentication.")
@@ -289,6 +293,7 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["access_token", "app_secret", "verify_token"]
+    additional_searchable_fields = ["business_id"]
 
     business_id = forms.CharField(label=_("WhatsApp Business Account ID"))
     access_token = forms.CharField(label=_("System User Access Token"))
@@ -321,6 +326,7 @@ class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["api_key"]
+    additional_searchable_fields = ["username"]
 
     username = forms.CharField(label=_("Username"))
     api_key = forms.CharField(label=_("API Key"))
@@ -328,6 +334,7 @@ class CommCareAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 class BasicAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["password"]
+    additional_searchable_fields = ["username"]
 
     username = forms.CharField(label=_("Username"))
     password = forms.CharField(label=_("Password"))
@@ -359,13 +366,28 @@ class SlackMessagingConfigForm(ProviderTypeConfigForm):
 
 class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     obfuscate_fields = ["secret_key"]
+    additional_searchable_fields = ["public_key"]
 
     secret_key = forms.CharField(label=_("Secret Key"))
     public_key = forms.CharField(label=_("Public Key"))
     host = forms.URLField(label=_("Host"))
 
 
+def _price_per_million_field(label):
+    """Per-million-token decimal field used by both the custom-model creation
+    form and the team-scoped pricing-override form. Single source of truth
+    for the (required, min_value, decimal_places) contract."""
+    return forms.DecimalField(label=label, required=False, min_value=Decimal("0"), decimal_places=6)
+
+
 class LlmProviderModelForm(forms.ModelForm):
+    """Custom-model creation form. Optional pricing fields are shown only
+    when `flag_ai_cost_monitoring` is on for the team; the view converts
+    per-million to per-1K tokens before persisting `PricingRule` rows."""
+
+    input_price_per_million_tokens = _price_per_million_field(_("Input price ($ / 1M tokens)"))
+    output_price_per_million_tokens = _price_per_million_field(_("Output price ($ / 1M tokens)"))
+
     class Meta:
         model = LlmProviderModel
         fields = ("type", "name", "max_token_limit")
@@ -390,3 +412,29 @@ class LlmProviderModelForm(forms.ModelForm):
             raise forms.ValidationError(_("A model with this name and max token limit already exists for your team"))
 
         return cleaned_data
+
+
+class PricingOverrideForm(forms.Form):
+    """Team-scoped override on a globally-priced model. Prices entered per
+    million tokens (the friendlier unit on provider pricing pages); the
+    view converts to per-1K-tokens before inserting `PricingRule` rows.
+    Leave a field blank to omit a service_kind from the override.
+    """
+
+    input_price_per_million_tokens = _price_per_million_field(_("Input price ($ / 1M tokens)"))
+    output_price_per_million_tokens = _price_per_million_field(_("Output price ($ / 1M tokens)"))
+    cached_input_price_per_million_tokens = _price_per_million_field(_("Cached input price ($ / 1M tokens)"))
+
+    def clean(self):
+        cleaned = super().clean()
+        provided = [
+            cleaned.get(f)
+            for f in (
+                "input_price_per_million_tokens",
+                "output_price_per_million_tokens",
+                "cached_input_price_per_million_tokens",
+            )
+        ]
+        if not any(p is not None for p in provided):
+            raise forms.ValidationError(_("Set at least one rate."))
+        return cleaned

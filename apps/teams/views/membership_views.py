@@ -88,7 +88,7 @@ def remove_team_membership(request, team_slug, membership_id):
         ),
     )
     if removing_self:
-        return HttpResponseRedirect(reverse("web:home"))
+        return HttpResponseRedirect(reverse("prelogin:home"))
     else:
         return HttpResponseRedirect(reverse("single_team:manage_team", args=[request.team.slug]))
 

@@ -65,7 +65,7 @@ class ParticipantDataInline(ReadonlyAdminMixin, admin.TabularInline):
 class ParticipantAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("identifier", "team", "public_id", "platform")
     list_filter = ("team", "platform")
-    search_fields = ("external_chat_id",)
+    search_fields = ("identifier",)
     inlines = [ParticipantDataInline]
 
 
@@ -91,12 +91,11 @@ class ExperimentAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelA
         "name",
         "team",
         "owner",
-        "source_material",
         "version_family",
         "version_number",
         "is_archived",
     )
-    list_filter = ("team", "owner", "source_material")
+    list_filter = ("team", "owner")
     search_fields = ("public_id", "name")
 
 

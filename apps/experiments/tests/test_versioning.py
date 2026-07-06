@@ -4,7 +4,7 @@ from apps.experiments.models import Experiment
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, differs
 from apps.files.models import File
 from apps.utils.factories.events import EventActionFactory, EventActionType, StaticTriggerFactory, TimeoutTriggerFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, SourceMaterialFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory
@@ -12,19 +12,19 @@ from apps.utils.factories.service_provider_factories import TraceProviderFactory
 
 @pytest.mark.django_db()
 def test_compare_models():
-    experiment = ExperimentFactory.create(temperature=0.1)
+    experiment = ExperimentFactory.create(seed_message="hello")
     instance1 = Experiment.objects.get(id=experiment.id)
     instance2 = Experiment.objects.get(id=experiment.id)
     assert instance1.compare_with_model(instance2, exclude_fields=[]) == set()
-    instance2.temperature = 0.2
-    assert instance1.compare_with_model(instance2, exclude_fields=["temperature"]) == set()
-    assert instance1.compare_with_model(instance2, exclude_fields=[]) == set(["temperature"])
+    instance2.seed_message = "goodbye"
+    assert instance1.compare_with_model(instance2, exclude_fields=["seed_message"]) == set()
+    assert instance1.compare_with_model(instance2, exclude_fields=[]) == set(["seed_message"])
 
 
 @pytest.mark.django_db()
 def test_differs():
-    experiment1 = ExperimentFactory.create(temperature=0.1)
-    experiment2 = ExperimentFactory.create(temperature=0.1)
+    experiment1 = ExperimentFactory.create()
+    experiment2 = ExperimentFactory.create()
     assert (
         differs(
             experiment1,
@@ -48,25 +48,25 @@ def test_differs():
 @pytest.mark.django_db()
 class TestVersion:
     def test_compare(self):
-        instance1 = ExperimentFactory.build(temperature=0.1)
+        instance1 = ExperimentFactory.build(seed_message="hello1")
         version1 = VersionDetails(
             instance=instance1,
             fields=[
-                VersionField(group_name="G1", name="the_temperature", raw_value=instance1.temperature),
+                VersionField(group_name="G1", name="the_seed_message", raw_value=instance1.seed_message),
             ],
         )
         similar_instance = instance1
         similar_version2 = VersionDetails(
             instance=similar_instance,
             fields=[
-                VersionField(group_name="G1", name="the_temperature", raw_value=similar_instance.temperature),
+                VersionField(group_name="G1", name="the_seed_message", raw_value=similar_instance.seed_message),
             ],
         )
-        different_instance = ExperimentFactory.build(temperature=0.2)
+        different_instance = ExperimentFactory.build(seed_message="hello2")
         different_version2 = VersionDetails(
             instance=different_instance,
             fields=[
-                VersionField(group_name="G1", name="the_temperature", raw_value=different_instance.temperature),
+                VersionField(group_name="G1", name="the_seed_message", raw_value=different_instance.seed_message),
             ],
         )
         version1.compare(similar_version2)
@@ -76,14 +76,14 @@ class TestVersion:
         assert version1.fields_changed is True
 
         changed_field = version1.fields[0]
-        assert changed_field.name == "the_temperature"
-        assert changed_field.label == "The Temperature"
-        assert changed_field.raw_value == 0.1
+        assert changed_field.name == "the_seed_message"
+        assert changed_field.label == "The Seed Message"
+        assert changed_field.raw_value == "hello1"
         assert changed_field.changed is True
-        assert changed_field.previous_field_version.raw_value == 0.2
+        assert changed_field.previous_field_version.raw_value == "hello2"
 
     def test_early_abort(self):
-        experiment = ExperimentFactory.create(name="One", temperature=0.1)
+        experiment = ExperimentFactory.create(name="One", seed_message="initial")
         exp_version = experiment.create_new_version()
 
         experiment.name = "Two"
@@ -98,8 +98,6 @@ class TestVersion:
         assert len(changed_fields) == 2
 
         # Early abort should only detect one change
-        experiment._clear_version_cache()
-        exp_version._clear_version_cache()
         working_version = experiment.version_details
         version_version = exp_version.version_details
         working_version.compare(version_version, early_abort=True)
@@ -179,7 +177,6 @@ class TestVersion:
 
     def test_fields_grouped(self, experiment):
         new_version = experiment.create_new_version()
-        experiment._clear_version_cache()
         original_version = experiment.version_details
         original_version.compare(new_version.version_details)
         all_groups = set([field.group_name for field in experiment.version_details.fields])
@@ -193,10 +190,9 @@ class TestVersion:
         # Let's change something
         new_version.seed_message = "new seed message"
 
-        new_version._clear_version_cache()
         original_version.compare(new_version.version_details)
         seed_message_group_name = original_version.get_field("seed_message").group_name
-        # Find the temperature group and check that it reports a change
+        # Find the seed_message group and check that it reports a change
         for group in original_version.fields_grouped:
             if group.name == seed_message_group_name:
                 assert group.has_changed_fields is True
@@ -294,21 +290,16 @@ class TestCopyExperiment:
         assert experiment_copy.consent_form == experiment.consent_form
         assert experiment_copy.consent_form.is_working_version
 
-        assert experiment_copy.pre_survey == experiment.pre_survey
-        assert experiment_copy.pre_survey.is_working_version
-
         assert experiment_copy.synthetic_voice_id == experiment.synthetic_voice_id
         assert experiment_copy.voice_provider_id == experiment.voice_provider_id
 
     def test_related_models(self, team):
-        source_material = SourceMaterialFactory.create()
-        experiment = ExperimentFactory.create(team=team, source_material=source_material)
+        experiment = ExperimentFactory.create(team=team)
 
         static_trigger = StaticTriggerFactory.create(experiment=experiment)
         timeout_trigger = TimeoutTriggerFactory.create(experiment=experiment)
 
         experiment_copy = experiment.create_new_version(is_copy=True)
-        assert experiment_copy.source_material == source_material
 
         assert experiment_copy.static_triggers.count() == 1
         static_trigger_copy = experiment_copy.static_triggers.first()
@@ -423,3 +414,36 @@ class TestCopyExperiment:
             "errors": {"test": "value"},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
+
+
+class TestExperimentFieldClassification:
+    """Guards against drift in the Experiment field classification.
+
+    Version creation clones the whole row, so every new field is implicitly part of
+    the versioned content unless classified otherwise. These tests force that
+    decision to be made explicitly when a field is added, renamed, or removed.
+    """
+
+    def test_every_concrete_field_is_classified(self):
+        concrete_fields = {field.name for field in Experiment._meta.get_fields() if field.concrete}
+        classified = Experiment.VERSIONED_CONTENT_FIELDS | Experiment.VERSION_IDENTITY_FIELDS
+
+        unclassified = concrete_fields - classified
+        assert not unclassified, (
+            f"Unclassified Experiment fields: {sorted(unclassified)}. Add each one to either "
+            "Experiment.VERSIONED_CONTENT_FIELDS (cloned on publish, restored on revert) or "
+            "Experiment.VERSION_IDENTITY_FIELDS (per-row identity/state, never copied)."
+        )
+
+        stale = classified - concrete_fields
+        assert not stale, f"Classified names that are not Experiment fields: {sorted(stale)}"
+
+    def test_classifications_are_disjoint(self):
+        overlap = Experiment.VERSIONED_CONTENT_FIELDS & Experiment.VERSION_IDENTITY_FIELDS
+        assert not overlap, f"Fields classified as both content and identity: {sorted(overlap)}"
+
+    def test_comparison_exclusions_are_not_content_fields(self):
+        """Fields excluded from version comparison must not be versioned content."""
+        excluded = set(Experiment().get_fields_to_exclude())
+        overlap = excluded & Experiment.VERSIONED_CONTENT_FIELDS
+        assert not overlap, f"Versioned content fields excluded from comparison: {sorted(overlap)}"

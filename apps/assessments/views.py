@@ -1,3 +1,4 @@
+import csv
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,7 @@ from apps.assessments.models import Score
 from apps.evaluations.models import EvaluationConfig, EvaluationMode
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem, AnnotationQueue
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 _SESSION_MODE = EvaluationMode.SESSION
@@ -284,3 +286,85 @@ class ConcordanceView(LoginAndTeamRequiredMixin, TemplateView):
             }
         )
         return context
+
+
+@login_and_team_required
+def export_concordance_csv(request: HttpRequest, team_slug: str) -> HttpResponse:
+    """Export concordance results as CSV.
+
+    Accepts the same ``eval``, ``queue``, ``field``, and ``show`` query
+    parameters as ``ConcordanceView``.  Returns a 404 when the feature flags
+    are inactive or required parameters are missing.
+    """
+    if not (
+        flag_is_active(request, "flag_assessments_concordance")
+        and flag_is_active(request, "flag_evaluations")
+        and flag_is_active(request, "flag_human_annotations")
+    ):
+        raise Http404("Concordance is not enabled for this team.")
+
+    team = request.team
+    eval_id = request.GET.get("eval")
+    queue_id = request.GET.get("queue")
+    field_name = request.GET.get("field")
+    show = request.GET.get("show", "all")
+    if show not in _SHOW_CHOICES:
+        show = "all"
+
+    if not eval_id or not queue_id:
+        raise Http404("eval and queue parameters are required.")
+
+    eval_config = get_object_or_404(EvaluationConfig, id=eval_id, team=team)
+    queue = get_object_or_404(AnnotationQueue, id=queue_id, team=team)
+    candidates = _candidate_categorical_fields(eval_config, queue)
+
+    if not candidates:
+        raise Http404("No matching categorical fields found.")
+
+    field_name = _resolve_field_name(field_name, candidates)
+    if field_name is None:
+        raise Http404("field parameter is required when multiple fields exist.")
+
+    rows_by_kind = _build_concordance_rows(team=team, eval_config=eval_config, queue=queue, field_name=field_name)
+    rows_by_show = {
+        "matched": rows_by_kind["matched"],
+        "eval_only": rows_by_kind["eval_only"],
+        "human_only": rows_by_kind["human_only"],
+        "all": rows_by_kind["matched"] + rows_by_kind["eval_only"] + rows_by_kind["human_only"],
+    }
+    rows = rows_by_show[show]
+
+    filename = f"concordance_{eval_config.name}_{queue.name}_{field_name}.csv".replace(" ", "_")
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "kind",
+            "session_external_id",
+            "experiment_public_id",
+            f"judge_{field_name}",
+            f"human_{field_name}",
+            "agree",
+            "eval_run_id",
+            "eval_result_id",
+            "annotation_item_id",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.kind,
+                row.session_external_id,
+                row.experiment_public_id,
+                row.judge_value,
+                row.human_value,
+                row.agree,
+                row.eval_run_id,
+                row.eval_result_id,
+                row.annotation_item_id,
+            ]
+        )
+
+    return response

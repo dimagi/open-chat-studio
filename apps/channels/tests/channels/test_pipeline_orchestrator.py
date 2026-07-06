@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from apps.channels.channels_v2.pipeline import (
+    EarlyAbort,
     EarlyExitResponse,
     MessageProcessingPipeline,
 )
@@ -99,6 +100,37 @@ class TestEarlyExit:
 
         t1.assert_called_once()
         t2.assert_called_once()
+
+
+class TestEarlyAbort:
+    def test_abort_skips_remaining_core_stages(self):
+        """When a core stage raises EarlyAbort, subsequent core stages are skipped."""
+        s1 = _make_stage()
+        s2 = _make_stage(side_effect=EarlyAbort())
+        s3 = _make_stage()
+
+        ctx = make_context()
+        pipeline = _pipeline(core=[s1, s2, s3])
+        pipeline.process(ctx)
+
+        s1.assert_called_once()
+        s2.assert_called_once()
+        s3.assert_not_called()
+
+    def test_abort_skips_terminal_stages(self):
+        """Terminal stages do NOT run when a core stage raises EarlyAbort."""
+        s1 = _make_stage(side_effect=EarlyAbort())
+        t1 = _make_stage()
+        t2 = _make_stage()
+
+        ctx = make_context()
+        pipeline = _pipeline(core=[s1], terminal=[t1, t2])
+        result = pipeline.process(ctx)
+
+        t1.assert_not_called()
+        t2.assert_not_called()
+        assert result is ctx
+        assert ctx.early_exit_response is None
 
 
 class TestUnexpectedException:

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import importlib
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils import timezone
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -15,6 +15,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
+from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
     ConditionType,
     validate_condition,
@@ -258,6 +259,62 @@ class EvaluationDataset(BaseTeamModel):
     def is_pending(self):
         return self.status == DatasetCreationStatus.PENDING
 
+    def add_messages(self, messages: list[EvaluationMessage]) -> tuple[list[EvaluationMessage], int]:
+        """Persist and link messages to this dataset, skipping duplicate references.
+
+        Deduplication is mode-aware:
+        - message mode: a message duplicates another when they share the same
+          (input_chat_message_id, expected_output_chat_message_id) pair.
+        - session mode: a message duplicates another when they share the same session_id.
+
+        Messages without the relevant references (e.g. manual or CSV rows with null
+        FKs) are never treated as duplicates. The dataset row is locked for the
+        duration to serialise concurrent adds. Returns (created_messages, skipped_count).
+        """
+        with transaction.atomic():
+            # Lock the dataset row so concurrent add_messages calls can't both
+            # read "not a duplicate" and each insert the same reference.
+            EvaluationDataset.objects.select_for_update().get(pk=self.pk)
+
+            seen = self._existing_dedup_keys()
+            to_create = []
+            skipped = 0
+            for message in messages:
+                key = self._dedup_key(message)
+                if key is not None and key in seen:
+                    skipped += 1
+                    continue
+                if key is not None:
+                    seen.add(key)
+                to_create.append(message)
+
+            created = []
+            if to_create:
+                created = EvaluationMessage.objects.bulk_create(to_create)
+                self.messages.add(*created)
+            return created, skipped
+
+    def _dedup_key(self, message: EvaluationMessage) -> tuple | None:
+        """Return the dedup key for a message, or None if it can't be a duplicate."""
+        if self.evaluation_mode == EvaluationMode.SESSION:
+            if message.session_id is None:
+                return None
+            return ("session", message.session_id)
+        if message.input_chat_message_id is None or message.expected_output_chat_message_id is None:
+            return None
+        return ("pair", message.input_chat_message_id, message.expected_output_chat_message_id)
+
+    def _existing_dedup_keys(self) -> set[tuple]:
+        """Build the set of dedup keys already present in this dataset."""
+        if self.evaluation_mode == EvaluationMode.SESSION:
+            session_ids = self.messages.filter(session__isnull=False).values_list("session_id", flat=True)
+            return {("session", session_id) for session_id in session_ids}
+        pairs = self.messages.filter(
+            input_chat_message_id__isnull=False,
+            expected_output_chat_message_id__isnull=False,
+        ).values_list("input_chat_message_id", "expected_output_chat_message_id")
+        return {("pair", input_id, output_id) for input_id, output_id in pairs}
+
     class Meta:
         unique_together = ("name", "team")
 
@@ -461,51 +518,7 @@ class EvaluationRun(BaseTeamModel):
             scoped_ids = self.scoped_messages.values_list("id", flat=True)
             results_qs = results_qs.filter(message_id__in=scoped_ids)
 
-        results = results_qs.all()
-        table_by_message = defaultdict(dict)
-        tags_by_message = defaultdict(set)
-        for result in results:
-            context_columns = {
-                # exclude 'current_datetime'
-                f"{key}": value
-                for key, value in result.message_context.items()
-                if key != "current_datetime"
-            }
-            # Build row data in order
-            row_data = OrderedDict()
-            row_data["session"] = result.session.external_id if result.session_id else ""
-            source_session = result.message.session if result.message.session_id else None
-            row_data["source_session"] = source_session.external_id if source_session else ""
-            row_data["source_experiment_id"] = (
-                str(source_session.experiment.public_id) if source_session and source_session.experiment_id else ""
-            )
-            row_data["message_id"] = result.message.id
-            row_data["Dataset Input"] = result.input_message
-            row_data["Dataset Output"] = result.output_message
-            row_data["Generated Response"] = result.output.get("generated_response", "")
-
-            row_data.update(
-                {f"{key} ({result.evaluator.name})": value for key, value in result.output.get("result", {}).items()}
-            )
-
-            row_data.update(context_columns)
-
-            for applied_tag in result.applied_tags.all():
-                tags_by_message[result.message.id].add(applied_tag.tag.name)
-
-            if result.output.get("error"):
-                row_data["error"] = result.output.get("error")
-
-            if include_ids is True:
-                row_data["id"] = result.message.id
-
-            table_by_message[result.message.id] = row_data
-
-        for message_id, row_data in table_by_message.items():
-            tags = tags_by_message.get(message_id)
-            row_data["Applied Tags"] = ", ".join(sorted(tags)) if tags else ""
-
-        return [{"#": index, **row} for index, row in enumerate(table_by_message.values())]
+        return build_evaluation_table_data(results_qs, include_ids=include_ids)
 
 
 class EvaluationResult(BaseTeamModel):

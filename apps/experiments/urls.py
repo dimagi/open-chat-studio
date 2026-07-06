@@ -31,7 +31,6 @@ urlpatterns = [
         views.prompt_builder_start_save_process,
         name="prompt_builder_start_save_process",
     ),
-    path("prompt_builder/load_prompts", views.prompt_builder_load_experiments, name="prompt_builder_load_experiments"),
     path(
         "prompt_builder/load_source_material",
         views.prompt_builder_load_source_material,
@@ -100,11 +99,6 @@ urlpatterns = [
         "e/<uuid:experiment_id>/s/<str:session_id>/",
         views.start_session_from_invite,
         name="start_session_from_invite",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/pre-survey/",
-        views.experiment_pre_survey,
-        name="experiment_pre_survey",
     ),
     path(
         "e/<uuid:experiment_id>/s/<str:session_id>/end/",

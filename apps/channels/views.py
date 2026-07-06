@@ -30,7 +30,7 @@ from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
 from apps.channels import meta_webhook, tasks
-from apps.channels.datamodels import TwilioMessage
+from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsapp_message
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -141,6 +141,10 @@ def new_turn_message(request, experiment_id: uuid):
     message_data = json.loads(request.body.decode("utf-8"))
     if "messages" not in message_data:
         # Normal inbound messages should have a "messages" key, so ignore everything else
+        return HttpResponse()
+
+    if is_non_conversational_whatsapp_message(message_data):
+        log.info("Ignoring non-conversational Turn.io WhatsApp webhook")
         return HttpResponse()
 
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
@@ -259,11 +263,8 @@ def new_connect_message(request: HttpRequest):
         return JsonResponse(serializer.errors, status=400)
 
     connect_channel_id = serializer.data["channel_id"]
-    try:
-        participant_data = ParticipantData.objects.get(
-            system_metadata__commcare_connect_channel_id=connect_channel_id,
-        )
-    except ParticipantData.DoesNotExist:
+    participant_data = ParticipantData.objects.for_connect_channel(connect_channel_id)
+    if participant_data is None:
         return JsonResponse({"detail": "No participant data found"}, status=404)
 
     channel = tasks.get_experiment_channel(
@@ -296,7 +297,7 @@ class BaseChannelDialogView(View):
         return get_object_or_404(
             Experiment.objects.select_related("team"),
             id=self.kwargs["experiment_id"],
-            team__slug=self.kwargs["team_slug"],
+            team=self.request.team,
         )
 
     def get_form_kwargs(self):
@@ -360,7 +361,7 @@ class ChannelEditDialogView(BaseChannelDialogView, PermissionRequiredMixin, Upda
             ExperimentChannel,
             id=self.kwargs["channel_id"],
             experiment__id=self.kwargs["experiment_id"],
-            team__slug=self.kwargs["team_slug"],
+            team=self.request.team,
         )
 
     def get_context_data(self, **kwargs):
@@ -414,8 +415,9 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
         ExperimentChannel.objects.select_related("experiment"),
         id=channel_id,
         experiment__id=experiment_id,
-        team__slug=team_slug,
+        team=request.team,
     )
+    _clear_remote_webhook(channel)
     channel.soft_delete()
     channels, available_platforms = get_channels_context(channel.experiment)
     return render(
@@ -427,6 +429,17 @@ def delete_channel(request, team_slug, experiment_id: int, channel_id: int):
             "experiment": channel.experiment,
         },
     )
+
+
+def _clear_remote_webhook(channel: ExperimentChannel):
+    """Best-effort removal of the channel's webhook configuration at the upstream provider."""
+    try:
+        manager = channel.get_webhook_manager()
+        if not manager or not manager.supports_webhook_management:
+            return
+        manager.remove_incoming_webhook(channel.extra_data or {}, channel.webhook_url)
+    except Exception:
+        log.exception("Error removing webhook for channel %s", channel.id)
 
 
 @method_decorator(waf_allow(WafRule.NoUserAgent_HEADER), name="dispatch")
@@ -482,10 +495,19 @@ class MetaCloudAPIWebhookView(View):
             log.warning("Meta Cloud API webhook signature verification failed for channel")
             return HttpResponse()
 
+        self._dispatch_message_values(message_values, channel_map)
+        return HttpResponse()
+
+    def _dispatch_message_values(self, message_values: list[dict], channel_map: dict) -> None:
+        """Queue a task for each conversational message value, routing it to its channel."""
         for value in message_values:
             phone_number_id = value["metadata"]["phone_number_id"]
             ch = channel_map.get(phone_number_id)
             if not ch:
+                continue
+
+            if is_non_conversational_whatsapp_message(value):
+                log.info("Ignoring non-conversational Meta Cloud API webhook value")
                 continue
 
             tasks.handle_meta_cloud_api_message.delay(
@@ -493,8 +515,6 @@ class MetaCloudAPIWebhookView(View):
                 team_slug=ch.team.slug,
                 message_data=value,
             )
-
-        return HttpResponse()
 
     def _payload_has_valid_signature(
         self, channels: list[ExperimentChannel], request_headers: dict, request_body: dict

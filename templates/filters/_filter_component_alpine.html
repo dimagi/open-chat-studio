@@ -18,7 +18,8 @@
       nlError: '',
       filterSlug: "{{ df_filter_slug }}",
       starredFilters: [],
-      savedFilters: null,
+      savedFilters: [],
+      savedFiltersLoaded: false,
       selectedSavedFilterId: null,
       experimentVersionsCache: {}, // Cache experiment ID -> version names
 
@@ -516,18 +517,23 @@
       },
 
       async fetchSavedFilters({ force = false } = {}) {
-        if (!force && this.savedFilters) return this.savedFilters;
+        if (!force && this.savedFiltersLoaded) return this.savedFilters;
         try {
           const url = '{% url "filters:list_filter_set" request.team.slug df_table_type %}';
           const res = await fetch(url, { credentials: 'same-origin' });
           const data = await res.json();
           const results = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
-          this.savedFilters = results;
+          // Mutate the existing array in place rather than reassigning it, so
+          // that Alpine's keyed x-for reconciles per-row without ever evaluating
+          // bindings against an undefined iteration scope.
+          this.savedFilters.splice(0, this.savedFilters.length, ...results);
+          this.savedFiltersLoaded = true;
           return this.savedFilters;
         } catch (error) {
           console.error('Failed to load filter sets:', error);
-          this.savedFilters = [];
-          return [];
+          this.savedFilters.splice(0, this.savedFilters.length);
+          this.savedFiltersLoaded = true;
+          return this.savedFilters;
         }
       },
 
@@ -574,6 +580,7 @@
         }
       },
       async applySavedFilter(savedFilter) {
+        if (!savedFilter) return;
         this.loadFiltersFromQueryString(savedFilter.filter_query_string);
         this.triggerFilterChange();
       },

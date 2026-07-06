@@ -404,8 +404,7 @@ class Command(BaseCommand):
             changed = True
 
         if changed:
-            node.params = params
-            node.save(update_fields=["params"])
+            node.set_params(params)
 
     def _clone_experiments(self, ctx: CloneContext):
         """Clone experiments and remap team + FKs."""
@@ -429,14 +428,6 @@ class Command(BaseCommand):
             new_exp.owner = ctx.user
 
             # Remap FK relationships - error if mapping not found
-            if experiment.source_material_id:
-                if experiment.source_material_id not in ctx.source_materials:
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references source_material_id="
-                        f"{experiment.source_material_id} not found in source team."
-                    )
-                new_exp.source_material = ctx.source_materials[experiment.source_material_id]
-
             if experiment.consent_form_id:
                 if experiment.consent_form_id not in ctx.consent_forms:
                     raise CommandError(
@@ -444,22 +435,6 @@ class Command(BaseCommand):
                         f"{experiment.consent_form_id} not found in source team."
                     )
                 new_exp.consent_form = ctx.consent_forms[experiment.consent_form_id]
-
-            if experiment.pre_survey_id:
-                if experiment.pre_survey_id not in ctx.surveys:
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references pre_survey_id="
-                        f"{experiment.pre_survey_id} not found in source team."
-                    )
-                new_exp.pre_survey = ctx.surveys[experiment.pre_survey_id]
-
-            if experiment.post_survey_id:
-                if experiment.post_survey_id not in ctx.surveys:
-                    raise CommandError(
-                        f"Experiment '{experiment.name}' references post_survey_id="
-                        f"{experiment.post_survey_id} not found in source team."
-                    )
-                new_exp.post_survey = ctx.surveys[experiment.post_survey_id]
 
             if experiment.voice_provider_id:
                 if experiment.voice_provider_id not in ctx.voice_providers:

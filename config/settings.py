@@ -39,6 +39,8 @@ IS_TESTING = "pytest" in sys.modules
 USE_DEBUG_TOOLBAR = env.bool("USE_DEBUG_TOOLBAR", default=DEBUG)
 if IS_TESTING:
     USE_DEBUG_TOOLBAR = False
+    # Use a fast (insecure) hasher in tests; the default PBKDF2 hasher is deliberately slow.
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -124,6 +126,8 @@ PROJECT_APPS = [
     "apps.data_migrations",
     "apps.oauth",
     "apps.ocs_notifications",
+    "apps.prelogin",
+    "apps.cost_tracking",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -376,7 +380,7 @@ if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
     # use private storage by default
-    STORAGES["default"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["default"] = {
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
         "OPTIONS": {
             "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
@@ -388,7 +392,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["public"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
@@ -438,22 +442,77 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "apps.api.pagination.CursorPagination",
     "PAGE_SIZE": 100,
+    # URL-path API versioning. v1 is frozen against today's surface and is also served under the
+    # unversioned /api/ alias (the permanent default); v2 (renamed surface + new endpoints) lands
+    # in a later phase. See apps/api/versioning.py and docs/design/read-only-chatbot-inspection-api.md.
+    "DEFAULT_VERSIONING_CLASS": "apps.api.versioning.URLPathVersioning",
+    "DEFAULT_VERSION": "v1",
+    "ALLOWED_VERSIONS": ["v1", "v2"],
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Dimagi Chatbots",
-    "DESCRIPTION": "Experiments with AI, GPT and LLMs",
-    "VERSION": "1",
+    "TITLE": "Open Chat Studio",
+    "DESCRIPTION": "Build, deploy and monitor chatbots.",
+    # Left blank so info.version is just the API version (e.g. "v1"/"v2"); drf-spectacular would
+    # otherwise prefix it as "<VERSION> (<api_version>)".
+    "VERSION": "",
     "SERVE_INCLUDE_SCHEMA": False,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.api.schema.prune_unused_tags",
+        "apps.api.schema.set_export_description",
+        "apps.api.schema.set_example_urls",
+    ],
+    "PREPROCESSING_HOOKS": [
+        "apps.api.schema.exclude_legacy_participants_path",
+    ],
+    # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
+    # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
+    "ENUM_NAME_OVERRIDES": {
+        "ChatbotSessionStatusEnum": "apps.experiments.models.SessionStatus",
+    },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
+        {
+            "name": "Channels",
+            "description": "Trigger bot messages or deliver messages directly to users on a channel.",
+        },
+        {
+            "name": "Chatbots",
+            "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
+        },
+        {
+            "name": "Me",
+            "description": "Information about the authenticated user and the team the token is scoped to.",
+        },
         {
             "name": "Chat",
             "description": """
                 The Chat API is designed to be used for integrating chatbots into external systems.
             """,
+        },
+        {
+            "name": "Experiments",
+            "description": "List and retrieve chatbots (formerly 'experiments').",
+        },
+        {
+            "name": "Experiment Sessions",
+            "description": "Manage chatbot sessions including session state, and session tags.",
+        },
+        {
+            "name": "Files",
+            "description": "Download the content of files associated with chat messages.",
+        },
+        {
+            "name": "OpenAI",
+            "description": "OpenAI-compatible endpoints for interacting with chatbots.",
+        },
+        {
+            "name": "Participants",
+            "description": "Manage participants, their data, and their schedules.",
         },
     ],
 }
@@ -537,6 +596,11 @@ CACHES = {
     },
 }
 
+if IS_TESTING:
+    # Use an in-process cache for tests: faster than Redis (no network round-trips) and
+    # naturally isolated per pytest-xdist worker, since each worker is a separate process.
+    CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
 WAFFLE_CREATE_MISSING_FLAGS = True
@@ -547,9 +611,10 @@ PROJECT_METADATA = {
     "URL": "http://localhost:8000",
     "DESCRIPTION": gettext_lazy("Build Chatbots and deploy them to WhatsApp, Telegram, Slack and more"),
     "CONTACT_EMAIL": "devops+openchatstudio@dimagi.com",
-    "IMAGE": "https://chatbots.dimagi.com/static/images/logo.png",
+    "IMAGE": "https://www.openchatstudio.com/static/images/logo.png",
     "TERMS_URL": env("TERMS_URL", default=""),
     "PRIVACY_POLICY_URL": env("PRIVACY_POLICY_URL", default=""),
+    "ACCEPTABLE_USE_POLICY_URL": env("ACCEPTABLE_USE_POLICY_URL", default=""),
     "DOCS_URL": env("DOCS_URL", default="https://docs.openchatstudio.com"),
 }
 
@@ -559,6 +624,14 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Add your google analytics ID to the environment to connect to Google Analytics
 GOOGLE_ANALYTICS_ID = env("GOOGLE_ANALYTICS_ID", default="")
+
+# Prelogin marketing pages
+# Optional contact email shown on the contact page. Leave unset to hide the email.
+PRELOGIN_CONTACT_EMAIL = env("PRELOGIN_CONTACT_EMAIL", default="")
+# HubSpot contact form embed. Leave portal/form IDs unset to hide the form.
+HUBSPOT_FORM_REGION = env("HUBSPOT_FORM_REGION", default="na1")
+HUBSPOT_FORM_PORTAL_ID = env("HUBSPOT_FORM_PORTAL_ID", default="")
+HUBSPOT_FORM_ID = env("HUBSPOT_FORM_ID", default="")
 
 # Sentry setup
 
@@ -572,6 +645,9 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.logging import ignore_logger
 
     ignore_logger("ocs.request")
+    # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
+    # so Django correctly rejects them with a 400. These are pure noise in Sentry.
+    ignore_logger("django.security.DisallowedHost")
 
     sentry_sdk.init(
         dsn=SENTRY_DSN,
@@ -727,6 +803,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data-node",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
+    "deploy_channels": "/how-to/deploy_to_different_channels/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",
@@ -805,6 +882,12 @@ COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_S
 COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
 COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
 
+### Internal team metadata
+# Staff-only, instance-configurable free-text metadata fields shown on a team's internal
+# metadata page and included in admin exports.
+# Format: list of {"key": <slug>, "label": <display label>}
+TEAM_METADATA_FIELDS = env.json("TEAM_METADATA_FIELDS", default=[{"key": "team_owner", "label": "Team Owner"}])
+
 ### System Agent
 # Models for use by the system agent. Separate multiple models (for fallback) using the ',' character.
 # openai:gpt5-2,anthropic:claude-4.5-opus
@@ -823,6 +906,9 @@ SYSTEM_AGENT_MODELS_LOW = get_system_agent_models(agent_models_low, agent_api_ke
 MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
+
+# How long after the last message a chat session token remains usable.
+CHAT_SESSION_TOKEN_INACTIVITY_WINDOW = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
 SUPPORTED_FILE_TYPES = {
     "file_search": (
@@ -855,6 +941,7 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
     "x-ocs-widget-version",
     "x-embed-key",
+    "x-session-token",
 ]
 
 CORS_ALLOW_METHODS = [

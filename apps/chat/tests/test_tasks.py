@@ -3,15 +3,15 @@ from unittest.mock import Mock
 from django.test import TestCase
 
 from apps.channels.models import ExperimentChannel
-from apps.chat.channels import _start_experiment_session
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, SessionStatus
+from apps.experiments.models import ConsentForm, Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.services import start_experiment_session
 from apps.service_providers.models import LlmProvider, TraceProvider
 from apps.service_providers.tests.mock_tracer import MockTracer
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.models import Team
 from apps.users.models import CustomUser
-from apps.utils.langchain import mock_llm
+from apps.utils.tests.langchain import mock_llm
 
 
 class TasksTest(TestCase):
@@ -33,7 +33,6 @@ class TasksTest(TestCase):
             owner=self.user,
             name="TestExperiment",
             description="test",
-            prompt_text="You are a helpful assistant",
             consent_form=ConsentForm.get_default(self.team),
         )
         self.experiment_channel = ExperimentChannel.objects.create(
@@ -49,7 +48,7 @@ class TasksTest(TestCase):
         expected_ping_message = "Hey, answer me!"
 
         provider = TraceProvider()
-        provider.get_service = Mock(return_value=MockTracer())  # ty: ignore[invalid-assignment]
+        provider.get_service = Mock(return_value=MockTracer())
         self.experiment_session.experiment.trace_provider = provider
         trace_service = TracingService.empty()
         trace_service.get_trace_metadata = lambda: {"trace_info": True}  # ty: ignore[invalid-assignment]
@@ -66,10 +65,10 @@ class TasksTest(TestCase):
         assert "trace_info" in messages[0].metadata
 
     def _add_session(self, experiment: Experiment, session_status: SessionStatus = SessionStatus.ACTIVE):
-        return _start_experiment_session(
+        return start_experiment_session(
             experiment,
             experiment_channel=self.experiment_channel,
-            participant_identifier=self.telegram_chat_id,
+            participant=Participant(identifier=self.telegram_chat_id),
             session_status=session_status,
         )
 

@@ -5,7 +5,7 @@ import json
 import os
 import uuid
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import httpx
 import pytest
@@ -16,6 +16,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.api.tasks import DuplicateConnectChannelError, create_connect_channel_for_participant
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
 from apps.teams.backends import CHATBOT_ADMIN_GROUP, add_user_to_team
@@ -23,8 +24,8 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.langchain import mock_llm
 from apps.utils.tests.clients import ApiTestClient
+from apps.utils.tests.langchain import mock_llm
 
 
 @pytest.fixture()
@@ -63,6 +64,7 @@ def test_list_experiments(auth_method, experiment):
         ],
         "next": None,
         "previous": None,
+        "count": 1,
     }
     assert response.json() == expected_json
 
@@ -130,6 +132,13 @@ def test_create_and_update_participant_data(auth_method):
     url = reverse("api:participant-data")
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
+    response_json = response.json()
+    assert response_json["identifier"] == identifier
+    assert response_json["platform"] == "api"
+    entries = {entry["chatbot_id"]: entry for entry in response_json["data"]}
+    assert entries[str(experiment.public_id)]["data"] == {"name": "John"}
+    assert entries[str(experiment.public_id)]["connect_channel_id"] is None
+    assert entries[str(experiment2.public_id)]["data"] == {"name": "Doe"}
 
     participant = Participant.objects.get(identifier=identifier)
     assert participant.name == ""
@@ -175,8 +184,7 @@ def test_update_participant_data_returns_404():
     assert experiment.participantdata_set.filter(participant=participant).exists() is False
 
 
-@pytest.mark.django_db()
-def test_create_participant_schedules(experiment):
+def _create_participant_schedules(experiment):
     identifier = "part1"
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)
@@ -229,8 +237,13 @@ def test_create_participant_schedules(experiment):
 
 
 @pytest.mark.django_db()
+def test_create_participant_schedules(experiment):
+    _create_participant_schedules(experiment)
+
+
+@pytest.mark.django_db()
 def test_update_participant_schedules(experiment):
-    schedules = test_create_participant_schedules(experiment)
+    schedules = _create_participant_schedules(experiment)
 
     identifier = "part1"
     user = experiment.team.members.first()
@@ -296,6 +309,26 @@ def test_update_participant_schedules(experiment):
     assert updated_schedules[2].next_trigger_date == trigger_date3
 
 
+@pytest.mark.django_db()
+def test_list_participants_includes_connect_channel_id(experiment):
+    participant = ParticipantFactory(team=experiment.team, platform="commcare_connect")
+    ParticipantData.objects.create(
+        team=experiment.team,
+        participant=participant,
+        experiment=experiment,
+        system_metadata={"commcare_connect_channel_id": "abc-123", "consent": True},
+    )
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team)
+
+    response = client.get(reverse("api:participant-data"))
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    entry = next(p for p in results if p["identifier"] == participant.identifier)
+    assert entry["data"][0]["connect_channel_id"] == "abc-123"
+
+
 def _setup_channel_participant(experiment, identifier, channel_platform, system_metadata=None):
     participant, _ = Participant.objects.get_or_create(
         team=experiment.team, identifier=identifier, platform=channel_platform
@@ -306,9 +339,7 @@ def _setup_channel_participant(experiment, identifier, channel_platform, system_
 
 
 @pytest.mark.django_db()
-@override_settings(
-    CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
-)
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
 def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     """
     Test that a connect channel is created for a participant where
@@ -325,7 +356,7 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     team = TeamWithUsersFactory.create()
     experiment1 = ExperimentFactory.create(team=team)
     ExperimentChannelFactory.create(team=team, experiment=experiment1, platform=ChannelPlatform.TELEGRAM)
-    ExperimentChannelFactory.create(
+    connect_channel = ExperimentChannelFactory.create(
         team=team,
         experiment=experiment1,
         platform=ChannelPlatform.COMMCARE_CONNECT,
@@ -384,15 +415,116 @@ def test_update_participant_data_and_setup_connect_channels(httpx_mock):
     response = client.post(url, json.dumps(data), content_type="application/json")
     assert response.status_code == 200
 
+    response_json = response.json()
+    assert response_json["identifier"] == "connectid_2"
+    channel_ids = {entry["chatbot_id"]: entry["connect_channel_id"] for entry in response_json["data"]}
+    assert channel_ids == {
+        str(experiment1.public_id): created_connect_channel_id,
+        str(experiment2.public_id): None,
+        str(experiment3.public_id): "7d6a-fdc93-4e9c",
+    }
+
     # Only one of the two experiments that the "ConnectID_2" participant belongs to has a connect messaging channel, so
     # we expect only one call to the Connect servers to have been made
     request = httpx_mock.get_request()
     request_data = json.loads(request.read())
     assert request_data["connectid"] == "connectid_2"
-    assert request_data["channel_source"] == "bot1"
+    assert request_data["channel_source"] == str(connect_channel.external_id)
+    assert request_data["channel_name"] == "bot1"
     assert Participant.objects.filter(identifier="connectid_2").exists()
     data = ParticipantData.objects.get(participant__identifier="connectid_2", experiment_id=experiment1.id)
     assert data.system_metadata == {"commcare_connect_channel_id": created_connect_channel_id, "consent": True}
+
+
+@pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+@pytest.mark.parametrize(
+    ("upstream", "expected_status"),
+    [
+        (500, 503),
+        (404, 404),
+        (400, 400),
+        ("network_error", 503),
+    ],
+)
+def test_update_participant_data_connect_channel_failure(httpx_mock, upstream, expected_status):
+    """A Connect API failure fails the request, but the participant data remains saved."""
+    url = f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/"
+    if upstream == "network_error":
+        # the client retries network errors up to 3 times
+        for _ in range(3):
+            httpx_mock.add_exception(httpx.ConnectError("connection failed"), method="POST", url=url)
+    else:
+        httpx_mock.add_response(method="POST", url=url, status_code=upstream)
+
+    team = TeamWithUsersFactory.create()
+    experiment = ExperimentFactory.create(team=team)
+    ExperimentChannelFactory.create(
+        team=team,
+        experiment=experiment,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "bot1"},
+    )
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+
+    data = {
+        "identifier": "connectid_3",
+        "platform": "commcare_connect",
+        "data": [{"experiment": str(experiment.public_id), "data": {"name": "John"}}],
+    }
+    response = client.post(reverse("api:participant-data"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == expected_status
+    assert "Failed to create channel" in response.json()["detail"]
+    # the participant data was saved despite the channel-creation failure
+    participant_data = ParticipantData.objects.get(participant__identifier="connectid_3", experiment=experiment)
+    assert participant_data.data == {"name": "John"}
+    assert "commcare_connect_channel_id" not in participant_data.system_metadata
+
+
+@pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+def test_update_participant_data_duplicate_channel_id_conflict(httpx_mock):
+    """If Connect returns a channel_id already bound to another row, the request fails with a
+    409 and the channel_id is not stored, but the participant data remains saved."""
+    duplicate_channel_id = str(uuid.uuid4())
+    team = TeamWithUsersFactory.create()
+    experiment_a = ExperimentFactory.create(team=team)
+    experiment_b = ExperimentFactory.create(team=team)
+    ExperimentChannelFactory.create(
+        team=team,
+        experiment=experiment_b,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "reused-bot-name"},
+    )
+    # the same participant already owns this channel_id via another experiment
+    _setup_channel_participant(
+        experiment_a,
+        identifier="connectid_9",
+        channel_platform=ChannelPlatform.COMMCARE_CONNECT,
+        system_metadata={"commcare_connect_channel_id": duplicate_channel_id, "consent": True},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/create_channel/",
+        json={"channel_id": duplicate_channel_id, "consent": True},
+    )
+
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+    data = {
+        "identifier": "connectid_9",
+        "platform": "commcare_connect",
+        "data": [{"experiment": str(experiment_b.public_id), "data": {"name": "John"}}],
+    }
+    response = client.post(reverse("api:participant-data"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == 409
+    assert "already linked to another chatbot" in response.json()["detail"]
+    participant_data = ParticipantData.objects.get(participant__identifier="connectid_9", experiment=experiment_b)
+    assert participant_data.data == {"name": "John"}
+    assert "commcare_connect_channel_id" not in participant_data.system_metadata
 
 
 @pytest.mark.django_db()
@@ -434,6 +566,67 @@ def test_register_connect_participant(client, experiment):
 
 
 @pytest.mark.django_db()
+class TestCreateConnectChannelForParticipant:
+    def _connect_channel(self, experiment, bot_name):
+        return ExperimentChannelFactory.create(
+            team=experiment.team,
+            experiment=experiment,
+            platform=ChannelPlatform.COMMCARE_CONNECT,
+            extra_data={"commcare_connect_bot_name": bot_name},
+        )
+
+    def _connect_client(self, channel_id):
+        client = Mock()
+        client.create_channel.return_value = {"channel_id": channel_id, "consent": True}
+        return client
+
+    def test_stores_channel_id_and_generates_encryption_key(self, experiment):
+        channel = self._connect_channel(experiment, "bot1")
+        connect_id = uuid.uuid4().hex
+        participant_data = _setup_participant_data(experiment, connect_id, system_metadata={})
+        channel_id = str(uuid.uuid4())
+        connect_client = self._connect_client(channel_id)
+
+        create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data)
+
+        # the stable external_id is the identity key on Connect; the bot name is display-only
+        connect_client.create_channel.assert_called_once_with(
+            connect_id=connect_id, channel_source=str(channel.external_id), channel_name="bot1"
+        )
+        participant_data.refresh_from_db()
+        assert participant_data.system_metadata == {"commcare_connect_channel_id": channel_id, "consent": True}
+        assert participant_data.encryption_key
+
+    def test_does_not_store_channel_id_owned_by_another_row(self, experiment, caplog):
+        """Connect's create_channel is idempotent on (connect_user, channel_source), so a reused
+        bot name returns a channel_id that may already be bound to another ParticipantData row.
+        It must never be stored on a second row (issue #3620)."""
+        channel_id = str(uuid.uuid4())
+        connect_id = uuid.uuid4().hex
+        existing = _setup_participant_data(
+            experiment,
+            connect_id,
+            system_metadata={"commcare_connect_channel_id": channel_id, "consent": True},
+        )
+        other_experiment = ExperimentFactory.create(team=experiment.team)
+        channel = self._connect_channel(other_experiment, "reused-bot-name")
+        participant_data = ParticipantData.objects.create(
+            team=experiment.team,
+            participant=existing.participant,
+            experiment=other_experiment,
+        )
+
+        with pytest.raises(DuplicateConnectChannelError):
+            create_connect_channel_for_participant(
+                channel, self._connect_client(channel_id), connect_id, participant_data
+            )
+
+        participant_data.refresh_from_db()
+        assert "commcare_connect_channel_id" not in participant_data.system_metadata
+        assert "already bound" in caplog.text
+
+
+@pytest.mark.django_db()
 class TestConnectApis:
     def _make_key_request(self, client, data):
         token = uuid.uuid4()
@@ -459,6 +652,66 @@ class TestConnectApis:
         assert base64.b64decode(base64_key) is not None
         participant_data.refresh_from_db()
         assert participant_data.encryption_key == base64_key
+
+    def test_generate_key_duplicate_rows_returns_oldest_key(self, client, experiment, httpx_mock, caplog):
+        """If duplicate rows hold the same channel_id (issue #3620), serve the oldest row's key —
+        the one the device originally fetched — instead of raising MultipleObjectsReturned."""
+        connect_id = uuid.uuid4().hex
+        commcare_connect_channel_id = uuid.uuid4().hex
+        oldest_key = base64.b64encode(os.urandom(32)).decode("utf-8")
+        oldest = _setup_participant_data(
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
+            encryption_key=oldest_key,
+        )
+        other_experiment = ExperimentFactory.create(team=experiment.team)
+        ParticipantData.objects.create(
+            team=experiment.team,
+            participant=oldest.participant,
+            experiment=other_experiment,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id},
+            encryption_key=base64.b64encode(os.urandom(32)).decode("utf-8"),
+        )
+
+        httpx_mock.add_response(
+            method="GET", url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL, json={"sub": connect_id}
+        )
+        response = self._make_key_request(client=client, data={"channel_id": commcare_connect_channel_id})
+
+        assert response.status_code == 200
+        assert response.json()["key"] == oldest_key
+        assert "Multiple ParticipantData rows" in caplog.text
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123123")
+    def test_consent_with_duplicate_rows_updates_oldest(self, client, experiment, caplog):
+        connect_id = uuid.uuid4().hex
+        commcare_connect_channel_id = uuid.uuid4().hex
+        oldest = _setup_participant_data(
+            experiment,
+            connect_id=connect_id,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": False},
+        )
+        other_experiment = ExperimentFactory.create(team=experiment.team)
+        ParticipantData.objects.create(
+            team=experiment.team,
+            participant=oldest.participant,
+            experiment=other_experiment,
+            system_metadata={"commcare_connect_channel_id": commcare_connect_channel_id, "consent": False},
+        )
+
+        payload = {"channel_id": commcare_connect_channel_id, "consent": True}
+        response = client.post(
+            reverse("api:commcare-connect:consent"),
+            json.dumps(payload),
+            headers=self._get_request_headers(payload),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        oldest.refresh_from_db()
+        assert oldest.system_metadata["consent"] is True
+        assert "Multiple ParticipantData rows" in caplog.text
 
     def test_generate_key_cannot_the_find_user(self, client, experiment, httpx_mock):
         connect_id = uuid.uuid4().hex
@@ -556,7 +809,7 @@ def _setup_participant_data(
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@patch("apps.chat.channels.CommCareConnectClient")
+@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, django_capture_on_commit_callbacks):
     """
@@ -649,7 +902,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
-@patch("apps.chat.channels.CommCareConnectClient")
+@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("consented", [True, False])
 def test_generate_bot_message_auto_creates_participant(
     ConnectClient, experiment, httpx_mock, consented, django_capture_on_commit_callbacks
@@ -780,6 +1033,51 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
     assert sent.from_email == "bot@chat.openchatstudio.com"
 
 
+@pytest.mark.django_db()
+@override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+@patch("apps.api.views.channels.CommCareConnectClient")
+def test_trigger_bot_duplicate_channel_id_conflict(ConnectClientView, experiment):
+    """A duplicate channel_id during enrollment surfaces as a 409, not a misleading consent error."""
+    duplicate_channel_id = uuid.uuid4().hex
+    connect_id = uuid.uuid4().hex
+    # the participant already owns this channel_id via another experiment
+    other_experiment = ExperimentFactory.create(team=experiment.team)
+    existing = _setup_participant_data(
+        other_experiment,
+        connect_id=connect_id,
+        system_metadata={"commcare_connect_channel_id": duplicate_channel_id, "consent": True},
+    )
+    # the row for the target experiment has no channel yet
+    ParticipantData.objects.create(
+        team=experiment.team,
+        participant=existing.participant,
+        experiment=experiment,
+    )
+    ExperimentChannelFactory.create(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        extra_data={"commcare_connect_bot_name": "reused-bot-name"},
+    )
+    ConnectClientView.return_value.create_channel.return_value = {
+        "channel_id": duplicate_channel_id,
+        "consent": True,
+    }
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+    data = {
+        "identifier": connect_id,
+        "platform": ChannelPlatform.COMMCARE_CONNECT,
+        "experiment": str(experiment.public_id),
+        "message_text": "hello",
+    }
+    response = client.post(reverse("api:trigger_bot"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == 409
+    assert "already linked to another chatbot" in response.json()["detail"]
+
+
 # ── trigger_bot direct-message (message_text) tests ──────────────────────────
 
 
@@ -788,7 +1086,7 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
 @patch("apps.api.views.channels.CommCareConnectClient")
-@patch("apps.chat.channels.CommCareConnectClient")
+@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_trigger_bot_direct_message(
     ConnectClientChat, ConnectClientView, experiment, auth_method, django_capture_on_commit_callbacks
@@ -885,7 +1183,7 @@ def test_trigger_bot_direct_message_for_email_channel(experiment, django_capture
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
 @patch("apps.api.views.channels.CommCareConnectClient")
-@patch("apps.chat.channels.CommCareConnectClient")
+@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
 def test_trigger_bot_direct_message_consent_required(ConnectClientChat, ConnectClientView, experiment, httpx_mock):
     """
     trigger_bot with message_text should return 400 when the participant has not consented (CCC platform).

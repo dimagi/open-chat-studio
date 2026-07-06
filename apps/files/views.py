@@ -290,7 +290,7 @@ class DeleteFile(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "files.delete_file"
 
     def delete(self, request, team_slug: str, pk: int):
-        file = get_object_or_404(File, team__slug=team_slug, id=pk)
+        file = get_object_or_404(File, team=request.team, id=pk)
 
         if collections := file.get_collection_references():
             return render_referenced_objects_modal(

@@ -166,6 +166,9 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         indexes = [
             models.Index(fields=["chat", "created_at"]),
             models.Index(fields=["chat", "message_type", "created_at"]),
+            # Supports the global (cross-team) date-range scans in the admin dashboard,
+            # which filter created_at without a chat/team prefix.
+            models.Index(fields=["created_at"], name="chatmessage_created_at_idx"),
         ]
 
     @classmethod

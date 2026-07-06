@@ -57,6 +57,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Always lint, test, and typecheck updated files. Use project-wide build sparingly
 * When adding new features: write or update unit tests first, then code to green
 * For regressions: add a failing test that reproduces the bug, then fix to green
+* Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
 
 ## Don't
@@ -72,8 +73,9 @@ Consult these guides when working in the relevant area:
 * `docs/agents/django_view_security.md` — when adding or modifying views (permissions, auth)
 * `docs/agents/multi_tenancy.md` — when adding new models or querysets (team scoping)
 * `docs/agents/pipeline_repository.md` — when adding or modifying DB access in pipeline nodes
-* `docs/developer_guides/feature_flags.md` — when adding, using, or removing feature flags
-* `docs/developer_guides/help_agent_evals.md` — when adding or modifying help agents or their eval tests
+* `docs/developer_guides/code_systems/feature_flags.md` — when adding, using, or removing feature flags
+* `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature
+* `docs/developer_guides/testing/help_agent_evals.md` — when adding or modifying help agents or their eval tests
 
 ## Agent skills
 
@@ -84,3 +86,23 @@ GitHub Issues on `dimagi/open-chat-studio` via the `gh` CLI.
 ### Domain docs
 
 Single-context — `CONTEXT.md` and `docs/adr/` at the repo root (created lazily by `/grill-with-docs`). See `docs/agents/domain.md`.
+
+### Architecture Decision Records (ADRs)
+
+ADRs live at `docs/adr/` and are rendered into the docs site under Architecture → Decisions. Each ADR captures one decision with context, consequences, and rejected alternatives. ADRs are sequentially numbered (`0001-...`, `0002-...`) and immutable once accepted — reversing a decision means writing a new ADR that supersedes the old one.
+
+Split decisions along the *independent supersession* axis: a choice you would revise on its own earns its own ADR; a choice that exists only as a forced consequence of a bigger decision (e.g. a stub library dictated by the type-checker you chose) is folded into that decision's ADR. Use `extends:` to link related-but-separate ADRs — relatedness alone is not a reason to split.
+
+**Source-doc lifecycle.** Design and spec docs (anywhere under `docs/`) carry a `status` frontmatter field:
+
+- `active` — still evolving; ADR extraction is gated off.
+- `stable` — decisions are settled; safe to extract.
+- `extracted` — already crystallised into ADRs; the source doc is now an index or has been deleted.
+
+When you finish a design doc and ship the work, flip `status` from `active` to `stable`, then run the extraction skill.
+
+**Extracting ADRs.** Use the `/extract-adrs <source-doc>` skill at `.claude/skills/extract-adrs/SKILL.md`. It walks you through identifying candidate decisions, drafting each ADR, wiring up cross-references, and updating `mkdocs.yml` plus `docs/adr/index.md`. The skill never commits — review the diff yourself.
+
+**Writing an ADR by hand.** Copy `docs/adr/_template.md` to `docs/adr/NNNN-kebab-title.md` (next free number), fill it in, append a row to the `docs/adr/index.md` table, and add a nav entry under `Architecture → Decisions` in `mkdocs.yml`.
+
+**Citing an ADR.** Use `ADR-NNNN` as the canonical reference in code comments, PR descriptions, and conversations. Link to the docs site URL for human-readable context.

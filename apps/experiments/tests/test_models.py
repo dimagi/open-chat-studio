@@ -6,6 +6,7 @@ import pytest
 import time_machine
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
+from django.urls import reverse
 from django.utils import timezone
 from time_machine import travel
 
@@ -18,8 +19,10 @@ from apps.experiments.models import (
     ExperimentSession,
     SyntheticVoice,
 )
+from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
 from apps.service_providers.tracing import TraceInfo
+from apps.teams.utils import get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
@@ -33,19 +36,29 @@ from apps.utils.factories.experiment import (
     ExperimentSessionFactory,
     ParticipantFactory,
     SourceMaterialFactory,
-    SurveyFactory,
     SyntheticVoiceFactory,
 )
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
+    LlmProviderFactory,
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamFactory
+from apps.utils.tests.langchain import build_fake_llm_service
 
 
 @pytest.fixture()
 def experiment_session():
     return ExperimentSessionFactory.create()
+
+
+@pytest.fixture()
+def general_synthetic_voices():
+    """The general (non-team-scoped) voices normally seeded by data migrations."""
+    return [
+        SyntheticVoiceFactory.create(service=service, voice_provider=None)
+        for service in (SyntheticVoice.AWS, SyntheticVoice.OpenAI, SyntheticVoice.Azure)
+    ]
 
 
 class TestSyntheticVoice:
@@ -64,13 +77,13 @@ class TestSyntheticVoice:
         assert voices_queryset.count() == SyntheticVoice.objects.count()
 
     @pytest.mark.django_db()
-    def test_get_for_team_excludes_service(self):
+    def test_get_for_team_excludes_service(self, general_synthetic_voices):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.OpenAI, SyntheticVoice.Azure}
 
     @pytest.mark.django_db()
-    def test_get_for_team_do_not_include_other_team_exclusive_voices(self):
+    def test_get_for_team_do_not_include_other_team_exclusive_voices(self, general_synthetic_voices):
         """Tests that `get_for_team` returns both general and team exclusive synthetic voices. Exclusive synthetic
         voices are those whose service is one of SyntheticVoice.TEAM_SCOPED_SERVICES
         """
@@ -425,6 +438,57 @@ class TestExperimentSession:
         final_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
         assert final_message_count == initial_message_count, "Transaction should have rolled back the message creation"
 
+    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    def test_ad_hoc_message_links_ai_message_to_trace(
+        self, mock_get_llm_service, from_experiment_session, experiment_session
+    ):
+        """The Trace created during ad_hoc_bot_message should reference the AI ChatMessage it produced."""
+        mock_get_llm_service.return_value = build_fake_llm_service(responses=["Bot reply"])
+        LlmProviderFactory.create(team=experiment_session.experiment.team)
+        from_experiment_session.return_value = Mock()
+
+        experiment_session.ad_hoc_bot_message("Tell the user we're testing", TraceInfo(name="test"))
+
+        ai_message = ChatMessage.objects.get(chat=experiment_session.chat, message_type=ChatMessageType.AI)
+        assert ai_message.content == "Bot reply"
+
+        trace = Trace.objects.get(session=experiment_session)
+        assert trace.output_message_id == ai_message.id
+
+    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch.object(ExperimentSession, "_bot_prompt_for_user")
+    def test_ad_hoc_message_direct_delivery(self, mock_bot_prompt, from_experiment_session, experiment_session):
+        """When ``message_text`` is provided the message is delivered verbatim, bypassing the LLM,
+        but still recorded in chat history (flagged ``direct_to_user``) and linked to the trace."""
+        mock_channel = Mock()
+        from_experiment_session.return_value = mock_channel
+        message = "Your appointment is confirmed for tomorrow at 10am."
+
+        experiment_session.ad_hoc_bot_message(None, TraceInfo(name="test"), message_text=message)
+
+        # The LLM is never consulted
+        mock_bot_prompt.assert_not_called()
+        # The message is delivered to the participant verbatim
+        mock_channel.send_message_to_user.assert_called_once_with(message)
+
+        # Recorded as an AI message flagged direct_to_user and linked to the trace
+        ai_message = ChatMessage.objects.get(chat=experiment_session.chat, message_type=ChatMessageType.AI)
+        assert ai_message.content == message
+        assert ai_message.metadata.get("direct_to_user") is True
+
+        trace = Trace.objects.get(session=experiment_session)
+        assert trace.output_message_id == ai_message.id
+
+    @pytest.mark.parametrize(
+        ("instruction_prompt", "message_text"),
+        [(None, None), ("prompt", "message")],
+    )
+    def test_ad_hoc_message_requires_exactly_one_input(self, instruction_prompt, message_text, experiment_session):
+        """Neither-or-both of instruction_prompt/message_text is a programming error."""
+        with pytest.raises(ValueError, match="Exactly one of instruction_prompt or message_text"):
+            experiment_session.ad_hoc_bot_message(instruction_prompt, TraceInfo(name="test"), message_text=message_text)
+
     @pytest.mark.parametrize("participant_data_injected", [True, False])
     def test_requires_participant_data(self, participant_data_injected):
         prompt = "data: {participant_data}" if participant_data_injected else "data"
@@ -613,10 +677,6 @@ class TestExperimentModel:
         experiment = ExperimentFactory.create()
         team = experiment.team
         experiment.consent_form = ConsentForm.get_default(team)
-
-        # Setup Safety Layers
-        # Setup Source material
-        experiment.source_material = SourceMaterialFactory.create(team=team, material="material science is interesting")
         experiment.save()
 
         # Setup Static Trigger
@@ -624,12 +684,6 @@ class TestExperimentModel:
 
         # Setup Timeout Trigger
         TimeoutTriggerFactory.create(experiment=experiment)
-
-        # Surveys
-        pre_survey = SurveyFactory.create(team=team)
-        post_survey = SurveyFactory.create(team=team)
-        experiment.pre_survey = pre_survey
-        experiment.post_survey = post_survey
 
         experiment.pipeline = PipelineFactory.create(team=experiment.team)
         experiment.save()
@@ -665,29 +719,22 @@ class TestExperimentModel:
             new=new_version,
             expected_changed_fields=[
                 "id",
-                "source_material",
                 "public_id",
                 "working_version",
                 "version_number",
                 "is_default_version",
                 "consent_form",
-                "pre_survey",
-                "post_survey",
                 "version_description",
                 "pipeline",
             ],
         )
-        self._assert_source_material_is_duplicated(original_experiment, new_version)
         self._assert_triggers_are_duplicated("static", original_experiment, new_version)
         self._assert_triggers_are_duplicated("timeout", original_experiment, new_version)
-        self._assert_attribute_duplicated("source_material", original_experiment, new_version)
         self._assert_attribute_duplicated(
             "consent_form", original_experiment, new_version, changed_fields_extra=["is_default"]
         )
         assert original_experiment.consent_form.is_default is True
         assert new_version.consent_form.is_default is False
-        self._assert_attribute_duplicated("pre_survey", original_experiment, new_version)
-        self._assert_attribute_duplicated("post_survey", original_experiment, new_version)
         self._assert_pipeline_is_duplicated(original_experiment, new_version)
 
         another_new_version = original_experiment.create_new_version()
@@ -711,36 +758,31 @@ class TestExperimentModel:
         new experiment version.
         """
         original_experiment = self._setup_original_experiment()
-        # Choose source_material as the attribute / related model
-        original_related_instance = original_experiment.source_material
+        # Choose consent_form as the attribute / related model
+        original_related_instance = original_experiment.consent_form
 
-        # The original related object has not versions, so we expeect a new version to be created
+        # The original related object has no versions, so we expect a new version to be created
         experiment_version1 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("source_material", experiment_version1)
+        original_experiment._copy_attr_to_new_version("consent_form", experiment_version1)
         assert original_related_instance.versions.count() == 1
-        assert experiment_version1.source_material != original_related_instance
-        assert experiment_version1.source_material.working_version == original_related_instance
+        assert experiment_version1.consent_form != original_related_instance
+        assert experiment_version1.consent_form.working_version == original_related_instance
 
         # No change between the original and versioned instances, so we don't want yet another version to be made
         experiment_version2 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("source_material", experiment_version2)
+        original_experiment._copy_attr_to_new_version("consent_form", experiment_version2)
         assert original_related_instance.versions.count() == 1
         # The new instance version should be the same as the previous one
-        assert experiment_version2.source_material == experiment_version1.source_material
+        assert experiment_version2.consent_form == experiment_version1.consent_form
 
         # Changing the working instance causes a new version to be made
-        original_experiment.source_material.material = "Saucy Sauceness"
-        original_experiment.source_material.save()
+        original_experiment.consent_form.consent_text = "Updated consent text"
+        original_experiment.consent_form.save()
         experiment_version3 = ExperimentFactory.create()
-        original_experiment._copy_attr_to_new_version("source_material", experiment_version3)
+        original_experiment._copy_attr_to_new_version("consent_form", experiment_version3)
         assert original_related_instance.versions.count() == 2
-        assert experiment_version3.source_material != experiment_version2.source_material
-        assert experiment_version3.source_material.working_version == original_experiment.source_material
-
-    def _assert_source_material_is_duplicated(self, original_experiment, new_version):
-        assert new_version.source_material != original_experiment.source_material
-        assert new_version.source_material.working_version == original_experiment.source_material
-        assert new_version.source_material.material == original_experiment.source_material.material
+        assert experiment_version3.consent_form != experiment_version2.consent_form
+        assert experiment_version3.consent_form.working_version == original_experiment.consent_form
 
     def _assert_triggers_are_duplicated(self, trigger_type, original_experiment, new_version):
         if trigger_type == "static":
@@ -1030,3 +1072,27 @@ def test_experimentsession_team_lastactivity_index_exists():
         names = {row[0] for row in cursor.fetchall()}
 
     assert "expsession_team_lastact_idx" in names
+
+
+@pytest.mark.django_db()
+def test_experiment_get_absolute_url_working_version(team_with_users):
+    """Working versions link to their own detail page."""
+    team = team_with_users
+    user = team.members.first()
+    experiment = Experiment.objects.create(name="My Bot", owner=user, team=team)
+    expected = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(team.id), experiment.id])
+    assert experiment.get_absolute_url() == expected
+
+
+@pytest.mark.django_db()
+def test_experiment_get_absolute_url_published_version(team_with_users):
+    """Published version snapshots link to the working version with ?version_id=X#versions."""
+    team = team_with_users
+    user = team.members.first()
+    pipeline = Pipeline.objects.create(team=team, name="pipe", data={"nodes": [], "edges": []})
+    experiment = Experiment.objects.create(name="My Bot", owner=user, team=team, pipeline=pipeline)
+    snapshot = experiment.create_new_version()
+
+    base_url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(team.id), experiment.id])
+    expected = f"{base_url}?version_id={snapshot.version_number}#versions"
+    assert snapshot.get_absolute_url() == expected

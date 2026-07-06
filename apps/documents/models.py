@@ -121,6 +121,7 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
+    create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
 
@@ -328,7 +329,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             raise IndexConfigurationException("Embedding provider model is missing this collection")
 
         index_manager = self.get_index_manager()
-        return index_manager.get_embedding_vector(query)
+        return index_manager.get_embedding_vector(query, input_type="query")
 
     def add_files_to_index(
         self,

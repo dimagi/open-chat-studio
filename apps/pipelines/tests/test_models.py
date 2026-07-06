@@ -5,11 +5,16 @@ import pytest
 
 from apps.channels.models import ExperimentChannel
 from apps.chat.bots import PipelineTestBot
+from apps.documents.models import CollectionFile
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.pipelines.models import Node
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
+from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
+    assistant_node,
     boolean_node,
+    create_pipeline_model,
     create_runnable,
     end_node,
     llm_response_with_prompt_node,
@@ -20,13 +25,14 @@ from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.events import EventActionFactory, ExperimentFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
 )
 from apps.utils.factories.user import UserFactory
-from apps.utils.langchain import (
+from apps.utils.tests.langchain import (
     FakeLlmEcho,
     build_fake_llm_service,
 )
@@ -87,17 +93,20 @@ class TestVersioningNodes:
             param_value = str(collection.id)
         node = NodeFactory.create(type=node_type, pipeline=pipeline, params={param_name: param_value})
 
-        # Versioning it should version the collection as well
+        pipeline.create_new_version()
         pipeline.create_new_version()
 
-        # Versioning it without changes to the collection should not version the collection
-        pipeline.create_new_version()
         if is_index:
-            assert node.versions.first().params[param_name] == [collection.versions.first().id]
-            assert node.versions.last().params[param_name] == [collection.versions.first().id]
+            # ADR-0031: index collections are live shared resources. Publishing keeps the working
+            # id verbatim and does NOT create a collection version.
+            assert not collection.versions.exists()
+            assert node.versions.first().params[param_name] == [collection.id]
+            assert node.versions.last().params[param_name] == [collection.id]
         else:
-            assert node.versions.first().params[param_name] == str(collection.versions.first().id)
-            assert node.versions.last().params[param_name] == str(collection.versions.first().id)
+            # ADR-0031: media collections are also live shared resources — not versioned per bot.
+            assert not collection.versions.exists()
+            assert node.versions.first().params[param_name] == str(collection.id)
+            assert node.versions.last().params[param_name] == str(collection.id)
 
     def test_version_llm_with_prompt_node_with_source_material(self):
         node_type = LLMResponseWithPrompt.__name__
@@ -136,24 +145,74 @@ class TestVersioningNodes:
             },
         )
 
-        # First versioning - should create versions of all dependencies
+        # First versioning - only source material versions; collections stay live (ADR-0031).
         pipeline_version = pipeline.create_new_version()
-        collection_version = collection.latest_version
-        collection_index_version = collection_index.latest_version
         source_material_version = source_material.latest_version
 
         node_version = pipeline_version.node_set.get(type=node_type)
-        assert node_version.params["collection_id"] == str(collection_version.id)
-        assert node_version.params["collection_index_ids"] == [collection_index_version.id]
+        assert node_version.params["collection_id"] == str(collection.id)
+        assert node_version.params["collection_index_ids"] == [str(collection_index.id)]
         assert node_version.params["source_material_id"] == str(source_material_version.id)
+        assert not collection.versions.exists()
+        assert not collection_index.versions.exists()
 
-        # Second versioning without changes - should reuse existing dependency versions
+        # Second versioning - reuse source-material version; collections still live.
         pipeline_version_2 = pipeline.create_new_version()
 
         node_version_2 = pipeline_version_2.node_set.get(type=node_type)
-        assert node_version_2.params["collection_id"] == str(collection_version.id)
-        assert node_version_2.params["collection_index_ids"] == [collection_index_version.id]
+        assert node_version_2.params["collection_id"] == str(collection.id)
+        assert node_version_2.params["collection_index_ids"] == [str(collection_index.id)]
         assert node_version_2.params["source_material_id"] == str(source_material_version.id)
+
+    def test_published_node_resolves_live_index(self):
+        """A bot published after ADR-0031 references the live working index, not a frozen copy."""
+        node_type = LLMResponseWithPrompt.__name__
+        collection_index = CollectionFactory.create(is_index=True)
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_index_ids": [collection_index.id]})
+        pipeline_version = pipeline.create_new_version()
+
+        node_version = pipeline_version.node_set.get(type=node_type)
+        # End-to-end: publishing keeps the working id (precondition), and runtime lookup resolves it to the live
+        # working index.
+        published_ids = node_version.params["collection_index_ids"]
+        assert published_ids == [collection_index.id]
+
+        resolved = ORMRepository().get_collections_for_search(published_ids)
+        assert [c.id for c in resolved] == [collection_index.id]
+        assert resolved[0].is_working_version
+
+    def test_index_content_change_does_not_mark_node_dirty(self):
+        """ADR-0031: index content drift must not flag a published bot as having unpublished changes."""
+        node_type = LLMResponseWithPrompt.__name__
+        collection_index = CollectionFactory.create(is_index=True)
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(
+            type=node_type, pipeline=pipeline, params={"collection_index_ids": [collection_index.id]}
+        )
+        pipeline.create_new_version()
+
+        # Simulate a document-source sync adding a file to the working index.
+        file = FileFactory.create(team=collection_index.team)
+        CollectionFile.objects.create(file=file, collection=collection_index, document_source=None)
+
+        node.refresh_from_db()
+        assert not node.compare_with_latest()
+
+    def test_media_content_change_does_not_mark_node_dirty(self):
+        """ADR-0031: media collection content drift must not flag a published bot as dirty."""
+        node_type = LLMResponseWithPrompt.__name__
+        media_collection = CollectionFactory.create(is_index=False)
+        pipeline = PipelineFactory.create()
+        node = NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(media_collection.id)})
+        pipeline.create_new_version()
+
+        # Simulate a manual edit adding a file to the working media collection.
+        file = FileFactory.create(team=media_collection.team)
+        CollectionFile.objects.create(file=file, collection=media_collection, document_source=None)
+
+        node.refresh_from_db()
+        assert not node.compare_with_latest()
 
 
 @pytest.mark.django_db()
@@ -172,17 +231,13 @@ class TestArchivingNodes:
         archive_related_params.assert_called()
 
     @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
-    @mock.patch("apps.service_providers.models.LlmProvider.create_remote_index")
-    def test_archive_related_objects(self, create_remote_index):
+    def test_archive_related_objects(self):
         # Setup related objects
         assistant = OpenAiAssistantFactory.create()
         collection = CollectionFactory.create()
         collection_index = CollectionFactory.create(
             is_index=True, openai_vector_store_id="v-123", llm_provider=LlmProviderFactory.create()
         )
-
-        # Setup mocks
-        create_remote_index.return_value = "v-456"
 
         # Build the pipeline
         pipeline = PipelineFactory.create()
@@ -198,27 +253,86 @@ class TestArchivingNodes:
         pipeline.create_new_version()
 
         assistant_version = assistant.versions.first()
-        collection_version = collection.versions.first()
-        collection_index_version = collection_index.versions.first()
 
         pipeline.archive()
 
-        # Ensure that the working versions are not archived, but the versions of each related object are
+        # Ensure that the working versions are not archived
         assistant.refresh_from_db()
         collection.refresh_from_db()
         collection_index.refresh_from_db()
-
         assistant_version.refresh_from_db()
-        collection_version.refresh_from_db()
-        collection_index_version.refresh_from_db()
 
         assert assistant.is_archived is False
+        # ADR-0031: media + index collections are live shared resources — never versioned per bot,
+        # so the working collections are untouched and no collection versions exist.
         assert collection.is_archived is False
+        assert not collection.versions.exists()
+        assert collection_index.is_archived is False
+        assert not collection_index.versions.exists()
+
+        # Assistants are still versioned per bot and get archived.
+        assert assistant_version.is_archived is True
+
+    def test_archive_legacy_frozen_index_version(self):
+        """
+        LEGACY data: a pre-ADR-0031 node may reference both the live working index id and a
+        frozen index version id in collection_index_ids. Archiving the pipeline must archive the
+        frozen copy (is_a_version=True) while leaving the live working index (is_a_version=False)
+        untouched. Including both ids makes the is_a_version guard load-bearing: dropping the guard
+        would wrongly archive the working index and fail this test.
+        """
+        # Working index collection (is_a_version=False)
+        collection_index = CollectionFactory.create(is_index=True)
+        # Frozen version of the index (is_a_version=True) — simulates the legacy per-bot copy
+        frozen_index = collection_index.create_new_version()
+        assert frozen_index.is_a_version, "pre-condition: frozen_index must be a version"
+
+        # Node references BOTH the live working id and the frozen version id (legacy stored data)
+        pipeline = PipelineFactory.create()
+        NodeFactory.create(
+            type=LLMResponseWithPrompt.__name__,
+            pipeline=pipeline,
+            params={"collection_index_ids": [collection_index.id, frozen_index.id]},
+        )
+
+        # Version the pipeline — the version node copies the param verbatim
+        pipeline.create_new_version()
+
+        # Archive the pipeline (working version → archives all version nodes too)
+        pipeline.archive()
+
+        frozen_index.refresh_from_db()
+        collection_index.refresh_from_db()
+        # The frozen per-bot copy is archived (legacy cleanup branch)
+        assert frozen_index.is_archived is True
+        # The live working index is protected by the is_a_version guard
         assert collection_index.is_archived is False
 
-        assert assistant_version.is_archived is True
-        assert collection_version.is_archived is True
-        assert collection_index_version.is_archived is True
+    def test_archive_legacy_frozen_media_version(self):
+        """
+        LEGACY data: a pre-ADR-0031 node may reference a frozen media collection version in
+        collection_id. Archiving the pipeline must archive that frozen copy (is_a_version=True)
+        while leaving a live working media collection (referenced by another node) untouched.
+        The working-media node makes the is_a_version guard load-bearing: dropping the guard would
+        wrongly archive the working media and fail this test.
+        """
+        node_type = LLMResponseWithPrompt.__name__
+        working_media = CollectionFactory.create(is_index=False)
+        frozen_media = working_media.create_new_version()
+        assert frozen_media.is_a_version, "pre-condition: frozen_media must be a version"
+
+        pipeline = PipelineFactory.create()
+        # Node A references the live working media id; Node B references the frozen version id.
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(working_media.id)})
+        NodeFactory.create(type=node_type, pipeline=pipeline, params={"collection_id": str(frozen_media.id)})
+
+        pipeline.create_new_version()
+        pipeline.archive()
+
+        working_media.refresh_from_db()
+        frozen_media.refresh_from_db()
+        assert frozen_media.is_archived is True
+        assert working_media.is_archived is False
 
 
 class TestPipeline:
@@ -258,6 +372,7 @@ class TestPipeline:
         """Test simple invoke with a pipeline that has an LLM node"""
         provider = LlmProviderFactory.create()
         provider_model = LlmProviderModelFactory.create()
+        source_material = SourceMaterialFactory.create()
         llm = FakeLlmEcho()
         service = build_fake_llm_service(None, llm)
         get_llm_service.return_value = service
@@ -265,7 +380,7 @@ class TestPipeline:
         llm_node = llm_response_with_prompt_node(
             str(provider.id),
             str(provider_model.id),
-            source_material_id=1,
+            source_material_id=str(source_material.id),
             prompt="Help the user. User data: {participant_data}. Source material: {source_material}",
             history_type="global",
         )
@@ -280,7 +395,7 @@ class TestPipeline:
         bot.process_input(user_input)
         expected_call_messages = [
             [
-                ("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: "),
+                ("system", "Help the user. User data: {'name': 'Anonymous'}. Source material: material"),
                 ("human", [{"text": user_input, "type": "text"}]),
             ],
         ]
@@ -319,6 +434,108 @@ class TestPipeline:
         # Double check that the node didn't archive the assistant
         assistant.refresh_from_db()
         assert assistant.is_archived is False
+
+
+@pytest.mark.django_db()
+class TestUpdateNodesFromData:
+    def test_re_adding_archived_node_flow_id_creates_fresh_working_node(self):
+        """Removing a node that has versions archives it; revert re-introduces the same
+        flow_id, which must yield a fresh editable working node without colliding with
+        the archived row."""
+        start, template, end = start_node(), render_template_node(), end_node()
+        pipeline = create_pipeline_model([start, template, end])
+        pipeline.create_new_version()  # the template node now has a version
+
+        original = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
+        node_version = original.versions.get()
+
+        def set_nodes(node_dicts):
+            pipeline.data = {"edges": [], "nodes": [{"id": n["id"], "data": n} for n in node_dicts]}
+            pipeline.update_nodes_from_data()
+
+        # remove the template node; it has a version so it is archived rather than deleted
+        set_nodes([start, end])
+        original.refresh_from_db()
+        assert original.is_archived
+
+        # re-add the same flow_id
+        set_nodes([start, template, end])
+
+        re_added = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
+        assert re_added.id != original.id
+        assert re_added.is_working_version
+        assert not re_added.is_archived
+        assert re_added.params["template_string"] == template["params"]["template_string"]
+
+        # the archived node and its version history are untouched
+        original.refresh_from_db()
+        node_version.refresh_from_db()
+        assert original.is_archived
+        assert node_version.working_version_id == original.id
+        assert Node.objects.get_all().filter(pipeline=pipeline, flow_id=template["id"]).count() == 2
+
+        # the re-added node is editable in place; no duplicate row appears
+        template["params"]["template_string"] = "updated: {{ input }}"
+        set_nodes([start, template, end])
+        re_added.refresh_from_db()
+        assert re_added.params["template_string"] == "updated: {{ input }}"
+        assert Node.objects.filter(pipeline=pipeline, flow_id=template["id"]).count() == 1
+
+        # publishing again versions the re-added node, not the archived one
+        pipeline.create_new_version()
+        assert re_added.versions.count() == 1
+        assert original.versions.count() == 1
+
+
+@pytest.mark.django_db()
+class TestPipelineRevert:
+    @patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+    def test_revert_remaps_versioned_params_back_to_working_records(self):
+        """Reverting rebuilds the working pipeline from a version's data, remapping params that
+        reference versioned records (assistant, source material) back to their working ids."""
+        assistant = OpenAiAssistantFactory.create()
+        source_material = SourceMaterialFactory.create(team=assistant.team)
+        provider = LlmProviderFactory.create(team=assistant.team)
+        provider_model = LlmProviderModelFactory.create(team=assistant.team)
+
+        start, asst, llm, end = (
+            start_node(),
+            assistant_node(str(assistant.id)),
+            llm_response_with_prompt_node(
+                str(provider.id), str(provider_model.id), source_material_id=str(source_material.id)
+            ),
+            end_node(),
+        )
+        pipeline = create_pipeline_model([start, asst, llm, end])
+        pipeline.save(update_fields=["data"])
+        version = pipeline.create_new_version()
+
+        # On publish, the version's node params point at the versioned records.
+        version_asst = version.node_set.get(type=AssistantNode.__name__)
+        assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
+        version_llm = version.node_set.get(type=LLMResponseWithPrompt.__name__)
+        assert version_llm.params["source_material_id"] == str(source_material.latest_version.id)
+
+        # Edit the working pipeline so revert has something to undo.
+        other_assistant = OpenAiAssistantFactory.create(team=assistant.team)
+        asst["params"]["assistant_id"] = str(other_assistant.id)
+        create_pipeline_model([start, asst, llm, end], pipeline=pipeline)
+
+        pipeline.revert_to_version(version)
+
+        working_asst = pipeline.node_set.get(type=AssistantNode.__name__)
+        working_llm = pipeline.node_set.get(type=LLMResponseWithPrompt.__name__)
+        # Params point at the working records, not the versioned ones from the snapshot.
+        assert working_asst.params["assistant_id"] == str(assistant.id)
+        assert working_llm.params["source_material_id"] == str(source_material.id)
+        # The mirrored resource FK columns are re-synced to the working records too.
+        assert working_asst.assistant_id == assistant.id
+        assert working_llm.source_material_id == source_material.id
+
+        # The version's nodes are untouched by the revert.
+        version_asst.refresh_from_db()
+        assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
+        assert version_asst.assistant_id == assistant.latest_version.id
 
 
 @pytest.mark.django_db()
@@ -363,3 +580,16 @@ class TestPipelineValidation:
         pipeline.update_nodes_from_data()
         errors = pipeline.validate()
         assert not errors
+
+
+@pytest.mark.parametrize(
+    ("node_type", "param_name", "expected"),
+    [
+        pytest.param(LLMResponseWithPrompt.__name__, "llm_provider_id", True, id="declared"),
+        pytest.param(LLMResponseWithPrompt.__name__, "assistant_id", False, id="not-declared"),
+        pytest.param(AssistantNode.__name__, "assistant_id", True, id="declared-on-other-type"),
+        pytest.param("NoSuchNode", "assistant_id", False, id="unknown-node-type"),
+    ],
+)
+def test_node_has_parameter(node_type, param_name, expected):
+    assert Node(type=node_type).has_parameter(param_name) is expected

@@ -4,21 +4,20 @@ import logging
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
+from apps.teams.models import Flag, Team
 from apps.trace.models import Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
-
-if TYPE_CHECKING:
-    from apps.experiments.models import Experiment, ExperimentSession
 
 logger = logging.getLogger("ocs.tracing")
 
@@ -40,6 +39,7 @@ class OCSTracer(Tracer):
         self.error_span_name: str = ""
         self.error_notification_config: SpanNotificationConfig | None = None
         self.metrics_collector: MetricsCollector | None = None
+        self.cost_tracking_enabled: bool = False
 
     @property
     def ready(self) -> bool:
@@ -92,6 +92,7 @@ class OCSTracer(Tracer):
 
         self.start_time = time.time()
         self.metrics_collector = MetricsCollector(start_time=self.start_time)
+        self.cost_tracking_enabled = self._evaluate_cost_tracking_flag()
 
         try:
             yield trace_context
@@ -123,6 +124,7 @@ class OCSTracer(Tracer):
 
             self._update_trace_metrics()
             self.trace_record.save()
+            self._record_costs()
 
             session_id = self.session.id if self.session else None
             logger.debug(
@@ -151,6 +153,46 @@ class OCSTracer(Tracer):
         self.trace_record.n_prompt_tokens = metrics.n_prompt_tokens
         self.trace_record.n_completion_tokens = metrics.n_completion_tokens
 
+    def _record_costs(self) -> None:
+        """Drain the collector's accumulated usage into UsageRecord rows.
+
+        Short-circuits when the flag is off so the cost path is zero-work
+        for teams that haven't opted in. `record_usage_bulk` swallows DB
+        errors internally; the outer `_finalize_trace` try/except catches
+        anything else (e.g. an unexpected helper failure).
+        """
+        if not self.cost_tracking_enabled:
+            return
+        if not self.metrics_collector:
+            return
+        if not self.trace_record:
+            return
+        from apps.cost_tracking.services.recorder import (  # noqa: PLC0415 - lazy: cost_tracking only imported when the flag is on
+            TraceContext,
+            record_usage_bulk,
+        )
+
+        events = list(self.metrics_collector.iter_cost_events())
+        if not events:
+            return
+        record_usage_bulk(
+            events,
+            TraceContext(
+                team_id=self.team_id,
+                trace_id=self.trace_record.id,
+                experiment_id=self.trace_record.experiment_id,
+                session_id=self.session.id if self.session else None,
+                participant_id=self.trace_record.participant_id,
+            ),
+        )
+
+    def _evaluate_cost_tracking_flag(self) -> bool:
+        """Look up the team-scoped `flag_ai_cost_monitoring` flag once per
+        trace entry. `Flag.get` is the cached classmethod; `Team(pk=...)`
+        avoids a DB fetch since `is_active_for_team` only reads `.pk`.
+        """
+        return Flag.get("flag_ai_cost_monitoring").is_active_for_team(Team(pk=self.team_id))
+
     def _fire_error_notification_if_needed(self) -> None:
         """Fire notification if a span declared one and the trace errored."""
         try:
@@ -175,6 +217,7 @@ class OCSTracer(Tracer):
         self.error_span_name = ""
         self.error_notification_config = None
         self.metrics_collector = None
+        self.cost_tracking_enabled = False
 
     @contextmanager
     def span(
@@ -217,12 +260,12 @@ class OCSTracer(Tracer):
     def set_output_message_id(self, output_message_id: str) -> None:
         """Set the output message ID for the trace."""
         if self.trace_record:
-            self.trace_record.output_message_id = output_message_id
+            self.trace_record.output_message_id = output_message_id  # ty: ignore[invalid-assignment]
 
     def set_input_message_id(self, input_message_id: str) -> None:
         """Set the input message ID for the trace."""
         if self.trace_record:
-            self.trace_record.input_message_id = input_message_id
+            self.trace_record.input_message_id = input_message_id  # ty: ignore[invalid-assignment]
 
     def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         if self.trace_record:
@@ -260,8 +303,6 @@ class OCSTracer(Tracer):
         """
         Bust any relevant caches when an error is detected in a span.
         """
-        from apps.experiments.models import Experiment  # noqa: PLC0415 - circular: experiments.models→tracing
-
         cache_key = Experiment.TREND_CACHE_KEY_TEMPLATE.format(experiment_id=self.experiment.id)
         cache.delete(cache_key)
 

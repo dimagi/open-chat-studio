@@ -21,6 +21,7 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
+from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
 from apps.chat.channels import ChannelBase
@@ -31,6 +32,7 @@ from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
@@ -40,12 +42,12 @@ from apps.experiments.filters import (
 from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
 from apps.experiments.tables import ExperimentVersionsTable
-from apps.experiments.tasks import async_create_experiment_version
+from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
     start_session_public,
 )
-from apps.experiments.views.utils import get_channels_context, get_max_char_limit
+from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -62,6 +64,7 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.trace.models import Trace
+from apps.utils.decorators import sunset
 from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
@@ -285,11 +288,7 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
             form.instance.name = unicodedata.normalize("NFC", form.instance.name)
             self.object = form.save()
 
-        task_id = async_create_experiment_version.delay(
-            experiment_id=self.object.id, version_description="", make_default=True
-        )
-        self.object.create_version_task_id = task_id
-        self.object.save(update_fields=["create_version_task_id"])
+        start_version_creation(self.object, make_default=True)
 
         return HttpResponseRedirect(self.get_success_url())
 
@@ -305,6 +304,13 @@ class CreateChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
 def single_chatbot_home(request, team_slug: str, experiment_id: int):
     experiment = get_object_or_404(Experiment.objects.get_all(), id=experiment_id, team=request.team)
 
+    # This page operates on the family-head (working) Experiment. If a version snapshot's id was
+    # requested (e.g. from a notification link), redirect to the working version and highlight
+    # that version in the versions tab via ?version_id=X#versions.
+    if experiment.is_a_version:
+        url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment.working_version_id])
+        return redirect(f"{url}?version_id={experiment.version_number}#versions")
+
     channels, available_platforms = get_channels_context(experiment)
 
     published = resolve_published_or_working(experiment)
@@ -317,6 +323,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
+        "highlight_version_id": request.GET.get("version_id"),
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
@@ -430,7 +437,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         if working_version.is_archived:
             raise PermissionDenied("Unable to version an archived chatbot.")
 
-        if working_version.create_version_task_id:
+        if working_version.version_operation_in_progress:
             messages.error(self.request, "Version creation is already in progress.")
             return HttpResponseRedirect(self.get_success_url())
 
@@ -440,11 +447,9 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
             messages.error(self.request, error_msg)
             return render(self.request, self.template_name, self.get_context_data(form=form))
 
-        task_id = async_create_experiment_version.delay(
-            experiment_id=working_version.id, version_description=description, make_default=is_default
-        )
-        working_version.create_version_task_id = task_id
-        working_version.save(update_fields=["create_version_task_id"])
+        if not start_version_creation(working_version, version_description=description, make_default=is_default):
+            messages.error(self.request, "Version creation is already in progress.")
+            return HttpResponseRedirect(self.get_success_url())
         messages.success(self.request, "Creating new version. This might take a few minutes.")
 
         return HttpResponseRedirect(self.get_success_url())
@@ -467,6 +472,58 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
             },
         )
         return f"{url}#versions"
+
+
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def chatbot_revert_confirm(request, team_slug: str, experiment_id: int, version_number: int):
+    """Render the revert confirmation modal: a diff of the working state vs the target version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    has_unreleased_changes = experiment.compare_with_latest()
+
+    version_details = experiment.version_details
+    version_details.compare(version.version_details)
+    context = {
+        "experiment": experiment,
+        "version": version,
+        "version_details": version_details,
+        "has_unreleased_changes": has_unreleased_changes,
+    }
+    return render(request, "experiments/components/revert_confirm_content.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def revert_chatbot_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """Revert the working chatbot to the content (fields + pipeline) of a previous version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    if experiment.is_archived:
+        raise PermissionDenied("Unable to revert an archived chatbot.")
+
+    # Hold the version-operation lock for the whole revert so a concurrent publish/revert can't
+    # interleave with it. acquire_version_operation_lock claims it atomically (no TOCTOU gap).
+    if experiment.acquire_version_operation_lock(f"revert-{experiment.id}-{version_number}"):
+        try:
+            experiment.revert_to_version(version)
+        finally:
+            Experiment.release_version_operation_lock(experiment.id)
+        messages.success(request, f"Reverted to v{version_number}.")
+    else:
+        messages.error(request, "A version operation is already in progress.")
+
+    url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
+    return HttpResponseRedirect(f"{url}#versions")
 
 
 class ChatbotVersionsTableView(ExperimentVersionsTableView):
@@ -492,11 +549,12 @@ def chatbot_version_details(request, team_slug: str, experiment_id: int, version
 
 @login_and_team_required
 @permission_required("experiments.view_experiment", raise_exception=True)
-def chatbot_version_create_status(
+def chatbot_version_operation_status(
     request,
     team_slug: str,
     experiment_id: int,
 ):
+    """Poll target for any in-flight version operation (publish, revert, ...)."""
     experiment = Experiment.objects.get(id=experiment_id, team=request.team)
     return TemplateResponse(
         request,
@@ -504,7 +562,9 @@ def chatbot_version_create_status(
         {
             "active_tab": "chatbots",
             "experiment": experiment,
-            "trigger_refresh": experiment.create_version_task_id is not None,
+            # this endpoint is only polled while an operation is in flight, so the
+            # response that shows the operation has finished must trigger a refresh
+            "trigger_refresh": True,
         },
     )
 
@@ -631,12 +691,17 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
         "experiment_name": experiment_version.name,
         "experiment_version": experiment_version,
         "experiment_version_number": experiment_version.version_number,
-        "max_char_limit": get_max_char_limit(experiment_version),
     }
     return TemplateResponse(
         request,
         "chatbots/chat/web_chat.html",
-        {"experiment": experiment, "session": session, "active_tab": "chatbots", **version_specific_vars},
+        {
+            "experiment": experiment,
+            "session": session,
+            "session_token": issue_session_token(session),
+            "active_tab": "chatbots",
+            **version_specific_vars,
+        },
     )
 
 
@@ -726,11 +791,16 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
     return _chatbot_chat_ui(request)
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @xframe_options_exempt
 @team_required
 def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
-    will ALWAYS create anonymous participants."""
+    will ALWAYS create anonymous participants.
+
+    Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
+    See https://github.com/dimagi/open-chat-studio/issues/3540
+    """
     try:
         chatbot = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
@@ -751,6 +821,7 @@ def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: u
     return redirect("chatbots:chatbot_chat_embed", team_slug, chatbot.public_id, session.external_id)
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @xframe_options_exempt
 def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -769,7 +840,6 @@ def _chatbot_chat_ui(request, embedded=False):
         "chatbot_name": chatbot_version.name,
         "experiment_version": chatbot_version,
         "experiment_version_number": chatbot_version.version_number,
-        "max_char_limit": get_max_char_limit(chatbot_version),
     }
     return TemplateResponse(
         request,
@@ -777,6 +847,7 @@ def _chatbot_chat_ui(request, embedded=False):
         {
             "experiment": request.experiment,
             "session": request.experiment_session,
+            "session_token": issue_session_token(request.experiment_session),
             "active_tab": "chatbots",
             "embedded": embedded,
             **version_specific_vars,
@@ -794,11 +865,7 @@ def copy_chatbot(request, team_slug, *args, **kwargs):
             # copy chatbot
             new_experiment = experiment.create_new_version(make_default=False, is_copy=True, name=new_name)
             # create default version for copied chatbot
-            task_id = async_create_experiment_version.delay(
-                experiment_id=new_experiment.id, version_description="", make_default=True
-            )
-            new_experiment.create_version_task_id = task_id
-            new_experiment.save(update_fields=["create_version_task_id"])
+            start_version_creation(new_experiment, make_default=True)
             return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=new_experiment.id)
     experiment_id = kwargs["pk"]
     return single_chatbot_home(request, team_slug, experiment_id)
@@ -846,7 +913,7 @@ def home(
 
 
 class AllSessionsHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
-    template_name = "generic/object_home.html"
+    template_name = "chatbots/all_sessions_home.html"
     permission_required = "experiments.view_experimentsession"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]

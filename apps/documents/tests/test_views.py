@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from waffle.testutils import override_flag
 
@@ -13,7 +14,7 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -157,6 +158,21 @@ class TestDeleteCollection:
         assert response.status_code == 200
         collection.refresh_from_db()
         assert collection.is_archived
+
+
+@pytest.mark.django_db()
+class TestAddCollectionFiles:
+    def test_uploaded_files_get_collection_purpose(self, client):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(team=team, is_index=False)
+        client.force_login(team.members.first())
+
+        upload = SimpleUploadedFile("notes.txt", b"hello world", content_type="text/plain")
+        url = reverse("documents:add_collection_files", args=[team.slug, collection.id])
+        client.post(url, {"files": [upload], "notes.txt": "a summary"})
+
+        file = File.objects.get(name="notes.txt", team=team)
+        assert file.purpose == FilePurpose.COLLECTION
 
 
 @pytest.mark.django_db()
@@ -466,3 +482,97 @@ class TestJSONCollectionSourceCreation:
         response = client.get(url)
         # The edit page must be reachable; flag should not block edit.
         assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+class TestCollectionSnapshots:
+    @pytest.fixture()
+    def team(self):
+        return TeamWithUsersFactory.create()
+
+    @mock.patch("apps.documents.views.tasks.async_create_collection_version.delay")
+    def test_create_snapshot_dispatches_task(self, delay_mock, team, client):
+        delay_mock.return_value = mock.Mock(task_id="task-abc")
+        collection = CollectionFactory.create(is_index=True, team=team)
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:create_collection_version", args=[collection.team.slug, collection.id])
+
+        response = client.post(url)
+
+        assert response.status_code == 200
+        delay_mock.assert_called_once_with(collection_id=collection.id)
+        collection.refresh_from_db()
+        assert collection.create_version_task_id == "task-abc"
+
+    @mock.patch("apps.documents.views.tasks.async_create_collection_version.delay")
+    def test_create_snapshot_refuses_when_in_flight(self, delay_mock, team, client):
+        collection = CollectionFactory.create(is_index=True, create_version_task_id="existing", team=team)
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:create_collection_version", args=[collection.team.slug, collection.id])
+
+        response = client.post(url)
+
+        assert response.status_code == 200
+        delay_mock.assert_not_called()
+
+    @mock.patch("apps.documents.views.tasks.async_create_collection_version.delay")
+    def test_create_snapshot_rejects_media_collection(self, delay_mock, team, client):
+        collection = CollectionFactory.create(is_index=False, team=team)
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:create_collection_version", args=[collection.team.slug, collection.id])
+
+        response = client.post(url)
+
+        assert response.status_code == 400
+        delay_mock.assert_not_called()
+
+    @mock.patch("apps.documents.views.tasks.async_create_collection_version.delay")
+    def test_create_snapshot_rejects_version_collection(self, delay_mock, team, client):
+        working = CollectionFactory.create(is_index=True, team=team)
+        version = working.create_new_version()
+        client.force_login(team.members.first())
+        url = reverse("documents:create_collection_version", args=[team.slug, version.id])
+
+        response = client.post(url)
+
+        assert response.status_code == 400
+        delay_mock.assert_not_called()
+
+    def test_snapshots_status_view_renders(self, team, client):
+        collection = CollectionFactory.create(is_index=True, team=team)
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:collection_snapshots", args=[collection.team.slug, collection.id])
+
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"Create snapshot" in response.content
+
+    def test_snapshots_section_shown_for_working_index(self, team, client):
+        collection = CollectionFactory.create(is_index=True, team=team)
+        client.force_login(team.members.first())
+        url = reverse("documents:single_collection_home", args=[team.slug, collection.id])
+
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"Create snapshot" in response.content
+
+    def test_snapshots_section_hidden_for_media_collection(self, team, client):
+        collection = CollectionFactory.create(is_index=False, team=team)
+        client.force_login(team.members.first())
+        url = reverse("documents:single_collection_home", args=[team.slug, collection.id])
+
+        response = client.get(url)
+
+        assert b"Create snapshot" not in response.content
+
+    def test_snapshots_section_hidden_on_version_page(self, team, client):
+        collection = CollectionFactory.create(is_index=True, team=team)
+        version = collection.create_new_version()
+        client.force_login(team.members.first())
+        url = reverse("documents:single_collection_home", args=[team.slug, version.id])
+
+        response = client.get(url)
+
+        assert b"Create snapshot" not in response.content

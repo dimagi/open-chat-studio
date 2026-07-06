@@ -55,6 +55,9 @@
                             <option :value="option.value" x-text="option.text" :selected="option.value == $store.promptBuilder.currentState.providerModelId"></option>
                         </template>
                     </select>
+                    <p class="text-error text-sm mt-1" x-show="$store.promptBuilder.missingProvider" x-cloak>
+                        The selected LLM provider is no longer available. Please choose another provider.
+                    </p>
                 </div>
 
             </div>
@@ -88,13 +91,6 @@
             </div>
             <ul class="menu menu-horizontal bg-base-100 rounded-box mt-2">
                 <li>
-                    <button
-                        hx-get="{% url 'experiments:prompt_builder_load_experiments' team.slug %}"
-                        hx-trigger="click" hx-target="#experiment-list" hx-swap="innerHTML"
-                        @click.stop="$store.promptBuilder.toggleSidebar('experiments')">
-                        <i class="fa fa-folder-open-o px-2"></i></button>
-                </li>
-                <li>
                     <button id="save-button" x-data="{ save: savePrompt }" @click.stop="save"><i
                         class="fa fa-save px-2"></i></button>
                 </li>
@@ -114,8 +110,6 @@
             },
             body: JSON.stringify({
                 // data to forwarded to the 'create experiment' view
-                'prompt_text': Alpine.store('promptBuilder').currentState.prompt,
-                'input_formatter': Alpine.store('promptBuilder').currentState.inputFormatter,
                 'source_material': Alpine.store('promptBuilder').currentState.sourceMaterialID,
                 'llm_provider': Alpine.store('promptBuilder').currentState.provider,
                 'llm_provider_model': Alpine.store('promptBuilder').currentState.providerModelId,
@@ -137,35 +131,6 @@
     }
 
 
-    // Submitting history and prompt to get AI response
-    function updateUIWithInputFormatting() {
-        // Apply input formatting only to the final message if it is from the User
-        // Get the last item in the array and modify it appropriately.
-        let inputFormatter = Alpine.store('promptBuilder').currentState.inputFormatter;
-        const clientMessagesArray = Alpine.store('promptBuilder').currentState.messages;
-
-        if (clientMessagesArray.length > 0) {
-            const clientLastItem = clientMessagesArray[clientMessagesArray.length - 1];
-            if ((inputFormatter.trim().length > 0) && clientLastItem.author.trim() === 'User') {
-                // Clear all the pre and post input formatting stuff
-                clientMessagesArray.forEach(message => {
-                    message.prepend_input_formatting = undefined;
-                    message.appended_input_formatting = undefined;
-                });
-
-                if (!inputFormatter.includes('{input}')) {
-                    inputFormatter += " {input}";
-                    Alpine.store('promptBuilder').currentState.inputFormatter = inputFormatter;
-                }
-
-                let [prepend, append] = inputFormatter.split('{input}');
-
-                clientLastItem.prepend_input_formatting = prepend;
-                clientLastItem.appended_input_formatting = append;
-            }
-        }
-    }
-
     function replaceWaitingText(task_id, response_obj) {
         Alpine.store('promptBuilder').currentState.messages.forEach((message) => {
             if (message.task_id === task_id) {
@@ -184,12 +149,10 @@
     }
 
     function submitMessageHistoryToGetResponse() {
-        updateUIWithInputFormatting();
         const messagesArray = Alpine.store('promptBuilder').currentState.messages;
 
         const data = {
             prompt: Alpine.store('promptBuilder').currentState.prompt,
-            inputFormatter: Alpine.store('promptBuilder').currentState.inputFormatter,
             sourceMaterialID: Alpine.store('promptBuilder').currentState.sourceMaterialID,
             sourceMaterialName: Alpine.store('promptBuilder').currentState.sourceMaterialName,
             provider: Alpine.store('promptBuilder').currentState.provider,

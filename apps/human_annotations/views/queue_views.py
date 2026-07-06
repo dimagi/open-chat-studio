@@ -9,6 +9,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db.models import Count, Exists, OuterRef, Prefetch, Subquery, Sum
 from django.db.models.functions import Coalesce
@@ -99,6 +100,11 @@ class CreateAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
     def form_valid(self, form):
         form.instance.team = self.request.team
         form.instance.created_by = self.request.user
+        try:
+            form.instance.validate_unique()
+        except ValidationError as e:
+            form._update_errors(e)
+            return self.form_invalid(form)
         return super().form_valid(form)
 
 
@@ -118,12 +124,23 @@ class EditAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Up
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        annotations_started = self.object.items.filter(review_count__gt=0).exists()
         context["existing_schema"] = self.object.schema
-        context["schema_locked"] = self.object.items.filter(review_count__gt=0).exists()
+        context["schema_locked"] = annotations_started
+        context["annotations_started"] = annotations_started
         return context
 
     def get_success_url(self):
         return reverse("human_annotations:queue_home", args=[self.request.team.slug])
+
+    def form_valid(self, form):
+        form.instance.team = self.request.team
+        try:
+            form.instance.validate_unique()
+        except ValidationError as e:
+            form._update_errors(e)
+            return self.form_invalid(form)
+        return super().form_valid(form)
 
 
 class DeleteAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):

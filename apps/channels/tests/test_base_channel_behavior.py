@@ -36,7 +36,7 @@ from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import MembershipFactory
-from apps.utils.langchain import mock_llm
+from apps.utils.tests.langchain import mock_llm
 
 from ...service_providers.speech_service import SynthesizedAudio
 from ...utils.factories.service_provider_factories import LlmProviderFactory
@@ -45,6 +45,8 @@ from .message_examples import base_messages
 
 
 class TestChannel(ChannelBase):
+    __test__ = False  # tell pytest not to collect this as a test class
+
     voice_replies_supported = True
     supported_message_types = [MESSAGE_TYPES.TEXT, MESSAGE_TYPES.VOICE]
 
@@ -281,12 +283,9 @@ def test_pre_conversation_flow(_send_seed_message):
     """This simulates an interaction between a user and the bot. The user initiated the conversation, so the
     user and bot must first go through the pre conversation flow. The following needs to happen:
     - The user must give consent
-    - The user must indicate that they filled out the survey
     """
     experiment = ExperimentFactory.create(conversational_consent_enabled=True)
     channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
-    pre_survey = experiment.pre_survey
-    assert pre_survey
 
     def _user_message(message: str):
         message = base_messages.text_message(message_text=message)  # ty: ignore[invalid-assignment]
@@ -299,32 +298,12 @@ def test_pre_conversation_flow(_send_seed_message):
     response = _user_message("Hi")
     assert experiment.consent_form.consent_text in response.content
     chat = channel.experiment_session.chat
-    pre_survey_link = channel.experiment_session.get_pre_survey_link(experiment)
-    confirmation_text = pre_survey.confirmation_text
-    expected_survey_text = confirmation_text.format(survey_link=pre_survey_link)
     # Let's see if the bot asked consent
     assert experiment.consent_form.consent_text in chat.messages.last().content
     # Check the status
     channel.experiment_session.refresh_from_db()
     assert channel.experiment_session.status == SessionStatus.PENDING
-    # It did, now the user gives consent
-    response = _user_message("1")
-    assert expected_survey_text in response.content
-    # Check the status
-    channel.experiment_session.refresh_from_db()
-    assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
-    # Let's make sure the bot presented the user with the survey
-    assert expected_survey_text in chat.messages.last().content
-    # Now the user tries to talk
-    response = _user_message("Hi there")
-    assert expected_survey_text in response.content
-    # Check the status. It should not have changed
-    channel.experiment_session.refresh_from_db()
-    assert channel.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY
-    # The bot should be persistent about that survey. Let's make sure it sends it
-    assert expected_survey_text in chat.messages.last().content
-
-    # The user caves, and says they did fill it out
+    # The user gives consent - should go directly to ACTIVE
     assert _send_seed_message.call_count == 0
     _send_seed_message.return_value = "Hi human"
     response = _user_message("1")
@@ -509,8 +488,6 @@ def test_user_query_extracted_for_pre_conversation_flow(message_func, message_ty
 
     channel = TestChannel(experiment, ExperimentChannelFactory.create(experiment=experiment))
     channel.experiment_session = experiment_session
-    pre_survey = experiment.pre_survey
-    assert pre_survey
 
     with (
         patch.object(channel, "_get_voice_transcript") as _get_voice_transcript,
@@ -732,28 +709,24 @@ def test_voice_tag_created_on_message(
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("expected_message_type", "response_behaviour", "use_processor_bot_voice"),
+    ("expected_message_type", "response_behaviour"),
     [
-        ("text", VoiceResponseBehaviours.NEVER, True),
-        ("text", VoiceResponseBehaviours.RECIPROCAL, True),
-        ("voice", VoiceResponseBehaviours.ALWAYS, True),
-        ("text", VoiceResponseBehaviours.NEVER, False),
-        ("text", VoiceResponseBehaviours.RECIPROCAL, False),
-        ("voice", VoiceResponseBehaviours.ALWAYS, False),
+        ("text", VoiceResponseBehaviours.NEVER),
+        ("text", VoiceResponseBehaviours.RECIPROCAL),
+        ("voice", VoiceResponseBehaviours.ALWAYS),
     ],
 )
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_voice_to_user")
 @patch("apps.channels.tests.test_base_channel_behavior.TestChannel.send_text_to_user")
 @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice", Mock())
 def test_send_message_to_user_with_single_bot(
-    send_text_to_user, send_voice_to_user, expected_message_type, response_behaviour, use_processor_bot_voice
+    send_text_to_user, send_voice_to_user, expected_message_type, response_behaviour
 ):
     """A simple test to make sure that when we call `channel_instance.send_message_to_user`, the correct message format
     will be used
     """
 
     session = ExperimentSessionFactory.create(
-        experiment__use_processor_bot_voice=use_processor_bot_voice,
         experiment__voice_response_behaviour=response_behaviour,
     )
     session.experiment_channel = ExperimentChannelFactory.create(experiment=session.experiment)
@@ -878,8 +851,8 @@ def test_supported_and_unsupported_attachments(experiment):
 
     session = ExperimentSessionFactory.create(experiment=experiment)
     channel = CustomChannel(experiment, experiment_channel=Mock(), experiment_session=session)
-    channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
-    channel.send_file_to_user = Mock()  # ty: ignore[invalid-assignment]
+    channel.send_text_to_user = Mock()
+    channel.send_file_to_user = Mock()
 
     file1 = FileFactory.create(name="f1", content_type="image/jpeg")
     file2 = FileFactory.create(name="f2", content_type="image/jpeg")
@@ -899,8 +872,8 @@ def test_supported_and_unsupported_attachments(experiment):
 def test_chat_message_returned_for_cancelled_generate():
     session = ExperimentSessionFactory.create()
     channel = TestChannel(session.experiment, None, session)
-    channel._add_message = Mock()  # ty: ignore[invalid-assignment]
-    channel._new_user_message = Mock()  # ty: ignore[invalid-assignment]
+    channel._add_message = Mock()
+    channel._new_user_message = Mock()
     channel._new_user_message.side_effect = GenerationCancelled(output="Cancelled")
     channel.message = base_messages.text_message("123", "hi")
     response = channel.new_user_message(channel.message)
@@ -928,7 +901,7 @@ class TestNotifications:
         """Test that file delivery exception triggers a notification."""
         session = ExperimentSessionFactory.build()
         channel = TestChannel(session.experiment, session.experiment_channel, session)
-        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+        channel.send_text_to_user = Mock()
 
         # Create a test file
         test_file = FileFactory.build(name="test.jpg", content_type="image/jpeg")
@@ -954,8 +927,8 @@ class TestNotifications:
         channel = TestChannel(session.experiment, session.experiment_channel, session)
 
         # Mock transcription_started and get_message_audio
-        channel.transcription_started = Mock()  # ty: ignore[invalid-assignment]
-        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))  # ty: ignore[invalid-assignment]
+        channel.transcription_started = Mock()
+        channel.get_message_audio = Mock(return_value=BytesIO(b"fake audio data"))
 
         # Mock _transcribe_audio to raise an exception
         with patch.object(channel, "_transcribe_audio", side_effect=Exception("Transcription failed")):
@@ -972,7 +945,7 @@ class TestNotifications:
         """Test that multiple file delivery failures create separate notifications."""
         session = ExperimentSessionFactory.build()
         channel = TestChannel(session.experiment, session.experiment_channel, session)
-        channel.send_text_to_user = Mock()  # ty: ignore[invalid-assignment]
+        channel.send_text_to_user = Mock()
 
         # Create test files
         file1 = FileFactory.build(name="test1.jpg", content_type="image/jpeg")

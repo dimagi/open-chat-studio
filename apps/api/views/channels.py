@@ -15,7 +15,12 @@ from rest_framework.views import APIView, Request
 
 from apps.api.permissions import verify_hmac
 from apps.api.serializers import TriggerBotMessageRequest, TriggerBotMessageResponse
-from apps.api.tasks import create_connect_channel_for_participant, trigger_bot_message_task
+from apps.api.tasks import (
+    DuplicateConnectChannelError,
+    connect_channel_error_details,
+    create_connect_channel_for_participant,
+    trigger_bot_message_task,
+)
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.channels import ChannelBase
@@ -40,15 +45,14 @@ def generate_key(request: Request):
     response.raise_for_status()
     connect_id = response.json().get("sub").lower()
 
-    try:
-        participant_data = ParticipantData.objects.defer("data").get(
-            participant__identifier=connect_id, system_metadata__commcare_connect_channel_id=commcare_connect_channel_id
-        )
-    except ParticipantData.DoesNotExist:
-        connect_logger.exception(
+    participant_data = ParticipantData.objects.for_connect_channel(
+        commcare_connect_channel_id, participant_identifier=connect_id
+    )
+    if participant_data is None:
+        connect_logger.error(
             f"ParticipantData with connect_id: {connect_id} and channel_id: {commcare_connect_channel_id} not found"
         )
-        raise Http404() from None
+        raise Http404()
 
     if not participant_data.encryption_key:
         participant_data.generate_encryption_key()
@@ -76,9 +80,9 @@ def consent(request: Request):
     if "consent" not in request_data or "channel_id" not in request_data:
         return HttpResponse("Missing consent or commcare_connect_channel_id", status=400)
 
-    participant_data = get_object_or_404(
-        ParticipantData, system_metadata__commcare_connect_channel_id=request_data["channel_id"]
-    )
+    participant_data = ParticipantData.objects.for_connect_channel(request_data["channel_id"])
+    if participant_data is None:
+        raise Http404()
     participant_data.update_consent(request_data["consent"])
 
     return HttpResponse()
@@ -127,32 +131,9 @@ def _ensure_commcare_connect_ready(channel, identifier, participant_data):
         connect_client = CommCareConnectClient()
         try:
             create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
-        except httpx.HTTPStatusError as e:
-            connect_logger.error(
-                f"Failed to create CommCare Connect channel for participant {identifier}: "
-                f"HTTP {e.response.status_code} - {e.response.text}"
-            )
-            if e.response.status_code == 404:
-                return JsonResponse(
-                    {"detail": "Failed to create channel: Participant not found in CommCare Connect"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            elif e.response.status_code >= 500:
-                return JsonResponse(
-                    {"detail": "Failed to create channel: CommCare Connect service error"},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-            else:
-                return JsonResponse(
-                    {"detail": f"Failed to create channel: {e.response.text}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        except httpx.HTTPError as e:
-            connect_logger.error(f"Failed to create CommCare Connect channel for participant {identifier}: {str(e)}")
-            return JsonResponse(
-                {"detail": "Failed to create channel: Unable to connect to CommCare Connect service"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        except (DuplicateConnectChannelError, httpx.HTTPError) as e:
+            status_code, detail = connect_channel_error_details(e, identifier)
+            return JsonResponse({"detail": detail}, status=status_code)
 
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)

@@ -6,22 +6,31 @@ from functools import cached_property
 from io import StringIO
 from typing import Any
 
+from celery.result import AsyncResult
+from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
-from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
-from apps.evaluations.tasks import upload_evaluation_run_results_task
+from apps.evaluations.tagging import remove_applied_tags_for_runs
+from apps.evaluations.tasks import (
+    export_evaluation_bulk_results_task,
+    upload_evaluation_run_results_task,
+)
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
 from apps.generics import actions
@@ -142,7 +151,7 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
     }
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
-        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
+        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team=self.request.team)
 
         return {
             **super().get_context_data(**kwargs),
@@ -150,6 +159,22 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
         }
+
+
+class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Un-apply the tags this config's runs created, then delete all of its runs."""
+
+    permission_required = "evaluations.delete_evaluationrun"
+
+    def post(self, request, team_slug: str, evaluation_pk: int):
+        config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
+        runs = EvaluationRun.objects.filter(config=config)
+        with transaction.atomic():
+            remove_applied_tags_for_runs(runs)
+            runs.delete()
+        response = HttpResponse(status=200)
+        response["HX-Redirect"] = reverse("evaluations:evaluation_runs_home", args=[team_slug, evaluation_pk])
+        return response
 
 
 class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -164,7 +189,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
     ]
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
-        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team__slug=team_slug)
+        config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team=self.request.team)
 
         date_range = self.request.GET.get("range", "30")
 
@@ -218,7 +243,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         evaluation_run = get_object_or_404(
-            EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team__slug=team_slug
+            EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team=self.request.team
         )
 
         title = (
@@ -269,7 +294,7 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
     @cached_property
     def evaluation_run(self) -> EvaluationRun:
         return get_object_or_404(
-            EvaluationRun.objects.select_related("generation_experiment").filter(team__slug=self.kwargs["team_slug"]),
+            EvaluationRun.objects.select_related("generation_experiment").filter(team=self.request.team),
             pk=self.kwargs["evaluation_run_pk"],
         )
 
@@ -447,44 +472,26 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_run(request, team_slug, evaluation_pk):
-    config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
+    config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
     run = config.run()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
 @permission_required("evaluations.add_evaluationrun")
 def create_evaluation_preview(request, team_slug, evaluation_pk):
-    config = get_object_or_404(EvaluationConfig, team__slug=team_slug, pk=evaluation_pk)
+    config = get_object_or_404(EvaluationConfig, team=request.team, pk=evaluation_pk)
     run = config.run_preview()
     return HttpResponseRedirect(reverse("evaluations:evaluation_results_home", args=[team_slug, evaluation_pk, run.pk]))
 
 
 @permission_required("evaluations.view_evaluationrun")
 def download_evaluation_run_csv(request, team_slug, evaluation_pk, evaluation_run_pk):
-    evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
-    )
+    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     filename = f"{evaluation_run.config.name}_results_{evaluation_run.id}.csv"
     table_data = list(evaluation_run.get_table_data(include_ids=True))
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f"attachment; filename={filename}"
-    writer = csv.writer(response)
-
-    if not table_data:
-        writer.writerow(["No results available yet"])
-        return response
-
-    all_headers = set()
-    for row in table_data:
-        all_headers.update(row.keys())
-
-    other_headers = sorted([h for h in all_headers if h not in EVALUATION_RUN_FIXED_HEADERS and h != "error"])
-    headers = [h for h in EVALUATION_RUN_FIXED_HEADERS if h in all_headers] + other_headers + ["error"]
-    writer.writerow(headers)
-
-    for row in table_data:
-        writer.writerow([row.get(header, "") for header in headers])
-
+    write_evaluation_csv(csv.writer(response), table_data)
     return response
 
 
@@ -529,9 +536,7 @@ def load_experiment_versions(request, team_slug: str):
 @permission_required("evaluations.change_evaluationrun")
 def update_evaluation_run_results(request, team_slug: str, evaluation_pk: int, evaluation_run_pk: int):
     """Upload CSV to update evaluation run results"""
-    evaluation_run = get_object_or_404(
-        EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
-    )
+    evaluation_run = get_object_or_404(EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team)
     if request.method == "GET":
         context = {
             "active_tab": "evaluations",
@@ -561,7 +566,7 @@ def parse_evaluation_results_csv_columns(request, team_slug: str, evaluation_pk:
     """Parse uploaded CSV and return column names and sample data for evaluation results."""
     try:
         evaluation_run = get_object_or_404(
-            EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team__slug=team_slug
+            EvaluationRun, id=evaluation_run_pk, config_id=evaluation_pk, team=request.team
         )
         csv_file = request.FILES.get("csv_file")
         if not csv_file:
@@ -575,9 +580,9 @@ def parse_evaluation_results_csv_columns(request, team_slug: str, evaluation_pk:
         sample_rows = all_rows[:3]
         total_rows = len(all_rows)
 
-        protected_columns = set(EVALUATION_RUN_FIXED_HEADERS) | set(["error"])
+        protected_columns = set(EVALUATION_RUN_FIXED_HEADERS) | {"error"}
 
-        result_columns = [col for col in columns if col not in protected_columns]
+        result_columns = [col for col in columns if col not in protected_columns and not col.startswith("error (")]
         suggestions = generate_evaluation_results_column_suggestions(result_columns, evaluation_run)
         return JsonResponse(
             {
@@ -611,3 +616,42 @@ def generate_evaluation_results_column_suggestions(result_columns, evaluation_ru
         suggestions[column] = suggested_evaluator_id
 
     return suggestions
+
+
+@login_and_team_required
+@permission_required("evaluations.view_evaluationrun")
+@require_POST
+def start_bulk_download(request, team_slug: str, evaluation_pk: int):
+    """Start an async bulk export of the most recent results per dataset item."""
+    config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
+    task = export_evaluation_bulk_results_task.delay(config.id, request.team.id)
+    return TemplateResponse(
+        request,
+        "evaluations/partials/bulk_download.html",
+        {"config": config, "task_id": task.id},
+    )
+
+
+@login_and_team_required
+@permission_required("evaluations.view_evaluationrun")
+def get_bulk_download_link(request, team_slug: str, evaluation_pk: int, task_id: str):
+    """Poll the bulk export task and return a download link when ready."""
+    config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
+    info = Progress(AsyncResult(task_id)).get_info()
+    context: dict = {"config": config}
+    if info["complete"] and info["success"]:
+        file_id = info["result"].get("file_id")
+        if file_id:
+            download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id}) + "?allow_s3=1"
+            context["export_download_url"] = download_url
+        else:
+            context["export_error"] = info["result"].get("error", "Export failed.")
+    elif info["complete"]:
+        context["export_error"] = "Export failed."
+    else:
+        context["task_id"] = task_id
+    return TemplateResponse(
+        request,
+        "evaluations/partials/bulk_download.html",
+        context,
+    )

@@ -38,14 +38,35 @@ def temporary_session(team: Team, user_id: int):
         transaction.set_rollback(True)
 
 
+def prompt_uses_current_datetime(prompt_template: str) -> bool:
+    """Whether ``{current_datetime}`` appears in the prompt template."""
+    return any(
+        field_name == "current_datetime" for _, field_name, _, _ in Formatter().parse(prompt_template) if field_name
+    )
+
+
 def get_system_message(prompt_template: str, prompt_context: PromptTemplateContext) -> SystemMessage:
     """
     Returns a populated SystemMessage based on the provided prompt template and context.
     """
     input_variables = {v for _, v, _, _ in Formatter().parse(prompt_template) if v is not None}
-    context = prompt_context.get_context(input_variables)
+    # coarse_datetime keeps the volatile second-precision value out of the cacheable system prompt;
+    # the precise time is injected into the latest message turn instead (see llm_node). See #3625.
+    context = prompt_context.get_context(input_variables, coarse_datetime=True)
     try:
         system_message = prompt_template.format(**context)
         return SystemMessage(content=system_message)
     except KeyError as e:
         raise PipelineNodeRunError(str(e)) from e
+
+
+def get_agent_middleware(node, system_message: SystemMessage) -> list:
+    """Returns the common agent middleware for nodes that build LLM agents:
+    history compression and provider prompt caching.
+    """
+    middleware = []
+    if history_middleware := node.build_history_middleware(system_message=system_message):
+        middleware.append(history_middleware)
+    if caching_middleware := node.get_llm_service().get_prompt_caching_middleware():
+        middleware.append(caching_middleware)
+    return middleware

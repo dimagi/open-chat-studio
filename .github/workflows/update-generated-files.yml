@@ -1,5 +1,5 @@
 # This workflow automatically updates generated files when relevant code changes:
-# - API schema (api-schema.yml) when API-related code changes
+# - API schema (api-schemas/v1.yml) when API-related code changes
 # - Django migrations when model files change
 # Both are generated using Django management commands and committed back to the PR branch if changes are detected.
 # This ensures generated files stay in sync with code changes and prevents CI failures.
@@ -79,7 +79,9 @@ jobs:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
-        run: uv run python manage.py spectacular --file api-schema.yml
+        run: |
+          uv run python manage.py spectacular --api-version v1 --file api-schemas/v1.yml --validate
+          uv run python manage.py spectacular --api-version v2 --file api-schemas/v2.yml --validate
 
       - name: Create Missing Migrations
         env:
@@ -89,11 +91,11 @@ jobs:
       - name: Check for changes
         id: verify-changed-files
         run: |
-          git add api-schema.yml apps/
+          git add api-schemas/ apps/
           if git diff --cached --exit-code; then
-            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit changes

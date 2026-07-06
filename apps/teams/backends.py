@@ -113,6 +113,7 @@ CONTENT_TYPES = {
         "notificationevent",
         "eventuser",
     ],
+    "cost_tracking": ["pricingrule", "usagerecord"],
 }
 
 CUSTOM_PERMISSIONS = {"experiments": ["invite_participants", "download_chats"]}
@@ -176,6 +177,12 @@ class GroupDef:
         return Permission.objects.filter(filters)
 
 
+CHAT_VIEWER_PERMS = [
+    AppPermSetDef("chat", [VIEW]),
+    AppPermSetDef("annotations", [VIEW]),
+    ModelPermSetDef("files", "file", [VIEW]),
+]
+
 GROUPS = [
     GroupDef(
         SUPER_ADMIN_GROUP,
@@ -207,11 +214,7 @@ GROUPS = [
     ),
     GroupDef(
         CHAT_VIEWER_GROUP,
-        [
-            AppPermSetDef("chat", [VIEW]),
-            AppPermSetDef("annotations", [VIEW]),
-            ModelPermSetDef("files", "file", [VIEW]),
-        ],
+        CHAT_VIEWER_PERMS,
     ),
     GroupDef(
         ASSISTANT_ADMIN_GROUP,
@@ -239,7 +242,8 @@ GROUPS = [
             ModelPermSetDef("human_annotations", "annotationitem", [VIEW, CHANGE]),
             ModelPermSetDef("human_annotations", "annotation", [ADD]),
             ModelPermSetDef("human_annotations", "annotationqueueaggregate", [VIEW]),
-        ],
+        ]
+        + CHAT_VIEWER_PERMS,
     ),
 ]
 

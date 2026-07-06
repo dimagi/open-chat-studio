@@ -30,7 +30,7 @@ We want the full lifecycle of a conversational AI app to happen in one place: pr
 
 ### Toward a code factory
 
-We're building toward a development model where AI agents do the bulk of coding and review, and humans provide direction, judgment, and oversight. We're not there yet. Today we use Claude Code for implementation and Igor for picking up routine tasks overnight. To get where we're going, we need better safety gates: stronger CI, better test coverage, architectural guardrails that make it hard for an AI agent to break things. The codebase itself needs to evolve. Cleaner boundaries, less implicit coupling, more refactoring to make the code legible and safe for autonomous agents to work in.
+We're building toward a development model where AI agents do the bulk of coding and review, and humans provide direction, judgment, and oversight. We're not there yet. Today we use Claude Code for implementation and Claude Code Agents for picking up routine tasks overnight. To get where we're going, we need better safety gates: stronger CI, better test coverage, architectural guardrails that make it hard for an AI agent to break things. The codebase itself needs to evolve. Cleaner boundaries, less implicit coupling, more refactoring to make the code legible and safe for autonomous agents to work in.
 
 ### Build incrementally, release when ready
 

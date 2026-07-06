@@ -1,10 +1,12 @@
 import time
+from datetime import timedelta
+from uuid import uuid4
 
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from django.core.files.base import ContentFile
 from django.utils import timezone
-from field_audit.models import AuditAction
+from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.channels.channels_v2.web_channel import WebChannel
@@ -13,7 +15,7 @@ from apps.chat.bots import create_conversation
 from apps.chat.exceptions import UserReportableError
 from apps.experiments.export import export_to_tempfile, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.utils import current_team
@@ -38,6 +40,8 @@ def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -
             team=experiment.team,
             content_type="application/gzip",
             file=ContentFile(tmp.read(), name=filename),
+            purpose=FilePurpose.DATA_EXPORT,
+            expiry_date=timezone.now() + timedelta(days=7),
         )
     return {"file_id": file_obj.id}
 
@@ -51,7 +55,31 @@ def async_create_experiment_version(
         with current_team(experiment.team):
             experiment.create_new_version(version_description, make_default)
     finally:
-        Experiment.objects.filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
+        Experiment.release_version_operation_lock(experiment_id)
+
+
+def start_version_creation(experiment, version_description: str = "", make_default: bool = False) -> bool:
+    """Dispatch async version creation under the version-operation lock.
+
+    The lock is acquired before dispatch so a concurrent version operation is
+    rejected atomically. Returns False when another operation is already in flight.
+    """
+    task_id = str(uuid4())
+    if not experiment.acquire_version_operation_lock(task_id):
+        return False
+    try:
+        async_create_experiment_version.apply_async(
+            kwargs={
+                "experiment_id": experiment.id,
+                "version_description": version_description,
+                "make_default": make_default,
+            },
+            task_id=task_id,
+        )
+    except Exception:
+        Experiment.release_version_operation_lock(experiment.id)
+        raise
+    return True
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
@@ -137,9 +165,6 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
     llm = with_llm_retry(llm)
     conversation = create_conversation(data_dict["prompt"], source_material_material, llm)
     conversation.load_memory_from_messages(_convert_prompt_builder_history(messages_history))
-    input_formatter = data_dict["inputFormatter"]
-    if input_formatter:
-        last_user_message = input_formatter.format(input=last_user_message)
 
     # Get the response from the bot using the last message from the user and return it
     answer, input_tokens, output_tokens = conversation.predict(last_user_message)
@@ -172,11 +197,6 @@ def get_prompt_builder_response_task(team_id: int, user_id, data_dict: dict) -> 
 
 
 def _convert_prompt_builder_history(messages_history):
-    from langchain_core.messages import (  # noqa: PLC0415 - lazy: avoid langchain import on startup
-        AIMessage,
-        HumanMessage,
-    )
-
     history = []
     for message in messages_history:
         if "message" not in message:

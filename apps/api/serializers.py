@@ -13,6 +13,29 @@ from apps.files.models import File
 from apps.teams.models import Team
 
 
+class ApiUrlField(serializers.HyperlinkedIdentityField):
+    """``HyperlinkedIdentityField`` that documents a concrete ``example`` URL in the OpenAPI schema.
+
+    Without an example, ReDoc samples a ``format: uri`` field as ``http://example.com``. The schema
+    (with the example) is emitted by ``apps.api.schema.ApiUrlFieldExtension``; the placeholder host
+    in ``openapi_example`` is then rewritten to the serving deployment's host by
+    ``apps.api.schema.set_example_urls``.
+
+    ``openapi_example`` is kept off ``_kwargs`` (so ``HyperlinkedIdentityField.__init__`` doesn't
+    reject it) and re-applied in ``__deepcopy__``, since DRF clones declared fields per serializer
+    instance by re-instantiating from ``_args``/``_kwargs`` alone.
+    """
+
+    def __init__(self, *args, openapi_example: str = "", **kwargs):
+        self.openapi_example = openapi_example
+        super().__init__(*args, **kwargs)
+
+    def __deepcopy__(self, memo):
+        clone = super().__deepcopy__(memo)
+        clone.openapi_example = self.openapi_example
+        return clone
+
+
 class ExperimentVersionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Experiment
@@ -20,8 +43,12 @@ class ExperimentVersionSerializer(serializers.ModelSerializer):
 
 
 class ExperimentSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(
-        view_name="api:experiment-detail", lookup_field="public_id", lookup_url_kwarg="id", label="API URL"
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:experiment-detail",
+        lookup_field="public_id",
+        lookup_url_kwarg="id",
+        label="API URL",
     )
     id = serializers.UUIDField(source="public_id")
     versions = ExperimentVersionSerializer(many=True)
@@ -40,10 +67,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
 class ParticipantDataEntrySerializer(serializers.ModelSerializer):
     chatbot = serializers.CharField(source="experiment.name", read_only=True)
     chatbot_id = serializers.UUIDField(source="experiment.public_id", read_only=True)
+    connect_channel_id = serializers.SerializerMethodField(
+        help_text="CommCare Connect channel ID. Only set for the CommCare Connect channel."
+    )
 
     class Meta:
         model = ParticipantData
-        fields = ["chatbot", "chatbot_id", "data"]
+        fields = ["chatbot", "chatbot_id", "data", "connect_channel_id"]
+
+    def get_connect_channel_id(self, obj) -> str | None:
+        return obj.system_metadata.get("commcare_connect_channel_id")
 
 
 class ParticipantDetailSerializer(serializers.ModelSerializer):
@@ -59,7 +92,7 @@ class ParticipantDetailSerializer(serializers.ModelSerializer):
         # queryset is pre-annotated via the view's get_queryset / prefetch
         qs = getattr(obj, "_prefetched_participant_data", None)
         if qs is None:
-            qs = obj.data_set.filter(team=obj.team)
+            qs = obj.data_set.filter(team=obj.team).select_related("experiment")
         return ParticipantDataEntrySerializer(qs, many=True).data
 
 
@@ -71,8 +104,11 @@ class TeamSerializer(serializers.ModelSerializer):
 
 class FileSerializer(serializers.ModelSerializer):
     size = serializers.IntegerField(source="content_size")
-    content_url = serializers.HyperlinkedIdentityField(
-        view_name="api:file-content", lookup_field="id", lookup_url_kwarg="pk"
+    content_url = ApiUrlField(
+        openapi_example="https://example.com/api/files/42/content",
+        view_name="api:file-content",
+        lookup_field="id",
+        lookup_url_kwarg="pk",
     )
 
     class Meta:
@@ -118,8 +154,11 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
 
 
 class ExperimentSessionSerializer(serializers.ModelSerializer):
-    url = serializers.HyperlinkedIdentityField(
-        view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:session-detail",
+        lookup_field="external_id",
+        lookup_url_kwarg="id",
     )
     id = serializers.ReadOnlyField(source="external_id")
     team = TeamSerializer(read_only=True)
@@ -142,6 +181,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             "platform",
             "messages",
             "tags",
+            "state",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -253,10 +293,26 @@ class ChatStartSessionRequest(serializers.Serializer):
     participant_name = serializers.CharField(
         label="Paricipant Name", required=False, help_text="Optional participant name"
     )
+    use_session_token = serializers.BooleanField(
+        label="Use session token",
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text="Whether to protect the session with a session token (default true). When enabled, the"
+        " response includes a `session_token` which must be sent as the `X-Session-Token` header on all"
+        " subsequent requests for this session. Set to false to opt out and rely on legacy access rules.",
+    )
 
 
 class ChatStartSessionResponse(serializers.Serializer):
     session_id = serializers.UUIDField(label="Session ID")
+    session_token = serializers.CharField(
+        label="Session token",
+        allow_null=True,
+        required=False,
+        help_text="Present when the session is token-protected. Send as the `X-Session-Token` header on all"
+        " subsequent requests for this session.",
+    )
     chatbot = ExperimentSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
 
@@ -324,8 +380,11 @@ class TriggerBotMessageRequest(serializers.Serializer):
 
 class TriggerBotMessageResponse(serializers.ModelSerializer):
     session_id = serializers.ReadOnlyField(source="external_id")
-    url = serializers.HyperlinkedIdentityField(
-        view_name="api:session-detail", lookup_field="external_id", lookup_url_kwarg="id"
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:session-detail",
+        lookup_field="external_id",
+        lookup_url_kwarg="id",
     )
     team = TeamSerializer(read_only=True)
     channel = serializers.CharField(source="platform", read_only=True)

@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'api-schema.yml'
+      - 'api-schemas/**.yml'
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Repository Dispatch
-        uses: peter-evans/repository-dispatch@v4
+        uses: peter-evans/repository-dispatch@v4.0.1
         with:
           token: ${{ secrets.OCS_DOCS_PAT }}
           repository: dimagi/open-chat-studio-docs

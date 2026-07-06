@@ -18,6 +18,7 @@ from apps.web.dynamic_filters.column_filters import (
     ExperimentFilter,
     ParticipantFilter,
     RemoteIdFilter,
+    SessionIdFilter,
     TimestampFilter,
 )
 
@@ -84,7 +85,7 @@ class ExperimentVersionsFilter(ChoiceColumnFilter):
         return [int(v[1:]) for v in values if "v" in v]
 
     def prepare(self, team, **kwargs):
-        self.options = Experiment.objects.get_version_names(team)
+        self.options = Experiment.objects.get_version_names(team)  # ty: ignore[invalid-assignment]
 
 
 class TraceStatusFilter(ChoiceColumnFilter):
@@ -100,6 +101,8 @@ class TraceFilter(MultiColumnFilter):
     date_range_column: ClassVar[str] = "timestamp"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
+        # Trace relates to Session via FK, so the path to the external ID is ``session__external_id``.
+        SessionIdFilter(columns=["session__external_id"]),
         TimestampFilter(label="Timestamp", column="timestamp", query_param="timestamp"),
         MessageTagsFilter(),
         RemoteIdFilter(),

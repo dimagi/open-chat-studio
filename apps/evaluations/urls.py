@@ -28,6 +28,11 @@ urlpatterns = [
         name="evaluation_runs_home",
     ),
     path(
+        "<int:evaluation_pk>/runs/clear/",
+        evaluation_config_views.ClearEvaluationRuns.as_view(),
+        name="clear_evaluation_runs",
+    ),
+    path(
         "<int:evaluation_pk>/evaluation_runs_table",
         evaluation_config_views.EvaluationRunTableView.as_view(),
         name="evaluation_runs_table",
@@ -58,6 +63,16 @@ urlpatterns = [
         name="evaluation_run_update",
     ),
     path(
+        "<int:evaluation_pk>/bulk_download/start/",
+        evaluation_config_views.start_bulk_download,
+        name="evaluation_bulk_download_start",
+    ),
+    path(
+        "<int:evaluation_pk>/bulk_download/<str:task_id>/",
+        evaluation_config_views.get_bulk_download_link,
+        name="evaluation_bulk_download_link",
+    ),
+    path(
         "sessions_selection_table",
         dataset_views.DatasetSessionsSelectionTableView.as_view(),
         name="dataset_sessions_selection_list",
@@ -66,6 +81,21 @@ urlpatterns = [
         "sessions_selection_json",
         dataset_views.dataset_sessions_selection_json,
         name="dataset_sessions_selection_json",
+    ),
+    path(
+        "dataset/<int:pk>/add-sessions/",
+        dataset_views.EvalDatasetAddSessionsView.as_view(),
+        name="dataset_add_sessions",
+    ),
+    path(
+        "dataset/<int:pk>/add-sessions/table/",
+        dataset_views.EvalDatasetSessionsTableView.as_view(),
+        name="dataset_add_sessions_table",
+    ),
+    path(
+        "dataset/<int:pk>/sessions-count/",
+        dataset_views.dataset_sessions_count,
+        name="dataset_sessions_count",
     ),
     path(
         "dataset/<int:dataset_id>/messages_table/",

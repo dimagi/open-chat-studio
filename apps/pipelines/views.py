@@ -26,10 +26,10 @@ from apps.experiments.models import AgentTools, BuiltInTools, Experiment, Source
 from apps.pipelines.flow import FlowPipelineData
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
+from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
-from apps.pipelines.utils import compute_max_char_limit
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import LLM_MODEL_PARAMETER_SCHEMAS
 from apps.service_providers.models import LlmProvider, LlmProviderModel
@@ -339,8 +339,6 @@ def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models
 
 
 def _pipeline_node_schemas():
-    from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→views
-
     schemas = []
 
     node_classes = [
@@ -403,7 +401,6 @@ def pipeline_data(request, team_slug: str, pk: int):
                 "name": pipeline.name,
                 "data": pipeline.flow_data,
                 "errors": pipeline.validate(),
-                "max_char_limit": compute_max_char_limit(pipeline),
             }
         }
     )

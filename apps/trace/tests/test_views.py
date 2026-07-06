@@ -1,3 +1,7 @@
+import re
+from html import unescape
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 from django.urls import reverse
 
@@ -18,6 +22,39 @@ def _make_trace(team, **kwargs):
         duration=1000,
         **kwargs,
     )
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_renders_filter_links(client, team_with_users):
+    """The trace detail page links to the trace table pre-filtered by session/chatbot/participant."""
+    team = team_with_users
+    user = team.members.first()
+    trace = _make_trace(team)
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    home_url = reverse("trace:home", args=[team.slug])
+
+    # Collect the filter query params from each link pointing at the trace table home.
+    links = {}
+    for href in re.findall(rf'href="({re.escape(home_url)}\?[^"]+)"', content):
+        params = parse_qs(urlparse(unescape(href)).query)
+        links[params["filter_0_column"][0]] = params
+
+    session_link = links["session_id"]
+    assert session_link["filter_0_operator"] == ["equals"]
+    assert session_link["filter_0_value"] == [str(trace.session.external_id)]
+
+    experiment_link = links["experiment"]
+    assert experiment_link["filter_0_operator"] == ["any of"]
+    assert experiment_link["filter_0_value"] == [f"[{trace.experiment_id}]"]
+
+    participant_link = links["participant"]
+    assert participant_link["filter_0_operator"] == ["equals"]
+    assert participant_link["filter_0_value"] == [trace.participant.identifier]
 
 
 @pytest.mark.django_db()

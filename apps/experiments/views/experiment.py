@@ -52,6 +52,7 @@ from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
     StaticTriggerType,
 )
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.decorators import (
     experiment_session_view,
     get_chat_session_access_cookie_data,
@@ -61,7 +62,6 @@ from apps.experiments.decorators import (
 from apps.experiments.email import send_chat_link_email
 from apps.experiments.forms import (
     ConsentForm,
-    SurveyCompletedForm,
     TranslateMessagesForm,
 )
 from apps.experiments.helpers import get_real_user_or_none
@@ -79,14 +79,14 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.views.utils import get_max_char_limit
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
+from apps.utils.decorators import sunset
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -111,6 +111,7 @@ def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @experiment_session_view()
 @require_POST
 @xframe_options_exempt
@@ -148,8 +149,13 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             chat_id=session.chat_id,
             tool_type=resource_type,
         )
+
+        # Participant uploads within a conversation are message media, regardless of
+        # which tool they feed. ASSISTANT is reserved for bot-configuration files.
         for uploaded_file in uploaded_files.getlist(resource_type):
-            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
+            new_file = File.objects.create(
+                name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
+            )
             attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
             created_files.append(new_file)
 
@@ -167,7 +173,6 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
         "experiment_version_number": experiment_version.version_number,
-        "max_char_limit": get_max_char_limit(experiment_version),
     }
     return TemplateResponse(
         request,
@@ -209,6 +214,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     )
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @experiment_session_view()
 @require_GET
 @xframe_options_exempt
@@ -342,11 +348,16 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     )
 
 
+@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @xframe_options_exempt
 @team_required
 def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
     """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
-    will ALWAYS create anonymous participants."""
+    will ALWAYS create anonymous participants.
+
+    Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
+    See https://github.com/dimagi/open-chat-studio/issues/3540
+    """
     try:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
     except ValidationError:
@@ -417,7 +428,7 @@ def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, 
 @login_and_team_required
 def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
-    experiment = get_object_or_404(Experiment, id=experiment_id, team__slug=team_slug)
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     parsed_url = urlparse(request.htmx.current_url)
     query_params = QueryDict(parsed_url.query)
     task_id = async_export_chat.delay(experiment_id, query_params, timezone)
@@ -448,16 +459,11 @@ def _record_consent_and_redirect(
 ):
     # record consent, update status
     experiment_session.consent_date = timezone.now()
-    if experiment_session.experiment_version.pre_survey:
-        experiment_session.status = SessionStatus.PENDING_PRE_SURVEY
-        redirect_url_name = "experiments:experiment_pre_survey"
-    else:
-        experiment_session.status = SessionStatus.ACTIVE
-        redirect_url_name = "chatbots:chatbot_chat"
+    experiment_session.status = SessionStatus.ACTIVE
     experiment_session.save()
     response = HttpResponseRedirect(
         reverse(
-            redirect_url_name,
+            "chatbots:chatbot_chat",
             args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
         )
     )
@@ -500,43 +506,6 @@ def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID,
             "experiment": published_version,
             "consent_notice": mark_safe(consent_notice),
             "form": form,
-            **version_specific_vars,
-        },
-    )
-
-
-@experiment_session_view(allowed_states=[SessionStatus.PENDING_PRE_SURVEY])
-@verify_session_access_cookie
-def experiment_pre_survey(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    if request.method == "POST":
-        form = SurveyCompletedForm(request.POST)
-        if form.is_valid():
-            request.experiment_session.status = SessionStatus.ACTIVE
-            request.experiment_session.save()
-            return HttpResponseRedirect(
-                reverse(
-                    "experiments:experiment_chat",
-                    args=[team_slug, experiment_id, session_id],
-                )
-            )
-    else:
-        form = SurveyCompletedForm()
-
-    published_version = resolve_published_or_working(request.experiment)
-    experiment_session = request.experiment_session
-    version_specific_vars = {
-        "experiment_name": published_version.name,
-        "experiment_description": published_version.description,
-        "pre_survey_link": experiment_session.get_pre_survey_link(published_version),
-    }
-    return TemplateResponse(
-        request,
-        "experiments/pre_survey.html",
-        {
-            "active_tab": "experiments",
-            "form": form,
-            "experiment": request.experiment,
-            "experiment_session": experiment_session,
             **version_specific_vars,
         },
     )
@@ -680,7 +649,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
         "selected_tags": selected_tags,
         "language": language,
         "available_languages": available_languages,
-        "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+        "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
         "has_missing_translations": has_missing_translations,
         "show_original_translation": show_original_translation,
         "translate_form_all": translate_form_all,
@@ -781,8 +750,6 @@ def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id
 @verify_session_access_cookie
 def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     form = None
-    survey_link = None
-    survey_text = None
     experiment_version = resolve_published_or_working(request.experiment)
     if request.method == "POST":
         # no validation needed
@@ -792,15 +759,8 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
         return HttpResponseRedirect(
             reverse("experiments:experiment_complete", args=[team_slug, experiment_id, session_id])
         )
-    elif experiment_version.post_survey:
-        form = SurveyCompletedForm()
-        survey_link = request.experiment_session.get_post_survey_link(experiment_version)
-        survey_text = experiment_version.post_survey.confirmation_text.format(survey_link=survey_link)
 
     version_specific_vars = {
-        "experiment.post_survey": experiment_version.post_survey,
-        "survey_link": survey_link,
-        "survey_text": survey_text,
         "experiment_name": experiment_version.name,
     }
     return TemplateResponse(
@@ -812,7 +772,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
             "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
             "active_tab": "experiments",
             "form": form,
-            "available_tags": [t.name for t in Tag.objects.filter(team__slug=team_slug, is_system_tag=False).all()],
+            "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
             **version_specific_vars,
         },
     )
@@ -835,7 +795,7 @@ def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, sessi
 @team_required
 def download_file(request, team_slug: str, session_id: int, pk: int):
     resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+        File, id=pk, team=request.team, chatattachment__chat__experiment_session__id=session_id
     )
     # An empty FileField (no underlying storage) raises ValueError when opened.
     # Treat this the same as a missing file on disk.
@@ -854,7 +814,7 @@ def download_file(request, team_slug: str, session_id: int, pk: int):
 def get_image_html(request, team_slug: str, session_id: int, pk: int):
     """Return HTML for displaying an image attachment."""
     resource = get_object_or_404(
-        File, id=pk, team__slug=team_slug, chatattachment__chat__experiment_session__id=session_id
+        File, id=pk, team=request.team, chatattachment__chat__experiment_session__id=session_id
     )
 
     if not resource.is_image:
@@ -884,7 +844,7 @@ def set_default_experiment(request, team_slug: str, experiment_id: int, version_
         Experiment, working_version_id=experiment_id, version_number=version_number, team=request.team
     )
     Experiment.objects.exclude(version_number=version_number).filter(
-        team__slug=team_slug, working_version_id=experiment_id
+        team=request.team, working_version_id=experiment_id
     ).update(is_default_version=False, audit_action=AuditAction.AUDIT)
     experiment.is_default_version = True
     experiment.save()
@@ -950,14 +910,14 @@ def trends_data(request, team_slug: str, experiment_id: int):
     """
     Returns JSON data for the experiment's trend barchart chart.
     """
+    experiment = get_object_or_404(Experiment.objects.filter(team=request.team), id=experiment_id)
     try:
-        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
         successes, errors = experiment.get_trend_data()
-        data = {"successes": successes, "errors": errors}
-        return JsonResponse({"trends": data})
     except Exception:
         logging.exception(f"Error loading barchart data for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
+    data = {"successes": successes, "errors": errors}
+    return JsonResponse({"trends": data})
 
 
 @require_GET
@@ -967,10 +927,10 @@ def get_experiment_version_names(request, team_slug: str, experiment_id: int):
     """
     Returns JSON data for the filters widget
     """
+    experiment = get_object_or_404(Experiment.objects.filter(team=request.team), id=experiment_id)
     try:
-        experiment = get_object_or_404(Experiment.objects.filter(team__slug=team_slug), id=experiment_id)
         version_names = Experiment.objects.get_version_names(experiment.team, working_version=experiment)
-        return JsonResponse({"version_names": version_names})
     except Exception:
         logging.exception(f"Error loading version names for experiment {experiment_id}")
         return JsonResponse({"error": "Failed to load barchart data", "datasets": []}, status=500)
+    return JsonResponse({"version_names": version_names})

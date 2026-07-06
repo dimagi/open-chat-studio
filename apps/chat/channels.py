@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 import emoji
 import httpx
-from django.db import transaction
 from django.http import Http404
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
@@ -32,7 +31,6 @@ from apps.chat.exceptions import (
     ParticipantNotAllowedException,
     ServiceWindowExpiredException,
     UserReportableError,
-    VersionedExperimentSessionsNotAllowedException,
 )
 from apps.chat.models import Chat, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
@@ -45,6 +43,7 @@ from apps.experiments.models import (
     SessionStatus,
     VoiceResponseBehaviours,
 )
+from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -172,11 +171,10 @@ class ChannelBase(ABC):
         session_external_id: str | None = None,
         metadata: dict | None = None,
     ):
-        return _start_experiment_session(
+        return start_experiment_session(
             working_experiment,
             experiment_channel,
-            participant_identifier,
-            participant_user,
+            Participant(identifier=participant_identifier, user=participant_user),
             session_status,
             timezone,
             session_external_id,
@@ -188,7 +186,7 @@ class ChannelBase(ABC):
         return cast(ExperimentSession, self._experiment_session)
 
     @experiment_session.setter
-    def experiment_session(self, value: ExperimentSession):
+    def experiment_session(self, value: ExperimentSession | None):
         self._experiment_session = value
         self.reset_bot()
 
@@ -344,11 +342,19 @@ class ChannelBase(ABC):
 
             channel_cls = NewApiChannel
         elif platform == "sureadhere":
-            channel_cls = SureAdhereChannel
+            from apps.channels.channels_v2.sureadhere_channel import (  # noqa: PLC0415
+                SureAdhereChannel as NewSureAdhereChannel,
+            )
+
+            channel_cls = NewSureAdhereChannel
         elif platform == "slack":
             channel_cls = SlackChannel
         elif platform == "commcare_connect":
-            channel_cls = CommCareConnectChannel
+            from apps.channels.channels_v2.connect_channel import (  # noqa: PLC0415
+                CommCareConnectChannel as NewCommCareConnectChannel,
+            )
+
+            channel_cls = NewCommCareConnectChannel
         elif platform == "email":
             from apps.channels.channels_v2.email_channel import EmailChannel  # noqa: PLC0415
 
@@ -454,34 +460,19 @@ class ChannelBase(ABC):
             raise e
 
     def _handle_pre_conversation_requirements(self) -> str | None:
-        """Since external channels doesn't have nice UI, we need to ask users' consent and get them to fill in the
-        pre-survey using the conversation thread. We use the session status and a rough state machine to achieve this.
+        """External channels lack a UI, so consent is collected via the conversation thread.
 
-        Here's a breakdown of the flow and the expected session status for each
-        Session started -> status will be SETUP
-        (Status==SETUP) First user message -> set status to PENDING
-
-        (Status==PENDING) User gave consent -> set status to ACTIVE if there isn't a survey
-        (Status==PENDING) User gave consent -> set status to PENDING_PRE_SURVEY if there is a survey
-
-        (Status==PENDING_PRE_SURVEY) user indicated that they took the survey -> sett status to ACTIVE
+        Session started -> status SETUP
+        (SETUP) first user message -> status PENDING, ask for consent
+        (PENDING) user gave consent -> status ACTIVE, start conversation
         """
         if self.experiment_session.status == SessionStatus.SETUP:
             return self._chat_initiated()
         elif self.experiment_session.status == SessionStatus.PENDING:
             if self._user_gave_consent():
-                if not self.experiment.pre_survey:
-                    return self.start_conversation()
-                else:
-                    self.experiment_session.update_status(SessionStatus.PENDING_PRE_SURVEY)
-                    return self._ask_user_to_take_survey()
-            else:
-                return self._ask_user_for_consent()
-        elif self.experiment_session.status == SessionStatus.PENDING_PRE_SURVEY:
-            if self._user_gave_consent():
                 return self.start_conversation()
             else:
-                return self._ask_user_to_take_survey()
+                return self._ask_user_for_consent()
         return None
 
     def start_conversation(self) -> str | None:
@@ -517,14 +508,6 @@ class ChannelBase(ABC):
         self._send_text_to_user_with_notification(bot_message)
         return bot_message
 
-    def _ask_user_to_take_survey(self):
-        pre_survey_link = self.experiment_session.get_pre_survey_link(self.experiment)
-        confirmation_text = self.experiment.pre_survey.confirmation_text
-        bot_message = confirmation_text.format(survey_link=pre_survey_link)
-        self._add_message_to_history(bot_message, ChatMessageType.AI)
-        self._send_text_to_user_with_notification(bot_message)
-        return bot_message
-
     def _should_handle_pre_conversation_requirements(self):
         """Checks to see if the user went through the pre-conversation formalities, such as giving consent and filling
         out the survey. Since we're using and updating the session's status during this flow, simply checking the
@@ -533,7 +516,6 @@ class ChannelBase(ABC):
         return self.experiment_session.status in [
             SessionStatus.SETUP,
             SessionStatus.PENDING,
-            SessionStatus.PENDING_PRE_SURVEY,
         ]
 
     def _user_gave_consent(self) -> bool:
@@ -1249,12 +1231,12 @@ class WhatsappChannel(ChannelBase):
         return self.messaging_service.can_send_file(file)
 
     def submit_input_to_llm(self):
-        """Send a typing indicator to the user when using Meta Cloud API."""
+        """Send a typing indicator to the user when the message has a WhatsApp message ID."""
         from apps.channels.datamodels import (  # noqa: PLC0415 - circular: datamodels imports chat.channels
-            MetaCloudAPIMessage,
+            WhatsAppMessage,
         )
 
-        if not isinstance(self.message, MetaCloudAPIMessage) or not self.message.whatsapp_message_id:
+        if not isinstance(self.message, WhatsAppMessage) or not self.message.whatsapp_message_id:
             return
         try:
             self.messaging_service.send_typing_indicator(
@@ -1263,23 +1245,6 @@ class WhatsappChannel(ChannelBase):
             )
         except Exception:
             logger.exception("Failed to send typing indicator")
-
-
-class SureAdhereChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
-        from_ = self.experiment_channel.extra_data.get("sureadhere_tenant_id")
-        to_patient = self.participant_identifier
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_,
-            to=to_patient,
-            platform=ChannelPlatform.SUREADHERE,
-            last_activity_at=self.last_activity_at,
-        )
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
 
 
 class FacebookMessengerChannel(ChannelBase):
@@ -1427,6 +1392,7 @@ class SlackChannel(ChannelBase):
         )
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.connect_channel.CommCareConnectChannel
 class CommCareConnectChannel(ChannelBase):
     voice_replies_supported = False
     supported_message_types = [MESSAGE_TYPES.TEXT]
@@ -1463,70 +1429,6 @@ class CommCareConnectChannel(ChannelBase):
         if not self.participant_data.encryption_key:
             self.participant_data.generate_encryption_key()
         return self.participant_data.get_encryption_key_bytes()
-
-
-def _start_experiment_session(
-    working_experiment: Experiment,
-    experiment_channel: ExperimentChannel,
-    participant_identifier: str,
-    participant_user: CustomUser | None = None,
-    session_status: SessionStatus = SessionStatus.ACTIVE,
-    timezone: str | None = None,
-    session_external_id: str | None = None,
-    metadata: dict | None = None,
-) -> ExperimentSession:
-    if working_experiment.is_a_version:
-        raise VersionedExperimentSessionsNotAllowedException(
-            message="A session cannot be linked to an experiment version. "
-        )
-
-    team = working_experiment.team
-    if not participant_identifier and not participant_user:
-        raise ValueError("Either participant_identifier or participant_user must be specified!")
-
-    if participant_user and participant_identifier != participant_user.email:
-        # This should technically never happen, since we disable the input for logged in users
-        raise Exception(f"User {participant_user.email} cannot impersonate participant {participant_identifier}")
-
-    with transaction.atomic():
-        participant, created = Participant.objects.get_or_create(
-            team=team,
-            identifier=experiment_channel.platform_enum.normalize_identifier(participant_identifier),
-            platform=experiment_channel.platform,
-            defaults={"user": participant_user},
-        )
-        if not created and participant_user and participant.user is None:
-            participant.user = participant_user
-            participant.save()
-
-        chat = Chat.objects.create(
-            team=team,
-            name=f"{participant_identifier} - {experiment_channel.name}",
-            metadata=metadata or {},
-        )
-
-        session, _ = ExperimentSession.objects.get_or_create(
-            external_id=session_external_id,
-            defaults={
-                "team": team,
-                "experiment": working_experiment,
-                "experiment_channel": experiment_channel,
-                "status": session_status,
-                "participant": participant,
-                "chat": chat,
-                "platform": experiment_channel.platform,
-            },
-        )
-
-        # Record the participant's timezone
-        if timezone:
-            participant.update_memory(data={"timezone": timezone}, experiment=working_experiment)
-
-    if experiment_channel.platform != ChannelPlatform.EVALUATIONS:
-        if participant.experimentsession_set.filter(experiment=working_experiment).count() == 1:
-            enqueue_static_triggers.delay(session.id, StaticTriggerType.PARTICIPANT_JOINED_EXPERIMENT)
-        enqueue_static_triggers.delay(session.id, StaticTriggerType.CONVERSATION_START)
-    return session
 
 
 # TODO: remove after channels refactor

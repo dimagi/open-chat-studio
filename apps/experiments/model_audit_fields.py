@@ -1,13 +1,7 @@
 EXPERIMENT_FIELDS = [
     "owner",
     "name",
-    "temperature",
-    "prompt_text",
-    "input_formatter",
-    "source_material",
     "seed_message",
-    "pre_survey",
-    "post_survey",
     "consent_form",
     "voice_provider",
     "synthetic_voice",

@@ -3,20 +3,34 @@ from __future__ import annotations
 import logging
 import re
 from io import BytesIO
+from typing import TYPE_CHECKING
+
+from django.db.models import Q
 
 from apps.annotations.models import TagCategories
-from apps.channels.channels_v2.exceptions import EarlyExitResponse
+from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.datamodels import Attachment
 from apps.chat.bots import EvalsBot, EventBot, get_bot
-from apps.chat.channels import MARKDOWN_REF_PATTERN, MESSAGE_TYPES, _start_experiment_session, strip_urls_and_emojis
+from apps.chat.channels import (
+    MARKDOWN_REF_PATTERN,
+    MESSAGE_TYPES,
+    strip_urls_and_emojis,
+)
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.exceptions import AudioSynthesizeException, UserReportableError
-from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageMetadataKeys, ChatMessageType
 from apps.events.models import StaticTriggerType
 from apps.events.tasks import enqueue_static_triggers
-from apps.experiments.models import ExperimentSession, SessionStatus, VoiceResponseBehaviours
+from apps.experiments.models import (
+    ExperimentSession,
+    Participant,
+    ParticipantData,
+    SessionStatus,
+    VoiceResponseBehaviours,
+)
+from apps.experiments.services import start_experiment_session
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (
     audio_synthesis_failure_notification,
@@ -26,9 +40,72 @@ from apps.service_providers.llm_service.history_managers import ExperimentHistor
 from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
 
+if TYPE_CHECKING:
+    from apps.users.models import CustomUser
+
 logger = logging.getLogger("ocs.channels")
 
 RESET_COMMAND = "/reset"
+
+
+def participant_identifier_filter(identifier: str, remote_id: str | None) -> Q:
+    """Build the participant lookup filter for the BSUID rollout.
+
+    Matches on the canonical identifier (the BSUID, post-rollout), plus the legacy
+    identifier when one is available, so a returning user
+    previously keyed by phone is linked to their messages now keyed by BSUID.
+    """
+    if remote_id and remote_id != identifier:
+        return Q(identifier=identifier) | Q(identifier=remote_id)
+    return Q(identifier=identifier)
+
+
+def _associate_user(participant: Participant, participant_user: CustomUser | None) -> None:
+    """Backfill the participant's user on first contact if it isn't set yet."""
+    if participant_user and participant.user is None:
+        participant.user = participant_user
+        participant.save()
+
+
+def get_or_create_participant(
+    team,
+    normalized_identifier: str,
+    platform: str,
+    participant_user: CustomUser | None,
+    participant_id_filter: Q,
+) -> Participant:
+    """Look up or create a participant, handling disjunctive (BSUID OR legacy phone) filters.
+
+    For a simple equality filter (the common case) this delegates straight to get_or_create.
+    For a disjunction it probes first, so a match reuses the existing row (oldest wins) while
+    a miss still creates the row keyed by the canonical normalized identifier -- never the phone.
+    """
+    if not normalized_identifier and not participant_user:
+        raise ValueError("Either an identifier or a user must be specified!")
+    if participant_user and normalized_identifier != participant_user.email:
+        # This should technically never happen, since we disable the input for logged in users
+        raise Exception(f"User {participant_user.email} cannot impersonate participant {normalized_identifier}")
+
+    is_simple_filter = len(participant_id_filter.children) == 1
+    if not is_simple_filter:
+        existing = (
+            Participant.objects.filter(participant_id_filter, team=team, platform=platform)
+            .order_by("created_at", "id")
+            .first()
+        )
+        if existing is not None:
+            _associate_user(existing, participant_user)
+            return existing
+
+    participant, created = Participant.objects.get_or_create(
+        team=team,
+        identifier=normalized_identifier,
+        platform=platform,
+        defaults={"user": participant_user},
+    )
+    if not created:
+        _associate_user(participant, participant_user)
+    return participant
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +129,53 @@ class ParticipantValidationStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
+# ParticipantResolverStage
+# ---------------------------------------------------------------------------
+
+
+class ParticipantResolverStage(ProcessingStage):
+    """Resolves (or creates) the Participant record for the validated identifier.
+
+    Always sets ctx.participant; new participants are created here so that
+    SessionResolutionStage can use the FK directly without a separate creation step.
+
+    If a participant_user is present in ctx.channel_context (e.g. web channels),
+    it is associated with the participant on first contact or backfilled if missing.
+    """
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        normalized = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
+        participant_user = ctx.channel_context.get("participant_user")
+        remote_id = ctx.message.remote_id if ctx.message else None
+        ctx.participant = get_or_create_participant(
+            team=ctx.experiment.team,
+            normalized_identifier=normalized,
+            platform=ctx.experiment_channel.platform,
+            participant_user=participant_user,
+            participant_id_filter=participant_identifier_filter(normalized, remote_id),
+        )
+        self._store_remote_id(ctx, remote_id)
+
+        try:
+            ctx.participant_data = ParticipantData.objects.for_experiment(ctx.experiment).get(
+                participant=ctx.participant
+            )
+        except ParticipantData.DoesNotExist:
+            ctx.participant_data = None
+
+    def _store_remote_id(self, ctx: MessageProcessingContext, remote_id: str | None) -> None:
+        """Persist the message's remote_id (e.g. the user's phone number) on the participant so it
+        can be used as the send recipient -- the participant identifier may be a (non-sendable) BSUID."""
+        participant = ctx.participant
+        if not remote_id or participant is None:
+            return
+        if participant.remote_id == remote_id:
+            return
+        participant.remote_id = remote_id
+        participant.save(update_fields=["remote_id"])
+
+
+# ---------------------------------------------------------------------------
 # SessionResolutionStage
 # ---------------------------------------------------------------------------
 
@@ -72,11 +196,13 @@ class SessionResolutionStage(ProcessingStage):
         if ctx.experiment_session is not None:
             return
 
-        # Try to load an existing active session (Issue 13: select_related)
+        # ParticipantResolverStage always creates/fetches the participant
+        # before this stage runs, so ctx.participant is guaranteed to be set.
+        assert ctx.participant is not None
         ctx.experiment_session = (
             ExperimentSession.objects.filter(
                 experiment=ctx.experiment.get_working_version(),
-                participant__identifier=str(ctx.participant_identifier),
+                participant=ctx.participant,
             )
             .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
             .select_related("participant", "chat", "experiment_channel")
@@ -106,31 +232,25 @@ class SessionResolutionStage(ProcessingStage):
     def _handle_reset(self, ctx: MessageProcessingContext) -> None:
         if ctx.experiment_session:
             ctx.experiment_session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
-        else:
-            # Load and end the existing session if one exists (common path for
-            # channels that don't pre-set sessions, e.g. API/Telegram)
-            existing = (
-                ExperimentSession.objects.filter(
-                    experiment=ctx.experiment.get_working_version(),
-                    participant__identifier=str(ctx.participant_identifier),
-                )
-                .exclude(status__in=STATUSES_FOR_COMPLETE_CHATS)
-                .first()
-            )
-            if existing:
-                existing.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
 
         ctx.experiment_session = self._create_session(ctx)
         ctx.trace_service.set_session(ctx.experiment_session)
         raise EarlyExitResponse("Conversation reset")
 
     def _create_session(self, ctx: MessageProcessingContext):
-        """Delegates to the existing _start_experiment_session helper."""
-        return _start_experiment_session(
+        """Delegates to the start_experiment_session service.
+
+        Reuses the participant ParticipantResolverStage already resolved (e.g. a legacy
+        phone-keyed row) so the session attaches to it rather than a new BSUID-keyed one.
+        """
+        participant = ctx.participant or Participant(
+            identifier=ctx.participant_identifier,
+            user=ctx.channel_context.get("participant_user"),
+        )
+        return start_experiment_session(
             working_experiment=ctx.experiment.get_working_version(),
             experiment_channel=ctx.experiment_channel,
-            participant_identifier=ctx.participant_identifier,
-            participant_user=ctx.channel_context.get("participant_user"),
+            participant=participant,
             session_status=SessionStatus.SETUP,
         )
 
@@ -190,6 +310,44 @@ class SessionActivationStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
+# ConsentCheckStage
+# ---------------------------------------------------------------------------
+
+
+class ConsentCheckStage(ProcessingStage):
+    """Platform consent gate (ParticipantData.system_metadata['consent']).
+
+    Distinct from ConsentFlowStage: that one drives the conversational
+    consent state machine (SETUP -> PENDING -> ACTIVE). This one enforces
+    a platform-level consent flag managed outside the chat (e.g. CommCare
+    Connect's auto-consent handshake, or Telegram revoking consent when
+    the bot is blocked).
+
+    When the gate blocks, the stage raises EarlyAbort to halt the pipeline
+    silently -- no user-facing message is sent and no terminal stages run.
+    Reporting an error would be wrong here: the participant has either
+    withdrawn consent or the channel can no longer reach them.
+
+    Configured via ChannelCapabilities.consent_config. When unset, the
+    stage is skipped entirely.
+    """
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.capabilities.consent_config is not None
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        config = ctx.capabilities.consent_config
+        participant_data = ctx.participant_data  # cached_property; None if no row
+        if participant_data is None:
+            if config.strict:
+                raise EarlyAbort()
+            return
+
+        if not participant_data.system_metadata.get("consent", config.default_consent):
+            raise EarlyAbort()
+
+
+# ---------------------------------------------------------------------------
 # ConsentFlowStage
 # ---------------------------------------------------------------------------
 
@@ -197,14 +355,18 @@ class SessionActivationStage(ProcessingStage):
 class ConsentFlowStage(ProcessingStage):
     """Handles the conversational consent state machine.
 
-    This stage only manages consent state transitions and raises
-    EarlyExitResponse. It does NOT:
+    This stage only manages consent state transitions. It does NOT:
       - Send messages (ResponseSendingStage handles that)
       - Persist to chat history (PersistenceStage handles that)
+      - Invoke the bot (BotInteractionStage handles that)
 
     Sub-behaviors:
-      - Builds consent/survey prompt text and raises EarlyExitResponse
-      - Handles seed message after consent is given
+      - Builds the consent prompt text and raises EarlyExitResponse
+      - Once consent is given, swaps the participant's original (pre-consent)
+        message into ctx.user_query and lets the pipeline continue, so the
+        normal bot-interaction path answers their first question. Falls back
+        to the seed message when there was no substantive original message,
+        and halts silently when there is neither.
     """
 
     USER_CONSENT_TEXT = "1"
@@ -223,36 +385,21 @@ class ConsentFlowStage(ProcessingStage):
             in [
                 SessionStatus.SETUP,
                 SessionStatus.PENDING,
-                SessionStatus.PENDING_PRE_SURVEY,
             ]
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
         session = ctx.experiment_session
-        response = None
 
         if session.status == SessionStatus.SETUP:
             session.update_status(SessionStatus.PENDING)
-            response = self._build_consent_prompt(ctx)
+            raise EarlyExitResponse(self._build_consent_prompt(ctx))
 
-        elif session.status == SessionStatus.PENDING:
-            if self._user_gave_consent(ctx):
-                if not ctx.experiment.pre_survey:
-                    response = self._start_conversation(ctx)
-                else:
-                    session.update_status(SessionStatus.PENDING_PRE_SURVEY)
-                    response = self._build_survey_prompt(ctx)
-            else:
-                response = self._build_consent_prompt(ctx)
+        if session.status == SessionStatus.PENDING:
+            if not self._user_gave_consent(ctx):
+                raise EarlyExitResponse(self._build_consent_prompt(ctx))
 
-        elif session.status == SessionStatus.PENDING_PRE_SURVEY:
-            if self._user_gave_consent(ctx):
-                response = self._start_conversation(ctx)
-            else:
-                response = self._build_survey_prompt(ctx)
-
-        if response is not None:
-            raise EarlyExitResponse(response)
+            self._start_conversation(ctx)
 
     def _user_gave_consent(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None and ctx.user_query.strip() == self.USER_CONSENT_TEXT
@@ -263,29 +410,53 @@ class ConsentFlowStage(ProcessingStage):
         confirmation_text = ctx.experiment.consent_form.confirmation_text
         return f"{consent_text}\n\n{confirmation_text}"
 
-    def _build_survey_prompt(self, ctx: MessageProcessingContext) -> str:
-        """Build the survey prompt text. Does NOT send or persist -- just returns the string."""
-        pre_survey_link = ctx.experiment_session.get_pre_survey_link(ctx.experiment)
-        confirmation_text = ctx.experiment.pre_survey.confirmation_text
-        return confirmation_text.format(survey_link=pre_survey_link)
+    def _start_conversation(self, ctx: MessageProcessingContext) -> None:
+        """Consent accepted: activate the session and hand off to the normal
+        bot-interaction path by swapping the bot input into ctx.user_query.
 
-    def _start_conversation(self, ctx: MessageProcessingContext) -> str | None:
-        ctx.experiment_session.update_status(SessionStatus.ACTIVE)
-        if ctx.experiment.seed_message:
-            return self._process_seed_message(ctx)
-        return None
-
-    def _process_seed_message(self, ctx: MessageProcessingContext) -> str:
-        """Invokes the bot with the seed message and returns the response text.
-
-        Note: bot.process_input() persists the AI response internally.
-        PersistenceStage detects this (ctx.bot_response is not None) and
-        skips creating a duplicate AI ChatMessage for the early exit response.
+        ctx.human_message stays as the consent-token message. The bot excludes
+        the input message from the LLM history it builds, so the token never
+        sits next to the swapped-in query in the LLM context, while remaining
+        in the persisted history as the record of the consent reply.
         """
-        if not ctx.bot:
-            ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
-        ctx.bot_response = ctx.bot.process_input(user_input=ctx.experiment.seed_message)
-        return ctx.bot_response.content
+        ctx.experiment_session.update_status(SessionStatus.ACTIVE)
+
+        # Original message wins over the seed message: answer what the
+        # participant actually asked before they were interrupted for consent.
+        original_message = self._get_original_message(ctx)
+        if original_message is not None:
+            ctx.user_query = original_message.content
+            return
+
+        if ctx.experiment.seed_message:
+            ctx.user_query = ctx.experiment.seed_message
+            return
+
+        # Nothing to answer: no substantive original message and no seed
+        # message. The session is now ACTIVE. Halt silently -- the consent
+        # token must not be forwarded to the bot as the participant's first
+        # prompt. (EarlyExitResponse("") would make terminal stages
+        # persist/send an empty AI message; EarlyAbort skips them entirely.)
+        raise EarlyAbort()
+
+    def _get_original_message(self, ctx: MessageProcessingContext) -> ChatMessage | None:
+        """Return the participant's first substantive message -- the one that
+        triggered SETUP -> PENDING -- so it can be answered after consent.
+
+        Returns None when the participant's first message was itself just the
+        consent token (no prior content), so the caller falls back to the seed
+        message / silent halt.
+        """
+        first_human_message = (
+            ctx.experiment_session.chat.messages.filter(message_type=ChatMessageType.HUMAN)
+            .order_by("created_at")
+            .first()
+        )
+        if first_human_message is None:
+            return None
+        if first_human_message.content.strip() == self.USER_CONSENT_TEXT:
+            return None
+        return first_human_message
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +600,7 @@ class BotInteractionStage(ProcessingStage):
     def process(self, ctx: MessageProcessingContext) -> None:
         ctx.callbacks.on_submit_input_to_llm(ctx.participant_identifier)
 
-        # Lazy bot creation -- reuse if already created (e.g. by ConsentFlowStage seed message)
+        # Lazy bot creation -- reuse if already set on the context
         if not ctx.bot:
             ctx.bot = get_bot(ctx.experiment_session, ctx.experiment, ctx.trace_service)
 
@@ -605,10 +776,28 @@ class AttachmentHydrationStage(ProcessingStage):
         )
 
     def process(self, ctx: MessageProcessingContext) -> None:
-        files = File.objects.filter(
-            id__in=ctx.message.attachment_file_ids,
-            team_id=ctx.experiment.team_id,
+        files = self._get_files(ctx)
+        if not files:
+            return
+        # Link the files to the session's Chat so the experiments:download_file
+        # view's join (File → ChatAttachment → Chat → ExperimentSession) resolves
+        # when an LLM provider fetches the download_link (or a user clicks it).
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(
+            chat=ctx.experiment_session.chat,
+            tool_type="ocs_attachments",
         )
+        chat_attachment.files.add(*files)
         ctx.message.attachments = [
             Attachment.from_file(f, type="ocs_attachments", session_id=ctx.experiment_session.id) for f in files
         ]
+
+    def _get_files(self, ctx: MessageProcessingContext) -> list[File]:
+        """Return the Files to hydrate. Default impl resolves pre-persisted Files
+        by ``ctx.message.attachment_file_ids``. Subclasses can override to acquire
+        files differently (e.g. download from a remote channel)."""
+        return list(
+            File.objects.filter(
+                id__in=ctx.message.attachment_file_ids,
+                team_id=ctx.experiment.team_id,
+            )
+        )

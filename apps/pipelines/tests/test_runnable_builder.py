@@ -52,7 +52,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
-from apps.utils.langchain import (
+from apps.utils.tests.langchain import (
     FakeLlmEcho,
     FakeLlmService,
     FakeLlmSimpleTokenCount,
@@ -1116,9 +1116,13 @@ class TestAssistantNode:
         )
         get_assistant_runnable.return_value = runnable_mock
 
+        assistant = OpenAiAssistantFactory.create()
         pipeline = PipelineFactory.create()
-        nodes = [start_node(), assistant_node(str(999)), end_node()]
+        nodes = [start_node(), assistant_node(str(assistant.id)), end_node()]
         runnable = create_runnable(pipeline, nodes)
+        # Delete the assistant after the node is wired up: SET_NULL nulls the node's mirror FK
+        # while the flow data keeps the (now-dangling) id, reproducing the runtime lookup failure.
+        assistant.delete()
         session = ExperimentSessionFactory.create()
         state = PipelineState(
             messages=["Hi there bot"],

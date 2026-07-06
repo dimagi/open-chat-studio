@@ -37,7 +37,7 @@ function dashboard() {
             participants: [],
             tags: [],
         },
-        
+
         overviewStats: [],
         botPerformanceData: [],
         botPerformancePagination: {
@@ -52,7 +52,7 @@ function dashboard() {
         },
         userEngagementData: [],
         tagAnalyticsData: {},
-        
+
         loadingStates: {
             overview: false,
             activeParticipants: false,
@@ -64,12 +64,12 @@ function dashboard() {
             tagAnalytics: false,
             averageResponseTime: false
         },
-        
+
         activeFilterId: null,
         saving: false,
-        
+
         initialLoad: true,
-        
+
         // Initialization
         init() {
             this.loadFiltersFromURL();
@@ -77,32 +77,32 @@ function dashboard() {
             this.loadInitialData();
             this.setupFilterWatchers();
             this.setupTomSelect();
-            
+
             this.initialLoad = false;
         },
-        
+
         setupTomSelect() {
             this.initializeTomSelect('id_experiments', 'experiments', 'Select chatbots...');
             this.initializeTomSelect('id_channels', 'channels', 'Select channels...');
             this.initializeTomSelect('id_participants', 'participants', 'Select participants...');
             this.initializeTomSelect('id_tags', 'tags', 'Select tags...');
         },
-        
+
         initializeTomSelect(elementId, filterKey, placeholder = null) {
             const selectElement = document.getElementById(elementId);
             if (!selectElement || selectElement.tomselect) return;
-            
+
             const config = {
                 ...TOM_SELECT_CONFIG,
                 onChange: () => this.handleFilterChange()
             };
-            
+
             if (placeholder) {
                 config.placeholder = placeholder;
             }
-            
+
             const tomSelect = new TomSelect(selectElement, config);
-            
+
             // Apply URL-loaded values
             const filterValues = this.filters[filterKey];
             if (filterValues && Array.isArray(filterValues)) {
@@ -111,7 +111,7 @@ function dashboard() {
                 });
             }
         },
-        
+
         setupFilterWatchers() {
             // Watch for filter changes to auto-refresh and update URL
             this.$watch('filters', () => {
@@ -121,15 +121,15 @@ function dashboard() {
                 }
             }, { deep: true });
         },
-        
+
         // Filter management
         updateFiltersFromForm() {
             const form = document.getElementById('filterForm');
             if (!form) return;
-            
+
             const formData = new FormData(form);
             this.filters = {};
-            
+
             for (let [key, value] of formData.entries()) {
                 if (value) {
                     if (this.filters[key]) {
@@ -149,16 +149,16 @@ function dashboard() {
                 delete this.filters.end_date;
             }
         },
-        
+
         handleFilterChange() {
             this.updateFiltersFromForm();
         },
-        
+
         // URL synchronization methods
         loadFiltersFromURL() {
             const urlParams = new URLSearchParams(window.location.search);
             const filtersFromURL = {};
-            
+
             for (const [key, value] of urlParams.entries()) {
                 if (key === 'experiments' || key === 'channels' || key === 'participants' || key === 'tags') {
                     // Handle multi-select fields
@@ -179,25 +179,25 @@ function dashboard() {
                     }
                 }
             }
-            
+
             // Apply URL filters to form and reactive state
             if (Object.keys(filtersFromURL).length > 0) {
                 this.applyFiltersToForm(filtersFromURL);
                 this.filters = { ...this.filters, ...filtersFromURL };
             }
         },
-        
+
         applyFiltersToForm(filterData) {
             const form = document.getElementById('filterForm');
             if (!form) return;
-            
+
             for (const [key, value] of Object.entries(filterData)) {
                 const element = form.querySelector(`[name="${key}"]`);
                 if (element) {
                     if (element.type === 'select-multiple') {
                         Array.from(element.options).forEach(option => {
-                            option.selected = Array.isArray(value) 
-                                ? value.includes(option.value) 
+                            option.selected = Array.isArray(value)
+                                ? value.includes(option.value)
                                 : value === option.value;
                         });
                     } else {
@@ -206,11 +206,11 @@ function dashboard() {
                 }
             }
         },
-        
+
         updateURL() {
             const url = new URL(window.location);
             const params = new URLSearchParams();
-            
+
             // Add filters to URL params
             for (const [key, value] of Object.entries(this.filters)) {
                 if (value && value !== '' && !(Array.isArray(value) && value.length === 0)) {
@@ -218,7 +218,7 @@ function dashboard() {
                     if ((key === 'start_date' || key === 'end_date') && this.filters.date_range !== 'custom') {
                         continue;
                     }
-                    
+
                     if (Array.isArray(value)) {
                         value.forEach(v => params.append(key, v));
                     } else {
@@ -226,35 +226,35 @@ function dashboard() {
                     }
                 }
             }
-            
+
             url.search = params.toString();
             window.history.replaceState({}, '', url);
         },
-        
+
         debounceRefresh() {
             clearTimeout(this.refreshTimeout);
             this.refreshTimeout = setTimeout(() => {
                 this.refreshAllCharts();
             }, DEFAULTS.DEBOUNCE_DELAY);
         },
-        
+
         resetFilters() {
             // Reset form
             const form = document.getElementById('filterForm');
             if (form) {
                 form.reset();
-                
+
                 // Set default values
                 const dateRangeSelect = form.querySelector('[data-filter-type="date_range"]');
                 if (dateRangeSelect) dateRangeSelect.value = DEFAULTS.DATE_RANGE;
-                
+
                 const granularitySelect = form.querySelector('[data-filter-type="granularity"]');
                 if (granularitySelect) granularitySelect.value = DEFAULTS.GRANULARITY;
-                
+
                 // Clear TomSelect instances
                 this.clearTomSelectInstances();
             }
-            
+
             // Reset reactive data
             this.filters = {
                 date_range: DEFAULTS.DATE_RANGE,
@@ -264,21 +264,21 @@ function dashboard() {
                 participants: [],
                 tags: [],
             };
-            
+
             this.activeFilterId = null;
-            
+
             // Clear URL parameters
             const url = new URL(window.location);
             url.search = '';
             window.history.replaceState({}, '', url);
         },
-        
+
         // API helpers
         async apiRequest(endpoint, params = {}) {
             if (!endpoint || typeof endpoint !== 'string') {
                 throw new Error('Invalid endpoint provided');
             }
-            
+
             const sanitizedParams = this.sanitizeParams({...this.filters, ...params});
             const urlParams = new URLSearchParams();
 
@@ -290,24 +290,24 @@ function dashboard() {
                     urlParams.set(key, value);
                 }
             }
-            
+
             try {
                 const response = await fetch(`${endpoint}?${urlParams}`);
-                
+
                 if (!response.ok) {
                     throw new Error(`API request failed: ${response.status} ${response.statusText}`);
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error(`API request to ${endpoint} failed:`, error);
                 throw error;
             }
         },
-        
+
         sanitizeParams(params) {
             const sanitized = {};
-            
+
             for (const [key, value] of Object.entries(params)) {
                 if (value !== null && value !== undefined && value !== '') {
                     if (Array.isArray(value)) {
@@ -320,19 +320,19 @@ function dashboard() {
                     }
                 }
             }
-            
+
             return sanitized;
         },
-        
+
         setLoadingState(key, loading) {
             this.loadingStates[key] = loading;
         },
-        
+
         // Data loading methods
         loadInitialData() {
             this.refreshAllCharts();
         },
-        
+
         async refreshAllCharts() {
             await Promise.all([
                 this.loadOverviewStats(),
@@ -342,13 +342,38 @@ function dashboard() {
                 this.loadBotPerformanceData(),
                 this.loadUserEngagementData(),
                 this.loadTagAnalytics(),
-                this.loadAverageResponseTimeChart()
+                this.loadAverageResponseTimeChart(),
+                this.loadCostTrackingPanel()
             ]);
         },
-        
+
+        async loadCostTrackingPanel() {
+            const container = document.getElementById("cost-tracking-panel-container");
+            if (!container) return;
+
+            const sanitized = this.sanitizeParams(this.filters);
+            const urlParams = new URLSearchParams();
+            for (const [key, value] of Object.entries(sanitized)) {
+                if (Array.isArray(value)) {
+                    value.forEach(item => urlParams.append(key, item));
+                } else {
+                    urlParams.set(key, value);
+                }
+            }
+
+            try {
+                const response = await fetch(`api/cost-tracking-panel/?${urlParams}`);
+                if (response.ok) {
+                    container.innerHTML = await response.text();
+                }
+            } catch (error) {
+                console.error("Failed to refresh cost tracking panel:", error);
+            }
+        },
+
         async loadOverviewStats() {
             this.setLoadingState('overview', true);
-            
+
             try {
                 const data = await this.apiRequest('api/overview/');
                 this.overviewStats = [
@@ -387,11 +412,11 @@ function dashboard() {
                 this.setLoadingState('overview', false);
             }
         },
-        
+
         async loadSessionAnalyticsChart() {
             this.setLoadingState('activeParticipants', true);
             this.setLoadingState('sessionAnalytics', true);
-            
+
             try {
                 const data = await this.apiRequest('api/session-analytics/');
                 if (window.chartManager) {
@@ -407,10 +432,10 @@ function dashboard() {
                 this.setLoadingState('activeParticipants', false);
             }
         },
-        
+
         async loadMessageVolumeChart() {
             this.setLoadingState('messageVolume', true);
-            
+
             try {
                 const data = await this.apiRequest('api/message-volume/');
                 if (window.chartManager) {
@@ -423,10 +448,10 @@ function dashboard() {
                 this.setLoadingState('messageVolume', false);
             }
         },
-        
+
         async loadChannelBreakdownChart() {
             this.setLoadingState('channelBreakdown', true);
-            
+
             try {
                 const data = await this.apiRequest('api/channel-breakdown/');
                 if (window.chartManager) {
@@ -439,16 +464,16 @@ function dashboard() {
                 this.setLoadingState('channelBreakdown', false);
             }
         },
-        
+
         async loadBotPerformanceData(page = null, order_by = null, order_dir = null) {
             this.setLoadingState('botPerformance', true);
-            
+
             try {
                 // Use provided parameters or current pagination state
                 const currentPage = page || this.botPerformancePagination.page;
                 const currentOrderBy = order_by || this.botPerformancePagination.order_by;
                 const currentOrderDir = order_dir || this.botPerformancePagination.order_dir;
-                
+
                 // Pass pagination/sorting params to apiRequest which will merge with filters
                 const params = {
                     page: currentPage,
@@ -456,9 +481,9 @@ function dashboard() {
                     order_by: currentOrderBy,
                     order_dir: currentOrderDir
                 };
-                
+
                 const data = await this.apiRequest('api/bot-performance/', params);
-                
+
                 this.botPerformanceData = data.results || [];
                 this.botPerformancePagination = {
                     page: data.page || 1,
@@ -477,14 +502,14 @@ function dashboard() {
                 this.setLoadingState('botPerformance', false);
             }
         },
-        
+
         async loadUserEngagementData() {
             this.setLoadingState('userEngagement', true);
-            
+
             try {
                 const data = await this.apiRequest('api/user-engagement/');
                 this.userEngagementData = data.most_active_participants || [];
-                
+
                 if (window.chartManager && data.session_length_distribution) {
                     window.chartManager.renderSessionLengthChart(data.session_length_distribution);
                 }
@@ -495,10 +520,10 @@ function dashboard() {
                 this.setLoadingState('userEngagement', false);
             }
         },
-        
+
         async loadTagAnalytics() {
             this.setLoadingState('tagAnalytics', true);
-            
+
             try {
                 const data = await this.apiRequest('api/tag-analytics/');
                 this.tagAnalyticsData = data;
@@ -509,13 +534,13 @@ function dashboard() {
                 this.setLoadingState('tagAnalytics', false);
             }
         },
-        
+
         // Saved filters
         async loadSavedFilter(filterId) {
             try {
                 const response = await fetch(`filters/load/${filterId}/`);
                 const data = await response.json();
-                
+
                 if (data.success) {
                     this.applyFilterData(data.filter_data);
                     this.activeFilterId = filterId;
@@ -543,14 +568,14 @@ function dashboard() {
                 this.setLoadingState('averageResponseTime', false);
             }
         },
-        
+
         applyFilterData(filterData) {
             const form = document.getElementById('filterForm');
             if (!form) return;
-            
+
             // Clear and apply values
             form.reset();
-            
+
             for (const [key, value] of Object.entries(filterData)) {
                 const element = form.querySelector(`[name="${key}"]`);
                 if (element) {
@@ -564,8 +589,8 @@ function dashboard() {
                         }
                     } else if (element.type === 'select-multiple') {
                         Array.from(element.options).forEach(option => {
-                            option.selected = Array.isArray(value) 
-                                ? value.includes(option.value) 
+                            option.selected = Array.isArray(value)
+                                ? value.includes(option.value)
                                 : value === option.value;
                         });
                     } else {
@@ -573,18 +598,18 @@ function dashboard() {
                     }
                 }
             }
-            
+
             // Update reactive state
             this.filters = {...filterData};
         },
-        
+
         async handleSaveFilter() {
             const form = document.getElementById('saveFilterForm');
             if (!form) {
                 console.error('saveFilterForm not found');
                 return;
             }
-            
+
             this.saving = true;
 
             try {
@@ -616,12 +641,12 @@ function dashboard() {
                 this.saving = false;
             }
         },
-        
+
         async deleteSavedFilter(filterId, filterName) {
             if (!confirm(`Are you sure you want to delete the filter "${filterName}"?`)) {
                 return;
             }
-            
+
             try {
                 const response = await fetch(`filters/delete/${filterId}/`, {
                     method: 'DELETE',
@@ -630,17 +655,17 @@ function dashboard() {
                         'Content-Type': 'application/json'
                     }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     this.showNotification('Filter deleted successfully', 'success');
-                    
+
                     // Clear active filter if it was the one deleted
                     if (this.activeFilterId === filterId) {
                         this.activeFilterId = null;
                     }
-                    
+
                     // Refresh page to update saved filters list
                     setTimeout(() => window.location.reload(), DEFAULTS.RELOAD_DELAY);
                 } else {
@@ -651,7 +676,7 @@ function dashboard() {
                 this.showNotification('Failed to delete filter', 'error');
             }
         },
-        
+
         // Error handling
         showChartError(chartId, message) {
             const canvas = document.getElementById(chartId);
@@ -668,7 +693,7 @@ function dashboard() {
                 `;
             }
         },
-        
+
         showNotification(message, type = 'info') {
             // Create notification element
             const notification = document.createElement('div');
@@ -679,9 +704,9 @@ function dashboard() {
                     <span>${message}</span>
                 </div>
             `;
-            
+
             document.body.appendChild(notification);
-            
+
             // Auto-remove after timeout
             setTimeout(() => {
                 if (notification.parentElement) {
@@ -689,7 +714,7 @@ function dashboard() {
                 }
             }, DEFAULTS.NOTIFICATION_TIMEOUT);
         },
-        
+
         // Utility methods
         formatNumber(num) {
             if (num >= 1000000) {
@@ -700,7 +725,7 @@ function dashboard() {
             }
             return num.toString();
         },
-        
+
         formatDuration(minutes) {
             if (minutes < 60) {
                 return `${Math.round(minutes)}m`;
@@ -713,16 +738,16 @@ function dashboard() {
         formatDate(date) {
             return formatDistanceToNow(new Date(date));
         },
-        
+
         getCSRFToken() {
             return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
         },
-        
+
         // Bot Performance Pagination and Sorting Methods
         changeBotPerformancePage(page) {
             this.loadBotPerformanceData(page);
         },
-        
+
         sortBotPerformance(column) {
             let order_dir = 'desc';
             if (this.botPerformancePagination.order_by === column && this.botPerformancePagination.order_dir === 'desc') {
@@ -730,33 +755,33 @@ function dashboard() {
             }
             this.loadBotPerformanceData(1, column, order_dir);
         },
-        
+
         getBotPerformancePageNumbers() {
             const pages = [];
             const current = this.botPerformancePagination.page;
             const total = this.botPerformancePagination.total_pages;
-            
+
             // Always show first page
             if (total > 0) pages.push(1);
-            
+
             // Add pages around current page
             for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
                 if (!pages.includes(i)) pages.push(i);
             }
-            
+
             // Always show last page
             if (total > 1 && !pages.includes(total)) pages.push(total);
-            
+
             return pages;
         },
-        
+
         getSortIcon(column) {
             if (this.botPerformancePagination.order_by !== column) {
                 return 'fas fa-sort';
             }
             return this.botPerformancePagination.order_dir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
         },
-        
+
         clearTomSelectInstances() {
             ['id_experiments', 'id_channels', 'id_participants', 'id_tags'].forEach(id => {
                 const element = document.getElementById(id);
@@ -793,7 +818,7 @@ function dashboard() {
                     // dynamic filters do not support granularity, and the tags filter is already added
                     return;
                 }
-                
+
                 let parsedValue = "";
                 // Map the filter keys to the expected query params in the all sessions view
                 let keyMapped = dynamicFilterParamMapping[key] || key;

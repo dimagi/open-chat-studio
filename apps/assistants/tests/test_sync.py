@@ -220,16 +220,16 @@ def test_import_openai_assistant(_, mock_file_retrieve, mock_vector_store_files,
     assert imported_assistant.builtin_tools == ["code_interpreter", "file_search"]
     assert imported_assistant.tool_resources.count() == 2
     code_files = imported_assistant.tool_resources.filter(tool_type="code_interpreter").first().files.all()
-    assert [(f.external_source, f.external_id) for f in code_files] == [
+    assert {(f.external_source, f.external_id) for f in code_files} == {
         ("openai", file.id) for file in code_files_expected
-    ]
+    }
     file_search_resource = imported_assistant.tool_resources.filter(tool_type="file_search").first()
     assert file_search_resource.extra["vector_store_id"] == vector_store_id
 
     file_search_files = file_search_resource.files.all()
-    assert [(f.external_source, f.external_id) for f in file_search_files] == [
+    assert {(f.external_source, f.external_id) for f in file_search_files} == {
         ("openai", file.id) for file in file_search_files_expected
-    ]
+    }
 
 
 @pytest.mark.django_db()

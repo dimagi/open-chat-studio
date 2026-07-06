@@ -64,7 +64,6 @@ class ExperimentFactory(factory.django.DjangoModelFactory):
         "apps.utils.factories.pipelines.PipelineFactory", team=factory.SelfAttribute("..team")
     )
     consent_form = factory.SubFactory(ConsentFormFactory, team=factory.SelfAttribute("..team"))
-    pre_survey = factory.SubFactory(SurveyFactory, team=factory.SelfAttribute("..team"))
     public_id = factory.Faker("uuid4")
     synthetic_voice = factory.SubFactory(SyntheticVoiceFactory)
     voice_provider = factory.SubFactory(VoiceProviderFactory)
@@ -109,6 +108,16 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Test Participant {n}")
 
 
+class ParticipantDataFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = models.ParticipantData
+
+    team = factory.SubFactory(TeamFactory)
+    experiment = factory.SubFactory(ExperimentFactory, team=factory.SelfAttribute("..team"))
+    participant = factory.SubFactory(ParticipantFactory, team=factory.SelfAttribute("..team"))
+    data = factory.LazyFunction(dict)
+
+
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.ExperimentSession
@@ -121,3 +130,11 @@ class ExperimentSessionFactory(factory.django.DjangoModelFactory):
         "apps.utils.factories.channels.ExperimentChannelFactory", team=factory.SelfAttribute("..team")
     )
     platform = factory.LazyAttribute(lambda obj: obj.experiment_channel.platform)
+
+
+class ChatAttachmentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "chat.ChatAttachment"
+
+    chat = factory.SubFactory(ChatFactory)
+    tool_type = "code_interpreter"

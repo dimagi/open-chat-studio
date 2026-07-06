@@ -51,7 +51,7 @@ def test_openai_service_uses_responses_api():
 
 
 @pytest.mark.parametrize(
-    "provider_type,config",
+    ("provider_type", "config"),
     [
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
@@ -78,3 +78,58 @@ def test_voyage_ai_service_returns_local_index_manager():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     manager = service.get_local_index_manager("voyage-4-large")
     assert isinstance(manager, VoyageAILocalIndexManager)
+
+
+@pytest.mark.parametrize(
+    ("provider_type", "config", "expected_slug"),
+    [
+        pytest.param(LlmProviderTypes.openai, {"openai_api_key": "test"}, "openai", id="openai"),
+        pytest.param(
+            LlmProviderTypes.anthropic,
+            {"anthropic_api_key": "test", "anthropic_api_base": "https://api.anthropic.com"},
+            "anthropic",
+            id="anthropic",
+        ),
+        pytest.param(LlmProviderTypes.groq, {"openai_api_key": "test"}, "groq", id="groq"),
+        pytest.param(LlmProviderTypes.perplexity, {"openai_api_key": "test"}, "perplexity", id="perplexity"),
+    ],
+)
+def test_get_llm_service_sets_provider_type_post_construction(provider_type, config, expected_slug):
+    """Regression: Pydantic v2 silently drops the leading-underscore `_type`
+    from init kwargs, so the factory has to assign it post-construction.
+    Without that, every service ends up with `_type='unknown'` and
+    `metadata['ocs_provider_type']` is wrong - cost tracking misattributes
+    every UsageRecord to the unknown bucket and no PricingRule matches.
+    """
+    service = provider_type.get_llm_service(config)
+    assert service._type == expected_slug
+    chat_model = service.get_chat_model("some-model")
+    assert chat_model.metadata["ocs_provider_type"] == expected_slug
+
+
+def test_anthropic_service_returns_prompt_caching_middleware():
+    from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+
+    service = AnthropicLlmService(anthropic_api_key="test", anthropic_api_base="https://api.anthropic.com")
+    middleware = service.get_prompt_caching_middleware()
+    assert isinstance(middleware, AnthropicPromptCachingMiddleware)
+    assert middleware.ttl == "5m"
+    # The agent model is always ChatAnthropic for this service, but never surface
+    # warnings to end users if that assumption breaks.
+    assert middleware.unsupported_model_behavior == "ignore"
+
+
+@pytest.mark.parametrize(
+    "service",
+    [
+        pytest.param(OpenAILlmService(openai_api_key="test"), id="openai-automatic-caching"),
+        pytest.param(
+            AzureLlmService(
+                openai_api_key="test", openai_api_base="https://api.openai.com/v1", openai_api_version="v1"
+            ),
+            id="azure-automatic-caching",
+        ),
+    ],
+)
+def test_non_anthropic_services_have_no_prompt_caching_middleware(service):
+    assert service.get_prompt_caching_middleware() is None

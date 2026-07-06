@@ -5,7 +5,7 @@ from datetime import timedelta
 from io import BytesIO
 from itertools import groupby
 
-from botocore.exceptions import BotoCoreError, ClientError
+import openai
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
@@ -15,10 +15,12 @@ from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 from django.utils.text import slugify
+from field_audit.models import AuditAction
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
+from apps.documents.document_source_service import sync_document_source
 from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
 from apps.documents.models import (
     Collection,
@@ -29,6 +31,7 @@ from apps.documents.models import (
 from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File, FilePurpose
 from apps.service_providers.models import LlmProvider
+from apps.teams.utils import current_team
 from apps.utils.celery import TaskbadgerTaskWrapper
 
 logger = get_task_logger("ocs.documents")
@@ -95,8 +98,6 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
 
 
 def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_ids: list[str]):
-    import openai  # noqa: PLC0415 - lazy: avoid loading openai at startup (not in top-level imports)
-
     llm_provider = LlmProvider.objects.get(id=llm_provider_id)
     old_manager = llm_provider.get_remote_index_manager(vector_store_id)
     old_manager.delete_remote_index()
@@ -173,10 +174,6 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 @shared_task(ignore_result=True)
 def sync_document_source_task(document_source_id: int):
     """Sync a specific document source"""
-    from apps.documents.document_source_service import (  # noqa: PLC0415 - circular: document_source_service imports documents.tasks
-        sync_document_source,
-    )
-
     try:
         document_source = DocumentSource.objects.select_related("collection").get(id=document_source_id)
     except DocumentSource.DoesNotExist:
@@ -211,9 +208,20 @@ def sync_all_document_sources_task():
     auto_sources = DocumentSource.objects.filter(
         auto_sync_enabled=True,
         collection__is_index=True,  # Only sync indexed collections
+        collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0031)
     ).values_list("id", flat=True)
 
     sync_document_source_task.map(auto_sources).delay()
+
+
+@shared_task(bind=True, base=TaskbadgerTask)
+def async_create_collection_version(self, collection_id: int):
+    try:
+        collection = Collection.objects.get(id=collection_id)
+        with current_team(collection.team):
+            collection.create_new_version()
+    finally:
+        Collection.objects.filter(id=collection_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
 
 
 @shared_task(
@@ -276,13 +284,14 @@ def delete_document_source_task(self, document_source_id: int):
 
     tb_task = TaskbadgerTaskWrapper(self)
     paginator = Paginator(document_source.collectionfile_set.all(), per_page=100, orphans=25)
-    for page in paginator:
-        with transaction.atomic():
-            bulk_delete_collection_files(document_source.collection, page.object_list)
-        tb_task.set_progress(page.number, paginator.num_pages)
+    with current_team(document_source.team):
+        for page in paginator:
+            with transaction.atomic():
+                bulk_delete_collection_files(document_source.collection, page.object_list)
+            tb_task.set_progress(page.number, paginator.num_pages)
 
-    if not document_source.has_versions:
-        document_source.delete()
+        if not document_source.has_versions:
+            document_source.delete()
 
 
 def _resolve_filename(name: str, used_filenames: dict[str, int]) -> str:
@@ -331,7 +340,9 @@ def _read_file_content(file, collection_id: int, log_level: int, retry_count: in
             "File integrity check failed while building ZIP archive",
             extra={"collection_id": collection_id, "file_id": file.id, "retry": retry_count},
         )
-        raise ZipIntegrityError(f"File '{file.name}' ({file.id}) returned {len(content)} bytes but expected {file.content_size}")
+        raise ZipIntegrityError(
+            f"File '{file.name}' ({file.id}) returned {len(content)} bytes but expected {file.content_size}"
+        )
 
     return content
 

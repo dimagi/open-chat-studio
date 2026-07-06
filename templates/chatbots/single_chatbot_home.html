@@ -1,5 +1,16 @@
 {% extends "web/app/app_base.html" %}
 {% load django_tables2 form_tags static team_tags waffle_tags %}
+
+{% block page_head %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/editors.css' %}">
+{% endblock page_head %}
+
+{% block page_js %}
+  {{ block.super }}
+  <script src="{% static 'js/editors-bundle.js' %}"></script>
+{% endblock page_js %}
+
 {% block breadcrumbs %}
 
   <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
@@ -97,49 +108,54 @@
       </div>
     </div>
     <h2 id="chatbot-description" class="flex-1 pg-subtitle">{{ experiment.description }}</h2>
-    {% if experiment.is_editable %}
-      <div class="my-4">
-        <h3 class="font-bold text-lg inline mr-4">Channels:</h3>
-        <input id="api-url-link" type="hidden" value="{{ experiment.get_api_url }}" />
-        <button class="btn btn-ghost btn-sm no-animation normal-case!" onclick="SiteJS.app.copyToClipboard(this, 'api-url-link')" title="Copy to clipboard">
-          <i class="fa-solid fa-link"></i> API <i class="fa-regular fa-copy fa-sm pg-text-muted"></i>
-        </button>
-        <div class="dropdown dropdown-hover">
-          <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case!">
-            <i class="fa-regular fa-window-maximize"></i> Web <i class="fa-solid fa-caret-down fa-sm pg-text-muted"></i>
+    <div id="consent-banner" class="mt-2 text-sm">{% include "chatbots/components/consent_banner.html" %}</div>
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-1 mt-2 mb-4 text-sm">
+      {% if experiment.is_editable %}
+        <div class="flex items-center flex-wrap gap-1">
+          <span class="font-semibold mr-1">Channels:</span>
+          <input id="api-url-link" type="hidden" value="{{ experiment.get_api_url }}" />
+          <button class="btn btn-ghost btn-sm no-animation normal-case!" onclick="SiteJS.app.copyToClipboard(this, 'api-url-link')" title="Copy to clipboard">
+            <i class="fa-solid fa-link"></i> API <i class="fa-regular fa-copy fa-sm pg-text-muted"></i>
+          </button>
+          <div class="dropdown dropdown-hover">
+            <div tabindex="0" role="button" class="btn btn-ghost btn-sm normal-case!">
+              <i class="fa-regular fa-window-maximize"></i> Web <i class="fa-solid fa-caret-down fa-sm pg-text-muted"></i>
+            </div>
+            <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm border">
+              {% if experiment.is_public %}
+                <li onclick="sharing_modal.showModal()">
+                  <span><i class="fa-solid fa-share-nodes"></i> Share</span>
+                </li>
+              {% endif %}
+              {% if perms.experiments.invite_participants %}
+                <li>
+                  <a href="{% url 'chatbots:chatbots_invitations' team.slug experiment.id %}">
+                    <i class="fa-regular fa-envelope"></i> Invitations
+                  </a>
+                </li>
+              {% endif %}
+            </ul>
           </div>
-          <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm border">
-            {% if experiment.is_public %}
-              <li onclick="sharing_modal.showModal()">
-                <span><i class="fa-solid fa-share-nodes"></i> Share</span>
-              </li>
-            {% endif %}
-            {% if perms.experiments.invite_participants %}
-              <li>
-                <a href="{% url 'chatbots:chatbots_invitations' team.slug experiment.id %}">
-                  <i class="fa-regular fa-envelope"></i> Invitations
-                </a>
-              </li>
-            {% endif %}
-          </ul>
+          <div id="dynamic-channels" class="inline">
+            {% include "chatbots/components/channel_buttons.html" %}
+          </div>
         </div>
-        {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
-        {% if experiment.is_public %}
-          {% include "experiments/share/dialog.html" %}
-        {% endif %}
-        <div id="dynamic-channels" class="inline">
-          {% include "chatbots/components/channel_buttons.html" %}
-        </div>
-        <div id="channel_create_edit_modal_placeholder"></div>
-      </div>
+      {% endif %}
+    </div>
+    {% if experiment.is_editable %}
+      {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
+      {% if experiment.is_public %}
+        {% include "experiments/share/dialog.html" %}
+      {% endif %}
+      <div id="channel_create_edit_modal_placeholder"></div>
     {% endif %}
   </div>
   <div class="tabs-container">
     <div role="tablist" class="tabs tabs-border flex justify-start">
       {% if perms.chat.view_chat %}
-        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" checked/>
+        <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Sessions" id="tab-allsessions" {% if not highlight_version_id %}checked{% endif %}/>
       {% endif %}
-      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" />
+      <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Versions" id="tab-versions" {% if highlight_version_id %}checked{% endif %}/>
       {% flag "flag_events" %}
         <input type="radio" name="tab_group" role="tab" class="tab" aria-label="Events" id="tab-events" />
       {% endflag %}
@@ -164,8 +180,25 @@
              hx-trigger="load, version-changed"
              hx-target="this"
              hx-get="{% url 'chatbots:versions-list' request.team.slug experiment.id %}"
-             hx-swap="innerHTML">
+             hx-swap="innerHTML"
+             {% if highlight_version_id %}data-highlight-version="{{ highlight_version_id }}"{% endif %}>
         </div>
+        {% if highlight_version_id %}
+        <script>
+          (function() {
+            const container = document.getElementById('versions-table');
+            function highlightVersion() {
+              const target = parseInt(container.dataset.highlightVersion, 10);
+              const row = container.querySelector('tr[data-version-number="' + target + '"]');
+              if (row) {
+                row.classList.add('bg-base-200');
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }
+            container.addEventListener('htmx:afterSwap', highlightVersion);
+          })();
+        </script>
+        {% endif %}
       </div>
     </div>
     {% flag "flag_events" %}
@@ -236,29 +269,14 @@
         persistent-session="false"
       ></open-chat-studio-widget>
       <script>
-        const widgetStyles = {
-          published: {
-            '--header-bg-color': 'oklch(0.982 0.018 155.826)',
-            '--header-bg-hover-color': 'oklch(0.76 0.177 163.223)',
-            '--header-text-color': 'oklch(0.527 0.154 150.069)',
-          },
-          working: {
-            '--header-bg-color': 'oklch(0.987 0.026 102.212)',
-            '--header-bg-hover-color': 'oklch(0.82 0.189 84.429)',
-            '--header-text-color': 'oklch(0.476 0.114 61.907)',
-          },
-        };
+        // ocsApplyWidgetVersionTheme is defined in the shared launcher partial included below.
         function openChatWidget(versionNumber) {
           const widget = document.getElementById('chatbot-widget');
           widget.versionNumber = versionNumber;
           widget.visible = true;
-          const isPublished = versionNumber === 0;
-          widget.headerText = isPublished ? 'Published Version' : `Working Version (v${versionNumber})`;
-          const styles = isPublished ? widgetStyles.published : widgetStyles.working;
-          for (const [prop, value] of Object.entries(styles)) {
-            widget.style.setProperty(prop, value);
-          }
+          ocsApplyWidgetVersionTheme(widget, versionNumber);
         }
       </script>
     {% endflag %}
+    {% include "chatbots/components/session_chat_widget_launcher.html" %}
 {% endblock app %}

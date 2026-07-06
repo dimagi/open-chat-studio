@@ -8,5 +8,7 @@ class UnableToLinkFileException(Exception):
     pass
 
 
-class AudioConversionError(Exception):
+class MessageMediaError(Exception):
+    """Raised when fetching, resolving, or interpreting inbound message media fails."""
+
     pass

@@ -15,7 +15,7 @@ import markdown
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
+from django.core.validators import validate_email
 from django.db import models, transaction
 from django.db.models import (
     BooleanField,
@@ -38,6 +38,7 @@ from field_audit.models import AuditAction, AuditingManager
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
+from apps.events.versioning import TriggerSyncMode, sync_triggers
 from apps.experiments import model_audit_fields
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin, differs
 from apps.generics.chips import Chip
@@ -181,11 +182,6 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("experiments:source_material_edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    @transaction.atomic()
-    def archive(self):
-        super().archive()
-        self.experiment_set.update(source_material=None, audit_action=AuditAction.AUDIT)
-
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
             instance=self,
@@ -253,12 +249,6 @@ class Survey(BaseTeamModel, VersionsMixin):
 
     def get_absolute_url(self):
         return reverse("experiments:survey_edit", args=[get_slug_for_team(self.team_id), self.id])
-
-    @transaction.atomic()
-    def archive(self):
-        super().archive()
-        self.experiments_pre.update(pre_survey=None, audit_action=AuditAction.AUDIT)
-        self.experiments_post.update(post_survey=None, audit_action=AuditAction.AUDIT)
 
     def _get_version_details(self) -> VersionDetails:
         return VersionDetails(
@@ -546,6 +536,49 @@ class Experiment(BaseTeamModel, VersionsMixin):
     DEFAULT_VERSION_NUMBER = 0
     TREND_CACHE_KEY_TEMPLATE = "experiment_trend_data_{experiment_id}"
 
+    # Every concrete model field must appear in exactly one of the two sets below
+    # (enforced by a guard test). Version creation clones the whole row, so a new
+    # field is versioned content unless it is explicitly classified as identity/state.
+    VERSIONED_CONTENT_FIELDS = frozenset(
+        {
+            "name",
+            "description",
+            "pipeline",
+            "seed_message",
+            "consent_form",
+            "voice_provider",
+            "synthetic_voice",
+            "conversational_consent_enabled",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "trace_provider",
+            "participant_allowlist",
+            "debug_mode_enabled",
+            "file_uploads_enabled",
+        }
+    )
+    """The versioned snapshot: fields cloned into a version on publish, and the
+    surface a revert copies from a version back onto the working row."""
+
+    VERSION_IDENTITY_FIELDS = frozenset(
+        {
+            "id",
+            "team",
+            "owner",
+            "public_id",
+            "created_at",
+            "updated_at",
+            "working_version",
+            "version_number",
+            "is_default_version",
+            "is_archived",
+            "version_description",
+            "create_version_task_id",
+        }
+    )
+    """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
+    cloning (or owned by a single row) and never copied between rows in a family."""
+
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
@@ -556,34 +589,12 @@ class Experiment(BaseTeamModel, VersionsMixin):
         blank=True,
         verbose_name="Pipeline",
     )
-    temperature = models.FloatField(default=0.7, validators=[MinValueValidator(0), MaxValueValidator(1)])
 
-    prompt_text = models.TextField(blank=True, default="")
-    input_formatter = models.TextField(
-        blank=True,
-        default="",
-        help_text="Use the {input} variable somewhere to modify the user input before it reaches the bot. "
-        "E.g. 'Safe or unsafe? {input}'",
-    )
-
-    source_material = models.ForeignKey(
-        SourceMaterial,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="If provided, the source material will be given to every bot in the chain.",
-    )
     seed_message = models.TextField(
         blank=True,
         default="",
         help_text="If set, send this message to the bot when the session starts, "
         "and prompt the user with the initial response.",
-    )
-    pre_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_pre", on_delete=models.SET_NULL
-    )
-    post_survey = models.ForeignKey(
-        Survey, null=True, blank=True, related_name="experiments_post", on_delete=models.SET_NULL
     )
     public_id = models.UUIDField(default=uuid.uuid4, unique=True)
     consent_form = models.ForeignKey(
@@ -617,7 +628,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default=VoiceResponseBehaviours.RECIPROCAL,
         help_text="This tells the bot when to reply with voice messages",
     )
-    tools = ArrayField(models.CharField(max_length=128), default=list, blank=True)
     echo_transcript = models.BooleanField(
         default=True,
         help_text=("Whether or not the bot should tell the user what it heard when the user sends voice messages"),
@@ -625,7 +635,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
     trace_provider = models.ForeignKey(
         "service_providers.TraceProvider", on_delete=models.SET_NULL, null=True, blank=True
     )
-    use_processor_bot_voice = models.BooleanField(default=False)
     participant_allowlist = ArrayField(models.CharField(max_length=128), default=list, blank=True)
 
     # Versioning fields
@@ -644,7 +653,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         default="",
     )
     debug_mode_enabled = models.BooleanField(default=False)
-    citations_enabled = models.BooleanField(default=True)
     create_version_task_id = models.CharField(max_length=128, blank=True)
     file_uploads_enabled = models.BooleanField(
         default=False,
@@ -682,10 +690,14 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def save(self, *args, **kwargs):
         if self.working_version_id is None and self.is_default_version is True:
             raise ValueError("A working experiment cannot be a default version")
-        self._clear_version_cache()
         return super().save(*args, **kwargs)
 
     def get_absolute_url(self):
+        if self.is_a_version:
+            url = reverse(
+                "chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.working_version_id]
+            )
+            return f"{url}?version_id={self.version_number}#versions"
         return reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(self.team_id), self.id])
 
     def get_version(self, version: int) -> Experiment:
@@ -873,6 +885,32 @@ class Experiment(BaseTeamModel, VersionsMixin):
     def api_url(self):
         return self.get_api_url()
 
+    # `create_version_task_id` doubles as a lock guarding all long-running version
+    # operations (publish, revert): non-empty means an operation is in flight.
+
+    @property
+    def version_operation_in_progress(self) -> bool:
+        return bool(self.create_version_task_id)
+
+    def acquire_version_operation_lock(self, task_id: str) -> bool:
+        """Atomically claim the version-operation lock for `task_id`.
+
+        Returns False when another version operation is already in flight.
+        """
+        acquired = (
+            Experiment.objects.get_all()
+            .filter(id=self.id, create_version_task_id="")
+            .update(create_version_task_id=task_id, audit_action=AuditAction.AUDIT)
+            == 1
+        )
+        if acquired:
+            self.create_version_task_id = task_id
+        return acquired
+
+    @classmethod
+    def release_version_operation_lock(cls, experiment_id: int):
+        cls.objects.get_all().filter(id=experiment_id).update(create_version_task_id="", audit_action=AuditAction.AUDIT)
+
     @transaction.atomic()
     def create_new_version(  # ty: ignore[invalid-method-override]
         self,
@@ -913,20 +951,48 @@ class Experiment(BaseTeamModel, VersionsMixin):
 
         if not is_copy:
             # nothing to do for copy - just reference the same object in the new copy
-            self._copy_attr_to_new_version("source_material", new_version)
             self._copy_attr_to_new_version("consent_form", new_version)
-            self._copy_attr_to_new_version("pre_survey", new_version)
-            self._copy_attr_to_new_version("post_survey", new_version)
 
-        self._copy_trigger_to_new_version(
-            trigger_queryset=self.static_triggers, new_version=new_version, is_copy=is_copy
-        )
-        self._copy_trigger_to_new_version(
-            trigger_queryset=self.timeout_triggers, new_version=new_version, is_copy=is_copy
-        )
+        # Version the pipeline before the triggers so a trigger referencing this experiment's own
+        # pipeline pins to the version just created here rather than spawning a redundant one.
         self._copy_pipeline_to_new_version(new_version, is_copy)
+        sync_triggers(self, new_version, mode=TriggerSyncMode.COPY if is_copy else TriggerSyncMode.PUBLISH)
 
         return new_version
+
+    @transaction.atomic()
+    def revert_to_version(self, version: Experiment) -> None:
+        """Revert this working experiment to the content of ``version``.
+
+        Versioned content fields are copied from the version onto the working row and the working
+        pipeline is reset to the version's pipeline (see ``Pipeline.revert_to_version``). The
+        operation is non-destructive: no version rows are modified and ``is_default_version`` is
+        left untouched.
+        """
+        if not self.is_working_version:
+            raise ValueError("Can only revert the working version of an experiment")
+        if version.get_working_version_id() != self.id:
+            raise ValueError("Can only revert to a version of this experiment")
+
+        # `pipeline` and `consent_form` are versioned content but need special handling: the working
+        # pipeline is reset in place rather than re-pointed, and the consent form is remapped to its
+        # working version rather than the version's frozen copy.
+        for field in self.VERSIONED_CONTENT_FIELDS - {"pipeline", "consent_form"}:
+            setattr(self, field, getattr(version, field))
+
+        self.consent_form = version.consent_form.get_working_version() if version.consent_form else None
+        self.save()
+
+        self._revert_pipeline_to_version(version)
+        sync_triggers(version, self, mode=TriggerSyncMode.REVERT)
+
+    def _revert_pipeline_to_version(self, version: Experiment) -> None:
+        """Reset the working pipeline in place to ``version``'s pipeline (see ``Pipeline.revert_to_version``)."""
+        if not version.pipeline:
+            return
+        if not self.pipeline:
+            raise ValueError("Cannot revert pipeline: working experiment has no pipeline")
+        self.pipeline.revert_to_version(version.pipeline)
 
     def get_fields_to_exclude(self):
         return super().get_fields_to_exclude() + ["is_default_version", "public_id", "version_description"]
@@ -991,10 +1057,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
         else:
             setattr(new_version, attr_name, attr_instance.create_new_version())
 
-    def _copy_trigger_to_new_version(self, trigger_queryset, new_version, is_copy: bool = False):
-        for trigger in trigger_queryset.all():
-            trigger.create_new_version(new_experiment=new_version, is_copy=is_copy)
-
     @property
     def is_public(self) -> bool:
         """
@@ -1027,9 +1089,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 raw_value=self.conversational_consent_enabled,
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
-            # Surveys
-            VersionField(group_name="Surveys", name="pre-survey", raw_value=self.pre_survey),
-            VersionField(group_name="Surveys", name="post_survey", raw_value=self.post_survey),
             # Voice
             VersionField(group_name="Voice", name="voice_provider", raw_value=self.voice_provider),
             VersionField(group_name="Voice", name="synthetic_voice", raw_value=self.synthetic_voice),
@@ -1042,12 +1101,6 @@ class Experiment(BaseTeamModel, VersionsMixin):
                 group_name="Voice",
                 name="echo_transcript",
                 raw_value=self.echo_transcript,
-                to_display=VersionFieldDisplayFormatters.yes_no,
-            ),
-            VersionField(
-                group_name="Voice",
-                name="use_processor_bot_voice",
-                raw_value=self.use_processor_bot_voice,
                 to_display=VersionFieldDisplayFormatters.yes_no,
             ),
             VersionField(group_name="Tracing", name="tracing_provider", raw_value=self.trace_provider),
@@ -1123,6 +1176,8 @@ class Participant(BaseTeamModel):
         unique_together = [("team", "platform", "identifier")]
         indexes = [
             models.Index(fields=["team", "-created_at"], name="participant_team_created_idx"),
+            # Supports the global (cross-team) date-range scans in the admin dashboard.
+            models.Index(fields=["created_at"], name="participant_created_at_idx"),
         ]
 
     @classmethod
@@ -1183,7 +1238,7 @@ class Participant(BaseTeamModel):
     def get_latest_session(self, experiment: Experiment) -> ExperimentSession:
         return self.experimentsession_set.filter(experiment=experiment).order_by("-created_at").first()
 
-    def last_seen(self) -> datetime:
+    def last_seen(self) -> datetime | None:
         """Gets the "last seen" date for this participant based on their last message"""
         latest_session = (
             self.experimentsession_set.annotate(message_count=Count("chat__messages"))
@@ -1307,6 +1362,26 @@ class ParticipantDataObjectManager(models.Manager):
             experiment_id = experiment.working_version_id
         return super().get_queryset().filter(experiment_id=experiment_id, team=experiment.team)
 
+    def for_connect_channel(self, channel_id: str, participant_identifier: str | None = None):
+        """Resolve the ParticipantData row that owns a CommCare Connect channel ID.
+
+        Exactly one row should hold a given channel_id; duplicates break key exchange and message
+        routing (see issue #3620). If duplicates exist anyway, return the oldest row — the one
+        whose encryption key the device originally fetched — and log an error.
+        Returns ``None`` when no row matches.
+        """
+        queryset = self.get_queryset().filter(system_metadata__commcare_connect_channel_id=channel_id)
+        if participant_identifier is not None:
+            queryset = queryset.filter(participant__identifier=participant_identifier)
+        rows = list(queryset.defer("data").order_by("id")[:2])
+        if len(rows) > 1:
+            log.error(
+                "Multiple ParticipantData rows hold CommCare Connect channel_id %s; using the oldest (pk=%s)",
+                channel_id,
+                rows[0].pk,
+            )
+        return rows[0] if rows else None
+
 
 def validate_json_dict(value):
     """Participant data must be a dict"""
@@ -1352,7 +1427,6 @@ class ParticipantData(BaseTeamModel):
 class SessionStatus(models.TextChoices):
     SETUP = "setup", gettext("Setting Up")
     PENDING = "pending", gettext("Awaiting participant")
-    PENDING_PRE_SURVEY = "pending-pre-survey", gettext("Awaiting pre-survey")
     ACTIVE = "active", gettext("Active")
     PENDING_REVIEW = "pending-review", gettext("Awaiting final review.")
     COMPLETE = "complete", gettext("Complete")
@@ -1391,6 +1465,10 @@ class ExperimentSession(BaseTeamModel):
 
     objects = ExperimentSessionObjectManager()
     external_id = models.CharField(max_length=255, default=uuid.uuid4, unique=True)
+    session_token_required = models.BooleanField(
+        default=True,
+        help_text="Require a signed session token (or authenticated user) for chat API access to this session.",
+    )
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=SessionStatus.choices, default=SessionStatus.SETUP)
     consent_date = models.DateTimeField(null=True, blank=True)
@@ -1424,6 +1502,8 @@ class ExperimentSession(BaseTeamModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["team", "-last_activity_at"], name="expsession_team_lastact_idx"),
+            # Supports the global (cross-team) date-range scans in the admin dashboard.
+            models.Index(fields=["created_at"], name="expsession_created_at_idx"),
         ]
 
     def __str__(self):
@@ -1470,12 +1550,6 @@ class ExperimentSession(BaseTeamModel):
         if not self.experiment_channel:
             return self.participant.get_platform_display()
         return self.experiment_channel.get_platform_display()
-
-    def get_pre_survey_link(self, experiment_version: Experiment):
-        return experiment_version.pre_survey.get_link(self.participant, self)
-
-    def get_post_survey_link(self, experiment_version: Experiment):
-        return experiment_version.post_survey.get_link(self.participant, self)
 
     def is_stale(self) -> bool:
         """A Channel Session is considered stale if the experiment that the channel points to differs from the
@@ -1546,22 +1620,29 @@ class ExperimentSession(BaseTeamModel):
     @transaction.atomic()
     def ad_hoc_bot_message(
         self,
-        instruction_prompt: str,
+        instruction_prompt: str | None,
         trace_info: TraceInfo,
         fail_silently=True,
         use_experiment: Experiment | None = None,
+        message_text: str | None = None,
     ):
         """Sends a bot message to this session and returns the trace data.
-        The bot message will be crafted using `instruction_prompt` and
+
+        When ``message_text`` is provided, that text is delivered to the participant verbatim,
+        bypassing the LLM. Otherwise the bot message is crafted using ``instruction_prompt`` and
         this session's history.
 
         Parameters:
-            instruction_prompt: The instruction prompt for the LLM
+            instruction_prompt: The instruction prompt for the LLM (ignored when ``message_text`` is set)
             trace_info: Metadata for adding to the trace
             fail_silently: Exceptions will not be suppresed if this is True
             use_experiment: The experiment whose data to use. This is useful for multi-bot setups where we want a
             specific child bot to handle the check-in.
+            message_text: A message to deliver to the participant directly, bypassing the LLM.
         """
+        if (instruction_prompt is None) == (message_text is None):
+            raise ValueError("Exactly one of instruction_prompt or message_text must be provided")
+
         trace_service = None
         try:
             with current_team(self.team):
@@ -1570,13 +1651,16 @@ class ExperimentSession(BaseTeamModel):
                 with trace_service.trace_or_span(
                     name=f"{experiment.name} - {trace_info.name}",
                     session=self,
-                    inputs={"input": instruction_prompt},
+                    inputs={"input": message_text if message_text is not None else instruction_prompt},
                     metadata=trace_info.metadata,
                     notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
                 ) as span:
-                    bot_message = self._bot_prompt_for_user(
-                        instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
-                    )
+                    if message_text is not None:
+                        bot_message = self._save_direct_bot_message(message_text, experiment, trace_service)
+                    else:
+                        bot_message = self._bot_prompt_for_user(
+                            instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
+                        )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
                     trace_metadata = trace_service.get_trace_metadata()
@@ -1588,6 +1672,23 @@ class ExperimentSession(BaseTeamModel):
                     trace_metadata = trace_service.get_trace_metadata()
                     e.trace_metadata = trace_metadata
                 raise e
+
+    def _save_direct_bot_message(self, message: str, experiment: Experiment, trace_service: TracingService) -> str:
+        """Records a direct (non-LLM) bot message in the chat history and returns it.
+
+        The message is delivered to the participant verbatim, so it is stored as an AI message
+        flagged with ``direct_to_user`` metadata and linked to the trace.
+        """
+        from apps.service_providers.llm_service.history_managers import (  # noqa: PLC0415 - circular: history_managers imports experiments.models
+            ExperimentHistoryManager,
+        )
+
+        history_manager = ExperimentHistoryManager(session=self, experiment=experiment, trace_service=trace_service)
+        ai_message = history_manager.save_message_to_history(
+            message, type_=ChatMessageType.AI, message_metadata={"direct_to_user": True}
+        )
+        trace_service.set_output_message_id(ai_message.id)
+        return message
 
     def _bot_prompt_for_user(
         self,
@@ -1684,8 +1785,7 @@ class ExperimentSession(BaseTeamModel):
             router_prompts = self.experiment.pipeline.get_node_param_values(RouterNode, param_name="prompt")
             prompts = llm_prompts + router_prompts
             return bool([prompt for prompt in prompts if "{participant_data}" in prompt])
-        else:
-            return "{participant_data}" in self.experiment.prompt_text
+        return False
 
     def as_experiment_chip(self) -> Chip:
         """Returns a link to the (legacy) experiment session page"""

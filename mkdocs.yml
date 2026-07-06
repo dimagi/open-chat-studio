@@ -56,6 +56,7 @@ plugins:
 
 extra_css:
   - assets/css/extra.css
+  - assets/css/adr-status.css
 
 nav:
   - Home: index.md
@@ -65,32 +66,85 @@ nav:
     - User Docs: contributing/user_docs.md
   - Getting Started:
     - Overview: getting-started/index.md
+    - Local Setup: getting-started/local-setup.md
+    - Docker Setup: getting-started/docker-setup.md
+    - Common Tasks: getting-started/common-tasks.md
+    - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
+    - Decisions:
+      - Index: adr/index.md
+      - 0000 Record architecture decisions: adr/0000-record-architecture-decisions.md
+      - 0001 Use AWS SES + django-anymail signal handler for email ingress: adr/0001-use-anymail-webhook-for-email-ingress.md
+      - 0002 Slack-style routing priority chain for email channel: adr/0002-email-channel-slack-style-routing.md
+      - 0003 Email thread continuity via ExperimentSession.external_id: adr/0003-email-thread-continuity-via-external-id.md
+      - 0004 Persist inbound email attachments in the webhook handler: adr/0004-persist-inbound-email-attachments-in-handler.md
+      - 0005 Validate inbound email attachments by content sniffing: adr/0005-validate-inbound-email-attachments-by-content.md
+      - 0006 Combine email reply text and attachments into a single message: adr/0006-combine-email-reply-text-and-attachments.md
+      - 0007 Adopt ty as the Python type checker: adr/0007-adopt-ty-as-python-type-checker.md
+      - 0008 Enable ty rules progressively from a baseline of all-ignored: adr/0008-progressive-ty-rule-enablement.md
+      - 0009 Context-based stateless message processing pipeline: adr/0009-context-based-stateless-message-processing-pipeline.md
+      - 0010 Exception-based early exit with guaranteed terminal stages: adr/0010-exception-based-early-exit-with-guaranteed-terminal-stages.md
+      - 0011 Silent pipeline halt via EarlyAbort: adr/0011-silent-pipeline-halt-via-earlyabort.md
+      - 0012 Lean Score value layer in apps/assessments: adr/0012-score-value-layer-in-apps-assessments.md
+      - 0013 Dual-write Scores from evaluations and annotations: adr/0013-dual-write-scores-from-evaluations-and-annotations.md
+      - 0014 Minimal read-side concordance view backed by Score: adr/0014-minimal-read-side-concordance-view.md
+      - 0015 Dedicated human_annotations app with queue/item/annotation/aggregate model: adr/0015-human-annotations-app-with-queue-item-annotation-aggregate-model.md
+      - 0016 Authoritative annotation for multi-reviewer consensus: adr/0016-authoritative-annotation-for-multi-reviewer-consensus.md
+      - 0017 Eager per-submission aggregation into a per-queue record: adr/0017-eager-aggregation-of-submitted-annotations.md
+      - 0018 Scope team querysets by FK identity, not slug join: adr/0018-scope-team-querysets-by-fk-not-slug-join.md
+      - 0019 Poll source experiments to auto-populate evaluation datasets: adr/0019-poll-source-experiments-to-auto-populate-eval-datasets.md
+      - 0020 Delta evaluation runs scoped to newly appended messages: adr/0020-delta-evaluation-runs-scoped-to-appended-messages.md
+      - 0021 Invest in API surface, not a read-only role: adr/0021-invest-in-api-surface-not-readonly-role.md
+      - 0022 URL-path API versioning, v1 frozen / v2 new: adr/0022-url-path-api-versioning.md
+      - 0023 Rename experiment to chatbot in the v2 API: adr/0023-rename-experiment-to-chatbot-in-v2.md
+      - 0024 inspect as a denormalized read-only projection: adr/0024-inspect-denormalized-readonly-projection.md
+      - 0025 Inline nested resource tree for the inspect payload: adr/0025-inline-nested-resource-tree.md
+      - 0026 Identify v2-exposed resources by database primary key: adr/0026-identify-resources-by-primary-key.md
+      - 0027 Secrets exclusion via per-resource allowlist serializers: adr/0027-secrets-exclusion-via-allowlist-serializers.md
+      - 0028 Inspect authorizes on chatbot view + team scope: adr/0028-inspect-authorization-team-scoped.md
+      - 0029 Download WhatsApp inbound attachments in an overridden hydration stage: adr/0029-download-whatsapp-inbound-attachments-in-hydration-stage.md
+      - 0030 Gate the email channel with a global allowed-domains setting: adr/0030-email-channel-allowed-domains-global-setting.md
+      - 0031 Collection content is a live shared resource: adr/0031-collection-content-is-live-shared-resource.md
+      - 0032 Validate Jinja templates server-side by parsing the AST: adr/0032-server-side-jinja-template-validation.md
+      - 0033 Structured runtime Jinja error messages: adr/0033-structured-runtime-jinja-error-messages.md
+      - 0034 Tiered feature deprecation gated by a usage audit: adr/0034-tiered-feature-deprecation-by-usage-audit.md
+      - 0035 Read-only mode gates features during the deprecation window: adr/0035-read-only-mode-during-deprecation-window.md
+      - 0036 Sunset headers and 410 Gone for retired HTTP surfaces: adr/0036-sunset-headers-and-410-for-retired-http-surfaces.md
+      - 0037 Row-multiplying list filters use EXISTS, not a blanket DISTINCT: adr/0037-row-multiplying-filters-use-exists-not-distinct.md
+      - 0038 Redirect version snapshot URLs to the working version: adr/0038-redirect-version-snapshot-urls-to-working-version.md
+      - 0039 Require proof of possession for chat session access: adr/0039-require-proof-of-possession-for-chat-session-access.md
+      - 0040 Stateless signed session tokens with server-side inactivity expiry: adr/0040-stateless-signed-session-tokens-with-inactivity-expiry.md
+      - 0041 Fail-closed session-token enforcement rollout: adr/0041-fail-closed-session-token-enforcement-rollout.md
+      - 0042 Settings-driven internal team metadata in a JSON field: adr/0042-settings-driven-internal-team-metadata.md
+      - 0043 BSUID participant identity for WhatsApp: adr/0043-whatsapp-bsuid-participant-identity.md
   - Developer Guides:
     - Processes:
-      - Igor (Incremental Worker): developer_guides/igor.md
+      - Claude Code Agents: developer_guides/claude_code_agent.md
+      - AI-Assisted Development: developer_guides/ai_development.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
-      - Deployment: developer_guides/deployment.md
-      - AI Development: developer_guides/ai_development.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
+      - Deployment: developer_guides/deployment.md
+      - Feature Deprecation: developer_guides/feature_deprecation.md
+      - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
     - Code Systems:
-      - Common Practises: developer_guides/common_practises.md
-      - Object Versioning: developer_guides/versioning.md
-      - Feature Flags: developer_guides/feature_flags.md
-      - WAF Management: developer_guides/waf_management.md
-      - Dynamic Filters: developer_guides/dynamic_filters.md
-      - Slack Channel Integration: developer_guides/slack_channel_integration.md
-      - Meta Cloud API Integration: developer_guides/meta_cloud_api_integration.md
-      - Index Managers: developer_guides/index_managers.md
-      - Notifications: developer_guides/notifications.md
+      - Common Practises: developer_guides/code_systems/common_practises.md
+      - Object Versioning: developer_guides/code_systems/versioning.md
+      - Feature Flags: developer_guides/code_systems/feature_flags.md
+      - WAF Management: developer_guides/code_systems/waf_management.md
+      - Dynamic Filters: developer_guides/code_systems/dynamic_filters.md
+      - Slack Channel Integration: developer_guides/code_systems/slack_channel_integration.md
+      - Meta Cloud API Integration: developer_guides/code_systems/meta_cloud_api_integration.md
+      - Index Managers: developer_guides/code_systems/index_managers.md
+      - Citations: developer_guides/code_systems/citations.md
+      - Notifications: developer_guides/code_systems/notifications.md
     - Testing:
-      - Integration Testing: developer_guides/integration_testing.md
-      - developer_guides/twilio_testing.md
-      - Help Agent Evals: developer_guides/help_agent_evals.md
+      - Integration Testing: developer_guides/testing/integration_testing.md
+      - Testing Twilio Integration Locally: developer_guides/testing/twilio_testing.md
+      - Help Agent Evals: developer_guides/testing/help_agent_evals.md
   - Self-Hosting:
     - Overview: hosting/index.md
     - Configuration: hosting/configuration.md

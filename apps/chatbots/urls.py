@@ -17,11 +17,21 @@ urlpatterns = [
         views.chatbot_version_details,
         name="version-details",
     ),
+    path(
+        "<int:experiment_id>/versions/revert/<int:version_number>/confirm/",
+        views.chatbot_revert_confirm,
+        name="revert-version-confirm",
+    ),
+    path(
+        "<int:experiment_id>/versions/revert/<int:version_number>/",
+        views.revert_chatbot_version,
+        name="revert-version",
+    ),
     path("<int:experiment_id>/events/", include("apps.events.urls")),
     path(
         "<int:experiment_id>/versions/status",
-        views.chatbot_version_create_status,
-        name="check_version_creation_status",
+        views.chatbot_version_operation_status,
+        name="check_version_operation_status",
     ),
     path("<int:experiment_id>/sessions-table/", views.ChatbotSessionsTableView.as_view(), name="sessions-list"),
     path(

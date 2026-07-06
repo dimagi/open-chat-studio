@@ -66,7 +66,7 @@
                     {{ option }}
                   {% endfor %}
                 </select>
-              {% endpartialdef %}
+              {% endpartialdef "select_filter" %}
             {% endwith %}
           </div>
 
@@ -135,14 +135,29 @@
       </template>
     </div>
 
+  <div id="cost-tracking-panel-container">
+    {% if cost_tracking_enabled %}
+      {% include "dashboard/_cost_tracking_panel.html" %}
+    {% endif %}
+  </div>
+
   <!-- Charts Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 
     <!-- Active Participants Chart -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <div class="card-title flex items-center justify-between">
-            <span>{% translate "Active Participants" %}</span>
+          <div class="card-title flex items-center gap-1 justify-between">
+            <div class="flex items-center gap-1">
+              <span>{% translate "Active Participants" %}</span>
+
+              {% blocktranslate asvar active_info %}
+                Users who have participated in at least one chat message within the selected date range.
+              {% endblocktranslate %}
+
+              {% include "generic/help.html" with help_content=active_info %}
+            </div>
+
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.activeParticipants"></div>
           </div>
           <div class="h-80">
@@ -154,8 +169,17 @@
     <!-- Session Analytics Chart -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <div class="card-title flex items-center justify-between">
-            <span>{% translate "Active Sessions" %}</span>
+          <div class="card-title flex items-center gap-1 justify-between">
+            <div class="flex items-center gap-1">
+              <span>{% translate "Active Sessions" %}</span>
+
+              {% blocktranslate asvar active_info %}
+                A session is considered active if it has a message from either the bot or the participant.
+              {% endblocktranslate %}
+
+              {% include "generic/help.html" with help_content=active_info %}
+            </div>
+
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.sessionAnalytics"></div>
           </div>
           <div class="h-80">

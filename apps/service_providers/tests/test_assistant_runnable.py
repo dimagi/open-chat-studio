@@ -29,7 +29,7 @@ from apps.service_providers.tracing import TracingService
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
-from apps.utils.langchain import mock_llm
+from apps.utils.tests.langchain import mock_llm
 
 ASSISTANT_ID = "test_assistant_id"
 LEGACY_EXPERIMENT_TOOLS = AgentTools.reminder_tools() + [AgentTools.UPDATE_PARTICIPANT_DATA]
@@ -587,7 +587,7 @@ def _get_assistant_mocked_history_recording(session, assistant, get_attachments_
     adapter = AssistantAdapter(session, assistant, citations_enabled=True)
     history_manager = ExperimentHistoryManager.for_assistant(session, session.experiment, TracingService.empty())
     assistant = AssistantChat(adapter=adapter, history_manager=history_manager)
-    history_manager.save_message_to_history = Mock()  # ty: ignore[invalid-assignment]
+    history_manager.save_message_to_history = Mock()
     adapter.get_attachments = lambda _type: get_attachments_return_value or []  # ty: ignore[invalid-assignment]
     return assistant
 

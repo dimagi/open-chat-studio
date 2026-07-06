@@ -10,6 +10,8 @@ from pydantic import BaseModel, HttpUrl
 
 
 class TestSchema(BaseModel):
+    __test__ = False  # tell pytest not to collect this as a test class
+
     att1: str
     att2: int
     url_attr: HttpUrl

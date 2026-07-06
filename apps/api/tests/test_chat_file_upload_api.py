@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -25,7 +25,7 @@ def authed_client(team_with_users):
 
 @pytest.fixture()
 def session(experiment):
-    return ExperimentSessionFactory.create(experiment=experiment)
+    return ExperimentSessionFactory.create(experiment=experiment, session_token_required=False)
 
 
 def _get_test_file_path(filename):
@@ -97,6 +97,8 @@ class TestChatFileUploadAPI:
         file_obj = File.objects.get(id=uploaded_file["id"])
         assert file_obj.name == "small_text.txt"
         assert file_obj.team == session.team
+        # Participant uploads are conversation media, not assistant config.
+        assert file_obj.purpose == FilePurpose.MESSAGE_MEDIA
 
     def test_successful_multiple_file_upload(self, api_client, session):
         """Test uploading multiple real files at once via API"""

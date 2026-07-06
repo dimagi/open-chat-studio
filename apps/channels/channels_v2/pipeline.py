@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from apps.channels.channels_v2.exceptions import EarlyExitResponse
+from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException
 from apps.service_providers.llm_service.runnables import GenerationCancelled
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from apps.channels.models import ExperimentChannel
     from apps.chat.bots import PipelineBot
     from apps.chat.models import ChatMessage
-    from apps.experiments.models import Experiment, ExperimentSession
+    from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
     from apps.files.models import File
     from apps.service_providers.speech_service import SynthesizedAudio
     from apps.service_providers.tracing import TracingService
@@ -53,6 +53,8 @@ class MessageProcessingContext:
 
     # --- State (populated during processing) --------------------------------
     experiment_session: ExperimentSession | None = None
+    participant: Participant | None = None
+    participant_data: ParticipantData | None = None
     participant_identifier: str | None = None
     participant_allowed: bool = False
 
@@ -117,16 +119,20 @@ class MessageProcessingPipeline:
     """Orchestrates message processing through core and terminal stages.
 
     Core stages run sequentially and can be short-circuited by raising
-    EarlyExitResponse. Terminal stages always run -- they handle both
-    normal responses and early exit responses.
+    EarlyExitResponse or EarlyAbort. Terminal stages run for normal and
+    EarlyExitResponse flows; EarlyAbort skips them entirely.
 
-    The pipeline is the ONLY place that handles EarlyExitResponse and
-    unexpected exceptions. Individual stages never check
+    The pipeline is the ONLY place that handles EarlyExitResponse,
+    EarlyAbort, and unexpected exceptions. Individual stages never check
     ctx.early_exit_response.
 
-    Error handling has two tiers:
-    1. EarlyExitResponse -- intentional short-circuit by a stage
-    2. Unexpected Exception -- catch-all generates an error message
+    Control flow tiers:
+    1. EarlyExitResponse -- intentional short-circuit with a user-facing
+       message; terminal stages still run.
+    2. EarlyAbort -- silent halt; no message, no terminal stages.
+       Used when reporting back to the user would be wrong (e.g. platform
+       consent withdrawn).
+    3. Unexpected Exception -- catch-all generates an error message
        via EventBot (preserving ChatException distinction), falls back
        to DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, then
        RE-RAISES so the caller knows processing failed.
@@ -151,12 +157,14 @@ class MessageProcessingPipeline:
 
         1. Run core stages sequentially. If any raises EarlyExitResponse,
            remaining core stages are skipped.
-        2. If any raises a passthrough exception, re-raise immediately
+        2. If any raises EarlyAbort, return immediately -- no error
+           handling, no terminal stages, no user-facing response.
+        3. If any raises a passthrough exception, re-raise immediately
            without error handling or terminal stages.
-        3. If any raises an unexpected exception, generate an error message
+        4. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        4. Run terminal stages unconditionally (they always fire).
-        5. If there was an unexpected exception, re-raise it after terminal
+        5. Run terminal stages unconditionally (they always fire).
+        6. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
         unexpected_exception = None
@@ -166,6 +174,10 @@ class MessageProcessingPipeline:
                 stage(ctx)
         except EarlyExitResponse as e:
             ctx.early_exit_response = e.response
+        except EarlyAbort:
+            # Silent halt -- skip terminal stages entirely. The pipeline
+            # has decided it cannot or should not respond to this message.
+            return ctx
         except self.passthrough_exceptions:
             # Passthrough exceptions (e.g. GenerationCancelled) propagate
             # immediately -- no error message generation, no terminal stages.

@@ -8,12 +8,12 @@ import pytest
 from django.utils import timezone
 from pydantic import ValidationError
 
-from apps.channels.datamodels import MetaCloudAPIMessage, TurnWhatsappMessage
+from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import turnio_messages
 from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
-from apps.service_providers.exceptions import AudioConversionError
+from apps.service_providers.exceptions import MessageMediaError
 from apps.service_providers.messaging_service import MetaCloudAPIService, TwilioService
 from apps.service_providers.models import MessagingProvider, MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
@@ -134,7 +134,7 @@ class TestTurnWhatsappMessageParsing:
 
     def test_audio_message_type_maps_to_voice(self):
         """WhatsApp sends 'audio' as the message type, which should map to MESSAGE_TYPES.VOICE."""
-        message = TurnWhatsappMessage.parse(turnio_messages.audio_message())
+        message = WhatsAppMessage.parse(turnio_messages.audio_message())
         assert message.content_type == MESSAGE_TYPES.VOICE
         assert message.media_id == "1215194677037265"
 
@@ -155,7 +155,7 @@ class TestTurnWhatsappMessageParsing:
                 }
             ],
         }
-        message = TurnWhatsappMessage.parse(message_data)
+        message = WhatsAppMessage.parse(message_data)
         assert message.content_type == MESSAGE_TYPES.VOICE
 
     def test_text_message_type_maps_to_text(self):
@@ -171,7 +171,7 @@ class TestTurnWhatsappMessageParsing:
                 }
             ],
         }
-        message = TurnWhatsappMessage.parse(message_data)
+        message = WhatsAppMessage.parse(message_data)
         assert message.content_type == MESSAGE_TYPES.TEXT
 
 
@@ -205,12 +205,12 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, audio_download_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="123",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
         with patch("apps.service_providers.messaging_service.audio.convert_audio") as mock_convert:
@@ -238,7 +238,7 @@ class TestMetaCloudAPIServiceAudio:
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_non_audio(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if the downloaded content is not audio."""
+        """Should raise MessageMediaError if the downloaded content is not audio."""
         media_url_response = httpx.Response(
             200,
             json={"url": "https://example.com/media"},
@@ -252,20 +252,20 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, non_audio_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="456",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError):
+        with pytest.raises(MessageMediaError):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_http_error(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if the media download fails."""
+        """Should raise MessageMediaError if the media download fails."""
         media_url_response = httpx.Response(
             200,
             json={"url": "https://example.com/media"},
@@ -277,35 +277,35 @@ class TestMetaCloudAPIServiceAudio:
         )
         mock_get.side_effect = [media_url_response, error_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="789",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError):
+        with pytest.raises(MessageMediaError):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.get")
     def test_get_message_audio_raises_on_media_url_http_error(self, mock_get, meta_cloud_api_service):
-        """Should raise AudioConversionError if resolving the media URL fails."""
+        """Should raise MessageMediaError if resolving the media URL fails."""
         error_response = httpx.Response(
             404,
             request=httpx.Request("GET", "https://graph.facebook.com/v25.0/bad_id"),
         )
         mock_get.side_effect = [error_response]
 
-        message = MetaCloudAPIMessage(
+        message = WhatsAppMessage(
             participant_id="27826419977",
             message_text="",
             content_type="voice",
             media_id="bad_id",
-            content_type_unparsed="voice",
+            attachment_mime_type="voice",
         )
 
-        with pytest.raises(AudioConversionError, match="Unable to resolve media URL"):
+        with pytest.raises(MessageMediaError, match="Unable to resolve media URL"):
             meta_cloud_api_service.get_message_audio(message)
 
     @patch("apps.service_providers.messaging_service.httpx.post")
@@ -624,6 +624,7 @@ class TestMetaCloudAPIServiceWindow:
         )
         assert mock_post.call_args.kwargs["json"] == {
             "messaging_product": "whatsapp",
+            "recipient_type": "individual",
             "to": "+27826419977",
             "type": "text",
             "text": {"body": "Hello"},
@@ -755,3 +756,115 @@ def _test_messaging_provider(team, provider_type: MessagingProviderType, data):
         type=provider_type,
         config=form.cleaned_data,
     )
+
+
+class TestMetaCloudAPIServiceBSUIDRecipient:
+    """Outbound send paths must use Meta's `recipient` field when targeting a BSUID,
+    and the `to` field when targeting a phone number.
+
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+    """
+
+    BSUID = "US.13491208655302741918"
+
+    def _make_service(self):
+        return MetaCloudAPIService(access_token="test_token", business_id="123456")
+
+    def _mock_send_response(self):
+        return httpx.Response(
+            200,
+            json={"messages": [{"id": "wamid.test"}]},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/messages"),
+        )
+
+    def _mock_upload_response(self):
+        return httpx.Response(
+            200,
+            json={"id": "media_id_abc"},
+            request=httpx.Request("POST", "https://graph.facebook.com/v25.0/phone123/media"),
+        )
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_text_message_to_bsuid_uses_recipient_field(self, mock_post):
+        mock_post.return_value = self._mock_send_response()
+        self._make_service().send_text_message(
+            message="Hello",
+            from_="phone123",
+            to=self.BSUID,
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent == {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "recipient": self.BSUID,
+            "type": "text",
+            "text": {"body": "Hello"},
+        }
+        assert "to" not in sent
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_text_message_to_phone_keeps_to_field(self, mock_post):
+        mock_post.return_value = self._mock_send_response()
+        self._make_service().send_text_message(
+            message="Hello",
+            from_="phone123",
+            to="+27826419977",
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent["to"] == "+27826419977"
+        assert "recipient" not in sent
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_template_message_to_bsuid_uses_recipient_field(self, mock_post):
+        mock_post.return_value = self._mock_send_response()
+        self._make_service().send_template_message(
+            message="Hi",
+            from_="phone123",
+            to=self.BSUID,
+            platform=ChannelPlatform.WHATSAPP,
+        )
+        sent = mock_post.call_args.kwargs["json"]
+        assert sent["recipient"] == self.BSUID
+        assert sent["recipient_type"] == "individual"
+        assert "to" not in sent
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_voice_message_to_bsuid_uses_recipient_field(self, mock_post):
+        mock_post.side_effect = [self._mock_upload_response(), self._mock_send_response()]
+        synthetic_voice = MagicMock(spec=SynthesizedAudio)
+        synthetic_voice.get_audio_bytes.return_value = b"fake-ogg"
+        self._make_service().send_voice_message(
+            synthetic_voice=synthetic_voice,
+            from_="phone123",
+            to=self.BSUID,
+            platform=ChannelPlatform.WHATSAPP,
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        sent = mock_post.call_args_list[1].kwargs["json"]
+        assert sent["recipient"] == self.BSUID
+        assert sent["recipient_type"] == "individual"
+        assert "to" not in sent
+
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    def test_send_file_to_user_bsuid_uses_recipient_field(self, mock_post):
+        mock_post.side_effect = [self._mock_upload_response(), self._mock_send_response()]
+        file = MagicMock()
+        file.content_type = "image/jpeg"
+        file.name = "x.jpg"
+        file.file.open.return_value.__enter__.return_value = BytesIO(b"data")
+        self._make_service().send_file_to_user(
+            from_="phone123",
+            to=self.BSUID,
+            platform=ChannelPlatform.WHATSAPP,
+            file=file,
+            download_link="https://example.com/x.jpg",
+            last_activity_at=timezone.now() - timedelta(hours=1),
+        )
+        sent = mock_post.call_args_list[1].kwargs["json"]
+        assert sent["recipient"] == self.BSUID
+        assert sent["recipient_type"] == "individual"
+        assert "to" not in sent

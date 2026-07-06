@@ -282,9 +282,6 @@ class EvaluatorForm(forms.ModelForm):
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
-        # Set by the view before is_valid() so the schema-drift check can
-        # ignore rules the user is deleting in the same submit.
-        self.pending_deleted_rule_pks: set[int] = set()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -317,34 +314,7 @@ class EvaluatorForm(forms.ModelForm):
                 error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
             raise forms.ValidationError(f"{', '.join(error_messages)}") from err
 
-        self._validate_existing_tag_rules_against_schema(params)
-
         return cleaned_data
-
-    def _validate_existing_tag_rules_against_schema(self, params):
-        """Block save when an existing tag rule no longer matches the new output_schema.
-
-        Skips rules the formset is deleting in the same submit so users aren't
-        stuck having to delete the rule and update the schema in two trips.
-        Surfaces all incompatible rules at once instead of stopping at the first.
-        """
-        if not (self.instance and self.instance.pk):
-            return
-
-        output_schema = (params or {}).get("output_schema") or {}
-        rules = self.instance.tag_rules.exclude(pk__in=self.pending_deleted_rule_pks)
-        errors = []
-        for rule in rules:
-            try:
-                field_def = validate_field_in_schema(rule.field_name, output_schema)
-                validate_condition(rule.condition_type, rule.condition_value, field_def)
-            except DjangoValidationError as err:
-                errors.append(
-                    f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
-                    f"output schema: {err.messages[0] if err.messages else err}"
-                )
-        if errors:
-            raise forms.ValidationError(errors)
 
 
 class EvaluatorTagRuleForm(forms.ModelForm):
@@ -505,6 +475,31 @@ class BaseEvaluatorTagRuleFormSet(forms.BaseInlineFormSet):
         kwargs["output_schema"] = self.output_schema
         return super()._construct_form(i, **kwargs)
 
+    def clean(self):
+        """Block save when a DB rule absent from this POST is incompatible with the schema.
+
+        Rows present in the POST are validated per-row against the output_schema
+        (including deletes and renames in the same submit). Rules missing from the
+        POST entirely (stale tab, concurrent edit) would otherwise silently survive
+        a schema change that breaks them, so check them here.
+        """
+        super().clean()
+        if not (self.instance and self.instance.pk):
+            return
+        submitted_pks = {form.instance.pk for form in self.forms if form.instance.pk}
+        errors = []
+        for rule in self.instance.tag_rules.exclude(pk__in=submitted_pks):
+            try:
+                field_def = validate_field_in_schema(rule.field_name, self.output_schema)
+                validate_condition(rule.condition_type, rule.condition_value, field_def)
+            except DjangoValidationError as err:
+                errors.append(
+                    f"Tag rule on field '{rule.field_name}' is incompatible with the updated "
+                    f"output schema: {err.messages[0] if err.messages else err}"
+                )
+        if errors:
+            raise forms.ValidationError(errors)
+
     @property
     def empty_form(self):
         form = self.form(
@@ -571,11 +566,6 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         required=False,
     )
 
-    filtered_session_ids = forms.CharField(
-        widget=forms.HiddenInput(attrs={"x-ref": "filteredSessionIds"}),
-        required=False,
-    )
-
     evaluation_mode = forms.ChoiceField(
         choices=[(EvaluationMode.MESSAGE, "Message level"), (EvaluationMode.SESSION, "Session level")],
         initial=EvaluationMode.MESSAGE,
@@ -595,77 +585,55 @@ class EvaluationDatasetBaseForm(forms.ModelForm):
         self.team = team
 
     def _clean_clone(self):
-        """Validates session IDs for clone mode. Returns (session_ids, filtered_session_ids)."""
+        """Validate selected session IDs for clone mode and return them as a set."""
         session_ids_str = self.data.get("session_ids", "")
         session_ids = {sid for sid in session_ids_str.split(",") if sid}
 
-        filtered_session_ids_str = self.data.get("filtered_session_ids", "")
-        filtered_session_ids = {sid for sid in filtered_session_ids_str.split(",") if sid}
-
         # Session-mode datasets are allowed to start empty (they may be auto-populated
         # later). Message-mode datasets still need at least one session to clone from.
-        if not session_ids and not filtered_session_ids:
+        if not session_ids:
             if self.cleaned_data.get("evaluation_mode") != EvaluationMode.SESSION:
                 raise forms.ValidationError("At least one session must be selected when cloning from sessions.")
-            return session_ids, filtered_session_ids
+            return session_ids
 
-        intersection = session_ids & filtered_session_ids
-        if intersection:
-            raise forms.ValidationError(
-                "A session cannot be selected in both 'All Messages' and 'Filtered Messages'. "
-                f"The following sessions are in both lists: {', '.join(sorted(str(sid) for sid in intersection))}"
-            )
-
-        all_session_ids = session_ids.union(filtered_session_ids)
-        existing_sessions = ExperimentSession.objects.filter(
-            team=self.team, external_id__in=all_session_ids
-        ).values_list("external_id", flat=True)
-
-        missing_sessions = all_session_ids - set(str(sid) for sid in existing_sessions)
+        existing_sessions = ExperimentSession.objects.filter(team=self.team, external_id__in=session_ids).values_list(
+            "external_id", flat=True
+        )
+        missing_sessions = session_ids - set(str(sid) for sid in existing_sessions)
         if missing_sessions:
             raise forms.ValidationError(
                 "The following sessions do not exist or you don't have permission to access them: "
                 f"{', '.join(sorted(missing_sessions))}"
             )
-
-        return session_ids, filtered_session_ids
+        return session_ids
 
     def _save_session_messages_clone(self, dataset):
         """Dispatch async task to clone messages from sessions."""
         session_ids = self.cleaned_data.get("session_ids", [])
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", [])
-
-        if not session_ids and not filtered_session_ids:
+        if not session_ids:
             return
 
         task = create_dataset_from_session_messages_task.delay(
             dataset.id,
             self.team.id,
             list(session_ids),
-            list(filtered_session_ids),
-            self.filter_params.to_query() if self.filter_params else None,
+            [],  # filtered_session_ids: legacy create form has no per-row filtered selection
+            None,  # filter_query: legacy create form has no per-row filtered selection
             self.timezone,
         )
-
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
     def _save_sessions_clone(self, dataset):
         """Dispatch async task to create session-mode messages."""
-        # In session mode the filtered/unfiltered distinction doesn't apply, so merge both sets.
         session_ids = self.cleaned_data.get("session_ids", set())
-        filtered_session_ids = self.cleaned_data.get("filtered_session_ids", set())
-        all_session_ids = list(session_ids | filtered_session_ids)
-
-        if not all_session_ids:
+        if not session_ids:
             return
-
         task = create_dataset_from_sessions_task.delay(
             dataset.id,
             self.team.id,
-            all_session_ids,
+            list(session_ids),
         )
-
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
 
@@ -741,12 +709,9 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             )
 
         if mode == "clone":
-            session_ids, filtered_session_ids = self._clean_clone()
-            cleaned_data["session_ids"] = session_ids
-            cleaned_data["filtered_session_ids"] = filtered_session_ids
+            cleaned_data["session_ids"] = self._clean_clone()
         elif mode == "annotation_queue":
             cleaned_data["session_ids"] = self._clean_annotation_queue()
-            cleaned_data["filtered_session_ids"] = set()
         elif mode == "manual":
             cleaned_data["message_pairs"] = self._clean_manual()
         elif mode == "csv":
@@ -964,8 +929,7 @@ class EvaluationDatasetForm(EvaluationDatasetBaseForm):
             for pair in message_pairs
         ]
 
-        created_messages = EvaluationMessage.objects.bulk_create(evaluation_messages)
-        dataset.messages.set(created_messages)
+        dataset.add_messages(evaluation_messages)
 
     def _save_csv(self, dataset):
         """Dispatch async task to create messages from CSV."""
@@ -1026,12 +990,8 @@ class EvaluationDatasetEditForm(EvaluationDatasetBaseForm):
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("mode")
-
         if mode == "clone":
-            session_ids, filtered_session_ids = self._clean_clone()
-            cleaned_data["session_ids"] = session_ids
-            cleaned_data["filtered_session_ids"] = filtered_session_ids
-
+            cleaned_data["session_ids"] = self._clean_clone()
         return cleaned_data
 
     def save(self, commit=True):

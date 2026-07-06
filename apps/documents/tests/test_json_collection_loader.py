@@ -148,38 +148,37 @@ class TestLoadDocumentsAttachments:
         assert docs[1].metadata["source"] == "https://example.com/a-2.pdf"
 
 
-class TestLoadDocumentsFallback:
-    def test_no_attachments_field_yields_fallback(self, json_config, httpx_mock):
-        feed = [
-            {
-                "title": "T",
-                "URI": "https://example.com/page",
-                "date": "01/01/2025",
-            }
-        ]
+def _single_attachment_item(**item_fields):
+    """Feed item with one fetchable PDF attachment, plus any extra item-level fields."""
+    return {
+        "title": "T",
+        "URI": "https://example.com/p",
+        "attachments": [{"file_type": "pdf", "title": "f", "link": "https://example.com/file.pdf"}],
+        **item_fields,
+    }
+
+
+class TestLoadDocumentsNoFetchableLink:
+    """Items with no fetchable document link are skipped (no title-only fallback)."""
+
+    def test_no_attachments_field_yields_nothing(self, json_config, httpx_mock, caplog):
+        feed = [{"title": "T", "URI": "https://example.com/page", "date": "01/01/2025"}]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
 
         loader = _make_loader(json_config)
-        docs = list(loader.load_documents())
+        with caplog.at_level(logging.DEBUG, logger="apps.documents.source_loaders.json_collection"):
+            docs = list(loader.load_documents())
 
-        assert len(docs) == 1
-        assert docs[0].page_content == "T"
-        assert docs[0].metadata["source"] == "https://example.com/page"
-        assert docs[0].metadata["title"] == "T"
-        assert docs[0].metadata["URI"] == "https://example.com/page"
-        assert docs[0].metadata["citation_text"] == "T"
-        assert docs[0].metadata["citation_url"] == "https://example.com/page"
-        assert "link" not in docs[0].metadata
+        assert docs == []
+        assert any("no attachments with a document link" in record.message for record in caplog.records)
 
-    def test_empty_attachments_yields_fallback(self, json_config, httpx_mock):
+    def test_empty_attachments_yields_nothing(self, json_config, httpx_mock):
         feed = [{"title": "T", "URI": "https://example.com/page", "attachments": []}]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
         loader = _make_loader(json_config)
-        docs = list(loader.load_documents())
-        assert len(docs) == 1
-        assert docs[0].page_content == "T"
+        assert list(loader.load_documents()) == []
 
-    def test_attachments_without_links_yields_fallback(self, json_config, httpx_mock):
+    def test_attachments_without_links_yields_nothing(self, json_config, httpx_mock):
         feed = [
             {
                 "title": "T",
@@ -189,26 +188,29 @@ class TestLoadDocumentsFallback:
         ]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
         loader = _make_loader(json_config)
-        docs = list(loader.load_documents())
-        assert len(docs) == 1
-        assert docs[0].page_content == "T"
+        assert list(loader.load_documents()) == []
 
+
+class TestItemMetadataPropagation:
     def test_optional_metadata_fields_propagate_when_present(self, json_config, httpx_mock):
         feed = [
-            {
-                "title": "T",
-                "URI": "https://example.com/p",
-                "authors": "Alice",
-                "publisher": "Pub",
-                "countries": ["US", "CA"],
-                "diseases": ["malaria"],
-                "tags": ["health"],
-                "regions": ["AFRO"],
-            }
+            _single_attachment_item(
+                authors="Alice",
+                publisher="Pub",
+                countries=["US", "CA"],
+                diseases=["malaria"],
+                tags=["health"],
+                regions=["AFRO"],
+            )
         ]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
         loader = _make_loader(json_config)
-        docs = list(loader.load_documents())
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.markitdown_read",
+            return_value=_stub_doc("body"),
+        ):
+            docs = list(loader.load_documents())
         meta = docs[0].metadata
         for k, v in [
             ("authors", "Alice"),
@@ -221,24 +223,162 @@ class TestLoadDocumentsFallback:
             assert meta[k] == v
 
     def test_optional_metadata_fields_absent_when_missing(self, json_config, httpx_mock):
-        feed = [{"title": "T", "URI": "https://example.com/p"}]
+        feed = [_single_attachment_item()]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
         loader = _make_loader(json_config)
-        meta = list(loader.load_documents())[0].metadata
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.markitdown_read",
+            return_value=_stub_doc("body"),
+        ):
+            meta = list(loader.load_documents())[0].metadata
         for k in ("authors", "publisher", "countries", "diseases", "tags", "regions"):
             assert k not in meta
 
     def test_item_missing_title_and_uri_is_skipped(self, json_config, httpx_mock, caplog):
-        feed = [{"date": "01/01/2025"}, {"title": "OK", "URI": "https://example.com/p"}]
+        feed = [{"date": "01/01/2025"}, _single_attachment_item(title="OK")]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
         loader = _make_loader(json_config)
 
         with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
-            docs = list(loader.load_documents())
+            with mock.patch(
+                "apps.documents.source_loaders.json_collection.markitdown_read",
+                return_value=_stub_doc("body"),
+            ):
+                docs = list(loader.load_documents())
 
         assert len(docs) == 1
         assert docs[0].metadata["title"] == "OK"
         assert any("neither 'title' nor 'URI'" in record.message for record in caplog.records)
+
+
+class TestMetadataFilters:
+    def _feed_item(self, **fields):
+        return _single_attachment_item(**fields)
+
+    @pytest.mark.parametrize(
+        ("filters", "item_fields", "expected_count"),
+        [
+            pytest.param(
+                [{"field": "status", "operator": "eq", "value": "published"}],
+                {"status": "published"},
+                1,
+                id="eq-match",
+            ),
+            pytest.param(
+                [{"field": "status", "operator": "eq", "value": "published"}],
+                {"status": "draft"},
+                0,
+                id="eq-no-match",
+            ),
+            pytest.param(
+                [{"field": "status", "operator": "eq", "value": "published"}],
+                {},
+                0,
+                id="eq-missing-field",
+            ),
+            pytest.param(
+                [{"field": "languages", "operator": "in", "value": ["en", "fr"]}],
+                {"languages": ["es", "fr"]},
+                1,
+                id="in-list-field-intersects",
+            ),
+            pytest.param(
+                [{"field": "languages", "operator": "in", "value": ["en", "fr"]}],
+                {"languages": ["es", "de"]},
+                0,
+                id="in-list-field-disjoint",
+            ),
+            pytest.param(
+                [{"field": "type", "operator": "in", "value": ["report", "memo"]}],
+                {"type": "report"},
+                1,
+                id="in-scalar-field-match",
+            ),
+            pytest.param(
+                [
+                    {"field": "status", "operator": "eq", "value": "published"},
+                    {"field": "type", "operator": "in", "value": ["report"]},
+                ],
+                {"status": "published", "type": "memo"},
+                0,
+                id="multiple-filters-are-anded",
+            ),
+        ],
+    )
+    def test_filters(self, httpx_mock, filters, item_fields, expected_count):
+        config = JSONCollectionSourceConfig(json_url="https://example.com/feed.json", metadata_filters=filters)
+        httpx_mock.add_response(url="https://example.com/feed.json", json=[self._feed_item(**item_fields)])
+        if expected_count:
+            httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+        loader = _make_loader(config)
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.markitdown_read",
+            return_value=_stub_doc("body"),
+        ):
+            docs = list(loader.load_documents())
+        assert len(docs) == expected_count
+
+    def test_filtered_item_is_not_fetched(self, httpx_mock, caplog):
+        """A filtered-out item must not trigger any attachment download."""
+        config = JSONCollectionSourceConfig(
+            json_url="https://example.com/feed.json",
+            metadata_filters=[{"field": "status", "operator": "eq", "value": "published"}],
+        )
+        httpx_mock.add_response(url="https://example.com/feed.json", json=[self._feed_item(status="draft")])
+        # No response registered for file.pdf: if the loader tried to fetch it, httpx_mock would error.
+        loader = _make_loader(config)
+        with caplog.at_level(logging.DEBUG, logger="apps.documents.source_loaders.json_collection"):
+            docs = list(loader.load_documents())
+        assert docs == []
+        assert any("did not satisfy metadata filter" in record.message for record in caplog.records)
+
+
+class TestUnsupportedFileTypes:
+    def test_unsupported_attachment_skipped_without_fetch(self, json_config, httpx_mock, caplog):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [
+                    {"file_type": "mp3", "title": "audio", "link": "https://example.com/a.mp3"},
+                    {"file_type": "pdf", "title": "doc", "link": "https://example.com/b.pdf"},
+                ],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        # Only the pdf is fetched; no response is registered for the mp3.
+        httpx_mock.add_response(url="https://example.com/b.pdf", content=b"PDF")
+        loader = _make_loader(json_config)
+        with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
+            with mock.patch(
+                "apps.documents.source_loaders.json_collection.markitdown_read",
+                return_value=_stub_doc("body"),
+            ):
+                docs = list(loader.load_documents())
+        assert len(docs) == 1
+        assert docs[0].metadata["link"] == "https://example.com/b.pdf"
+        assert any("unsupported file type" in record.message for record in caplog.records)
+
+    def test_blocklist_is_case_insensitive(self, json_config, httpx_mock):
+        feed = [
+            {
+                "title": "T",
+                "URI": "https://example.com/page",
+                "attachments": [{"file_type": "MP4", "title": "video", "link": "https://example.com/v.mp4"}],
+            }
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        loader = _make_loader(json_config)
+        assert list(loader.load_documents()) == []
+
+    def test_custom_blocklist(self, httpx_mock):
+        config = JSONCollectionSourceConfig(json_url="https://example.com/feed.json", unsupported_file_types=["pdf"])
+        feed = [_single_attachment_item()]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        loader = _make_loader(config)
+        assert list(loader.load_documents()) == []
 
 
 class TestLoadDocumentsAttachmentFailures:

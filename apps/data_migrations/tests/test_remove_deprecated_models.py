@@ -74,6 +74,7 @@ class TestRemoveDeprecatedModelsCommand:
         assert not LlmProviderModel.objects.filter(id=old_model.id).exists()
         node.refresh_from_db()
         assert node.params["llm_provider_model_id"] == replacement_model.id
+        assert node.llm_provider_model_id == replacement_model.id
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_notifies_affected_team(self, mock_notify):

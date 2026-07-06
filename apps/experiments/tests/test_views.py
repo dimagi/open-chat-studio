@@ -8,8 +8,10 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.test import override_settings
 from django.urls import reverse
+from django.utils.http import http_date
 
 from apps.chat.channels import WebChannel
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -18,6 +20,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.experiments.views.experiment import _verify_user_or_start_session
+from apps.files.models import FilePurpose
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.experiment import (
     ConsentFormFactory,
@@ -42,7 +45,6 @@ def test_create_experiment_creates_first_version(client, team_with_users):
     post_data = {
         "name": "some name",
         "type": "llm",
-        "prompt_text": "You are a helpful assistant.",
         "consent_form": consent_form.id,
         "temperature": 0.7,
         "llm_provider": LlmProviderFactory.create(team=team_with_users).id,
@@ -279,6 +281,22 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
 
 
 @pytest.mark.django_db()
+@mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
+def test_start_session_public_embed_returns_deprecation_headers(client):
+    """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
+    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+    url = reverse(
+        "experiments:start_session_public_embed",
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+    )
+    response = client.get(url)
+    assert response.status_code == 302
+    assert response.headers["Deprecation"] == "true"
+    assert response.headers["Sunset"] == http_date(EMBED_FLOW_SUNSET_AT.timestamp())
+    assert response.headers["Link"] == f'<{EMBED_FLOW_SUCCESSOR_URL}>; rel="successor-version"'
+
+
+@pytest.mark.django_db()
 @mock.patch("apps.chat.channels.enqueue_static_triggers")
 def test_timezone_saved_in_participant_data(_trigger_mock):
     """A participant's timezone data should be saved in all ParticipantData records"""
@@ -326,13 +344,28 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     file_search_file.name = "fs.text"
     code_interpreter_file = BytesIO(b"some content")
     code_interpreter_file.name = "ci.text"
-    data = {"message": "Hi there", "file_search": [file_search_file], "code_interpreter": [code_interpreter_file]}
+    ocs_attachment_file = BytesIO(b"some content")
+    ocs_attachment_file.name = "ocs.text"
+    data = {
+        "message": "Hi there",
+        "file_search": [file_search_file],
+        "code_interpreter": [code_interpreter_file],
+        "ocs_attachments": [ocs_attachment_file],
+    }
     client.post(url, data=data)
-    # Check if tool resources were created with the files
+    # Tool resources are created with the files. Participant uploads are conversation
+    # media regardless of which tool they feed; ASSISTANT is reserved for bot config.
     ci_resource = session.chat.attachments.get(tool_type="code_interpreter")
-    assert ci_resource.files.filter(name="ci.text").exists()
+    ci_file = ci_resource.files.get(name="ci.text")
+    assert ci_file.purpose == FilePurpose.MESSAGE_MEDIA
+
     fs_resource = session.chat.attachments.get(tool_type="file_search")
-    assert fs_resource.files.filter(name="fs.text").exists()
+    fs_file = fs_resource.files.get(name="fs.text")
+    assert fs_file.purpose == FilePurpose.MESSAGE_MEDIA
+
+    ocs_resource = session.chat.attachments.get(tool_type="ocs_attachments")
+    ocs_file = ocs_resource.files.get(name="ocs.text")
+    assert ocs_file.purpose == FilePurpose.MESSAGE_MEDIA
 
 
 @pytest.mark.django_db()
@@ -374,9 +407,8 @@ class TestPublicSessions:
         self, verify_user, capture_identifier, expect_user_verified, client
     ):
         verify_user.return_value = HttpResponse()
-        prompt = "This is data: {participant_data}"
         experiment = ExperimentFactory.create(
-            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=capture_identifier, prompt_text=prompt
+            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=capture_identifier
         )
         post_data = {
             "identifier": "someone@gmail.com",
@@ -490,17 +522,17 @@ class TestPublicSessions:
 
 @pytest.mark.django_db()
 class TestVerifyPublicChatToken:
-    @override_settings(SECRET_KEY="test_key")
+    @override_settings(SECRET_KEY="test_key_that_is_at_least_32_bytes_long")
     @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
     def test_valid_token_redirects_to_chat(self, record_consent_and_redirect, client):
         record_consent_and_redirect.return_value = HttpResponse()
-        session = ExperimentSessionFactory.create(experiment__pre_survey=None)
+        session = ExperimentSessionFactory.create()
         experiment = session.experiment
         token = jwt.encode(
             {
                 "session": str(session.external_id),
             },
-            "test_key",
+            "test_key_that_is_at_least_32_bytes_long",
             algorithm="HS256",
         )
         client.get(

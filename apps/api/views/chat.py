@@ -15,7 +15,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from apps.api.authentication import EmbeddedWidgetAuthentication
-from apps.api.permissions import LegacySessionAccessPermission, WidgetDomainPermission
+from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
     ChatSendMessageRequest,
@@ -24,19 +24,26 @@ from apps.api.serializers import (
     ChatStartSessionResponse,
     MessageSerializer,
 )
+from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
+from apps.channels.widget_versions import (
+    WIDGET_VERSION_HEADER,
+    is_widget_request,
+    mark_widget_request,
+    widget_sunset_headers,
+)
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
-SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, LegacySessionAccessPermission]
+SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
@@ -147,8 +154,10 @@ def chat_upload_file(request, session_id):
             team=session.team,
             content_size=file.size,
             content_type=File.get_content_type(file),
+            # 24h expiry is an abandoned-upload guard; it is cleared once the file is
+            # attached to a message (see the send handler below).
             expiry_date=expiry_date,
-            purpose="assistant",
+            purpose=FilePurpose.MESSAGE_MEDIA,
             metadata={
                 "session_id": str(session_id),
                 "uploaded_by": uploaded_by,
@@ -166,6 +175,42 @@ def chat_upload_file(request, session_id):
         )
 
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
+
+
+def _issue_or_opt_out_session_token(request, session, use_session_token, session_data):
+    """Issue a session token, or opt the session out of token enforcement.
+
+    `use_session_token` is the request preference (True/False/None). A token-aware
+    widget always sends it explicitly (True), so an unset field from widget traffic
+    means a pre-token widget — opt out. Widget traffic is identified by the
+    x-ocs-widget-version header (sent by 0.5.1+) or, for older widgets that send no
+    header, by `session_data.source`. Everything else (direct API consumers) defaults
+    to enforced. Returns the token, or None when opted out.
+    """
+    if use_session_token is None:
+        use_session_token = not is_widget_request(request, session_data)
+    if use_session_token:
+        return issue_session_token(session)
+    session.session_token_required = False
+    session.save(update_fields=["session_token_required"])
+    return None
+
+
+def _resolve_experiment_channel(request, team, session_data):
+    """Return the ExperimentChannel for this request.
+
+    Embed-key auth resolves to the widget's own channel; for widget traffic we also
+    record the reported version (or a placeholder for pre-0.5.1 widgets that send no
+    header). Recording is gated on `is_widget_request` so a non-widget caller using an
+    embed key isn't tagged with a placeholder version. Everything else (direct API
+    consumers) falls back to the team API channel.
+    """
+    if not isinstance(request.auth, ExperimentChannel):
+        return ExperimentChannel.objects.get_team_api_channel(team)
+    channel = request.auth
+    if is_widget_request(request, session_data):
+        channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
+    return channel
 
 
 @extend_schema(
@@ -232,6 +277,7 @@ def chat_upload_file(request, session_id):
         ),
     ],
 )
+@widget_sunset_headers
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([WidgetDomainPermission])
@@ -246,6 +292,11 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
+
+    # Pre-0.5.1 widgets send no version header; flag them (via session_data.source)
+    # so deprecated old widgets still receive RFC 8594 sunset headers.
+    if is_widget_request(request, session_data):
+        mark_widget_request(request)
 
     # Security check: Only authenticated users can specify version numbers
     if version_number is not None and not request.user.is_authenticated:
@@ -274,12 +325,7 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    # Check if authenticated via DRF EmbeddedWidgetAuthentication
-    if isinstance(request.auth, ExperimentChannel):
-        experiment_channel = request.auth
-    else:
-        # legacy flow
-        experiment_channel = ExperimentChannel.objects.get_team_api_channel(team)
+    experiment_channel = _resolve_experiment_channel(request, team, session_data)
 
     if request.user.is_authenticated:
         user = request.user
@@ -330,9 +376,12 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
+    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"), session_data)
+
     # Prepare response data
     response_data = {
         "session_id": session.external_id,
+        "session_token": session_token,
         "chatbot": experiment_version or experiment,
         "participant": participant,
     }
@@ -379,6 +428,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
         ),
     ],
 )
+@widget_sunset_headers
 @api_view(["POST"])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
@@ -441,16 +491,31 @@ def chat_send_message(request, session_id):
             attachment_data.append(attachment.model_dump())
 
     # Queue the response generation as a background task
-    task_id = get_response_for_webchat_task.delay(
+    task = get_response_for_webchat_task.delay(
         experiment_session_id=session.id,
         experiment_id=experiment_version.id,
         message_text=message_text,
         attachments=attachment_data if attachment_data else None,
         context=context,
-    ).task_id
+    )
+    task_id = task.task_id
+    # Bind the task to this session so the poll endpoint can reject cross-session reads (IDOR).
+    # TTL matches the Celery result backend's default expiry (24 h).
+    cache.set(f"task_session:{task_id}", str(session_id), 24 * 3600)
 
     response_data = ChatSendMessageResponse({"task_id": task_id, "status": "processing"}).data
     return Response(response_data, status=status.HTTP_202_ACCEPTED)
+
+
+def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
+    """Raise NotFound if task_id is bound to a different session (IDOR prevention).
+
+    A missing cache entry is allowed for backward compatibility with tasks
+    dispatched before this binding was introduced.
+    """
+    bound_session = cache.get(f"task_session:{task_id}")
+    if bound_session is not None and bound_session != str(session_id):
+        raise NotFound()
 
 
 @extend_schema(
@@ -470,6 +535,12 @@ def chat_send_message(request, session_id):
             {
                 "error": serializers.CharField(required=False),
                 "status": serializers.CharField(),
+            },
+        ),
+        404: inline_serializer(
+            "ChatTaskPollNotFound",
+            {
+                "detail": serializers.CharField(),
             },
         ),
         500: inline_serializer(
@@ -502,7 +573,9 @@ def chat_send_message(request, session_id):
 def chat_poll_task_response(request, session_id, task_id):
     session = get_experiment_session_cached(session_id)
     if not session:
-        return NotFound()
+        raise NotFound()
+
+    _verify_task_belongs_to_session(task_id, str(session_id))
 
     experiment = session.experiment
     task_details = get_message_task_response(experiment, task_id)

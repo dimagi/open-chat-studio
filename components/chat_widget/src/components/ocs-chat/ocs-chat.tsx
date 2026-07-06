@@ -14,7 +14,7 @@ import {
 import { renderMarkdownSync as renderMarkdownComplete } from '../../utils/markdown';
 import { varToPixels } from '../../utils/utils';
 import { TranslationStrings, TranslationManager, defaultTranslations } from '../../utils/translations';
-import { ChatSessionService, ChatMessage, MessagePollingHandle, TaskPollingHandle } from '../../services/chat-session-service';
+import { ChatSessionService, ChatMessage, MessagePollingHandle, TaskPollingHandle, SessionAccessError } from '../../services/chat-session-service';
 import { FileAttachmentManager, SelectedFile } from '../../services/file-attachment-manager';
 
 interface PointerEvent {
@@ -25,6 +25,7 @@ interface PointerEvent {
 interface SessionStorageData {
   sessionId?: string;
   messages: ChatMessage[];
+  sessionToken?: string;
 }
 
 @Component({
@@ -167,6 +168,7 @@ export class OcsChat {
   @Prop() userName?: string;
   /**
    * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+   * Ignored when `sessionId` is provided.
    */
   @Prop() persistentSession: boolean = true;
 
@@ -210,9 +212,24 @@ export class OcsChat {
    */
   @Prop() versionNumber?: number;
 
+  /**
+   * The ID of an existing chat session to connect to. When provided, the widget
+   * is bound to that session: local session persistence is disabled and the
+   * message history is loaded from the server. Intended for host pages that
+   * create the session server-side (e.g. the OCS web chat page).
+   */
+  @Prop() sessionId?: string;
+
+  /**
+   * A session token proving access to the session named by `session-id`. Host
+   * pages that create the session server-side pass a server-minted token here so
+   * the widget can authenticate its requests. Only meaningful with `session-id`.
+   */
+  @Prop() sessionToken?: string;
+
   @State() error: string = '';
   @State() messages: ChatMessage[] = [];
-  @State() sessionId?: string;
+  @State() activeSessionId?: string;
   @State() isLoading: boolean = false;
   @State() isTyping: boolean = false;
   @State() typingProgressMessage: string = '';
@@ -227,6 +244,7 @@ export class OcsChat {
   @State() generatedUserId?: string;
   @State() isFullscreen: boolean = false;
   @State() showNewChatConfirmation: boolean = false;
+  @State() sessionEnded: boolean = false;
 
   @State() selectedFiles: SelectedFile[] = [];
   @State() isUploadingFiles: boolean = false;
@@ -260,6 +278,7 @@ export class OcsChat {
   private positionInitialized: boolean = false;
   private internalPageContext?: Record<string, any>;
   private sessionEpoch: number = 0;
+  private currentSessionToken?: string;
   @Element() host: HTMLElement;
 
   async componentWillLoad() {
@@ -274,12 +293,17 @@ export class OcsChat {
 
     await this.initializeTranslations();
 
-    // Always try to load existing session if localStorage is available
-    if (this.persistentSession && this.isLocalStorageAvailable()) {
-      const { sessionId, messages } = this.loadSessionFromStorage();
+    if (this.isSessionBound()) {
+      // Bound to an externally-managed session: the host page is the source of truth.
+      this.activeSessionId = this.sessionId;
+      this.applySessionToken(this.sessionToken);
+    } else if (this.persistentSession && this.isLocalStorageAvailable()) {
+      // Always try to load existing session if localStorage is available
+      const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
       if (sessionId && messages) {
-        this.sessionId = sessionId;
+        this.activeSessionId = sessionId;
         this.messages = messages;
+        this.applySessionToken(sessionToken);
       }
     }
     this.parseWelcomeMessages();
@@ -315,8 +339,12 @@ export class OcsChat {
       }
 
       // Resume polling for existing session (don't auto-start new sessions)
-      if (this.visible && this.sessionId) {
-        this.startMessagePolling();
+      if (this.visible && this.activeSessionId) {
+        if (this.isSessionBound()) {
+          void this.loadBoundSessionHistory();
+        } else {
+          this.startMessagePolling();
+        }
       }
     }, 0);
 
@@ -330,6 +358,32 @@ export class OcsChat {
     window.removeEventListener('resize', this.handleWindowResize);
   }
 
+  // ---------------------------------------------------------------------------
+  // Public event API
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Dispatch a composed, bubbling CustomEvent on the host element so that
+   * embedders can listen with plain addEventListener outside the shadow root.
+   *
+   * All events are dispatched synchronously so that handlers can update
+   * reactive props (e.g. `pageContext`) before the calling code reads them.
+   */
+  private dispatchWidgetEvent<T extends Record<string, unknown> | null>(name: string, detail: T = null as unknown as T): void {
+    this.host.dispatchEvent(
+      new CustomEvent<T>(name, {
+        bubbles: true,
+        composed: true,
+        detail,
+      }),
+    );
+  }
+
+  private applySessionToken(token?: string): void {
+    this.currentSessionToken = token;
+    this.chatService?.setSessionToken(token);
+  }
+
   private getChatService(): ChatSessionService {
     if (!this.chatService) {
       this.chatService = new ChatSessionService({
@@ -339,6 +393,7 @@ export class OcsChat {
         taskPollingIntervalMs: OcsChat.TASK_POLLING_INTERVAL_MS,
         taskPollingMaxAttempts: OcsChat.TASK_POLLING_MAX_ATTEMPTS,
         messagePollingIntervalMs: OcsChat.MESSAGE_POLLING_INTERVAL_MS,
+        sessionToken: this.currentSessionToken,
       });
     }
     return this.chatService;
@@ -353,6 +408,62 @@ export class OcsChat {
     };
 
     this.messages = [...this.messages, errorMessage];
+    this.saveSessionToStorage();
+    this.scrollToBottom();
+  }
+
+  /**
+   * Recover from a rejected session token (403). Unbound widgets discard the
+   * dead session/token, show a notice, and start fresh on the next send; bound
+   * widgets cannot restart a host-owned session, so they surface an error.
+   */
+  private handleSessionAccessError(): void {
+    this.cleanup();
+    this.isLoading = false;
+    this.isTyping = false;
+    this.isUploadingFiles = false;
+    this.typingProgressMessage = '';
+
+    if (this.isSessionBound()) {
+      this.addErrorMessage(this.translationManager.get('status.sessionError', 'This chat session is no longer available.'));
+      return;
+    }
+
+    this.sessionEpoch += 1;
+    this.activeSessionId = undefined;
+    this.applySessionToken(undefined);
+    this.clearSessionStorage();
+    this.addErrorMessage(this.translationManager.get('status.sessionExpired', 'Your chat session expired. Starting a new chat — please resend your message.'));
+  }
+
+  /**
+   * The server reported the session has ended (e.g. closed from another tab or
+   * by the bot). Polling has already stopped; disable the composer and tell the
+   * user. Unbound widgets can recover via the "new chat" button (clearSession).
+   */
+  private handleSessionEnded(): void {
+    if (this.sessionEnded) {
+      return;
+    }
+    this.sessionEnded = true;
+    this.dispatchWidgetEvent('ocs:session:ended', { sessionId: this.activeSessionId });
+    this.stopMessagePolling();
+    this.isTyping = false;
+    this.typingProgressMessage = '';
+    const content = this.translationManager.get('status.chatEnded') ?? 'This chat has ended.';
+    // An unbound widget restores persisted messages and re-polls after a reload,
+    // so the notice may already be the last message.
+    const last = this.messages.at(-1);
+    if (last?.role === 'system' && last.content === content) {
+      return;
+    }
+    const notice: ChatMessage = {
+      created_at: new Date().toISOString(),
+      role: 'system',
+      content,
+      attachments: [],
+    };
+    this.messages = [...this.messages, notice];
     this.saveSessionToStorage();
     this.scrollToBottom();
   }
@@ -446,6 +557,7 @@ export class OcsChat {
 
       const requestBody: Record<string, unknown> = {
         chatbot_id: this.chatbotId,
+        use_session_token: true,
         session_data: {
           source: 'widget',
           page_url: window.location.href,
@@ -463,8 +575,10 @@ export class OcsChat {
 
       const data = await this.getChatService().startSession(requestBody);
       if (epoch !== this.sessionEpoch) return;
-      this.sessionId = data.session_id;
+      this.activeSessionId = data.session_id;
+      this.applySessionToken(data.session_token ?? undefined);
       this.saveSessionToStorage();
+      this.dispatchWidgetEvent('ocs:session:started', { sessionId: this.activeSessionId });
 
       this.startMessagePolling();
     } catch (_error) {
@@ -475,8 +589,34 @@ export class OcsChat {
     }
   }
 
+  /**
+   * Load the full message history for a session provided via the `session-id`
+   * prop, then begin regular polling.
+   */
+  private async loadBoundSessionHistory(): Promise<void> {
+    const epoch = this.sessionEpoch;
+    try {
+      const history = await this.getChatService().fetchAllMessages(this.activeSessionId);
+      if (epoch !== this.sessionEpoch) return;
+      // Keep messages added while the history was loading (e.g. an optimistic
+      // user message) by appending any that aren't part of the fetched history.
+      const known = new Set(history.map(m => `${m.created_at}|${m.role}|${m.content}`));
+      const pending = this.messages.filter(m => !known.has(`${m.created_at}|${m.role}|${m.content}`));
+      this.messages = [...history, ...pending];
+      this.scrollToBottom(true);
+    } catch (error) {
+      if (epoch !== this.sessionEpoch) return;
+      if (error instanceof SessionAccessError) {
+        this.handleSessionAccessError();
+        return;
+      }
+      console.warn('Failed to load chat history:', error);
+    }
+    this.startMessagePolling();
+  }
+
   private async uploadFiles(): Promise<number[]> {
-    if (this.selectedFiles.length === 0 || !this.sessionId || !this.allowAttachments) {
+    if (this.selectedFiles.length === 0 || !this.activeSessionId || !this.allowAttachments) {
       return [];
     }
 
@@ -484,11 +624,15 @@ export class OcsChat {
     try {
       const uploadResult = await this.attachmentManager.uploadPendingFiles(this.selectedFiles, {
         apiBaseUrl: this.apiBaseUrl || 'https://www.openchatstudio.com',
-        sessionId: this.sessionId,
+        sessionId: this.activeSessionId,
         participantId: this.getOrGenerateUserId(),
         participantName: this.userName,
+        headers: this.getChatService().getUploadHeaders(),
       });
       this.selectedFiles = uploadResult.selectedFiles;
+      if (uploadResult.tokenRejected) {
+        throw new SessionAccessError(403, 'session_token_required', uploadResult.errorMessage || 'Session token rejected');
+      }
       return uploadResult.uploadedIds;
     } finally {
       this.isUploadingFiles = false;
@@ -496,18 +640,18 @@ export class OcsChat {
   }
 
   private async sendMessage(message: string): Promise<void> {
-    if (!message.trim()) return;
+    if (!message.trim() || this.sessionEnded) return;
     const epoch = this.sessionEpoch;
 
     // Start session if we don't have one yet
-    if (!this.sessionId) {
+    if (!this.activeSessionId) {
       // Prevent concurrent session initialization
       if (this.isLoading) {
         return;
       }
       await this.startSession();
       // Check if session started successfully
-      if (!this.sessionId) {
+      if (!this.activeSessionId) {
         return; // startSession already handled the error
       }
     }
@@ -563,6 +707,13 @@ export class OcsChat {
       }
       this.scrollToBottom();
 
+      // Fire before-send first so handlers can update pageContext synchronously
+      // before we read internalPageContext into the request body.
+      this.dispatchWidgetEvent('ocs:message:before-send', {
+        message: message.trim(),
+        sessionId: this.activeSessionId ?? '',
+      });
+
       const requestBody: any = { message: message.trim() };
       if (this.allowAttachments && attachmentIds.length > 0) {
         requestBody.attachment_ids = attachmentIds;
@@ -574,7 +725,7 @@ export class OcsChat {
         requestBody.version_number = this.versionNumber;
       }
 
-      const data = await this.getChatService().sendMessage(this.sessionId, requestBody);
+      const data = await this.getChatService().sendMessage(this.activeSessionId, requestBody);
       if (epoch !== this.sessionEpoch) return;
 
       if (data.status === 'error') {
@@ -582,9 +733,17 @@ export class OcsChat {
       }
 
       this.internalPageContext = undefined;
+      this.dispatchWidgetEvent('ocs:message:sent', {
+        message: message.trim(),
+        sessionId: this.activeSessionId,
+      });
       this.startTaskPolling(data.task_id);
     } catch (error) {
       if (epoch !== this.sessionEpoch) return;
+      if (error instanceof SessionAccessError) {
+        this.handleSessionAccessError();
+        return;
+      }
       const errorText = error instanceof Error ? error.message : 'Failed to send message';
       this.handleError(errorText);
     }
@@ -706,6 +865,7 @@ export class OcsChat {
     }
 
     this.saveVisibleState(visible);
+    this.dispatchWidgetEvent(visible ? 'ocs:open' : 'ocs:close');
 
     if (this.isButtonDragging) {
       this.isButtonDragging = false;
@@ -719,9 +879,14 @@ export class OcsChat {
       }
 
       // Resume polling for existing session (don't auto-start new sessions)
-      if (this.sessionId) {
+      if (this.activeSessionId) {
         this.scrollToBottom(true);
-        this.startMessagePolling();
+        if (this.isSessionBound() && this.messages.length === 0) {
+          // A bound widget that was hidden at load has not fetched its history yet.
+          void this.loadBoundSessionHistory();
+        } else {
+          this.startMessagePolling();
+        }
       }
     } else {
       this.stopMessagePolling();
@@ -729,7 +894,7 @@ export class OcsChat {
   }
 
   private startTaskPolling(taskId: string): void {
-    if (!this.sessionId) return;
+    if (!this.activeSessionId) return;
 
     this.currentPollTaskId = taskId;
     this.isTyping = true;
@@ -739,10 +904,14 @@ export class OcsChat {
       this.taskPollingHandle.cancel();
     }
 
-    this.taskPollingHandle = this.getChatService().pollTask(this.sessionId, taskId, {
+    this.taskPollingHandle = this.getChatService().pollTask(this.activeSessionId, taskId, {
       onMessage: message => {
         this.messages = [...this.messages, message];
         this.saveSessionToStorage();
+        this.dispatchWidgetEvent('ocs:message:received', {
+          message: { ...message },
+          sessionId: this.activeSessionId ?? '',
+        });
         this.scrollToBottom();
         this.isTyping = false;
         this.typingProgressMessage = '';
@@ -773,15 +942,19 @@ export class OcsChat {
       },
       onError: error => {
         this.typingProgressMessage = '';
-        this.handleError(error.message);
         this.taskPollingHandle = undefined;
+        if (error instanceof SessionAccessError) {
+          this.handleSessionAccessError();
+          return;
+        }
+        this.handleError(error.message);
         this.startMessagePolling();
       },
     });
   }
 
   private startMessagePolling(): void {
-    if (!this.sessionId || this.currentPollTaskId || !this.visible) {
+    if (!this.activeSessionId || this.currentPollTaskId || !this.visible || this.sessionEnded) {
       return;
     }
 
@@ -789,14 +962,26 @@ export class OcsChat {
       return;
     }
 
-    this.messagePollingHandle = this.getChatService().startMessagePolling(this.sessionId, {
+    this.messagePollingHandle = this.getChatService().startMessagePolling(this.activeSessionId, {
       getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
       onMessages: messages => {
         if (messages.length === 0) return;
         this.messages = [...this.messages, ...messages];
         this.saveSessionToStorage();
+        for (const message of messages) {
+          if (message.role !== 'user') {
+            this.dispatchWidgetEvent('ocs:message:received', {
+              message: { ...message },
+              sessionId: this.activeSessionId ?? '',
+            });
+          }
+        }
         this.scrollToBottom();
         this.focusInput();
+      },
+      onSessionEnded: () => {
+        this.messagePollingHandle = undefined;
+        this.handleSessionEnded();
       },
       onError: () => {
         // Silently ignore polling errors to match previous behaviour
@@ -1380,18 +1565,24 @@ export class OcsChat {
       messages: `ocs-chat-messages-${this.chatbotId}`,
       lastActivity: `ocs-chat-activity-${this.chatbotId}`,
       visible: `ocs-chat-visible-${this.chatbotId}`,
+      sessionToken: `ocs-chat-token-${this.chatbotId}`,
     };
   }
 
   private saveSessionToStorage(): void {
-    if (!this.persistentSession) {
+    if (!this.persistentSession || this.isSessionBound()) {
       return;
     }
     const keys = this.getStorageKeys();
     try {
-      if (this.sessionId) {
-        localStorage.setItem(keys.sessionId, this.sessionId);
+      if (this.activeSessionId) {
+        localStorage.setItem(keys.sessionId, this.activeSessionId);
         localStorage.setItem(keys.lastActivity, new Date().toISOString());
+        if (this.currentSessionToken) {
+          localStorage.setItem(keys.sessionToken, this.currentSessionToken);
+        } else {
+          localStorage.removeItem(keys.sessionToken);
+        }
       }
       localStorage.setItem(keys.messages, JSON.stringify(this.messages));
     } catch (error) {
@@ -1430,7 +1621,9 @@ export class OcsChat {
         }
       }
 
-      return { sessionId, messages };
+      const sessionToken = localStorage.getItem(keys.sessionToken) ?? undefined;
+
+      return { sessionId, messages, sessionToken };
     } catch (error) {
       // fall back to starting a new session
       console.warn('Failed to load chat session from localStorage, starting new session:', error);
@@ -1476,7 +1669,9 @@ export class OcsChat {
   }
 
   private saveVisibleState(visible: boolean): void {
-    if (!this.persistentSession) return;
+    // Kiosk visibility is forced, so persisting it would only leak into a
+    // standard-mode widget for the same chatbot on another page.
+    if (!this.persistentSession || this.isKioskMode()) return;
     try {
       const keys = this.getStorageKeys();
       localStorage.setItem(keys.visible, visible ? '1' : '0');
@@ -1504,6 +1699,7 @@ export class OcsChat {
       localStorage.removeItem(keys.messages);
       localStorage.removeItem(keys.lastActivity);
       localStorage.removeItem(keys.visible);
+      localStorage.removeItem(keys.sessionToken);
     } catch (error) {
       console.warn('Failed to clear chat session from localStorage:', error);
     }
@@ -1511,6 +1707,10 @@ export class OcsChat {
 
   private isKioskMode(): boolean {
     return this.mode === 'kiosk';
+  }
+
+  private isSessionBound(): boolean {
+    return !!this.sessionId;
   }
 
   private isLocalStorageAvailable(): boolean {
@@ -1543,14 +1743,23 @@ export class OcsChat {
   private async clearSession(): Promise<void> {
     this.sessionEpoch += 1;
     this.clearSessionStorage();
-    this.sessionId = undefined;
+    // A session provided by the host page (session-id prop) cannot be cleared;
+    // stay bound to it. Unbound widgets start a new session on the next message.
+    this.activeSessionId = this.sessionId;
+    this.applySessionToken(this.isSessionBound() ? this.sessionToken : undefined);
     this.messages = [];
     this.isTyping = false;
+    this.sessionEnded = false;
     this.currentPollTaskId = '';
     if (this.allowAttachments) {
       this.selectedFiles = [];
     }
     this.cleanup();
+    if (this.isSessionBound()) {
+      // The host-owned session cannot be cleared: reload its history and
+      // resume polling so the widget doesn't end up in a dead state.
+      void this.loadBoundSessionHistory();
+    }
   }
 
   private toggleFullscreen(): void {
@@ -1561,7 +1770,7 @@ export class OcsChat {
 
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
-    if (this.error && !this.sessionId) {
+    if (this.error && !this.activeSessionId) {
       return (
         <Host>
           <p class="error-message">{this.error}</p>
@@ -1589,8 +1798,8 @@ export class OcsChat {
                 </div>
                 <div class="header-text">{this.translationManager.get('branding.headerText', this.headerText)}</div>
                 <div class="header-buttons">
-                  {/* New Chat button */}
-                  {this.messages.length > 0 && (
+                  {/* New Chat button — hidden for bound sessions (the host page owns the session lifecycle) */}
+                  {this.messages.length > 0 && !this.isSessionBound() && (
                     <button
                       class="header-button"
                       onClick={() => this.showConfirmationDialog()}
@@ -1641,7 +1850,7 @@ export class OcsChat {
             {/* Chat Content */}
             <div class="chat-content">
               {/* Loading State */}
-              {this.isLoading && !this.sessionId && (
+              {this.isLoading && !this.activeSessionId && (
                 <div class="loading-container">
                   <div class="loading-spinner"></div>
                   <span class="loading-text">{this.translationManager.get('status.starting')}</span>
@@ -1750,11 +1959,11 @@ export class OcsChat {
                     ref={el => (this.textareaRef = el)}
                     class="message-textarea"
                     rows={1}
-                    placeholder={this.translationManager.get('composer.placeholder')}
+                    placeholder={this.sessionEnded ? this.translationManager.get('status.chatEnded') : this.translationManager.get('composer.placeholder')}
                     value={this.messageInput}
                     onInput={e => this.handleInputChange(e)}
                     onKeyPress={e => this.handleKeyPress(e)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                   ></textarea>
                   {/* File Upload Button */}
                   {this.allowAttachments && (
@@ -1777,7 +1986,7 @@ export class OcsChat {
                     <button
                       class="file-attachment-button"
                       onClick={() => this.fileInputRef?.click()}
-                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading}
+                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                       title={this.translationManager.get('attach.add')}
                       aria-label={this.translationManager.get('attach.add')}
                     >
@@ -1785,9 +1994,9 @@ export class OcsChat {
                     </button>
                   )}
                   <button
-                    class={`send-button ${!this.isTyping && !this.isLoading && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
+                    class={`send-button ${!this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
                     onClick={() => this.sendMessage(this.messageInput)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || !this.messageInput.trim()}
+                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
                   >
                     {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                   </button>

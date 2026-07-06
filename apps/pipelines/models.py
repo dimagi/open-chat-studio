@@ -1,13 +1,10 @@
-import logging
+import copy
 from collections import defaultdict
 from collections.abc import Iterator
-from dataclasses import dataclass
 from functools import cached_property
-from typing import Self
 from uuid import uuid4
 
 import pydantic
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -15,63 +12,16 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from apps.chat.models import ChatMessageType
 from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
-from apps.experiments.models import ExperimentSession, SourceMaterial
+from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
+from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
-from apps.utils.fields import SanitizedJSONField
+from apps.utils.fields import SanitizedJSONField, as_int
 from apps.utils.models import BaseModel
-
-versioning_logger = logging.getLogger("ocs.versioning")
-
-
-@dataclass
-class ModelParamSpec:
-    """A helper class to hold the parameter name and model of those that are database records"""
-
-    param_name: str
-    model_cls: VersionsMixin
-
-    def get_object(self, id: int):
-        return self.model_cls.objects.get(id=id)
-
-
-def _set_versioned_param_value(node_version: Self, param_name: str, param_cls):
-    """
-    Handles parameters referencing versioned models with the following logic:
-    - If the referenced model has changes compared to its latest version, a new version is created, and the
-        parameter is updated to point to this new version.
-    - If the referenced model matches the latest version, the parameter is simply updated to point to the existing
-        latest version.
-    """
-
-    if param_instance_id := node_version.params.get(param_name):
-        if param_instance := param_cls.objects.filter(id=param_instance_id).first():
-            if not param_instance.has_versions or param_instance.compare_with_latest():
-                new_instance_version = param_instance.create_new_version()
-                node_version.params[param_name] = str(new_instance_version.id)
-            else:
-                node_version.params[param_name] = str(param_instance.latest_version.id)
-
-
-def _set_versioned_param_list_values(node_version: Self, param_name: str, param_cls):
-    """
-    Handles list parameters referencing versioned models with the same logic as _set_versioned_param_value
-    but for a list of IDs.
-    """
-    if param_instance_ids := node_version.params.get(param_name):
-        versioned_ids = []
-        for param_instance_id in param_instance_ids:
-            if param_instance := param_cls.objects.filter(id=param_instance_id).first():
-                if not param_instance.has_versions or param_instance.compare_with_latest():
-                    new_instance_version = param_instance.create_new_version()
-                    versioned_ids.append(new_instance_version.id)
-                else:
-                    versioned_ids.append(param_instance.latest_version.id)
-        node_version.params[param_name] = versioned_ids
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -299,6 +249,31 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         return pipeline_version
 
     @transaction.atomic()
+    def revert_to_version(self, version: "Pipeline") -> None:
+        """Reset this working pipeline to the state of ``version``.
+
+        Builds the working pipeline's flow data from ``version.flow_data`` (which carries each
+        node's params straight from the version's node rows), remaps params that reference
+        versioned records back to their working id — the inverse of the rewriting done during
+        publish, see ``apps.pipelines.versioning`` — and rebuilds the nodes via
+        ``update_nodes_from_data``. The versioned record for each param is read from the version
+        node's resource FK column.
+        """
+        # flow_data's nodes are built from the same node_set, so every flow_id resolves here.
+        version_nodes_by_flow_id = {node.flow_id: node for node in version.node_set.all()}
+        data = copy.deepcopy(version.flow_data)
+        for node in data.get("nodes", []):
+            node_data = node.get("data", {})
+            params = node_data.get("params", {})
+            version_node = version_nodes_by_flow_id[node["id"]]
+            for spec in get_versioned_param_specs(node_data.get("type")):
+                spec.revert_referenced_record(version_node, params)
+
+        self.data = data
+        self.save(update_fields=["data"])
+        self.update_nodes_from_data()
+
+    @transaction.atomic()
     def archive(self) -> bool:
         """
         Archive this record only when it is not still being referenced by other records. If this record is the working
@@ -378,6 +353,53 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     )
     is_archived = models.BooleanField(default=False)
     pipeline = models.ForeignKey(Pipeline, on_delete=models.CASCADE)
+    llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    source_material = models.ForeignKey(
+        "experiments.SourceMaterial",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    collection = models.ForeignKey(
+        "documents.Collection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="media_nodes",
+    )
+    collection_indexes = models.ManyToManyField(
+        "documents.Collection",
+        blank=True,
+        related_name="index_nodes",
+    )
+    assistant = models.ForeignKey(
+        "assistants.OpenAiAssistant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
+    synthetic_voice = models.ForeignKey(
+        "experiments.SyntheticVoice",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+    )
     objects = NodeObjectManager()
 
     def __str__(self):
@@ -387,22 +409,22 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     def name(self):
         return self.params.get("name", None)
 
+    def has_parameter(self, param_name: str) -> bool:
+        """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
+        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
+
+        node_class = getattr(pipeline_nodes, self.type, None)
+        return node_class is not None and param_name in node_class.model_fields
+
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]
         """
-        Create a new version of the node and if the node is an assistant node, create a new version of the assistant
-        and update the `assistant_id` in the node params to the new assistant version id.
+        Create a new version of the node. Params that reference versioned records (see
+        `apps.pipelines.versioning`) are versioned along with the node and updated to point at the new version.
 
         Args:
             pipeline: If provided, the new version will be assigned to this pipeline before saving,
                 avoiding a transient state where the node temporarily belongs to the original pipeline.
         """
-        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
-        from apps.pipelines.nodes.nodes import (  # noqa: PLC0415 - circular: nodes.nodes→models
-            AssistantNode,
-            LLMResponseWithPrompt,
-        )
-
         new_version = super().create_new_version(save=False, is_copy=is_copy)
         if is_copy and new_flow_id:
             old_flow_id = new_version.flow_id
@@ -410,29 +432,38 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             if new_version.type not in ("StartNode", "EndNode") and new_version.params.get("name") == old_flow_id:
                 new_version.params["name"] = new_flow_id
 
-        if not is_copy and self.type == AssistantNode.__name__ and new_version.params.get("assistant_id"):
-            assistant = OpenAiAssistant.objects.get(id=new_version.params.get("assistant_id"))
-            if not assistant.is_a_version:
-                assistant_version = assistant.create_new_version()
-                # convert to string to be consistent with values from the UI
-                new_version.params["assistant_id"] = str(assistant_version.id)
-
-        if not is_copy and self.type == LLMResponseWithPrompt.__name__:
-            _set_versioned_param_value(new_version, "source_material_id", SourceMaterial)
-            _set_versioned_param_value(new_version, "collection_id", Collection)
-            _set_versioned_param_list_values(new_version, "collection_index_ids", Collection)
+        if not is_copy:
+            for spec in get_versioned_param_specs(self.type):
+                spec.version_referenced_record(new_version.params)
 
         if pipeline is not None:
             new_version.pipeline = pipeline
         new_version.save()
         if self.params.get("custom_actions"):
             self._copy_custom_action_operations_to_new_version(new_node=new_version, is_copy=is_copy)
+        new_version._sync_resource_fk_fields()
 
         return new_version
+
+    def set_params(self, params):
+        """Assign params, persist them, and re-derive the resource FK mirror.
+
+        Prefer this over assigning ``self.params`` and calling ``save()`` directly: it keeps
+        the FK columns (a derived mirror of the ids in params) from drifting away from params.
+        See ``_sync_resource_fk_fields``.
+        """
+        self.params = params
+        # Persist only params (not a full save of a possibly-stale instance) so concurrent
+        # writes to unrelated columns aren't clobbered. _sync_resource_fk_fields handles the
+        # derived FK columns.
+        self.save(update_fields=["params"])
+        self._sync_resource_fk_fields()
 
     def update_from_params(self):
         """Callback to do DB related updates pertaining to the node params"""
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
+
+        self._sync_resource_fk_fields()
 
         if self.type == LLMResponseWithPrompt.__name__:
             custom_action_infos = []
@@ -441,6 +472,47 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
                 custom_action_infos.append({"custom_action_id": custom_action_id, "operation_id": operation_id})
 
             set_custom_actions(self, custom_action_infos)
+
+    @classmethod
+    def resource_fk_fields(cls):
+        return [
+            field.name
+            for field in cls._meta.get_fields()
+            if isinstance(field, models.ForeignKey) and field.remote_field.on_delete is models.SET_NULL
+        ]
+
+    def _sync_resource_fk_fields(self):
+        """Populate FK/M2M fields from the params JSON.
+
+        The FK columns are a derived mirror of the IDs in params (non-int/boolean values
+        map to null). We don't pre-check that a scalar id still exists: a resource can't
+        be deleted while a working node references it — the delete guards check
+        pipeline-node usage (see apps.utils.deletion.get_related_objects /
+        get_related_pipelines_queryset) — so a live node's params never holds a dangling
+        id, and the DB FK constraint surfaces any that slip through. Versions may point at
+        a since-deleted resource, but they're never re-synced. The collection_indexes M2M
+        is set from a Collection queryset, which drops ids that no longer exist. Only
+        saves when a scalar FK changed.
+        """
+        from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
+
+        params = self.params or {}
+        update_fields = []
+        for field_name in self.resource_fk_fields():
+            value = as_int(params.get(f"{field_name}_id"))
+            if getattr(self, f"{field_name}_id") != value:
+                setattr(self, f"{field_name}_id", value)
+                update_fields.append(f"{field_name}_id")
+        if update_fields:
+            self.save(update_fields=update_fields)
+
+        raw_index_ids = params.get("collection_index_ids") or []
+        if not isinstance(raw_index_ids, list | tuple | set):
+            raw_index_ids = [raw_index_ids]
+        # Coerce through as_int (like the scalar FKs) so malformed JSON values are dropped rather
+        # than blowing up the id__in query.
+        index_ids = [parsed for parsed in map(as_int, raw_index_ids) if parsed is not None]
+        self.collection_indexes.set(Collection.objects.filter(id__in=index_ids))
 
     def archive(self):
         """
@@ -455,46 +527,29 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         self._archive_related_params()
 
     def _get_version_details(self) -> VersionDetails:
-        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
-        from apps.experiments.models import (  # noqa: PLC0415 - circular: experiments.models→models
-            VersionFieldDisplayFormatters,
-        )
         from apps.pipelines.nodes.nodes import LLMResponseWithPrompt  # noqa: PLC0415 - circular: nodes.nodes→models
 
         node_name = self.params.get("name", self.type)
         if node_name == self.flow_id:
             node_name = self.type
 
+        specs_by_param = {spec.param_name: spec for spec in get_versioned_param_specs(self.type)}
         param_versions = []
         for name, value in self.params.items():
             display_formatter = None
-            match name:
-                case "tools":
-                    display_formatter = VersionFieldDisplayFormatters.format_tools
-                case "custom_actions":
-                    # This is appended to the param_versions list separately
-                    continue
-                case "name":
-                    value = node_name
-                case "assistant_id":
-                    name = "assistant"
-                    # Load the assistant, since it is being versioned
-                    if value:
-                        value = OpenAiAssistant.objects.filter(id=value).first()
-                case "collection_id":
-                    name = "media"
-                    if value:
-                        value = Collection.objects.filter(id=value).first()
-                case "collection_index_ids":
-                    name = "Collection Indexes"
-                    if value:
-                        # Convert list of IDs to list of Collection objects
-                        value = list(Collection.objects.filter(id__in=value))
-                case "source_material_id":
-                    name = "source_material"
-                    if value:
-                        value = SourceMaterial.objects.filter(id=value).first()
+            if spec := specs_by_param.get(name):
+                # Load the referenced record(s) for display
+                name = spec.display_name
+                value = spec.resolve_for_display(value)
+            else:
+                match name:
+                    case "tools":
+                        display_formatter = VersionFieldDisplayFormatters.format_tools
+                    case "custom_actions":
+                        # This is appended to the param_versions list separately
+                        continue
+                    case "name":
+                        value = node_name
 
             param_versions.append(
                 VersionField(group_name=node_name, name=name, raw_value=value, to_display=display_formatter),
@@ -523,40 +578,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """
         Archive related params that were also versioned along with this node
         """
-        from apps.assistants.models import OpenAiAssistant  # noqa: PLC0415 - circular: assistants.models→models
-        from apps.documents.models import Collection  # noqa: PLC0415 - circular: documents.models→models
-        from apps.pipelines.nodes import nodes  # noqa: PLC0415 - circular: nodes.nodes→models
-
-        model_param_specs = {
-            nodes.AssistantNode.__name__: [ModelParamSpec(param_name="assistant_id", model_cls=OpenAiAssistant)],
-            nodes.LLMResponseWithPrompt.__name__: [
-                ModelParamSpec(param_name="collection_id", model_cls=Collection),
-                # TODO: Custom actions needed
-                # TODO: Source material needed
-            ],
-        }
-
-        for spec in model_param_specs.get(self.type, []):
-            if instance_id := self.params.get(spec.param_name):
-                try:
-                    obj = spec.get_object(instance_id)
-                    obj.archive()
-                except ObjectDoesNotExist:
-                    versioning_logger.exception(
-                        f"Failed to archive {spec.param_name} with id {instance_id}, since it could not be found"
-                    )
-
-        # Handle list parameters separately (e.g., collection_index_ids)
-        if self.type == nodes.LLMResponseWithPrompt.__name__:
-            if collection_index_ids := self.params.get("collection_index_ids"):
-                for collection_id in collection_index_ids:
-                    try:
-                        collection = Collection.objects.get(id=collection_id)
-                        collection.archive()
-                    except ObjectDoesNotExist:
-                        versioning_logger.exception(
-                            f"Failed to archive collection_index_ids with id {collection_id}: not found"
-                        )
+        for spec in get_versioned_param_specs(self.type):
+            spec.archive_referenced_record(self.params)
 
 
 class PipelineEventInputs(models.TextChoices):

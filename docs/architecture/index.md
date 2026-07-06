@@ -2,9 +2,14 @@
 hide:
   - navigation
 ---
+
 # Architecture
 
 This section provides an overview of the Open Chat Studio architecture, explaining the core concepts and components that make up the system.
+
+!!! tip "Architecture Decision Records"
+
+    Significant architectural decisions are recorded as ADRs. See the **[ADR index](../adr/index.md)** for the full list.
 
 For AI-generated architecture diagrams based on this GitHub repo, visit
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)

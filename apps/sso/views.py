@@ -124,7 +124,7 @@ class SignupAfterInvite(SignupView):
                 self.request,
                 _("The invitation has already been accepted. Please sign in to continue or request a new invitation."),
             )
-            return redirect("web:home")
+            return redirect("prelogin:home")
 
         if flag_is_active(self.request, "flag_sso_login"):
             if response := _redirect_for_sso(self.request, self.invitation.email, for_signup=True):

@@ -5,13 +5,14 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 import httpx
+import requests
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
+from apps.channels.channels_v2.capabilities import ChannelCapabilities, PlatformConsentConfig
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.sender import ChannelSender
@@ -37,11 +38,17 @@ class TelegramCallbacks(ChannelCallbacks):
     def __init__(self, telegram_bot: TeleBot):
         self.telegram_bot = telegram_bot
 
+    def _safe_send_chat_action(self, recipient: str, action: str) -> None:
+        try:
+            self.telegram_bot.send_chat_action(chat_id=recipient, action=action)
+        except (requests.exceptions.RequestException, ConnectionError) as e:
+            logger.warning("Failed to send chat action '%s' to %s: %s", action, recipient, e)
+
     def transcription_started(self, recipient: str) -> None:
-        self.telegram_bot.send_chat_action(chat_id=recipient, action="upload_voice")
+        self._safe_send_chat_action(recipient, "upload_voice")
 
     def on_submit_input_to_llm(self, recipient: str) -> None:
-        self.telegram_bot.send_chat_action(chat_id=recipient, action="typing")
+        self._safe_send_chat_action(recipient, "typing")
 
     def echo_transcript(self, recipient: str, transcript: str) -> None:
         # Telegram supports reply-to threading via the inbound message id, but
@@ -130,6 +137,10 @@ class TelegramChannel(ChannelBase):
             supports_conversational_consent=True,
             supported_message_types=self.supported_message_types,
             can_send_file=self._can_send_file,
+            # Lenient: only block when consent was explicitly revoked (e.g.
+            # handle_telegram_block sets consent=False after a 403). Participants
+            # with no ParticipantData row or no consent key are allowed through.
+            consent_config=PlatformConsentConfig(strict=False, default_consent=True),
         )
 
     def _can_send_file(self, file: File) -> bool:

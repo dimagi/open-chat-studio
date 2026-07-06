@@ -1,0 +1,6118 @@
+openapi: 3.0.3
+info:
+  title: Open Chat Studio
+  version: export
+  description: Read-only, team-scoped endpoints for the Open Chat Studio data sync/export.
+    **Unversioned and intended only for OCS export** — it carries no backwards-compatibility
+    guarantee and may change without notice.
+paths:
+  /api/export/analysis_queries/:
+    get:
+      operationId: analysis_queries
+      summary: Analysis Queries
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisQueryList'
+          description: ''
+  /api/export/annotation_items/:
+    get:
+      operationId: annotation_items
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Annotation Items
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationItemList'
+          description: ''
+  /api/export/annotation_queue_aggregates/:
+    get:
+      operationId: annotation_queue_aggregates
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Annotation Queue Aggregates
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationQueueAggregateList'
+          description: ''
+  /api/export/annotation_queues/:
+    get:
+      operationId: annotation_queues
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Annotation Queues
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationQueueList'
+          description: ''
+  /api/export/annotations/:
+    get:
+      operationId: annotations
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Annotations
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnotationList'
+          description: ''
+  /api/export/applied_tags/:
+    get:
+      operationId: applied_tags
+      summary: Applied Tags
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppliedTagList'
+          description: ''
+  /api/export/auth_providers/:
+    get:
+      operationId: auth_providers
+      summary: Auth Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthProviderList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/chat_attachments/:
+    get:
+      operationId: chat_attachments
+      summary: Chat Attachments
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatAttachmentList'
+          description: ''
+  /api/export/chat_messages/:
+    get:
+      operationId: chat_messages
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Chat Messages
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageList'
+          description: ''
+  /api/export/chatbot_channels/:
+    get:
+      operationId: chatbot_channels
+      summary: Chatbot Channels
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentChannelList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/chatbots/:
+    get:
+      operationId: chatbots
+      summary: Chatbots
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentList'
+          description: ''
+  /api/export/chats/:
+    get:
+      operationId: chats
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Chats
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatList'
+          description: ''
+  /api/export/collection_files/:
+    get:
+      operationId: collection_files
+      summary: Collection Files
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionFileList'
+          description: ''
+  /api/export/collections/:
+    get:
+      operationId: collections
+      summary: Collections
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionList'
+          description: ''
+  /api/export/consent_forms/:
+    get:
+      operationId: consent_forms
+      summary: Consent Forms
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentFormList'
+          description: ''
+  /api/export/custom_action_operations/:
+    get:
+      operationId: custom_action_operations
+      summary: Custom Action Operations
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomActionOperationList'
+          description: ''
+  /api/export/custom_actions/:
+    get:
+      operationId: custom_actions
+      summary: Custom Actions
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomActionList'
+          description: ''
+  /api/export/custom_tagged_items/:
+    get:
+      operationId: custom_tagged_items
+      summary: Custom Tagged Items
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomTaggedItemList'
+          description: ''
+  /api/export/dataset_auto_population_rules/:
+    get:
+      operationId: dataset_auto_population_rules
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Dataset Auto Population Rules
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetAutoPopulationRuleList'
+          description: ''
+  /api/export/document_sources/:
+    get:
+      operationId: document_sources
+      summary: Document Sources
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentSourceList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/embedding_provider_models/:
+    get:
+      operationId: embedding_provider_models
+      summary: Embedding Provider Models
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingProviderModelList'
+          description: ''
+  /api/export/evaluation_configs/:
+    get:
+      operationId: evaluation_configs
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Evaluation Configs
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationConfigList'
+          description: ''
+  /api/export/evaluation_datasets/:
+    get:
+      operationId: evaluation_datasets
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Evaluation Datasets
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationDatasetList'
+          description: ''
+  /api/export/evaluation_messages/:
+    get:
+      operationId: evaluation_messages
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Evaluation Messages
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationMessageList'
+          description: ''
+  /api/export/evaluation_results/:
+    get:
+      operationId: evaluation_results
+      summary: Evaluation Results
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResultList'
+          description: ''
+  /api/export/evaluation_run_aggregates/:
+    get:
+      operationId: evaluation_run_aggregates
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Evaluation Run Aggregates
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationRunAggregateList'
+          description: ''
+  /api/export/evaluation_runs/:
+    get:
+      operationId: evaluation_runs
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Evaluation Runs
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationRunList'
+          description: ''
+  /api/export/evaluator_tag_rules/:
+    get:
+      operationId: evaluator_tag_rules
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Evaluator Tag Rules
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluatorTagRuleList'
+          description: ''
+  /api/export/evaluators/:
+    get:
+      operationId: evaluators
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Evaluators
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluatorList'
+          description: ''
+  /api/export/event_actions/:
+    get:
+      operationId: event_actions
+      summary: Event Actions
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventActionList'
+          description: ''
+  /api/export/event_users/:
+    get:
+      operationId: event_users
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Event Users
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventUserList'
+          description: ''
+  /api/export/file_chunk_embeddings/:
+    get:
+      operationId: file_chunk_embeddings
+      summary: File Chunk Embeddings
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileChunkEmbeddingList'
+          description: ''
+  /api/export/files/:
+    get:
+      operationId: files
+      summary: Files
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileList'
+          description: ''
+  /api/export/llm_provider_models/:
+    get:
+      operationId: llm_provider_models
+      summary: Llm Provider Models
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProviderModelList'
+          description: ''
+  /api/export/llm_providers/:
+    get:
+      operationId: llm_providers
+      summary: Llm Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProviderList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/manifest/:
+    get:
+      operationId: manifest
+      description: 'Returns the resource manifest: resource call order, per-model
+        config, and a schema checksum clients can use to detect schema compatability.'
+      summary: Manifest
+      tags:
+      - Manifest
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Manifest'
+          description: ''
+  /api/export/messaging_providers/:
+    get:
+      operationId: messaging_providers
+      summary: Messaging Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagingProviderList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/notification_event_types/:
+    get:
+      operationId: notification_event_types
+      summary: Notification Event Types
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventTypeList'
+          description: ''
+  /api/export/notification_events/:
+    get:
+      operationId: notification_events
+      summary: Notification Events
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationEventList'
+          description: ''
+  /api/export/participant_data/:
+    get:
+      operationId: participant_data
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Participant Data
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantDataList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/participants/:
+    get:
+      operationId: participants
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Participants
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantList'
+          description: ''
+  /api/export/pipeline_chat_histories/:
+    get:
+      operationId: pipeline_chat_histories
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Pipeline Chat Histories
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineChatHistoryList'
+          description: ''
+  /api/export/pipeline_chat_messages/:
+    get:
+      operationId: pipeline_chat_messages
+      summary: Pipeline Chat Messages
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineChatMessagesList'
+          description: ''
+  /api/export/pipeline_nodes/:
+    get:
+      operationId: pipeline_nodes
+      summary: Pipeline Nodes
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeList'
+          description: ''
+  /api/export/pipelines/:
+    get:
+      operationId: pipelines
+      summary: Pipelines
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineList'
+          description: ''
+  /api/export/pricing_rules/:
+    get:
+      operationId: pricing_rules
+      summary: Pricing Rules
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRuleList'
+          description: ''
+  /api/export/scheduled_messages/:
+    get:
+      operationId: scheduled_messages
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Scheduled Messages
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledMessageList'
+          description: ''
+  /api/export/scores/:
+    get:
+      operationId: scores
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Scores
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreList'
+          description: ''
+  /api/export/sessions/:
+    get:
+      operationId: sessions
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Sessions
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentSessionList'
+          description: ''
+  /api/export/source_materials/:
+    get:
+      operationId: source_materials
+      summary: Source Materials
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceMaterialList'
+          description: ''
+  /api/export/static_triggers/:
+    get:
+      operationId: static_triggers
+      summary: Static Triggers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticTriggerList'
+          description: ''
+  /api/export/synthetic_voices/:
+    get:
+      operationId: synthetic_voices
+      summary: Synthetic Voices
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyntheticVoiceList'
+          description: ''
+  /api/export/tags/:
+    get:
+      operationId: tags
+      summary: Tags
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagList'
+          description: ''
+  /api/export/team/:
+    get:
+      operationId: team
+      description: Returns the team resolved from the API key, as a single object.
+      summary: Team
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamDetail'
+          description: ''
+  /api/export/timeout_triggers/:
+    get:
+      operationId: timeout_triggers
+      summary: Timeout Triggers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeoutTriggerList'
+          description: ''
+  /api/export/trace_providers/:
+    get:
+      operationId: trace_providers
+      summary: Trace Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceProviderList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+  /api/export/traces/:
+    get:
+      operationId: traces
+      summary: Traces
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceList'
+          description: ''
+  /api/export/transcript_analyses/:
+    get:
+      operationId: transcript_analyses
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: Transcript Analyses
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranscriptAnalysisList'
+          description: ''
+  /api/export/usage_records/:
+    get:
+      operationId: usage_records
+      summary: Usage Records
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageRecordList'
+          description: ''
+  /api/export/user_comments/:
+    get:
+      operationId: user_comments
+      description: 'Paginated by `updated_at`: a row modified while you page through
+        it can reappear on a later page, so clients must treat results as upserts
+        keyed by `id` rather than assuming each row is seen once.'
+      summary: User Comments
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCommentList'
+          description: ''
+  /api/export/user_notification_preferences/:
+    get:
+      operationId: user_notification_preferences
+      summary: User Notification Preferences
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserNotificationPreferencesList'
+          description: ''
+  /api/export/users/:
+    get:
+      operationId: users
+      summary: Users
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUserList'
+          description: ''
+  /api/export/voice_providers/:
+    get:
+      operationId: voice_providers
+      summary: Voice Providers
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+        description: Keyset pagination cursor returned as `cursor` by the previous
+          page.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Maximum rows per page (default 100, capped at 1000).
+      tags:
+      - Team
+      security:
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceProviderList'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncErrorDetail'
+          description: Team has no registered public key; secret data cannot be sealed.
+components:
+  schemas:
+    ActionTypeEnum:
+      enum:
+      - log
+      - end_conversation
+      - send_message_to_bot
+      - schedule_trigger
+      - pipeline_start
+      type: string
+      description: |-
+        * `log` - Log the last message
+        * `end_conversation` - End the conversation
+        * `send_message_to_bot` - Prompt the bot to message the user
+        * `schedule_trigger` - Trigger a schedule
+        * `pipeline_start` - Start a pipeline
+    AnalysisQueryDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        prompt:
+          type: string
+        output_format:
+          type: string
+          maxLength: 255
+        order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        analysis:
+          type: integer
+      required:
+      - analysis
+      - id
+      - prompt
+    AnalysisQueryList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisQueryDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    AnnotationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_authoritative:
+          type: boolean
+        authoritative_set_at:
+          type: string
+          format: date-time
+          nullable: true
+        data:
+          description: Annotation data matching the queue's schema
+        status:
+          $ref: '#/components/schemas/AnnotationDetailStatusEnum'
+        item:
+          type: integer
+        reviewer:
+          type: integer
+        authoritative_set_by:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - item
+      - reviewer
+      - updated_at
+    AnnotationDetailStatusEnum:
+      enum:
+      - draft
+      - submitted
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `submitted` - Submitted
+    AnnotationItemDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        item_type:
+          $ref: '#/components/schemas/ItemTypeEnum'
+        status:
+          $ref: '#/components/schemas/AnnotationItemDetailStatusEnum'
+        review_count:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        flags: {}
+        queue:
+          type: integer
+        session:
+          type: integer
+          nullable: true
+        message:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - item_type
+      - message
+      - queue
+      - session
+      - updated_at
+    AnnotationItemDetailStatusEnum:
+      enum:
+      - pending
+      - in_progress
+      - awaiting_resolution
+      - completed
+      - flagged
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `in_progress` - In Progress
+        * `awaiting_resolution` - Awaiting resolution
+        * `completed` - Completed
+        * `flagged` - Flagged
+    AnnotationItemList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnotationItemDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    AnnotationList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnotationDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    AnnotationQueueAggregateDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        aggregates:
+          description: Aggregated stats per schema field
+        queue:
+          type: integer
+      required:
+      - created_at
+      - id
+      - queue
+      - updated_at
+    AnnotationQueueAggregateList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnotationQueueAggregateDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    AnnotationQueueDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        schema:
+          description: Dict of field_name -> FieldDefinition JSON (same format as
+            evaluator output_schema)
+        num_reviews_required:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          description: Number of reviews required before an item is marked complete
+            (1-10)
+        status:
+          $ref: '#/components/schemas/AnnotationQueueDetailStatusEnum'
+        created_by:
+          type: integer
+          nullable: true
+        assignees:
+          type: array
+          items:
+            type: integer
+      required:
+      - created_at
+      - id
+      - name
+      - updated_at
+    AnnotationQueueDetailStatusEnum:
+      enum:
+      - active
+      - paused
+      - completed
+      - archived
+      type: string
+      description: |-
+        * `active` - Active
+        * `paused` - Paused
+        * `completed` - Completed
+        * `archived` - Archived
+    AnnotationQueueList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnotationQueueDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    AppliedTagDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        evaluation_result:
+          type: integer
+        rule:
+          type: integer
+        tag:
+          type: integer
+      required:
+      - created_at
+      - evaluation_result
+      - id
+      - rule
+      - tag
+      - updated_at
+    AppliedTagList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedTagDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    AuthProviderDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/AuthProviderDetailTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - type
+      - updated_at
+    AuthProviderDetailTypeEnum:
+      enum:
+      - basic
+      - api_key
+      - bearer
+      - commcare
+      type: string
+      description: |-
+        * `basic` - Basic
+        * `api_key` - API Key
+        * `bearer` - Bearer Auth
+        * `commcare` - CommCare
+    AuthProviderList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthProviderDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    BlankEnum:
+      enum:
+      - ''
+    CategoryEnum:
+      enum:
+      - bot_response
+      - safety_layer_response
+      - experiment_version
+      - response_rating
+      - error
+      - media_type
+      type: string
+      description: |-
+        * `bot_response` - Bot Response
+        * `safety_layer_response` - Safety Layer Response
+        * `experiment_version` - Experiment Version
+        * `response_rating` - Response Rating
+        * `error` - Error
+        * `media_type` - Media Type
+    ChatAttachmentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        tool_type:
+          type: string
+          maxLength: 128
+        extra: {}
+        chat:
+          type: integer
+        files:
+          type: array
+          items:
+            type: integer
+      required:
+      - chat
+      - created_at
+      - id
+      - tool_type
+      - updated_at
+    ChatAttachmentList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatAttachmentDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ChatDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        translated_languages:
+          type: array
+          items:
+            type: string
+            maxLength: 3
+          nullable: true
+          description: List of language codes for which translated text is available
+        metadata: {}
+      required:
+      - created_at
+      - id
+      - updated_at
+    ChatList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ChatMessageDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        message_type:
+          $ref: '#/components/schemas/MessageTypeEnum'
+        content:
+          type: string
+        summary:
+          type: string
+          nullable: true
+          description: The summary of the conversation up to this point (not including
+            this message)
+        translations:
+          description: Dictionary of translated text keyed by the language code
+        metadata: {}
+        chat:
+          type: integer
+      required:
+      - chat
+      - content
+      - id
+      - message_type
+      - updated_at
+    ChatMessageList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessageDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ChatbotSessionStatusEnum:
+      enum:
+      - setup
+      - pending
+      - active
+      - pending-review
+      - complete
+      - unknown
+      type: string
+      description: |-
+        * `setup` - Setting Up
+        * `pending` - Awaiting participant
+        * `active` - Active
+        * `pending-review` - Awaiting final review.
+        * `complete` - Complete
+        * `unknown` - Unknown
+    CollectionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        summary:
+          type: string
+          description: Description of this collection used to with additional context
+            to LLMs to allow them to make decisions about when to search this collection.
+        is_archived:
+          type: boolean
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_remote_index:
+          type: boolean
+          description: If selected, this index will be created at and hosted by the
+            selected provider
+        openai_vector_store_id:
+          type: string
+          maxLength: 255
+        is_index:
+          type: boolean
+        create_version_task_id:
+          type: string
+          maxLength: 128
+        working_version:
+          type: integer
+          nullable: true
+        llm_provider:
+          type: integer
+          nullable: true
+        embedding_provider_model:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - updated_at
+    CollectionFileDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          oneOf:
+          - $ref: '#/components/schemas/CollectionFileDetailStatusEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        metadata:
+          nullable: true
+        external_id:
+          type: string
+          description: ID of file in document source
+          maxLength: 255
+        file:
+          type: integer
+        collection:
+          type: integer
+        document_source:
+          type: integer
+          nullable: true
+      required:
+      - collection
+      - file
+      - id
+    CollectionFileDetailStatusEnum:
+      enum:
+      - pending
+      - in_progress
+      - completed
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `in_progress` - In Progress
+        * `completed` - Completed
+        * `failed` - Failed
+    CollectionFileList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionFileDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    CollectionList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    CompressionMarkerEnum:
+      enum:
+      - summarize
+      - truncate_tokens
+      - max_history_length
+      type: string
+      description: |-
+        * `summarize` - Summarize
+        * `truncate_tokens` - Truncate Tokens
+        * `max_history_length` - Max History Length
+    ConditionTypeEnum:
+      enum:
+      - equals
+      - range
+      type: string
+      description: |-
+        * `equals` - Equals
+        * `range` - Range
+    ConfidenceEnum:
+      enum:
+      - exact
+      - estimated
+      - unknown
+      type: string
+      description: |-
+        * `exact` - Exact
+        * `estimated` - Estimated
+        * `unknown` - Unknown
+    ConsentFormDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        consent_text:
+          type: string
+          description: Custom markdown text
+        capture_identifier:
+          type: boolean
+        identifier_label:
+          type: string
+          maxLength: 200
+        identifier_type:
+          $ref: '#/components/schemas/IdentifierTypeEnum'
+        is_default:
+          type: boolean
+          readOnly: true
+        confirmation_text:
+          type: string
+          description: Use this text to tell the user to respond with '1' in order
+            to give their consent
+        is_archived:
+          type: boolean
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - consent_text
+      - created_at
+      - id
+      - is_default
+      - name
+      - updated_at
+    ConsentFormList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsentFormDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    CustomActionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        prompt:
+          type: string
+        server_url:
+          type: string
+          format: uri
+          maxLength: 200
+        api_schema: {}
+        _operations:
+          title: ' operations'
+        allowed_operations:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+        healthcheck_path:
+          type: string
+          description: Optional health check endpoint
+        health_status:
+          $ref: '#/components/schemas/HealthStatusEnum'
+        last_health_check:
+          type: string
+          format: date-time
+          nullable: true
+        auth_provider:
+          type: integer
+          nullable: true
+      required:
+      - api_schema
+      - created_at
+      - id
+      - name
+      - server_url
+      - updated_at
+    CustomActionList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomActionDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    CustomActionOperationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        operation_id:
+          type: string
+          maxLength: 255
+        _operation_schema:
+          title: ' operation schema'
+        working_version:
+          type: integer
+          nullable: true
+        assistant:
+          type: integer
+          nullable: true
+        node:
+          type: integer
+          nullable: true
+        custom_action:
+          type: integer
+      required:
+      - assistant
+      - created_at
+      - custom_action
+      - id
+      - operation_id
+      - updated_at
+    CustomActionOperationList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomActionOperationDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    CustomTaggedItemDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content_type:
+          type: string
+          readOnly: true
+        object_id:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        user:
+          type: integer
+          nullable: true
+        tag:
+          type: integer
+      required:
+      - content_type
+      - created_at
+      - id
+      - object_id
+      - tag
+      - updated_at
+    CustomTaggedItemList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomTaggedItemDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    CustomUserDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        groups:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        date_joined:
+          type: string
+          format: date-time
+        avatar:
+          type: string
+        language:
+          type: string
+          nullable: true
+          maxLength: 10
+      required:
+      - groups
+      - id
+      - username
+    CustomUserList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomUserDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    DataTypeEnum:
+      enum:
+      - numeric
+      - categorical
+      - boolean
+      type: string
+      description: |-
+        * `numeric` - Numeric
+        * `categorical` - Categorical
+        * `boolean` - Boolean
+    DatasetAutoPopulationRuleDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        filter_query_string:
+          type: string
+          description: Filter criteria as a query string; empty means 'all sessions
+            from this bot'. Format matches FilterParams used elsewhere.
+        is_enabled:
+          type: boolean
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_run_status:
+          oneOf:
+          - $ref: '#/components/schemas/LastRunStatusEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        last_error:
+          type: string
+        consecutive_failure_count:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        dataset:
+          type: integer
+        source_experiment:
+          type: integer
+          description: Sessions from this chatbot are considered for auto-population.
+      required:
+      - created_at
+      - dataset
+      - id
+      - source_experiment
+      - updated_at
+    DatasetAutoPopulationRuleList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetAutoPopulationRuleDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    DocumentSourceDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        source_type:
+          allOf:
+          - $ref: '#/components/schemas/SourceTypeEnum'
+          description: |-
+            Type of document source
+
+            * `github` - GitHub Repository
+            * `confluence` - Confluence
+            * `json_collection` - JSON Collection
+        auto_sync_enabled:
+          type: boolean
+          description: Automatically sync this source on a schedule
+        last_sync:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last successful sync
+        sync_task_id:
+          type: string
+          description: System ID of the sync task, if present.
+          maxLength: 40
+        is_archived:
+          type: boolean
+        collection:
+          type: integer
+          description: The collection this document source belongs to
+        auth_provider:
+          type: integer
+          nullable: true
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - collection
+      - config
+      - created_at
+      - id
+      - source_type
+      - updated_at
+    DocumentSourceList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentSourceDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EmailLevelEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      type: integer
+      description: |-
+        * `0` - Info
+        * `1` - Warning
+        * `2` - Error
+    EmbeddingProviderModelDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        is_global:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeB81Enum'
+        name:
+          type: string
+          description: The name of the model. e.g. 'text-embedding-3-small'
+          maxLength: 128
+      required:
+      - created_at
+      - id
+      - is_global
+      - name
+      - type
+      - updated_at
+    EmbeddingProviderModelList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmbeddingProviderModelDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluationConfigDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        version_selection_type:
+          allOf:
+          - $ref: '#/components/schemas/VersionSelectionTypeEnum'
+          description: |-
+            Type of version selection: specific, latest_working, or latest_published
+
+            * `specific` - Specific Version
+            * `latest_working` - Latest Working Version
+            * `latest_published` - Latest Published Version
+        auto_run_on_append:
+          type: boolean
+          description: When enabled, every time the dataset receives newly auto-populated
+            rows this evaluation runs automatically over only those rows. May incur
+            LLM cost.
+        dataset:
+          type: integer
+        experiment_version:
+          type: integer
+          nullable: true
+          description: Specific chatbot version to use for evaluation. If not set,
+            will skip generation.
+        base_experiment:
+          type: integer
+          nullable: true
+          description: Base chatbot used when experiment_version is a sentinel value.
+        evaluators:
+          type: array
+          items:
+            type: integer
+      required:
+      - created_at
+      - dataset
+      - evaluators
+      - id
+      - name
+      - updated_at
+    EvaluationConfigList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationConfigDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluationDatasetDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        evaluation_mode:
+          allOf:
+          - $ref: '#/components/schemas/EvaluationModeEnum'
+          description: |-
+            Message mode stores individual message pairs; Session mode stores entire conversations
+
+            * `message` - Message
+            * `session` - Session
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusA8fEnum'
+          description: |-
+            Status of dataset creation
+
+            * `pending` - Pending
+            * `processing` - Processing
+            * `completed` - Completed
+            * `failed` - Failed
+        job_id:
+          type: string
+          maxLength: 255
+        error_message:
+          type: string
+        messages:
+          type: array
+          items:
+            type: integer
+      required:
+      - created_at
+      - id
+      - messages
+      - name
+      - updated_at
+    EvaluationDatasetList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationDatasetDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluationMessageDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        input: {}
+        output: {}
+        context: {}
+        history: {}
+        participant_data:
+          description: Participant data at the time of the message
+        session_state:
+          description: Session state at the time of the trace
+        metadata: {}
+        input_chat_message:
+          type: integer
+          nullable: true
+        expected_output_chat_message:
+          type: integer
+          nullable: true
+        session:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - updated_at
+    EvaluationMessageList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationMessageDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluationModeEnum:
+      enum:
+      - message
+      - session
+      type: string
+      description: |-
+        * `message` - Message
+        * `session` - Session
+    EvaluationResultDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        output: {}
+        evaluator:
+          type: integer
+        message:
+          type: integer
+        run:
+          type: integer
+        session:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - evaluator
+      - id
+      - message
+      - output
+      - run
+      - updated_at
+    EvaluationResultList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationResultDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluationRunAggregateDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        aggregates: {}
+        computed_at:
+          type: string
+          format: date-time
+          readOnly: true
+        run:
+          type: integer
+        evaluator:
+          type: integer
+      required:
+      - computed_at
+      - created_at
+      - evaluator
+      - id
+      - run
+      - updated_at
+    EvaluationRunAggregateList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationRunAggregateDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluationRunDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StatusA8fEnum'
+        type:
+          $ref: '#/components/schemas/EvaluationRunDetailTypeEnum'
+        job_id:
+          type: string
+          maxLength: 255
+        error_message:
+          type: string
+        config:
+          type: integer
+        generation_experiment:
+          type: integer
+          nullable: true
+          description: The experiment version used for generation during this evaluation
+            run
+        user:
+          type: integer
+          nullable: true
+        scoped_messages:
+          type: array
+          items:
+            type: integer
+          description: Subset of dataset messages this run evaluated. Empty for FULL/PREVIEW.
+      required:
+      - config
+      - created_at
+      - id
+      - updated_at
+    EvaluationRunDetailTypeEnum:
+      enum:
+      - full
+      - preview
+      - delta
+      type: string
+      description: |-
+        * `full` - Full
+        * `preview` - Preview
+        * `delta` - Delta
+    EvaluationRunList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationRunDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluatorDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        type:
+          type: string
+          maxLength: 128
+        params: {}
+        evaluation_mode:
+          allOf:
+          - $ref: '#/components/schemas/EvaluationModeEnum'
+          description: |-
+            Message mode evaluates individual message pairs; Session mode evaluates entire conversations
+
+            * `message` - Message
+            * `session` - Session
+      required:
+      - created_at
+      - id
+      - name
+      - type
+      - updated_at
+    EvaluatorList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluatorDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EvaluatorTagRuleDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        field_name:
+          type: string
+          maxLength: 255
+        condition_type:
+          $ref: '#/components/schemas/ConditionTypeEnum'
+        condition_value: {}
+        evaluator:
+          type: integer
+        tag:
+          type: integer
+      required:
+      - condition_type
+      - created_at
+      - evaluator
+      - field_name
+      - id
+      - tag
+      - updated_at
+    EvaluatorTagRuleList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluatorTagRuleDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EventActionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        action_type:
+          $ref: '#/components/schemas/ActionTypeEnum'
+        params: {}
+      required:
+      - action_type
+      - created_at
+      - id
+      - updated_at
+    EventActionList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventActionDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EventTypeDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        identifier:
+          type: string
+          maxLength: 40
+        event_data: {}
+        level:
+          allOf:
+          - $ref: '#/components/schemas/EmailLevelEnum'
+          minimum: 0
+          maximum: 32767
+      required:
+      - created_at
+      - id
+      - identifier
+      - level
+      - updated_at
+    EventTypeList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventTypeDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    EventUserDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        read:
+          type: boolean
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+        muted_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the mute expires
+        event_type:
+          type: integer
+        user:
+          type: integer
+      required:
+      - created_at
+      - event_type
+      - id
+      - updated_at
+      - user
+    EventUserList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventUserDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ExperimentChannelDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        extra_data:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          description: The name of this channel
+          maxLength: 255
+        deleted:
+          type: boolean
+        external_id:
+          type: string
+          format: uuid
+          readOnly: true
+        platform:
+          $ref: '#/components/schemas/PlatformEnum'
+        widget_version:
+          type: string
+          nullable: true
+          maxLength: 32
+        widget_version_updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        experiment:
+          type: integer
+          nullable: true
+        messaging_provider:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - external_id
+      - extra_data
+      - id
+      - name
+      - updated_at
+    ExperimentChannelList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentChannelDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ExperimentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        seed_message:
+          type: string
+          description: If set, send this message to the bot when the session starts,
+            and prompt the user with the initial response.
+        public_id:
+          type: string
+          format: uuid
+        conversational_consent_enabled:
+          type: boolean
+          description: 'If enabled, the consent form will be sent at the start of
+            a conversation for external channels. Note: This requires the experiment
+            to have a seed message.'
+        voice_response_behaviour:
+          allOf:
+          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
+          description: |-
+            This tells the bot when to reply with voice messages
+
+            * `always` - Always
+            * `reciprocal` - Reciprocal
+            * `never` - Never
+        echo_transcript:
+          type: boolean
+          description: Whether or not the bot should tell the user what it heard when
+            the user sends voice messages
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          default: 1
+        is_default_version:
+          type: boolean
+          default: false
+        is_archived:
+          type: boolean
+        version_description:
+          type: string
+        debug_mode_enabled:
+          type: boolean
+        create_version_task_id:
+          type: string
+          maxLength: 128
+        file_uploads_enabled:
+          type: boolean
+          description: Enables file attachments in the web chat interface.
+        owner:
+          type: integer
+        pipeline:
+          type: integer
+          nullable: true
+        consent_form:
+          type: integer
+          nullable: true
+          description: Consent form content to show to users before participation
+            in experiments.
+        voice_provider:
+          type: integer
+          nullable: true
+        synthetic_voice:
+          type: integer
+          nullable: true
+        trace_provider:
+          type: integer
+          nullable: true
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - owner
+      - updated_at
+      - working_version
+    ExperimentList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ExperimentSessionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        external_id:
+          type: string
+          maxLength: 255
+        session_token_required:
+          type: boolean
+          description: Require a signed session token (or authenticated user) for
+            chat API access to this session.
+        status:
+          $ref: '#/components/schemas/ChatbotSessionStatusEnum'
+        consent_date:
+          type: string
+          format: date-time
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the experiment (chat) ended.
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the final review was submitted.
+        seed_task_id:
+          type: string
+          description: System ID of the seed message task, if present.
+          maxLength: 40
+        state: {}
+        platform:
+          type: string
+          nullable: true
+          maxLength: 128
+        experiment_versions:
+          type: array
+          items:
+            type: integer
+            maximum: 2147483647
+            minimum: 0
+          nullable: true
+          description: Array of unique experiment version numbers seen by this session
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the last user interaction
+        first_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the first user interaction
+        participant:
+          type: integer
+        experiment:
+          type: integer
+        chat:
+          type: integer
+        experiment_channel:
+          type: integer
+          nullable: true
+      required:
+      - chat
+      - created_at
+      - experiment
+      - id
+      - participant
+      - updated_at
+    ExperimentSessionList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentSessionDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    FileChunkEmbeddingDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        chunk_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        text:
+          type: string
+        page_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        embedding:
+          type: array
+          items:
+            type: number
+            format: double
+        is_archived:
+          type: boolean
+        file:
+          type: integer
+        collection:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - chunk_number
+      - collection
+      - created_at
+      - embedding
+      - file
+      - id
+      - text
+      - updated_at
+    FileChunkEmbeddingList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileChunkEmbeddingDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    FileDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        file:
+          type: string
+        external_source:
+          type: string
+          maxLength: 255
+        external_id:
+          type: string
+          maxLength: 255
+        content_size:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        content_type:
+          type: string
+        expiry_date:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          type: string
+          maxLength: 1024
+        purpose:
+          $ref: '#/components/schemas/PurposeEnum'
+        is_archived:
+          type: boolean
+        metadata: {}
+        unsupported_channels:
+          description: Channels that cannot send this file directly, with reasons
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - file
+      - id
+      - name
+      - purpose
+      - updated_at
+    FileList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    GenderEnum:
+      enum:
+      - male
+      - female
+      - male (child)
+      - female (child)
+      type: string
+      description: |-
+        * `male` - Male
+        * `female` - Female
+        * `male (child)` - Male (Child)
+        * `female (child)` - Female (Child)
+    HealthStatusEnum:
+      enum:
+      - unknown
+      - up
+      - down
+      type: string
+      description: |-
+        * `unknown` - Unknown
+        * `up` - Up
+        * `down` - Down
+    IdentifierTypeEnum:
+      enum:
+      - email
+      - text
+      type: string
+      description: |-
+        * `email` - Email
+        * `text` - Text
+    ItemTypeEnum:
+      enum:
+      - session
+      - message
+      type: string
+      description: |-
+        * `session` - Session
+        * `message` - Message
+    LastRunStatusEnum:
+      enum:
+      - success
+      - error
+      - no_op
+      type: string
+      description: |-
+        * `success` - Success
+        * `error` - Error
+        * `no_op` - No-op
+    LlmProviderDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeB81Enum'
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - type
+      - updated_at
+    LlmProviderList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmProviderDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    LlmProviderModelDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        is_global:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TypeB81Enum'
+        name:
+          type: string
+          description: The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'
+          maxLength: 128
+        max_token_limit:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: When the message history for a session exceeds this limit (in
+            tokens), it will be compressed. If 0, compression will be disabled which
+            may result in errors or high LLM costs.
+        deprecated:
+          type: boolean
+      required:
+      - created_at
+      - id
+      - is_global
+      - name
+      - type
+      - updated_at
+    LlmProviderModelList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmProviderModelDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    Manifest:
+      type: object
+      description: 'The sync manifest: the call order and per-model config, plus a
+        checksum of the applied schema.'
+      properties:
+        schema_checksum:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestEntry'
+      required:
+      - entries
+      - schema_checksum
+    ManifestEntry:
+      type: object
+      description: 'One row of the manifest: which model to pull and the config the
+        endpoint/importer need.'
+      properties:
+        model:
+          type: string
+          description: Internal `app_label.model` key.
+        resource:
+          type: string
+          description: URL-facing resource name the endpoint is mounted at.
+        cursor:
+          type: string
+          description: 'Pagination cursor type: pk | updated_at_id.'
+        secret:
+          type: boolean
+          description: Whether rows carry fields sealed under the team public key.
+      required:
+      - cursor
+      - model
+      - resource
+      - secret
+    MessageTypeEnum:
+      enum:
+      - human
+      - ai
+      - system
+      type: string
+      description: |-
+        * `human` - Human
+        * `ai` - AI
+        * `system` - System
+    MessagingProviderDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/MessagingProviderDetailTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+        extra_data: {}
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - type
+      - updated_at
+    MessagingProviderDetailTypeEnum:
+      enum:
+      - twilio
+      - turnio
+      - sureadhere
+      - slack
+      - meta_cloud_api
+      type: string
+      description: |-
+        * `twilio` - Twilio
+        * `turnio` - Turn.io
+        * `sureadhere` - SureAdhere
+        * `slack` - Slack
+        * `meta_cloud_api` - Meta Cloud API (WhatsApp)
+    MessagingProviderList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessagingProviderDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    NodeDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        flow_id:
+          type: string
+          maxLength: 128
+        type:
+          type: string
+          maxLength: 128
+        label:
+          type: string
+          maxLength: 128
+        params: {}
+        is_archived:
+          type: boolean
+        working_version:
+          type: integer
+          nullable: true
+        pipeline:
+          type: integer
+        llm_provider:
+          type: integer
+          nullable: true
+        llm_provider_model:
+          type: integer
+          nullable: true
+        source_material:
+          type: integer
+          nullable: true
+        collection:
+          type: integer
+          nullable: true
+        assistant:
+          type: integer
+          nullable: true
+        synthetic_voice:
+          type: integer
+          nullable: true
+        collection_indexes:
+          type: array
+          items:
+            type: integer
+      required:
+      - created_at
+      - flow_id
+      - id
+      - pipeline
+      - type
+      - updated_at
+    NodeList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    NotificationEventDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        message:
+          type: string
+        links:
+          nullable: true
+        event_type:
+          type: integer
+      required:
+      - created_at
+      - event_type
+      - id
+      - message
+      - title
+      - updated_at
+    NotificationEventList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationEventDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ParticipantDataDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        data:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        encryption_key:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        system_metadata: {}
+        participant:
+          type: integer
+        experiment:
+          type: integer
+      required:
+      - created_at
+      - data
+      - encryption_key
+      - experiment
+      - id
+      - participant
+      - updated_at
+    ParticipantDataList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDataDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ParticipantDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 320
+        identifier:
+          type: string
+          maxLength: 320
+        public_id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+          maxLength: 32
+        remote_id:
+          type: string
+          maxLength: 255
+        user:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - platform
+      - updated_at
+    ParticipantList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    PipelineChatHistoryDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/PipelineChatHistoryDetailTypeEnum'
+        name:
+          type: string
+          maxLength: 128
+        session:
+          type: integer
+      required:
+      - created_at
+      - id
+      - name
+      - session
+      - type
+      - updated_at
+    PipelineChatHistoryDetailTypeEnum:
+      enum:
+      - node
+      - named
+      - global
+      - none
+      type: string
+      description: |-
+        * `node` - Node
+        * `named` - Named
+        * `global` - Global
+        * `none` - No History
+    PipelineChatHistoryList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineChatHistoryDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    PipelineChatMessagesDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        node_id:
+          type: string
+        human_message:
+          type: string
+        ai_message:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        compression_marker:
+          oneOf:
+          - $ref: '#/components/schemas/CompressionMarkerEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        chat_history:
+          type: integer
+      required:
+      - ai_message
+      - chat_history
+      - created_at
+      - human_message
+      - id
+      - node_id
+      - updated_at
+    PipelineChatMessagesList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineChatMessagesDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    PipelineDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        data: {}
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        is_archived:
+          type: boolean
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - data
+      - id
+      - name
+      - updated_at
+    PipelineList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    PlatformEnum:
+      enum:
+      - telegram
+      - web
+      - whatsapp
+      - facebook
+      - sureadhere
+      - api
+      - slack
+      - commcare_connect
+      - evaluations
+      - embedded_widget
+      - email
+      type: string
+      description: |-
+        * `telegram` - Telegram
+        * `web` - Web
+        * `whatsapp` - WhatsApp
+        * `facebook` - Facebook
+        * `sureadhere` - SureAdhere
+        * `api` - API
+        * `slack` - Slack
+        * `commcare_connect` - CommCare Connect
+        * `evaluations` - Evaluations
+        * `embedded_widget` - Embedded Widget
+        * `email` - Email
+    PricingRuleDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        provider_type:
+          type: string
+          maxLength: 64
+        model_name:
+          type: string
+          maxLength: 128
+        service_kind:
+          $ref: '#/components/schemas/ServiceKindEnum'
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        currency:
+          type: string
+          maxLength: 3
+        effective_from:
+          type: string
+          format: date-time
+        effective_to:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          $ref: '#/components/schemas/PricingRuleDetailSourceEnum'
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - model_name
+      - provider_type
+      - service_kind
+      - unit_price
+    PricingRuleDetailSourceEnum:
+      enum:
+      - seed
+      - manual
+      - import
+      type: string
+      description: |-
+        * `seed` - Seed
+        * `manual` - Manual
+        * `import` - Import
+    PricingRuleList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PricingRuleDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    PurposeEnum:
+      enum:
+      - assistant
+      - collection
+      - evaluation_dataset
+      - data_export
+      - message_media
+      type: string
+      description: |-
+        * `assistant` - Assistant
+        * `collection` - Collection
+        * `evaluation_dataset` - Evaluation Dataset
+        * `data_export` - Data Export
+        * `message_media` - Message Media
+    ScheduledMessageDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        external_id:
+          type: string
+          description: A unique identifier for the scheduled message
+          maxLength: 32
+        next_trigger_date:
+          type: string
+          format: date-time
+          nullable: true
+        last_triggered_at:
+          type: string
+          format: date-time
+          nullable: true
+        total_triggers:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        is_complete:
+          type: boolean
+        custom_schedule_params: {}
+        end_date:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        action:
+          type: integer
+          nullable: true
+        experiment:
+          type: integer
+        participant:
+          type: integer
+        cancelled_by:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - experiment
+      - external_id
+      - id
+      - participant
+      - updated_at
+    ScheduledMessageList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledMessageDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ScoreDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        target_content_type:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        target_object_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        name:
+          type: string
+          maxLength: 255
+        data_type:
+          $ref: '#/components/schemas/DataTypeEnum'
+        value_numeric:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,14}(?:\.\d{0,6})?$
+          nullable: true
+        value_string:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/ScoreDetailSourceEnum'
+        automated_result:
+          type: integer
+          nullable: true
+        review:
+          type: integer
+          nullable: true
+        author:
+          type: integer
+          nullable: true
+      required:
+      - automated_result
+      - created_at
+      - data_type
+      - id
+      - name
+      - review
+      - source
+      - target_content_type
+      - target_object_id
+      - updated_at
+    ScoreDetailSourceEnum:
+      enum:
+      - llm_judge
+      - programmatic
+      - human_review
+      - user_feedback
+      - system
+      type: string
+      description: |-
+        * `llm_judge` - LLM judge
+        * `programmatic` - Programmatic
+        * `human_review` - Human review
+        * `user_feedback` - User feedback
+        * `system` - System
+    ScoreList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    ServiceEnum:
+      enum:
+      - AWS
+      - Azure
+      - OpenAI
+      - OpenAIVoiceEngine
+      - ElevenLabs
+      - Intron
+      type: string
+      description: |-
+        * `AWS` - AWS
+        * `Azure` - Azure
+        * `OpenAI` - OpenAI
+        * `OpenAIVoiceEngine` - OpenAIVoiceEngine
+        * `ElevenLabs` - ElevenLabs
+        * `Intron` - Intron
+    ServiceKindEnum:
+      enum:
+      - llm_input
+      - llm_output
+      - llm_cached_input
+      - llm_cache_write
+      type: string
+      description: |-
+        * `llm_input` - Llm Input
+        * `llm_output` - Llm Output
+        * `llm_cached_input` - Llm Cached Input
+        * `llm_cache_write` - Llm Cache Write
+    SourceMaterialDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        topic:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the source material.
+        material:
+          type: string
+        is_archived:
+          type: boolean
+        owner:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - material
+      - owner
+      - topic
+      - updated_at
+    SourceMaterialList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceMaterialDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    SourceTypeEnum:
+      enum:
+      - github
+      - confluence
+      - json_collection
+      type: string
+      description: |-
+        * `github` - GitHub Repository
+        * `confluence` - Confluence
+        * `json_collection` - JSON Collection
+    StaticTriggerDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/StaticTriggerDetailTypeEnum'
+        is_archived:
+          type: boolean
+        is_active:
+          type: boolean
+        action:
+          type: integer
+        experiment:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - action
+      - created_at
+      - experiment
+      - id
+      - type
+      - updated_at
+    StaticTriggerDetailTypeEnum:
+      enum:
+      - conversation_end
+      - conversation_ended_by_user
+      - conversation_ended_by_bot
+      - conversation_ended_via_api
+      - conversation_ended_by_event
+      - conversation_ended_manually
+      - last_timeout
+      - conversation_start
+      - new_human_message
+      - new_bot_message
+      - participant_joined
+      type: string
+      description: |-
+        * `conversation_end` - The conversation has ended (by any means)
+        * `conversation_ended_by_user` - The conversation is ended by the participant
+        * `conversation_ended_by_bot` - The conversation is ended by the bot
+        * `conversation_ended_via_api` - The conversation is ended via the API
+        * `conversation_ended_by_event` - The conversation is ended by an event
+        * `conversation_ended_manually` - The conversation is manually ended by an admin
+        * `last_timeout` - The last timeout occurs
+        * `conversation_start` - A new conversation is started
+        * `new_human_message` - A new human message is received
+        * `new_bot_message` - A new bot message is received
+        * `participant_joined` - A new participant joined the experiment
+    StaticTriggerList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticTriggerDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    StatusA8fEnum:
+      enum:
+      - pending
+      - processing
+      - completed
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `processing` - Processing
+        * `completed` - Completed
+        * `failed` - Failed
+    SyncErrorDetail:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    SyntheticVoiceDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        is_global:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          description: The name of the synthetic voice, as per the documentation of
+            the service
+          maxLength: 128
+        external_id:
+          type: string
+          nullable: true
+          description: Provider-specific voice identifier when it differs from the
+            display name
+          maxLength: 128
+        neural:
+          type: boolean
+          default: false
+          description: Indicates whether this voice is a neural voice
+        language:
+          type: string
+          description: The language this voice is for
+          maxLength: 64
+        language_code:
+          type: string
+          description: The language code this voice is for
+          maxLength: 32
+        gender:
+          description: |-
+            The gender of this voice
+
+            * `male` - Male
+            * `female` - Female
+            * `male (child)` - Male (Child)
+            * `female (child)` - Female (Child)
+          oneOf:
+          - $ref: '#/components/schemas/GenderEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        service:
+          allOf:
+          - $ref: '#/components/schemas/ServiceEnum'
+          description: |-
+            The service this voice is from
+
+            * `AWS` - AWS
+            * `Azure` - Azure
+            * `OpenAI` - OpenAI
+            * `OpenAIVoiceEngine` - OpenAIVoiceEngine
+            * `ElevenLabs` - ElevenLabs
+            * `Intron` - Intron
+        voice_provider:
+          type: integer
+          nullable: true
+          title: Team
+        file:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - external_id
+      - gender
+      - id
+      - is_global
+      - language
+      - language_code
+      - name
+      - service
+      - updated_at
+      - voice_provider
+    SyntheticVoiceList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyntheticVoiceDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    TagDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        slug:
+          type: string
+          pattern: ^[-\w]+$
+          maxLength: 100
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        is_system_tag:
+          type: boolean
+        category:
+          oneOf:
+          - $ref: '#/components/schemas/CategoryEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        created_by:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - name
+      - slug
+      - updated_at
+    TagList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    TeamDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        feature_flags:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        metadata:
+          description: Internal staff-only metadata for this team.
+      required:
+      - created_at
+      - feature_flags
+      - id
+      - name
+      - slug
+      - updated_at
+    TimeoutTriggerDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        delay:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: Seconds to wait before triggering action
+        total_num_triggers:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          description: The number of times to trigger the action
+        is_archived:
+          type: boolean
+        is_active:
+          type: boolean
+        trigger_from_first_message:
+          type: boolean
+          description: When enabled, the timeout delay is calculated from the first
+            message in the conversation rather than the most recent.
+        config_changed_at:
+          type: string
+          format: date-time
+          description: Tracks when trigger config last changed. Prevents retroactive
+            application to old sessions.
+        action:
+          type: integer
+        experiment:
+          type: integer
+        working_version:
+          type: integer
+          nullable: true
+      required:
+      - action
+      - config_changed_at
+      - created_at
+      - delay
+      - experiment
+      - id
+      - updated_at
+    TimeoutTriggerList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeoutTriggerDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    TraceDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        trace_id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/TraceDetailStatusEnum'
+        duration:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        participant_data:
+          description: Snapshot of participant data at the time of the trace
+        participant_data_diff:
+          nullable: true
+          description: Diff of participant data changes during this trace
+        session_state:
+          description: Snapshot of session state at the time of the trace
+        experiment_version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        trace_metadata:
+          description: Metadata from trace providers (e.g. Langfuse trace_id, trace_url)
+        error:
+          type: string
+          description: Error message if the trace failed
+        n_turns:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: Number of LLM calls during pipeline execution
+        n_toolcalls:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: Number of tool invocations across all turns
+        n_total_tokens:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: Total tokens (prompt + completion) consumed
+        n_prompt_tokens:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: Total input/prompt tokens consumed
+        n_completion_tokens:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: Total output/completion tokens consumed
+        experiment:
+          type: integer
+          nullable: true
+        session:
+          type: integer
+          nullable: true
+        participant:
+          type: integer
+          nullable: true
+        input_message:
+          type: integer
+          nullable: true
+        output_message:
+          type: integer
+          nullable: true
+      required:
+      - duration
+      - id
+      - timestamp
+      - trace_id
+    TraceDetailStatusEnum:
+      enum:
+      - success
+      - pending
+      - error
+      type: string
+      description: |-
+        * `success` - Success
+        * `pending` - Pending
+        * `error` - Error
+    TraceList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    TraceProviderDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/TraceProviderDetailTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - type
+      - updated_at
+    TraceProviderDetailTypeEnum:
+      enum:
+      - langfuse
+      type: string
+      description: '* `langfuse` - Langfuse'
+    TraceProviderList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceProviderDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    TranscriptAnalysisDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusA8fEnum'
+        query_file:
+          type: string
+          nullable: true
+        result_file:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+        job_id:
+          type: string
+          maxLength: 255
+        public_id:
+          type: string
+          format: uuid
+          readOnly: true
+        translation_language:
+          type: string
+          description: ISO 639-2/T language code for translation
+          maxLength: 3
+        experiment:
+          type: integer
+        created_by:
+          type: integer
+        llm_provider:
+          type: integer
+          nullable: true
+        llm_provider_model:
+          type: integer
+          nullable: true
+          title: LLM Model
+          description: The LLM model to use
+        translation_llm_provider:
+          type: integer
+          nullable: true
+        translation_llm_provider_model:
+          type: integer
+          nullable: true
+          title: Translation LLM Model
+          description: The LLM model to use for translation
+        sessions:
+          type: array
+          items:
+            type: integer
+      required:
+      - created_at
+      - created_by
+      - experiment
+      - id
+      - name
+      - public_id
+      - sessions
+      - updated_at
+    TranscriptAnalysisList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranscriptAnalysisDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    TypeB81Enum:
+      enum:
+      - openai
+      - azure
+      - anthropic
+      - groq
+      - perplexity
+      - deepseek
+      - google
+      - google_vertex_ai
+      - voyage
+      type: string
+      description: |-
+        * `openai` - OpenAI
+        * `azure` - Azure OpenAI
+        * `anthropic` - Anthropic
+        * `groq` - Groq
+        * `perplexity` - Perplexity
+        * `deepseek` - DeepSeek
+        * `google` - Google Gemini
+        * `google_vertex_ai` - Google Vertex AI
+        * `voyage` - Voyage AI
+    UsageRecordDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        service_kind:
+          $ref: '#/components/schemas/ServiceKindEnum'
+        provider_type:
+          type: string
+          maxLength: 64
+        model_name:
+          type: string
+          maxLength: 128
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,14}(?:\.\d{0,4})?$
+          nullable: true
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+          nullable: true
+        cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        currency:
+          type: string
+          maxLength: 3
+        confidence:
+          $ref: '#/components/schemas/ConfidenceEnum'
+        extra: {}
+        experiment:
+          type: integer
+          nullable: true
+        session:
+          type: integer
+          nullable: true
+        participant:
+          type: integer
+          nullable: true
+        trace:
+          type: integer
+          nullable: true
+        pricing_rule:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - model_name
+      - provider_type
+      - service_kind
+      - timestamp
+      - updated_at
+    UsageRecordList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageRecordDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    UserCommentDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content_type:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        comment:
+          type: string
+        object_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        user:
+          type: integer
+      required:
+      - content_type
+      - created_at
+      - id
+      - object_id
+      - updated_at
+      - user
+    UserCommentList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserCommentDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    UserNotificationPreferencesDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        in_app_enabled:
+          type: boolean
+        in_app_level:
+          allOf:
+          - $ref: '#/components/schemas/EmailLevelEnum'
+          minimum: 0
+          maximum: 32767
+        email_enabled:
+          type: boolean
+        email_level:
+          allOf:
+          - $ref: '#/components/schemas/EmailLevelEnum'
+          minimum: 0
+          maximum: 32767
+        do_not_disturb_until:
+          type: string
+          format: date-time
+          nullable: true
+        user:
+          type: integer
+      required:
+      - created_at
+      - id
+      - updated_at
+      - user
+    UserNotificationPreferencesList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserNotificationPreferencesDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    VersionSelectionTypeEnum:
+      enum:
+      - specific
+      - latest_working
+      - latest_published
+      type: string
+      description: |-
+        * `specific` - Specific Version
+        * `latest_working` - Latest Working Version
+        * `latest_published` - Latest Published Version
+    VoiceProviderDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        config:
+          type: string
+          description: Sealed under the team's public key (base64, RSA-OAEP).
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        type:
+          $ref: '#/components/schemas/VoiceProviderDetailTypeEnum'
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - config
+      - created_at
+      - id
+      - name
+      - type
+      - updated_at
+    VoiceProviderDetailTypeEnum:
+      enum:
+      - aws
+      - azure
+      - openai
+      - openaivoiceengine
+      - elevenlabs
+      - intron
+      type: string
+      description: |-
+        * `aws` - AWS Polly
+        * `azure` - Azure Text to Speech
+        * `openai` - OpenAI Text to Speech
+        * `openaivoiceengine` - OpenAI Voice Engine Text to Speech
+        * `elevenlabs` - ElevenLabs
+        * `intron` - Intron
+    VoiceProviderList:
+      type: object
+      properties:
+        cursor:
+          type: string
+          nullable: true
+          description: Cursor for the next page; null once the resource is exhausted.
+        has_more:
+          type: boolean
+          description: True while more rows remain beyond this page.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceProviderDetail'
+      required:
+      - cursor
+      - has_more
+      - results
+    VoiceResponseBehaviourEnum:
+      enum:
+      - always
+      - reciprocal
+      - never
+      type: string
+      description: |-
+        * `always` - Always
+        * `reciprocal` - Reciprocal
+        * `never` - Never
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-api-key
+    tokenAuth:
+      type: http
+      scheme: bearer
+tags: []
+externalDocs:
+  url: https://docs.openchatstudio.com/api/
+  description: API Guides

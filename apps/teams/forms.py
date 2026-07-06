@@ -1,4 +1,6 @@
 from allauth.account.forms import SignupForm
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from django import forms
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -103,6 +105,31 @@ class TeamChangeForm(forms.ModelForm):
         help_texts = {
             "name": _("Your team name."),
         }
+
+
+class TeamPublicKeyForm(forms.ModelForm):
+    class Meta:
+        model = Team
+        fields = ("public_key",)
+        labels = {
+            "public_key": _("Public Key"),
+        }
+        help_texts = {
+            "public_key": _("Public key used to seal data exported from this team."),
+        }
+        widgets = {
+            "public_key": forms.Textarea(attrs={"rows": 4}),
+        }
+
+    def clean_public_key(self):
+        value = self.cleaned_data.get("public_key", "")
+        if not value:
+            return value
+        try:
+            load_pem_public_key(value.encode())
+        except (ValueError, UnsupportedAlgorithm) as e:
+            raise ValidationError(_("Enter a valid PEM-encoded public key.")) from e
+        return value
 
 
 class NotifyRecipientsForm(forms.Form):

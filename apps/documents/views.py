@@ -9,7 +9,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRef, Q, Subquery, Value, When
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext as _
@@ -42,7 +42,7 @@ from apps.documents.models import (
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
 from apps.documents.utils import delete_collection_file
-from apps.files.models import File, FileChunkEmbedding
+from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
@@ -93,7 +93,7 @@ class CollectionHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templat
 @login_and_team_required
 @permission_required("documents.view_collection", raise_exception=True)
 def single_collection_home(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team=request.team)
 
     document_sources = (
         DocumentSource.objects.working_versions_queryset().filter(collection=collection).prefetch_related("sync_logs")
@@ -126,10 +126,10 @@ def single_collection_home(request, team_slug: str, pk: int):
 
 @login_and_team_required
 def collection_files_view(request, team_slug: str, collection_id: int, document_source_id: int | None = None):
-    collection = get_object_or_404(Collection, id=collection_id, team__slug=team_slug)
+    collection = get_object_or_404(Collection, id=collection_id, team=request.team)
     document_source = None
     if document_source_id:
-        document_source = get_object_or_404(DocumentSource, id=document_source_id, team__slug=team_slug)
+        document_source = get_object_or_404(DocumentSource, id=document_source_id, team=request.team)
     chunk_count_query = (
         FileChunkEmbedding.objects.filter(collection_id=OuterRef("collection_id"), file_id=OuterRef("file_id"))
         .values("collection_id", "file_id")
@@ -185,14 +185,14 @@ class QueryView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView
         return {
             "active_tab": "collections",
             "title": "Query Collection",
-            "collection": Collection.objects.get(id=pk, team__slug=team_slug),
+            "collection": Collection.objects.get(id=pk, team=self.request.team),
         }
 
 
 @login_and_team_required
 @permission_required("documents.view_collection", raise_exception=True)
 def query_collection(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team__slug=team_slug)
+    collection = get_object_or_404(Collection.objects.select_related("team"), id=pk, team=request.team)
     index_manager = collection.get_index_manager()
     context = {
         "chunks": index_manager.query(
@@ -218,7 +218,7 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
     @cached_property
     def collection(self):
         return get_object_or_404(
-            Collection.objects.select_related("team"), id=self.collection_id, team__slug=self.team_slug
+            Collection.objects.select_related("team"), id=self.collection_id, team=self.request.team
         )
 
     def get_form_class(self):
@@ -297,7 +297,7 @@ class EditDocumentSource(BaseDocumentSourceView, UpdateView):
 @login_and_team_required
 @permission_required("documents.change_collection")
 def delete_document_source(request, team_slug: str, collection_id: int, pk: int):
-    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team=request.team)
     document_source.archive()
     return HttpResponse()
 
@@ -307,7 +307,7 @@ def delete_document_source(request, team_slug: str, collection_id: int, pk: int)
 @permission_required("documents.change_collection")
 def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
     """Trigger manual sync of a document source"""
-    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team=request.team)
 
     if document_source.sync_task_id:
         messages.warning(request, "This document source is already syncing.")
@@ -333,7 +333,7 @@ def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
 @require_http_methods(["GET"])
 def document_source_sync_logs(request, team_slug: str, collection_id: int, pk: int):
     """View sync logs for a document source"""
-    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team__slug=team_slug)
+    document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team=request.team)
 
     sync_logs = DocumentSourceSyncLog.objects.filter(document_source=document_source)
 
@@ -368,7 +368,7 @@ def document_source_sync_logs(request, team_slug: str, collection_id: int, pk: i
 @login_and_team_required
 @permission_required("documents.change_collection")
 def add_collection_files(request, team_slug: str, pk: int):
-    collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
+    collection = get_object_or_404(Collection, id=pk, team=request.team)
 
     supported_extensions = (
         settings.SUPPORTED_FILE_TYPES["file_search"]
@@ -401,6 +401,7 @@ def add_collection_files(request, team_slug: str, pk: int):
                     name=uploaded_file.name,
                     file=uploaded_file,
                     summary=request.POST[uploaded_file.name] if not collection.is_index else "",
+                    purpose=FilePurpose.COLLECTION,
                 )
             )
 
@@ -470,7 +471,7 @@ def get_collection_file_status(request, team_slug: str, collection_id: int, pk: 
         ).select_related("collection"),
         collection_id=collection_id,
         id=pk,
-        collection__team__slug=team_slug,
+        collection__team=request.team,
     )
 
     return render(
@@ -492,7 +493,7 @@ def download_collection_files(request, team_slug: str, pk: int):
     Start a background task to create a ZIP of all manually uploaded files.
     Returns HTML snippet with task_id for progress tracking.
     """
-    collection = get_object_or_404(Collection, id=pk, team__slug=team_slug)
+    collection = get_object_or_404(Collection, id=pk, team=request.team)
     manually_uploaded_count = CollectionFile.objects.filter(collection=collection, document_source__isnull=True).count()
 
     if manually_uploaded_count == 0:
@@ -617,7 +618,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
     permission_required = "documents.delete_collection"
 
     def delete(self, request, team_slug: str, pk: int):
-        collection = get_object_or_404(Collection, team__slug=team_slug, id=pk)
+        collection = get_object_or_404(Collection, team=request.team, id=pk)
 
         if collection.archive():
             messages.success(request, "Collection deleted")
@@ -663,6 +664,32 @@ def retry_failed_uploads(request, team_slug: str, pk: int):
     queryset.update(status=FileStatus.PENDING)
     tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
+
+
+def _render_collection_snapshots(request, collection):
+    return render(request, "documents/_collection_snapshots.html", {"collection": collection})
+
+
+@require_POST
+@login_and_team_required
+@permission_required("documents.change_collection", raise_exception=True)
+def create_collection_version(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Collection, id=pk, team=request.team)
+    if not collection.is_index or collection.is_a_version:
+        return HttpResponseBadRequest("Only working index collections can be snapshotted.")
+    if not collection.create_version_task_id:
+        result = tasks.async_create_collection_version.delay(collection_id=collection.id)
+        collection.create_version_task_id = result.task_id
+        collection.save(update_fields=["create_version_task_id"])
+    return _render_collection_snapshots(request, collection)
+
+
+@require_http_methods(["GET"])
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def collection_snapshots(request, team_slug: str, pk: int):
+    collection = get_object_or_404(Collection, id=pk, team=request.team)
+    return _render_collection_snapshots(request, collection)
 
 
 class CreateCollectionFromAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, FormView):
@@ -719,19 +746,18 @@ class FileChunkEmbeddingListView(LoginAndTeamRequiredMixin, PermissionRequiredMi
 
         # Get chunks for this file in this collection, ordered by chunk number
         return FileChunkEmbedding.objects.filter(
-            collection_id=collection_id, file_id=file_id, team__slug=self.kwargs["team_slug"]
+            collection_id=collection_id, file_id=file_id, team=self.request.team
         ).order_by("chunk_number")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        team_slug = self.kwargs["team_slug"]
         collection_id = self.kwargs["collection_id"]
         file_id = self.kwargs["file_id"]
 
         collection_file = get_object_or_404(
             CollectionFile.objects.select_related("file", "collection"),
-            collection__team__slug=team_slug,
+            collection__team=self.request.team,
             file_id=file_id,
             collection_id=collection_id,
         )

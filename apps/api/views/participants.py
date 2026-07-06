@@ -1,23 +1,40 @@
+import logging
 import uuid
 
+import httpx
 from django.db import transaction
 from django.db.models import Prefetch
-from django.http import HttpResponse
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
 from apps.api.permissions import ReadOnlyAPIKeyPermission
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
-from apps.api.tasks import setup_connect_channels_for_bots
-from apps.channels.models import ChannelPlatform
+from apps.api.tasks import (
+    DuplicateConnectChannelError,
+    connect_channel_error_details,
+    create_connect_channel_for_participant,
+)
+from apps.channels.clients.connect_client import CommCareConnectClient
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthResourceScope
+
+logger = logging.getLogger("ocs.api")
+
+
+class ChannelCreationError(APIException):
+    """Channel-creation failure carrying the status code mapped from the upstream error."""
+
+    def __init__(self, detail, status_code):
+        self.status_code = status_code
+        super().__init__(detail)
 
 
 class ParticipantView(APIView):
@@ -69,6 +86,7 @@ class ParticipantView(APIView):
                             "chatbot": "Support Bot",
                             "chatbot_id": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
                             "data": {"name": "John", "timezone": "Africa/Johannesburg"},
+                            "connect_channel_id": None,
                         },
                     ],
                 },
@@ -82,7 +100,13 @@ class ParticipantView(APIView):
             qs = qs.filter(identifier=identifier)
         if platform := request.query_params.get("platform"):
             qs = qs.filter(platform=platform)
-        if experiment_uuid := _parse_experiment_uuid(request.query_params.get("experiment")):
+        # "chatbot" is the documented (OpenApiParameter) name; "experiment" is kept as a
+        # deprecated fallback alias for older callers. Both take a chatbot/experiment public UUID.
+        # Report validation errors under whichever param the caller actually used.
+        chatbot_param = request.query_params.get("chatbot")
+        param_name = "chatbot" if chatbot_param else "experiment"
+        chatbot_param = chatbot_param or request.query_params.get("experiment")
+        if experiment_uuid := _parse_experiment_uuid(chatbot_param, param_name=param_name):
             data_qs = data_qs.filter(experiment__public_id=experiment_uuid)
             qs = qs.filter(id__in=data_qs.values_list("participant_id", flat=True))
         qs = qs.prefetch_related(Prefetch("data_set", queryset=data_qs, to_attr="_prefetched_participant_data"))
@@ -96,11 +120,12 @@ class ParticipantView(APIView):
         summary="Update Participant Data",
         tags=["Participants"],
         request=ParticipantDataUpdateRequest(),
-        responses={200: {}},
+        responses={200: ParticipantDetailSerializer},
         examples=[
             OpenApiExample(
                 name="CreateParticipantData",
                 summary="Create participant data for multiple experiments",
+                request_only=True,
                 value={
                     "identifier": "part1",
                     "platform": "api",
@@ -124,6 +149,7 @@ class ParticipantView(APIView):
             OpenApiExample(
                 name="UpdateParticipantSchedules",
                 summary="Update and delete participant schedules",
+                request_only=True,
                 value={
                     "identifier": "part1",
                     "platform": "api",
@@ -143,19 +169,39 @@ class ParticipantView(APIView):
                     ],
                 },
             ),
+            OpenApiExample(
+                name="UpdateParticipantDataResponse",
+                summary="Response including connect channel IDs",
+                response_only=True,
+                value={
+                    "id": "e172ff63-2469-419f-a828-783fc9291bc7",
+                    "identifier": "part1",
+                    "name": "John",
+                    "platform": "commcare_connect",
+                    "remote_id": "",
+                    "data": [
+                        {
+                            "chatbot": "Support Bot",
+                            "chatbot_id": "815e7ef4-3479-4689-ae6c-29ca1a04ca8e",
+                            "data": {"name": "John"},
+                            "connect_channel_id": "c64a1f7d-2f9b-4c3a-9e57-0f0c9a3a1b2d",
+                        },
+                    ],
+                },
+            ),
         ],
     )
     def post(self, request):
         return _update_participant_data(request)
 
 
-def _parse_experiment_uuid(value):
+def _parse_experiment_uuid(value, *, param_name="chatbot"):
     if not value:
         return None
     try:
         return uuid.UUID(value)
     except ValueError as e:
-        raise ValidationError({"experiment": "Must be a valid UUID."}) from e
+        raise ValidationError({param_name: "Must be a valid UUID."}) from e
 
 
 def _update_participant_data(request):
@@ -179,7 +225,7 @@ def _update_participant_data(request):
     experiment_data = serializer.data["data"]
     experiment_map = _get_participant_experiments(team, experiment_data)
 
-    experiment_data_map = {}
+    connect_data_by_experiment_id = {}
     for data in experiment_data:
         experiment = experiment_map[data["experiment"]]
 
@@ -194,12 +240,12 @@ def _update_participant_data(request):
             _create_update_schedules(request, experiment, participant, schedule_data)
 
         if platform == ChannelPlatform.COMMCARE_CONNECT:
-            experiment_data_map[experiment.id] = participant_data.id
+            connect_data_by_experiment_id[experiment.id] = participant_data
 
-    if platform == ChannelPlatform.COMMCARE_CONNECT:
-        setup_connect_channels_for_bots.delay(connect_id=identifier, experiment_data_map=experiment_data_map)
+    if connect_data_by_experiment_id:
+        _setup_connect_channels(identifier, connect_data_by_experiment_id)
 
-    return HttpResponse()
+    return Response(ParticipantDetailSerializer(participant).data)
 
 
 def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]:
@@ -213,6 +259,38 @@ def _get_participant_experiments(team, experiment_data) -> dict[str, Experiment]
         raise NotFound(detail=response)
 
     return experiment_map
+
+
+def _setup_connect_channels(identifier, participant_data_by_experiment_id):
+    """
+    Synchronously create Connect channels for experiments that use the ConnectMessaging channel,
+    so the channel IDs can be returned in the response.
+
+    Persists each new channel ID to ``ParticipantData.system_metadata``. Participant data that
+    already has a channel ID is skipped, as are experiments without a Connect channel.
+    """
+    channels = ExperimentChannel.objects.filter(
+        platform=ChannelPlatform.COMMCARE_CONNECT,
+        experiment_id__in=participant_data_by_experiment_id.keys(),
+    )
+    # one channel per experiment, mirroring the previous task-based implementation
+    channel_by_experiment_id = {channel.experiment_id: channel for channel in channels}
+    pending = [
+        (channel, participant_data_by_experiment_id[experiment_id])
+        for experiment_id, channel in channel_by_experiment_id.items()
+        if "commcare_connect_channel_id" not in participant_data_by_experiment_id[experiment_id].system_metadata
+    ]
+    if not pending:
+        # Don't instantiate the client unnecessarily; it raises if Connect settings are missing.
+        return
+
+    connect_client = CommCareConnectClient()
+    for channel, participant_data in pending:
+        try:
+            create_connect_channel_for_participant(channel, connect_client, identifier, participant_data)
+        except (DuplicateConnectChannelError, httpx.HTTPError) as e:
+            status_code, detail = connect_channel_error_details(e, identifier)
+            raise ChannelCreationError(detail, status_code) from e
 
 
 def _schedule_external_id(data, experiment, participant):

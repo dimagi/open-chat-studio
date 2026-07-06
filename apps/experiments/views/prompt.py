@@ -12,27 +12,13 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import Experiment, PromptBuilderHistory, SourceMaterial
+from apps.experiments.models import PromptBuilderHistory, SourceMaterial
 from apps.experiments.tasks import get_prompt_builder_response_task
 from apps.service_providers.models import LlmProviderModel
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.decorators import login_and_team_required, team_required
 
 PROMPT_DATA_SESSION_KEY = "prompt_data"
-
-
-@login_and_team_required
-@permission_required("experiments.view_experiment", raise_exception=True)
-def prompt_builder_load_experiments(request, team_slug: str):
-    experiments = list(Experiment.objects.filter(team=request.team).values("id", "name", "prompt_text"))
-
-    return TemplateResponse(
-        request,
-        "experiments/experiment_list.html",
-        {
-            "experiments": experiments,
-        },
-    )
 
 
 @login_and_team_required
@@ -125,7 +111,6 @@ def get_prompt_builder_history(request, team_slug: str):
             "sourceMaterialID": history_data.get("sourceMaterialID", -1),
             "temperature": history_data.get("temperature", 0.7),
             "prompt": history_data.get("prompt", ""),
-            "inputFormatter": history_data.get("inputFormatter", ""),
             "provider": history_data.get("provider"),
             "providerModelId": history_data.get("providerModelId"),
             "messages": history_data.get("messages", []),

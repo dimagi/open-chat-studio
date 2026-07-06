@@ -275,10 +275,10 @@ def get_filter_registry() -> dict[str, type[MultiColumnFilter]]:
     Imports known filter modules to ensure subclasses are registered
     regardless of import order.
     """
-    import apps.experiments.filters  # noqa: F401, PLC0415
-    import apps.human_annotations.filters  # noqa: F401, PLC0415
-    import apps.ocs_notifications.filters  # noqa: F401, PLC0415
-    import apps.participants.filters  # noqa: F401, PLC0415
-    import apps.trace.filters  # noqa: F401, PLC0415
+    import apps.experiments.filters  # noqa: F401, PLC0415 - registration: load filter subclasses regardless of import order
+    import apps.human_annotations.filters  # noqa: F401, PLC0415 - registration: load filter subclasses regardless of import order
+    import apps.ocs_notifications.filters  # noqa: F401, PLC0415 - registration: load filter subclasses regardless of import order
+    import apps.participants.filters  # noqa: F401, PLC0415 - registration: load filter subclasses regardless of import order
+    import apps.trace.filters  # noqa: F401, PLC0415 - registration: load filter subclasses regardless of import order
 
     return {cls.slug: cls for cls in MultiColumnFilter.__subclasses__() if getattr(cls, "slug", "")}

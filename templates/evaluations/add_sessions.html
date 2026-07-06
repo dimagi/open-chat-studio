@@ -1,0 +1,217 @@
+{% extends "web/app/app_base.html" %}
+{% load i18n static %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'evaluations:dataset_home' request.team.slug %}">{% translate "Datasets" %}</a></li>
+      <li><a href="{% url 'evaluations:dataset_edit' request.team.slug dataset.pk %}">{{ dataset.name }}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Add Sessions" %}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+<div x-data="annotationQueueSessionSelector({ sessionCountUrl: '{{ sessions_count_url }}' })"
+     x-init="init()"
+     data-queue-name="{{ dataset.name }}">
+
+  <div class="flex flex-col gap-4">
+    <h2 class="text-xl font-bold">{% blocktranslate with name=dataset.name %}Add Sessions to "{{ name }}"{% endblocktranslate %}</h2>
+
+    <!-- Error messages -->
+    <div x-show="errorMessages.length" class="alert alert-error mb-4" x-cloak>
+      <i class="fa-solid fa-exclamation-triangle"></i>
+      <div>
+        <template x-for="error in errorMessages">
+          <p x-text="error"></p>
+        </template>
+      </div>
+    </div>
+
+    <!-- Row 1: filter bar (left) + Clone toggle (right, conditional) -->
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        {% include "experiments/filters.html" %}
+      </div>
+      {% if dataset.evaluation_mode != 'session' %}
+      <div x-show="hasActiveFilters" x-cloak class="flex items-center gap-3 text-sm">
+        <span class="font-medium">{% translate "Clone" %}:</span>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="message_scope_ui" value="all" x-model="messageScope" class="radio radio-sm radio-primary">
+          <span>{% translate "All messages" %}</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="radio" name="message_scope_ui" value="filtered" x-model="messageScope" class="radio radio-sm radio-primary">
+          <span>{% translate "Filtered messages only" %}</span>
+        </label>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Row 2: unified action bar (sentence-style) -->
+    <div class="flex items-center flex-wrap gap-3 bg-base-200 rounded-lg px-4 py-2">
+      <span class="text-sm font-medium">{% translate "Add to dataset" %}:</span>
+
+      <div class="join">
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'selected' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('selected')">
+          {% translate "Selected only" %}
+        </button>
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('all_matching')">
+          {% translate "All matching filters" %}
+        </button>
+        {% if dataset.evaluation_mode != 'session' %}
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'sample' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('sample')">
+          {% translate "Sample" %}
+        </button>
+        {% endif %}
+      </div>
+
+      <!-- Sample percent inputs (visible only in sample mode) -->
+      <template x-if="mode === 'sample'">
+        <div class="flex items-center gap-2">
+          <input type="number"
+                 x-model.number="samplePercent"
+                 @change="clampSamplePercent()"
+                 min="1" max="100"
+                 class="input input-sm input-bordered w-16 text-center">
+          <span class="text-sm">%</span>
+          <input type="range"
+                 x-model.number="samplePercent"
+                 @change="clampSamplePercent()"
+                 min="1" max="100"
+                 class="range range-sm range-primary w-32">
+        </div>
+      </template>
+
+      <div class="ml-auto flex items-center gap-2">
+        <button type="submit" form="add-sessions-form" class="btn btn-primary btn-sm" :disabled="isSubmitDisabled">
+          <span x-text="datasetButtonLabel">{% translate "Add to dataset" %}</span>
+        </button>
+        <a href="{% url 'evaluations:dataset_edit' team_slug=request.team.slug pk=dataset.pk %}"
+           class="btn btn-ghost btn-sm">
+          {% translate "Cancel" %}
+        </a>
+      </div>
+    </div>
+
+    <!-- Hint for selected mode with zero selections -->
+    <div x-show="mode === 'selected' && selectedSessionIds.size === 0" x-cloak
+         class="text-sm text-warning">
+      {% translate "Select at least one session." %}
+    </div>
+
+    <!-- Clear selections (visible in selected mode when selections exist) -->
+    <div x-show="mode === 'selected' && selectedSessionIds.size > 0" x-cloak class="text-sm">
+      <span x-text="selectedSessionIds.size"></span>
+      {% translate "selected" %}
+      <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
+        {% translate "Clear" %}
+      </button>
+    </div>
+
+    <!-- Dimming hint for non-selected modes -->
+    <div x-show="mode !== 'selected'" x-cloak class="text-sm text-base-content/60">
+      {% translate "Row selections do not affect this mode." %}
+    </div>
+
+    <!-- Sessions table (HTMX lazy-loaded). Dimmed when not in 'selected' mode. -->
+    <div id="sessions-table"
+         :class="{ 'opacity-60': mode !== 'selected' }"
+         data-url="{% url 'evaluations:dataset_add_sessions_table' request.team.slug dataset.pk %}">
+      {% include "table/table_placeholder.html" %}
+    </div>
+
+    <!-- Sample mode hint -->
+    <div x-show="mode === 'sample'" x-cloak class="text-xs text-base-content/50">
+      {% translate "Sessions are randomly sampled at the time of adding." %}
+    </div>
+
+    <!-- Submission form -->
+    <form method="post" id="add-sessions-form" @submit="handleSubmit($event)">
+      {% csrf_token %}
+      <input type="hidden" name="session_ids" x-model="sessionIdsString">
+      <input type="hidden" name="mode" :value="mode">
+      <input type="hidden" name="sample_percent" :value="samplePercent">
+      <input type="hidden" name="message_scope" :value="messageScope">
+      <template x-for="param in filterParams" :key="param.name">
+        <input type="hidden" :name="param.name" :value="param.value">
+      </template>
+    </form>
+  </div>
+
+  <!-- Confirmation modal -->
+  <div x-show="showConfirmModal" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+       @keydown.escape.window="cancelConfirm()">
+    <div class="bg-base-100 rounded-lg shadow-xl p-6 max-w-md w-full mx-4" @click.outside="cancelConfirm()">
+      <h3 class="text-lg font-bold mb-2" x-text="confirmTitle"></h3>
+      <p class="text-sm text-base-content/70 mb-4" x-text="confirmMessage"></p>
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="btn btn-ghost btn-sm" @click="cancelConfirm()">
+          {% translate "Cancel" %}
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" @click="confirmSubmit()">
+          {% translate "Confirm" %}
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock app %}
+
+{% block page_js %}
+  <script src="{% static 'js/human_annotations-bundle.js' %}"></script>
+  <script>
+    // Extend the shared annotationQueueSessionSelector with messageScope state
+    // and a watcher that resets it whenever filters clear.
+    const _baseSelector = window.annotationQueueSessionSelector;
+    window.annotationQueueSessionSelector = function(options) {
+      const base = _baseSelector(options);
+      const baseInit = base.init;
+      Object.assign(base, {
+        messageScope: 'all',
+        init() {
+          // Run base init with `this` = Alpine proxy so reactive
+          // assignments (e.g., filterParams) trigger setters and
+          // the $watch below fires when filters change.
+          baseInit.call(this);
+          this.$watch('hasActiveFilters', (now) => {
+            if (!now && this.messageScope !== 'all') {
+              this.messageScope = 'all';
+            }
+          });
+        },
+      });
+      // Use defineProperty so the getter stays a getter (Object.assign would
+      // invoke the source getter at assign time, freezing the value).
+      Object.defineProperty(base, 'datasetButtonLabel', {
+        get() {
+          let n;
+          if (this.mode === 'selected') {
+            n = this.selectedSessionIds.size;
+          } else if (this.mode === 'all_matching') {
+            n = this.totalCount;
+          } else {
+            n = this.estimatedSampleCount;
+          }
+          return `Add ${n} to dataset`;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      return base;
+    };
+  </script>
+{% endblock page_js %}

@@ -29,15 +29,56 @@
       </div>
     </div>
 
-    <!-- Filter controls + session count + top-level action buttons -->
+    <!-- Filter controls -->
     <div class="flex items-center justify-between flex-wrap gap-2">
       <div>
         {% include "experiments/filters.html" %}
       </div>
-      <div class="flex items-center gap-3">
-        <div class="text-sm font-medium">
-          <span x-text="totalCount"></span> {% translate "sessions" %}
+    </div>
+
+    <!-- Action bar: Add-to-queue scope + Submit + Cancel inline -->
+    <div class="flex items-center flex-wrap gap-3 bg-base-200 rounded-lg px-4 py-2">
+      <span class="text-sm font-medium">{% translate "Add to queue" %}:</span>
+      <div class="join">
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'selected' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('selected')">
+          {% translate "Selected only" %}
+        </button>
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('all_matching')">
+          {% translate "All matching filters" %}
+        </button>
+        <button type="button"
+                class="join-item btn btn-sm"
+                :class="mode === 'sample' ? 'btn-primary' : 'btn-ghost'"
+                @click="setMode('sample')">
+          {% translate "Sample" %}
+        </button>
+      </div>
+
+      <!-- Sample controls (visible only in sample mode) -->
+      <template x-if="mode === 'sample'">
+        <div class="flex items-center gap-2">
+          <input type="number"
+                 x-model.number="samplePercent"
+                 @change="clampSamplePercent()"
+                 min="1" max="100"
+                 class="input input-sm input-bordered w-16 text-center">
+          <span class="text-sm">%</span>
+          <input type="range"
+                 x-model.number="samplePercent"
+                 @change="clampSamplePercent()"
+                 min="1" max="100"
+                 class="range range-sm range-primary w-32">
         </div>
+      </template>
+
+      <!-- Inline Submit + Cancel -->
+      <div class="ml-auto flex items-center gap-2">
         <button type="submit" form="add-sessions-form" class="btn btn-primary btn-sm" :disabled="isSubmitDisabled">
           <span x-text="buttonLabel">{% translate "Add to Queue" %}</span>
         </button>
@@ -46,53 +87,6 @@
           {% translate "Cancel" %}
         </a>
       </div>
-    </div>
-
-    <!-- Scope selector bar -->
-    <div class="flex items-center justify-between flex-wrap gap-3 bg-base-200 rounded-lg px-4 py-2">
-      <div class="flex items-center gap-3">
-        <span class="text-sm font-medium">{% translate "Add" %}:</span>
-        <div class="join">
-          <button type="button"
-                  class="join-item btn btn-sm"
-                  :class="mode === 'selected' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setMode('selected')">
-            {% translate "Selected only" %}
-          </button>
-          <button type="button"
-                  class="join-item btn btn-sm"
-                  :class="mode === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setMode('all_matching')">
-            {% translate "All matching filters" %}
-          </button>
-          <button type="button"
-                  class="join-item btn btn-sm"
-                  :class="mode === 'sample' ? 'btn-primary' : 'btn-ghost'"
-                  @click="setMode('sample')">
-            {% translate "Sample" %}
-          </button>
-        </div>
-
-        <!-- Sample controls (visible only in sample mode) -->
-        <template x-if="mode === 'sample'">
-          <div class="flex items-center gap-2">
-            <input type="number"
-                   x-model.number="samplePercent"
-                   @change="clampSamplePercent()"
-                   min="1" max="100"
-                   class="input input-sm input-bordered w-16 text-center">
-            <span class="text-sm">%</span>
-            <input type="range"
-                   x-model.number="samplePercent"
-                   @change="clampSamplePercent()"
-                   min="1" max="100"
-                   class="range range-sm range-primary w-32">
-          </div>
-        </template>
-      </div>
-
-      <!-- Live count pill -->
-      <div class="badge" :class="pillClass" x-text="pillText"></div>
     </div>
 
     <!-- Hint for selected mode with zero selections -->
@@ -127,7 +121,7 @@
       {% translate "Sessions are randomly sampled at the time of adding." %}
     </div>
 
-    <!-- Submission form -->
+    <!-- Submission form (hidden inputs only; submit lives in the action bar via form="add-sessions-form") -->
     <form method="post" id="add-sessions-form" @submit="handleSubmit($event)">
       {% csrf_token %}
       <input type="hidden" name="session_ids" x-model="sessionIdsString">
@@ -137,15 +131,6 @@
       <template x-for="param in filterParams" :key="param.name">
         <input type="hidden" :name="param.name" :value="param.value">
       </template>
-      <div class="flex gap-2 mt-4">
-        <button type="submit" class="btn btn-primary" :disabled="isSubmitDisabled">
-          <span x-text="buttonLabel">{% translate "Add to Queue" %}</span>
-        </button>
-        <a href="{% url 'human_annotations:queue_detail' team_slug=request.team.slug pk=queue.pk %}"
-           class="btn btn-ghost">
-          {% translate "Cancel" %}
-        </a>
-      </div>
     </form>
   </div>
 

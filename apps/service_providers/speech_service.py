@@ -1,21 +1,22 @@
 import logging
+import os
 import tempfile
 import time
 from contextlib import closing
 from dataclasses import dataclass
 from io import BytesIO
-from typing import IO, TYPE_CHECKING, ClassVar
+from typing import IO, ClassVar
 
 import httpx
 import pydantic
+from elevenlabs.client import ElevenLabs as ElevenLabsClient
+from openai import OpenAI
+from pydub import AudioSegment
 
 from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException, UserReportableError
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers.intron import INTRON_BASE_URL
-
-if TYPE_CHECKING:
-    from openai import OpenAI
 
 log = logging.getLogger("ocs.speech")
 
@@ -82,7 +83,6 @@ class AWSSpeechService(SpeechService):
         Calls AWS Polly to convert the text to speech using the synthetic_voice
         """
         import boto3  # noqa: PLC0415 - TID253: heavy lib, slow startup
-        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
 
         polly_client = boto3.Session(
             aws_access_key_id=self.aws_access_key_id,
@@ -117,13 +117,15 @@ class AzureSpeechService(SpeechService):
         """
         # keep heavy imports inline
         import azure.cognitiveservices.speech as speechsdk  # noqa: PLC0415 - lazy: optional provider dep (Azure speech SDK)
-        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
 
         speech_config = speechsdk.SpeechConfig(subscription=self.azure_subscription_key, region=self.azure_region)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+            temp_file_name = temp_file.name
+
+        try:
             # Create an audio configuration that points to the output audio file
-            audio_config = speechsdk.audio.AudioConfig(filename=temp_file.name)
+            audio_config = speechsdk.audio.AudioConfig(filename=temp_file_name)
 
             # Setup voice font (Azure refers to synthetic voices as voice fonts)
             speech_config.speech_synthesis_voice_name = f"{synthetic_voice.language_code}-{synthetic_voice.name}"
@@ -136,12 +138,31 @@ class AzureSpeechService(SpeechService):
 
             # Check if synthesis was successful
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                # Validate the output file before attempting to decode it.
+                # Azure may report success but write an empty or invalid WAV file
+                # when the text language does not match the configured voice language.
+                file_size = os.path.getsize(temp_file_name)
+                if file_size < 4:
+                    raise AudioSynthesizeException(
+                        f"Azure returned an empty audio file for voice "
+                        f"'{synthetic_voice.language_code}-{synthetic_voice.name}'. This is likely caused by a "
+                        "mismatch between the text language and the configured voice language."
+                    )
+                with open(temp_file_name, "rb") as f:
+                    header = f.read(4)
+                if header != b"RIFF":
+                    raise AudioSynthesizeException(
+                        f"Azure returned an invalid WAV file (bad RIFF header) for voice "
+                        f"'{synthetic_voice.language_code}-{synthetic_voice.name}'. This is likely caused by a "
+                        "mismatch between the text language and the configured voice language."
+                    )
+
                 audio_segment = AudioSegment.from_file(
-                    temp_file.name, format="wav"
+                    temp_file_name, format="wav"
                 )  # Azure returns audio in WAV format
                 duration_seconds = len(audio_segment) / 1000  # Convert milliseconds to seconds
 
-                with open(temp_file.name, "rb") as f:
+                with open(temp_file_name, "rb") as f:
                     file_content = f.read()
 
                 return SynthesizedAudio(audio=BytesIO(file_content), duration=duration_seconds, format="wav")
@@ -153,6 +174,9 @@ class AzureSpeechService(SpeechService):
                         msg += f". Error details: {cancellation_details.error_details}"
                 raise AudioSynthesizeException(msg)
             raise AudioSynthesizeException(f"Unexpected result: {result}")
+        finally:
+            if os.path.exists(temp_file_name):
+                os.unlink(temp_file_name)
 
     def _transcribe_audio(self, audio: IO[bytes]) -> str:
         # keep heavy imports inline
@@ -195,7 +219,6 @@ class OpenAISpeechService(SpeechService):
     @property
     def _client(self) -> "OpenAI":
         # keep heavy imports inline
-        from openai import OpenAI  # noqa: PLC0415 - lazy: optional provider dep (OpenAI speech)
 
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
@@ -204,7 +227,6 @@ class OpenAISpeechService(SpeechService):
         Calls OpenAI to convert the text to speech using the synthetic_voice
         """
         # keep heavy imports inline
-        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
 
         response = self._client.audio.speech.create(model="gpt-4o-mini-tts", voice=synthetic_voice.name, input=text)
         audio_data = response.read()
@@ -231,13 +253,9 @@ class ElevenLabsSpeechService(SpeechService):
 
     @property
     def _client(self):
-        from elevenlabs.client import ElevenLabs as ElevenLabsClient  # noqa: PLC0415 - lazy: optional provider dep
-
         return ElevenLabsClient(api_key=self.elevenlabs_api_key)
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
-        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
-
         audio_iter = self._client.text_to_speech.convert(
             voice_id=synthetic_voice.external_id,
             model_id=self.elevenlabs_model,
@@ -266,8 +284,6 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
 
     @property
     def _client(self) -> "OpenAI":
-        from openai import OpenAI  # noqa: PLC0415 - lazy: optional provider dep (OpenAI speech)
-
         return OpenAI(api_key=self.openai_api_key, organization=self.openai_organization, base_url=self.openai_api_base)
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
@@ -275,7 +291,6 @@ class OpenAIVoiceEngineSpeechService(SpeechService):
         Uses the voice sample from `synthetic_voice` and calls OpenAI to synthesize audio with the sample voice
         """
         # keep heavy imports inline
-        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
 
         sample_audio = synthetic_voice.file
 
@@ -320,8 +335,6 @@ class IntronSpeechService(SpeechService):
     _SUCCESS_STATUS: ClassVar[str] = "TTS_TEXT_AUDIO_GENERATED"
 
     def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
-        from pydub import AudioSegment  # noqa: PLC0415 - lazy: optional audio processing lib
-
         # Pool the TCP/TLS connection across enqueue + (up to 120) status polls against the Intron API.
         # The S3 audio download is intentionally made outside this client because S3 rejects the Bearer
         # header with a 400, and mixing hosts in the same pool wouldn't improve reuse anyway.

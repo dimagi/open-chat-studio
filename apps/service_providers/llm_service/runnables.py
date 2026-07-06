@@ -232,7 +232,8 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
                             file_ref_text, f"file:{team.slug}:{session_id}:{created_file.id}"
                         )
                         file_path_attachments.append(created_file)
-                    file_ids.add(file_id)
+                    if file_id:
+                        file_ids.add(file_id)
 
                 output_message += message_content_value + "\n"
             else:
