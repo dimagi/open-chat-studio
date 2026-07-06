@@ -335,7 +335,11 @@ class ChannelBase(ABC):
 
             channel_cls = NewWhatsappChannel
         elif platform == "facebook":
-            channel_cls = FacebookMessengerChannel
+            from apps.channels.channels_v2.facebook_channel import (  # noqa: PLC0415 - avoid circular import
+                FacebookMessengerChannel as NewFacebookMessengerChannel,
+            )
+
+            channel_cls = NewFacebookMessengerChannel
         elif platform == "api":
             # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
             from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
@@ -1247,6 +1251,7 @@ class WhatsappChannel(ChannelBase):
             logger.exception("Failed to send typing indicator")
 
 
+# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.facebook_channel.FacebookMessengerChannel
 class FacebookMessengerChannel(ChannelBase):
     def send_text_to_user(self, text: str):
         from_ = self.experiment_channel.extra_data.get("page_id")
