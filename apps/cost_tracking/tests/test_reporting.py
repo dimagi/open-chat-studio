@@ -10,11 +10,13 @@ from django.test.utils import CaptureQueriesContext
 from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind
 from apps.cost_tracking.services.reporting import (
     cost_summary,
+    cost_timeseries,
+    costs_by_experiment,
+    coverage_gaps,
     last_synced_at,
-    top_n_bots,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
@@ -149,10 +151,10 @@ class TestCostSummary:
 
 
 @pytest.mark.django_db()
-class TestTopNBots:
-    """Ordering, exclusions, aggregation, team scoping."""
+class TestCostsByExperiment:
+    """Per-experiment cost map feeding the Bot Performance table."""
 
-    def test_single_query_for_aggregate(self):
+    def test_single_query(self):
         team = TeamFactory.create()
         exp_a = ExperimentFactory.create(team=team, name="bot-a")
         exp_b = ExperimentFactory.create(team=team, name="bot-b")
@@ -160,74 +162,33 @@ class TestTopNBots:
         _usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp_b)
 
         with CaptureQueriesContext(connection) as ctx:
-            top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
+            costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW)
 
         # Single GROUP BY query — no N+1 per experiment.
         assert len(ctx.captured_queries) == 1
 
-    def test_orders_by_cost_descending(self):
+    def test_aggregates_per_experiment(self):
         team = TeamFactory.create()
-        cheap = ExperimentFactory.create(team=team, name="cheap")
-        expensive = ExperimentFactory.create(team=team, name="expensive")
-        _usage(team, cost="0.10", when=_NOW - timedelta(days=1), experiment=cheap)
-        _usage(team, cost="5.00", when=_NOW - timedelta(days=1), experiment=expensive)
+        exp = ExperimentFactory.create(team=team, name="bot")
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp)
 
-        rows = top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
+        costs = costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW)
 
-        assert [r.experiment_name for r in rows] == ["expensive", "cheap"]
+        assert costs == {exp.id: Decimal("3.00000000")}
 
     def test_excludes_records_with_null_experiment(self):
         team = TeamFactory.create()
         _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=None)
 
-        rows = top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
+        assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
-        assert rows == []
-
-    def test_aggregates_per_experiment(self):
-        team = TeamFactory.create()
-        exp = ExperimentFactory.create(team=team, name="bot")
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, quantity=100)
-        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), experiment=exp, quantity=200)
-
-        rows = top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
-
-        assert len(rows) == 1
-        assert rows[0].cost == Decimal("3.00000000")
-        assert rows[0].tokens == 300
-
-    def test_cost_per_session_divides_when_sessions_present(self):
+    def test_excludes_records_outside_window(self):
         team = TeamFactory.create()
         exp = ExperimentFactory.create(team=team)
-        s1 = ExperimentSessionFactory.create(experiment=exp, team=team)
-        s2 = ExperimentSessionFactory.create(experiment=exp, team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=s1)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=s2)
+        _usage(team, cost="9.99", when=_NOW - timedelta(days=40), experiment=exp)
 
-        rows = top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
-
-        assert rows[0].sessions == 2
-        assert rows[0].cost_per_session == Decimal("1.00000000")
-
-    def test_cost_per_session_none_when_no_sessions(self):
-        team = TeamFactory.create()
-        exp = ExperimentFactory.create(team=team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=None)
-
-        rows = top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
-
-        assert rows[0].sessions == 0
-        assert rows[0].cost_per_session is None
-
-    def test_limit_truncates(self):
-        team = TeamFactory.create()
-        for i in range(15):
-            exp = ExperimentFactory.create(team=team, name=f"bot-{i}")
-            _usage(team, cost=str(i + 1), when=_NOW - timedelta(days=1), experiment=exp)
-
-        rows = top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW, limit=5)
-
-        assert len(rows) == 5
+        assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
     def test_team_scoped(self):
         team = TeamFactory.create()
@@ -235,9 +196,105 @@ class TestTopNBots:
         exp_other = ExperimentFactory.create(team=other)
         _usage(other, cost="999.00", when=_NOW - timedelta(days=1), experiment=exp_other)
 
-        rows = top_n_bots(team, start=_NOW - timedelta(days=30), end=_NOW)
+        assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
 
-        assert rows == []
+
+@pytest.mark.django_db()
+class TestCoverageGaps:
+    """The models behind the unpriced / no-usage warning counts."""
+
+    def test_groups_unpriced_and_unknown_by_model(self):
+        team = TeamFactory.create()
+        rule = PricingRule.objects.create(
+            team=None,
+            provider_type="openai",
+            model_name="priced-model",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.0001",
+        )
+        # Unpriced (no rule, non-UNKNOWN) across two calls of one model.
+        _usage(
+            team, cost="0.00", when=_NOW - timedelta(days=1), model_name="unpriced-model", confidence=Confidence.EXACT
+        )
+        _usage(
+            team, cost="0.00", when=_NOW - timedelta(days=2), model_name="unpriced-model", confidence=Confidence.EXACT
+        )
+        # No-usage (UNKNOWN) call of another model.
+        _usage(
+            team, cost="0.00", when=_NOW - timedelta(days=3), model_name="unknown-model", confidence=Confidence.UNKNOWN
+        )
+        # A priced call - must not appear in either list.
+        _usage(team, cost="0.50", when=_NOW - timedelta(days=4), model_name="priced-model", pricing_rule=rule)
+
+        gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert [(g.model_name, g.call_count) for g in gaps.unpriced] == [("unpriced-model", 2)]
+        assert [(g.model_name, g.call_count) for g in gaps.unknown] == [("unknown-model", 1)]
+
+    def test_sorted_by_call_count_descending(self):
+        team = TeamFactory.create()
+        for _ in range(3):
+            _usage(team, cost="0.00", when=_NOW - timedelta(days=1), model_name="loud", confidence=Confidence.EXACT)
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), model_name="quiet", confidence=Confidence.EXACT)
+
+        gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert [g.model_name for g in gaps.unpriced] == ["loud", "quiet"]
+
+    def test_single_query(self):
+        team = TeamFactory.create()
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
+
+        with CaptureQueriesContext(connection) as ctx:
+            coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert len(ctx.captured_queries) == 1
+
+    def test_empty_when_all_priced(self):
+        team = TeamFactory.create()
+        rule = PricingRule.objects.create(
+            team=None,
+            provider_type="openai",
+            model_name="priced-model",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.0001",
+        )
+        _usage(team, cost="0.50", when=_NOW - timedelta(days=1), model_name="priced-model", pricing_rule=rule)
+
+        gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert gaps.unpriced == []
+        assert gaps.unknown == []
+
+
+@pytest.mark.django_db()
+class TestCostTimeseries:
+    """Per-bucket spend for the panel's daily-spend chart."""
+
+    def test_buckets_by_day_ordered(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=2))
+        _usage(team, cost="0.50", when=_NOW - timedelta(days=2))
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=1))
+
+        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert [point["cost"] for point in series] == [1.5, 2.0]
+
+    def test_costs_are_floats(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.25", when=_NOW - timedelta(days=1))
+
+        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert isinstance(series[0]["cost"], float)
+
+    def test_team_scoped(self):
+        team = TeamFactory.create()
+        other = TeamFactory.create()
+        _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
+
+        assert cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW) == []
 
 
 @pytest.mark.django_db()

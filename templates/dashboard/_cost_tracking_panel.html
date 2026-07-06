@@ -20,7 +20,8 @@
     </div>
 
     {% if cost_summary.total_cost or cost_summary.unknown_call_count or cost_summary.unpriced_call_count %}
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+      {# 3-col split only when there's estimated spend to break out; otherwise the headline stands alone. #}
+      <div class="grid grid-cols-1 gap-6 mt-4 {% if cost_summary.estimated_cost > 0 %}md:grid-cols-3{% endif %}">
         <div>
           <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "LLM spend" %}</div>
           <div class="text-3xl font-bold text-gray-900 dark:text-gray-100">${{ cost_summary.total_cost|cost_display }}</div>
@@ -31,56 +32,54 @@
             </div>
           {% endif %}
         </div>
-        <div>
-          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Exact" %}</div>
-          <div class="text-xl font-semibold text-gray-900 dark:text-gray-100">${{ cost_summary.exact_cost|cost_display }}</div>
-        </div>
-        <div>
-          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Estimated" %}</div>
-          <div class="text-xl font-semibold text-gray-900 dark:text-gray-100">${{ cost_summary.estimated_cost|cost_display }}</div>
-          {% if cost_summary.unknown_call_count %}
-            <div class="text-xs text-yellow-800 mt-1">
-              {% blocktranslate count counter=cost_summary.unknown_call_count %}{{ counter }} call with no usage data{% plural %}{{ counter }} calls with no usage data{% endblocktranslate %}
-            </div>
-          {% endif %}
-          {% if cost_summary.unpriced_call_count %}
-            <div class="text-xs text-yellow-800 mt-1">
-              {% blocktranslate count counter=cost_summary.unpriced_call_count %}{{ counter }} call missing pricing{% plural %}{{ counter }} calls missing pricing{% endblocktranslate %}
-            </div>
-          {% endif %}
-        </div>
+        {% if cost_summary.estimated_cost > 0 %}
+          <div>
+            <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Exact" %}</div>
+            <div class="text-xl font-semibold text-gray-900 dark:text-gray-100">${{ cost_summary.exact_cost|cost_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Estimated" %}</div>
+            <div class="text-xl font-semibold text-gray-900 dark:text-gray-100">${{ cost_summary.estimated_cost|cost_display }}</div>
+          </div>
+        {% endif %}
       </div>
 
-      {% if cost_top_bots %}
-        <div class="mt-6 overflow-x-auto">
-          <table class="table table-zebra w-full">
-            <thead>
-              <tr>
-                <th>{% translate "Chatbot" %}</th>
-                <th class="text-right">{% translate "Cost" %}</th>
-                <th class="text-right">{% translate "Tokens" %}</th>
-                <th class="text-right">{% translate "Sessions" %}</th>
-                <th class="text-right">{% translate "Cost / session" %}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for bot in cost_top_bots %}
-                <tr>
-                  <td>{{ bot.experiment_name }}</td>
-                  <td class="text-right">${{ bot.cost|cost_display }}</td>
-                  <td class="text-right">{{ bot.tokens }}</td>
-                  <td class="text-right">{{ bot.sessions }}</td>
-                  <td class="text-right">
-                    {% if bot.cost_per_session is not None %}
-                      ${{ bot.cost_per_session|cost_display }}
-                    {% else %}
-                      -
-                    {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+      {# Coverage warnings: each count expands to the models responsible so the numbers are actionable. #}
+      {% if cost_summary.unknown_call_count or cost_summary.unpriced_call_count %}
+        <div class="mt-4 space-y-2">
+          {% if cost_summary.unknown_call_count %}
+            <details class="text-xs text-yellow-800 dark:text-yellow-500">
+              <summary class="cursor-pointer">
+                {% blocktranslate count counter=cost_summary.unknown_call_count %}{{ counter }} call with no usage data{% plural %}{{ counter }} calls with no usage data{% endblocktranslate %}
+              </summary>
+              <ul class="mt-1 ml-4 list-disc">
+                {% for gap in cost_coverage_gaps.unknown %}
+                  <li>{{ gap.provider_type }} / {{ gap.model_name }} ({{ gap.call_count }})</li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+          {% if cost_summary.unpriced_call_count %}
+            <details class="text-xs text-yellow-800 dark:text-yellow-500">
+              <summary class="cursor-pointer">
+                {% blocktranslate count counter=cost_summary.unpriced_call_count %}{{ counter }} call missing pricing{% plural %}{{ counter }} calls missing pricing{% endblocktranslate %}
+              </summary>
+              <ul class="mt-1 ml-4 list-disc">
+                {% for gap in cost_coverage_gaps.unpriced %}
+                  <li>{{ gap.provider_type }} / {{ gap.model_name }} ({{ gap.call_count }})</li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if cost_summary.total_cost %}
+        <div class="mt-6">
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">{% translate "Daily spend" %}</div>
+          <div class="h-64">
+            <canvas id="costTimeseriesChart"></canvas>
+          </div>
         </div>
       {% endif %}
     {% else %}

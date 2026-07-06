@@ -61,5 +61,5 @@ apps/cost_tracking/
     pricing.py              PricingResolver + cache
     recorder.py             record_usage_bulk + UsageEvent / TraceContext
     estimation.py           tiktoken + response_text helpers
-    reporting.py            cost_summary, top_n_bots, last_synced_at
+    reporting.py            cost_summary, costs_by_experiment, coverage_gaps, cost_timeseries, last_synced_at
 ```

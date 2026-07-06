@@ -17,15 +17,15 @@ class ChartManager {
             light: '#F3F4F6',
             dark: '#374151'
         };
-        
+
         this.setupChartDefaults();
     }
-    
+
     setupChartDefaults() {
         Chart.defaults.font.family = '"Inter", sans-serif';
         Chart.defaults.font.size = 12;
         Chart.defaults.color = '#6B7280';
-        
+
         // Default chart options
         this.defaultOptions = {
             responsive: true,
@@ -70,13 +70,13 @@ class ChartManager {
             }
         };
     }
-    
+
     renderActiveParticipantsChart(data) {
         const ctx = document.getElementById('activeParticipantsChart');
         if (!ctx) return;
-        
+
         this.destroyChart('activeParticipants');
-        
+
         const chartData = {
             labels: data.map(item => this.formatDateLabel(item.date)),
             datasets: [{
@@ -90,7 +90,7 @@ class ChartManager {
                 pointHoverRadius: 6
             }]
         };
-        
+
         const options = {
             ...this.defaultOptions,
             plugins: {
@@ -110,18 +110,18 @@ class ChartManager {
                 }
             }
         };
-        
+
         this.charts.activeParticipants = new Chart(ctx, {
             type: 'line',
             data: chartData,
             options: options
         });
     }
-    
+
     renderSessionAnalyticsChart(data) {
         const ctx = document.getElementById('sessionAnalyticsChart');
         if (!ctx) return;
-        
+
         this.destroyChart('sessionAnalytics');
 
         const chartData = {
@@ -164,15 +164,15 @@ class ChartManager {
             options: options
         });
     }
-    
+
     renderMessageVolumeChart(data) {
         const ctx = document.getElementById('messageVolumeChart');
         if (!ctx) return;
-        
+
         this.destroyChart('messageVolume');
-        
+
         const labels = data.totals?.map(item => this.formatDateLabel(item.date)) || [];
-        
+
         const chartData = {
             labels: labels,
             datasets: [
@@ -194,7 +194,7 @@ class ChartManager {
                 }
             ]
         };
-        
+
         const options = {
             ...this.defaultOptions,
             plugins: {
@@ -214,7 +214,7 @@ class ChartManager {
                 }
             }
         };
-        
+
         this.charts.messageVolume = new Chart(ctx, {
             type: 'line',
             data: chartData,
@@ -280,16 +280,16 @@ class ChartManager {
             options: options
         });
     }
-    
+
     renderChannelBreakdownChart(data) {
         const ctx = document.getElementById('channelBreakdownChart');
         if (!ctx) return;
-        
+
         this.destroyChart('channelBreakdown');
-        
+
         const channels = data.platforms || [];
         const totalSessions = data.totals?.sessions || 1;
-        
+
         const chartData = {
             labels: channels.map(channel => channel.platform || 'Unknown'),
             datasets: [{
@@ -306,7 +306,7 @@ class ChartManager {
                 borderColor: '#ffffff'
             }]
         };
-        
+
         const options = {
             responsive: true,
             maintainAspectRatio: false,
@@ -347,20 +347,20 @@ class ChartManager {
                 }
             }
         };
-        
+
         this.charts.channelBreakdown = new Chart(ctx, {
             type: 'doughnut',
             data: chartData,
             options: options
         });
     }
-    
+
     renderSessionLengthChart(distributionData) {
         const ctx = document.getElementById('sessionLengthChart');
         if (!ctx) return;
-        
+
         this.destroyChart('sessionLength');
-        
+
         const chartData = {
             labels: distributionData.map(bin => bin.label),
             datasets: [{
@@ -371,7 +371,7 @@ class ChartManager {
                 borderWidth: 1
             }]
         };
-        
+
         const options = {
             ...this.defaultOptions,
             plugins: {
@@ -398,33 +398,83 @@ class ChartManager {
                 }
             }
         };
-        
+
         this.charts.sessionLength = new Chart(ctx, {
             type: 'bar',
             data: chartData,
             options: options
         });
     }
-    
+
+    renderCostTimeseriesChart(data) {
+        const ctx = document.getElementById('costTimeseriesChart');
+        if (!ctx) return;
+
+        this.destroyChart('costTimeseries');
+
+        const chartData = {
+            labels: (data || []).map(item => this.formatDateLabel(item.date)),
+            datasets: [{
+                label: 'Spend',
+                data: (data || []).map(item => item.cost),
+                backgroundColor: this.colorPalette.primary + '80',
+                borderColor: this.colorPalette.primary,
+                borderWidth: 1
+            }]
+        };
+
+        const formatCost = (value) => `$${(value || 0).toFixed(2)}`;
+
+        const options = {
+            ...this.defaultOptions,
+            plugins: {
+                ...this.defaultOptions.plugins,
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => `Spend: ${formatCost(context.parsed.y)}`
+                    }
+                }
+            },
+            scales: {
+                ...this.defaultOptions.scales,
+                y: {
+                    ...this.defaultOptions.scales.y,
+                    ticks: {
+                        callback: (value) => formatCost(value)
+                    }
+                }
+            }
+        };
+
+        this.charts.costTimeseries = new Chart(ctx, {
+            type: 'bar',
+            data: chartData,
+            options: options
+        });
+    }
+
     destroyChart(chartKey) {
         if (this.charts[chartKey]) {
             this.charts[chartKey].destroy();
             delete this.charts[chartKey];
         }
     }
-    
+
     destroyAllCharts() {
         Object.keys(this.charts).forEach(key => {
             this.destroyChart(key);
         });
     }
-    
+
     formatDateLabel(dateString) {
         const date = new Date(dateString);
         const now = new Date();
         const diffTime = Math.abs(now - date);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+
         if (diffDays <= 7) {
             // Show day of week for recent dates
             return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -436,13 +486,13 @@ class ChartManager {
             return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
         }
     }
-    
+
     updateChartTheme(isDarkMode) {
         const textColor = isDarkMode ? '#F3F4F6' : '#374151';
         const gridColor = isDarkMode ? 'rgba(156, 163, 175, 0.2)' : 'rgba(156, 163, 175, 0.1)';
-        
+
         Chart.defaults.color = textColor;
-        
+
         Object.values(this.charts).forEach(chart => {
             if (chart.options.scales) {
                 if (chart.options.scales.x) {
@@ -457,11 +507,11 @@ class ChartManager {
                     chart.options.scales.y1.ticks.color = textColor;
                 }
             }
-            
+
             if (chart.options.plugins?.legend?.labels) {
                 chart.options.plugins.legend.labels.color = textColor;
             }
-            
+
             chart.update('none');
         });
     }
@@ -470,7 +520,7 @@ class ChartManager {
 // Initialize chart manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.chartManager = new ChartManager();
-    
+
     // Listen for theme changes
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
@@ -480,7 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-    
+
     observer.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ['data-theme']

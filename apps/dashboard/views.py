@@ -8,7 +8,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 from waffle import flag_is_active
 
-from apps.cost_tracking.services.reporting import cost_summary, top_n_bots
+from apps.cost_tracking.services.reporting import cost_summary, cost_timeseries, coverage_gaps
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -30,7 +30,7 @@ def _cost_tracking_context(request, filter_form: DashboardFilterForm) -> dict:
     return {
         "cost_tracking_enabled": True,
         "cost_summary": cost_summary(request.team, start=start, end=end),
-        "cost_top_bots": top_n_bots(request.team, start=start, end=end),
+        "cost_coverage_gaps": coverage_gaps(request.team, start=start, end=end),
     }
 
 
@@ -169,8 +169,27 @@ class BotPerformanceApiView(DashboardApiView):
         order_dir = request.GET.get("order_dir", "desc")
 
         data = service.get_bot_performance_summary(
-            page=page, page_size=page_size, order_by=order_by, order_dir=order_dir, **filter_params
+            page=page,
+            page_size=page_size,
+            order_by=order_by,
+            order_dir=order_dir,
+            include_cost=flag_is_active(request, COST_TRACKING_FLAG),
+            **filter_params,
         )
+        return self.json_response(data)
+
+
+class CostTrackingApiView(DashboardApiView):
+    """Cost-tracking data endpoint, gated on the team's cost-monitoring flag.
+    Returns an empty payload when the flag is off so the frontend can no-op.
+    """
+
+    def get(self, request, *args, **kwargs):
+        if not flag_is_active(request, COST_TRACKING_FLAG):
+            return self.json_response([])
+        start, end = _cost_panel_period(DashboardFilterForm(data=request.GET, team=request.team))
+        granularity = request.GET.get("granularity", "daily")
+        data = cost_timeseries(request.team, start=start, end=end, granularity=granularity)
         return self.json_response(data)
 
 
