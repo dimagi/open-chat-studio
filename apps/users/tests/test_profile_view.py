@@ -37,9 +37,9 @@ class TestProfileEmailUpdate:
         assert EmailAddress.objects.get(user=user, email=new_email).primary is True
         assert EmailAddress.objects.get(user=user, email=old_email).primary is False
 
-    def test_changing_email_with_no_existing_email_address_does_not_error(self, client, team_with_users):
+    def test_changing_email_to_brand_new_address_creates_unverified_row(self, client, team_with_users):
         """If the user has no EmailAddress row for the new email (and confirmation is not required),
-        the view should still succeed without trying to set a non-existent address as primary."""
+        the view creates an unverified EmailAddress row and does not promote it to primary."""
         user = team_with_users.members.first()
         user.email = "old@example.com"
         user.save()
@@ -53,7 +53,9 @@ class TestProfileEmailUpdate:
         assert response.status_code == 200
         user.refresh_from_db()
         assert user.email == "brand-new@example.com"
-        assert not EmailAddress.objects.filter(user=user, email="brand-new@example.com").exists()
+        email_address = EmailAddress.objects.get(user=user, email="brand-new@example.com")
+        assert email_address.verified is False
+        assert email_address.primary is False
 
     def test_unchanged_email_does_not_touch_email_address_rows(self, client, team_with_users):
         """If the email isn't changing, the EmailAddress rows should be left alone (in particular,
