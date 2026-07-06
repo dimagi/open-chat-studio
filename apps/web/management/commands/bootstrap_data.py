@@ -378,16 +378,25 @@ class Command(BaseCommand):
         chart and per-bot costs), plus a few estimated / unpriced / no-usage rows
         so the confidence split and coverage-gap warnings render.
         """
+        # Rerun-safe: an already-seeded team yields no new sessions upstream, so
+        # rehydrate from the DB rather than skipping usage seeding and the flag.
+        if not sessions:
+            sessions = list(
+                ExperimentSession.objects.filter(team=team).select_related("experiment", "participant").order_by("id")
+            )
         if not sessions:
             return
         self.stdout.write("")
         self.stdout.write("--- Creating Usage Records ---")
 
+        # Idempotent: clear prior seed rows so reruns don't inflate dashboard totals.
+        UsageRecord.objects.filter(team=team).delete()
+
         provider_type = llm_provider.type
-        # Any global rule serves as the "priced" anchor - the panel only checks
-        # whether a rule is linked, not that it matches the model.
-        priced_rule = PricingRule.objects.filter(team__isnull=True).order_by("id").first()
-        priced_model = priced_rule.model_name if priced_rule else "gpt-4o-mini"
+        # Priced rows must carry a rule, else reporting counts them as unpriced
+        # coverage gaps. Ensure a global rule exists to anchor them.
+        priced_rule = self._ensure_global_pricing_rule()
+        priced_model = priced_rule.model_name
         now = timezone.now()
 
         created = 0
@@ -474,6 +483,20 @@ class Command(BaseCommand):
         )
         UsageRecord.objects.filter(pk=record.pk).update(timestamp=timestamp)
         return 1
+
+    def _ensure_global_pricing_rule(self) -> PricingRule:
+        """A global PricingRule to anchor the 'priced' seed rows, created as a
+        placeholder if the pricing seed migration hasn't populated one."""
+        rule = PricingRule.objects.filter(team__isnull=True).order_by("id").first()
+        if rule is None:
+            rule = PricingRule.objects.create(
+                team=None,
+                provider_type="openai",
+                model_name="gpt-4o-mini",
+                service_kind=ServiceKind.LLM_INPUT,
+                unit_price=Decimal("0.00015"),
+            )
+        return rule
 
     def _enable_cost_tracking_flag(self, team) -> None:
         """The Cost Tracking panel is gated on this team-scoped flag, so enable

@@ -81,38 +81,36 @@ class CoverageGaps:
     unknown: list[ModelCoverageGap]
 
 
-def _scoped_records(
-    team: Team,
-    *,
-    experiment_ids: list[int] | None = None,
-    platform_names: list[str] | None = None,
-    participant_ids: list[int] | None = None,
-):
+@dataclass(frozen=True)
+class CostFilters:
+    """The dashboard filters the cost read path honours, bundled so the
+    reporting functions take one argument instead of three parallel lists.
+    Tags are intentionally absent - usage records aren't tagged directly.
+    """
+
+    experiment_ids: list[int] | None = None
+    platform_names: list[str] | None = None
+    participant_ids: list[int] | None = None
+
+
+def _scoped_records(team: Team, filters: CostFilters | None = None):
     """Team-scoped UsageRecords with the dashboard's chatbot / participant /
     platform filters applied (mirrors the cost panel's other charts). Platform
     is matched via the record's session, so records with no session are excluded
-    when a platform filter is set. Tags are intentionally not supported here -
-    usage records aren't tagged directly.
+    when a platform filter is set.
     """
+    filters = filters or CostFilters()
     qs = UsageRecord.objects.filter(team=team)
-    if experiment_ids:
-        qs = qs.filter(experiment_id__in=experiment_ids)
-    if participant_ids:
-        qs = qs.filter(participant_id__in=participant_ids)
-    if platform_names:
-        qs = qs.filter(session__platform__in=platform_names)
+    if filters.experiment_ids:
+        qs = qs.filter(experiment_id__in=filters.experiment_ids)
+    if filters.participant_ids:
+        qs = qs.filter(participant_id__in=filters.participant_ids)
+    if filters.platform_names:
+        qs = qs.filter(session__platform__in=filters.platform_names)
     return qs
 
 
-def cost_summary(
-    team: Team,
-    *,
-    start: datetime,
-    end: datetime,
-    experiment_ids: list[int] | None = None,
-    platform_names: list[str] | None = None,
-    participant_ids: list[int] | None = None,
-) -> CostSummary:
+def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None) -> CostSummary:
     """Total cost in [start, end), delta vs the equal-length prior period,
     and a confidence breakdown so the dashboard footer can show what share
     of the spend is estimated.
@@ -121,9 +119,7 @@ def cost_summary(
     period_q = Q(timestamp__gte=start, timestamp__lt=end)
     previous_q = Q(timestamp__gte=previous_start, timestamp__lt=start)
 
-    agg = _scoped_records(
-        team, experiment_ids=experiment_ids, platform_names=platform_names, participant_ids=participant_ids
-    ).aggregate(
+    agg = _scoped_records(team, filters).aggregate(
         total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
         previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
         exact=Coalesce(
@@ -158,22 +154,14 @@ def cost_summary(
 
 
 def costs_by_experiment(
-    team: Team,
-    *,
-    start: datetime,
-    end: datetime,
-    experiment_ids: list[int] | None = None,
-    platform_names: list[str] | None = None,
-    participant_ids: list[int] | None = None,
+    team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None
 ) -> dict[int, Decimal]:
     """Total cost per experiment in the period, keyed by `experiment_id`.
     Feeds the dashboard's Bot Performance table cost column. Records with a
     null experiment (e.g. trace whose experiment was hard-deleted) are excluded.
     """
     rows = (
-        _scoped_records(
-            team, experiment_ids=experiment_ids, platform_names=platform_names, participant_ids=participant_ids
-        )
+        _scoped_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end, experiment__isnull=False)
         .values("experiment_id")
         .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
@@ -202,15 +190,7 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
     return SessionUsage(total_cost=total_cost, by_model=by_model)
 
 
-def coverage_gaps(
-    team: Team,
-    *,
-    start: datetime,
-    end: datetime,
-    experiment_ids: list[int] | None = None,
-    platform_names: list[str] | None = None,
-    participant_ids: list[int] | None = None,
-) -> CoverageGaps:
+def coverage_gaps(team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None) -> CoverageGaps:
     """The models behind the period's unpriced / no-usage warnings, so the
     panel can list which models are responsible. Single grouped query over the
     `(team, model_name, timestamp)` index; buckets with a zero count in a
@@ -218,9 +198,7 @@ def coverage_gaps(
     """
     period_q = Q(timestamp__gte=start, timestamp__lt=end)
     rows = (
-        _scoped_records(
-            team, experiment_ids=experiment_ids, platform_names=platform_names, participant_ids=participant_ids
-        )
+        _scoped_records(team, filters)
         .filter(period_q & (Q(confidence=Confidence.UNKNOWN) | Q(pricing_rule__isnull=True)))
         .values("provider_type", "model_name")
         .annotate(
@@ -241,14 +219,7 @@ def coverage_gaps(
 
 
 def cost_timeseries(
-    team: Team,
-    *,
-    start: datetime,
-    end: datetime,
-    granularity: str = "daily",
-    experiment_ids: list[int] | None = None,
-    platform_names: list[str] | None = None,
-    participant_ids: list[int] | None = None,
+    team: Team, *, start: datetime, end: datetime, granularity: str = "daily", filters: CostFilters | None = None
 ) -> list[dict]:
     """Spend per time bucket in [start, end), ordered chronologically. Costs
     are returned as floats for direct JSON/Chart.js consumption. Empty buckets
@@ -256,9 +227,7 @@ def cost_timeseries(
     """
     trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
     rows = (
-        _scoped_records(
-            team, experiment_ids=experiment_ids, platform_names=platform_names, participant_ids=participant_ids
-        )
+        _scoped_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end)
         .annotate(bucket=trunc("timestamp"))
         .values("bucket")

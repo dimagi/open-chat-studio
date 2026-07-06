@@ -9,6 +9,7 @@ from django.test.utils import CaptureQueriesContext
 
 from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind
 from apps.cost_tracking.services.reporting import (
+    CostFilters,
     cost_summary,
     cost_timeseries,
     costs_by_experiment,
@@ -335,7 +336,9 @@ class TestCostFilters:
         _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
         _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
 
-        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+        summary = cost_summary(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
 
         assert summary.total_cost == Decimal("1.00")
 
@@ -346,7 +349,9 @@ class TestCostFilters:
         _usage(team, cost="2.00", when=_NOW - timedelta(days=45), experiment=keep)
         _usage(team, cost="9.00", when=_NOW - timedelta(days=45), experiment=drop)
 
-        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+        summary = cost_summary(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
 
         assert summary.previous_period_cost == Decimal("2.00")
 
@@ -358,7 +363,9 @@ class TestCostFilters:
         _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, participant=keep.participant)
         _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, participant=drop.participant)
 
-        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW, participant_ids=[keep.participant_id])
+        series = cost_timeseries(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(participant_ids=[keep.participant_id])
+        )
 
         assert [point["cost"] for point in series] == [1.0]
 
@@ -370,7 +377,9 @@ class TestCostFilters:
         _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=web)
         _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=api)
 
-        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW, platform_names=["web"])
+        series = cost_timeseries(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(platform_names=["web"])
+        )
 
         assert [point["cost"] for point in series] == [1.0]
 
@@ -381,7 +390,9 @@ class TestCostFilters:
         _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
         _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
 
-        costs = costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+        costs = costs_by_experiment(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
 
         assert costs == {keep.id: Decimal("1.00000000")}
 
@@ -392,6 +403,8 @@ class TestCostFilters:
         _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=keep, model_name="keep-model")
         _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=drop, model_name="drop-model")
 
-        gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+        gaps = coverage_gaps(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
 
         assert [g.model_name for g in gaps.unpriced] == ["keep-model"]
