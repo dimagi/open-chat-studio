@@ -85,15 +85,15 @@ def create_team_files_zip_task(self, team_id: int) -> int:
     """
     progress_recorder = ProgressRecorder(self)
     team = Team.objects.get(id=team_id)
-    files = list(get_team_files_queryset(team))
-    total = len(files)
+    files = get_team_files_queryset(team)
+    total = files.count()
     export_id = None
 
     try:
         with tempfile.NamedTemporaryFile(suffix=".zip") as tmp:
             with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zip_file:
                 seen: set[str] = set()
-                for idx, file in enumerate(files, start=1):
+                for idx, file in enumerate(files.iterator(), start=1):
                     progress_recorder.set_progress(idx, total, description=f"Adding {file.name}")
                     if not file.file:
                         continue
