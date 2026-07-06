@@ -24,6 +24,7 @@ from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
+from apps.pipelines.models import Pipeline
 from apps.service_providers.forms import LlmProviderModelForm, PricingOverrideForm
 from apps.service_providers.models import (
     EmbeddingProviderModel,
@@ -119,6 +120,22 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
         experiment_objects = [obj for obj in blocking_objects if isinstance(obj, Experiment)]
         assistant_objects = [obj for obj in blocking_objects if isinstance(obj, OpenAiAssistant)]
 
+        # Pipeline references come from node params (e.g. an LLM node's llm_provider_id), which
+        # get_related_objects surfaces as the nodes' pipelines. Resolve them to the chatbots that
+        # use them; working pipelines without a live chatbot still block on their own.
+        pipeline_objects = {obj.pk: obj for obj in blocking_objects if isinstance(obj, Pipeline)}
+        standalone_pipelines = []
+        if pipeline_objects:
+            seen_experiment_ids = {e.pk for e in experiment_objects}
+            pipeline_experiments = Experiment.objects.filter(
+                pipeline__in=pipeline_objects.values(), is_archived=False
+            ).exclude(pk__in=seen_experiment_ids)
+            experiment_objects.extend(pipeline_experiments)
+            covered_pipeline_ids = {e.pipeline_id for e in experiment_objects}
+            standalone_pipelines = [
+                p for p in pipeline_objects.values() if p.pk not in covered_pipeline_ids and p.is_working_version
+            ]
+
         manual_experiments = [
             Chip(
                 label=(
@@ -139,11 +156,15 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
         related_assistants = [
             Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in assistant_objects
         ]
-        if experiment_objects or assistant_objects:
+        pipeline_chips = [
+            Chip(label=pipeline.name, url=pipeline.get_absolute_url()) for pipeline in standalone_pipelines
+        ]
+        if experiment_objects or assistant_objects or standalone_pipelines:
             return render_referenced_objects_modal(
                 "service provider",
                 request=request,
                 experiments=manual_experiments,
+                pipeline_nodes=pipeline_chips,
                 assistants=related_assistants,
                 bulk_archiveable_experiments=bulk_archiveable_experiments,
                 bulk_archiveable_ids=[e.id for e in experiment_objects if is_bulk_archiveable(e)],

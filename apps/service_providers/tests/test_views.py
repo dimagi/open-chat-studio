@@ -130,33 +130,92 @@ def test_sync_voices_endpoint(team_with_users, authed_client):
 
 
 @pytest.mark.django_db()
-def test_delete_llm_provider_referenced_by_pipeline_nullifies_node_fk(team_with_users, authed_client):
-    """Deleting an LLM provider referenced by a pipeline node succeeds (SET_NULL): the node's
-    llm_provider FK is nulled, while params (authoritative) is left untouched.
+class TestDeleteLlmProviderPipelineReferences:
+    """LLM providers are referenced from pipeline node params, not experiment FKs.
+    Deletion must be blocked while a live pipeline or chatbot version still uses the provider."""
 
-    In practice this only happens for an archived pipeline: the delete guards block removing a
-    provider that a live (working) node still references, so the FK is only nulled once the
-    pipeline holding the node has been archived and the provider is then deleted.
-    """
-    provider = LlmProviderFactory(team=team_with_users)
-    node = NodeFactory.create(
-        type="LLMResponseWithPrompt",
-        params={"llm_provider_id": provider.id},
-        llm_provider=provider,
-    )
-
-    response = authed_client.delete(
-        reverse(
+    def _delete_url(self, team, provider):
+        return reverse(
             "service_providers:delete",
-            kwargs={"team_slug": team_with_users.slug, "provider_type": ServiceProvider.llm.slug, "pk": provider.pk},
+            kwargs={"team_slug": team.slug, "provider_type": ServiceProvider.llm.slug, "pk": provider.pk},
         )
-    )
 
-    assert response.status_code == 200
-    assert not LlmProvider.objects.filter(pk=provider.pk).exists()
-    node.refresh_from_db()
-    assert node.llm_provider_id is None
-    assert node.params["llm_provider_id"] == provider.id  # params unchanged (authoritative)
+    def _make_node(self, provider, **kwargs):
+        return NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"llm_provider_id": provider.id},
+            llm_provider=provider,
+            **kwargs,
+        )
+
+    def test_blocked_by_working_pipeline_without_experiment(self, team_with_users, authed_client):
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert node.pipeline.name in response.content.decode()
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_blocked_by_working_chatbot(self, team_with_users, authed_client):
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert experiment.name in response.content.decode()
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_blocked_by_published_version_only(self, team_with_users, authed_client):
+        """Blocked even when only the published version's pipeline references the provider."""
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+        experiment.create_new_version()  # v1, auto-published
+        node.set_params({})  # working pipeline no longer references the provider
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_non_published_version_is_bulk_archiveable(self, team_with_users, authed_client):
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+        experiment.create_new_version()  # v1, auto-published
+        experiment.create_new_version()  # v2, non-published
+        node.set_params({})
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert "Archive All Non-published Versions" in response.content.decode()
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_allowed_when_only_archived_references(self, team_with_users, authed_client):
+        """Deleting a provider referenced only by archived pipelines succeeds (SET_NULL):
+        the node's FK is nulled while params (authoritative) is left untouched."""
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+        experiment.create_new_version()
+        experiment.archive()
+        node.pipeline.archive()
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert not LlmProvider.objects.filter(pk=provider.pk).exists()
+        node.refresh_from_db()
+        assert node.llm_provider_id is None
+        assert node.params["llm_provider_id"] == provider.id  # params unchanged (authoritative)
 
 
 @pytest.mark.django_db()
