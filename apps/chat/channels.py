@@ -50,14 +50,13 @@ from apps.ocs_notifications.notifications import (
     audio_transcription_failure_notification,
     file_delivery_failure_notification,
 )
-from apps.service_providers.file_limits import can_send_on_slack, can_send_on_telegram
+from apps.service_providers.file_limits import can_send_on_telegram
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.service_providers.tracing.base import SpanNotificationConfig, TraceContext
-from apps.slack.utils import parse_session_external_id
 from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 
@@ -335,7 +334,11 @@ class ChannelBase(ABC):
 
             channel_cls = NewWhatsappChannel
         elif platform == "facebook":
-            channel_cls = FacebookMessengerChannel
+            from apps.channels.channels_v2.facebook_channel import (  # noqa: PLC0415 - avoid circular import
+                FacebookMessengerChannel as NewFacebookMessengerChannel,
+            )
+
+            channel_cls = NewFacebookMessengerChannel
         elif platform == "api":
             # noqa: PLC0415 - inline to avoid circular import: channels_v2 imports from chat.channels
             from apps.channels.channels_v2.api_channel import ApiChannel as NewApiChannel  # noqa: PLC0415
@@ -348,7 +351,9 @@ class ChannelBase(ABC):
 
             channel_cls = NewSureAdhereChannel
         elif platform == "slack":
-            channel_cls = SlackChannel
+            from apps.channels.channels_v2.slack_channel import SlackChannel as NewSlackChannel  # noqa: PLC0415
+
+            channel_cls = NewSlackChannel
         elif platform == "commcare_connect":
             from apps.channels.channels_v2.connect_channel import (  # noqa: PLC0415
                 CommCareConnectChannel as NewCommCareConnectChannel,
@@ -1247,40 +1252,6 @@ class WhatsappChannel(ChannelBase):
             logger.exception("Failed to send typing indicator")
 
 
-class FacebookMessengerChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
-        from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.last_activity_at,
-        )
-
-    @property
-    def voice_replies_supported(self) -> bool:
-        return self.messaging_service.voice_replies_supported
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
-
-    def echo_transcript(self, transcript: str):
-        self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
-
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
-        from_ = self.experiment_channel.extra_data["page_id"]
-        self.messaging_service.send_voice_message(
-            synthetic_voice,
-            from_=from_,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.last_activity_at,
-        )
-
-
 # TODO: remove after channels refactor — replaced by apps.channels.channels_v2.api_channel.ApiChannel
 class ApiChannel(ChannelBase):
     """Message Handler for the API"""
@@ -1334,62 +1305,6 @@ class ApiChannel(ChannelBase):
     def send_text_to_user(self, bot_message: str):  # ty: ignore[invalid-method-override]
         # The bot cannot send messages to this client, since it wouldn't know where to send it to
         pass
-
-
-class SlackChannel(ChannelBase):
-    voice_replies_supported = False
-    supported_message_types = [MESSAGE_TYPES.TEXT]
-    supports_multimedia = True
-
-    def __init__(
-        self,
-        experiment: Experiment,
-        experiment_channel: ExperimentChannel,
-        experiment_session: ExperimentSession,
-        messaging_service=None,
-    ):
-        super().__init__(experiment, experiment_channel, experiment_session)
-        self._messaging_service = messaging_service
-
-    @property
-    def messaging_service(self):
-        if not self._messaging_service:
-            self._messaging_service = self.experiment_channel.messaging_provider.get_messaging_service()
-        return self._messaging_service
-
-    def send_text_to_user(self, text: str):
-        if not self.message:
-            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
-        else:
-            channel_id = self.message.channel_id
-            thread_ts = self.message.thread_ts
-        self.messaging_service.send_text_message(
-            text,
-            from_="",
-            to=channel_id,
-            platform=ChannelPlatform.SLACK,
-            thread_ts=thread_ts,
-            last_activity_at=self.last_activity_at,
-        )
-
-    def _ensure_sessions_exists(self):
-        if not self.experiment_session:
-            raise ChannelException("WebChannel requires an existing session")
-
-    def _can_send_file(self, file: File) -> bool:
-        return can_send_on_slack(file.content_type or "", file.content_size or 0).supported
-
-    def send_file_to_user(self, file: File):
-        if not self.message:
-            channel_id, thread_ts = parse_session_external_id(self.experiment_session.external_id)
-        else:
-            channel_id = self.message.channel_id
-            thread_ts = self.message.thread_ts
-        self.messaging_service.send_file_message(
-            file=file,
-            to=channel_id,
-            thread_ts=thread_ts,
-        )
 
 
 # TODO: remove after channels refactor — replaced by apps.channels.channels_v2.connect_channel.CommCareConnectChannel

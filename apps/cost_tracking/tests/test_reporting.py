@@ -13,6 +13,7 @@ from apps.cost_tracking.services.reporting import (
     cost_timeseries,
     costs_by_experiment,
     coverage_gaps,
+    session_usage,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -180,6 +181,47 @@ class TestCostsByExperiment:
         _usage(other, cost="999.00", when=_NOW - timedelta(days=1), experiment=exp_other)
 
         assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
+
+
+@pytest.mark.django_db()
+class TestSessionUsage:
+    """Per-session, per-model cost/token breakdown and session scoping."""
+
+    def test_empty_when_no_records(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+
+        usage = session_usage(session)
+
+        assert usage.total_cost == Decimal(0)
+        assert usage.by_model == []
+
+    def test_groups_by_model_with_total(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW, session=session, model_name="gpt-4o", quantity=100)
+        _usage(team, cost="2.00", when=_NOW, session=session, model_name="gpt-4o", quantity=200)
+        _usage(team, cost="0.50", when=_NOW, session=session, model_name="gpt-4o-mini", quantity=50)
+
+        usage = session_usage(session)
+
+        assert usage.total_cost == Decimal("3.50000000")
+        assert [(m.model_name, m.cost, m.tokens) for m in usage.by_model] == [
+            ("gpt-4o", Decimal("3.00000000"), 300),
+            ("gpt-4o-mini", Decimal("0.50000000"), 50),
+        ]
+
+    def test_scoped_to_session(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        other = ExperimentSessionFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW, session=session, model_name="gpt-4o")
+        _usage(team, cost="9.00", when=_NOW, session=other, model_name="gpt-4o")
+
+        usage = session_usage(session)
+
+        assert usage.total_cost == Decimal("1.00000000")
+        assert len(usage.by_model) == 1
 
 
 @pytest.mark.django_db()
