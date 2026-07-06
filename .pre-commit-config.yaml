@@ -30,7 +30,7 @@ repos:
         args: [ --fix, --show-fixes ]
       - id: ruff-format
   - repo: https://github.com/djlint/djLint
-    rev: v1.39.5
+    rev: v1.40.3
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
@@ -47,14 +47,14 @@ repos:
         types: [ file ]
         args: [ --fix ]
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: 'v3.9.1'
+    rev: 'v3.9.4'
     hooks:
       - id: prettier
         files: ^components/chat_widget/src/.*\.(ts|tsx|css)$
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.55
+    rev: v0.0.56
     hooks:
       # Run the type checker.
       - id: ty-check
