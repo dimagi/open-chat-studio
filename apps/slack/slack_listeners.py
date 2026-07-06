@@ -13,10 +13,10 @@ import re
 from django.db.models import Q
 from slack_bolt import BoltContext, BoltResponse
 
+from apps.channels.channels_v2.slack_channel import SlackChannel
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import SlackChannel
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.messaging_service import SlackService
