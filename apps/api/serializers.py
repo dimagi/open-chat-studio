@@ -8,6 +8,7 @@ from taggit.serializers import TaggitSerializer, TagListSerializerField
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageMetadataKeys, ChatMessageType
+from apps.cost_tracking.services.reporting import session_usage
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.files.models import File
 from apps.teams.models import Team
@@ -170,6 +171,17 @@ class MessageSerializer(TaggitSerializer, serializers.ModelSerializer):
         return data
 
 
+class SessionModelUsageSerializer(serializers.Serializer):
+    model_name = serializers.CharField()
+    cost = serializers.DecimalField(max_digits=14, decimal_places=8)
+    tokens = serializers.IntegerField()
+
+
+class SessionUsageSerializer(serializers.Serializer):
+    total_cost = serializers.DecimalField(max_digits=14, decimal_places=8)
+    by_model = SessionModelUsageSerializer(many=True)
+
+
 class ExperimentSessionSerializer(serializers.ModelSerializer):
     url = ApiUrlField(
         openapi_example="https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/",
@@ -182,6 +194,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     experiment = ExperimentStubSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
     messages = serializers.SerializerMethodField()
+    usage = serializers.SerializerMethodField()
     tags = TagListSerializerField(source="chat.tags")
 
     class Meta:
@@ -197,6 +210,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
             "status",
             "platform",
             "messages",
+            "usage",
             "tags",
             "state",
         ]
@@ -206,6 +220,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         if not self._include_messages:
             self.fields.pop("messages")
+            self.fields.pop("usage")
         else:
             # hack to change the component name for the schema to include messages
             self._spectacular_annotation = {"component_name": "ExperimentSessionWithMessages"}
@@ -214,6 +229,10 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     def get_messages(self, instance):
         messages = list(instance.chat.message_iterator())
         return MessageSerializer(reversed(messages), many=True, context=self.context).data
+
+    @extend_schema_field(SessionUsageSerializer)
+    def get_usage(self, instance):
+        return SessionUsageSerializer(session_usage(instance)).data
 
 
 class ExperimentSessionCreateSerializer(serializers.ModelSerializer):

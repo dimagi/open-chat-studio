@@ -12,6 +12,7 @@ from django.db.models import Count, DecimalField, Q, Sum
 from django.db.models.functions import Coalesce
 
 from apps.cost_tracking.models import Confidence, PricingRule, UsageRecord
+from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.cost_tracking")
@@ -35,6 +36,23 @@ class CostSummary:
     unknown_call_count: int
     unpriced_call_count: int
     last_synced: datetime | None
+
+
+@dataclass(frozen=True)
+class ModelSpend:
+    """Per-model spend row for a single session's usage breakdown."""
+
+    model_name: str
+    cost: Decimal
+    tokens: int
+
+
+@dataclass(frozen=True)
+class SessionUsage:
+    """Whole-session usage: total cost plus a per-model breakdown."""
+
+    total_cost: Decimal
+    by_model: list[ModelSpend]
 
 
 @dataclass(frozen=True)
@@ -113,6 +131,27 @@ def top_n_bots(team: Team, *, start: datetime, end: datetime, limit: int = 10) -
         .order_by("-cost")[:limit]
     )
     return [_bot_spend_from_row(row) for row in rows]
+
+
+def session_usage(session: ExperimentSession) -> SessionUsage:
+    """Cost/token breakdown by model for a single session, plus the overall
+    total. Rows are ordered by descending cost. Uses the
+    `(team, session, timestamp)` index.
+    """
+    rows = (
+        UsageRecord.objects.filter(team_id=session.team_id, session=session)
+        .values("model_name")
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+        )
+        .order_by("-cost")
+    )
+    by_model = [
+        ModelSpend(model_name=row["model_name"], cost=row["cost"], tokens=int(row["tokens"] or 0)) for row in rows
+    ]
+    total_cost = sum((row.cost for row in by_model), _ZERO)
+    return SessionUsage(total_cost=total_cost, by_model=by_model)
 
 
 def last_synced_at() -> datetime | None:
