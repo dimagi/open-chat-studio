@@ -9,6 +9,7 @@ from django.urls import reverse
 from apps.cost_tracking.models import Confidence
 from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.utils.factories.experiment import ExperimentFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
@@ -183,6 +184,18 @@ class TestCostTimeseriesEndpoint:
         payload = response.json()
         assert len(payload) == 1
         assert payload[0]["cost"] == 1.0
+
+    def test_respects_experiment_filter(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        other_experiment = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment)
+        base = self._url(team) + "?date_range=custom&start_date=2026-06-01&end_date=2026-06-20"
+
+        matching = authenticated_client.get(base + f"&experiments={experiment.id}")
+        other = authenticated_client.get(base + f"&experiments={other_experiment.id}")
+
+        assert matching.json()[0]["cost"] == 1.0
+        assert other.json() == []
 
 
 @pytest.mark.django_db()

@@ -15,7 +15,7 @@ from apps.cost_tracking.services.reporting import (
     coverage_gaps,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
@@ -278,3 +278,78 @@ class TestCostTimeseries:
         _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
         assert cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW) == []
+
+
+@pytest.mark.django_db()
+class TestCostFilters:
+    """The cost read path honours the dashboard's chatbot / participant /
+    platform filters (but not tags). Verified across the four public functions.
+    """
+
+    def test_cost_summary_filters_by_experiment(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
+
+        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_cost_summary_filters_prior_period_too(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=45), experiment=keep)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=45), experiment=drop)
+
+        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+
+        assert summary.previous_period_cost == Decimal("2.00")
+
+    def test_timeseries_filters_by_participant(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        keep = ExperimentSessionFactory.create(experiment=exp, team=team)
+        drop = ExperimentSessionFactory.create(experiment=exp, team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, participant=keep.participant)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, participant=drop.participant)
+
+        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW, participant_ids=[keep.participant_id])
+
+        assert [point["cost"] for point in series] == [1.0]
+
+    def test_timeseries_filters_by_platform_via_session(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        web = ExperimentSessionFactory.create(experiment=exp, team=team, platform="web")
+        api = ExperimentSessionFactory.create(experiment=exp, team=team, platform="api")
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=web)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=api)
+
+        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW, platform_names=["web"])
+
+        assert [point["cost"] for point in series] == [1.0]
+
+    def test_costs_by_experiment_filters_by_experiment(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
+
+        costs = costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+
+        assert costs == {keep.id: Decimal("1.00000000")}
+
+    def test_coverage_gaps_filters_by_experiment(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=keep, model_name="keep-model")
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=drop, model_name="drop-model")
+
+        gaps = coverage_gaps(team, start=_NOW - timedelta(days=30), end=_NOW, experiment_ids=[keep.id])
+
+        assert [g.model_name for g in gaps.unpriced] == ["keep-model"]

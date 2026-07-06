@@ -357,7 +357,16 @@ class DashboardService:
             experiments_base = querysets["experiments"]
 
             cost_map = (
-                costs_by_experiment(self.team, start=querysets["start_date"], end=querysets["end_date"])
+                costs_by_experiment(
+                    self.team,
+                    start=querysets["start_date"],
+                    end=querysets["end_date"],
+                    **{
+                        k: cache_filters[k]
+                        for k in ("experiment_ids", "platform_names", "participant_ids")
+                        if cache_filters.get(k)
+                    },
+                )
                 if include_cost
                 else {}
             )
