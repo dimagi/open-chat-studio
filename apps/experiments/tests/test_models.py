@@ -379,7 +379,7 @@ class TestExperimentSession:
         }
 
     @pytest.mark.parametrize("fail_silently", [True, False])
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.channels_v2.registry.from_experiment_session")
     @patch.object(ExperimentSession, "_bot_prompt_for_user")
     def test_ad_hoc_message(self, mock_bot_prompt, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
@@ -402,7 +402,7 @@ class TestExperimentSession:
         else:
             _test()
 
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.channels_v2.registry.from_experiment_session")
     @patch.object(ExperimentSession, "_bot_prompt_for_user")
     def test_ad_hoc_message_transaction_rollback(self, mock_bot_prompt, from_experiment_session, experiment_session):
         """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
@@ -438,7 +438,7 @@ class TestExperimentSession:
         final_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
         assert final_message_count == initial_message_count, "Transaction should have rolled back the message creation"
 
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.channels_v2.registry.from_experiment_session")
     @patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_ad_hoc_message_links_ai_message_to_trace(
         self, mock_get_llm_service, from_experiment_session, experiment_session
@@ -456,7 +456,7 @@ class TestExperimentSession:
         trace = Trace.objects.get(session=experiment_session)
         assert trace.output_message_id == ai_message.id
 
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.channels_v2.registry.from_experiment_session")
     @patch.object(ExperimentSession, "_bot_prompt_for_user")
     def test_ad_hoc_message_direct_delivery(self, mock_bot_prompt, from_experiment_session, experiment_session):
         """When ``message_text`` is provided the message is delivered verbatim, bypassing the LLM,
