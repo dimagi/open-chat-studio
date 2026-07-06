@@ -16,7 +16,7 @@ from apps.channels.channels_v2.stages.core import (
     ResponseFormattingStage,
 )
 from apps.channels.channels_v2.stages.terminal import ActivityTrackingStage, PersistenceStage
-from apps.chat.channels import MESSAGE_TYPES
+from apps.channels.const import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.service_providers.tracing import TracingService
 

@@ -5,9 +5,9 @@ import pytest
 from apps.channels.channels_v2.capabilities import ChannelCapabilities, PlatformConsentConfig
 from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.channels_v2.stages.core import ConsentCheckStage, SessionResolutionStage
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.tests.channels.conftest import make_context
 from apps.channels.tests.message_examples.base_messages import text_message
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ParticipantData

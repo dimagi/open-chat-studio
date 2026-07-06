@@ -18,10 +18,10 @@ from apps.channels.channels_v2.email_channel import (
     email_inbound_handler,
     get_email_experiment_channel,
 )
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import EmailMessage, RawAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
