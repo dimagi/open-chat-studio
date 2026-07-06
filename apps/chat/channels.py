@@ -1251,41 +1251,6 @@ class WhatsappChannel(ChannelBase):
             logger.exception("Failed to send typing indicator")
 
 
-# TODO: remove after channels refactor — replaced by apps.channels.channels_v2.facebook_channel.FacebookMessengerChannel
-class FacebookMessengerChannel(ChannelBase):
-    def send_text_to_user(self, text: str):
-        from_ = self.experiment_channel.extra_data.get("page_id")
-        self.messaging_service.send_text_message(
-            message=text,
-            from_=from_,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.last_activity_at,
-        )
-
-    @property
-    def voice_replies_supported(self) -> bool:
-        return self.messaging_service.voice_replies_supported
-
-    @property
-    def supported_message_types(self):
-        return self.messaging_service.supported_message_types
-
-    def echo_transcript(self, transcript: str):
-        self._send_text_to_user_with_notification(f'I heard: "{transcript}"')
-
-    def send_voice_to_user(self, synthetic_voice: SynthesizedAudio):
-        """Uploads the synthesized voice to AWS and sends the public link to the messaging provider."""
-        from_ = self.experiment_channel.extra_data["page_id"]
-        self.messaging_service.send_voice_message(
-            synthetic_voice,
-            from_=from_,
-            to=self.participant_identifier,
-            platform=ChannelPlatform.FACEBOOK,
-            last_activity_at=self.last_activity_at,
-        )
-
-
 # TODO: remove after channels refactor — replaced by apps.channels.channels_v2.api_channel.ApiChannel
 class ApiChannel(ChannelBase):
     """Message Handler for the API"""
