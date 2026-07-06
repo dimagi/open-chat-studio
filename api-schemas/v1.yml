@@ -1316,7 +1316,7 @@ components:
           readOnly: true
         experiment:
           allOf:
-          - $ref: '#/components/schemas/Experiment'
+          - $ref: '#/components/schemas/ExperimentStub'
           readOnly: true
         participant:
           allOf:
@@ -1390,7 +1390,7 @@ components:
           readOnly: true
         experiment:
           allOf:
-          - $ref: '#/components/schemas/Experiment'
+          - $ref: '#/components/schemas/ExperimentStub'
           readOnly: true
         participant:
           allOf:
@@ -1429,6 +1429,35 @@ components:
       - tags
       - team
       - updated_at
+      - url
+    ExperimentStub:
+      type: object
+      description: A lightweight experiment representation for embedding in other
+        resources.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        url:
+          type: string
+          format: uri
+          example: https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/
+          readOnly: true
+          title: API URL
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - name
       - url
     ExperimentVersion:
       type: object

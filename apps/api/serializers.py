@@ -58,6 +58,23 @@ class ExperimentSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "url", "version_number", "versions"]
 
 
+class ExperimentStubSerializer(serializers.ModelSerializer):
+    """A lightweight experiment representation for embedding in other resources."""
+
+    url = ApiUrlField(
+        openapi_example="https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/",
+        view_name="api:experiment-detail",
+        lookup_field="public_id",
+        lookup_url_kwarg="id",
+        label="API URL",
+    )
+    id = serializers.UUIDField(source="public_id")
+
+    class Meta:
+        model = Experiment
+        fields = ["id", "name", "description", "url", "version_number"]
+
+
 class ParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Participant
@@ -162,7 +179,7 @@ class ExperimentSessionSerializer(serializers.ModelSerializer):
     )
     id = serializers.ReadOnlyField(source="external_id")
     team = TeamSerializer(read_only=True)
-    experiment = ExperimentSerializer(read_only=True)
+    experiment = ExperimentStubSerializer(read_only=True)
     participant = ParticipantSerializer(read_only=True)
     messages = serializers.SerializerMethodField()
     tags = TagListSerializerField(source="chat.tags")
