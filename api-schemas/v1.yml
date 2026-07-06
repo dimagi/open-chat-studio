@@ -1420,6 +1420,10 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
+        usage:
+          allOf:
+          - $ref: '#/components/schemas/SessionUsage'
+          readOnly: true
         tags:
           type: array
           items:
@@ -1435,6 +1439,7 @@ components:
       - team
       - updated_at
       - url
+      - usage
     ExperimentStub:
       type: object
       description: A lightweight experiment representation for embedding in other
@@ -1767,6 +1772,21 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
         * `email` - Email
+    SessionModelUsage:
+      type: object
+      properties:
+        model_name:
+          type: string
+        cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        tokens:
+          type: integer
+      required:
+      - cost
+      - model_name
+      - tokens
     SessionStatusEnum:
       enum:
       - active
@@ -1775,6 +1795,20 @@ components:
       description: |-
         * `active` - Active
         * `ended` - Ended
+    SessionUsage:
+      type: object
+      properties:
+        total_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        by_model:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionModelUsage'
+      required:
+      - by_model
+      - total_cost
     Team:
       type: object
       properties:
