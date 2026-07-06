@@ -10,13 +10,18 @@ Usage:
     python manage.py bootstrap_data --skip-sample-data  # Only create user/team
 """
 
+from datetime import timedelta
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from apps.annotations.models import Tag
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord
 from apps.documents.models import Collection
 from apps.evaluations.models import (
     EvaluationConfig,
@@ -35,7 +40,7 @@ from apps.service_providers.llm_service.credentials import (
 from apps.service_providers.models import LlmProvider, LlmProviderTypes
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
-from apps.teams.models import Membership, Team
+from apps.teams.models import Flag, Membership, Team
 from apps.trace.models import Trace, TraceStatus
 
 _PIPELINE_NAMES = [
@@ -69,6 +74,12 @@ _EVALUATION_DATASET_MESSAGES = [
     ("Thanks for the fast shipping!", "Glad to hear it — enjoy!"),
     ("This product doesn't match the description.", "I understand, let me help you with a return."),
 ]
+_COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
+# Fake model names for the unpriced / no-usage rows so the panel's coverage-gap
+# warnings have something to list.
+_UNPRICED_MODEL = "experimental-model-x"
+_UNKNOWN_MODEL = "legacy-model-y"
+_USAGE_DAYS = 14
 
 
 class Command(BaseCommand):
@@ -194,6 +205,7 @@ class Command(BaseCommand):
         tags = self._seed_tags(user, team)
         sessions = self._seed_participants_and_sessions(user, team, experiments, tags)
         self._seed_traces(team, sessions)
+        self._seed_usage_records(team, sessions, llm_provider)
         files = self._seed_files(team)
         self._seed_collection(team, files)
         self._seed_evaluation(team, llm_provider, llm_model)
@@ -359,6 +371,117 @@ class Command(BaseCommand):
                 n_completion_tokens=50,
             )
         self.stdout.write(self.style.SUCCESS(f"  Created {len(sessions)} trace(s)"))
+
+    def _seed_usage_records(self, team, sessions: list[ExperimentSession], llm_provider) -> None:
+        """Seed cost-tracking UsageRecords so the dashboard's Cost Tracking panel
+        has data: priced spend spread over the last two weeks (for the daily-spend
+        chart and per-bot costs), plus a few estimated / unpriced / no-usage rows
+        so the confidence split and coverage-gap warnings render.
+        """
+        if not sessions:
+            return
+        self.stdout.write("")
+        self.stdout.write("--- Creating Usage Records ---")
+
+        provider_type = llm_provider.type
+        # Any global rule serves as the "priced" anchor - the panel only checks
+        # whether a rule is linked, not that it matches the model.
+        priced_rule = PricingRule.objects.filter(team__isnull=True).order_by("id").first()
+        priced_model = priced_rule.model_name if priced_rule else "gpt-4o-mini"
+        now = timezone.now()
+
+        created = 0
+        # Priced, exact spend: each session bills a little every day, with a
+        # per-session multiplier so bots differ in the Bot Performance table.
+        for day in range(_USAGE_DAYS):
+            timestamp = now - timedelta(days=day, hours=3)
+            for idx, session in enumerate(sessions):
+                cost = Decimal("0.02") * (idx + 1) * (1 + day % 3)
+                created += self._create_usage_record(
+                    team,
+                    session,
+                    provider_type,
+                    priced_model,
+                    quantity=400 + 50 * idx,
+                    cost=cost,
+                    confidence=Confidence.EXACT,
+                    pricing_rule=priced_rule,
+                    timestamp=timestamp,
+                )
+
+        # A couple of estimated rows so the Exact/Estimated split shows.
+        for session in sessions[:2]:
+            created += self._create_usage_record(
+                team,
+                session,
+                provider_type,
+                priced_model,
+                quantity=300,
+                cost=Decimal("0.015"),
+                confidence=Confidence.ESTIMATED,
+                pricing_rule=priced_rule,
+                timestamp=now - timedelta(days=1),
+            )
+
+        # Unpriced rows (no rule) → "calls missing pricing" coverage gap.
+        for session in sessions[:2]:
+            created += self._create_usage_record(
+                team,
+                session,
+                provider_type,
+                _UNPRICED_MODEL,
+                quantity=200,
+                cost=Decimal(0),
+                confidence=Confidence.EXACT,
+                pricing_rule=None,
+                timestamp=now - timedelta(days=2),
+            )
+
+        # Unknown-confidence rows → "calls with no usage data" coverage gap.
+        created += self._create_usage_record(
+            team,
+            sessions[0],
+            provider_type,
+            _UNKNOWN_MODEL,
+            quantity=None,
+            cost=Decimal(0),
+            confidence=Confidence.UNKNOWN,
+            pricing_rule=None,
+            timestamp=now - timedelta(days=1),
+        )
+
+        self.stdout.write(self.style.SUCCESS(f"  Created {created} usage record(s)"))
+        self._enable_cost_tracking_flag(team)
+
+    def _create_usage_record(
+        self, team, session, provider_type, model_name, *, quantity, cost, confidence, pricing_rule, timestamp
+    ) -> int:
+        """Create one UsageRecord and stamp its timestamp (auto_now_add can't be
+        set on create). Returns 1 so callers can tally."""
+        record = UsageRecord.objects.create(
+            team=team,
+            experiment=session.experiment,
+            session=session,
+            participant=session.participant,
+            service_kind=ServiceKind.LLM_INPUT,
+            provider_type=provider_type,
+            model_name=model_name,
+            quantity=quantity,
+            unit_price=Decimal("0.00015"),
+            cost=cost,
+            confidence=confidence,
+            pricing_rule=pricing_rule,
+        )
+        UsageRecord.objects.filter(pk=record.pk).update(timestamp=timestamp)
+        return 1
+
+    def _enable_cost_tracking_flag(self, team) -> None:
+        """The Cost Tracking panel is gated on this team-scoped flag, so enable
+        it here to make the seeded records visible on the dashboard."""
+        flag, _ = Flag.objects.get_or_create(name=_COST_TRACKING_FLAG)
+        flag.teams.add(team)
+        flag.flush()
+        self.stdout.write(self.style.SUCCESS(f"  Enabled '{_COST_TRACKING_FLAG}' flag for team"))
 
     def _seed_files(self, team) -> list[File]:
         self.stdout.write("")
