@@ -115,9 +115,9 @@ def get_session_json(session, expected_messages=None, expected_tags=None):
         "experiment": {
             "id": str(experiment.public_id),
             "name": experiment.name,
+            "description": experiment.description,
             "url": f"http://testserver/api/experiments/{experiment.public_id}/",
             "version_number": 1,
-            "versions": [],
         },
         "participant": {"identifier": session.participant.identifier, "remote_id": ""},
         "id": str(session.external_id),

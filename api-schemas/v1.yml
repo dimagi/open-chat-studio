@@ -593,12 +593,17 @@ paths:
         schema:
           type: string
         description: Experiment ID to filter sessions by
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
+      - in: query
+        name: ordering
         schema:
           type: string
+          enum:
+          - -created_at
+          - created_at
+        description: 'Which field to use when ordering the results. Available fields:
+          `created_at`. Prefix a field with `-` for descending order (e.g. `-created_at`),
+          or omit the prefix for ascending order (e.g. `created_at`). Defaults to
+          `-created_at`.'
       - name: page_size
         required: false
         in: query
@@ -1316,7 +1321,7 @@ components:
           readOnly: true
         experiment:
           allOf:
-          - $ref: '#/components/schemas/Experiment'
+          - $ref: '#/components/schemas/ExperimentStub'
           readOnly: true
         participant:
           allOf:
@@ -1390,7 +1395,7 @@ components:
           readOnly: true
         experiment:
           allOf:
-          - $ref: '#/components/schemas/Experiment'
+          - $ref: '#/components/schemas/ExperimentStub'
           readOnly: true
         participant:
           allOf:
@@ -1429,6 +1434,35 @@ components:
       - tags
       - team
       - updated_at
+      - url
+    ExperimentStub:
+      type: object
+      description: A lightweight experiment representation for embedding in other
+        resources.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        url:
+          type: string
+          format: uri
+          example: https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/
+          readOnly: true
+          title: API URL
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - name
       - url
     ExperimentVersion:
       type: object
