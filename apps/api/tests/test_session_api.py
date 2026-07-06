@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -6,6 +8,7 @@ from rest_framework.fields import DateTimeField
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatAttachment
 from apps.experiments.models import ExperimentSession, Team
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -108,7 +111,7 @@ def test_list_sessions_count_only_on_first_page(experiment):
     assert len(second_page["results"]) == 1
 
 
-def get_session_json(session, expected_messages=None, expected_tags=None):
+def get_session_json(session, expected_messages=None, expected_tags=None, expected_usage=None):
     experiment = session.experiment
     data = {
         "url": f"http://testserver/api/sessions/{session.external_id}/",
@@ -134,6 +137,7 @@ def get_session_json(session, expected_messages=None, expected_tags=None):
     }
     if expected_messages is not None:
         data["messages"] = expected_messages
+        data["usage"] = expected_usage if expected_usage is not None else {"total_cost": "0.00000000", "by_model": []}
     return data
 
 
@@ -219,6 +223,27 @@ def test_retrieve_session(auth_method, session):
         ],
         expected_tags=["tag1"],
     )
+
+
+@pytest.mark.django_db()
+def test_retrieve_session_includes_usage_breakdown(session):
+    team = session.team
+    UsageRecordFactory.create(team=team, session=session, model_name="gpt-4o", cost=Decimal("1.00"), quantity=100)
+    UsageRecordFactory.create(team=team, session=session, model_name="gpt-4o", cost=Decimal("2.00"), quantity=200)
+    UsageRecordFactory.create(team=team, session=session, model_name="gpt-4o-mini", cost=Decimal("0.50"), quantity=50)
+
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+    response = client.get(reverse("api:session-detail", kwargs={"id": session.external_id}))
+
+    assert response.status_code == 200
+    assert response.json()["usage"] == {
+        "total_cost": "3.50000000",
+        "by_model": [
+            {"model_name": "gpt-4o", "cost": "3.00000000", "tokens": 300},
+            {"model_name": "gpt-4o-mini", "cost": "0.50000000", "tokens": 50},
+        ],
+    }
 
 
 def _create_attachments(chat, message):
