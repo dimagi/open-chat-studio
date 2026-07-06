@@ -730,7 +730,7 @@ def test_session_table_session_query_uses_limit(team_with_users):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+@patch("apps.experiments.services.enqueue_static_triggers", Mock())
 def test_start_chatbot_session_public_embed_returns_deprecation_headers(client):
     """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
     chatbot = ExperimentFactory.create()
@@ -763,7 +763,7 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+@patch("apps.experiments.services.enqueue_static_triggers", Mock())
 def test_start_authed_web_session_with_default_version_chats_with_published_version(client, team_with_users):
     """The chatbots table chat button posts version 0 so sessions run against the published version."""
     user = team_with_users.members.first()
