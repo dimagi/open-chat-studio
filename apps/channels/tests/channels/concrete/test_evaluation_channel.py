@@ -33,6 +33,14 @@ def evals_channel(evals_experiment):
 
 
 @pytest.mark.django_db()
+def test_get_team_evaluations_channel_is_idempotent(evals_experiment):
+    """Repeated calls return the same team channel instead of creating duplicates"""
+    channel1 = ExperimentChannel.objects.get_team_evaluations_channel(evals_experiment.team)
+    channel2 = ExperimentChannel.objects.get_team_evaluations_channel(evals_experiment.team)
+    assert channel1.id == channel2.id
+
+
+@pytest.mark.django_db()
 class TestEvaluationChannelEndToEnd:
     @patch("apps.channels.channels_v2.stages.core.EvalsBot")
     def test_processes_message_with_evals_bot(self, mock_evals_bot_cls, evals_experiment, evals_channel):
