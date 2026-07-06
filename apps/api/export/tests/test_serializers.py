@@ -79,7 +79,7 @@ def test_team_serializer_excludes_members_and_public_key_and_lists_flags():
         pytest.param("", False, id="no-key"),
     ],
 )
-def test_team_endpoint_serializer_adds_status_fields_without_leaking_the_key(public_key, expected_public_key):
+def test_team_endpoint_serializer_adds_status_fields(public_key, expected_public_key):
     """The team endpoint serializer extends the importable row with the two status fields the sync
     client preflights on: is_migrating, and public_key collapsed to a boolean presence flag -- so the
     key material and the members list never go out."""
