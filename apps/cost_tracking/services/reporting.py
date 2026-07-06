@@ -11,7 +11,7 @@ from decimal import Decimal
 from django.db.models import Count, DecimalField, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
 
-from apps.cost_tracking.models import Confidence, PricingRule, UsageRecord
+from apps.cost_tracking.models import Confidence, UsageRecord
 from apps.teams.models import Team
 
 logger = logging.getLogger("ocs.cost_tracking")
@@ -33,7 +33,6 @@ class CostSummary:
     estimated_cost: Decimal
     unknown_call_count: int
     unpriced_call_count: int
-    last_synced: datetime | None
 
 
 _GRANULARITY_TRUNC = {
@@ -104,7 +103,6 @@ def cost_summary(team: Team, *, start: datetime, end: datetime) -> CostSummary:
         estimated_cost=agg["estimated"],
         unknown_call_count=agg["unknown_rows"],
         unpriced_call_count=agg["unpriced_rows"],
-        last_synced=last_synced_at(),
     )
 
 
@@ -168,18 +166,6 @@ def cost_timeseries(team: Team, *, start: datetime, end: datetime, granularity: 
         .order_by("bucket")
     )
     return [{"date": row["bucket"], "cost": float(row["cost"])} for row in rows]
-
-
-def last_synced_at() -> datetime | None:
-    """Most recent `effective_from` on a globally-scoped PricingRule.
-    The dashboard footer renders "Pricing last synced YYYY-MM-DD".
-    """
-    return (
-        PricingRule.objects.filter(team__isnull=True)
-        .order_by("-effective_from")
-        .values_list("effective_from", flat=True)
-        .first()
-    )
 
 
 def _coverage_gap_from_row(row: dict, call_count: int) -> ModelCoverageGap:

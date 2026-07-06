@@ -13,7 +13,6 @@ from apps.cost_tracking.services.reporting import (
     cost_timeseries,
     costs_by_experiment,
     coverage_gaps,
-    last_synced_at,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -123,22 +122,6 @@ class TestCostSummary:
         assert summary.unpriced_call_count == 3
         assert summary.unknown_call_count == 1
 
-    def test_last_synced_returned_in_summary(self):
-        team = TeamFactory.create()
-        newer = PricingRule.objects.create(
-            team=None,
-            provider_type="openai",
-            model_name="test-model-newer",
-            service_kind=ServiceKind.LLM_INPUT,
-            unit_price="0.00015",
-        )
-        future = newer.effective_from + timedelta(days=365)
-        PricingRule.objects.filter(pk=newer.pk).update(effective_from=future)
-
-        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
-
-        assert summary.last_synced == future
-
     def test_single_query_for_aggregate(self):
         team = TeamFactory.create()
         _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
@@ -146,8 +129,8 @@ class TestCostSummary:
         with CaptureQueriesContext(connection) as ctx:
             cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
 
-        # One aggregate over UsageRecord + one for last_synced - no N+1.
-        assert len(ctx.captured_queries) == 2
+        # Single aggregate over UsageRecord - no N+1.
+        assert len(ctx.captured_queries) == 1
 
 
 @pytest.mark.django_db()
@@ -295,40 +278,3 @@ class TestCostTimeseries:
         _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
         assert cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW) == []
-
-
-@pytest.mark.django_db()
-class TestLastSyncedAt:
-    """The seed migration always inserts global rules - these tests prune
-    them first so the assertions speak only to behaviour under test.
-    """
-
-    def test_none_when_no_global_rules(self):
-        PricingRule.objects.all().delete()
-        assert last_synced_at() is None
-
-    def test_ignores_team_scoped_rules(self):
-        PricingRule.objects.filter(team__isnull=True).delete()
-        team = TeamFactory.create()
-        PricingRule.objects.create(
-            team=team,
-            provider_type="openai",
-            model_name="test-model",
-            service_kind=ServiceKind.LLM_INPUT,
-            unit_price="0.00015",
-        )
-
-        assert last_synced_at() is None
-
-    def test_returns_most_recent_global_effective_from(self):
-        newer = PricingRule.objects.create(
-            team=None,
-            provider_type="openai",
-            model_name="test-model-newer",
-            service_kind=ServiceKind.LLM_INPUT,
-            unit_price="0.00015",
-        )
-        future = newer.effective_from + timedelta(days=365)
-        PricingRule.objects.filter(pk=newer.pk).update(effective_from=future)
-
-        assert last_synced_at() == future

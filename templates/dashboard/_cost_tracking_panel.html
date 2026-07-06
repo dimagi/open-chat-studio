@@ -5,18 +5,8 @@
 {% endcomment %}
 <div class="card bg-base-100 shadow-xl mb-8" data-testid="cost-tracking-panel">
   <div class="card-body">
-    <div class="card-title flex items-center justify-between">
-      <div>
-        <span>{% translate "Cost Tracking" %}</span>
-        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-normal">
-          {{ cost_summary.period_start|date:"M j" }} – {{ cost_summary.period_end|date:"M j, Y" }}
-        </div>
-      </div>
-      {% if cost_summary.last_synced %}
-        <span class="text-xs text-gray-500 dark:text-gray-400">
-          {% blocktranslate with synced=cost_summary.last_synced|date:"Y-m-d" %}Pricing last synced {{ synced }}{% endblocktranslate %}
-        </span>
-      {% endif %}
+    <div class="card-title">
+      <span>{% translate "Cost Tracking" %}</span>
     </div>
 
     {% if cost_summary.total_cost or cost_summary.unknown_call_count or cost_summary.unpriced_call_count %}
