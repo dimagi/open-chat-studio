@@ -1593,7 +1593,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TeamDetail'
+                $ref: '#/components/schemas/TeamExport'
           description: ''
   /api/export/timeout_triggers/:
     get:
@@ -5437,7 +5437,7 @@ components:
       - cursor
       - has_more
       - results
-    TeamDetail:
+    TeamExport:
       type: object
       properties:
         id:
@@ -5448,6 +5448,11 @@ components:
           items:
             type: string
           readOnly: true
+        public_key:
+          type: boolean
+          readOnly: true
+          description: Whether the team has a public key registered. The key itself
+            is never exported.
         created_at:
           type: string
           format: date-time
@@ -5465,11 +5470,16 @@ components:
           pattern: ^[-a-zA-Z0-9_]+$
         metadata:
           description: Internal staff-only metadata for this team.
+        is_migrating:
+          type: boolean
+          description: When set, the team's outbound message firing is frozen while
+            its data is migrated.
       required:
       - created_at
       - feature_flags
       - id
       - name
+      - public_key
       - slug
       - updated_at
     TimeoutTriggerDetail:

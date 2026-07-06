@@ -7,7 +7,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
 from django.core.management.base import CommandError
 
-from apps.api.export.permissions import TeamIsMigrating
 from apps.api.export.serializers import build_resource_serializer
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
@@ -74,6 +73,8 @@ def _scenario(public_key):
                 "name": "Imported",
                 "slug": "imported-team-z",
                 "feature_flags": [],
+                "is_migrating": True,
+                "public_key": True,
                 "created_at": PAST,
                 "updated_at": PAST,
             }
@@ -133,6 +134,8 @@ def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
                 "name": "T",
                 "slug": "imported-team-z",
                 "feature_flags": [],
+                "is_migrating": True,
+                "public_key": True,
                 "created_at": PAST,
                 "updated_at": PAST,
             }
@@ -178,14 +181,16 @@ def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(tmp_path, keypair):
     store = FKTranslationStore(tmp_path / "t.sqlite")
     first = FakeClient(manifest, rows)
     run_sync(first, store, keypair[1])
-    assert first.get_team_calls == 1  # first run fetches and imports the team
+    # once for the readiness precondition, once to fetch and import the team
+    assert first.get_team_calls == 2
 
     second = FakeClient(manifest, rows)
     run_sync(second, store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").count() == 1
-    # the team is already synced, so the rerun loads it from the target DB instead of re-fetching it
-    assert second.get_team_calls == 0
+    # the team is already synced, so the rerun only hits the endpoint for the readiness precondition,
+    # not to re-import the team (that's loaded from the target DB)
+    assert second.get_team_calls == 1
     # the second run resumes each pk resource from its highest synced source key
     assert dict(second.iter_calls)["llm_provider"] == "5"
 
@@ -277,27 +282,29 @@ class _RaisingClient(FakeClient):
         return super().iter_rows(resource, start_cursor, limit)
 
 
-def test_migration_lock_403_from_get_team_raises_friendly_error(tmp_path, keypair):
+@pytest.mark.parametrize(
+    ("is_migrating", "public_key", "match"),
+    [
+        pytest.param(False, True, "Migration mode", id="not-migrating"),
+        pytest.param(True, False, "no public key", id="no-public-key"),
+        pytest.param(False, False, "Migration mode.*no public key", id="neither"),
+    ],
+)
+def test_sync_blocks_when_source_team_is_not_ready(tmp_path, keypair, is_migrating, public_key, match):
+    """Migration mode and a registered public key must both be set on the source team; the sync blocks
+    up front (before any import) and names whatever is missing."""
     manifest, rows = _scenario(keypair[0])
+    rows["teams"][0].update(is_migrating=is_migrating, public_key=public_key)
     store = FKTranslationStore(tmp_path / "t.sqlite")
-    client = _RaisingClient(manifest, rows, _http_error(403, TeamIsMigrating.message), raise_on="get_team")
 
-    with pytest.raises(CommandError, match="Migration mode"):
-        run_sync(client, store, keypair[1])
+    with pytest.raises(CommandError, match=match):
+        run_sync(FakeClient(manifest, rows), store, keypair[1])
 
-
-def test_migration_lock_403_from_resource_page_raises_friendly_error(tmp_path, keypair):
-    manifest, rows = _scenario(keypair[0])
-    store = FKTranslationStore(tmp_path / "t.sqlite")
-    client = _RaisingClient(manifest, rows, _http_error(403, TeamIsMigrating.message), raise_on="iter_rows")
-
-    with pytest.raises(CommandError, match="Migration mode"):
-        run_sync(client, store, keypair[1])
+    assert not Team.objects.filter(slug="imported-team-z").exists()  # blocked before importing anything
 
 
-def test_unrelated_403_is_not_mistaken_for_migration_lock(tmp_path, keypair):
-    """A 403 for some other reason (e.g. a revoked API key) must surface as-is, not be reworded into
-    a misleading 'enable migration mode' message."""
+def test_unrelated_403_surfaces_as_http_error(tmp_path, keypair):
+    """A 403 from the source (e.g. a revoked API key) must surface as-is rather than be swallowed."""
     manifest, rows = _scenario(keypair[0])
     store = FKTranslationStore(tmp_path / "t.sqlite")
     error = _http_error(403, "You do not have permission to perform this action.")

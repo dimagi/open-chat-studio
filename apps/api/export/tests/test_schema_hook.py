@@ -81,7 +81,7 @@ def test_every_export_resource_publishes_its_row_component(export_components):
     assert not missing, f"export resources without a row component: {missing}"
 
 
-@pytest.mark.parametrize("model_name", ["Team", "ConsentForm", "SourceMaterial"])
+@pytest.mark.parametrize("model_name", ["ConsentForm", "SourceMaterial"])
 def test_export_detail_and_curated_serializer_live_in_separate_schemas(export_components, v2_components, model_name):
     """The export surface is its own schema, so the export '<Model>Detail' row serializer lives only
     in the export schema while the curated public/inspect serializer (the bare model name) stays in

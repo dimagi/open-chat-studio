@@ -13,7 +13,6 @@ from pathlib import Path
 import requests
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.api.export.permissions import TeamIsMigrating
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, mute_signals
@@ -28,19 +27,19 @@ from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
+MIGRATION_MODE_REQUIRED = "Migration mode needs to be enabled on the source team before you can continue."
+MISSING_PUBLIC_KEY_MESSAGE = (
+    "The source team has no public key registered, so its secret data cannot be exported. "
+    "Set the team's public key on the source server before syncing."
+)
+
 # Known source-server refusals, matched by status code and detail marker, with the friendly
 # message to show the operator instead of a raw HTTP traceback.
 _FRIENDLY_HTTP_ERRORS = (
     (
-        403,
-        TeamIsMigrating.message,
-        "Migration mode needs to be enabled on the team before you can continue",
-    ),
-    (
         400,
         MISSING_PUBLIC_KEY_DETAIL,
-        "The source team has no public key registered, so its secret data cannot be exported. "
-        "Set the team's public key on the source server before syncing.",
+        MISSING_PUBLIC_KEY_MESSAGE,
     ),
 )
 
@@ -76,11 +75,27 @@ def _start_cursor(model_label, cursor_type, store, model):
     return derive_updated_at_cursor(pairs)
 
 
+def check_source_team_ready(client) -> None:
+    """Block the sync unless the source team is in migration mode and has a public key registered --
+    both must be set. The export API no longer enforces migration mode server-side, so the client
+    checks it here from the team endpoint's ``is_migrating`` / ``public_key`` status (the latter is a
+    boolean saying whether a key is registered). Raises CommandError listing whatever is missing."""
+    team = client.get_team()
+    problems = []
+    if not team.get("is_migrating"):
+        problems.append(MIGRATION_MODE_REQUIRED)
+    if not team.get("public_key"):
+        problems.append(MISSING_PUBLIC_KEY_MESSAGE)
+    if problems:
+        raise CommandError(" ".join(problems))
+
+
 def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
-    its schema matches, and we hold a key for any sealed secrets. Returns the manifest. Raises
-    CommandError on any failure -- call this *before* any destructive local change (--force-delete)
-    so a wrong key path, unreachable source, or schema mismatch can't leave the team deleted."""
+    its schema matches, we hold a key for any sealed secrets, and the source team is ready to export
+    (migration mode on, public key set). Returns the manifest. Raises CommandError on any failure --
+    call this *before* any destructive local change (--force-delete) so a wrong key path, unreachable
+    source, schema mismatch, or an unready source team can't leave the team deleted."""
     manifest = client.get_manifest()
     if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
         raise CommandError(
@@ -93,6 +108,8 @@ def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
             "The source exports sealed secret fields but no private key was provided; the secrets "
             "would be imported as unreadable tokens. Pass --private-key-path with the team's key."
         )
+
+    check_source_team_ready(client)
     return manifest
 
 

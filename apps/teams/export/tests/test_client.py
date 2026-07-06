@@ -53,6 +53,17 @@ def test_get_team_hits_root_endpoint():
     assert session.calls[0]["url"] == "https://src.example/api/export/team/"
 
 
+def test_get_team_is_cached_across_calls():
+    """The team is read more than once per sync run (readiness precondition, then import), but doesn't
+    change mid-sync -- so the fetcher hits the endpoint only once."""
+    session = FakeSession([FakeResponse(json_data={"id": 1, "name": "T"})])
+    client = _client(session)
+    first = client.get_team()
+    second = client.get_team()
+    assert first is second
+    assert len(session.calls) == 1
+
+
 def test_get_page_passes_cursor_and_limit():
     session = FakeSession([FakeResponse(json_data={"results": [], "has_more": False, "cursor": "9"})])
     _client(session).get_page("chatbots", cursor="4", limit=50)
