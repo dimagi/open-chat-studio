@@ -25,7 +25,7 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token
-from apps.channels.channels_v2.api_channel import ApiChannel
+from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached
@@ -39,7 +39,7 @@ from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
@@ -154,8 +154,10 @@ def chat_upload_file(request, session_id):
             team=session.team,
             content_size=file.size,
             content_type=File.get_content_type(file),
+            # 24h expiry is an abandoned-upload guard; it is cleared once the file is
+            # attached to a message (see the send handler below).
             expiry_date=expiry_date,
-            purpose="assistant",
+            purpose=FilePurpose.MESSAGE_MEDIA,
             metadata={
                 "session_id": str(session_id),
                 "uploaded_by": uploaded_by,

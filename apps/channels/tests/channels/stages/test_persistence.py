@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.stages.terminal import PersistenceStage
+from apps.channels.stages.terminal import PersistenceStage
 from apps.channels.tests.channels.conftest import make_context
 from apps.channels.tests.message_examples.base_messages import text_message
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -38,7 +38,7 @@ class TestPersistenceStageShould:
             message=msg,
         )
 
-        with patch("apps.channels.channels_v2.stages.terminal.ChatMessage.objects") as mock_objects:
+        with patch("apps.channels.stages.terminal.ChatMessage.objects") as mock_objects:
             self.stage(ctx)
             mock_objects.create.assert_not_called()
 

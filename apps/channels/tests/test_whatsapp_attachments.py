@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatAttachment, ChatMessage
 from apps.files.models import File, FilePurpose
 from apps.service_providers.messaging_service import MetaCloudAPIService, TurnIOService, TwilioService

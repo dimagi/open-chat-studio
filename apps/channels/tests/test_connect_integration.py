@@ -90,7 +90,7 @@ class TestHandleConnectMessageTask:
         # The version will be used when chatting to the bot
         experiment.create_new_version(make_default=True)
 
-        with patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient") as ConnectClientMock:
+        with patch("apps.channels.connect_channel.CommCareConnectClient") as ConnectClientMock:
             client_mock = ConnectClientMock.return_value
             handle_commcare_connect_message(experiment.id, data.id, payload["messages"])
             assert client_mock.send_message_to_user.call_count == 1

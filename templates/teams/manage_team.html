@@ -1,6 +1,7 @@
 {% extends "web/app/app_base.html" %}
 {% load form_tags i18n static team_tags waffle_tags %}
 {% block page_head %}
+  <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
   <style>
     /* Adds fade out effect when invitations are canceled */
     tr.htmx-swapping td {
@@ -14,14 +15,14 @@
   <section class="app-card">
     {% if not create %}
       <div class="flex justify-between">
-        <h3 data-cy="title" class="pg-subtitle">
-          {% translate "Team Details" %}
-        </h3>
+        <h3 data-cy="title" class="pg-subtitle">{% translate "Team Details" %}</h3>
         <div class="flex gap-2">
           {% if request.user.is_staff %}
-            <a href="{% url "single_team:internal_metadata" request.team.slug %}" class="btn btn-primary">{% translate "Internal Metadata" %}</a>
+            <a href="{% url "single_team:internal_metadata" request.team.slug %}"
+               class="btn btn-primary">{% translate "Internal Metadata" %}</a>
           {% endif %}
-          <a href="{% url "single_team:feature_flags" request.team.slug %}" class="btn btn-primary">{% translate "Manage Feature Flags" %}</a>
+          <a href="{% url "single_team:feature_flags" request.team.slug %}"
+             class="btn btn-primary">{% translate "Manage Feature Flags" %}</a>
         </div>
       </div>
     {% endif %}
@@ -43,7 +44,6 @@
     {% include "service_providers/service_provider_home.html" with provider_type="messaging" subtitle=messaging_subtitle perm="add_messagingprovider" %}
     {% translate "Authentication credentials for integrations" as auth_subtitle %}
     {% include "service_providers/service_provider_home.html" with provider_type="auth" subtitle=auth_subtitle perm="add_authprovider" %}
-
     {% with button_style="btn-outline" title_class="pg-subtitle" %}
       {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
       {% url "custom_actions:table" request.team.slug as actions_table_url %}
@@ -51,44 +51,90 @@
       {% translate "Allow Experiments to call external services" as actions_subtitle %}
       {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle data_cy_title="title-actions" %}
     {% endwith %}
-
     {% flag "flag_mcp" %}
-      {% has_perm "mcp_integrations" "add_mcpserver" as allow_new_mcp %}
-      {% url "mcp_integrations:table" request.team.slug as mcp_table_url %}
-      {% url "mcp_integrations:new" request.team.slug as mcp_new_url %}
-      {% translate "Manage MCP Servers" as mcp_subtitle %}
-      {% with button_style="btn-outline" title_class="pg-subtitle" %}
-        {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle data_cy_title="title-mcp" %}
-      {% endwith %}
-    {% endflag %}
-
-    {% translate "Record trace details of bot activity" as trace_subtitle %}
-    {% include "service_providers/service_provider_home.html" with provider_type="tracing" subtitle=trace_subtitle perm="add_traceprovider" %}
-    <section class="app-card">
-      <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
-      <div class="table-responsive">
-        <table class="table pg-table">
-          <thead>
+    {% has_perm "mcp_integrations" "add_mcpserver" as allow_new_mcp %}
+    {% url "mcp_integrations:table" request.team.slug as mcp_table_url %}
+    {% url "mcp_integrations:new" request.team.slug as mcp_new_url %}
+    {% translate "Manage MCP Servers" as mcp_subtitle %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle data_cy_title="title-mcp" %}
+    {% endwith %}
+  {% endflag %}
+  {% translate "Record trace details of bot activity" as trace_subtitle %}
+  {% include "service_providers/service_provider_home.html" with provider_type="tracing" subtitle=trace_subtitle perm="add_traceprovider" %}
+  <section class="app-card">
+    <h3 class="pg-subtitle">{% translate "Team Members" %}</h3>
+    <div class="table-responsive">
+      <table class="table pg-table">
+        <thead>
+          <tr>
+            <th>{% translate "Member" %}</th>
+            <th>{% translate "Roles" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for membership in team.sorted_memberships.all %}
             <tr>
-              <th>{% translate "Member" %}</th>
-              <th>{% translate "Roles" %}</th>
+              <td>
+                {% if request.team_membership.is_team_admin or request.team_membership == membership %}
+                  <a class="link"
+                     href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
+                {% else %}
+                  {{ membership.user }}
+                {% endif %}
+              </td>
+              <td>{{ membership.groups.all|join:", " }}</td>
             </tr>
-          </thead>
-          <tbody>
-            {% for membership in team.sorted_memberships.all %}
-              <tr>
-                <td>
-                  {% if request.team_membership.is_team_admin or request.team_membership == membership %}
-                    <a class="link" href="{% url 'single_team:team_membership_details' request.team.slug membership.pk %}">{{ membership.user }}</a>
-                  {% else %}
-                    {{ membership.user }}
-                  {% endif %}
-                </td>
-                <td>{{ membership.groups.all|join:", " }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% include "teams/components/team_invitations.html" %}
+  {% if request.team_membership.is_team_admin %}
+    <section class="app-card">
+      <h3 class="pg-subtitle">{% translate "Data Export" %}</h3>
+      <p class="my-2 text-muted">
+        {% translate "Register a public key to seal secret data exported from this team during a migration." %}
+      </p>
+      <form method="post"
+            action="{% url 'single_team:set_public_key' request.team.slug %}">
+        {% csrf_token %}
+        {{ public_key_form.non_field_errors }}
+        {% render_form_fields public_key_form %}
+        <div class="pg-inline-buttons">
+          <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
+        </div>
+      </form>
+      <hr class="my-4">
+      <p class="my-2 text-muted">{% translate "Download a zip archive of every file belonging to this team." %}</p>
+      <div id="team-files-download-wrapper">
+        {% if files_export_task_id %}
+          {% include "teams/partials/download_files_progress.html" with task_id=files_export_task_id %}
+        {% else %}
+          {% if files_export_file %}
+            <p class="my-2 text-muted">
+              {% blocktranslate with created=files_export_file.created_at %}Last export created {{ created }}.{% endblocktranslate %}
+            </p>
+          {% endif %}
+          <form hx-post="{% url 'single_team:download_team_files' request.team.slug %}"
+                hx-target="#team-files-download-wrapper"
+                hx-swap="innerHTML">
+            {% csrf_token %}
+            <div class="pg-inline-buttons">
+              {% if files_export_file %}
+                <a id="ocs-ready-download-link"
+                   class="btn btn-outline"
+                   href="{% url 'files:base' team.slug files_export_file.id %}?allow_s3">
+                  {% translate "Download Export" %}
+                </a>
+                <button type="submit" class="btn btn-outline">{% translate "Regenerate export" %}</button>
+              {% else %}
+                <button type="submit" class="btn btn-outline">{% translate "Download team files" %}</button>
+              {% endif %}
+            </div>
+          </form>
+        {% endif %}
       </div>
     </section>
     {% include "teams/components/team_invitations.html" %}
@@ -130,4 +176,5 @@
       {% include "teams/components/delete_team_modal.html" %}
     {% endif %}
   {% endif %}
+{% endif %}
 {% endblock app %}

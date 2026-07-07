@@ -256,3 +256,54 @@ def test_tool_artifact_response(get_configured_tools, get_llm_service, provider,
 
 def _tool_call(name, args):
     return AIMessage(tool_calls=[ToolCall(name=name, args=args, id="123")], content="")
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_empty_followup_after_tool_call_uses_earlier_message(get_llm_service, provider, provider_model):
+    """Regression test: Claude sometimes responds with a non-empty message + tool calls, then returns
+    an empty content array after the tool results are sent back.  OCS must use the last non-empty
+    AI message rather than the final empty one.
+
+    Scenario:
+      1. LLM responds: content="I'll update your data now." + tool_calls=[UPDATE_PARTICIPANT_DATA]
+      2. OCS executes the tool call and sends back the tool result.
+      3. LLM responds: content=[]  (empty – Claude signals it's done via tools, not text)
+
+    Bug: ``execute_sub_agent`` takes ``result["messages"][-1]`` which is the empty message,
+    producing an empty pipeline output.
+    Expected: the non-empty content from step 1 should be the pipeline output.
+    """
+    first_response = AIMessage(
+        content="I'll update your participant data now.",
+        tool_calls=[
+            ToolCall(name=AgentTools.UPDATE_PARTICIPANT_DATA, args={"key": "mood", "value": "happy"}, id="tc1")
+        ],
+    )
+    # Claude's follow-up after receiving the tool result – empty content array
+    empty_followup = AIMessage(content=[])
+
+    service = build_fake_llm_service(responses=[first_response, empty_followup])
+    get_llm_service.return_value = service
+
+    nodes = [
+        start_node(),
+        llm_response_with_prompt_node(
+            str(provider.id),
+            str(provider_model.id),
+            prompt="Be helpful. {participant_data}",
+            name="llm1",
+            tools=[AgentTools.UPDATE_PARTICIPANT_DATA],
+        ),
+        end_node(),
+    ]
+    pipeline = PipelineFactory.create()
+    session = ExperimentSessionFactory.create()
+    graph = create_runnable(pipeline, nodes)
+    state = PipelineState(
+        messages=["Update my mood to happy"],
+        experiment_session=session,
+        participant_data={},
+    )
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
+    assert output["messages"][-1] == "I'll update your participant data now."

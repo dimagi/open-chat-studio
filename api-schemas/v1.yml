@@ -487,8 +487,8 @@ paths:
               examples:
                 ListParticipants:
                   value:
-                    next: http://api.example.org/accounts/?cursor=cD00ODY%3D"
-                    previous: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+                    next: https://example.com/api/?cursor=cD00ODY%3D
+                    previous: https://example.com/api/?cursor=cj0xJnA9NDg3
                     results:
                     - id: e172ff63-2469-419f-a828-783fc9291bc7
                       identifier: part1
@@ -593,12 +593,17 @@ paths:
         schema:
           type: string
         description: Experiment ID to filter sessions by
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
+      - in: query
+        name: ordering
         schema:
           type: string
+          enum:
+          - -created_at
+          - created_at
+        description: 'Which field to use when ordering the results. Available fields:
+          `created_at`. Prefix a field with `-` for descending order (e.g. `-created_at`),
+          or omit the prefix for ascending order (e.g. `created_at`). Defaults to
+          `-created_at`.'
       - name: page_size
         required: false
         in: query
@@ -1283,6 +1288,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
           title: API URL
         version_number:
@@ -1304,6 +1310,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
         id:
           type: string
@@ -1314,7 +1321,7 @@ components:
           readOnly: true
         experiment:
           allOf:
-          - $ref: '#/components/schemas/Experiment'
+          - $ref: '#/components/schemas/ExperimentStub'
           readOnly: true
         participant:
           allOf:
@@ -1377,6 +1384,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
         id:
           type: string
@@ -1387,7 +1395,7 @@ components:
           readOnly: true
         experiment:
           allOf:
-          - $ref: '#/components/schemas/Experiment'
+          - $ref: '#/components/schemas/ExperimentStub'
           readOnly: true
         participant:
           allOf:
@@ -1412,6 +1420,10 @@ components:
           items:
             $ref: '#/components/schemas/Message'
           readOnly: true
+        usage:
+          allOf:
+          - $ref: '#/components/schemas/SessionUsage'
+          readOnly: true
         tags:
           type: array
           items:
@@ -1426,6 +1438,36 @@ components:
       - tags
       - team
       - updated_at
+      - url
+      - usage
+    ExperimentStub:
+      type: object
+      description: A lightweight experiment representation for embedding in other
+        resources.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        url:
+          type: string
+          format: uri
+          example: https://example.com/api/experiments/123e4567-e89b-12d3-a456-426614174000/
+          readOnly: true
+          title: API URL
+        version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - id
+      - name
       - url
     ExperimentVersion:
       type: object
@@ -1456,6 +1498,7 @@ components:
         content_url:
           type: string
           format: uri
+          example: https://example.com/api/files/42/content
           readOnly: true
       required:
       - content_url
@@ -1519,12 +1562,12 @@ components:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+          example: https://example.com/api/?cursor=cD00ODY%3D
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:
@@ -1543,12 +1586,12 @@ components:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+          example: https://example.com/api/?cursor=cD00ODY%3D
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:
@@ -1567,12 +1610,12 @@ components:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+          example: https://example.com/api/?cursor=cD00ODY%3D
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:
@@ -1729,6 +1772,21 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Embedded Widget
         * `email` - Email
+    SessionModelUsage:
+      type: object
+      properties:
+        model_name:
+          type: string
+        cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        tokens:
+          type: integer
+      required:
+      - cost
+      - model_name
+      - tokens
     SessionStatusEnum:
       enum:
       - active
@@ -1737,6 +1795,20 @@ components:
       description: |-
         * `active` - Active
         * `ended` - Ended
+    SessionUsage:
+      type: object
+      properties:
+        total_cost:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+        by_model:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionModelUsage'
+      required:
+      - by_model
+      - total_cost
     Team:
       type: object
       properties:
@@ -1799,6 +1871,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
         team:
           allOf:

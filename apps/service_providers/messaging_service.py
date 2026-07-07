@@ -21,9 +21,9 @@ if TYPE_CHECKING:
     from twilio.rest.api.v2010.account.message import MessageInstance
 
 from apps.channels import audio
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import MediaCache, TwilioMessage, WhatsAppMessage, looks_like_bsuid
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File
 from apps.service_providers.exceptions import MessageMediaError, ServiceProviderConfigError

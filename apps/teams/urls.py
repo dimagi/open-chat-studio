@@ -22,6 +22,7 @@ team_urlpatterns = (
         path("invite/cancel/<slug:invitation_id>/", views.cancel_invitation_view, name="cancel_invitation"),
         path("public-key/", views.set_public_key, name="set_public_key"),
         path("migration-lock/", views.set_migration_lock, name="set_migration_lock"),
+        path("files/download/", views.download_team_files, name="download_team_files"),
         path("flags/", views.feature_flags, name="feature_flags"),
         path("internal-metadata/", views.internal_metadata, name="internal_metadata"),
     ],

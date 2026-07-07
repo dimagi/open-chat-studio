@@ -62,13 +62,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
         Model(
-            "claude-sonnet-4-20250514",
-            k(200),
-            deprecated=True,
-            replacement="claude-sonnet-4-6",
-            parameters=AnthropicReasoningParameters,
-        ),
-        Model(
             "claude-opus-4-20250514",
             k(200),
             deprecated=True,
@@ -161,6 +154,7 @@ DELETED_MODELS = [
     ("anthropic", "claude-2.0"),
     ("anthropic", "claude-2.1"),
     ("anthropic", "claude-instant-1.2"),
+    ("anthropic", "claude-sonnet-4-20250514", "claude-sonnet-4-6"),
     # OpenAI
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),

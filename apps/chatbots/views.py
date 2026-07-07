@@ -22,9 +22,9 @@ from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.session_tokens import issue_session_token
-from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import ChannelBase
+from apps.channels.registry import get_channel_class_for_platform
+from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
@@ -653,7 +653,7 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
     participant = old_session.participant
 
     # Create new session using the same channel as the old session
-    channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
+    channel_cls = get_channel_class_for_platform(experiment_channel.platform)
     new_session = channel_cls.start_new_session(
         working_experiment=experiment,
         participant_identifier=participant.identifier,

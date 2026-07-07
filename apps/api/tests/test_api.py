@@ -809,7 +809,7 @@ def _setup_participant_data(
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, django_capture_on_commit_callbacks):
     """
@@ -902,7 +902,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("consented", [True, False])
 def test_generate_bot_message_auto_creates_participant(
     ConnectClient, experiment, httpx_mock, consented, django_capture_on_commit_callbacks
@@ -1086,7 +1086,7 @@ def test_trigger_bot_duplicate_channel_id_conflict(ConnectClientView, experiment
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
 @patch("apps.api.views.channels.CommCareConnectClient")
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_trigger_bot_direct_message(
     ConnectClientChat, ConnectClientView, experiment, auth_method, django_capture_on_commit_callbacks
@@ -1183,7 +1183,7 @@ def test_trigger_bot_direct_message_for_email_channel(experiment, django_capture
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
 @patch("apps.api.views.channels.CommCareConnectClient")
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 def test_trigger_bot_direct_message_consent_required(ConnectClientChat, ConnectClientView, experiment, httpx_mock):
     """
     trigger_bot with message_text should return 400 when the participant has not consented (CCC platform).

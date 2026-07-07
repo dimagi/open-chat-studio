@@ -7,7 +7,7 @@ from django.db import models
 from django.urls import reverse
 from django.utils.translation import gettext
 from field_audit import audit_fields
-from field_audit.models import AuditingManager
+from field_audit.models import AuditAction, AuditingManager
 from waffle import get_setting
 from waffle.managers import FlagManager
 from waffle.models import CACHE_EMPTY, AbstractUserFlag
@@ -47,6 +47,21 @@ class Team(BaseModel):
         blank=True,
         help_text="Internal staff-only metadata for this team.",
     )
+    files_export = models.ForeignKey(
+        "files.File",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        # No reverse relation: the default reverse name ("team") would clash with File.team.
+        related_name="+",
+        help_text="Most recently generated team-files export, if any.",
+    )
+    files_export_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Celery task id of an in-progress team-files export, if any.",
+    )
     is_migrating = models.BooleanField(
         default=False,
         db_default=False,
@@ -73,6 +88,25 @@ class Team(BaseModel):
     @property
     def dashboard_url(self) -> str:
         return reverse("web_team:home", args=[self.slug])
+
+    @property
+    def files_export_in_progress(self) -> bool:
+        return bool(self.files_export_task_id)
+
+    def mark_files_export_started(self, task_id: str):
+        """Record the id of the in-progress team-files export."""
+        Team.objects.filter(id=self.id).update(files_export_task_id=task_id, audit_action=AuditAction.AUDIT)
+        self.files_export_task_id = task_id
+
+    def mark_files_export_finished(self, export_file_id: int | None = None):
+        """Clear the in-progress export, optionally recording the completed export file."""
+        values = {"files_export_task_id": ""}
+        if export_file_id is not None:
+            values["files_export_id"] = export_file_id
+        Team.objects.filter(id=self.id).update(audit_action=AuditAction.AUDIT, **values)
+        self.files_export_task_id = ""
+        if export_file_id is not None:
+            self.files_export_id = export_file_id
 
 
 class PermissionsMixin(models.Model):

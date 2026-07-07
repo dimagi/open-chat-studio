@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.stages.core import QueryExtractionStage
+from apps.channels.stages.core import QueryExtractionStage
 from apps.channels.tests.channels.conftest import StubCallbacks, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
 
@@ -61,7 +61,7 @@ class TestQueryExtractionStage:
 
         assert len(callbacks.echo_transcript_calls) == 0
 
-    @patch("apps.channels.channels_v2.stages.core.audio_transcription_failure_notification")
+    @patch("apps.channels.stages.core.audio_transcription_failure_notification")
     def test_transcription_failure_notifies(self, mock_notification):
         msg = audio_message()
         callbacks = StubCallbacks()

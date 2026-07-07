@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from apps.channels.channels_v2.stages.terminal import ActivityTrackingStage
+from apps.channels.stages.terminal import ActivityTrackingStage
 from apps.channels.tests.channels.conftest import make_context
 
 
