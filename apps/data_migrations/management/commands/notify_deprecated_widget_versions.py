@@ -60,9 +60,19 @@ class Command(IdempotentCommand):
             return {}
 
         cutoff = timezone.now() - RECENT_ACTIVITY_WINDOW
-        channels = ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False
-        ).select_related("experiment", "team")
+        channels = (
+            ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False)
+            .select_related("experiment", "team")
+            .only(
+                "widget_version",
+                "team__slug",
+                "team__name",
+                "experiment__name",
+                "experiment__team",
+                "experiment__working_version",
+                "experiment__version_number",
+            )
+        )
         if not channels.exists():
             return {}
         channels_with_recent_sessions = set(
