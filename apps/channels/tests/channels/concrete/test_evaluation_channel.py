@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.db import IntegrityError
 
-from apps.channels.channels_v2.evaluation_channel import EvaluationChannel
 from apps.channels.datamodels import BaseMessage
+from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.exceptions import ChannelException
