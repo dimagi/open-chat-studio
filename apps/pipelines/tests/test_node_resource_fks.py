@@ -3,7 +3,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import call_command
-from django.db import transaction
 
 from apps.pipelines.models import Node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -104,20 +103,31 @@ class TestNodeResourceFKSync:
         node.update_from_params()
         assert set(node.collection_indexes.values_list("id", flat=True)) == {c1.id}
 
-    def test_stale_scalar_fk_id_is_set_not_nulled(self):
-        """We no longer pre-check existence before setting the FK: the id from params is
-        written straight to the column. Delete guards ensure a live node's params never
-        holds a dangling id, and the (deferred) DB FK constraint is the backstop at
-        commit — so the code doesn't silently null a non-existent id anymore."""
+    def test_stale_scalar_fk_id_is_nulled(self):
+        """A scalar FK id in params that references a deleted resource is coerced to null,
+        not written straight to the column. Not every SET_NULL resource has a delete guard
+        (e.g. LlmProvider), so a stale id can linger in params after the resource is gone;
+        resurrecting it would trip the deferred DB FK constraint at commit."""
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
             params={"llm_provider_id": 999999},
         )
-        with transaction.atomic():
-            node.update_from_params()
-            assert node.llm_provider_id == 999999
-            # Roll back so the deferred FK violation isn't checked at commit/teardown.
-            transaction.set_rollback(True)
+        node.update_from_params()
+        node.refresh_from_db()
+        assert node.llm_provider_id is None
+
+    def test_scalar_fk_to_archived_resource_is_kept(self):
+        """Archiving is a soft-delete: the row still exists, so a scalar FK to it stays
+        linked. Existence is checked against _base_manager, not the archive-filtering
+        default manager, so a valid reference isn't mistaken for dangling."""
+        source_material = SourceMaterialFactory.create(is_archived=True)
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"source_material_id": source_material.id},
+        )
+        node.update_from_params()
+        node.refresh_from_db()
+        assert node.source_material_id == source_material.id
 
     def test_update_nodes_from_data_populates_fks(self):
         provider = LlmProviderFactory.create()

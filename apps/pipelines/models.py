@@ -485,14 +485,15 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """Populate FK/M2M fields from the params JSON.
 
         The FK columns are a derived mirror of the IDs in params (non-int/boolean values
-        map to null). We don't pre-check that a scalar id still exists: a resource can't
-        be deleted while a working node references it — the delete guards check
-        pipeline-node usage (see apps.utils.deletion.get_related_objects /
-        get_related_pipelines_queryset) — so a live node's params never holds a dangling
-        id, and the DB FK constraint surfaces any that slip through. Versions may point at
-        a since-deleted resource, but they're never re-synced. The collection_indexes M2M
-        is set from a Collection queryset, which drops ids that no longer exist. Only
-        saves when a scalar FK changed.
+        map to null). A dangling scalar id is coerced to null rather than written straight
+        through: not every SET_NULL resource is protected by a delete guard (an LlmProvider,
+        for one, can be deleted while a node references it — SET_NULL nulls the FK column but
+        the stale id lingers in params), so re-deriving it verbatim would resurrect the
+        dangling reference and trip the deferred DB FK constraint at commit. Existence is
+        checked against ``_base_manager`` so a still-valid reference to a soft-deleted
+        (archived) resource isn't mistaken for dangling. This mirrors the collection_indexes
+        M2M below and the ``backfill_node_fks`` command. Versions may point at a since-deleted
+        resource, but they're never re-synced. Only saves when a scalar FK changed.
         """
         from apps.documents.models import Collection  # noqa: PLC0415 - avoid circular import
 
@@ -500,6 +501,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         update_fields = []
         for field_name in self.resource_fk_fields():
             value = as_int(params.get(f"{field_name}_id"))
+            if value is not None:
+                related_model = self._meta.get_field(field_name).related_model
+                if not related_model._base_manager.filter(pk=value).exists():
+                    value = None
             if getattr(self, f"{field_name}_id") != value:
                 setattr(self, f"{field_name}_id", value)
                 update_fields.append(f"{field_name}_id")
