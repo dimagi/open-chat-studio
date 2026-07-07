@@ -10,7 +10,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils.http import http_date
 
-from apps.channels.channels_v2.web_channel import WebChannel
+from apps.channels.web_channel import WebChannel
 from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.models import (
     Experiment,

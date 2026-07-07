@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.pipeline import MessageProcessingContext
+    from apps.channels.pipeline import MessageProcessingContext
 
 
 class ProcessingStage(ABC):

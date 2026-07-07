@@ -21,9 +21,9 @@ from apps.api.tasks import (
     create_connect_channel_for_participant,
     trigger_bot_message_task,
 )
-from apps.channels.channels_v2.registry import get_channel_class_for_platform
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.registry import get_channel_class_for_platform
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.teams.utils import current_team

@@ -4,12 +4,14 @@ from typing import TYPE_CHECKING
 
 from django.http import Http404
 
-from apps.channels.channels_v2.api_channel import NoOpSender
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.pipeline import MessageProcessingPipeline
-from apps.channels.channels_v2.stages.core import (
+from apps.channels.api_channel import NoOpSender
+from apps.channels.callbacks import ChannelCallbacks
+from apps.channels.capabilities import ChannelCapabilities
+from apps.channels.channel_base import ChannelBase
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.models import ExperimentChannel
+from apps.channels.pipeline import MessageProcessingPipeline
+from apps.channels.stages.core import (
     BotInteractionStage,
     ChatMessageCreationStage,
     MessageTypeValidationStage,
@@ -18,9 +20,7 @@ from apps.channels.channels_v2.stages.core import (
     ResponseFormattingStage,
     SessionActivationStage,
 )
-from apps.channels.channels_v2.stages.terminal import ActivityTrackingStage, PersistenceStage
-from apps.channels.const import MESSAGE_TYPES
-from apps.channels.models import ExperimentChannel
+from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, Participant, SessionStatus

@@ -25,7 +25,7 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token
-from apps.channels.channels_v2.api_channel import ApiChannel
+from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel
 from apps.channels.utils import get_experiment_session_cached

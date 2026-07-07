@@ -2,8 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.exceptions import EarlyExitResponse
-from apps.channels.channels_v2.stages.core import ParticipantValidationStage
+from apps.channels.exceptions import EarlyExitResponse
+from apps.channels.stages.core import ParticipantValidationStage
 from apps.channels.tests.channels.conftest import make_context
 from apps.channels.tests.message_examples.base_messages import text_message
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.facebook_channel import (
+from apps.channels.facebook_channel import (
     FacebookMessengerCallbacks,
     FacebookMessengerChannel,
     FacebookMessengerSender,

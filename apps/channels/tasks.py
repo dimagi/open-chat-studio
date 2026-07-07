@@ -7,14 +7,9 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
-from apps.channels.channels_v2.api_channel import ApiChannel
-from apps.channels.channels_v2.connect_channel import CommCareConnectChannel
-from apps.channels.channels_v2.evaluation_channel import EvaluationChannel
-from apps.channels.channels_v2.facebook_channel import FacebookMessengerChannel
-from apps.channels.channels_v2.sureadhere_channel import SureAdhereChannel
-from apps.channels.channels_v2.telegram_channel import TelegramChannel
-from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
+from apps.channels.api_channel import ApiChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
+from apps.channels.connect_channel import CommCareConnectChannel
 from apps.channels.datamodels import (
     BaseMessage,
     SureAdhereMessage,
@@ -23,7 +18,12 @@ from apps.channels.datamodels import (
     WhatsAppMessage,
 )
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
+from apps.channels.evaluation_channel import EvaluationChannel
+from apps.channels.facebook_channel import FacebookMessengerChannel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.sureadhere_channel import SureAdhereChannel
+from apps.channels.telegram_channel import TelegramChannel
+from apps.channels.whatsapp_channel import WhatsappChannel
 from apps.chat.models import ChatMessage
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
@@ -227,7 +227,7 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     retry_jitter=True,
 )
 def handle_email_message(self, email_data: dict, channel_id: int | None = None, session_id: int | None = None):
-    from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415 - tests patch EmailChannel at source module
+    from apps.channels.email_channel import (  # noqa: PLC0415 - tests patch EmailChannel at source module
         EmailChannel,
         EmailThreadContext,
         get_email_experiment_channel,

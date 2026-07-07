@@ -1,9 +1,9 @@
 import pytest
 from django.test import override_settings
 
-from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.registry import from_experiment_session
+from apps.channels.channel_base import ChannelBase
 from apps.channels.models import ChannelPlatform
+from apps.channels.registry import from_experiment_session
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory

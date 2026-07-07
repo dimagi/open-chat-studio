@@ -5,11 +5,11 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
+from apps.channels.whatsapp_channel import WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
@@ -58,7 +58,7 @@ class TestTwilio:
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
+    @patch("apps.channels.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -192,7 +192,7 @@ class TestTurnio:
     )
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
+    @patch("apps.channels.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -315,7 +315,7 @@ class TestMetaCloudApi:
     )
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
+    @patch("apps.channels.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_voice_message")
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")

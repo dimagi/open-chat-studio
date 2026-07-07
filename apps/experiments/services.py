@@ -35,8 +35,8 @@ def start_experiment_session(
     participant_identifier = participant.identifier
     participant_user = participant.user
 
-    # Inline import to avoid circular import: channels_v2.stages.core imports from experiments.services
-    from apps.channels.channels_v2.stages.core import get_or_create_participant  # noqa: PLC0415
+    # Inline import to avoid circular import: channels.stages.core imports from experiments.services
+    from apps.channels.stages.core import get_or_create_participant  # noqa: PLC0415
 
     normalized_identifier = experiment_channel.platform_enum.normalize_identifier(participant_identifier)
 
