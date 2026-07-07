@@ -76,30 +76,34 @@ class ChannelBase(ABC):
             ctx = self._create_context(message)
             pipeline = self._build_pipeline()
 
-            try:
-                with self.trace_service.trace(
-                    trace_name=self.experiment.name,
-                    session=ctx.experiment_session,
-                    inputs={"input": message.model_dump(mode="json")},
-                ) as span:
+            with self.trace_service.trace(
+                trace_name=self.experiment.name,
+                session=ctx.experiment_session,
+                inputs={"input": message.model_dump(mode="json")},
+            ) as span:
+                try:
                     ctx = pipeline.process(ctx)
+                except GenerationCancelled:
+                    # Cancellation is control flow, not a failure -- close the
+                    # trace cleanly rather than letting it propagate through the
+                    # trace context manager and mark the trace as errored.
+                    span.set_outputs({"response": "", "cancelled": True})
+                    return ChatMessage(content="", message_type=ChatMessageType.AI)
 
-                    # Determine the response to return
-                    if ctx.early_exit_response is not None:
-                        response = ChatMessage(content=ctx.early_exit_response, message_type=ChatMessageType.AI)
-                    elif ctx.bot_response:
-                        response = ctx.bot_response
-                    else:
-                        response = ChatMessage(content="", message_type=ChatMessageType.AI)
+                # Determine the response to return
+                if ctx.early_exit_response is not None:
+                    response = ChatMessage(content=ctx.early_exit_response, message_type=ChatMessageType.AI)
+                elif ctx.bot_response:
+                    response = ctx.bot_response
+                else:
+                    response = ChatMessage(content="", message_type=ChatMessageType.AI)
 
-                    span.set_outputs({"response": response.content})
+                span.set_outputs({"response": response.content})
 
-                    # Update instance state (for backward compat during migration)
-                    self.experiment_session = ctx.experiment_session
+                # Update instance state (for backward compat during migration)
+                self.experiment_session = ctx.experiment_session
 
-                    return response
-            except GenerationCancelled:
-                return ChatMessage(content="", message_type=ChatMessageType.AI)
+                return response
 
     def _create_context(self, message: BaseMessage) -> MessageProcessingContext:
         ctx = MessageProcessingContext(
