@@ -9,7 +9,6 @@ from twilio.request_validator import RequestValidator
 
 from apps.channels.api_channel import ApiChannel
 from apps.channels.channels_v2.evaluation_channel import EvaluationChannel
-from apps.channels.channels_v2.sureadhere_channel import SureAdhereChannel
 from apps.channels.channels_v2.telegram_channel import TelegramChannel
 from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
@@ -24,6 +23,7 @@ from apps.channels.datamodels import (
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
 from apps.channels.facebook_channel import FacebookMessengerChannel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.sureadhere_channel import SureAdhereChannel
 from apps.chat.models import ChatMessage
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
