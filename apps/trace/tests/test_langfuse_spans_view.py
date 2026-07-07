@@ -115,21 +115,30 @@ class TestBuildChildMap:
         result = view._build_child_map([root])
         assert result == {}
 
-    def test_children_sorted_by_start_time(self):
+    @pytest.mark.parametrize(
+        ("children", "expected_order"),
+        [
+            pytest.param(
+                [("Later", datetime(2024, 1, 1, 12, 0, 1)), ("Earlier", datetime(2024, 1, 1, 12, 0, 0))],
+                ["Earlier", "Later"],
+                id="sorted_by_start_time",
+            ),
+            pytest.param(
+                [("NoTime", None), ("Timed", datetime(2024, 1, 1, 12, 0, 0))],
+                ["Timed", "NoTime"],
+                id="missing_start_time_sorts_last",
+            ),
+        ],
+    )
+    def test_children_sorted_by_start_time(self, children, expected_order):
         view = TraceLangfuseSpansView()
         root = _make_observation("obs-1", "Root")
-        later = _make_observation("obs-2", "Later", parent_id="obs-1", start_time=datetime(2024, 1, 1, 12, 0, 1))
-        earlier = _make_observation("obs-3", "Earlier", parent_id="obs-1", start_time=datetime(2024, 1, 1, 12, 0, 0))
-        result = view._build_child_map([root, later, earlier])
-        assert [obs.name for obs in result["obs-1"]] == ["Earlier", "Later"]
-
-    def test_children_without_start_time_sort_last(self):
-        view = TraceLangfuseSpansView()
-        root = _make_observation("obs-1", "Root")
-        no_time = _make_observation("obs-2", "NoTime", parent_id="obs-1")
-        timed = _make_observation("obs-3", "Timed", parent_id="obs-1", start_time=datetime(2024, 1, 1, 12, 0, 0))
-        result = view._build_child_map([root, no_time, timed])
-        assert [obs.name for obs in result["obs-1"]] == ["Timed", "NoTime"]
+        child_obs = [
+            _make_observation(f"obs-{i + 2}", name, parent_id="obs-1", start_time=start_time)
+            for i, (name, start_time) in enumerate(children)
+        ]
+        result = view._build_child_map([root, *child_obs])
+        assert [obs.name for obs in result["obs-1"]] == expected_order
 
     def test_flatten_observations_depth_first_with_depths(self):
         view = TraceLangfuseSpansView()
