@@ -7,7 +7,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
-from apps.channels.channels_v2.api_channel import ApiChannel
+from apps.channels.api_channel import ApiChannel
 from apps.channels.channels_v2.connect_channel import CommCareConnectChannel
 from apps.channels.channels_v2.evaluation_channel import EvaluationChannel
 from apps.channels.channels_v2.facebook_channel import FacebookMessengerChannel

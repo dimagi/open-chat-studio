@@ -3,9 +3,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.http import Http404
 
+from apps.channels.api_channel import NoOpSender
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.api_channel import NoOpSender
 from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.stages.core import (

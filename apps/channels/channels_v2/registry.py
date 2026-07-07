@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from apps.channels.channels_v2.api_channel import ApiChannel
+from apps.channels.api_channel import ApiChannel
 from apps.channels.channels_v2.connect_channel import CommCareConnectChannel
 from apps.channels.channels_v2.email_channel import EmailChannel
 from apps.channels.channels_v2.facebook_channel import FacebookMessengerChannel
