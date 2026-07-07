@@ -214,7 +214,8 @@ for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
 def get_model_parameters(model_name: str, **param_overrides) -> dict:
     """Return the model parameters, with any overrides applied."""
     parameters_model = LLM_MODEL_PARAMETERS.get(model_name, BasicParameters)
-    return parameters_model(**param_overrides).model_dump()
+    filtered = parameters_model.filter_overrides(param_overrides)
+    return parameters_model(**filtered).model_dump()
 
 
 def get_default_model(provider_type: str) -> Model | None:
