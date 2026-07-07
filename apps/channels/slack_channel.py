@@ -3,19 +3,19 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.callbacks import ChannelCallbacks
+from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform
+from apps.channels.sender import ChannelSender
 from apps.chat.exceptions import ChannelException
 from apps.service_providers.file_limits import can_send_on_slack
 from apps.slack.utils import parse_session_external_id
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.channels.models import ExperimentChannel
+    from apps.channels.pipeline import MessageProcessingContext
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.files.models import File
     from apps.service_providers.messaging_service import SlackService

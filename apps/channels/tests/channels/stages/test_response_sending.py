@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from apps.channels.channels_v2.stages.terminal import FileDeliveryFailure, MessageDeliveryFailure, ResponseSendingStage
+from apps.channels.stages.terminal import FileDeliveryFailure, MessageDeliveryFailure, ResponseSendingStage
 from apps.channels.tests.channels.conftest import StubSender, make_context
 
 

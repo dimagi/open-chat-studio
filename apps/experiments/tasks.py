@@ -9,8 +9,8 @@ from django.utils import timezone
 from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
 
-from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.datamodels import Attachment, BaseMessage
+from apps.channels.web_channel import WebChannel
 from apps.chat.bots import create_conversation
 from apps.chat.exceptions import UserReportableError
 from apps.experiments.export import export_to_tempfile, get_filtered_sessions

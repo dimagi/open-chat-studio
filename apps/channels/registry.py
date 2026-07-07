@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from apps.channels.channels_v2.api_channel import ApiChannel
-from apps.channels.channels_v2.connect_channel import CommCareConnectChannel
-from apps.channels.channels_v2.email_channel import EmailChannel
-from apps.channels.channels_v2.facebook_channel import FacebookMessengerChannel
-from apps.channels.channels_v2.slack_channel import SlackChannel
-from apps.channels.channels_v2.sureadhere_channel import SureAdhereChannel
-from apps.channels.channels_v2.telegram_channel import TelegramChannel
-from apps.channels.channels_v2.web_channel import WebChannel
-from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
+from apps.channels.api_channel import ApiChannel
+from apps.channels.connect_channel import CommCareConnectChannel
+from apps.channels.email_channel import EmailChannel
+from apps.channels.facebook_channel import FacebookMessengerChannel
 from apps.channels.models import ChannelPlatform
+from apps.channels.slack_channel import SlackChannel
+from apps.channels.sureadhere_channel import SureAdhereChannel
+from apps.channels.telegram_channel import TelegramChannel
+from apps.channels.web_channel import WebChannel
+from apps.channels.whatsapp_channel import WhatsappChannel
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.channel_base import ChannelBase
+    from apps.channels.channel_base import ChannelBase
     from apps.experiments.models import ExperimentSession
 
 # The evaluations platform is deliberately absent; EvaluationChannel is constructed directly with a bot.

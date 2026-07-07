@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.stages.terminal import (
+from apps.channels.stages.terminal import (
     FileDeliveryFailure,
     MessageDeliveryFailure,
     SendingErrorHandlerStage,
@@ -37,7 +37,7 @@ class TestSendingErrorHandlerStage:
         exc = MessageDeliveryFailure(RuntimeError("boom"), context="text message")
         ctx = make_context(sending_exceptions=[exc])
 
-        with patch("apps.channels.channels_v2.stages.terminal.message_delivery_failure_notification") as mock_notify:
+        with patch("apps.channels.stages.terminal.message_delivery_failure_notification") as mock_notify:
             stage(ctx)
 
         passing_handler.assert_called_once_with(ctx, exc)
@@ -54,13 +54,13 @@ class TestSendingErrorHandlerStage:
         experiment_channel.platform_enum.title.return_value = "Telegram"
         ctx = make_context(sending_exceptions=[exc], experiment_channel=experiment_channel)
 
-        with patch("apps.channels.channels_v2.stages.terminal.message_delivery_failure_notification") as mock_notify:
+        with patch("apps.channels.stages.terminal.message_delivery_failure_notification") as mock_notify:
             stage(ctx)
 
         passing_handler.assert_called_once_with(ctx, exc)
         mock_notify.assert_called_once()
 
-    @patch("apps.channels.channels_v2.stages.terminal.message_delivery_failure_notification")
+    @patch("apps.channels.stages.terminal.message_delivery_failure_notification")
     def test_message_delivery_failure_sends_notification_and_does_not_reraise(self, mock_notify):
         """A wrapped ``MessageDeliveryFailure`` triggers a team notification and is swallowed,
         so a single send failure does not poison the rest of the pipeline."""
@@ -96,7 +96,7 @@ class TestSendingErrorHandlerStage:
         with pytest.raises(RuntimeError, match="unexpected platform error"):
             self.stage(ctx)
 
-    @patch("apps.channels.channels_v2.stages.terminal.file_delivery_failure_notification")
+    @patch("apps.channels.stages.terminal.file_delivery_failure_notification")
     def test_file_exception_sends_notification(self, mock_notify):
         """A ``FileDeliveryFailure`` triggers a file-specific notification and is also swallowed."""
         file_obj = MagicMock()

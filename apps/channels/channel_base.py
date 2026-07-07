@@ -4,9 +4,9 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.pipeline import MessageProcessingContext, MessageProcessingPipeline
-from apps.channels.channels_v2.stages.core import (
+from apps.channels.capabilities import ChannelCapabilities
+from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
+from apps.channels.stages.core import (
     AttachmentHydrationStage,
     BotInteractionStage,
     ChatMessageCreationStage,
@@ -20,7 +20,7 @@ from apps.channels.channels_v2.stages.core import (
     SessionActivationStage,
     SessionResolutionStage,
 )
-from apps.channels.channels_v2.stages.terminal import (
+from apps.channels.stages.terminal import (
     ActivityTrackingStage,
     DeliveryErrorHandler,
     PersistenceStage,
@@ -37,10 +37,10 @@ from apps.service_providers.tracing import TracingService
 from apps.teams.utils import current_team
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.callbacks import ChannelCallbacks
-    from apps.channels.channels_v2.sender import ChannelSender
+    from apps.channels.callbacks import ChannelCallbacks
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
+    from apps.channels.sender import ChannelSender
     from apps.experiments.models import Experiment
 
 logger = logging.getLogger("ocs.channels")

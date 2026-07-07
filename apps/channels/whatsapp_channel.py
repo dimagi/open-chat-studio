@@ -4,21 +4,21 @@ import logging
 from io import BytesIO
 from typing import TYPE_CHECKING
 
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.sender import ChannelSender
-from apps.channels.channels_v2.stages.core import AttachmentHydrationStage
+from apps.channels.callbacks import ChannelCallbacks
+from apps.channels.capabilities import ChannelCapabilities
+from apps.channels.channel_base import ChannelBase
 from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
+from apps.channels.sender import ChannelSender
+from apps.channels.stages.core import AttachmentHydrationStage
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File, FilePurpose
 from apps.service_providers.models import MessagingProviderType
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
+    from apps.channels.pipeline import MessageProcessingContext
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.service_providers.messaging_service import MessagingService
     from apps.service_providers.speech_service import SynthesizedAudio

@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from apps.channels.channels_v2.api_channel import NoOpSender
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.pipeline import MessageProcessingContext, MessageProcessingPipeline
-from apps.channels.channels_v2.sender import ChannelSender
-from apps.channels.channels_v2.stages.core import (
+from apps.channels.api_channel import NoOpSender
+from apps.channels.callbacks import ChannelCallbacks
+from apps.channels.capabilities import ChannelCapabilities
+from apps.channels.channel_base import ChannelBase
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
+from apps.channels.sender import ChannelSender
+from apps.channels.stages.core import (
     ChatMessageCreationStage,
     EvalsBotInteractionStage,
     MessageTypeValidationStage,
     QueryExtractionStage,
     ResponseFormattingStage,
 )
-from apps.channels.channels_v2.stages.terminal import ActivityTrackingStage, PersistenceStage
-from apps.channels.const import MESSAGE_TYPES
+from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
 from apps.chat.exceptions import ChannelException
 from apps.service_providers.tracing import TracingService
 

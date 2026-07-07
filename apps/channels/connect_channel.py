@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities, PlatformConsentConfig
-from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.pipeline import MessageProcessingContext
-from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.callbacks import ChannelCallbacks
+from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfig
+from apps.channels.channel_base import ChannelBase
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.const import MESSAGE_TYPES
+from apps.channels.pipeline import MessageProcessingContext
+from apps.channels.sender import ChannelSender
 from apps.chat.exceptions import ChannelException
 
 logger = logging.getLogger("ocs.channels")

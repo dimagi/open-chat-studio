@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.pipeline import MessageProcessingContext
+    from apps.channels.pipeline import MessageProcessingContext
     from apps.files.models import File
     from apps.service_providers.speech_service import SynthesizedAudio
 

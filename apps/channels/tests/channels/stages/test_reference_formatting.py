@@ -1,6 +1,6 @@
 import pytest
 
-from apps.channels.channels_v2.stages.core import ResponseFormattingStage
+from apps.channels.stages.core import ResponseFormattingStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.team import TeamFactory

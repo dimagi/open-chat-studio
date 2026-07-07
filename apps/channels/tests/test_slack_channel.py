@@ -5,9 +5,9 @@ from unittest.mock import Mock
 import pytest
 from mock.mock import patch
 
-from apps.channels.channels_v2.slack_channel import SlackChannel
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.slack_channel import SlackChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.files.models import File
 from apps.service_providers.messaging_service import SlackService
@@ -68,7 +68,7 @@ def test_handle_user_message(bot_process_input, slack_channel, slack_service):
 
 @pytest.mark.django_db()
 @patch("apps.chat.bots.EventBot.get_user_message")
-@patch("apps.channels.channels_v2.slack_channel.SlackChannel.messaging_service")
+@patch("apps.channels.slack_channel.SlackChannel.messaging_service")
 def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
     get_user_message.return_value = "Hi"
     session = SlackChannel.start_new_session(

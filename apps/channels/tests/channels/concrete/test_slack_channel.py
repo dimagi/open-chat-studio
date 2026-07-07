@@ -2,8 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.slack_channel import SlackChannel
 from apps.channels.const import MESSAGE_TYPES
+from apps.channels.slack_channel import SlackChannel
 from apps.chat.exceptions import ChannelException
 
 
