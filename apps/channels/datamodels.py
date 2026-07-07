@@ -10,8 +10,8 @@ import phonenumbers
 from mailparser_reply import EmailReplyParser
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import MESSAGE_TYPES
 from apps.documents.readers import Document
 from apps.files.models import File
 

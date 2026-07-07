@@ -11,7 +11,7 @@ from apps.channels.channels_v2.stages.terminal import (
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
-from apps.chat.channels import MESSAGE_TYPES
+from apps.channels.const import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.experiments.models import Experiment
 

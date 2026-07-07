@@ -21,9 +21,9 @@ from apps.api.tasks import (
     create_connect_channel_for_participant,
     trigger_bot_message_task,
 )
+from apps.channels.channels_v2.registry import get_channel_class_for_platform
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import ChannelBase
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.teams.utils import current_team
@@ -230,11 +230,12 @@ class TriggerBotMessageView(APIView):
                 return error
 
         target_experiment = resolve_published_or_working(experiment)
-        ChannelClass = ChannelBase.get_channel_class_for_platform(platform)
+        ChannelClass = get_channel_class_for_platform(platform)
         bot_channel = ChannelClass(experiment=target_experiment, experiment_channel=channel)
         with current_team(experiment.team):
             bot_channel.ensure_session_exists_for_participant(identifier, new_session=data["start_new_session"])
             session = bot_channel.experiment_session
+            assert session is not None
             if data.get("session_data"):
                 session.state = {**session.state, **data["session_data"]}
                 session.save(update_fields=["state"])

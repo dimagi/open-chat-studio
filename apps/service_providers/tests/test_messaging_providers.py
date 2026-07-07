@@ -8,10 +8,10 @@ import pytest
 from django.utils import timezone
 from pydantic import ValidationError
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tests.message_examples import turnio_messages
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.service_providers.exceptions import MessageMediaError
 from apps.service_providers.messaging_service import MetaCloudAPIService, TwilioService

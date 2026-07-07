@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.service_providers.file_limits import can_send_on_slack
 from apps.slack.utils import parse_session_external_id

@@ -19,8 +19,8 @@ from apps.channels.channels_v2.stages.core import (
     SessionActivationStage,
 )
 from apps.channels.channels_v2.stages.terminal import ActivityTrackingStage, PersistenceStage
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.models import ExperimentChannel
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import Chat
 from apps.experiments.models import Experiment, Participant, SessionStatus

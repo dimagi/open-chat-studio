@@ -15,11 +15,11 @@ from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import is_email_domain_allowed
-from apps.chat.channels import MESSAGE_TYPES
 from apps.experiments.models import ExperimentSession
 from apps.files.content_type import detect_content_type
 from apps.files.models import File, FilePurpose

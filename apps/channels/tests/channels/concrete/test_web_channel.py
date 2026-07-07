@@ -17,7 +17,7 @@ from apps.channels.channels_v2.stages.terminal import (
     SendingErrorHandlerStage,
 )
 from apps.channels.channels_v2.web_channel import WebChannel
-from apps.chat.channels import MESSAGE_TYPES
+from apps.channels.const import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.experiments.models import Experiment
 

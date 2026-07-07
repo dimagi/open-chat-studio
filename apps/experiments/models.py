@@ -1714,9 +1714,9 @@ class ExperimentSession(BaseTeamModel):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
-        from apps.chat.channels import ChannelBase  # noqa: PLC0415 - circular: chat.channels imports experiments.models
+        from apps.channels.channels_v2 import registry  # noqa: PLC0415 - circular import
 
-        channel = ChannelBase.from_experiment_session(self)
+        channel = registry.from_experiment_session(self)
         channel.send_message_to_user(message)
 
     @cached_property

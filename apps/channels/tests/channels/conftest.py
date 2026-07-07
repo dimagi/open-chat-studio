@@ -8,8 +8,8 @@ from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.tests.message_examples.base_messages import text_message
-from apps.chat.channels import MESSAGE_TYPES
 
 
 class StubSender(ChannelSender):

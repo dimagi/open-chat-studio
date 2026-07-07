@@ -5,9 +5,9 @@ import pytest
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.exceptions import EarlyExitResponse
 from apps.channels.channels_v2.stages.core import MessageTypeValidationStage
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.channels.tests.message_examples.base_messages import text_message, unsupported_content_type_message
-from apps.chat.channels import MESSAGE_TYPES
 
 
 class TestMessageTypeValidationStage:

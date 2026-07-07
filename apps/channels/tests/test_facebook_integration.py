@@ -4,10 +4,10 @@ from unittest.mock import Mock, patch
 import pytest
 from django.test import override_settings
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_twilio_message
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatMessage
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
