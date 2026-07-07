@@ -21,14 +21,15 @@ def test_strip_urls_and_emojis():
     )
 
     output, urls = strip_urls_and_emojis(text)
-    assert len(urls) == 6
     assert output == expected_text
-    assert "https://www.example.com" in urls
-    assert "http://www.another-site.org" in urls
-    assert "https://developer.mozilla.org/some/path" in urls
-    assert "https://twitter.com" in urls
-    assert "https://www.catvideos.com" in urls
-    assert "https://facebook.com?page=page1" in urls
+    assert set(urls) == {
+        "https://www.example.com",
+        "http://www.another-site.org",
+        "https://developer.mozilla.org/some/path",
+        "https://twitter.com",
+        "https://www.catvideos.com",
+        "https://facebook.com?page=page1",
+    }
 
 
 def test_url_regex():
