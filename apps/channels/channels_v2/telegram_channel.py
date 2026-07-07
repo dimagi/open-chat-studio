@@ -11,8 +11,8 @@ from telebot.apihelper import ApiTelegramException
 from telebot.util import antiflood, smart_split
 
 from apps.channels import audio
+from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfig
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.channels_v2.stages.terminal import DeliveryErrorHandler, MessageDeliveryFailure

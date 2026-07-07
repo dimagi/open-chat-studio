@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING
 
 from django.http import Http404
 
+from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.api_channel import NoOpSender
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
 from apps.channels.channels_v2.channel_base import ChannelBase
 from apps.channels.channels_v2.pipeline import MessageProcessingPipeline
 from apps.channels.channels_v2.stages.core import (

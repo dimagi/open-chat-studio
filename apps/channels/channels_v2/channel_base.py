@@ -37,7 +37,7 @@ from apps.service_providers.tracing import TracingService
 from apps.teams.utils import current_team
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.callbacks import ChannelCallbacks
+    from apps.channels.callbacks import ChannelCallbacks
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
     from apps.channels.sender import ChannelSender
