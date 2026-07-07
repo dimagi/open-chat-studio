@@ -11,8 +11,8 @@ from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TraceInfo
 
 if TYPE_CHECKING:
+    from apps.channels.capabilities import ChannelCapabilities
     from apps.channels.channels_v2.callbacks import ChannelCallbacks
-    from apps.channels.channels_v2.capabilities import ChannelCapabilities
     from apps.channels.channels_v2.sender import ChannelSender
     from apps.channels.channels_v2.stages.base import ProcessingStage
     from apps.channels.datamodels import BaseMessage

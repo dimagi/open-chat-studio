@@ -2,9 +2,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.api_channel import ApiChannel, NoOpSender
 from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.stages.terminal import (
     ActivityTrackingStage,
     PersistenceStage,

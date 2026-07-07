@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.capabilities import ChannelCapabilities, PlatformConsentConfig
+from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfig
 from apps.channels.channels_v2.stages.core import ConsentCheckStage, SessionResolutionStage
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse

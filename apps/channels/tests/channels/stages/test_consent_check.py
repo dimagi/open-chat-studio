@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.capabilities import PlatformConsentConfig
+from apps.channels.capabilities import PlatformConsentConfig
 from apps.channels.channels_v2.stages.core import ConsentCheckStage
 from apps.channels.exceptions import EarlyAbort
 from apps.channels.models import ChannelPlatform
