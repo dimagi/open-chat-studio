@@ -82,6 +82,16 @@ class ResponseSendingStage(ProcessingStage):
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.formatted_message is not None or ctx.early_exit_response is not None
 
+    def get_span_inputs(self, ctx: MessageProcessingContext) -> dict:
+        """Record what is being delivered so a send failure has context on the span."""
+        message = ctx.early_exit_response if ctx.early_exit_response is not None else ctx.formatted_message
+        return {
+            "recipient": ctx.participant_identifier,
+            "message": message,
+            "is_voice": ctx.voice_audio is not None,
+            "files": [file.name for file in ctx.files_to_send],
+        }
+
     def process(self, ctx: MessageProcessingContext) -> None:
         try:
             if ctx.early_exit_response:
