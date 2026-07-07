@@ -137,7 +137,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    message_text = request.POST["message"]
+    message_text = request.POST.get("message", "")
     uploaded_files = request.FILES
     attachments = []
     created_files = []
@@ -160,6 +160,11 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
+
+    if not message_text and not attachments:
+        from django.http import HttpResponseBadRequest
+
+        return HttpResponseBadRequest("A message or attachment is required.")
 
     if attachments and not message_text:
         message_text = "Please look at the attachments and respond appropriately"
