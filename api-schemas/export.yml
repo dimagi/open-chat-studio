@@ -5448,7 +5448,7 @@ components:
           items:
             type: string
           readOnly: true
-        public_key:
+        has_public_key:
           type: boolean
           readOnly: true
           description: Whether the team has a public key registered. The key itself
@@ -5477,9 +5477,9 @@ components:
       required:
       - created_at
       - feature_flags
+      - has_public_key
       - id
       - name
-      - public_key
       - slug
       - updated_at
     TimeoutTriggerDetail:

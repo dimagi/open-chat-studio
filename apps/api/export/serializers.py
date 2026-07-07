@@ -208,9 +208,9 @@ def build_team_serializer():
     """Serializer for the single-team endpoint (``GET /api/export/team/``). The team anchors the export
     surface and is served as one object rather than a page. It extends the importable team-row dump with
     the two operational status fields the sync client preflights on: ``is_migrating`` (kept out of the
-    importable row, so migration mode isn't replicated to the target) and ``public_key``, which the
-    method field below collapses to a boolean -- whether a key is registered, never the key itself. Only
-    ``members`` is dropped outright."""
+    importable row, so migration mode isn't replicated to the target) and ``has_public_key`` -- a method
+    field collapsing the key to a boolean, whether one is registered, never the key material itself. The
+    raw ``public_key`` field is excluded alongside ``members`` so neither ever goes out."""
     base = build_resource_serializer(entry_model(TEAM_MODEL))
 
     class TeamExportSerializer(base):
@@ -219,9 +219,9 @@ def build_team_serializer():
         )
 
         class Meta(base.Meta):
-            exclude = ["members"]
+            exclude = ["members", "public_key"]
 
-        def get_public_key(self, team) -> bool:
+        def get_has_public_key(self, team) -> bool:
             return bool(team.public_key)
 
     return TeamExportSerializer

@@ -74,7 +74,7 @@ def _scenario(public_key):
                 "slug": "imported-team-z",
                 "feature_flags": [],
                 "is_migrating": True,
-                "public_key": True,
+                "has_public_key": True,
                 "created_at": PAST,
                 "updated_at": PAST,
             }
@@ -135,7 +135,7 @@ def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
                 "slug": "imported-team-z",
                 "feature_flags": [],
                 "is_migrating": True,
-                "public_key": True,
+                "has_public_key": True,
                 "created_at": PAST,
                 "updated_at": PAST,
             }
@@ -283,18 +283,18 @@ class _RaisingClient(FakeClient):
 
 
 @pytest.mark.parametrize(
-    ("is_migrating", "public_key", "match"),
+    ("is_migrating", "has_public_key", "match"),
     [
         pytest.param(False, True, "Migration mode", id="not-migrating"),
         pytest.param(True, False, "no public key", id="no-public-key"),
         pytest.param(False, False, "Migration mode.*no public key", id="neither"),
     ],
 )
-def test_sync_blocks_when_source_team_is_not_ready(tmp_path, keypair, is_migrating, public_key, match):
+def test_sync_blocks_when_source_team_is_not_ready(tmp_path, keypair, is_migrating, has_public_key, match):
     """Migration mode and a registered public key must both be set on the source team; the sync blocks
     up front (before any import) and names whatever is missing."""
     manifest, rows = _scenario(keypair[0])
-    rows["teams"][0].update(is_migrating=is_migrating, public_key=public_key)
+    rows["teams"][0].update(is_migrating=is_migrating, has_public_key=has_public_key)
     store = FKTranslationStore(tmp_path / "t.sqlite")
 
     with pytest.raises(CommandError, match=match):

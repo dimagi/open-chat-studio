@@ -265,18 +265,19 @@ def test_document_sources_resource_seals_config():
 
 
 @pytest.mark.parametrize(
-    ("public_key", "expected_public_key"),
+    ("public_key", "expected_has_public_key"),
     [
         pytest.param("a-real-public-key", True, id="key-set"),
         pytest.param("", False, id="no-key"),
     ],
 )
-def test_team_endpoint_reports_migration_status_and_public_key_presence(public_key, expected_public_key):
+def test_team_endpoint_reports_migration_status_and_public_key_presence(public_key, expected_has_public_key):
     """The team endpoint ships the two fields the sync client preflights on -- ``is_migrating`` and
-    ``public_key`` collapsed to a boolean presence flag -- but never the public key material itself."""
+    ``has_public_key`` collapsed to a boolean presence flag -- but never the public key material itself."""
     team = TeamWithUsersFactory(public_key=public_key, is_migrating=True)
     client = ApiTestClient(_admin(team), team)
     body = client.get(reverse("api:export:team")).json()
     assert body["is_migrating"] is True
-    assert body["public_key"] is expected_public_key  # a boolean presence flag, never the key material
+    assert body["has_public_key"] is expected_has_public_key  # a boolean presence flag, never the key material
+    assert "public_key" not in body  # the raw key field must never appear alongside the boolean
     assert "members" not in body

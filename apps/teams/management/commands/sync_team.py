@@ -78,13 +78,13 @@ def _start_cursor(model_label, cursor_type, store, model):
 def check_source_team_ready(client) -> None:
     """Block the sync unless the source team is in migration mode and has a public key registered --
     both must be set. The export API no longer enforces migration mode server-side, so the client
-    checks it here from the team endpoint's ``is_migrating`` / ``public_key`` status (the latter is a
+    checks it here from the team endpoint's ``is_migrating`` / ``has_public_key`` status (the latter is a
     boolean saying whether a key is registered). Raises CommandError listing whatever is missing."""
     team = client.get_team()
     problems = []
     if not team.get("is_migrating"):
         problems.append(MIGRATION_MODE_REQUIRED)
-    if not team.get("public_key"):
+    if not team.get("has_public_key"):
         problems.append(MISSING_PUBLIC_KEY_MESSAGE)
     if problems:
         raise CommandError(" ".join(problems))
