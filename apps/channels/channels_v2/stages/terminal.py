@@ -70,6 +70,8 @@ class ResponseSendingStage(ProcessingStage):
     the exception is appended to ctx.sending_exceptions.
 
     - Text/voice: _send_text/_send_voice raise MessageDeliveryFailure.
+    - Voice failures the channel's should_voice_fallback_to_text predicate
+      approves are retried as text (ctx.formatted_message) instead of raising.
     - Files: each failure is wrapped in FileDeliveryFailure and appended
       to ctx.sending_exceptions. A download link fallback is sent via
       _send_text; if that also fails, the MessageDeliveryFailure propagates
@@ -78,6 +80,9 @@ class ResponseSendingStage(ProcessingStage):
     SendingErrorHandlerStage processes ctx.sending_exceptions for
     notifications and platform-specific side effects.
     """
+
+    def __init__(self, should_voice_fallback_to_text: Callable[[Exception], bool] | None = None) -> None:
+        self._should_voice_fallback_to_text = should_voice_fallback_to_text
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.formatted_message is not None or ctx.early_exit_response is not None
@@ -91,8 +96,8 @@ class ResponseSendingStage(ProcessingStage):
 
             # Normal path -- send formatted bot response
             if ctx.voice_audio:
-                self._send_voice(ctx, ctx.voice_audio, ctx.participant_identifier)
-                if ctx.additional_text_message:
+                voice_sent = self._send_voice(ctx, ctx.voice_audio, ctx.participant_identifier)
+                if voice_sent and ctx.additional_text_message:
                     self._send_text(ctx, ctx.additional_text_message, ctx.participant_identifier)
             else:
                 self._send_text(ctx, ctx.formatted_message, ctx.participant_identifier)
@@ -114,14 +119,30 @@ class ResponseSendingStage(ProcessingStage):
                 context="text message",
             ) from e
 
-    def _send_voice(self, ctx: MessageProcessingContext, audio: SynthesizedAudio, recipient: str) -> None:
+    def _send_voice(self, ctx: MessageProcessingContext, audio: SynthesizedAudio, recipient: str) -> bool:
+        """Returns True if voice was delivered, False if the reply fell back to text."""
         try:
             ctx.sender.send_voice(audio, recipient)
+            return True
         except Exception as e:
+            if self._voice_fallback_to_text(ctx, e, recipient):
+                return False
             raise MessageDeliveryFailure(
                 e,
                 context="voice message",
             ) from e
+
+    def _voice_fallback_to_text(self, ctx: MessageProcessingContext, exc: Exception, recipient: str) -> bool:
+        """Send ctx.formatted_message as text when the channel approves the voice failure."""
+        if self._should_voice_fallback_to_text is None or not ctx.formatted_message:
+            return False
+        if not self._should_voice_fallback_to_text(exc):
+            return False
+        logger.info("Voice delivery failed (%s); falling back to text", exc)
+        # Response is no longer voice: PersistenceStage must not tag it or attach audio
+        ctx.voice_audio = None
+        self._send_text(ctx, ctx.formatted_message, recipient)
+        return True
 
     def _flush(self, ctx: MessageProcessingContext) -> None:
         try:

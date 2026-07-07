@@ -135,7 +135,7 @@ class ChannelBase(ABC):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
-                ResponseSendingStage(),
+                ResponseSendingStage(should_voice_fallback_to_text=self._should_voice_fallback_to_text),
                 SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 ActivityTrackingStage(),
@@ -149,6 +149,14 @@ class ChannelBase(ABC):
         the next handler runs, falling through to generic notification behavior.
         """
         return []
+
+    def _should_voice_fallback_to_text(self, exc: Exception) -> bool:
+        """Whether a failed voice delivery should be retried as a text message.
+
+        Called by ResponseSendingStage with the exception raised from send_voice.
+        Override per channel for platform failures where text can still get through.
+        """
+        return False
 
     def _create_trace_service(self):
         return TracingService.create_for_experiment(self.experiment)
@@ -272,7 +280,7 @@ class ChannelBase(ABC):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
-                ResponseSendingStage(),
+                ResponseSendingStage(should_voice_fallback_to_text=self._should_voice_fallback_to_text),
                 SendingErrorHandlerStage(error_handlers=self._get_delivery_error_handlers()),
                 PersistenceStage(),
                 # No ActivityTrackingStage -- caller manages session activity

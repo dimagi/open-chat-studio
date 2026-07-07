@@ -11,6 +11,7 @@ from apps.channels.channels_v2.sender import ChannelSender
 from apps.channels.channels_v2.stages.core import AttachmentHydrationStage
 from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
+from apps.chat.exceptions import ServiceWindowExpiredException
 from apps.files.models import File, FilePurpose
 from apps.service_providers.models import MessagingProviderType
 
@@ -240,3 +241,8 @@ class WhatsappChannel(ChannelBase):
             supported_message_types=tuple(self.messaging_service.supported_message_types),
             can_send_file=self.messaging_service.can_send_file,
         )
+
+    def _should_voice_fallback_to_text(self, exc: Exception) -> bool:
+        # Voice can never be sent via template once the 24h service window
+        # closes, but text still can, so the reply is worth retrying as text.
+        return isinstance(exc, ServiceWindowExpiredException)
