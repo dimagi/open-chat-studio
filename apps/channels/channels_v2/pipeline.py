@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
+from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException
 from apps.service_providers.llm_service.runnables import GenerationCancelled

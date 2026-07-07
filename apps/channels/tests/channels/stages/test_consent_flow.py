@@ -2,8 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.channels_v2.stages.core import ConsentFlowStage
+from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.experiments.models import SessionStatus
 
