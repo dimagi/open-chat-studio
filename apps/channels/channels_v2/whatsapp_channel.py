@@ -16,9 +16,9 @@ from apps.files.models import File, FilePurpose
 from apps.service_providers.models import MessagingProviderType
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
+    from apps.channels.pipeline import MessageProcessingContext
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.service_providers.messaging_service import MessagingService
     from apps.service_providers.speech_service import SynthesizedAudio

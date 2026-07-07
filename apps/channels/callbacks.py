@@ -4,8 +4,8 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.channels.datamodels import BaseMessage
+    from apps.channels.pipeline import MessageProcessingContext
 
 
 class ChannelCallbacks:

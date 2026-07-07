@@ -15,9 +15,9 @@ import pytest
 from django.test import override_settings
 
 from apps.channels.channels_v2.connect_channel import CommCareConnectSender
-from apps.channels.channels_v2.pipeline import MessageProcessingContext
 from apps.channels.clients.connect_client import CommCareConnectClient, Message, NewMessagePayload
 from apps.channels.models import ChannelPlatform
+from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.tasks import handle_commcare_connect_message
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage, ChatMessageType

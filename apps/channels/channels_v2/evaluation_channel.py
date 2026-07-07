@@ -6,8 +6,8 @@ from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.api_channel import NoOpSender
 from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.const import MESSAGE_TYPES
+from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPipeline
 from apps.channels.sender import ChannelSender
 from apps.channels.stages.core import (
     ChatMessageCreationStage,

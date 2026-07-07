@@ -14,8 +14,8 @@ from apps.service_providers.file_limits import can_send_on_slack
 from apps.slack.utils import parse_session_external_id
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.pipeline import MessageProcessingContext
     from apps.channels.models import ExperimentChannel
+    from apps.channels.pipeline import MessageProcessingContext
     from apps.experiments.models import Experiment, ExperimentSession
     from apps.files.models import File
     from apps.service_providers.messaging_service import SlackService
