@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from datetime import date
+from enum import Enum
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from django.db.models import Model
 
 from apps.channels.channels_v2.exceptions import EarlyAbort, EarlyExitResponse
 from apps.service_providers.llm_service.runnables import GenerationCancelled
@@ -14,6 +18,20 @@ if TYPE_CHECKING:
 # They must not mark a stage's span as errored.
 _CONTROL_FLOW_SIGNALS = (EarlyExitResponse, EarlyAbort, GenerationCancelled)
 
+# Bounds for span-value serialization -- keep trace payloads small and cheap.
+_SPAN_LIST_LIMIT = 20
+_SPAN_MAX_DEPTH = 2
+_UNSET = object()
+
+# Field-list declarations use the real context attribute names, but trace spans
+# display friendlier keys free of legacy "experiment" naming. Applied per path
+# segment, so "experiment_session.experiment_versions" -> "session.chatbot_versions".
+_SPAN_KEY_ALIASES = {
+    "experiment_session": "session",
+    "experiment_channel": "channel",
+    "experiment_versions": "chatbot_versions",
+}
+
 
 class ProcessingStage(ABC):
     """Base class for stateless processing stages.
@@ -23,7 +41,17 @@ class ProcessingStage(ABC):
 
     Stages do NOT check early_exit_response -- the pipeline orchestrator
     handles short-circuiting. To exit early, raise EarlyExitResponse.
+
+    Observability: declare ``span_input_fields`` / ``span_output_fields`` as
+    context attribute paths (dotted paths allowed, e.g. ``"experiment_session.status"``)
+    to record them on the stage's trace span. Inputs are read before ``process``,
+    outputs after. Override ``get_span_inputs`` / ``get_span_outputs`` directly
+    when a derived value is needed instead of a raw context field.
     """
+
+    # Context attribute paths recorded on this stage's trace span.
+    span_input_fields: ClassVar[tuple[str, ...]] = ()
+    span_output_fields: ClassVar[tuple[str, ...]] = ()
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         """Override to add stage-specific preconditions.
@@ -42,14 +70,14 @@ class ProcessingStage(ABC):
         return None
 
     def get_span_inputs(self, ctx: MessageProcessingContext) -> dict[str, Any]:
-        """Override to record useful context on this stage's trace span.
-        Default: empty -- no inputs recorded."""
-        return {}
+        """Context recorded on this stage's span, from ``span_input_fields``.
+        Override for derived values that aren't raw context fields."""
+        return _summarize_span_fields(ctx, self.span_input_fields)
 
     def get_span_outputs(self, ctx: MessageProcessingContext) -> dict[str, Any]:
-        """Override to record useful outputs on this stage's trace span.
-        Default: empty -- no outputs recorded."""
-        return {}
+        """Context recorded on this stage's span, from ``span_output_fields``.
+        Override for derived values that aren't raw context fields."""
+        return _summarize_span_fields(ctx, self.span_output_fields)
 
     def __call__(self, ctx: MessageProcessingContext) -> None:
         """Execute stage inside a trace span, keeping the span's status honest.
@@ -114,3 +142,65 @@ class ProcessingStage(ABC):
             first = new_sending[0]
             root_exc = getattr(first, "original_exc", first)
         return messages, root_exc
+
+
+def _summarize_span_fields(ctx: MessageProcessingContext, field_paths: tuple[str, ...]) -> dict[str, Any]:
+    """Read each context attribute path and render it trace-safe.
+
+    Serialization must never break message processing, so any failure to read
+    or render a field degrades to a placeholder rather than raising.
+    """
+    summary: dict[str, Any] = {}
+    for path in field_paths:
+        key = _span_key(path)
+        try:
+            value = _resolve_path(ctx, path)
+            if value is _UNSET:
+                continue
+            summary[key] = _to_trace_value(value)
+        except Exception:
+            summary[key] = "<unserializable>"
+    return summary
+
+
+def _span_key(path: str) -> str:
+    """Map a context attribute path to its display key, aliasing legacy segments."""
+    return ".".join(_SPAN_KEY_ALIASES.get(part, part) for part in path.split("."))
+
+
+def _resolve_path(obj: Any, path: str) -> Any:
+    """Walk a dotted attribute path. Returns ``_UNSET`` if an attribute is
+    missing, ``None`` if any step along the way is None."""
+    for part in path.split("."):
+        if obj is None:
+            return None
+        obj = getattr(obj, part, _UNSET)
+        if obj is _UNSET:
+            return _UNSET
+    return obj
+
+
+def _to_trace_value(value: Any, depth: int = 0) -> Any:
+    """Render a value as JSON-safe primitives for a trace span.
+
+    Models collapse to ``{id, model}`` (never ``str(model)`` -- that can fire
+    queries); unknown objects collapse to their type name. Collections are
+    bounded by size and depth.
+    """
+    if value is None or isinstance(value, str | bool | int | float):
+        return value
+    if isinstance(value, Enum):
+        return _to_trace_value(value.value, depth)
+    if isinstance(value, date):  # date and datetime
+        return value.isoformat()
+    if isinstance(value, Model):
+        return {"id": value.pk, "model": str(value._meta.verbose_name)}
+    if isinstance(value, list | tuple | set):
+        if depth >= _SPAN_MAX_DEPTH:
+            return f"[{len(value)} items]"
+        return [_to_trace_value(item, depth + 1) for item in list(value)[:_SPAN_LIST_LIMIT]]
+    if isinstance(value, dict):
+        if depth >= _SPAN_MAX_DEPTH:
+            return f"{{{len(value)} keys}}"
+        return {str(k): _to_trace_value(v, depth + 1) for k, v in value.items()}
+    return f"<{type(value).__name__}>"
