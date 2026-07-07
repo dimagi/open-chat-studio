@@ -241,10 +241,13 @@ class OCSTracer(Tracer):
             error_to_record = e
             raise
         finally:
-            if error_to_record:
+            # A span fails either by raising (error_to_record) or by recording
+            # an error on its context without raising (span_context.error), e.g.
+            # a stage that caught a delivery failure and recovered.
+            if error_to_record or span_context.has_error():
                 self.error_detected = True
                 if not self.error_message:
-                    self.error_message = str(error_to_record)
+                    self.error_message = str(error_to_record) if error_to_record else (span_context.error or "")
                 # First erroring span wins — captures innermost span (it exits before outer spans)
                 if not self.error_span_name:
                     self.error_span_name = span_context.name
