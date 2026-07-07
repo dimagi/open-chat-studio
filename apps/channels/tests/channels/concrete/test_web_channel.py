@@ -6,18 +6,18 @@ from django.http import Http404
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.api_channel import NoOpSender
-from apps.channels.channels_v2.stages.core import (
+from apps.channels.channels_v2.web_channel import WebChannel
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.stages.core import (
     ConsentFlowStage,
     SessionResolutionStage,
 )
-from apps.channels.channels_v2.stages.terminal import (
+from apps.channels.stages.terminal import (
     ActivityTrackingStage,
     PersistenceStage,
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
-from apps.channels.channels_v2.web_channel import WebChannel
-from apps.channels.const import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.experiments.models import Experiment
 

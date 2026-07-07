@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.stages.core import ChatMessageCreationStage
+from apps.channels.stages.core import ChatMessageCreationStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
 from apps.chat.models import ChatMessageType
@@ -52,7 +52,7 @@ class TestChatMessageCreationStage:
         tag_names = list(ctx.human_message.tags.values_list("name", flat=True))
         assert "voice" in tag_names
 
-    @patch("apps.channels.channels_v2.stages.core.enqueue_static_triggers")
+    @patch("apps.channels.stages.core.enqueue_static_triggers")
     def test_static_triggers_fired(self, mock_enqueue):
         mock_enqueue.delay = MagicMock()
         experiment = ExperimentFactory()
@@ -71,7 +71,7 @@ class TestChatMessageCreationStage:
 
         mock_enqueue.delay.assert_called_once()
 
-    @patch("apps.channels.channels_v2.stages.core.enqueue_static_triggers")
+    @patch("apps.channels.stages.core.enqueue_static_triggers")
     def test_static_triggers_not_fired_when_disabled(self, mock_enqueue):
         mock_enqueue.delay = MagicMock()
         experiment = ExperimentFactory()

@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from telebot.apihelper import ApiTelegramException
 
-from apps.channels.channels_v2.stages.terminal import MessageDeliveryFailure
 from apps.channels.channels_v2.telegram_channel import TelegramChannel, handle_telegram_block
+from apps.channels.stages.terminal import MessageDeliveryFailure
 from apps.channels.tests.channels.conftest import make_context
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory

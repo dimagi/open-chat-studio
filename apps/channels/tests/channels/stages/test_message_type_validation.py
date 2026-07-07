@@ -3,9 +3,9 @@ from unittest.mock import patch
 import pytest
 
 from apps.annotations.models import TagCategories
-from apps.channels.channels_v2.stages.core import MessageTypeValidationStage
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.exceptions import EarlyExitResponse
+from apps.channels.stages.core import MessageTypeValidationStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.channels.tests.message_examples.base_messages import text_message, unsupported_content_type_message
 
@@ -43,7 +43,7 @@ class TestMessageTypeValidationStage:
         assert tag_name == "unsupported_message_type"
         assert tag_category == TagCategories.ERROR
 
-    @patch("apps.channels.channels_v2.stages.core.MessageTypeValidationStage._generate_unsupported_response")
+    @patch("apps.channels.stages.core.MessageTypeValidationStage._generate_unsupported_response")
     def test_eventbot_failure_uses_fallback(self, mock_generate):
         mock_generate.side_effect = Exception("EventBot failed")
         capabilities = make_capabilities(supported_message_types=(MESSAGE_TYPES.TEXT,))

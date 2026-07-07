@@ -5,13 +5,13 @@ import pytest
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
 from apps.channels.channels_v2.api_channel import ApiChannel, NoOpSender
-from apps.channels.channels_v2.stages.terminal import (
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.stages.terminal import (
     ActivityTrackingStage,
     PersistenceStage,
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
-from apps.channels.const import MESSAGE_TYPES
 from apps.chat.exceptions import ChannelException
 from apps.experiments.models import Experiment
 

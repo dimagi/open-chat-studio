@@ -8,9 +8,9 @@ from django.utils import timezone
 
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
-from apps.channels.channels_v2.stages.base import ProcessingStage
-from apps.channels.channels_v2.stages.core import RESET_COMMAND
 from apps.channels.const import MESSAGE_TYPES
+from apps.channels.stages.base import ProcessingStage
+from apps.channels.stages.core import RESET_COMMAND
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.files.models import File, FilePurpose
 from apps.ocs_notifications.notifications import (

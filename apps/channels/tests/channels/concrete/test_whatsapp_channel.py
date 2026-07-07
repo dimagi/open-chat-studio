@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.stages.terminal import ResponseSendingStage
 from apps.channels.channels_v2.whatsapp_channel import WhatsappCallbacks, WhatsappChannel, WhatsappSender
+from apps.channels.stages.terminal import ResponseSendingStage
 from apps.channels.tests.channels.conftest import make_context
 from apps.chat.exceptions import ServiceWindowExpiredException
 

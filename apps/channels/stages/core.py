@@ -9,10 +9,10 @@ from django.db.models import Q
 
 from apps.annotations.models import TagCategories
 from apps.channels.channels_v2.pipeline import MessageProcessingContext
-from apps.channels.channels_v2.stages.base import ProcessingStage
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import Attachment
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
+from apps.channels.stages.base import ProcessingStage
 from apps.channels.text_utils import MARKDOWN_REF_PATTERN, strip_urls_and_emojis
 from apps.chat.bots import EvalsBot, EventBot, get_bot
 from apps.chat.const import STATUSES_FOR_COMPLETE_CHATS

@@ -1305,7 +1305,7 @@ class TestEmailAttachmentsEndToEnd:
         # Patch get_bot in core.py so we don't need a real LLM provider.
         # Run the Celery task synchronously by routing .delay() to the function body.
         with (
-            patch("apps.channels.channels_v2.stages.core.get_bot") as mock_get_bot,
+            patch("apps.channels.stages.core.get_bot") as mock_get_bot,
             patch(
                 "apps.channels.tasks.handle_email_message.delay",
                 side_effect=lambda **kw: handle_email_message(**kw),
