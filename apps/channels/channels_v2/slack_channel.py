@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from apps.channels.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.channel_base import ChannelBase
+from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform

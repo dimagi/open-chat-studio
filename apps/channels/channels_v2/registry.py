@@ -14,7 +14,7 @@ from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.models import ChannelPlatform
 
 if TYPE_CHECKING:
-    from apps.channels.channels_v2.channel_base import ChannelBase
+    from apps.channels.channel_base import ChannelBase
     from apps.experiments.models import ExperimentSession
 
 # The evaluations platform is deliberately absent; EvaluationChannel is constructed directly with a bot.

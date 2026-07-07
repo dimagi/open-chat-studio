@@ -1,7 +1,7 @@
 import pytest
 from django.test import override_settings
 
-from apps.channels.channels_v2.channel_base import ChannelBase
+from apps.channels.channel_base import ChannelBase
 from apps.channels.channels_v2.registry import from_experiment_session
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ParticipantData

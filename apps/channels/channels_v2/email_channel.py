@@ -13,7 +13,7 @@ from django.db import IntegrityError
 
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.channel_base import ChannelBase
+from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import _MAX_REFERENCES, RawAttachment, SkippedAttachment
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel

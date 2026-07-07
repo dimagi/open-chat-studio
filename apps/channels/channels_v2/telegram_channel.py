@@ -13,7 +13,7 @@ from telebot.util import antiflood, smart_split
 from apps.channels import audio
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfig
-from apps.channels.channels_v2.channel_base import ChannelBase
+from apps.channels.channel_base import ChannelBase
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TelegramMessage
 from apps.channels.pipeline import MessageProcessingContext

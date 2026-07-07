@@ -4,7 +4,7 @@ import logging
 
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities, PlatformConsentConfig
-from apps.channels.channels_v2.channel_base import ChannelBase
+from apps.channels.channel_base import ChannelBase
 from apps.channels.clients.connect_client import CommCareConnectClient
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.pipeline import MessageProcessingContext

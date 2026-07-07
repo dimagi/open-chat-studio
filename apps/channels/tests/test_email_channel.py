@@ -8,7 +8,7 @@ from django.db import IntegrityError  # noqa: F811 - used at runtime in test
 from django.test import override_settings
 
 from apps.channels.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.channel_base import ChannelBase
+from apps.channels.channel_base import ChannelBase
 from apps.channels.channels_v2.email_channel import (
     EmailChannel,
     EmailSender,
