@@ -214,7 +214,7 @@ def build_team_serializer():
     base = build_resource_serializer(entry_model(TEAM_MODEL))
 
     class TeamExportSerializer(base):
-        public_key = serializers.SerializerMethodField(
+        has_public_key = serializers.SerializerMethodField(
             help_text="Whether the team has a public key registered. The key itself is never exported."
         )
 
