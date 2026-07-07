@@ -60,10 +60,6 @@ class Command(IdempotentCommand):
             return {}
 
         cutoff = timezone.now() - RECENT_ACTIVITY_WINDOW
-        # The query is restricted to the columns this migration needs, rather than loading every
-        # column via a plain select_related(). As a data migration this can run on a fresh database
-        # before later column migrations are applied (e.g. teams.0013_team_is_migrating), so
-        # pulling all columns would fail with UndefinedColumn.
         channels = (
             ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False)
             .select_related("experiment", "team")
