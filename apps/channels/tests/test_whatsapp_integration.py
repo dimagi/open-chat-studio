@@ -5,11 +5,11 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
+from apps.channels.whatsapp_channel import WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File

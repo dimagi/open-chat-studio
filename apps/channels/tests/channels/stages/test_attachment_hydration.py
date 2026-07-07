@@ -3,10 +3,10 @@ from unittest.mock import MagicMock
 import pytest
 from django.urls import reverse
 
-from apps.channels.channels_v2.whatsapp_channel import WhatsappAttachmentHydrationStage
 from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.stages.core import AttachmentHydrationStage
 from apps.channels.tests.channels.conftest import make_context
+from apps.channels.whatsapp_channel import WhatsappAttachmentHydrationStage
 from apps.chat.models import ChatAttachment
 from apps.files.models import File
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory

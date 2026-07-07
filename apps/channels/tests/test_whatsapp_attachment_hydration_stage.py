@@ -2,8 +2,8 @@
 
 import pytest
 
-from apps.channels.channels_v2.whatsapp_channel import WhatsappAttachmentHydrationStage
 from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
+from apps.channels.whatsapp_channel import WhatsappAttachmentHydrationStage
 from apps.files.models import File, FilePurpose
 
 from ._whatsapp_attachment_helpers import make_stage_context

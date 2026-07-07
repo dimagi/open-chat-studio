@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from apps.channels.api_channel import ApiChannel
-from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
 from apps.channels.connect_channel import CommCareConnectChannel
 from apps.channels.email_channel import EmailChannel
 from apps.channels.facebook_channel import FacebookMessengerChannel
@@ -12,6 +11,7 @@ from apps.channels.slack_channel import SlackChannel
 from apps.channels.sureadhere_channel import SureAdhereChannel
 from apps.channels.telegram_channel import TelegramChannel
 from apps.channels.web_channel import WebChannel
+from apps.channels.whatsapp_channel import WhatsappChannel
 
 if TYPE_CHECKING:
     from apps.channels.channel_base import ChannelBase
