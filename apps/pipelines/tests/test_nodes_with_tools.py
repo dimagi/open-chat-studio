@@ -276,7 +276,9 @@ def test_empty_followup_after_tool_call_uses_earlier_message(get_llm_service, pr
     """
     first_response = AIMessage(
         content="I'll update your participant data now.",
-        tool_calls=[ToolCall(name=AgentTools.UPDATE_PARTICIPANT_DATA, args={"key": "mood", "value": "happy"}, id="tc1")],
+        tool_calls=[
+            ToolCall(name=AgentTools.UPDATE_PARTICIPANT_DATA, args={"key": "mood", "value": "happy"}, id="tc1")
+        ],
     )
     # Claude's follow-up after receiving the tool result – empty content array
     empty_followup = AIMessage(content=[])
