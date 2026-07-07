@@ -9,7 +9,9 @@ from django.test import override_settings
 
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.channel_base import ChannelBase
-from apps.channels.channels_v2.email_channel import (
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.datamodels import EmailMessage, RawAttachment
+from apps.channels.email_channel import (
     EmailChannel,
     EmailSender,
     EmailThreadContext,
@@ -18,8 +20,6 @@ from apps.channels.channels_v2.email_channel import (
     email_inbound_handler,
     get_email_experiment_channel,
 )
-from apps.channels.const import MESSAGE_TYPES
-from apps.channels.datamodels import EmailMessage, RawAttachment
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_email_message
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -687,7 +687,7 @@ class TestHandleEmailMessageTask:
             "references": [],
         }
 
-        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             handle_email_message(email_data=email_data)
             MockEmailChannel.assert_called_once()
@@ -730,7 +730,7 @@ class TestHandleEmailMessageTask:
             "skipped_attachments": [],
         }
 
-        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             handle_email_message(email_data=email_data, channel_id=channel.id)
             MockEmailChannel.assert_called_once()
@@ -761,7 +761,7 @@ class TestHandleEmailMessageTask:
             "references": [],
         }
 
-        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             # Call without channel_id (legacy form)
             handle_email_message(email_data=email_data)
@@ -1038,7 +1038,7 @@ class TestEmailEndToEnd:
             "references": [],
         }
 
-        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             handle_email_message(email_data=email_data)
 
@@ -1067,7 +1067,7 @@ class TestEmailEndToEnd:
             "references": ["<outbound-1@chat.openchatstudio.com>"],
         }
 
-        with patch("apps.channels.channels_v2.email_channel.EmailChannel") as MockEmailChannel:
+        with patch("apps.channels.email_channel.EmailChannel") as MockEmailChannel:
             mock_instance = MockEmailChannel.return_value
             handle_email_message(email_data=email_data)
 
@@ -1104,7 +1104,7 @@ class TestPersistInboundAttachments:
         # size check fires (magic sees b"x"*N as text/plain, causing a
         # spurious mismatch against application/pdf before the size check).
         with patch(
-            "apps.channels.channels_v2.email_channel.detect_content_type",
+            "apps.channels.email_channel.detect_content_type",
             return_value="application/pdf",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1143,7 +1143,7 @@ class TestPersistInboundAttachments:
         # detection-based rejection branch without relying on real libmagic
         # signatures (which can vary by version/platform).
         with patch(
-            "apps.channels.channels_v2.email_channel.detect_content_type",
+            "apps.channels.email_channel.detect_content_type",
             return_value="application/x-msdownload",
         ):
             accepted, skipped = _persist_inbound_attachments(raw, team_id=team.id)
@@ -1251,7 +1251,7 @@ class TestEmailInboundHandlerWithAttachments:
         # Mock detect_content_type so the oversized PDF doesn't trip the
         # mismatch check (libmagic sees a long string of "x" as text/plain).
         with (
-            patch("apps.channels.channels_v2.email_channel.detect_content_type", return_value="application/pdf"),
+            patch("apps.channels.email_channel.detect_content_type", return_value="application/pdf"),
             patch("apps.channels.tasks.handle_email_message.delay") as delay,
         ):
             email_inbound_handler(sender=None, event=MagicMock(message=inbound))

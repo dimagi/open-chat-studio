@@ -227,7 +227,7 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     retry_jitter=True,
 )
 def handle_email_message(self, email_data: dict, channel_id: int | None = None, session_id: int | None = None):
-    from apps.channels.channels_v2.email_channel import (  # noqa: PLC0415 - tests patch EmailChannel at source module
+    from apps.channels.email_channel import (  # noqa: PLC0415 - tests patch EmailChannel at source module
         EmailChannel,
         EmailThreadContext,
         get_email_experiment_channel,
