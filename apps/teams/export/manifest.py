@@ -119,7 +119,7 @@ SECRET_REGISTRY: dict[str, list[str]] = {
 # not propagated (is_staff/is_superuser are crosscutting perms). The user's auth ``groups`` stay in --
 # the serializer's ``groups`` method field overrides them with the team role.
 EXCLUDE_REGISTRY: dict[str, list[str]] = {
-    "teams.team": ["members", "public_key"],
+    "teams.team": ["members", "public_key", "files_export", "files_export_task_id"],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # Collection.files / DocumentSource.files are M2M through CollectionFile (extra columns). Excluding
     # them stops the serializer emitting a bare pk list the importer would .set() -- Django rejects
