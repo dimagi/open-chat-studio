@@ -1,10 +1,11 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.db import IntegrityError
 
 from apps.channels.channels_v2.evaluation_channel import EvaluationChannel
 from apps.channels.datamodels import BaseMessage
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage
@@ -38,6 +39,16 @@ def test_get_team_evaluations_channel_is_idempotent(evals_experiment):
     channel1 = ExperimentChannel.objects.get_team_evaluations_channel(evals_experiment.team)
     channel2 = ExperimentChannel.objects.get_team_evaluations_channel(evals_experiment.team)
     assert channel1.id == channel2.id
+
+
+@pytest.mark.django_db()
+def test_team_evaluations_channel_is_unique_per_team(evals_experiment):
+    """The DB constraint itself rejects a second evaluations channel for the same team"""
+    team = evals_experiment.team
+    ExperimentChannel.objects.get_team_evaluations_channel(team)
+
+    with pytest.raises(IntegrityError):
+        ExperimentChannel.objects.create(team=team, platform=ChannelPlatform.EVALUATIONS, name="another-evals-channel")
 
 
 @pytest.mark.django_db()
