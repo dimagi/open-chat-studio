@@ -14,8 +14,8 @@ from uuid import uuid4
 import pytest
 from django.test import override_settings
 
-from apps.channels.channels_v2.connect_channel import CommCareConnectSender
 from apps.channels.clients.connect_client import CommCareConnectClient, Message, NewMessagePayload
+from apps.channels.connect_channel import CommCareConnectSender
 from apps.channels.models import ChannelPlatform
 from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.tasks import handle_commcare_connect_message
@@ -77,7 +77,7 @@ class TestCommCareConnectSender:
         participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=True)
         sender = self._make_sender(experiment, participant_data=participant_data)
 
-        with patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient") as ClientMock:
+        with patch("apps.channels.connect_channel.CommCareConnectClient") as ClientMock:
             client_instance = ClientMock.return_value
             sender.send_text("Hello world", recipient=participant.identifier)
 
@@ -97,7 +97,7 @@ class TestCommCareConnectSender:
 
         sender = self._make_sender(experiment, participant_data=participant_data)
 
-        with patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient") as ClientMock:
+        with patch("apps.channels.connect_channel.CommCareConnectClient") as ClientMock:
             sender.send_text("Hello", recipient=participant.identifier)
 
         participant_data.refresh_from_db()
@@ -112,7 +112,7 @@ class TestCommCareConnectSender:
     def test_send_text_raises_when_no_participant_data(self, experiment):
         sender = self._make_sender(experiment, participant_data=None)
 
-        with patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient"):
+        with patch("apps.channels.connect_channel.CommCareConnectClient"):
             with pytest.raises(ChannelException, match="Participant data not found"):
                 sender.send_text("Hi", recipient="ghost-participant")
 
@@ -127,7 +127,7 @@ class TestCommCareConnectSender:
         )
         sender = self._make_sender(experiment, participant_data=participant_data)
 
-        with patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient"):
+        with patch("apps.channels.connect_channel.CommCareConnectClient"):
             with pytest.raises(ChannelException, match="channel_id is missing"):
                 sender.send_text("Hi", recipient=participant.identifier)
 
@@ -151,7 +151,7 @@ class TestCommCareConnectChannelIntegration:
 
         with (
             patch("apps.chat.bots.PipelineBot.process_input") as mock_bot,
-            patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient") as ClientMock,
+            patch("apps.channels.connect_channel.CommCareConnectClient") as ClientMock,
         ):
             mock_bot.return_value = ChatMessage(content="Hi human", message_type=ChatMessageType.AI)
             handle_commcare_connect_message(experiment.id, participant_data.id, payload["messages"])
@@ -176,7 +176,7 @@ class TestCommCareConnectChannelIntegration:
 
         with (
             patch("apps.chat.bots.PipelineBot.process_input") as mock_bot,
-            patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient") as ClientMock,
+            patch("apps.channels.connect_channel.CommCareConnectClient") as ClientMock,
         ):
             handle_commcare_connect_message(experiment.id, participant_data.id, payload["messages"])
 
