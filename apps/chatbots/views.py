@@ -23,8 +23,8 @@ from waffle import flag_is_active
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.session_tokens import issue_session_token
 from apps.channels.channels_v2.registry import get_channel_class_for_platform
-from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
+from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable

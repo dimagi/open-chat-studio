@@ -6,7 +6,6 @@ from django.http import Http404
 from apps.channels.api_channel import NoOpSender
 from apps.channels.callbacks import ChannelCallbacks
 from apps.channels.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.stages.core import (
     ConsentFlowStage,
@@ -18,6 +17,7 @@ from apps.channels.stages.terminal import (
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
+from apps.channels.web_channel import WebChannel
 from apps.chat.exceptions import ChannelException
 from apps.experiments.models import Experiment
 
@@ -105,8 +105,8 @@ class TestWebChannelCapabilities:
         assert caps.supported_message_types == [MESSAGE_TYPES.TEXT]
 
 
-_START_SESSION = "apps.channels.channels_v2.web_channel.start_experiment_session"
-_CHECK_SEED = "apps.channels.channels_v2.web_channel.WebChannel.check_and_process_seed_message"
+_START_SESSION = "apps.channels.web_channel.start_experiment_session"
+_CHECK_SEED = "apps.channels.web_channel.WebChannel.check_and_process_seed_message"
 _GET_WEB_CHANNEL = "apps.channels.models.ExperimentChannelObjectManager.get_team_web_channel"
 
 
