@@ -2,9 +2,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.slack_channel import SlackSender
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform
+from apps.channels.slack_channel import SlackSender
 from apps.channels.tests.channels.conftest import make_context
 from apps.slack.utils import make_session_external_id
 
