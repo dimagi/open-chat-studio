@@ -14,8 +14,7 @@ def strip_urls_and_emojis(text: str) -> tuple[str, list[str]]:
     text = emoji.replace_emoji(text, replace="")
 
     url_pattern = re.compile(URL_REGEX)
-    urls = set(url_pattern.findall(text)) or []
-    for url in urls:
-        text = text.replace(url, "")
+    urls = list(dict.fromkeys(url_pattern.findall(text)))
+    text = url_pattern.sub("", text)
 
-    return text, list(urls)
+    return text, urls
