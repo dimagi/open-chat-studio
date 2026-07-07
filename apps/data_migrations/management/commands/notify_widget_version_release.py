@@ -52,9 +52,18 @@ class Command(IdempotentCommand):
         return f"Notified {len(affected_by_team)} team(s)"
 
     def _collect_affected_teams(self) -> dict:
-        channels = ExperimentChannel.objects.filter(
-            platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False
-        ).select_related("experiment", "team")
+        channels = (
+            ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False)
+            .select_related("experiment", "team")
+            .only(
+                "team__slug",
+                "team__name",
+                "experiment__name",
+                "experiment__team",
+                "experiment__working_version",
+                "experiment__version_number",
+            )
+        )
 
         affected_by_team = {}
         for channel in channels:
