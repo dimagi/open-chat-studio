@@ -87,6 +87,16 @@ class ResponseSendingStage(ProcessingStage):
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.formatted_message is not None or ctx.early_exit_response is not None
 
+    def get_span_inputs(self, ctx: MessageProcessingContext) -> dict:
+        """Record what is being delivered so a send failure has context on the span."""
+        message = ctx.early_exit_response if ctx.early_exit_response is not None else ctx.formatted_message
+        return {
+            "recipient": ctx.participant_identifier,
+            "message": message,
+            "is_voice": ctx.voice_audio is not None,
+            "files": [file.name for file in ctx.files_to_send],
+        }
+
     def process(self, ctx: MessageProcessingContext) -> None:
         try:
             if ctx.early_exit_response:
@@ -184,6 +194,9 @@ class SendingErrorHandlerStage(ProcessingStage):
     def __init__(self, error_handlers: Sequence[DeliveryErrorHandler] = ()) -> None:
         self._error_handlers: tuple[DeliveryErrorHandler, ...] = tuple(error_handlers)
 
+    def get_span_inputs(self, ctx: MessageProcessingContext) -> dict:
+        return {"sending_exceptions": [str(exc) for exc in ctx.sending_exceptions]}
+
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return bool(ctx.sending_exceptions)
 
@@ -242,6 +255,8 @@ class PersistenceStage(ProcessingStage):
     3. Voice attachments: Tags the bot response as "voice" and saves
        the synthesized audio as a file attachment.
     """
+
+    span_input_fields = ("early_exit_response", "human_message_tags", "voice_audio")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         if not ctx.experiment_session:
@@ -314,6 +329,8 @@ class PersistenceStage(ProcessingStage):
 
 class ActivityTrackingStage(ProcessingStage):
     """TERMINAL STAGE: Updates session activity timestamp and experiment version tracking."""
+
+    span_output_fields = ("experiment_session.last_activity_at", "experiment_session.experiment_versions")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.experiment_session is not None

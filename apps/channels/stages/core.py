@@ -113,6 +113,9 @@ def get_or_create_participant(
 class ParticipantValidationStage(ProcessingStage):
     """Validates the participant is allowed to interact with this experiment."""
 
+    span_input_fields = ("message.participant_id",)
+    span_output_fields = ("participant_allowed",)
+
     def process(self, ctx: MessageProcessingContext) -> None:
         ctx.participant_identifier = ctx.message.participant_id
 
@@ -139,6 +142,9 @@ class ParticipantResolverStage(ProcessingStage):
     If a participant_user is present in ctx.channel_context (e.g. web channels),
     it is associated with the participant on first contact or backfilled if missing.
     """
+
+    span_input_fields = ("participant_identifier", "experiment_channel.platform")
+    span_output_fields = ("participant.id", "participant_data.id")
 
     def process(self, ctx: MessageProcessingContext) -> None:
         normalized = ctx.experiment_channel.platform_enum.normalize_identifier(ctx.participant_identifier)
@@ -184,6 +190,9 @@ class SessionResolutionStage(ProcessingStage):
     For Web/Slack channels the session is pre-set on the context, so this
     stage becomes a no-op (Issue 4).
     """
+
+    span_input_fields = ("participant.id",)
+    span_output_fields = ("experiment_session.id", "experiment_session.status")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return True
@@ -260,6 +269,9 @@ class SessionResolutionStage(ProcessingStage):
 class MessageTypeValidationStage(ProcessingStage):
     """Validates the message type is supported by this channel."""
 
+    span_input_fields = ("message.content_type", "capabilities.supported_message_types")
+    span_output_fields = ("human_message_tags",)
+
     def process(self, ctx: MessageProcessingContext) -> None:
         if ctx.message.content_type not in ctx.capabilities.supported_message_types:
             # Tag the human message for analytics (PersistenceStage applies the tag)
@@ -297,6 +309,8 @@ class SessionActivationStage(ProcessingStage):
     proceed. This keeps the side effect out of ConsentFlowStage.should_run.
     """
 
+    span_output_fields = ("experiment_session.status",)
+
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         if ctx.experiment_session is None:
             return False
@@ -328,6 +342,8 @@ class ConsentCheckStage(ProcessingStage):
     Configured via ChannelCapabilities.consent_config. When unset, the
     stage is skipped entirely.
     """
+
+    span_input_fields = ("participant_data.id",)
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.capabilities.consent_config is not None
@@ -367,6 +383,9 @@ class ConsentFlowStage(ProcessingStage):
     """
 
     USER_CONSENT_TEXT = "1"
+
+    span_input_fields = ("experiment_session.status",)
+    span_output_fields = ("experiment_session.status", "user_query")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         # Skip if channel doesn't support conversational consent
@@ -468,6 +487,9 @@ class QueryExtractionStage(ProcessingStage):
     For voice messages, this transcribes the audio.
     """
 
+    span_input_fields = ("message.content_type",)
+    span_output_fields = ("user_query",)
+
     def process(self, ctx: MessageProcessingContext) -> None:
         if ctx.message.content_type == MESSAGE_TYPES.VOICE:
             try:
@@ -511,6 +533,9 @@ class ChatMessageCreationStage(ProcessingStage):
     This is a separate stage between query extraction and bot interaction,
     keeping extraction testable without the DB.
     """
+
+    span_input_fields = ("user_query",)
+    span_output_fields = ("human_message.id",)
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None
@@ -588,6 +613,9 @@ class BotInteractionStage(ProcessingStage):
     runs terminal stages, and then re-raises.
     """
 
+    span_input_fields = ("user_query",)
+    span_output_fields = ("bot_response.content", "files_to_send")
+
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None
 
@@ -621,6 +649,9 @@ class EvalsBotInteractionStage(ProcessingStage):
     bypassing the DB-backed ParticipantData model.
     """
 
+    span_input_fields = ("user_query",)
+    span_output_fields = ("bot_response.content", "files_to_send")
+
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.user_query is not None
 
@@ -651,6 +682,9 @@ class ResponseFormattingStage(ProcessingStage):
     text -- the user still gets a useful response. This is NOT an
     unrecoverable error, so it does not propagate to the pipeline's catch-all.
     """
+
+    span_input_fields = ("bot_response.content",)
+    span_output_fields = ("formatted_message", "voice_audio", "files_to_send", "unsupported_files")
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return ctx.bot_response is not None
@@ -763,6 +797,8 @@ class AttachmentHydrationStage(ProcessingStage):
     that reference a real session. No-op for channels that don't use
     this pattern.
     """
+
+    span_output_fields = ("message.attachments",)
 
     def should_run(self, ctx: MessageProcessingContext) -> bool:
         return bool(
