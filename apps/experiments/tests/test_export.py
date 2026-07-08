@@ -6,7 +6,13 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.export import UTF8_BOM, export_rows_to_csv_stream, filtered_export_to_csv
+from apps.experiments.export import (
+    UTF8_BOM,
+    count_export_messages,
+    export_rows_to_csv_stream,
+    filtered_export_to_csv,
+    generate_export_rows,
+)
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -355,3 +361,38 @@ def test_export_rows_to_csv_stream_preserves_special_characters():
     rows = [["Message"], ["I’m at the café"]]
     output = "".join(export_rows_to_csv_stream(iter(rows)))
     assert "I’m at the café" in output
+
+
+def _make_session_with_messages(count: int):
+    session = ExperimentSessionFactory.create()
+    for i in range(count):
+        ChatMessage.objects.create(
+            chat=session.chat,
+            content=f"message {i}",
+            message_type=ChatMessageType.HUMAN,
+        )
+    return session
+
+
+@pytest.mark.django_db()
+def test_count_export_messages():
+    session = _make_session_with_messages(3)
+    assert count_export_messages(session.experiment.sessions.all()) == 3
+
+
+@pytest.mark.django_db()
+def test_generate_export_rows_reports_progress_per_message():
+    """progress_callback is called once per message with the cumulative message count."""
+    session = _make_session_with_messages(5)
+    calls = []
+
+    with patch("apps.experiments.export.EXPORT_CHUNK_SIZE", 2):
+        list(
+            generate_export_rows(
+                session.experiment,
+                session.experiment.sessions.all(),
+                progress_callback=calls.append,
+            )
+        )
+
+    assert calls == [1, 2, 3, 4, 5]

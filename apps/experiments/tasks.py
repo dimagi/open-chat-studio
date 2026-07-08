@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
+from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 from django.utils import timezone
 from langchain_core.messages import AIMessage, HumanMessage
@@ -13,7 +14,7 @@ from apps.channels.datamodels import Attachment, BaseMessage
 from apps.channels.web_channel import WebChannel
 from apps.chat.bots import create_conversation
 from apps.chat.exceptions import UserReportableError
-from apps.experiments.export import export_to_tempfile, get_filtered_sessions
+from apps.experiments.export import count_export_messages, export_to_tempfile, get_filtered_sessions
 from apps.experiments.models import Experiment, ExperimentSession, PromptBuilderHistory, SourceMaterial
 from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.retry import with_llm_retry
@@ -30,11 +31,18 @@ def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -
     experiment = Experiment.objects.get(id=experiment_id)
     filtered_sessions = get_filtered_sessions(experiment, query_params, time_zone)
     filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv.gz"
+
+    progress_recorder = ProgressRecorder(self)
+    total = count_export_messages(filtered_sessions)
+
+    def report_progress(current):
+        progress_recorder.set_progress(current, total, description=f"Processing {current} of {total} messages")
+
     # Use a spooled temp file so small exports stay in memory while large ones spill
     # to disk, avoiding a single large in-memory allocation for the whole CSV.
     # compress=True writes a gzip stream, reducing file size by ~80–90% for typical
     # chat exports and dramatically cutting S3 storage and download time.
-    with export_to_tempfile(experiment, filtered_sessions, compress=True) as tmp:
+    with export_to_tempfile(experiment, filtered_sessions, compress=True, progress_callback=report_progress) as tmp:
         file_obj = File.objects.create(
             name=filename,
             team=experiment.team,

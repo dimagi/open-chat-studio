@@ -1,30 +1,115 @@
-<div class="flex flex-row gap-1" id="chat-exports">
-    <button class="btn btn-sm btn-outline btn-primary no-animation"
+{% load i18n %}
+<div class="flex flex-row gap-2 items-center" id="chat-exports">
+    <button id="chat-export-generate-btn"
+            class="btn btn-sm btn-outline btn-primary no-animation"
             hx-post="{% url 'experiments:generate_chat_export' team.slug experiment.id %}"
             hx-trigger="click"
             hx-swap="outerHTML"
             hx-target="#chat-exports"
             {% if task_id %}disabled{% endif %}>
-        <i class="fa-solid fa-file-export"></i>
         {% if task_id %}
-            <span class="loading loading-bars loading-xs"></span> Generating
+            <span class="loading loading-bars loading-xs"></span> {% translate "Generating" %}
         {% else %}
-            Generate Chat Export
+            <i class="fa-solid fa-file-export"></i> {% translate "Generate Chat Export" %}
         {% endif %}
     </button>
 
     {% if task_id %}
-        <div
-            hx-get="{% url 'experiments:get_export_download_link' team.slug experiment.id task_id %}"
-            hx-trigger="every 2s"
-            hx-swap="outerHTML"
-            hx-target="#chat-exports"
-        ></div>
-    {% endif %}
-    {% if export_download_url %}
-        <a class="text-sm font-medium hover:link btn btn-sm btn-outline" href="{{ export_download_url }}">
-            <i class="fa-solid fa-download"></i>
-            Download export
+        <div id="chat-export-progress" class="flex items-center gap-2">
+            <div class="progress-wrapper progress w-32 bg-base-300 rounded-full overflow-hidden h-2">
+                <div id="chat-export-bar"
+                     class="progress-bar h-full bg-primary transition-all duration-300 ease-out"
+                     style="width: 0%"></div>
+            </div>
+            <span id="chat-export-percent" class="text-xs text-base-content/70">0%</span>
+        </div>
+
+        <a id="chat-export-download" class="btn btn-sm btn-outline btn-primary" href="#" style="display: none;">
+            <i class="fa-solid fa-download"></i> {% translate "Download export" %}
         </a>
+
+        <span id="chat-export-error" class="text-xs text-error" style="display: none;"></span>
+
+        {% translate "Generate Chat Export" as generate_label %}
+        {% translate "No file was created. Please try again." as msg_no_file %}
+        {% translate "An error occurred while creating the export." as msg_generic_error %}
+        {% translate "Network error — check your connection." as msg_network_error %}
+        {% translate "Server error — please try again." as msg_server_error %}
+        <script>
+          (function () {
+            const progressUrl = "{% url 'celery_progress:task_status' task_id %}";
+            const downloadBaseUrl = "{% url 'files:base' team.slug 0 %}";
+
+            // Translated strings piped through escapejs so locales with quotes/apostrophes
+            // (e.g. French) can't break out of these JS string literals.
+            const GENERATE_LABEL = '{{ generate_label|escapejs }}';
+            const MSG_NO_FILE = '{{ msg_no_file|escapejs }}';
+            const MSG_GENERIC_ERROR = '{{ msg_generic_error|escapejs }}';
+            const MSG_NETWORK_ERROR = '{{ msg_network_error|escapejs }}';
+            const MSG_SERVER_ERROR = '{{ msg_server_error|escapejs }}';
+
+            const generateBtn = document.getElementById("chat-export-generate-btn");
+            const progressEl = document.getElementById("chat-export-progress");
+            const bar = document.getElementById("chat-export-bar");
+            const percentEl = document.getElementById("chat-export-percent");
+            const downloadLink = document.getElementById("chat-export-download");
+            const errorEl = document.getElementById("chat-export-error");
+
+            function resetGenerateButton() {
+              if (!generateBtn) return;
+              generateBtn.disabled = false;
+              generateBtn.innerHTML = '<i class="fa-solid fa-file-export"></i> ' + GENERATE_LABEL;
+            }
+
+            function showError(message) {
+              if (progressEl) progressEl.style.display = "none";
+              if (errorEl) {
+                errorEl.textContent = message;
+                errorEl.style.display = "";
+              }
+              resetGenerateButton();
+            }
+
+            CeleryProgressBar.initProgressBar(progressUrl, {
+              pollInterval: 500,
+
+              onProgress: function (_bar, _msg, progress) {
+                const percent = progress.percent || 0;
+                if (bar) bar.style.width = percent + "%";
+                if (percentEl) percentEl.textContent = Math.round(percent) + "%";
+              },
+
+              onSuccess: function (_bar, _msg, result) {
+                const fileId = result && result.file_id;
+                if (!fileId) {
+                  showError(MSG_NO_FILE);
+                  return;
+                }
+                if (downloadLink) {
+                  downloadLink.href = downloadBaseUrl.replace(/\/0(\/?$)/, "/" + fileId + "$1") + "?allow_s3";
+                  downloadLink.style.display = "";
+                }
+                if (progressEl) progressEl.style.display = "none";
+                resetGenerateButton();
+              },
+
+              onError: function () {
+                showError(MSG_GENERIC_ERROR);
+              },
+
+              onTaskError: function (_bar, _msg, excMessage) {
+                showError(excMessage || MSG_GENERIC_ERROR);
+              },
+
+              onNetworkError: function () {
+                showError(MSG_NETWORK_ERROR);
+              },
+
+              onHttpError: function () {
+                showError(MSG_SERVER_ERROR);
+              },
+            });
+          })();
+        </script>
     {% endif %}
 </div>
