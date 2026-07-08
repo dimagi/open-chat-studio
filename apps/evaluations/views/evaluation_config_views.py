@@ -127,8 +127,8 @@ class EditEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateV
 class DeleteEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluationconfig"
 
-    def delete(self, request, *args, **kwargs):
-        evaluation = get_object_or_404(EvaluationConfig, team=request.team, pk=kwargs["pk"])
+    def delete(self, request, team_slug: str, pk: int):
+        evaluation = get_object_or_404(EvaluationConfig, team=request.team, pk=pk)
         evaluation.delete()
         response = HttpResponse(status=200)
         if request.GET.get("redirect") == "1":

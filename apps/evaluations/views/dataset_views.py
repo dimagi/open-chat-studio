@@ -158,9 +158,9 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
 class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluationdataset"
 
-    def delete(self, request, *args, **kwargs):
+    def delete(self, request, team_slug: str, pk: int):
         """Handle AJAX delete requests."""
-        dataset = get_object_or_404(EvaluationDataset, team=request.team, pk=kwargs["pk"])
+        dataset = get_object_or_404(EvaluationDataset, team=request.team, pk=pk)
         dataset.delete()
 
         return HttpResponse(status=200)

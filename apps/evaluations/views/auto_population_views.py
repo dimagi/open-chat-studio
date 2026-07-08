@@ -90,8 +90,8 @@ class EditAutoPopulationRule(_RuleViewMixin, UpdateView):
 class DeleteAutoPopulationRule(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.change_evaluationdataset"
 
-    def delete(self, request, *args, **kwargs):
-        get_object_or_404(DatasetAutoPopulationRule, team=request.team, pk=kwargs["pk"]).delete()
+    def delete(self, request, team_slug: str, pk: int):
+        get_object_or_404(DatasetAutoPopulationRule, team=request.team, pk=pk).delete()
         return HttpResponse(status=200)
 
 

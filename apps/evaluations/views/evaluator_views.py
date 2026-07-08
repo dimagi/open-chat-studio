@@ -178,8 +178,8 @@ class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Evaluato
 class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluator"
 
-    def delete(self, request, *args, **kwargs):
-        evaluator = get_object_or_404(Evaluator, team=request.team, pk=kwargs["pk"])
+    def delete(self, request, team_slug: str, pk: int):
+        evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
         evaluator.delete()
         return HttpResponse(status=200)
 
