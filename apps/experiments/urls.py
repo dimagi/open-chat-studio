@@ -89,11 +89,6 @@ urlpatterns = [
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
     path("e/<int:experiment_id>/exports/generate", views.generate_chat_export, name="generate_chat_export"),
-    path(
-        "e/<int:experiment_id>/exports/result/<slug:task_id>",
-        views.get_export_download_link,
-        name="get_export_download_link",
-    ),
     # public links
     path(
         "e/<uuid:experiment_id>/s/<str:session_id>/",
