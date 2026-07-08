@@ -91,24 +91,34 @@ def check_source_team_ready(client) -> None:
         raise CommandError(" ".join(problems))
 
 
+def _prompt(message: str) -> str:
+    """input() that turns EOF (no terminal -- cron, CI, piped stdin) into a clean abort."""
+    try:
+        return input(message)
+    except EOFError:
+        raise CommandError("This command must be run interactively; stdin is closed.") from None
+
+
 def check_sync_preconditions(client, private_key, enforce_schema=True, store=None) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
     its schema matches, we hold a key for any sealed secrets, and the source team is ready to export
-    (migration mode on, public key set). Returns the manifest. Raises CommandError on any failure --
-    call this *before* any destructive local change (--force-delete) so a wrong key path, unreachable
-    source, schema mismatch, or an unready source team can't leave the team deleted."""
-    if store is not None and not store.has_flag(FILES_CONFIRMED_FLAG):
-        answer = input(
+    (migration mode on, public key set). When a ``store`` is given, also ask the operator to confirm
+    the team's files were moved to this server's storage backend -- that happens outside this command
+    and the sync fails without it. The answer is recorded in the store only once every check passes,
+    so an aborted run asks again while a rerun after a clean preflight doesn't. Returns the manifest.
+    Raises CommandError on any failure, before any rows are imported."""
+    files_confirmation_needed = store is not None and not store.has_flag(FILES_CONFIRMED_FLAG)
+    if files_confirmation_needed:
+        answer = _prompt(
             "Have you exported the team's files from the source server and imported them into "
             "this server's storage backend? [yes/no]: "
         )
-        if answer != "yes":
+        if answer.strip().lower() != "yes":
             raise CommandError(
                 "The team's files must be exported from the source server and imported into this "
                 "server's storage backend before syncing, otherwise the sync will fail. Do that "
                 "first, then rerun this command."
             )
-        store.set_flag(FILES_CONFIRMED_FLAG)
 
     manifest = client.get_manifest()
     if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
@@ -124,6 +134,8 @@ def check_sync_preconditions(client, private_key, enforce_schema=True, store=Non
         )
 
     check_source_team_ready(client)
+    if files_confirmation_needed:
+        store.set_flag(FILES_CONFIRMED_FLAG)
     return manifest
 
 
@@ -335,4 +347,4 @@ class Command(BaseCommand):
                 "before re-importing."
             )
         )
-        return input("Type 'yes' to continue: ") == "yes"
+        return _prompt("Type 'yes' to continue: ") == "yes"

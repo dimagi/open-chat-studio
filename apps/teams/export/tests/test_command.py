@@ -137,12 +137,38 @@ def test_files_confirmation_is_asked_once_and_remembered(tmp_path, keypair, monk
     with pytest.raises(CommandError, match="files"):
         check_sync_preconditions(client, keypair[1], store=store)
 
-    monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
+    monkeypatch.setattr("builtins.input", lambda *a, **k: " Yes ")  # affirmative in any case/spacing
     check_sync_preconditions(client, keypair[1], store=store)
 
     reopened = FKTranslationStore(tmp_path / "t.sqlite")
     monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted again after confirmation"))
     check_sync_preconditions(client, keypair[1], store=reopened)
+
+
+def test_files_confirmation_is_not_remembered_when_preconditions_fail(tmp_path, keypair, monkeypatch):
+    """A "yes" is only recorded once every other check passes, so an aborted run asks again."""
+    manifest, rows = _scenario(keypair[0])
+    manifest["schema_checksum"] += "-mismatch"
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
+
+    with pytest.raises(CommandError, match="schema"):
+        check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
+
+    assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
+
+
+def test_files_confirmation_fails_cleanly_without_a_terminal(tmp_path, keypair, monkeypatch):
+    """EOF on stdin (cron, CI, piped input) must abort with a CommandError, not a raw EOFError."""
+
+    def eof(*args, **kwargs):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", eof)
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    with pytest.raises(CommandError, match="interactively"):
+        check_sync_preconditions(FakeClient(*_scenario(keypair[0])), keypair[1], store=store)
 
 
 def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
