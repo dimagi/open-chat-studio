@@ -232,17 +232,19 @@ def _get_search_tool(node):
 
 
 def _get_final_ai_message(messages: list) -> AIMessage:
-    """Return the last AI message with non-empty content.
+    """Return the last AI message with non-empty text content.
 
     Claude (and some other models) sometimes respond with a non-empty message
-    alongside tool calls, then send an empty content array after receiving
-    the tool results — signalling completion via the tool flow rather than
-    a follow-up text turn.  In that case ``messages[-1]`` is empty and
-    we should use the last message that actually has content instead.
+    alongside tool calls, then send further turns that carry only tool calls
+    (a ``tool_use`` block with no text) or an empty content array — signalling
+    completion via the tool flow rather than a follow-up text turn.  Those
+    trailing turns render to empty output, so we walk backwards and return the
+    last message that actually has text.  ``message.text`` handles both plain
+    string content and structured content blocks, ignoring tool-call blocks.
     """
     for message in reversed(messages):
-        if isinstance(message, AIMessage) and message.content:
+        if isinstance(message, AIMessage) and message.text:
             return message
     # Fallback: return the last message as-is (preserves existing behaviour
-    # when all AI messages are empty, e.g. pure tool-call chains).
+    # when no AI message has text, e.g. pure tool-call chains).
     return messages[-1]
