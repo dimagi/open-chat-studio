@@ -1,6 +1,4 @@
-from django.contrib.postgres.operations import (
-    AddIndexConcurrently,  # ty: ignore[unresolved-import]
-)
+from django.contrib.postgres.operations import AddIndexConcurrently
 from django.db import migrations, models
 
 
