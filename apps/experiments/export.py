@@ -200,6 +200,10 @@ def generate_export_rows(
     session_cache: dict[int, dict] = {}
     processed = 0
 
+    def report(count):
+        if progress_callback:
+            progress_callback(count)
+
     while True:
         chunk = list(base_qs.filter(pk__gt=last_pk)[:EXPORT_CHUNK_SIZE])
         if not chunk:
@@ -208,15 +212,17 @@ def generate_export_rows(
         for message in chunk:
             yield _yield_row_for_message(message, session_cache, experiment, translation_language)
             processed += 1
-            if progress_callback and processed % PROGRESS_UPDATE_INTERVAL == 0:
-                progress_callback(processed)
+            if processed % PROGRESS_UPDATE_INTERVAL == 0:
+                report(processed)
 
         last_pk = chunk[-1].pk
         if len(chunk) < EXPORT_CHUNK_SIZE:
             break
 
-    if progress_callback and processed and processed % PROGRESS_UPDATE_INTERVAL != 0:
-        progress_callback(processed)
+    # Report the final tally so the last partial interval (and exports smaller than one
+    # interval) still reach 100%. processed == 0 is a no-op since 0 % INTERVAL == 0.
+    if processed % PROGRESS_UPDATE_INTERVAL != 0:
+        report(processed)
 
 
 def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
