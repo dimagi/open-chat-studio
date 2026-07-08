@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from apps.evaluations.models import EvaluationDataset
 from apps.utils.factories.evaluations import EvaluationDatasetFactory
-from apps.utils.factories.team import MembershipFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import GroupFactory
 
 
@@ -38,4 +38,18 @@ def test_delete_dataset_without_delete_perm_is_forbidden(client, team_with_users
     response = client.delete(url)
 
     assert response.status_code == 403
+    assert EvaluationDataset.objects.filter(id=dataset.id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_dataset_for_other_team_returns_404(client, team_with_users):
+    user = team_with_users.members.first()
+    other_team = TeamFactory.create()
+    dataset = EvaluationDatasetFactory.create(team=other_team)
+
+    client.force_login(user)
+    url = reverse("evaluations:dataset_delete", args=[team_with_users.slug, dataset.id])
+    response = client.delete(url)
+
+    assert response.status_code == 404
     assert EvaluationDataset.objects.filter(id=dataset.id).exists()
