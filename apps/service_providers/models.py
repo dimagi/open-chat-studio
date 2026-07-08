@@ -577,6 +577,7 @@ class AuthProviderType(models.TextChoices):
     api_key = "api_key", _("API Key")
     bearer = "bearer", _("Bearer Auth")
     commcare = "commcare", _("CommCare")
+    oauth_client_credentials = "oauth_client_credentials", _("OAuth (Client Credentials)")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -591,6 +592,8 @@ class AuthProviderType(models.TextChoices):
                 return forms.BearerAuthConfigForm
             case AuthProviderType.commcare:
                 return forms.CommCareAuthConfigForm
+            case AuthProviderType.oauth_client_credentials:
+                return forms.OAuthClientCredentialsConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
@@ -616,6 +619,7 @@ class AuthProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=AuthProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    _auth_data = encrypt(models.JSONField(default=dict))
 
     class Meta:
         ordering = ("type", "name")
@@ -628,6 +632,11 @@ class AuthProvider(BaseTeamModel):
         return AuthProviderType(self.type)
 
     def get_auth_service(self) -> auth_service.AuthService:
+        if self.type_enum == AuthProviderType.oauth_client_credentials:
+            from apps.service_providers.auth_service.oauth import OAuthTokenManager  # noqa: PLC0415 - circular
+
+            token = OAuthTokenManager(self).get_valid_access_token()
+            return auth_service.BearerTokenAuthService(token=token)
         return self.type_enum.get_auth_service(self.config)
 
 
