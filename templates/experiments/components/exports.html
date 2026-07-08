@@ -58,7 +58,10 @@
             function resetGenerateButton() {
               if (!generateBtn) return;
               generateBtn.disabled = false;
-              generateBtn.innerHTML = '<i class="fa-solid fa-file-export"></i> ' + GENERATE_LABEL;
+              // Set the label via textContent, not innerHTML: escapejs guards the JS string
+              // context but not HTML, so a translated label with <, > or & stays literal text.
+              generateBtn.innerHTML = '<i class="fa-solid fa-file-export"></i> ';
+              generateBtn.appendChild(document.createTextNode(GENERATE_LABEL));
             }
 
             function showError(message) {
@@ -86,7 +89,8 @@
                   return;
                 }
                 if (downloadLink) {
-                  downloadLink.href = downloadBaseUrl.replace(/\/0(\/?$)/, "/" + fileId + "$1") + "?allow_s3";
+                  // Function replacement so a "$" in fileId can't be read as a $-substitution.
+                  downloadLink.href = downloadBaseUrl.replace(/\/0(\/?$)/, (_m, p1) => "/" + fileId + p1) + "?allow_s3";
                   downloadLink.style.display = "";
                 }
                 if (progressEl) progressEl.style.display = "none";
