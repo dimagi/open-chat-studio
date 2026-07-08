@@ -1,3 +1,5 @@
+import hashlib
+import json
 import time
 from typing import TYPE_CHECKING
 
@@ -18,6 +20,16 @@ EXPIRY_SKEW_SECONDS = 60
 # Fallback lifetime used when the token endpoint omits `expires_in`. Caching for
 # a bounded window is better than refetching on every request.
 DEFAULT_TOKEN_TTL_SECONDS = 3600
+
+# Config fields the token depends on. A change to any of them invalidates the
+# cached token so the next request refetches under the new config.
+_FINGERPRINTED_CONFIG_FIELDS = (
+    "client_id",
+    "client_secret",
+    "token_url",
+    "scope",
+    "token_endpoint_auth_method",
+)
 
 
 class TokenEndpointAuthMethod:
@@ -42,7 +54,7 @@ class OAuthTokenManager:
 
     def get_valid_access_token(self) -> str:
         token = self.provider._auth_data
-        if token and not _is_expired(token):
+        if _token_is_valid(token, self.provider.config):
             return token["access_token"]
         return self._refetch_with_lock()
 
@@ -57,15 +69,30 @@ class OAuthTokenManager:
         model = type(self.provider)
         with transaction.atomic():
             provider = model.objects.select_for_update().get(pk=self.provider.pk)
-            if provider._auth_data and not _is_expired(provider._auth_data):
+            if _token_is_valid(provider._auth_data, provider.config):
                 token = provider._auth_data
             else:
                 token = _fetch_client_credentials_token(provider.config)
+                token["config_fingerprint"] = _config_fingerprint(provider.config)
                 provider._auth_data = token
                 provider.save(update_fields=["_auth_data"])
             # Keep the in-memory instance in sync so subsequent reads see the token.
             self.provider._auth_data = token
         return token["access_token"]
+
+
+def _token_is_valid(token: dict, config: dict) -> bool:
+    """A cached token is usable while it is unexpired and was issued under the current config."""
+    if not token:
+        return False
+    if token.get("config_fingerprint") != _config_fingerprint(config):
+        return False
+    return not _is_expired(token)
+
+
+def _config_fingerprint(config: dict) -> str:
+    relevant = {field: config.get(field) for field in _FINGERPRINTED_CONFIG_FIELDS}
+    return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()
 
 
 def _is_expired(token: dict) -> bool:

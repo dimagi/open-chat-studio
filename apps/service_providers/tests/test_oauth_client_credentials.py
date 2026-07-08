@@ -9,6 +9,7 @@ from apps.service_providers.auth_service.oauth import (
     EXPIRY_SKEW_SECONDS,
     OAuthTokenError,
     OAuthTokenManager,
+    _config_fingerprint,
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
@@ -127,13 +128,42 @@ def test_refetches_when_token_missing_or_expiring(team, stored_token):
 @pytest.mark.django_db()
 def test_valid_token_is_not_refetched(team):
     provider = _make_provider(team)
-    provider._auth_data = {"access_token": "still-good", "token_type": "Bearer", "expires_at": time.time() + 3600}
+    provider._auth_data = {
+        "access_token": "still-good",
+        "token_type": "Bearer",
+        "expires_at": time.time() + 3600,
+        "config_fingerprint": _config_fingerprint(provider.config),
+    }
     provider.save(update_fields=["_auth_data"])
 
     with patch("apps.service_providers.auth_service.oauth._fetch_client_credentials_token") as mock_fetch:
         assert OAuthTokenManager(provider).get_valid_access_token() == "still-good"
 
     mock_fetch.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_config_change_invalidates_cached_token(team):
+    """Changing a token-relevant config field (e.g. scope) refetches under the new config."""
+    provider = _make_provider(team)
+    provider._auth_data = {
+        "access_token": "old-scope-token",
+        "token_type": "Bearer",
+        "expires_at": time.time() + 3600,
+        "config_fingerprint": _config_fingerprint(provider.config),
+    }
+    provider.save(update_fields=["_auth_data"])
+
+    provider.config = {**provider.config, "scope": "read write admin"}
+    provider.save(update_fields=["config"])
+
+    fresh = {"access_token": "new-scope-token", "token_type": "Bearer", "expires_at": time.time() + 3600}
+    with patch(
+        "apps.service_providers.auth_service.oauth._fetch_client_credentials_token", return_value=fresh
+    ) as mock_fetch:
+        assert OAuthTokenManager(provider).get_valid_access_token() == "new-scope-token"
+
+    assert mock_fetch.call_count == 1
 
 
 @pytest.mark.django_db()
