@@ -213,6 +213,7 @@ def test_token_request_auth_method(team, httpx_mock, auth_method, expect_basic_h
     request = httpx_mock.get_request()
     body = request.content.decode()
     assert "grant_type=client_credentials" in body
+    assert "scope=read+write" in body
     if expect_basic_header:
         # HTTP Basic: credentials in the Authorization header, not the body.
         assert request.headers["Authorization"].startswith("Basic ")
@@ -221,6 +222,18 @@ def test_token_request_auth_method(team, httpx_mock, auth_method, expect_basic_h
         assert "Authorization" not in request.headers
         assert "client_secret=my-secret" in body
         assert "client_id=my-client" in body
+
+
+@pytest.mark.django_db()
+def test_token_response_with_narrowed_scope_is_accepted(team, httpx_mock):
+    """A server granting a different scope than requested must not raise (RFC 6749 §3.3)."""
+    provider = _make_provider(team)  # requests "read write"
+    httpx_mock.add_response(
+        url=TOKEN_URL,
+        json={"access_token": "tok", "token_type": "Bearer", "expires_in": 3600, "scope": "read"},
+    )
+
+    assert OAuthTokenManager(provider).get_valid_access_token() == "tok"
 
 
 @pytest.mark.django_db()

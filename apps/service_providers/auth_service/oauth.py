@@ -108,10 +108,14 @@ def _fetch_client_credentials_token(config: dict) -> dict:
     scope = config.get("scope") or None
     _validate_token_url(token_url)
 
-    client = BackendApplicationClient(client_id=config["client_id"], scope=scope)
-    body, request_kwargs = _prepare_token_request(client, config)
+    # The scope is set on the request body only, not on the client. A server may
+    # grant a different scope than requested (RFC 6749 §3.3); if the client held a
+    # scope, oauthlib would raise on that mismatch when parsing. We don't consume
+    # the granted scope, so we let it differ silently.
+    client = BackendApplicationClient(client_id=config["client_id"])
+    body, request_kwargs = _prepare_token_request(client, config, scope)
     response_text = _post_token_request(token_url, body, request_kwargs)
-    return _parse_token_response(client, response_text, token_url, scope)
+    return _parse_token_response(client, response_text, token_url)
 
 
 def _validate_token_url(token_url: str) -> None:
@@ -126,13 +130,13 @@ def _validate_token_url(token_url: str) -> None:
         raise OAuthTokenError(f"Invalid OAuth token URL {token_url}: {exc}") from exc
 
 
-def _prepare_token_request(client: BackendApplicationClient, config: dict) -> tuple[str, dict]:
+def _prepare_token_request(client: BackendApplicationClient, config: dict, scope) -> tuple[str, dict]:
     """Build the request body and httpx kwargs for the configured auth method."""
     auth_method = config.get("token_endpoint_auth_method", TokenEndpointAuthMethod.CLIENT_SECRET_BASIC)
     if auth_method == TokenEndpointAuthMethod.CLIENT_SECRET_POST:
-        body = client.prepare_request_body(include_client_id=True, client_secret=config["client_secret"])
+        body = client.prepare_request_body(scope=scope, include_client_id=True, client_secret=config["client_secret"])
         return body, {}
-    body = client.prepare_request_body()
+    body = client.prepare_request_body(scope=scope)
     return body, {"auth": httpx.BasicAuth(config["client_id"], config["client_secret"])}
 
 
@@ -152,10 +156,10 @@ def _post_token_request(token_url: str, body: str, request_kwargs: dict) -> str:
     return response.text
 
 
-def _parse_token_response(client: BackendApplicationClient, response_text: str, token_url: str, scope) -> dict:
+def _parse_token_response(client: BackendApplicationClient, response_text: str, token_url: str) -> dict:
     """Parse the token response and normalise it to the fields we persist."""
     try:
-        token = client.parse_request_body_response(response_text, scope=scope)
+        token = client.parse_request_body_response(response_text)
     except OAuth2Error as exc:
         raise OAuthTokenError(f"Invalid OAuth token response from {token_url}: {exc}") from exc
 
