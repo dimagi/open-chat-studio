@@ -20,13 +20,19 @@ class ResourceFetcher:
         self.backoff = 1.0
         self._session = session or requests.Session()
         self._sleep = sleep
+        self._team = None
 
     def get_manifest(self) -> dict:
         return self._get("/api/export/manifest/")
 
     def get_team(self) -> dict:
-        """The team itself, served as a single object at the ``export/team/`` path (not a page)."""
-        return self._get("/api/export/team/")
+        """The team itself, served as a single object at the ``export/team/`` path (not a page). Cached
+        for the fetcher's lifetime (one sync run): the team is read more than once per run -- the
+        readiness precondition and again to anchor the import -- but doesn't change mid-sync, so a
+        single request suffices."""
+        if self._team is None:
+            self._team = self._get("/api/export/team/")
+        return self._team
 
     def get_page(self, resource, cursor=None, limit=100) -> dict:
         params = {"limit": limit}

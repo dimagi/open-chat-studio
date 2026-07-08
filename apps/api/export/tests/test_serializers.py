@@ -15,6 +15,7 @@ from apps.api.export.serializers import (
     ManifestSerializer,
     build_resource_response_serializer,
     build_resource_serializer,
+    build_team_serializer,
 )
 from apps.assessments.models import Score
 from apps.chat.models import Chat
@@ -63,10 +64,31 @@ def test_team_serializer_excludes_members_and_public_key_and_lists_flags():
     data = _serialize(Team, team)
     assert "members" not in data
     assert "public_key" not in data
+    # is_migrating is an internal operational flag; it must not be replicated to an import target.
+    assert "is_migrating" not in data
     assert isinstance(data["feature_flags"], list)
     assert data["id"] == team.id
     assert "created_at" in data
     assert "updated_at" in data
+
+
+@pytest.mark.parametrize(
+    ("public_key", "expected_has_public_key"),
+    [
+        pytest.param("a-key", True, id="key-set"),
+        pytest.param("", False, id="no-key"),
+    ],
+)
+def test_team_endpoint_serializer_adds_status_fields(public_key, expected_has_public_key):
+    """The team endpoint serializer extends the importable row with the two status fields the sync
+    client preflights on: is_migrating, and has_public_key collapsed to a boolean presence flag -- so the
+    key material and the members list never go out."""
+    team = TeamFactory(public_key=public_key, is_migrating=True)
+    data = build_team_serializer()(team).data
+    assert data["is_migrating"] is True
+    assert data["has_public_key"] is expected_has_public_key  # a boolean presence flag, never the key material
+    assert "public_key" not in data  # the raw key field must never appear alongside the boolean
+    assert "members" not in data
 
 
 def test_customuser_serializer_drops_password_and_perms():

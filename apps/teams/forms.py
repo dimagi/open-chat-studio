@@ -132,6 +132,18 @@ class TeamPublicKeyForm(forms.ModelForm):
         return value
 
 
+class TeamMigrationForm(forms.ModelForm):
+    class Meta:
+        model = Team
+        fields = ("is_migrating",)
+        labels = {"is_migrating": _("Migration mode")}
+        help_texts = {
+            "is_migrating": _(
+                "Freeze this team's outbound message firing while its data is migrated to another server."
+            ),
+        }
+
+
 class NotifyRecipientsForm(forms.Form):
     NOTIFICATION_CHOICES = [
         ("self", "Send email notification to myself"),

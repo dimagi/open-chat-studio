@@ -119,13 +119,17 @@ SECRET_REGISTRY: dict[str, list[str]] = {
 # not propagated (is_staff/is_superuser are crosscutting perms). The user's auth ``groups`` stay in --
 # the serializer's ``groups`` method field overrides them with the team role.
 EXCLUDE_REGISTRY: dict[str, list[str]] = {
-    "teams.team": ["members", "public_key", "files_export", "files_export_task_id"],
+    "teams.team": ["members", "public_key", "files_export", "files_export_task_id", "is_migrating"],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
     # Collection.files / DocumentSource.files are M2M through CollectionFile (extra columns). Excluding
     # them stops the serializer emitting a bare pk list the importer would .set() -- Django rejects
     # that for explicit through models. CollectionFile rows (their own entry) carry the link.
     "documents.collection": ["files"],
     "documents.documentsource": ["files"],
+    # Tag slugs are unique across the whole server (taggit) while tags are team-scoped, so a source
+    # slug may already be taken by another team on the target. TagBase.save() regenerates a
+    # collision-free slug when it's absent.
+    "annotations.tag": ["slug"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).
