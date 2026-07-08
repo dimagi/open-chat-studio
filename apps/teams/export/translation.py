@@ -20,6 +20,7 @@ class FKTranslationStore:
             "content_type TEXT NOT NULL, source_key INTEGER NOT NULL, target_key INTEGER, "
             "PRIMARY KEY (content_type, source_key))"
         )
+        self._conn.execute("CREATE TABLE IF NOT EXISTS flags (name TEXT PRIMARY KEY)")
         self._conn.commit()
         self._index: dict[str, dict[int, int | None]] = {}
         for content_type, source_key, target_key in self._conn.execute(
@@ -55,6 +56,14 @@ class FKTranslationStore:
         """Highest source pk already created for a model -- the pk cursor for resuming the pull."""
         committed = self.committed_targets(content_type)
         return max(committed) if committed else None
+
+    def has_flag(self, name: str) -> bool:
+        """True if the run-scoped flag was set on a previous run (e.g. a confirmation already given)."""
+        return self._conn.execute("SELECT 1 FROM flags WHERE name = ?", (name,)).fetchone() is not None
+
+    def set_flag(self, name: str) -> None:
+        self._conn.execute("INSERT OR IGNORE INTO flags (name) VALUES (?)", (name,))
+        self._conn.commit()
 
     def has_unfilled_targets(self) -> bool:
         """True if any recorded row still lacks a target -- i.e. a prior run was interrupted."""

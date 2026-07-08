@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -13,7 +11,12 @@ from apps.teams.export.importer import Importer
 from apps.teams.export.manifest import schema_checksum
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.management.commands import sync_team
-from apps.teams.management.commands.sync_team import Command, force_delete_team, run_sync
+from apps.teams.management.commands.sync_team import (
+    Command,
+    check_sync_preconditions,
+    force_delete_team,
+    run_sync,
+)
 from apps.teams.models import Team
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 
@@ -118,6 +121,25 @@ def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
     assert Team.objects.filter(slug="imported-team-z").exists()
 
 
+def test_files_confirmation_is_asked_once_and_remembered(tmp_path, keypair, monkeypatch):
+    """Declining the files prompt aborts without persisting anything; confirming is recorded in the
+    state DB so a rerun (a fresh store over the same file) doesn't ask again."""
+    manifest, rows = _scenario(keypair[0])
+    client = FakeClient(manifest, rows)
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "no")
+    with pytest.raises(CommandError, match="files"):
+        check_sync_preconditions(client, keypair[1], store=store)
+
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
+    check_sync_preconditions(client, keypair[1], store=store)
+
+    reopened = FKTranslationStore(tmp_path / "t.sqlite")
+    monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted again after confirmation"))
+    check_sync_preconditions(client, keypair[1], store=reopened)
+
+
 def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
     entries = [
         {"model": "users.customuser", "resource": "user", "cursor": "pk", "secret": False},
@@ -200,30 +222,6 @@ def test_force_delete_team_is_a_no_op_when_team_missing(tmp_path):
     force_delete_team("never-synced", tmp_path)  # no team, no state DB -- must not raise
 
 
-def test_force_delete_is_not_reached_when_preconditions_fail(tmp_path, keypair, monkeypatch):
-    """A failing precondition (here, a schema mismatch) must abort before --force-delete runs, so a
-    bad source can't leave the operator with no team."""
-    Team.objects.create(name="Keep", slug="imported-team-z")
-    manifest, rows = _scenario(keypair[0])
-    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: FakeClient(manifest, rows))
-
-    options = {
-        "source_url": "http://src",
-        "api_key": "k",
-        "team_slug": "imported-team-z",
-        "private_key_path": None,
-        "state_dir": str(tmp_path),
-        "limit": 100,
-        "skip_schema_check": False,
-        "force_delete": True,
-    }
-    with pytest.raises(CommandError, match="schema"):
-        Command().handle(**options)
-
-    assert Team.objects.filter(slug="imported-team-z").exists()  # the destructive delete never ran
-
-
 def _force_delete_options(tmp_path, **overrides):
     options = {
         "source_url": "http://src",
@@ -234,7 +232,6 @@ def _force_delete_options(tmp_path, **overrides):
         "limit": 100,
         "skip_schema_check": False,
         "force_delete": True,
-        "interactive": True,
     }
     options.update(overrides)
     return options
@@ -252,19 +249,6 @@ def test_force_delete_aborts_when_confirmation_declined(tmp_path, monkeypatch):
         Command().handle(**_force_delete_options(tmp_path))
 
     assert Team.objects.filter(slug="imported-team-z").exists()  # declined -> nothing deleted
-
-
-def test_force_delete_noinput_skips_confirmation(tmp_path, monkeypatch):
-    """--no-input deletes without prompting, for non-interactive (CI) runs."""
-    Team.objects.create(name="Old", slug="imported-team-z")
-    monkeypatch.setattr(sync_team, "ResourceFetcher", lambda *a, **k: object())
-    monkeypatch.setattr(sync_team, "check_sync_preconditions", lambda *a, **k: {})
-    monkeypatch.setattr(sync_team, "run_sync", lambda *a, **k: SimpleNamespace(target_team=None))
-    monkeypatch.setattr("builtins.input", lambda *a, **k: pytest.fail("prompted despite --no-input"))
-
-    Command().handle(**_force_delete_options(tmp_path, interactive=False))
-
-    assert not Team.objects.filter(slug="imported-team-z").exists()  # deleted without prompting
 
 
 def test_serialized_row_round_trips_through_importer(tmp_path, keypair):

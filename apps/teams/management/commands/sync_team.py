@@ -40,11 +40,29 @@ def _start_cursor(model_label, cursor_type, store, model):
     return derive_updated_at_cursor(pairs)
 
 
-def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
+FILES_CONFIRMED_FLAG = "files_confirmed"
+
+
+def check_sync_preconditions(client, private_key, enforce_schema=True, store=None) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
-    its schema matches, and we hold a key for any sealed secrets. Returns the manifest. Raises
-    CommandError on any failure -- call this *before* any destructive local change (--force-delete)
-    so a wrong key path, unreachable source, or schema mismatch can't leave the team deleted."""
+    its schema matches, and we hold a key for any sealed secrets. When a ``store`` is given, first
+    ask the operator to confirm the team's files were moved to this server's storage backend -- that
+    happens outside this command and the sync fails without it. The confirmation is recorded in the
+    store so reruns don't ask again. Returns the manifest. Raises CommandError on any failure,
+    before any rows are imported."""
+    if store is not None and not store.has_flag(FILES_CONFIRMED_FLAG):
+        answer = input(
+            "Have you exported the team's files from the source server and imported them into "
+            "this server's storage backend? [yes/no]: "
+        )
+        if answer != "yes":
+            raise CommandError(
+                "The team's files must be exported from the source server and imported into this "
+                "server's storage backend before syncing, otherwise the sync will fail. Do that "
+                "first, then rerun this command."
+            )
+        store.set_flag(FILES_CONFIRMED_FLAG)
+
     manifest = client.get_manifest()
     if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
         raise CommandError(
@@ -139,13 +157,6 @@ class Command(BaseCommand):
             action="store_true",
             help="Delete the local team and its sync state before syncing, for a clean re-import.",
         )
-        parser.add_argument(
-            "--noinput",
-            "--no-input",
-            action="store_false",
-            dest="interactive",
-            help="Skip the --force-delete confirmation prompt (for non-interactive runs).",
-        )
 
     def handle(self, *args, **options):
         private_key = None
@@ -155,12 +166,8 @@ class Command(BaseCommand):
         client = ResourceFetcher(options["source_url"], options["api_key"])
         enforce_schema = not options["skip_schema_check"]
 
-        # Preflight before the destructive --force-delete: a bad key path (read above), an
-        # unreachable source, or a schema mismatch must fail while the existing team is still intact.
-        check_sync_preconditions(client, private_key, enforce_schema)
-
         if options["force_delete"]:
-            if options.get("interactive", True) and not self._confirm_force_delete(options["team_slug"]):
+            if not self._confirm_force_delete(options["team_slug"]):
                 raise CommandError("Aborted: --force-delete not confirmed.")
             force_delete_team(
                 options["team_slug"],
@@ -169,6 +176,8 @@ class Command(BaseCommand):
             )
 
         store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
+
+        check_sync_preconditions(client, private_key, enforce_schema, store=store)
 
         run_sync(
             client,
