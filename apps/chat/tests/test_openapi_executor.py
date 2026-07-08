@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from langchain_community.utilities.openapi import OpenAPISpec
@@ -119,7 +119,8 @@ def test_openapi_tool_response_content_disposition_attachment(httpx_mock, filena
 
 
 @pytest.mark.django_db()
-def test_openapi_tool_oauth_client_credentials_auth(httpx_mock, team):
+@patch("apps.service_providers.auth_service.oauth.validate_user_input_url")
+def test_openapi_tool_oauth_client_credentials_auth(mock_validate, httpx_mock, team):
     """A custom action backed by an OAuth provider sends a fetched bearer token."""
     provider = AuthProviderFactory.create(
         team=team,

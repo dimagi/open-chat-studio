@@ -12,6 +12,7 @@ from apps.service_providers.auth_service.oauth import (
 )
 from apps.service_providers.models import AuthProvider, AuthProviderType
 from apps.utils.factories.service_provider_factories import AuthProviderFactory
+from apps.utils.urlvalidate import InvalidURL
 
 TOKEN_URL = "https://auth.example.com/token"
 
@@ -30,6 +31,13 @@ def _make_provider(team, **config_overrides):
         type=AuthProviderType.oauth_client_credentials,
         config={**CONFIG, **config_overrides},
     )
+
+
+@pytest.fixture(autouse=True)
+def _allow_token_url():
+    """Bypass the SSRF guard's DNS resolution for the placeholder token host."""
+    with patch("apps.service_providers.auth_service.oauth.validate_user_input_url"):
+        yield
 
 
 # --- Form validation ---
@@ -215,3 +223,15 @@ def test_token_response_missing_access_token_raises(team, httpx_mock):
 
     with pytest.raises(OAuthTokenError):
         OAuthTokenManager(provider).get_valid_access_token()
+
+
+@pytest.mark.django_db()
+def test_token_url_failing_ssrf_guard_is_rejected(team):
+    """A token URL that resolves to an internal host is refused before any request."""
+    provider = _make_provider(team)
+    with patch(
+        "apps.service_providers.auth_service.oauth.validate_user_input_url",
+        side_effect=InvalidURL("Unsafe IP address"),
+    ):
+        with pytest.raises(OAuthTokenError, match="Invalid OAuth token URL"):
+            OAuthTokenManager(provider).get_valid_access_token()

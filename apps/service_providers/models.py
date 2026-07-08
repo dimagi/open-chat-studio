@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
+from apps.service_providers.auth_service.oauth import OAuthTokenManager
 from apps.service_providers.intron import build_intron_synthetic_voices
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
@@ -633,8 +634,6 @@ class AuthProvider(BaseTeamModel):
 
     def get_auth_service(self) -> auth_service.AuthService:
         if self.type_enum == AuthProviderType.oauth_client_credentials:
-            from apps.service_providers.auth_service.oauth import OAuthTokenManager  # noqa: PLC0415 - circular
-
             token = OAuthTokenManager(self).get_valid_access_token()
             return auth_service.BearerTokenAuthService(token=token)
         return self.type_enum.get_auth_service(self.config)

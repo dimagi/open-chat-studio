@@ -6,6 +6,8 @@ from django.conf import settings
 from django.db import transaction
 from oauthlib.oauth2 import BackendApplicationClient, OAuth2Error
 
+from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
+
 if TYPE_CHECKING:
     from apps.service_providers.models import AuthProvider
 
@@ -52,10 +54,9 @@ class OAuthTokenManager:
         token request is made. A short, dedicated transaction is used because the
         caller may be inside a long transaction or on a read replica.
         """
-        from apps.service_providers.models import AuthProvider  # noqa: PLC0415 - circular: models imports this module
-
+        model = type(self.provider)
         with transaction.atomic():
-            provider = AuthProvider.objects.select_for_update().get(pk=self.provider.pk)
+            provider = model.objects.select_for_update().get(pk=self.provider.pk)
             if provider._auth_data and not _is_expired(provider._auth_data):
                 token = provider._auth_data
             else:
@@ -76,21 +77,40 @@ def _is_expired(token: dict) -> bool:
 
 def _fetch_client_credentials_token(config: dict) -> dict:
     """Perform the client-credentials token request and return the token dict."""
-    client_id = config["client_id"]
-    client_secret = config["client_secret"]
     token_url = config["token_url"]
     scope = config.get("scope") or None
+    _validate_token_url(token_url)
+
+    client = BackendApplicationClient(client_id=config["client_id"], scope=scope)
+    body, request_kwargs = _prepare_token_request(client, config)
+    response_text = _post_token_request(token_url, body, request_kwargs)
+    return _parse_token_response(client, response_text, token_url, scope)
+
+
+def _validate_token_url(token_url: str) -> None:
+    """Guard the outbound request against SSRF.
+
+    The token endpoint is admin-supplied config and carries the client secret, so
+    it must not be allowed to target internal hosts.
+    """
+    try:
+        validate_user_input_url(token_url, strict=not settings.DEBUG)
+    except InvalidURL as exc:
+        raise OAuthTokenError(f"Invalid OAuth token URL {token_url}: {exc}") from exc
+
+
+def _prepare_token_request(client: BackendApplicationClient, config: dict) -> tuple[str, dict]:
+    """Build the request body and httpx kwargs for the configured auth method."""
     auth_method = config.get("token_endpoint_auth_method", TokenEndpointAuthMethod.CLIENT_SECRET_BASIC)
-
-    client = BackendApplicationClient(client_id=client_id, scope=scope)
-
-    request_kwargs = {}
     if auth_method == TokenEndpointAuthMethod.CLIENT_SECRET_POST:
-        body = client.prepare_request_body(include_client_id=True, client_secret=client_secret)
-    else:
-        body = client.prepare_request_body()
-        request_kwargs["auth"] = httpx.BasicAuth(client_id, client_secret)
+        body = client.prepare_request_body(include_client_id=True, client_secret=config["client_secret"])
+        return body, {}
+    body = client.prepare_request_body()
+    return body, {"auth": httpx.BasicAuth(config["client_id"], config["client_secret"])}
 
+
+def _post_token_request(token_url: str, body: str, request_kwargs: dict) -> str:
+    """POST the token request, returning the response body text."""
     try:
         response = httpx.post(
             token_url,
@@ -102,21 +122,22 @@ def _fetch_client_credentials_token(config: dict) -> dict:
         response.raise_for_status()
     except httpx.HTTPError as exc:
         raise OAuthTokenError(f"Failed to fetch OAuth token from {token_url}: {exc}") from exc
+    return response.text
 
+
+def _parse_token_response(client: BackendApplicationClient, response_text: str, token_url: str, scope) -> dict:
+    """Parse the token response and normalise it to the fields we persist."""
     try:
-        token = client.parse_request_body_response(response.text, scope=scope)
+        token = client.parse_request_body_response(response_text, scope=scope)
     except OAuth2Error as exc:
         raise OAuthTokenError(f"Invalid OAuth token response from {token_url}: {exc}") from exc
 
     if not token.get("access_token"):
         raise OAuthTokenError(f"OAuth token response from {token_url} did not contain an access token")
 
-    if not token.get("expires_at"):
-        token["expires_at"] = time.time() + DEFAULT_TOKEN_TTL_SECONDS
-
     # Persist only the fields we need; drop oauthlib's transient extras.
     return {
         "access_token": token["access_token"],
         "token_type": token.get("token_type", "Bearer"),
-        "expires_at": token["expires_at"],
+        "expires_at": token.get("expires_at") or (time.time() + DEFAULT_TOKEN_TTL_SECONDS),
     }

@@ -115,8 +115,9 @@ def main(input, **kwargs):
         request = httpx_mock.get_request()
         assert request.headers.get("x-api-key") == "secret123"
 
+    @patch("apps.service_providers.auth_service.oauth.validate_user_input_url")
     @patch("apps.utils.restricted_http.validate_user_input_url")
-    def test_oauth_client_credentials_auth_provider(self, mock_validate, httpx_mock):
+    def test_oauth_client_credentials_auth_provider(self, mock_validate, mock_token_validate, httpx_mock):
         """End-to-end: an OAuth provider fetches a token then sends it as a bearer header."""
         team = TeamFactory.create()
         AuthProviderFactory.create(
