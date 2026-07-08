@@ -1,4 +1,5 @@
 import pytest
+import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.core import mail
@@ -40,12 +41,14 @@ class FakeClient:
         self.manifest = manifest
         self.rows_by_resource = rows_by_resource
         self.iter_calls = []
+        self.get_team_calls = 0
 
     def get_manifest(self):
         return self.manifest
 
     def get_team(self):
         # The team is fetched on its own from the dedicated ``team/`` endpoint, not the manifest loop.
+        self.get_team_calls += 1
         return self.rows_by_resource["teams"][0]
 
     def iter_rows(self, resource, start_cursor=None, limit=100):
@@ -73,6 +76,8 @@ def _scenario(public_key):
                 "name": "Imported",
                 "slug": "imported-team-z",
                 "feature_flags": [],
+                "is_migrating": True,
+                "has_public_key": True,
                 "created_at": PAST,
                 "updated_at": PAST,
             }
@@ -151,6 +156,8 @@ def test_new_users_receive_a_password_reset_email(tmp_path, keypair):
                 "name": "T",
                 "slug": "imported-team-z",
                 "feature_flags": [],
+                "is_migrating": True,
+                "has_public_key": True,
                 "created_at": PAST,
                 "updated_at": PAST,
             }
@@ -194,14 +201,163 @@ def test_run_sync_builds_team_and_resolves_secret_provider(tmp_path, keypair):
 def test_rerun_is_a_no_op_and_resumes_from_derived_cursor(tmp_path, keypair):
     manifest, rows = _scenario(keypair[0])
     store = FKTranslationStore(tmp_path / "t.sqlite")
-    run_sync(FakeClient(manifest, rows), store, keypair[1])
+    first = FakeClient(manifest, rows)
+    run_sync(first, store, keypair[1])
+    # once for the readiness precondition, once to fetch and import the team
+    assert first.get_team_calls == 2
 
     second = FakeClient(manifest, rows)
     run_sync(second, store, keypair[1])
 
     assert Team.objects.filter(slug="imported-team-z").count() == 1
+    # the team is already synced, so the rerun only hits the endpoint for the readiness precondition,
+    # not to re-import the team (that's loaded from the target DB)
+    assert second.get_team_calls == 1
     # the second run resumes each pk resource from its highest synced source key
     assert dict(second.iter_calls)["llm_provider"] == "5"
+
+
+def test_rerun_reanchors_scoped_rows_to_the_existing_team(tmp_path, keypair):
+    """On rerun the team is loaded from the target DB (not re-fetched), and it still anchors the
+    team-scoped rows -- the provider stays attached to the same imported team."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+    team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+
+    importer = run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    assert importer.target_team == team
+    provider = LlmProvider.objects.get(pk=store.get_target("service_providers.llmprovider", 5))
+    assert provider.team_id == team.id
+
+
+def test_untracked_existing_team_aborts_and_suggests_force_delete(tmp_path, keypair):
+    """A team already present locally but absent from the sync store must not be imported over: the
+    sync aborts and points the operator at --force-delete, leaving the team and store untouched."""
+    manifest, rows = _scenario(keypair[0])
+    existing = Team.objects.create(name="Old name", slug="imported-team-z")
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    with pytest.raises(CommandError, match="--force-delete"):
+        run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    existing.refresh_from_db()
+    assert existing.name == "Old name"  # left untouched
+    assert Team.objects.filter(slug="imported-team-z").count() == 1  # no duplicate created
+    assert store.get_target("teams.team", 9001) is None  # not linked
+    assert not LlmProvider.objects.filter(team=existing).exists()  # no scoped rows imported
+
+
+def test_stale_sync_state_pointing_at_deleted_team_suggests_force_delete(tmp_path, keypair):
+    """If the synced team was deleted locally but the sync state still references it, a rerun must
+    abort with a CommandError pointing at --force-delete, not a raw Team.DoesNotExist traceback."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+    Team.objects.get(slug="imported-team-z").delete()
+
+    with pytest.raises(CommandError, match="--force-delete"):
+        run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+
+def test_first_time_import_creates_team(tmp_path, keypair):
+    """A brand-new import (no local team with that slug) creates the team from the source."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    assert Team.objects.filter(slug="imported-team-z").exists()
+
+
+class _FakeHTTPResponse:
+    def __init__(self, status_code, detail):
+        self.status_code = status_code
+        self._detail = detail
+
+    def json(self):
+        return {"detail": self._detail}
+
+
+def _http_error(status_code, detail):
+    return requests.HTTPError(response=_FakeHTTPResponse(status_code, detail))
+
+
+class _RaisingClient(FakeClient):
+    """A FakeClient whose ``get_team`` or ``iter_rows`` raises instead of returning data, to simulate
+    an HTTP error surfacing from the source server mid-sync."""
+
+    def __init__(self, manifest, rows, error, raise_on):
+        super().__init__(manifest, rows)
+        self._error = error
+        self._raise_on = raise_on
+
+    def get_team(self):
+        if self._raise_on == "get_team":
+            raise self._error
+        return super().get_team()
+
+    def iter_rows(self, resource, start_cursor=None, limit=100):
+        if self._raise_on == "iter_rows":
+            raise self._error
+        return super().iter_rows(resource, start_cursor, limit)
+
+
+@pytest.mark.parametrize(
+    ("is_migrating", "has_public_key", "match"),
+    [
+        pytest.param(False, True, "Migration mode", id="not-migrating"),
+        pytest.param(True, False, "no public key", id="no-public-key"),
+        pytest.param(False, False, "Migration mode.*no public key", id="neither"),
+    ],
+)
+def test_sync_blocks_when_source_team_is_not_ready(tmp_path, keypair, is_migrating, has_public_key, match):
+    """Migration mode and a registered public key must both be set on the source team; the sync blocks
+    up front (before any import) and names whatever is missing."""
+    manifest, rows = _scenario(keypair[0])
+    rows["teams"][0].update(is_migrating=is_migrating, has_public_key=has_public_key)
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    with pytest.raises(CommandError, match=match):
+        run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    assert not Team.objects.filter(slug="imported-team-z").exists()  # blocked before importing anything
+
+
+def test_unrelated_403_surfaces_as_http_error(tmp_path, keypair):
+    """A 403 from the source (e.g. a revoked API key) must surface as-is rather than be swallowed."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    error = _http_error(403, "You do not have permission to perform this action.")
+    client = _RaisingClient(manifest, rows, error, raise_on="get_team")
+
+    with pytest.raises(requests.HTTPError):
+        run_sync(client, store, keypair[1])
+
+
+def test_missing_public_key_400_raises_friendly_error(tmp_path, keypair):
+    """The source returns a 400 when a secret resource is requested but its team has no public key to
+    seal against; surface a friendly message instead of a raw HTTP traceback."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    error = _http_error(400, seal_mod.MISSING_PUBLIC_KEY_DETAIL)
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+
+    with pytest.raises(CommandError, match="no public key"):
+        run_sync(client, store, keypair[1])
+
+
+def test_unrelated_400_is_not_mistaken_for_missing_public_key(tmp_path, keypair):
+    """A 400 for some other reason must surface as-is, not be reworded into a misleading
+    'set the public key' message."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    error = _http_error(400, "Invalid cursor.")
+    client = _RaisingClient(manifest, rows, error, raise_on="iter_rows")
+
+    with pytest.raises(requests.HTTPError):
+        run_sync(client, store, keypair[1])
 
 
 def test_force_delete_team_removes_team_and_resets_state(tmp_path):
