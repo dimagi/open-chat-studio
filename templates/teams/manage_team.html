@@ -97,8 +97,7 @@
       <p class="my-2 text-muted">
         {% translate "Register a public key to seal secret data exported from this team during a migration." %}
       </p>
-      <form method="post"
-            action="{% url 'single_team:set_public_key' request.team.slug %}">
+      <form method="post" action="{% url 'single_team:set_public_key' request.team.slug %}">
         {% csrf_token %}
         {{ public_key_form.non_field_errors }}
         {% render_form_fields public_key_form %}
@@ -106,7 +105,9 @@
           <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
         </div>
       </form>
-      <hr class="my-4">
+
+      <div class="divider"></div>
+
       <p class="my-2 text-muted">{% translate "Download a zip archive of every file belonging to this team." %}</p>
       <div id="team-files-download-wrapper">
         {% if files_export_task_id %}
@@ -136,45 +137,31 @@
           </form>
         {% endif %}
       </div>
-    </section>
-    {% include "teams/components/team_invitations.html" %}
-    {% if request.team_membership.is_team_admin %}
-      <section class="app-card">
-        <h3 class="pg-subtitle">{% translate "Data Export" %}</h3>
+
+      <div class="divider"></div>
+
+      <form method="post" action="{% url 'single_team:set_migration_lock' request.team.slug %}">
+        {% csrf_token %}
+        <label class="label font-bold cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="is_migrating" class="checkbox"
+                  {% if request.team.is_migrating %}checked{% endif %}>
+          <span>{% translate "Migration mode" %}</span>
+        </label>
         <p class="my-2 text-muted">
-          {% translate "Register a public key to seal secret data exported from this team during a migration." %}
+          {% translate "While enabled, scheduled messages and event triggers (including timeout triggers) for this team are paused and will not fire." %}
         </p>
-        <form method="post" action="{% url 'single_team:set_public_key' request.team.slug %}">
-          {% csrf_token %}
-          {{ public_key_form.non_field_errors }}
-          {% render_form_fields public_key_form %}
-          <div class="pg-inline-buttons">
-            <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
-          </div>
-        </form>
-        <form method="post" action="{% url 'single_team:set_migration_lock' request.team.slug %}" class="mt-4">
-          {% csrf_token %}
-          <label class="label cursor-pointer justify-start gap-2">
-            <input type="checkbox" name="is_migrating" class="checkbox"
-                   {% if request.team.is_migrating %}checked{% endif %}>
-            <span>{% translate "Migration mode" %}</span>
-          </label>
-          <p class="my-2 text-muted">
-            {% translate "While enabled, scheduled messages and event triggers (including timeout triggers) for this team are paused and will not fire." %}
-          </p>
-          <div class="pg-inline-buttons">
-            <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
-          </div>
-        </form>
-      </section>
-      <section class="app-card">
-        <h3 class="pg-subtitle">
-          {% translate "Danger Zone" %}
-        </h3>
-        <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
-      </section>
-      {% include "teams/components/delete_team_modal.html" %}
-    {% endif %}
+        <div class="pg-inline-buttons">
+          <input class="btn btn-outline" type="submit" value="{% translate "Save" %}">
+        </div>
+      </form>
+    </section>
+    <section class="app-card">
+      <h3 class="pg-subtitle">
+        {% translate "Danger Zone" %}
+      </h3>
+      <label for="delete-modal" class="pg-button-danger modal-button">{% translate "Delete Team" %}</label>
+    </section>
+    {% include "teams/components/delete_team_modal.html" %}
   {% endif %}
 {% endif %}
 {% endblock app %}

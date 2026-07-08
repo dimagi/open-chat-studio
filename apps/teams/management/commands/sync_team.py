@@ -27,6 +27,7 @@ from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
+FILES_CONFIRMED_FLAG = "files_confirmed"
 MIGRATION_MODE_REQUIRED = "Migration mode needs to be enabled on the source team before you can continue."
 MISSING_PUBLIC_KEY_MESSAGE = (
     "The source team has no public key registered, so its secret data cannot be exported. "
@@ -90,12 +91,23 @@ def check_source_team_ready(client) -> None:
         raise CommandError(" ".join(problems))
 
 
-def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
+def _prompt(message: str) -> str:
+    """input() that turns EOF (no terminal -- cron, CI, piped stdin) into a clean abort."""
+    try:
+        return input(message)
+    except EOFError:
+        raise CommandError("This command must be run interactively; stdin is closed.") from None
+
+
+def check_sync_preconditions(client, private_key, enforce_schema=True, store=None) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
     its schema matches, we hold a key for any sealed secrets, and the source team is ready to export
-    (migration mode on, public key set). Returns the manifest. Raises CommandError on any failure --
-    call this *before* any destructive local change (--force-delete) so a wrong key path, unreachable
-    source, schema mismatch, or an unready source team can't leave the team deleted."""
+    (migration mode on, public key set). When a ``store`` is given, also ask the operator to confirm
+    the team's files were moved to this server's storage backend -- that happens outside this command
+    and the sync fails without it. The answer is recorded in the store only once every check passes,
+    so an aborted run asks again while a rerun after a clean preflight doesn't. Returns the manifest.
+    Raises CommandError on any failure, before any rows are imported."""
+
     manifest = client.get_manifest()
     if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
         raise CommandError(
@@ -110,6 +122,21 @@ def check_sync_preconditions(client, private_key, enforce_schema=True) -> dict:
         )
 
     check_source_team_ready(client)
+
+    files_confirmation_needed = store is not None and not store.has_flag(FILES_CONFIRMED_FLAG)
+    if files_confirmation_needed:
+        answer = _prompt(
+            "Have you exported the team's files from the source server and imported them into "
+            "this server's storage backend? [yes/no]: "
+        )
+        if answer.strip().lower() != "yes":
+            raise CommandError(
+                "The team's files must be exported from the source server and imported into this "
+                "server's storage backend before syncing, otherwise the sync will fail. Do that "
+                "first, then rerun this command."
+            )
+    if files_confirmation_needed:
+        store.set_flag(FILES_CONFIRMED_FLAG)
     return manifest
 
 
@@ -240,13 +267,6 @@ class Command(BaseCommand):
             action="store_true",
             help="Delete the local team and its sync state before syncing, for a clean re-import.",
         )
-        parser.add_argument(
-            "--noinput",
-            "--no-input",
-            action="store_false",
-            dest="interactive",
-            help="Skip the --force-delete confirmation prompt (for non-interactive runs).",
-        )
 
     def handle(self, *args, **options):
         start_time = time.monotonic()
@@ -257,14 +277,12 @@ class Command(BaseCommand):
         client = ResourceFetcher(options["source_url"], options["api_key"])
         enforce_schema = not options["skip_schema_check"]
 
-        # Preflight before the destructive --force-delete: a bad key path (read above), an
-        # unreachable source, or a schema mismatch must fail while the existing team is still intact.
-        check_sync_preconditions(client, private_key, enforce_schema)
-
         if options["force_delete"]:
             self._run_force_delete(options)
 
         store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
+
+        check_sync_preconditions(client, private_key, enforce_schema, store=store)
 
         run_sync(
             client,
@@ -280,8 +298,8 @@ class Command(BaseCommand):
         self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"], duration=duration)
 
     def _run_force_delete(self, options):
-        """Confirm (unless --no-input) and delete the local team plus its sync state."""
-        if options.get("interactive", True) and not self._confirm_force_delete(options["team_slug"]):
+        """Confirm and delete the local team plus its sync state."""
+        if not self._confirm_force_delete(options["team_slug"]):
             raise CommandError("Aborted: --force-delete not confirmed.")
         force_delete_team(
             options["team_slug"],
@@ -330,4 +348,4 @@ class Command(BaseCommand):
                 "before re-importing."
             )
         )
-        return input("Type 'yes' to continue: ") == "yes"
+        return _prompt("Type 'yes' to continue: ") == "yes"
