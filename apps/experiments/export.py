@@ -18,6 +18,7 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
+PROGRESS_UPDATE_INTERVAL = 100
 
 UTF8_BOM = "\ufeff"  # Prepended to CSV exports so Excel detects UTF-8 encoding.
 
@@ -206,13 +207,16 @@ def generate_export_rows(
 
         for message in chunk:
             yield _yield_row_for_message(message, session_cache, experiment, translation_language)
-            if progress_callback:
-                processed += 1
+            processed += 1
+            if progress_callback and processed % PROGRESS_UPDATE_INTERVAL == 0:
                 progress_callback(processed)
 
         last_pk = chunk[-1].pk
         if len(chunk) < EXPORT_CHUNK_SIZE:
             break
+
+    if progress_callback and processed and processed % PROGRESS_UPDATE_INTERVAL != 0:
+        progress_callback(processed)
 
 
 def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:

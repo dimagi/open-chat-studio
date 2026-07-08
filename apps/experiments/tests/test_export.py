@@ -381,8 +381,27 @@ def test_count_export_messages():
 
 
 @pytest.mark.django_db()
-def test_generate_export_rows_reports_progress_per_message():
-    """progress_callback is called once per message with the cumulative message count."""
+def test_generate_export_rows_reports_progress_every_interval():
+    """progress_callback fires every PROGRESS_UPDATE_INTERVAL messages, plus a final total."""
+    session = _make_session_with_messages(5)
+    calls = []
+
+    with patch("apps.experiments.export.PROGRESS_UPDATE_INTERVAL", 2):
+        list(
+            generate_export_rows(
+                session.experiment,
+                session.experiment.sessions.all(),
+                progress_callback=calls.append,
+            )
+        )
+
+    # Fires at 2 and 4 (every interval), then a final flush at 5 (partial interval).
+    assert calls == [2, 4, 5]
+
+
+@pytest.mark.django_db()
+def test_generate_export_rows_progress_interval_independent_of_chunk_size():
+    """Progress cadence follows PROGRESS_UPDATE_INTERVAL, not the DB read batch size."""
     session = _make_session_with_messages(5)
     calls = []
 
@@ -395,4 +414,4 @@ def test_generate_export_rows_reports_progress_per_message():
             )
         )
 
-    assert calls == [1, 2, 3, 4, 5]
+    assert calls == [5]
