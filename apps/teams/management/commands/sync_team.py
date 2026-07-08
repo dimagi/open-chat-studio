@@ -285,8 +285,8 @@ class Command(BaseCommand):
         self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"], duration=duration)
 
     def _run_force_delete(self, options):
-        """Confirm (unless --no-input) and delete the local team plus its sync state."""
-        if options.get("interactive", True) and not self._confirm_force_delete(options["team_slug"]):
+        """Confirm and delete the local team plus its sync state."""
+        if not self._confirm_force_delete(options["team_slug"]):
             raise CommandError("Aborted: --force-delete not confirmed.")
         force_delete_team(
             options["team_slug"],
