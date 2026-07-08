@@ -1502,6 +1502,7 @@ class ExperimentSession(BaseTeamModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["team", "-last_activity_at"], name="expsession_team_lastact_idx"),
+            models.Index(fields=["team", "first_activity_at"], name="expsession_team_firstact_idx"),
             # Supports the global (cross-team) date-range scans in the admin dashboard.
             models.Index(fields=["created_at"], name="expsession_created_at_idx"),
         ]
