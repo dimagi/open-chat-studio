@@ -30,18 +30,18 @@ def _serialize_csv_tilde_values(values: list[str] | tuple[str, ...] | list[objec
     return output.getvalue().rstrip("\r\n")
 
 
-def _try_parse_json_string_list(value: str) -> list[str] | None:
+def _try_parse_json_string_list(value: str) -> list[object] | None:
     try:
         parsed = json.loads(value)
     except (json.JSONDecodeError, TypeError):
         return None
 
-    if isinstance(parsed, list) and all(isinstance(item, str) for item in parsed):
+    if isinstance(parsed, list):
         return parsed
     return None
 
 
-def _coerce_list_filter_values(value: str) -> list[str] | None:
+def _coerce_list_filter_values(value: str) -> list[object] | None:
     parsed = _try_parse_json_string_list(value)
     if parsed is not None:
         if len(parsed) == 1:
@@ -63,16 +63,15 @@ class ColumnFilterData(BaseModel):
         """Normalize list-based filter values to JSON arrays for operators that expect lists."""
         if self.operator in _LIST_OPERATORS:
             if isinstance(self.value, str):
-                if "~" in self.value:
-                    parsed = _coerce_list_filter_values(self.value)
-                    if parsed is not None:
+                parsed = _coerce_list_filter_values(self.value)
+                if parsed is not None:
+                    self.value = json.dumps(parsed)
+                elif "~" in self.value:
+                    parsed = _parse_csv_tilde_values(self.value)
+                    if parsed:
                         self.value = json.dumps(parsed)
                     else:
-                        parsed = _parse_csv_tilde_values(self.value)
-                        if parsed:
-                            self.value = json.dumps(parsed)
-                        else:
-                            self.value = json.dumps([self.value])
+                        self.value = json.dumps([self.value])
                 else:
                     self.value = json.dumps([self.value])
             else:
