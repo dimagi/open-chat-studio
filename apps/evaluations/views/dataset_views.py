@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
-from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
+from django.views.generic import CreateView, TemplateView, UpdateView
 from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
@@ -155,17 +155,13 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
         return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
 
-class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
+class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluationdataset"
-    model = EvaluationDataset
-
-    def get_queryset(self):
-        return EvaluationDataset.objects.filter(team=self.request.team)
 
     def delete(self, request, *args, **kwargs):
         """Handle AJAX delete requests."""
-        self.object = self.get_object()
-        self.object.delete()
+        dataset = get_object_or_404(EvaluationDataset, team=request.team, pk=kwargs["pk"])
+        dataset.delete()
 
         return HttpResponse(status=200)
 

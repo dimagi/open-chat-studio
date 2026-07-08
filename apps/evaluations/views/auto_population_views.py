@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
-from django.views.generic import CreateView, DeleteView, UpdateView
+from django.views.generic import CreateView, UpdateView, View
 
 from apps.evaluations.forms import DatasetAutoPopulationRuleForm
 from apps.evaluations.models import DatasetAutoPopulationRule, EvaluationDataset, EvaluationMode
@@ -87,21 +87,11 @@ class EditAutoPopulationRule(_RuleViewMixin, UpdateView):
         return response
 
 
-class DeleteAutoPopulationRule(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
+class DeleteAutoPopulationRule(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.change_evaluationdataset"
-    model = DatasetAutoPopulationRule
-
-    def get_queryset(self):
-        return DatasetAutoPopulationRule.objects.filter(team=self.request.team)
-
-    def get_success_url(self):
-        return reverse(
-            "evaluations:dataset_edit",
-            args=[self.request.team.slug, self.get_object().dataset_id],
-        )
 
     def delete(self, request, *args, **kwargs):
-        self.get_object().delete()
+        get_object_or_404(DatasetAutoPopulationRule, team=request.team, pk=kwargs["pk"]).delete()
         return HttpResponse(status=200)
 
 
