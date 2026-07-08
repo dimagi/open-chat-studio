@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("teams", "0012_team_metadata"),
+        ("teams", "0013_team_files_export_team_files_export_task_id"),
     ]
 
     operations = [
