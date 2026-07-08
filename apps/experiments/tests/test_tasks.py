@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,16 +21,19 @@ def test_async_export_chat_returns_file_id():
 
 @pytest.mark.django_db()
 @patch("apps.experiments.tasks.ProgressRecorder")
-def test_async_export_chat_reports_progress(mock_recorder_cls):
+def test_async_export_chat_reports_progress(mock_recorder_cls, caplog):
     recorder = mock_recorder_cls.return_value
     session = ExperimentSessionFactory.create()
     for i in range(2):
         ChatMessage.objects.create(chat=session.chat, content=f"m{i}", message_type=ChatMessageType.HUMAN)
 
-    async_export_chat.run(session.experiment_id, {}, "UTC")
+    with caplog.at_level(logging.INFO, logger="ocs.experiments"):
+        async_export_chat.run(session.experiment_id, {}, "UTC")
 
     # Final progress update reports all messages processed against the total.
     recorder.set_progress.assert_called_with(2, 2, description="Processing 2 of 2 messages")
+    # Progress is also logged (with the experiment name) so it can be tracked in the shell.
+    assert f"Chat export '{session.experiment.name}': processed 2/2 messages" in caplog.text
 
 
 @pytest.mark.django_db()

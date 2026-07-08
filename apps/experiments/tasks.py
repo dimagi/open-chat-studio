@@ -37,6 +37,7 @@ def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -
 
     def report_progress(current):
         progress_recorder.set_progress(current, total, description=f"Processing {current} of {total} messages")
+        logger.info("Chat export '%s': processed %s/%s messages", experiment.name, current, total)
 
     # Use a spooled temp file so small exports stay in memory while large ones spill
     # to disk, avoiding a single large in-memory allocation for the whole CSV.
