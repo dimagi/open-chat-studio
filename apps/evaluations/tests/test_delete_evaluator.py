@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from apps.evaluations.models import Evaluator
 from apps.utils.factories.evaluations import EvaluatorFactory
-from apps.utils.factories.team import MembershipFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import GroupFactory
 
 
@@ -38,4 +38,18 @@ def test_delete_evaluator_without_delete_perm_is_forbidden(client, team_with_use
     response = client.delete(url)
 
     assert response.status_code == 403
+    assert Evaluator.objects.filter(id=evaluator.id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_evaluator_for_other_team_returns_404(client, team_with_users):
+    user = team_with_users.members.first()
+    other_team = TeamFactory.create()
+    evaluator = EvaluatorFactory.create(team=other_team)
+
+    client.force_login(user)
+    url = reverse("evaluations:evaluator_delete", args=[team_with_users.slug, evaluator.id])
+    response = client.delete(url)
+
+    assert response.status_code == 404
     assert Evaluator.objects.filter(id=evaluator.id).exists()
