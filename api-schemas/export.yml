@@ -2250,12 +2250,14 @@ components:
       - api_key
       - bearer
       - commcare
+      - oauth_client_credentials
       type: string
       description: |-
         * `basic` - Basic
         * `api_key` - API Key
         * `bearer` - Bearer Auth
         * `commcare` - CommCare
+        * `oauth_client_credentials` - OAuth (Client Credentials)
     AuthProviderList:
       type: object
       properties:
