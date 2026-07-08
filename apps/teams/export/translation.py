@@ -58,7 +58,8 @@ class FKTranslationStore:
         return max(committed) if committed else None
 
     def has_flag(self, name: str) -> bool:
-        """True if the run-scoped flag was set on a previous run (e.g. a confirmation already given)."""
+        """True if the flag was recorded by an earlier run (e.g. a confirmation already given); flags
+        persist in the state DB until it is reset."""
         return self._conn.execute("SELECT 1 FROM flags WHERE name = ?", (name,)).fetchone() is not None
 
     def set_flag(self, name: str) -> None:
