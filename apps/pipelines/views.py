@@ -407,9 +407,7 @@ def pipeline_data(request, team_slug: str, pk: int):
 def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
     """Handle full-graph POST saves (backward-compatible)."""
     with transaction.atomic():
-        pipeline = get_object_or_404(
-            Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team
-        )
+        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
         data = FlowPipelineData.model_validate_json(request.body)
         pipeline.name = data.name
         pipeline.data = data.data.model_dump()
@@ -417,11 +415,13 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         pipeline.update_nodes_from_data()
         pipeline.refresh_from_db(fields=["node_set"])
-    return JsonResponse({
-        "data": pipeline.flow_data,
-        "errors": pipeline.validate(),
-        "edit_revision": pipeline.edit_revision,
-    })
+    return JsonResponse(
+        {
+            "data": pipeline.flow_data,
+            "errors": pipeline.validate(),
+            "edit_revision": pipeline.edit_revision,
+        }
+    )
 
 
 def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
@@ -457,11 +457,13 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         pipeline.update_nodes_from_data()
         pipeline.refresh_from_db(fields=["node_set"])
 
-    return JsonResponse({
-        "data": pipeline.flow_data,
-        "errors": pipeline.validate(),
-        "edit_revision": pipeline.edit_revision,
-    })
+    return JsonResponse(
+        {
+            "data": pipeline.flow_data,
+            "errors": pipeline.validate(),
+            "edit_revision": pipeline.edit_revision,
+        }
+    )
 
 
 @login_and_team_required

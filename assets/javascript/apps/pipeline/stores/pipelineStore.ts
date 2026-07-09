@@ -439,4 +439,3 @@ function updateEdgeClasses(edges: Edge[], errors: ErrorsType) {
   }
   return edges;
 }
-

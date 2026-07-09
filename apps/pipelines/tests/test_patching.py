@@ -94,8 +94,12 @@ class TestApplyPipelinePatch:
         return {
             "nodes": [
                 {"id": "start", "type": "startNode", "data": {"id": "start", "type": StartNode.__name__}},
-                {"id": "llm-1", "type": "pipelineNode", "position": {"x": 100, "y": 0},
-                 "data": {"id": "llm-1", "type": LLMResponseWithPrompt.__name__, "label": "LLM", "params": {}}},
+                {
+                    "id": "llm-1",
+                    "type": "pipelineNode",
+                    "position": {"x": 100, "y": 0},
+                    "data": {"id": "llm-1", "type": LLMResponseWithPrompt.__name__, "label": "LLM", "params": {}},
+                },
                 {"id": "end", "type": "endNode", "data": {"id": "end", "type": EndNode.__name__}},
             ],
             "edges": [

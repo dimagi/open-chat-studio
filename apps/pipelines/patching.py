@@ -53,11 +53,7 @@ def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
     # Cull edges that referenced a deleted node
     deleted_ids = set(diff.delete)
     if deleted_ids:
-        flow.edges = [
-            edge
-            for edge in flow.edges
-            if edge.source not in deleted_ids and edge.target not in deleted_ids
-        ]
+        flow.edges = [edge for edge in flow.edges if edge.source not in deleted_ids and edge.target not in deleted_ids]
 
 
 def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:

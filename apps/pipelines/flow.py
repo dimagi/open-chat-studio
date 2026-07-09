@@ -44,6 +44,7 @@ class FlowPipelineData(pydantic.BaseModel):
 
 class NodeDiff(pydantic.BaseModel):
     """Describes changes to nodes within a graph diff."""
+
     add: list[FlowNode] = Field(default_factory=list)
     update: list[FlowNode] = Field(default_factory=list)
     delete: list[str] = Field(default_factory=list)
@@ -51,6 +52,7 @@ class NodeDiff(pydantic.BaseModel):
 
 class EdgeDiff(pydantic.BaseModel):
     """Describes changes to edges within a graph diff."""
+
     add: list[FlowEdge] = Field(default_factory=list)
     update: list[FlowEdge] = Field(default_factory=list)
     delete: list[str] = Field(default_factory=list)
@@ -65,6 +67,7 @@ class PipelineDiffPayload(pydantic.BaseModel):
     - delete contains only string IDs.
     - Deleting a node must also remove all connected edges (enforced by backend).
     """
+
     base_revision: int
     nodes: NodeDiff = Field(default_factory=NodeDiff)
     edges: EdgeDiff = Field(default_factory=EdgeDiff)
