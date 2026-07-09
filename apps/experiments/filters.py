@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Subquery
+from django.db.models import Exists, OuterRef
 
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform
@@ -72,26 +72,23 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
         self.options = [tag.name for tag in team.tag_set.filter(is_system_tag=False)]
 
     def _chat_or_message_tag_exists(self, tag_names):
-        """Build a Q matching outer rows whose chat or any of its messages carries one of ``tag_names``."""
-        chat_ct = ContentType.objects.get_for_model(Chat)
-        chat_message_ct = ContentType.objects.get_for_model(ChatMessage)
+        """Match outer rows whose chat, or any of the chat's messages, carries one of ``tag_names``.
+
+        Both halves correlate directly on ``chat_id`` so Postgres can hash/semi-join them.
+        The message check filters ``ChatMessage`` on its own tags and clears the model's
+        default ``created_at`` ordering — that ordering is meaningless inside ``EXISTS`` and
+        would otherwise force a per-session sort of each chat's messages (which turned the
+        session-table count into a multi-minute query). Duplicate rows are harmless in ``EXISTS``.
+        """
         chat_tag_exists = Exists(
             CustomTaggedItem.objects.filter(
                 object_id=OuterRef("chat_id"),
-                content_type_id=chat_ct.id,
+                content_type_id=ContentType.objects.get_for_model(Chat).id,
                 tag__name__in=tag_names,
             )
         )
-        # Double OuterRef: the inner Subquery sits inside an Exists, so OuterRef("chat_id")
-        # would resolve to the Subquery's parent (CustomTaggedItem). One more OuterRef hop
-        # is needed to reach the outermost ExperimentSession queryset's chat_id. Don't
-        # collapse to a single OuterRef — that breaks the correlation.
         message_tag_exists = Exists(
-            CustomTaggedItem.objects.filter(
-                content_type_id=chat_message_ct.id,
-                tag__name__in=tag_names,
-                object_id__in=Subquery(ChatMessage.objects.filter(chat_id=OuterRef(OuterRef("chat_id"))).values("id")),
-            )
+            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), tags__name__in=tag_names).order_by()
         )
         return chat_tag_exists | message_tag_exists
 
