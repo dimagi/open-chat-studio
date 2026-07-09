@@ -109,8 +109,8 @@ export default function Pipeline() {
   );
 
   const onNodeDragStop: NodeDragHandler = useCallback(() => {
-    autoSaveCurrentPipline(nodes, edges);
-  }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
+    autoSaveCurrentPipline();
+  }, [autoSaveCurrentPipline]);
 
   function handleDelete(e: KeyboardEvent) {
     if (lastSelection) {
