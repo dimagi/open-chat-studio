@@ -55,6 +55,9 @@ class FakeClient:
         self.iter_calls.append((resource, start_cursor))
         return list(self.rows_by_resource.get(resource, []))
 
+    def get_file_content(self, file_id):
+        return b""
+
 
 def _manifest(entries, checksum=None):
     return {"schema_checksum": checksum if checksum is not None else schema_checksum(), "entries": entries}

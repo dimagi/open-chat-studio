@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
 import pytest
+import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.db import models
 from django.db.models.signals import post_save
 
@@ -12,10 +14,12 @@ from apps.annotations.models import Tag, UserComment
 from apps.api.export.serializers import build_resource_serializer
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ConsentForm, ExperimentSession
+from apps.files.models import File
 from apps.human_annotations.models import AnnotationQueue
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
+from apps.teams.export.client import FileContentNotFound
 from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
 from apps.teams.export.translation import FKTranslationStore
@@ -669,6 +673,140 @@ def test_m2m_member_with_untranslated_target_raises(store):
 
     with pytest.raises(UnresolvedForeignKey):
         importer.import_rows("human_annotations.annotationqueue", [_annotation_queue_row(600, assignees=[71, 72])])
+
+
+# ---------------------------------------------------------------------------
+# File content backfill
+# ---------------------------------------------------------------------------
+
+FILE_STORAGE = File._meta.get_field("file").storage
+
+
+class _RecordingFetcher:
+    """Stand-in for ResourceFetcher.get_file_content: records the source pks it's asked for and
+    returns canned bytes (or raises, to simulate the source also missing the blob)."""
+
+    def __init__(self, content=b"remote-bytes", error=None):
+        self.content = content
+        self.error = error
+        self.calls = []
+
+    def __call__(self, source_pk):
+        self.calls.append(source_pk)
+        if self.error is not None:
+            raise self.error
+        return self.content
+
+
+def _file_row(source_id=501, *, path="synced-file.txt", external_id="", external_source=""):
+    """A serialized files.file row whose ``file`` field is the stored relative ``path`` (as the export
+    serializer emits it). The blob is not written to storage here, so importing it hits the missing-file
+    path unless the caller seeds storage first. ``name`` is deterministic so tests can look the row up."""
+    file = FileFactory.build()
+    file.pk = source_id
+    file.name = f"file-{source_id}"
+    file.file = path
+    file.external_id = external_id
+    file.external_source = external_source
+    file.working_version = None
+    return dict(build_resource_serializer(File)(file, context={"public_key": None}).data)
+
+
+def _clear_storage(*paths):
+    # delete() is a safe no-op when the object is absent -- and unlike exists(), it doesn't depend on
+    # the storage backend reporting existence reliably (real S3 is used in tests), so a stale blob
+    # from a prior run can't make a "missing file" case silently find content.
+    for path in paths:
+        if path:
+            FILE_STORAGE.delete(path)
+
+
+def test_importing_file_backfills_missing_blob_from_the_source(store):
+    """A file row whose blob isn't in this server's storage is backfilled: the bytes are fetched from
+    the source's file content API (keyed by the source pk) and written at the stored path."""
+    _clear_storage("backfilled-501.txt")
+    fetcher = _RecordingFetcher(content=b"remote-bytes")
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(501, path="backfilled-501.txt")])
+
+    assert fetcher.calls == [501]
+    file = File.objects.get(pk=store.get_target("files.file", 501))
+    assert file.file.read() == b"remote-bytes"
+    _clear_storage("backfilled-501.txt")
+
+
+def test_importing_file_with_present_blob_does_not_fetch(store):
+    """When the blob is already in storage (the operator copied it across), the file imports without
+    touching the content API."""
+    saved_path = FILE_STORAGE.save("present-502.txt", ContentFile(b"already-here"))
+    fetcher = _RecordingFetcher()
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(502, path=saved_path)])
+
+    assert fetcher.calls == []
+    file = File.objects.get(pk=store.get_target("files.file", 502))
+    assert file.file.read() == b"already-here"
+    _clear_storage(saved_path)
+
+
+def test_importing_file_without_a_fetcher_raises_when_blob_missing(store):
+    """With no fetcher wired in (the default), a missing blob surfaces as it does today -- File.save()
+    reads its size from storage and fails -- rather than being silently swallowed."""
+    _clear_storage("missing-503.txt")
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    with pytest.raises(FileNotFoundError):
+        importer.import_rows("files.file", [_file_row(503, path="missing-503.txt")])
+
+
+def test_importing_external_file_without_a_blob_is_imported_without_fetch(store):
+    """External-source rows (e.g. OpenAI assistant files) carry no local blob, so File.save() never
+    reads a size and there's nothing to backfill."""
+    fetcher = _RecordingFetcher()
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(504, path="", external_id="ext-1", external_source="openai")])
+
+    assert fetcher.calls == []
+    file = File.objects.get(pk=store.get_target("files.file", 504))
+    assert not file.file
+
+
+def test_file_not_found_on_source_imports_the_row_without_content_and_records_it(store):
+    """A 404 from the content API means the source is missing the blob too. Rather than aborting,
+    import the file's metadata without content (so references to it still resolve) and record it so
+    the operator gets a report of what couldn't be recovered."""
+    _clear_storage("gone-505.txt")
+    fetcher = _RecordingFetcher(error=FileContentNotFound(505))
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(505, path="gone-505.txt")])
+
+    file = File.objects.get(pk=store.get_target("files.file", 505))
+    assert not file.file
+    assert "gone-505.txt" in importer.missing_files
+
+
+def test_non_404_fetch_failure_aborts_import_and_commits_no_row(store):
+    """A transport/server error isn't a 'file is gone' signal, so the sync still aborts and the row
+    rolls back rather than silently landing a file with no content."""
+    _clear_storage("fail-507.txt")
+    fetcher = _RecordingFetcher(error=requests.HTTPError("500"))
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    with pytest.raises(requests.HTTPError):
+        importer.import_rows("files.file", [_file_row(507, path="fail-507.txt")])
+
+    assert store.get_target("files.file", 507) is None
+    assert not File.objects.filter(name="file-507").exists()
 
 
 # ---------------------------------------------------------------------------
