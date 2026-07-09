@@ -60,10 +60,7 @@ const createPipelineStore: StateCreator<
       nodes: newChange,
     });
 
-    get().autoSaveCurrentPipline(
-      newChange,
-      newEdges,
-    );
+    get().autoSaveCurrentPipline();
   },
   setEdges: (change) => {
     if (get().readOnly) return;
@@ -73,10 +70,7 @@ const createPipelineStore: StateCreator<
       edges: newChange,
     });
 
-    get().autoSaveCurrentPipline(
-      get().nodes,
-      newChange,
-    );
+    get().autoSaveCurrentPipline();
   },
   setNode: (id: string, change: Node | ((oldState: Node) => Node)) => {
     if (get().readOnly) return;
@@ -172,10 +166,7 @@ const createPipelineStore: StateCreator<
       newEdges = addEdge(connection, oldEdges);
       return newEdges;
     });
-    get().autoSaveCurrentPipline(
-        get().nodes,
-        newEdges,
-      );
+    get().autoSaveCurrentPipline();
   },
   addNode: (node, position) => {
     if (get().readOnly) return;
@@ -281,24 +272,8 @@ const createPipelineManagerStore: StateCreator<
     }
   },
   setIsLoading: (isLoading: boolean) => set({isLoading}),
-  autoSaveCurrentPipline: (nodes: Node[], edges: Edge[]) => {
-    if (!get().currentPipeline) {
-      return
-    }
-
-    // Use diff-based PATCH for autosave
-    const oldNodes = get().currentPipeline!.data?.nodes || [];
-    const oldEdges = get().currentPipeline!.data?.edges || [];
-
-    const diff = computePipelineDiff(
-      oldNodes as Node[],
-      nodes,
-      oldEdges as Edge[],
-      edges,
-      get().currentRevision,
-    );
-
-    if (!diff) {
+  autoSaveCurrentPipline: () => {
+    if (!get().currentPipeline || get().conflictDetected) {
       return;
     }
 
@@ -310,9 +285,27 @@ const createPipelineManagerStore: StateCreator<
 
     // Set up a new timeout.
     saveTimeoutId = setTimeout(() => {
-      if (get().currentPipeline) {
-        get()._patchPipeline(diff);
+      if (!get().currentPipeline || get().conflictDetected) {
+        return;
       }
+
+      // Compute diff from the latest state right before sending, not from captured params
+      const oldNodes = get().currentPipeline!.data?.nodes || [];
+      const oldEdges = get().currentPipeline!.data?.edges || [];
+
+      const diff = computePipelineDiff(
+        oldNodes as Node[],
+        get().nodes,
+        oldEdges as Edge[],
+        get().edges,
+        get().currentRevision,
+      );
+
+      if (!diff) {
+        return;
+      }
+
+      get()._patchPipeline(diff);
     }, 1000);
   },
   savePipeline: (pipeline: PipelineType) => {
@@ -352,7 +345,7 @@ const createPipelineManagerStore: StateCreator<
     });
   },
   _patchPipeline: async (diff: PipelineDiffPayload) => {
-    set({isSaving: true, conflictDetected: false});
+    set({isSaving: true});
     try {
       const response = await apiClient.patchPipeline(get().currentPipelineId!, diff);
       if (response) {
@@ -379,8 +372,11 @@ const createPipelineManagerStore: StateCreator<
         }
       }
     } catch (err) {
-      if ((err as {status?: number}).status === 409) {
-        set({conflictDetected: true});
+      if ((err as {status?: number; currentRevision?: number}).status === 409) {
+        set({
+          conflictDetected: true,
+          currentRevision: (err as {currentRevision?: number}).currentRevision ?? get().currentRevision,
+        });
       } else {
         alertify.error("There was an error saving");
       }

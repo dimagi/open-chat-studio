@@ -1,4 +1,3 @@
-import {Edge, Node} from "reactflow";
 import {PipelineDiffPayload, PipelineType} from "./pipeline";
 
 export type PipelineManagerStoreType = {
@@ -11,10 +10,7 @@ export type PipelineManagerStoreType = {
   setIsLoading: (isLoading: boolean) => void;
   updatePipelineName: (name: string) => void;
   savePipeline: (pipelne: PipelineType) => Promise<void>;
-  autoSaveCurrentPipline: (
-    nodes: Node[],
-    edges: Edge[],
-  ) => void;
+  autoSaveCurrentPipline: () => void;
   // Internal PATCH helper
   _patchPipeline: (diff: PipelineDiffPayload) => Promise<void>;
   // Conflict handling
