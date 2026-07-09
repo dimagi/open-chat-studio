@@ -312,11 +312,13 @@ class Importer:
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict, field_values: dict
     ) -> tuple[models.Model, bool]:
         """Find the existing target row (via the translation map, then a model-specific natural-key
-        match) or create it. Returns (instance, created)."""
+        match) or create it. Returns (instance, created). The lookup goes through ``_base_manager`` so
+        an archived or soft-deleted target row -- hidden by the default manager -- is still matched on
+        re-import rather than duplicated (which would break the unique external_id on channels)."""
         target_pk = self.store.get_target(model_label, source_pk)
         instance = None
-        if target_pk is not None and model.objects.filter(pk=target_pk).exists():
-            instance = model.objects.get(pk=target_pk)
+        if target_pk is not None and model._base_manager.filter(pk=target_pk).exists():
+            instance = model._base_manager.get(pk=target_pk)
         elif model_label in _MATCH_EXISTING:
             instance = _MATCH_EXISTING[model_label](model, row, self.store, self.target_team)
 

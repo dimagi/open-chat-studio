@@ -12,6 +12,7 @@ from django.db.models.signals import post_save
 
 from apps.annotations.models import Tag, UserComment
 from apps.api.export.serializers import build_resource_serializer
+from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.files.models import File
@@ -184,6 +185,36 @@ def test_rerun_does_not_duplicate(store):
     importer.import_rows("teams.team", [_team_row()])
     assert store.get_target("teams.team", 9001) == first_pk
     assert Team.objects.filter(slug="imported-team-xyz").count() == 1
+
+
+def test_reimporting_soft_deleted_channel_is_idempotent(store):
+    """A soft-deleted channel is exported (deleted=True). Re-importing it must map to the existing
+    target row, not create a duplicate -- so the existence check has to see deleted rows, which the
+    default manager filters out. A duplicate would also violate the channel's unique external_id."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])  # captures the target team
+
+    channel_row = {
+        "id": 555,
+        "name": "Deleted TG",
+        "experiment": None,
+        "deleted": True,
+        "extra_data": {"bot_token": "x"},
+        "external_id": "31cfe1e9-4b5a-4ffd-8d17-e8cb161d3921",
+        "platform": "telegram",
+        "messaging_provider": None,
+        "widget_version": None,
+        "widget_version_updated_at": None,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("bot_channels.experimentchannel", [dict(channel_row)])
+    first_pk = store.get_target("bot_channels.experimentchannel", 555)
+    importer.import_rows("bot_channels.experimentchannel", [dict(channel_row)])
+
+    assert store.get_target("bot_channels.experimentchannel", 555) == first_pk
+    channels = ExperimentChannel.objects.get_unfiltered_queryset()
+    assert channels.filter(external_id=channel_row["external_id"]).count() == 1
 
 
 # A natural-key sample per GLOBAL_CONFIG model, used to build a matching pair of rows. Keyed by
