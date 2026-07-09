@@ -20,6 +20,7 @@ from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
 from apps.service_providers.auth_service.oauth import OAuthTokenManager
 from apps.service_providers.intron import build_intron_synthetic_voices
+from apps.service_providers.minimax import build_minimax_synthetic_voices
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -287,6 +288,7 @@ class VoiceProviderType(models.TextChoices):
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
     elevenlabs = "elevenlabs", _("ElevenLabs")
     intron = "intron", _("Intron")
+    minimax = "minimax", _("MiniMax")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -305,6 +307,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.ElevenLabsVoiceConfigForm
             case VoiceProviderType.intron:
                 return forms.IntronVoiceConfigForm
+            case VoiceProviderType.minimax:
+                return forms.MinimaxVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
@@ -324,6 +328,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.ElevenLabsSpeechService(**config)
                 case VoiceProviderType.intron:
                     return speech_service.IntronSpeechService(**config)
+                case VoiceProviderType.minimax:
+                    return speech_service.MinimaxSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -441,6 +447,15 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                     build_intron_synthetic_voices(self)
             except Exception:
                 log.exception("Failed to seed Intron voices for provider %s", self.pk)
+                warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
+        elif self.type == VoiceProviderType.minimax.value:
+            try:
+                # Nested savepoint: any IntegrityError from the seeding loop rolls back its own
+                # rows without poisoning the outer transaction, so the provider itself still commits.
+                with transaction.atomic(savepoint=True):
+                    build_minimax_synthetic_voices(self)
+            except Exception:
+                log.exception("Failed to seed MiniMax voices for provider %s", self.pk)
                 warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
         return warnings
 
