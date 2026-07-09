@@ -4793,6 +4793,10 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        edit_revision:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
         is_archived:
           type: boolean
         working_version:
