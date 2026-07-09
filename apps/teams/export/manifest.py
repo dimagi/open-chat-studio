@@ -231,13 +231,14 @@ def model_has_team_field(model: type[Model]) -> bool:
 
 
 def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
-    """The model's rows for this team, including any shared global rows and any archived rows.
+    """The model's rows for this team, including any shared global rows and any archived or
+    soft-deleted rows.
 
-    Versioned models filter ``is_archived=False`` on their default manager; ``get_all()`` bypasses
-    that so archived rows are shared across servers along with the live ones."""
+    Some default managers hide rows: versioned models filter ``is_archived=False`` and
+    ``ExperimentChannel`` filters ``deleted=False``. ``_base_manager`` is Django's unfiltered manager
+    (docs: Model._base_manager), so those rows are shared across servers along with the live ones."""
     model = entry_model(entry.model)
-    manager = model.objects
-    base = manager.get_all() if hasattr(manager, "get_all") else manager
+    base = model._base_manager
     paths = TEAM_PATH_REGISTRY.get(entry.model, "team")
     if isinstance(paths, str):
         paths = [paths]
