@@ -357,7 +357,6 @@ const createPipelineManagerStore: StateCreator<
       const response = await apiClient.patchPipeline(get().currentPipelineId!, diff);
       if (response) {
         // Update local state with merged data from server
-        const nodes = response.data?.nodes as Node[] | undefined;
         const edges = response.data?.edges as Edge[] | undefined;
         set({
           currentRevision: response.edit_revision,
