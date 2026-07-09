@@ -1,6 +1,7 @@
 import inspect
 import json
 
+import pydantic
 from celery.result import AsyncResult
 from celery_progress.backend import Progress
 from django.contrib import messages
@@ -23,11 +24,12 @@ from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
-from apps.pipelines.flow import FlowPipelineData
+from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import OptionsSource
+from apps.pipelines.patching import apply_pipeline_patch
 from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
@@ -378,15 +380,10 @@ def llm_model_parameter_context():
 @csrf_exempt
 def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "POST":
-        with transaction.atomic():
-            pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
-            data = FlowPipelineData.model_validate_json(request.body)
-            pipeline.name = data.name
-            pipeline.data = data.data.model_dump()
-            pipeline.save()
-            pipeline.update_nodes_from_data()
-            pipeline.refresh_from_db(fields=["node_set"])
-        return JsonResponse({"data": pipeline.flow_data, "errors": pipeline.validate()})
+        return _handle_pipeline_post(request, pk, team_slug)
+
+    if request.method == "PATCH":
+        return _handle_pipeline_patch(request, pk, team_slug)
 
     try:
         pipeline = Pipeline.objects.get(pk=pk)
@@ -400,10 +397,71 @@ def pipeline_data(request, team_slug: str, pk: int):
                 "id": pipeline.id,
                 "name": pipeline.name,
                 "data": pipeline.flow_data,
+                "edit_revision": pipeline.edit_revision,
                 "errors": pipeline.validate(),
             }
         }
     )
+
+
+def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
+    """Handle full-graph POST saves (backward-compatible)."""
+    with transaction.atomic():
+        pipeline = get_object_or_404(
+            Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team
+        )
+        data = FlowPipelineData.model_validate_json(request.body)
+        pipeline.name = data.name
+        pipeline.data = data.data.model_dump()
+        pipeline.edit_revision += 1
+        pipeline.save(update_fields=["name", "data", "edit_revision"])
+        pipeline.update_nodes_from_data()
+        pipeline.refresh_from_db(fields=["node_set"])
+    return JsonResponse({
+        "data": pipeline.flow_data,
+        "errors": pipeline.validate(),
+        "edit_revision": pipeline.edit_revision,
+    })
+
+
+def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
+    """Handle incremental PATCH saves with optimistic concurrency."""
+    try:
+        patch = PipelineDiffPayload.model_validate_json(request.body)
+    except (pydantic.ValidationError, json.JSONDecodeError) as e:
+        return JsonResponse({"error": f"Malformed payload: {e}"}, status=400)
+
+    with transaction.atomic():
+        pipeline = get_object_or_404(
+            Pipeline.objects.select_for_update().prefetch_related("node_set"),
+            pk=pk,
+            team=request.team,
+        )
+
+        if patch.base_revision != pipeline.edit_revision:
+            return JsonResponse(
+                {
+                    "error": "Conflict: pipeline was modified by another session.",
+                    "current_revision": pipeline.edit_revision,
+                },
+                status=409,
+            )
+
+        if patch.name is not None:
+            pipeline.name = patch.name
+
+        merged_data = apply_pipeline_patch(pipeline.data, patch)
+        pipeline.data = merged_data
+        pipeline.edit_revision += 1
+        pipeline.save(update_fields=["name", "data", "edit_revision"])
+        pipeline.update_nodes_from_data()
+        pipeline.refresh_from_db(fields=["node_set"])
+
+    return JsonResponse({
+        "data": pipeline.flow_data,
+        "errors": pipeline.validate(),
+        "edit_revision": pipeline.edit_revision,
+    })
 
 
 @login_and_team_required
