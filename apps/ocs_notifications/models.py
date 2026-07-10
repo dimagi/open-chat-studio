@@ -93,7 +93,11 @@ class EventUserQuerySet(models.QuerySet):
                         created_at=models.F("created_at"),
                     )
                 )
-            )
+            ),
+            latest_event_created_at=models.Subquery(
+                latest_event_subquery.values("created_at"),
+                output_field=models.DateTimeField(),
+            ),
         )
 
     def with_mute_status(self) -> models.QuerySet:
