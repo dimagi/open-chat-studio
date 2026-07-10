@@ -45,9 +45,11 @@ SYSTEM_VOICES: tuple[tuple[str, str, str], ...] = (
 def build_minimax_synthetic_voices(provider: "VoiceProvider") -> None:
     """Create one SyntheticVoice per built-in system voice for `provider`.
 
-    Idempotent: `ignore_conflicts=True` relies on the (name, gender, service,
-    voice_provider) unique index so re-running against an already-seeded provider
-    is a no-op. The API-facing ``voice_id`` is stored in ``external_id``.
+    The API-facing ``voice_id`` is stored in ``external_id``. Idempotent:
+    because ``external_id`` is set, ``ignore_conflicts=True`` deduplicates against
+    the ``unique_external_id_per_service_provider`` constraint on
+    ``(external_id, service, voice_provider)``, so re-running against an
+    already-seeded provider is a no-op.
     """
     voices = [
         SyntheticVoice(

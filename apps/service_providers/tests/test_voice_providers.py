@@ -808,3 +808,26 @@ def test_run_post_save_hook_seeds_minimax_voices(team_with_users):
     assert seeded.count() > 0
     # opaque system-voice ids live in external_id (mirroring ElevenLabs)
     assert all(v.external_id for v in seeded)
+
+
+@pytest.mark.django_db()
+def test_run_post_save_hook_seeds_minimax_voices_is_idempotent(team_with_users):
+    """Re-running the hook does not duplicate voices: ignore_conflicts dedupes against
+    the unique (external_id, service, voice_provider) constraint."""
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.minimax,
+        config={"minimax_api_key": "test_key", "minimax_group_id": "test_group"},
+    )
+    provider.run_post_save_hook()
+    count_after_first = SyntheticVoice.objects.filter(
+        service=SyntheticVoice.MiniMax, voice_provider=provider
+    ).count()
+
+    provider.run_post_save_hook()
+    count_after_second = SyntheticVoice.objects.filter(
+        service=SyntheticVoice.MiniMax, voice_provider=provider
+    ).count()
+
+    assert count_after_first > 0
+    assert count_after_second == count_after_first
