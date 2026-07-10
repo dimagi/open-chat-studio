@@ -4,7 +4,7 @@ from typing import ClassVar
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef
 
-from apps.annotations.models import CustomTaggedItem
+from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import Experiment
@@ -78,15 +78,16 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
         precompute each subquery once as a hashed subplan instead of re-running it per
         session row.
         """
+        tag_ids = list(Tag.objects.filter(name__in=tag_names).values_list("id", flat=True))
         chat_ct = ContentType.objects.get_for_model(Chat)
         chat_tag_exists = Exists(
             CustomTaggedItem.objects.filter(
                 object_id=OuterRef("chat_id"),
                 content_type_id=chat_ct.id,
-                tag__name__in=tag_names,
+                tag_id__in=tag_ids,
             )
         )
-        message_tag_exists = Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), tags__name__in=tag_names))
+        message_tag_exists = Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), tags__in=tag_ids))
         return chat_tag_exists | message_tag_exists
 
     def apply_any_of(self, queryset, value, timezone=None):
