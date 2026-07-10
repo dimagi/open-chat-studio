@@ -74,22 +74,19 @@ class ChatMessageTagsFilter(ChoiceColumnFilter):
     def _chat_or_message_tag_exists(self, tag_names):
         """Match outer rows whose chat, or any of the chat's messages, carries one of ``tag_names``.
 
-        Both halves correlate directly on ``chat_id`` so Postgres can hash/semi-join them.
-        The message check filters ``ChatMessage`` on its own tags and clears the model's
-        default ``created_at`` ordering — that ordering is meaningless inside ``EXISTS`` and
-        would otherwise force a per-session sort of each chat's messages (which turned the
-        session-table count into a multi-minute query). Duplicate rows are harmless in ``EXISTS``.
+        Both halves correlate directly on ``chat_id`` at the top level so Postgres can
+        precompute each subquery once as a hashed subplan instead of re-running it per
+        session row.
         """
+        chat_ct = ContentType.objects.get_for_model(Chat)
         chat_tag_exists = Exists(
             CustomTaggedItem.objects.filter(
                 object_id=OuterRef("chat_id"),
-                content_type_id=ContentType.objects.get_for_model(Chat).id,
+                content_type_id=chat_ct.id,
                 tag__name__in=tag_names,
             )
         )
-        message_tag_exists = Exists(
-            ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), tags__name__in=tag_names).order_by()
-        )
+        message_tag_exists = Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"), tags__name__in=tag_names))
         return chat_tag_exists | message_tag_exists
 
     def apply_any_of(self, queryset, value, timezone=None):
