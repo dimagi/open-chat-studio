@@ -6,7 +6,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluator
-from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Survey
+from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
 from apps.teams.models import Flag, Membership, Team
@@ -14,7 +14,7 @@ from apps.teams.utils import current_team
 from apps.users.models import CustomUser
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationDatasetFactory, EvaluatorFactory
-from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory, SurveyFactory
+from apps.utils.factories.experiment import ConsentFormFactory, SourceMaterialFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -48,7 +48,6 @@ def source_team(django_db_blocker):
         # Content
         SourceMaterialFactory.create(team=team)
         consent_form = ConsentFormFactory.create(team=team)
-        SurveyFactory.create(team=team)
 
         # Pipeline
         pipeline = Pipeline.create_default(team, "Test Pipeline", llm_provider.id, llm_model)
@@ -197,10 +196,6 @@ def test_clone_team_clones_content(source_team):
     source_cf_count = ConsentForm.objects.working_versions_queryset().filter(team=source_team).count()
     target_cf_count = ConsentForm.objects.working_versions_queryset().filter(team=target).count()
     assert target_cf_count == source_cf_count
-
-    source_s_count = Survey.objects.working_versions_queryset().filter(team=source_team).count()
-    target_s_count = Survey.objects.working_versions_queryset().filter(team=target).count()
-    assert target_s_count == source_s_count
 
 
 @pytest.mark.django_db()

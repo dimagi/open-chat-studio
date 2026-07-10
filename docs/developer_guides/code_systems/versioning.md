@@ -4,7 +4,7 @@ See the [**User Documentation**][user-docs] on versioning.
 
 The versioning feature is a working version pattern that allows OCS users to edit chatbot configurations while maintaining immutable snapshots for production use. This ensures that active chatbot sessions for participants continue running on stable chatbot versions while chatbot configuration changes are made in the background.
 
-Versioned objects include Experiment, Pipeline, Node, Collection, Survey and more. To confirm the current implementation, review the codebase and technical documentation.
+Versioned objects include Experiment, Pipeline, Node, Collection and more. To confirm the current implementation, review the codebase and technical documentation.
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 
