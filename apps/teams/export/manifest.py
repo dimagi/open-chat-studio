@@ -233,8 +233,14 @@ def model_has_team_field(model: type[Model]) -> bool:
 
 
 def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
-    """The model's rows for this team, including any shared global rows."""
+    """The model's rows for this team, including any shared global rows and any archived or
+    soft-deleted rows.
+
+    Some default managers hide rows: versioned models filter ``is_archived=False`` and
+    ``ExperimentChannel`` filters ``deleted=False``. ``_base_manager`` is Django's unfiltered manager
+    (docs: Model._base_manager), so those rows are shared across servers along with the live ones."""
     model = entry_model(entry.model)
+    base = model._base_manager
     paths = TEAM_PATH_REGISTRY.get(entry.model, "team")
     if isinstance(paths, str):
         paths = [paths]
@@ -244,7 +250,7 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     spec = GLOBAL_CONFIG.get(entry.model)
     if spec:
         team_q |= Q(**{f"{spec.null_field}__isnull": True})
-    queryset = model.objects.filter(team_q)
+    queryset = base.filter(team_q)
     if len(paths) > 1:
         queryset = queryset.distinct()
     extra_filter = EXTRA_FILTERS.get(entry.model)

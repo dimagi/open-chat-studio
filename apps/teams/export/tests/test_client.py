@@ -1,13 +1,14 @@
 import pytest
 import requests
 
-from apps.teams.export.client import ResourceFetcher
+from apps.teams.export.client import FileContentNotFound, ResourceFetcher
 
 
 class FakeResponse:
-    def __init__(self, status_code=200, json_data=None):
+    def __init__(self, status_code=200, json_data=None, content=b""):
         self.status_code = status_code
         self._json = json_data or {}
+        self.content = content
         self.closed = False
 
     def json(self):
@@ -15,7 +16,7 @@ class FakeResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise requests.HTTPError(f"{self.status_code}")
+            raise requests.HTTPError(f"{self.status_code}", response=self)
 
     def close(self):
         self.closed = True
@@ -109,3 +110,27 @@ def test_client_error_is_not_retried():
     with pytest.raises(requests.HTTPError):
         _client(session).get_manifest()
     assert len(session.calls) == 1
+
+
+def test_get_file_content_hits_file_content_endpoint_and_returns_bytes():
+    session = FakeSession([FakeResponse(content=b"file-bytes")])
+    assert _client(session).get_file_content(42) == b"file-bytes"
+    call = session.calls[0]
+    assert call["url"] == "https://src.example/api/files/42/content"
+    assert call["headers"]["X-Api-Key"] == "secret-key"
+
+
+def test_get_file_content_missing_file_raises_file_content_not_found():
+    """A 404 means the source is also missing the blob -- raise a domain error (not retried) so the
+    importer can report it and carry on rather than aborting the whole sync."""
+    session = FakeSession([FakeResponse(404)])
+    with pytest.raises(FileContentNotFound):
+        _client(session).get_file_content(99)
+    assert len(session.calls) == 1
+
+
+def test_get_file_content_other_client_error_still_raises_http_error():
+    """A non-404 client error isn't a 'file is gone' signal, so it surfaces as-is."""
+    session = FakeSession([FakeResponse(403)])
+    with pytest.raises(requests.HTTPError):
+        _client(session).get_file_content(99)

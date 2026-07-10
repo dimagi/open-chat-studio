@@ -7,6 +7,7 @@ translation store. Each run makes one pass over the manifest and exits; rerun to
 """
 
 import time
+from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 
@@ -207,7 +208,12 @@ def run_sync(
 ):
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
-    importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
+    importer = Importer(
+        store,
+        private_key=private_key,
+        on_user_created=on_user_created,
+        fetch_file_content=client.get_file_content,
+    )
     try:
         with mute_signals():
             load_team(importer, client, store, write)
@@ -284,7 +290,7 @@ class Command(BaseCommand):
 
         check_sync_preconditions(client, private_key, enforce_schema, store=store)
 
-        run_sync(
+        importer = run_sync(
             client,
             store,
             private_key,
@@ -295,7 +301,12 @@ class Command(BaseCommand):
         )
 
         duration = timedelta(seconds=round(time.monotonic() - start_time))
-        self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"], duration=duration)
+        self._report(
+            sync_complete=not store.has_unfilled_targets(),
+            team_slug=options["team_slug"],
+            duration=duration,
+            missing_files=importer.missing_files,
+        )
 
     def _run_force_delete(self, options):
         """Confirm and delete the local team plus its sync state."""
@@ -307,18 +318,35 @@ class Command(BaseCommand):
             write=lambda message: self.stdout.write(self.style.WARNING(message)),
         )
 
-    def _report(self, *, sync_complete: bool, team_slug: str, duration: timedelta | None = None) -> None:
+    def _report(
+        self,
+        *,
+        sync_complete: bool,
+        team_slug: str,
+        duration: timedelta | None = None,
+        missing_files: Sequence[str] = (),
+    ) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
-        which resources need manual setup, whether the sync finished or must be rerun, how long the
-        run took, and the follow-up step for channel webhooks (a separate command -- see
-        ``reregister_webhooks``). Sections are headed and blank-line separated so the report stands
-        apart from the row-by-row progress log above it."""
+        which resources need manual setup, which files the source had no content for, whether the sync
+        finished or must be rerun, how long the run took, and the follow-up step for channel webhooks
+        (a separate command -- see ``reregister_webhooks``). Sections are headed and blank-line
+        separated so the report stands apart from the row-by-row progress log above it."""
         self.stdout.write("")
         self.stdout.write(self.style.MIGRATE_HEADING("Sync report"))
         self.stdout.write(self.style.MIGRATE_HEADING("=" * 60))
 
         if duration is not None:
             self.stdout.write(f"Duration: {duration}")
+
+        if missing_files:
+            self.stdout.write("")
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{len(missing_files)} file(s) had no content on the source and were imported without it:"
+                )
+            )
+            for name in missing_files:
+                self.stdout.write(f"  - {name}")
 
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Channel webhooks were not re-registered."))
@@ -345,7 +373,8 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.WARNING(
                 f"--force-delete will permanently delete the local team '{team_slug}' and all its data "
-                "before re-importing."
+                "before re-importing. This also removes the team's files from backend storage, so they "
+                "must be re-imported after the delete completes."
             )
         )
         return _prompt("Type 'yes' to continue: ") == "yes"
