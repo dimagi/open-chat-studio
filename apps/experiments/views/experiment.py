@@ -19,6 +19,7 @@ from django.http import (
     FileResponse,
     Http404,
     HttpResponse,
+    HttpResponseBadRequest,
     HttpResponseForbidden,
     HttpResponseRedirect,
     JsonResponse,
@@ -122,19 +123,7 @@ def experiment_session_message_embed(
     return _experiment_session_message(request, version_number, embedded=True)
 
 
-def _experiment_session_message(request, version_number: int, embedded=False):
-    working_experiment = request.experiment
-    session = request.experiment_session
-
-    if working_experiment.is_archived:
-        raise PermissionDenied("Cannot chat with an archived experiment.")
-
-    try:
-        experiment_version = working_experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    message_text = request.POST.get("message", "")
+def _process_uploaded_files(request, session):
     uploaded_files = request.FILES
     attachments = []
     created_files = []
@@ -158,9 +147,25 @@ def _experiment_session_message(request, version_number: int, embedded=False):
 
         tool_resource.files.add(*created_files)
 
-    if not message_text and not attachments:
-        from django.http import HttpResponseBadRequest
+    return attachments, created_files
 
+
+def _experiment_session_message(request, version_number: int, embedded=False):
+    working_experiment = request.experiment
+    session = request.experiment_session
+
+    if working_experiment.is_archived:
+        raise PermissionDenied("Cannot chat with an archived experiment.")
+
+    try:
+        experiment_version = working_experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    message_text = request.POST.get("message", "")
+    attachments, created_files = _process_uploaded_files(request, session)
+
+    if not message_text and not attachments:
         return HttpResponseBadRequest("A message or attachment is required.")
 
     if attachments and not message_text:
