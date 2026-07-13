@@ -36,6 +36,12 @@ class ApiClient {
       return response.data;
     } catch (error) {
       console.error(error);
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        const err = new Error("Conflict: pipeline was modified by another session.") as Error & {status: number; currentRevision: number};
+        err.status = 409;
+        err.currentRevision = error.response.data.current_revision;
+        throw err;
+      }
       throw error;
     }
   }
@@ -52,17 +58,17 @@ class ApiClient {
       );
 
       if (response?.status !== 200) {
-        if (response?.status === 409) {
-          const err = new Error("Conflict: pipeline was modified by another session.") as Error & {status: number; currentRevision: number};
-          err.status = 409;
-          err.currentRevision = response.data.current_revision;
-          throw err;
-        }
         throw new Error(`HTTP error! status: ${response?.status}`);
       }
       return response.data;
     } catch (error) {
       console.error(error);
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        const err = new Error("Conflict: pipeline was modified by another session.") as Error & {status: number; currentRevision: number};
+        err.status = 409;
+        err.currentRevision = error.response.data.current_revision;
+        throw err;
+      }
       throw error;
     }
   }

@@ -12,6 +12,10 @@ export default function Page() {
   const dirty = usePipelineStore((state) => state.dirty);
   const isSaving = usePipelineStore((state) => state.isSaving);
   const error = usePipelineStore((state) => state.getPipelineError());
+  const conflictDetected = usePipelineStore((state) => state.conflictDetected);
+  const dismissConflict = usePipelineStore((state) => state.dismissConflict);
+  const loadPipeline = usePipelineStore((state) => state.loadPipeline);
+  const currentPipelineId = usePipelineStore((state) => state.currentPipelineId);
   const [name, setName] = useState(currentPipeline?.name);
   const [editingName, setEditingName] = useState(false);
   const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -59,12 +63,14 @@ export default function Page() {
                 }
               </>
             ))}
-            <div className="tooltip tooltip-right" data-tip={dirty ? (isSaving ? "Saving ..." : "Preparing to Save") : "Saved"}>
+            <div className="tooltip tooltip-right" data-tip={conflictDetected ? "Conflict - changes not saved" : dirty ? (isSaving ? "Saving ..." : "Preparing to Save") : "Saved"}>
               <button className="btn btn-sm btn-circle no-animation self-center">
-                {dirty ?
-                  (isSaving ? <span className="loading loading-spinner loading-xs"></span> :
-                    <i className="fa fa-cloud-upload"></i>)
-                  : <i className="fa fa-check"></i>
+                {conflictDetected ?
+                  <i className="fa fa-exclamation-triangle text-amber-500"></i>
+                  : dirty ?
+                    (isSaving ? <span className="loading loading-spinner loading-xs"></span> :
+                      <i className="fa fa-cloud-upload"></i>)
+                    : <i className="fa fa-check"></i>
                 }
               </button>
             </div>
@@ -80,6 +86,33 @@ export default function Page() {
               </div>
             )}
           </div>
+          {conflictDetected && (
+            <div className="alert alert-warning rounded-none shadow-sm flex items-center justify-between" role="alert">
+              <div className="flex items-center gap-2">
+                <i className="fa fa-exclamation-triangle text-lg"></i>
+                <span>This pipeline was modified in another session. Reload to see the latest version.</span>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  className="btn btn-sm btn-ghost"
+                  onClick={dismissConflict}
+                >
+                  Dismiss
+                </button>
+                <button
+                  className="btn btn-sm btn-warning"
+                  onClick={() => {
+                    dismissConflict();
+                    if (currentPipelineId) {
+                      loadPipeline(currentPipelineId);
+                    }
+                  }}
+                >
+                  Reload
+                </button>
+              </div>
+            </div>
+          )}
           <div id="react-flow-id" className="relative h-full w-full">
             <Pipeline />
           </div>
