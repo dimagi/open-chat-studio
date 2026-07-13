@@ -166,11 +166,34 @@ def _match_queue_aggregate(model, row: dict, store: FKTranslationStore, target_t
     return model.objects.filter(queue_id=target_queue).first() if target_queue else None
 
 
+def _match_existing_score(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """Map onto the Score a side effect already wrote for this review/result rather than inserting a
+    duplicate that violates the per-review / per-result unique constraint. Importing a submitted
+    Annotation runs write_scores_from_annotation from its save() (a save() override, not a signal, so
+    mute_signals doesn't stop it), so the review's scores exist on the target before the manifest's own
+    score rows arrive. Matched on whichever partial-unique key the row carries -- (review, name) or
+    (automated_result, name) -- with the FK translated to its target."""
+    name = row["name"]
+    parents = (
+        ("review", "human_annotations.annotation"),
+        ("automated_result", "evaluations.evaluationresult"),
+    )
+    for field, model_label in parents:
+        source_pk = row.get(field)
+        if source_pk is None:
+            continue
+        target_pk = store.get_target(model_label, source_pk)
+        if target_pk is not None:
+            return model.objects.filter(name=name, **{f"{field}_id": target_pk}).first()
+    return None
+
+
 # Rows matched to a pre-existing target row by natural key instead of created.
 _MATCH_EXISTING = {
     "users.customuser": _match_existing_user,
     "experiments.consentform": _match_default_consent_form,
     "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
+    "assessments.score": _match_existing_score,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator
