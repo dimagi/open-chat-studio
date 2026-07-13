@@ -49,10 +49,12 @@ class TestCreateTeamFilesZipTask:
         assert zf.read(f2.file.name) == b"world"
         assert zf.testzip() is None
 
-    def test_excludes_archived_files(self, team):
+    def test_includes_archived_files(self, team):
+        # Archived File rows are part of the export API snapshot, so their bytes must be in the zip too
+        # -- otherwise an imported archived row would point at a blob that was never uploaded.
         keep = FileFactory(team=team, file__data=b"x", file__filename="keep.txt")
-        FileFactory(team=team, is_archived=True, file__data=b"y", file__filename="drop.txt")
-        assert _zip_from_task(team).namelist() == [keep.file.name]
+        archived = FileFactory(team=team, is_archived=True, file__data=b"y", file__filename="archived.txt")
+        assert set(_zip_from_task(team).namelist()) == {keep.file.name, archived.file.name}
 
     def test_includes_versioned_copies(self, team):
         working = FileFactory(team=team, file__data=b"w", file__filename="w.txt")

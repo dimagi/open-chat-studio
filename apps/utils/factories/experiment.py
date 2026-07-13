@@ -11,15 +11,6 @@ from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 
-class SurveyFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = models.Survey
-
-    name = "Name"
-    url = "https://example.com/participant={participant_id}"
-    team = factory.SubFactory(TeamFactory)
-
-
 class ConsentFormFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.ConsentForm

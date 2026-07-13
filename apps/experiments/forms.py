@@ -1,10 +1,6 @@
 from django import forms
 from django.core import validators
-from django.utils.translation import gettext_lazy
 
-from apps.experiments.models import (
-    Survey,
-)
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_llm_provider_by_team, get_models_by_provider
@@ -30,29 +26,6 @@ class ConsentForm(forms.Form):
                 self.fields["identifier"].disabled = True
         else:
             del self.fields["identifier"]
-
-
-class SurveyForm(forms.ModelForm):
-    class Meta:
-        model = Survey
-        fields = ["name", "url", "confirmation_text"]
-        labels = {
-            "confirmation_text": "User Message",
-        }
-        help_texts = {
-            "url": gettext_lazy(
-                "Use the {participant_id}, {session_id} and {experiment_id} variables if you want to "
-                "include the participant, session and experiment session ids in the url."
-            ),
-            "confirmation_text": gettext_lazy(
-                "The message that will be displayed to the participant to initiate the survey."
-                " Use the <code>{survey_link}</code> tag to place the survey link in the text.<br/>"
-                "If you want to use this survey in a web channel you can omit the <code>{survey_link}</code> tag"
-                " as the link will be displayed below the text.<br/>"
-                "If you want to use this survey in a non-web channel you should instruct the user"
-                " to respond with '1' to indicate that they have completed the survey."
-            ),
-        }
 
 
 class ExperimentInvitationForm(forms.Form):

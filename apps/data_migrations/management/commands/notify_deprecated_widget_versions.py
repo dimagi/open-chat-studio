@@ -64,12 +64,15 @@ class Command(IdempotentCommand):
             ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False)
             .select_related("experiment", "team")
             .only(
+                "team_id",
+                "experiment_id",
                 "widget_version",
-                "team__slug",
                 "team__name",
+                "team__slug",
+                # name plus what Experiment.get_absolute_url() reads
                 "experiment__name",
-                "experiment__team",
-                "experiment__working_version",
+                "experiment__team_id",
+                "experiment__working_version_id",
                 "experiment__version_number",
             )
         )

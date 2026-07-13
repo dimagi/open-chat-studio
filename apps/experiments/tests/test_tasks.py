@@ -1,8 +1,10 @@
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import override_settings
 
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -15,6 +17,23 @@ def test_async_export_chat_returns_file_id():
     file = File.objects.get(id=result["file_id"])
     assert file.purpose == FilePurpose.DATA_EXPORT
     assert file.expiry_date is not None
+
+
+@pytest.mark.django_db()
+@patch("apps.experiments.tasks.ProgressRecorder")
+def test_async_export_chat_reports_progress(mock_recorder_cls, caplog):
+    recorder = mock_recorder_cls.return_value
+    session = ExperimentSessionFactory.create()
+    for i in range(2):
+        ChatMessage.objects.create(chat=session.chat, content=f"m{i}", message_type=ChatMessageType.HUMAN)
+
+    with caplog.at_level(logging.INFO, logger="ocs.experiments"):
+        async_export_chat.run(session.experiment_id, {}, "UTC")
+
+    # Final progress update reports all messages processed against the total.
+    recorder.set_progress.assert_called_with(2, 2, description="Processing 2 of 2 messages")
+    # Progress is also logged (with the experiment name) so it can be tracked in the shell.
+    assert f"Chat export '{session.experiment.name}': processed 2/2 messages" in caplog.text
 
 
 @pytest.mark.django_db()

@@ -260,19 +260,18 @@ def _tool_call(name, args):
 
 @pytest.mark.django_db()
 @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_empty_followup_after_tool_call_uses_earlier_message(get_llm_service, provider, provider_model):
-    """Regression test: Claude sometimes responds with a non-empty message + tool calls, then returns
-    an empty content array after the tool results are sent back.  OCS must use the last non-empty
-    AI message rather than the final empty one.
+def test_tool_only_followup_after_tool_call_uses_earlier_message(get_llm_service, provider, provider_model):
+    """Regression test: after the text turn, Claude can emit trailing turns that carry no text — a turn
+    whose content is a list holding *only* a ``tool_use`` block (truthy content, but no text) and/or an
+    empty content array.  Both render to empty output, so a naive ``message.content`` check returns the
+    tool-only turn.  We must skip them and use the last turn that actually has text.
 
-    Scenario:
-      1. LLM responds: content="I'll update your data now." + tool_calls=[UPDATE_PARTICIPANT_DATA]
-      2. OCS executes the tool call and sends back the tool result.
-      3. LLM responds: content=[]  (empty – Claude signals it's done via tools, not text)
-
-    Bug: ``execute_sub_agent`` takes ``result["messages"][-1]`` which is the empty message,
-    producing an empty pipeline output.
-    Expected: the non-empty content from step 1 should be the pipeline output.
+    Scenario (mirrors a real Langfuse trace):
+      1. LLM responds: content="...text..." + tool_calls=[UPDATE_PARTICIPANT_DATA]
+      2. tool result sent back
+      3. LLM responds: content=[{tool_use}] only (no text) + tool_calls=[UPDATE_PARTICIPANT_DATA]
+      4. tool result sent back
+      5. LLM responds: content=[]  (empty – Claude signals it's done via tools, not text)
     """
     first_response = AIMessage(
         content="I'll update your participant data now.",
@@ -280,10 +279,14 @@ def test_empty_followup_after_tool_call_uses_earlier_message(get_llm_service, pr
             ToolCall(name=AgentTools.UPDATE_PARTICIPANT_DATA, args={"key": "mood", "value": "happy"}, id="tc1")
         ],
     )
-    # Claude's follow-up after receiving the tool result – empty content array
+    # Follow-up turn carrying only a tool_use block – truthy content, but no text
+    tool_only_followup = AIMessage(
+        content=[{"type": "tool_use", "id": "tc2", "name": AgentTools.UPDATE_PARTICIPANT_DATA, "input": {}}],
+        tool_calls=[ToolCall(name=AgentTools.UPDATE_PARTICIPANT_DATA, args={"key": "done", "value": "yes"}, id="tc2")],
+    )
     empty_followup = AIMessage(content=[])
 
-    service = build_fake_llm_service(responses=[first_response, empty_followup])
+    service = build_fake_llm_service(responses=[first_response, tool_only_followup, empty_followup])
     get_llm_service.return_value = service
 
     nodes = [

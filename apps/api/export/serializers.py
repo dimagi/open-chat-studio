@@ -21,7 +21,7 @@ from apps.teams.export.manifest import (
     generic_fk_fields,
     model_has_team_field,
 )
-from apps.teams.export.seal import seal
+from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, seal
 from apps.teams.models import Flag
 
 
@@ -203,11 +203,28 @@ def build_resource_serializer(model):
     return type(f"{component_name(model)}DetailSerializer", (_SecretMixin, serializers.ModelSerializer), attrs)
 
 
+@cache
 def build_team_serializer():
     """Serializer for the single-team endpoint (``GET /api/export/team/``). The team anchors the export
-    surface and is served as one object rather than a page, but its fields are the same dynamic dump
-    as any other synced resource row."""
-    return build_resource_serializer(entry_model(TEAM_MODEL))
+    surface and is served as one object rather than a page. It extends the importable team-row dump with
+    the two operational status fields the sync client preflights on: ``is_migrating`` (kept out of the
+    importable row, so migration mode isn't replicated to the target) and ``has_public_key`` -- a method
+    field collapsing the key to a boolean, whether one is registered, never the key material itself. The
+    raw ``public_key`` field is excluded alongside ``members`` so neither ever goes out."""
+    base = build_resource_serializer(entry_model(TEAM_MODEL))
+
+    class TeamExportSerializer(base):
+        has_public_key = serializers.SerializerMethodField(
+            help_text="Whether the team has a public key registered. The key itself is never exported."
+        )
+
+        class Meta(base.Meta):
+            exclude = ["members", "public_key"]
+
+        def get_has_public_key(self, team) -> bool:
+            return bool(team.public_key)
+
+    return TeamExportSerializer
 
 
 def resource_responses(entry: ManifestEntry) -> dict[int, type[serializers.Serializer] | OpenApiResponse]:
@@ -220,7 +237,7 @@ def resource_responses(entry: ManifestEntry) -> dict[int, type[serializers.Seria
     if entry.secret:
         responses[400] = OpenApiResponse(
             response=SyncErrorDetail,
-            description="Team has no registered public key; secret data cannot be sealed.",
+            description=MISSING_PUBLIC_KEY_DETAIL,
         )
     return responses
 

@@ -52,11 +52,12 @@ def delete_team_async(team_id, user_email, notify_recipients="self"):
 def get_team_files_queryset(team):
     """Files for the team to include in a data export, excluding export artifacts.
 
-    The File manager already excludes archived files. We include versioned copies
-    (not just working versions) so the export is a complete snapshot, and drop
+    ``get_all()`` bypasses the File manager's ``is_archived=False`` filter so archived files are
+    included -- they're part of the export API snapshot, so their bytes must ship too. We include
+    versioned copies (not just working versions) so the export is a complete snapshot, and drop
     previously generated export zips.
     """
-    return File.objects.filter(team=team).exclude(purpose=FilePurpose.DATA_EXPORT).order_by("id")
+    return File.objects.get_all().filter(team=team).exclude(purpose=FilePurpose.DATA_EXPORT).order_by("id")
 
 
 def _export_arcname(file: File) -> str:
