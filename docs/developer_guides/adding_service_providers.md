@@ -14,7 +14,7 @@ There are five provider categories, each backed by one team-scoped model with an
 | Auth | `AuthProvider` | `AuthProviderType` | `auth_service/main.py::AuthService` |
 | Tracing | `TraceProvider` | `TraceProviderType` | `tracing/base.py::Tracer` |
 
-All models and enums live in `apps/service_providers/models.py`. The type enum is the contract: each member routes to a config form (via the `form_cls` property) and a service class (via a factory method like `get_speech_service()`). Views, URLs, and tables are generic and driven off these enums — adding a provider normally requires no view or template changes.
+File paths are relative to `apps/service_providers/`. All models and enums live in `apps/service_providers/models.py`. The type enum is the contract: each member routes to a config form (via the `form_cls` property) and a service class (via a factory method like `get_speech_service()`). Views, URLs, and tables are generic and driven off these enums — adding a provider normally requires no view or template changes.
 
 ## Adding a provider to an existing category
 
@@ -32,9 +32,11 @@ class VoiceProviderType(models.TextChoices):
 
 Add a `case` to the enum's `form_cls` property and to its service factory method (`get_speech_service`, `get_llm_service`, `get_messaging_service`, `get_auth_service`, or `get_service` depending on category).
 
+Note: `LlmProviderTypes` is not a `TextChoices` enum — its members are `(slug, label, additional_config)` tuples backed by the `LlmProviderType` dataclass. The optional `additional_config` dict carries provider capabilities such as `supports_transcription`, `supports_assistants`, or an `openai_api_base` for OpenAI-compatible APIs.
+
 ### 2. Add the config form
 
-In `apps/service_providers/forms.py`, subclass `ProviderTypeConfigForm`. Form field names must match the service class's constructor fields, since the form's cleaned data is stored as the provider `config` and passed to the service as kwargs.
+In `apps/service_providers/forms.py`, subclass `ProviderTypeConfigForm`. Form field names must match the service class's constructor fields, since the form's cleaned data is stored as the provider `config` and passed to the service as kwargs. Empty config values are dropped before the service is constructed, so optional fields need a default on the service class.
 
 ```python
 class ElevenLabsVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
@@ -65,7 +67,7 @@ Adding an enum member widens the model's `type` choices, so run `makemigrations 
 
 * **LLM**: add default models to `DEFAULT_LLM_PROVIDER_MODELS` in `llm_service/default_models.py` and seed them via a data migration — see [Managing LLM Models](managing_models.md).
 * **Voice**: add a service constant to `SyntheticVoice` in `apps/experiments/models.py` (including `SERVICES`, and `TEAM_SCOPED_SERVICES` if voices are per-team). If the provider needs post-create side effects such as syncing its voice list, use `VoiceProvider.run_post_save_hook()`.
-* **Messaging**: hook the new service into channel handling in `apps/channels/` if it supports a new platform.
+* **Messaging**: channel setup discovers services automatically (`MessagingProviderType.platform_supported_provider_types()` iterates `MessagingService` subclasses and matches on `supported_platforms`), so supporting an existing platform needs no extra wiring. Supporting a brand-new platform means adding a `ChannelPlatform` value and channel handling in `apps/channels/`.
 
 ### 6. Tests
 
@@ -82,5 +84,5 @@ This is rare. In addition to the steps above you need:
 1. A new model in `models.py` inheriting `BaseTeamModel` with `type`, `name`, and `config = encrypt(models.JSONField(default=dict))` fields, plus a slug in `const.py`.
 2. A new type enum with `form_cls` and a service factory method.
 3. A new member on the `ServiceProvider` enum in `utils.py` — this drives the generic views, tables, and URLs.
-4. A UI entry point: include `service_providers/service_provider_home.html` with your `provider_type` in `templates/teams/manage_team.html`.
-5. Permissions for the new model (the generic views check `<action>_<model>` permissions via `ServiceProvider.get_permission()`).
+4. A UI entry point: include `service_providers/service_provider_home.html` in `templates/teams/manage_team.html`, passing `provider_type` (the slug) and `perm` (e.g. `add_myprovider`).
+5. Permissions for the new model — the generic views check `<action>_<modelname>` permissions built by `ServiceProvider.get_permission()`.
