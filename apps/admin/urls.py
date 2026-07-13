@@ -33,4 +33,7 @@ urlpatterns = [
     # API endpoints for TomSelect
     path("api/teams/", views.teams_api, name="teams_api"),
     path("api/users/", views.users_api, name="users_api"),
+    # Cross-team LLM usage / provider-key reporting (consumed by external scripts)
+    path("api/provider-usage/", views.provider_usage_api, name="provider_usage_api"),
+    path("api/provider-keys/", views.provider_keys_api, name="provider_keys_api"),
 ]
