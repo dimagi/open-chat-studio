@@ -12,11 +12,12 @@ from django.db.models.signals import post_save
 
 from apps.annotations.models import Tag, UserComment
 from apps.api.export.serializers import build_resource_serializer
+from apps.assessments.models import Score
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ConsentForm, ExperimentSession
 from apps.files.models import File
-from apps.human_annotations.models import AnnotationQueue
+from apps.human_annotations.models import Annotation, AnnotationQueue
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
@@ -704,6 +705,48 @@ def test_m2m_member_with_untranslated_target_raises(store):
 
     with pytest.raises(UnresolvedForeignKey):
         importer.import_rows("human_annotations.annotationqueue", [_annotation_queue_row(600, assignees=[71, 72])])
+
+
+def test_importing_a_score_maps_onto_the_annotation_side_effect_row(store):
+    """Regression for the sync_team UniqueViolation on ``score_unique_per_review_field``.
+
+    Importing a submitted Annotation runs ``Annotation.save()``, which calls
+    ``write_scores_from_annotation`` and writes Score rows on the target as a side effect. Because
+    that write lives in a ``save()`` override -- not a signal -- ``mute_signals`` doesn't stop it. The
+    manifest then imports the source's own Score rows (assessments.score comes after annotations), and
+    each one used to collide on ``(review, name)`` with the score the annotation save just wrote. The
+    score is now matched onto that existing row instead of inserting a duplicate.
+    """
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    target_team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+
+    # Source graph: a submitted annotation whose save() already wrote its Score rows on the source.
+    source_annotation = AnnotationFactory(data={"accuracy": "yes"})
+    source_score = source_annotation.scores.get()
+
+    # Target-side rows the annotation/score FKs resolve to, with their translations recorded.
+    target_item = AnnotationItemFactory(team=target_team)
+    target_reviewer = UserFactory()
+    store.record("human_annotations.annotationitem", source_annotation.item_id, target_item.id)
+    store.record("users.customuser", source_annotation.reviewer_id, target_reviewer.id)
+    store.record("experiments.experimentsession", source_annotation.item.session_id, target_item.session_id)
+
+    annotation_row = dict(build_resource_serializer(Annotation)(source_annotation).data)
+    score_row = dict(build_resource_serializer(Score)(source_score).data)
+
+    with mute_signals():
+        importer.import_rows("human_annotations.annotation", [annotation_row])
+        target_annotation_pk = store.get_target("human_annotations.annotation", source_annotation.id)
+        # Importing the annotation already wrote a Score for (target review, "accuracy").
+        side_effect_score = Score.objects.get(review_id=target_annotation_pk, name="accuracy")
+
+        # Importing the source's own score row for the same field maps onto that row, not a duplicate.
+        importer.import_rows("assessments.score", [score_row])
+
+    assert Score.objects.filter(review_id=target_annotation_pk, name="accuracy").count() == 1
+    # The imported score is recorded as the existing row, so a rerun resolves its FK straight to it.
+    assert store.get_target("assessments.score", source_score.id) == side_effect_score.pk
 
 
 # ---------------------------------------------------------------------------
