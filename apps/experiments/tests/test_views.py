@@ -369,6 +369,31 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
 
 
 @pytest.mark.django_db()
+@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
+@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
+def test_experiment_session_message_view_missing_message(delay_mock, experiment, client):
+    """A POST without a 'message' field or attachments returns 400 instead of raising."""
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, participant=ParticipantFactory.create(user=experiment.owner)
+    )
+    url = reverse(
+        "experiments:experiment_session_message",
+        kwargs={
+            "team_slug": experiment.team.slug,
+            "experiment_id": experiment.public_id,
+            "session_id": session.external_id,
+            "version_number": Experiment.DEFAULT_VERSION_NUMBER,
+        },
+    )
+    client.force_login(experiment.owner)
+
+    response = client.post(url, data={})
+
+    assert response.status_code == 400
+    delay_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
 class TestPublicSessions:
     @pytest.mark.parametrize("is_user", [False, True])
     @mock.patch("apps.experiments.services.enqueue_static_triggers")
