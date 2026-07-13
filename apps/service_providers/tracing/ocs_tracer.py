@@ -10,11 +10,12 @@ from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
+from apps.cost_tracking.services.recorder import TraceContext as CostTraceContext
+from apps.cost_tracking.services.recorder import record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
 from apps.service_providers.tracing.metrics import MetricsCollector
-from apps.teams.models import Flag, Team
 from apps.trace.models import Trace, TraceStatus
 
 from .base import SpanNotificationConfig, TraceContext, Tracer
@@ -39,7 +40,6 @@ class OCSTracer(Tracer):
         self.error_span_name: str = ""
         self.error_notification_config: SpanNotificationConfig | None = None
         self.metrics_collector: MetricsCollector | None = None
-        self.cost_tracking_enabled: bool = False
 
     @property
     def ready(self) -> bool:
@@ -92,7 +92,6 @@ class OCSTracer(Tracer):
 
         self.start_time = time.time()
         self.metrics_collector = MetricsCollector(start_time=self.start_time)
-        self.cost_tracking_enabled = self._evaluate_cost_tracking_flag()
 
         try:
             yield trace_context
@@ -156,28 +155,22 @@ class OCSTracer(Tracer):
     def _record_costs(self) -> None:
         """Drain the collector's accumulated usage into UsageRecord rows.
 
-        Short-circuits when the flag is off so the cost path is zero-work
-        for teams that haven't opted in. `record_usage_bulk` swallows DB
-        errors internally; the outer `_finalize_trace` try/except catches
-        anything else (e.g. an unexpected helper failure).
+        Cost data is recorded for every team; the `flag_ai_cost_monitoring`
+        flag only gates the UI, not this write path. `record_usage_bulk`
+        swallows DB errors internally; the outer `_finalize_trace` try/except
+        catches anything else (e.g. an unexpected helper failure).
         """
-        if not self.cost_tracking_enabled:
-            return
         if not self.metrics_collector:
             return
         if not self.trace_record:
             return
-        from apps.cost_tracking.services.recorder import (  # noqa: PLC0415 - lazy: cost_tracking only imported when the flag is on
-            TraceContext,
-            record_usage_bulk,
-        )
 
         events = list(self.metrics_collector.iter_cost_events())
         if not events:
             return
         record_usage_bulk(
             events,
-            TraceContext(
+            CostTraceContext(
                 team_id=self.team_id,
                 trace_id=self.trace_record.id,
                 experiment_id=self.trace_record.experiment_id,
@@ -185,13 +178,6 @@ class OCSTracer(Tracer):
                 participant_id=self.trace_record.participant_id,
             ),
         )
-
-    def _evaluate_cost_tracking_flag(self) -> bool:
-        """Look up the team-scoped `flag_ai_cost_monitoring` flag once per
-        trace entry. `Flag.get` is the cached classmethod; `Team(pk=...)`
-        avoids a DB fetch since `is_active_for_team` only reads `.pk`.
-        """
-        return Flag.get("flag_ai_cost_monitoring").is_active_for_team(Team(pk=self.team_id))
 
     def _fire_error_notification_if_needed(self) -> None:
         """Fire notification if a span declared one and the trace errored."""
@@ -217,7 +203,6 @@ class OCSTracer(Tracer):
         self.error_span_name = ""
         self.error_notification_config = None
         self.metrics_collector = None
-        self.cost_tracking_enabled = False
 
     @contextmanager
     def span(
