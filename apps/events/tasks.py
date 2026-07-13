@@ -3,6 +3,7 @@ from celery.utils.log import get_task_logger
 
 from apps.events.models import ScheduledMessage, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
+from apps.teams.export_service import migrating_team_ids
 
 logger = get_task_logger("ocs.events")
 
@@ -25,7 +26,7 @@ def _get_static_triggers_to_fire(session_id: int, trigger_type: StaticTrigger):
 
     queryset = StaticTrigger.objects.filter(
         experiment=experiment_version, type__in=trigger_types_to_filter, is_active=True
-    )
+    ).exclude(experiment__team_id__in=migrating_team_ids())
 
     return queryset.values_list("id", flat=True)
 
@@ -40,7 +41,11 @@ def fire_static_trigger(trigger_id, session_id):
 
 @shared_task(ignore_result=True)
 def enqueue_timed_out_events():
-    active_triggers = TimeoutTrigger.objects.published_versions().filter(is_active=True)
+    active_triggers = (
+        TimeoutTrigger.objects.published_versions()
+        .filter(is_active=True)
+        .exclude(experiment__team_id__in=migrating_team_ids())
+    )
     for trigger in active_triggers:
         for session in trigger.timed_out_sessions():
             if session.is_stale():
@@ -66,7 +71,7 @@ def fire_trigger(trigger_id, session_id):
 def poll_scheduled_messages():
     """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
     new trigger details for each message."""
-    messages = ScheduledMessage.objects.get_messages_to_fire()
+    messages = ScheduledMessage.objects.get_messages_to_fire().exclude(team_id__in=migrating_team_ids())
     for message in messages:
         message.safe_trigger()
 

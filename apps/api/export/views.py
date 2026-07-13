@@ -26,7 +26,7 @@ from apps.teams.export.manifest import (
     get_manifest_entry,
     team_scoped_queryset,
 )
-from apps.teams.export.seal import load_public_key
+from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_public_key
 
 from .serializers import (
     ManifestSerializer,
@@ -105,7 +105,7 @@ class ResourceView(_ExportAPIView):
         if entry.secret:
             if not request.team.public_key:
                 return Response(
-                    {"detail": "Team has no registered public key; secret data cannot be sealed."},
+                    {"detail": MISSING_PUBLIC_KEY_DETAIL},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             context["public_key"] = load_public_key(request.team.public_key)

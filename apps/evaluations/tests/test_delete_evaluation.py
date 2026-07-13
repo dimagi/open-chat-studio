@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.utils.factories.evaluations import EvaluationConfigFactory
-from apps.utils.factories.team import MembershipFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import GroupFactory
 
 
@@ -52,6 +52,20 @@ def test_delete_evaluation_redirect_param_zero_does_not_redirect(client, team_wi
     assert response.status_code == 200
     assert "HX-Redirect" not in response.headers
     assert not EvaluationConfig.objects.filter(id=evaluation.id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_evaluation_for_other_team_returns_404(client, team_with_users):
+    user = team_with_users.members.first()
+    other_team = TeamFactory.create()
+    evaluation = EvaluationConfigFactory.create(team=other_team)
+
+    client.force_login(user)
+    url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
+    response = client.delete(url)
+
+    assert response.status_code == 404
+    assert EvaluationConfig.objects.filter(id=evaluation.id).exists()
 
 
 @pytest.mark.django_db()

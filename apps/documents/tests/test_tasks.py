@@ -15,6 +15,7 @@ from apps.documents.models import CollectionFile, FileStatus
 from apps.documents.tasks import (
     async_create_collection_version,
     create_collection_zip_task,
+    delete_collection_task,
     index_collection_files_task,
     migrate_vector_stores,
     sync_all_document_sources_task,
@@ -35,6 +36,24 @@ def collection(db):
         is_index=True,
         is_remote_index=True,
     )
+
+
+@pytest.mark.django_db()
+def test_delete_collection_task_deletes_files_of_archived_collection():
+    """delete_collection_task runs after Collection.archive() has already set is_archived=True, so it
+    must load the archived row and delete its files. Regression: fetching via Collection.objects (which
+    hides archived rows) made the task a silent no-op, leaving CollectionFile rows orphaned."""
+    collection = CollectionFactory.create(is_index=False)
+    file = FileFactory.create(team=collection.team)
+    collection.files.add(file)
+    collection.is_archived = True
+    collection.save(update_fields=["is_archived"])
+    assert CollectionFile.objects.filter(collection=collection).exists()
+
+    with patch("apps.documents.utils.get_related_m2m_objects", return_value=[]):
+        delete_collection_task(collection.id)
+
+    assert not CollectionFile.objects.filter(collection=collection).exists()
 
 
 @pytest.mark.django_db()

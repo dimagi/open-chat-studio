@@ -1,12 +1,9 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import cast
 from urllib.parse import urlencode, urlparse
 
 import jwt
-from celery.result import AsyncResult
-from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -44,7 +41,7 @@ from field_audit.models import AuditAction
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.channels.datamodels import Attachment, AttachmentType
+from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
@@ -156,7 +153,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             new_file = File.objects.create(
                 name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
             )
-            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
+            attachments.append(Attachment.from_file(new_file, resource_type, session.id))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
@@ -357,7 +354,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 @xframe_options_exempt
 @team_required
 def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
+    """Special view for starting sessions from embedded widgets. This will ignore consent and
     will ALWAYS create anonymous participants.
 
     Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
@@ -440,21 +437,6 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )
-
-
-@permission_required("experiments.download_chats", raise_exception=True)
-@login_and_team_required
-def get_export_download_link(request, team_slug: str, experiment_id: str, task_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    info = Progress(AsyncResult(task_id)).get_info()
-    context: dict[str, object] = {"experiment": experiment}
-    if info["complete"] and info["success"]:
-        file_id = info["result"]["file_id"]
-        download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id}) + "?allow_s3=1"
-        context["export_download_url"] = download_url
-    else:
-        context["task_id"] = task_id
-    return TemplateResponse(request, "experiments/components/exports.html", context)
 
 
 def _record_consent_and_redirect(
