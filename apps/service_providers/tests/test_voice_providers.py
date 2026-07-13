@@ -746,8 +746,10 @@ def test_minimax_synthesize_voice(team_with_users):
 
     call = mock_post.call_args
     url = call.args[0] if call.args else call.kwargs["url"]
-    # GroupId travels as a query param; the API key as a Bearer header.
-    assert "GroupId=test_group" in url
+    # GroupId travels as a query param (via httpx `params`, URL-encoded);
+    # the API key as a Bearer header.
+    assert url.endswith("/v1/t2a_v2")
+    assert call.kwargs["params"] == {"GroupId": "test_group"}
     assert call.kwargs["headers"]["Authorization"] == "Bearer test_key"
     body = call.kwargs["json"]
     assert body["model"] == "speech-2.8-hd"
@@ -820,14 +822,10 @@ def test_run_post_save_hook_seeds_minimax_voices_is_idempotent(team_with_users):
         config={"minimax_api_key": "test_key", "minimax_group_id": "test_group"},
     )
     provider.run_post_save_hook()
-    count_after_first = SyntheticVoice.objects.filter(
-        service=SyntheticVoice.MiniMax, voice_provider=provider
-    ).count()
+    count_after_first = SyntheticVoice.objects.filter(service=SyntheticVoice.MiniMax, voice_provider=provider).count()
 
     provider.run_post_save_hook()
-    count_after_second = SyntheticVoice.objects.filter(
-        service=SyntheticVoice.MiniMax, voice_provider=provider
-    ).count()
+    count_after_second = SyntheticVoice.objects.filter(service=SyntheticVoice.MiniMax, voice_provider=provider).count()
 
     assert count_after_first > 0
     assert count_after_second == count_after_first

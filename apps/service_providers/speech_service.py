@@ -446,7 +446,8 @@ class MinimaxSpeechService(SpeechService):
             "Content-Type": "application/json",
         }
         resp = httpx.post(
-            f"{MINIMAX_BASE_URL}/v1/t2a_v2?GroupId={self.minimax_group_id}",
+            f"{MINIMAX_BASE_URL}/v1/t2a_v2",
+            params={"GroupId": self.minimax_group_id},
             headers=headers,
             json={
                 "model": self.minimax_model,
