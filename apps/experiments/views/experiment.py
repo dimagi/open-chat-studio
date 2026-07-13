@@ -1,7 +1,6 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import cast
 from urllib.parse import urlencode, urlparse
 
 import jwt
@@ -42,7 +41,7 @@ from field_audit.models import AuditAction
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.channels.datamodels import Attachment, AttachmentType
+from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
@@ -154,7 +153,7 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             new_file = File.objects.create(
                 name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
             )
-            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
+            attachments.append(Attachment.from_file(new_file, resource_type, session.id))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
