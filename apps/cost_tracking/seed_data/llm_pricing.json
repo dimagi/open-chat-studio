@@ -885,6 +885,72 @@
   },
   {
     "provider_type": "openai",
+    "model_name": "gpt-5.6-terra",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0025"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.015"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00025"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.003125"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-5.6-sol",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.005"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.03"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0005"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00625"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
+    "model_name": "gpt-5.6-luna",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.001"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.006"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0001"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0.00125"
+      }
+    ]
+  },
+  {
+    "provider_type": "openai",
     "model_name": "o3",
     "rules": [
       {
