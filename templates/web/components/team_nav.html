@@ -44,15 +44,6 @@
     </a>
   </li>
   {% endif %}
-  {% if perms.experiments.view_survey %}
-  <li>
-    <a href="{% url 'experiments:survey_home' request.team.slug %}"
-       {% if active_tab == 'survey' %}class="menu-active"{% endif %}>
-      <i class="fa-solid fa-file-circle-question fa-fw"></i>
-      {% translate "Surveys" %}
-    </a>
-  </li>
-  {% endif %}
   {% if perms.experiments.view_consentform %}
   <li>
     <a href="{% url 'experiments:consent_home' request.team.slug %}"

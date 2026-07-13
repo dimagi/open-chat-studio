@@ -5,7 +5,6 @@ from apps.experiments.models import (
     ConsentForm,
     Experiment,
     SourceMaterial,
-    Survey,
 )
 from apps.generics import actions
 
@@ -29,25 +28,6 @@ class SourceMaterialTable(tables.Table):
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No source material found."
-
-
-class SurveyTable(tables.Table):
-    actions = actions.ActionsColumn(
-        actions=[
-            actions.edit_action(url_name="experiments:survey_edit"),
-            actions.delete_action(url_name="experiments:survey_delete"),
-        ]
-    )
-
-    class Meta:
-        model = Survey
-        fields = (
-            "name",
-            "url",
-        )
-        row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
-        orderable = False
-        empty_text = "No surveys found."
 
 
 class ConsentFormTable(tables.Table):

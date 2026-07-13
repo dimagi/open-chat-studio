@@ -787,7 +787,6 @@ DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
     "consent": "/concepts/consent/",
     "chat_widget": "/chat_widget/",
-    "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
     "concepts.prompt_variables": "/concepts/prompt_variables/",

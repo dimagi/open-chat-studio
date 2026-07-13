@@ -75,16 +75,6 @@ class ParticipantData(ReadonlyAdminMixin, admin.ModelAdmin):
     list_filter = ("participant",)
 
 
-@admin.register(models.Survey)
-class SurveyAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = (
-        "name",
-        "team",
-        "url",
-    )
-    list_filter = ("team",)
-
-
 @admin.register(models.Experiment)
 class ExperimentAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
     list_display = (
