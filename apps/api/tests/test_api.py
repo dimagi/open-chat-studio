@@ -16,7 +16,11 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.api.tasks import DuplicateConnectChannelError, create_connect_channel_for_participant
+from apps.api.tasks import (
+    DuplicateConnectChannelError,
+    connect_channel_error_details,
+    create_connect_channel_for_participant,
+)
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
 from apps.teams.backends import CHATBOT_ADMIN_GROUP, add_user_to_team
@@ -481,6 +485,27 @@ def test_update_participant_data_connect_channel_failure(httpx_mock, upstream, e
     participant_data = ParticipantData.objects.get(participant__identifier="connectid_3", experiment=experiment)
     assert participant_data.data == {"name": "John"}
     assert "commcare_connect_channel_id" not in participant_data.system_metadata
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expect_captured"),
+    [
+        pytest.param(400, True, id="400-captured"),
+        pytest.param(404, False, id="404-not-captured"),
+        pytest.param(500, False, id="500-not-captured"),
+    ],
+)
+def test_connect_channel_error_details_reports_400_to_sentry(status_code, expect_captured):
+    """400s from Connect attach the exception so Sentry records the full error; others don't."""
+    error = httpx.HTTPStatusError(
+        "error",
+        request=httpx.Request("POST", "http://connect/messaging/create_channel/"),
+        response=httpx.Response(status_code, text="bad request"),
+    )
+    with patch("apps.api.tasks.logger") as mock_logger:
+        connect_channel_error_details(error, "connectid_1")
+
+    assert mock_logger.error.call_args.kwargs["exc_info"] is (error if expect_captured else None)
 
 
 @pytest.mark.django_db()

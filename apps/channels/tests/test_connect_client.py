@@ -85,6 +85,22 @@ class TestConnectClient:
         assert messages[0] == "this is a secret message"
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_send_message_error_attaches_response_body(self, httpx_mock):
+        """A 400 from Connect attaches the response body as a note so it's visible in Sentry."""
+        httpx_mock.add_response(
+            method="POST",
+            url=f"{settings.COMMCARE_CONNECT_SERVER_URL}/messaging/send_fcm/",
+            json={"errors": "no_user_consent"},
+            status_code=400,
+        )
+
+        connect_client = CommCareConnectClient()
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            connect_client.send_message_to_user(str(uuid4()), message="hi", encryption_key=os.urandom(32))
+
+        assert any("no_user_consent" in note for note in exc_info.value.__notes__)
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_send_message_to_user(self, httpx_mock):
         httpx_mock.add_response(
             method="POST",
