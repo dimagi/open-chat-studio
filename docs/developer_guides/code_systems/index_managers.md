@@ -33,6 +33,8 @@ Abstract base class for managing vector stores in remote indexing services. Prov
 
 - **OpenAIRemoteIndexManager**: OpenAI-specific implementation for managing file uploads and vector stores using [OpenAI's vector store API](https://developers.openai.com/api/reference/resources/vector_stores).
 
+  The API can search across 2 vector stores, but rejects more than 2 with a 400 error ("maximum of 2 vector stores allowed"). This isn't documented by OpenAI; it only surfaces as a runtime error. OCS enforces this at node-validation time via `LlmProviderTypes.openai.max_vector_stores`.
+
 #### LocalIndexManager
 
 Abstract base class for managing local embedding operations. Handles text processing and embedding generation on the application side.
