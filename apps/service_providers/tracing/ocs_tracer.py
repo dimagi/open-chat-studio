@@ -155,8 +155,7 @@ class OCSTracer(Tracer):
     def _record_costs(self) -> None:
         """Drain the collector's accumulated usage into UsageRecord rows.
 
-        Cost data is recorded for every team; the `flag_ai_cost_monitoring`
-        flag only gates the UI, not this write path. `record_usage_bulk`
+        Cost data is recorded for every team; `record_usage_bulk`
         swallows DB errors internally; the outer `_finalize_trace` try/except
         catches anything else (e.g. an unexpected helper failure).
         """
