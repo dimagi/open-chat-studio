@@ -6,6 +6,7 @@ rebuilding the test database (use `--create-db`).
 
 from django.db import models
 from django_pydantic_field import SchemaField
+from field_audit import audit_fields
 from pydantic import BaseModel, HttpUrl
 
 
@@ -17,6 +18,7 @@ class TestSchema(BaseModel):
     url_attr: HttpUrl
 
 
+@audit_fields("config")
 class ModelWithSchemaField(models.Model):
     config = SchemaField(TestSchema)
 
