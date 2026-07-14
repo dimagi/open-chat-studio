@@ -113,6 +113,44 @@ def test_create_queue_with_optional_field(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_create_queue_duplicate_name_shows_form_error(client, team_with_users, queue):
+    """Creating a queue with a name that already exists for the team returns a form error, not a 500."""
+    url = reverse("human_annotations:queue_new", args=[team_with_users.slug])
+    data = {
+        "name": queue.name,
+        "description": "A test queue",
+        "schema": json.dumps({"score": {"type": "int", "description": "Score", "ge": 1, "le": 5}}),
+        "num_reviews_required": 1,
+    }
+    response = client.post(url, data)
+    assert response.status_code == 200
+    assert not response.context["form"].is_valid()
+    assert "already exists" in str(response.context["form"].errors)
+    assert AnnotationQueue.objects.filter(name=queue.name, team=team_with_users).count() == 1
+
+
+@pytest.mark.django_db()
+def test_edit_queue_duplicate_name_shows_form_error(client, team_with_users, queue, user):
+    """Renaming a queue to collide with another queue's name returns a form error, not a 500."""
+    other = AnnotationQueueFactory.create(team=team_with_users, created_by=user, name="Other Queue")
+    edit_url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, other.pk])
+    response = client.post(
+        edit_url,
+        {
+            "name": queue.name,
+            "description": other.description,
+            "schema": json.dumps(other.schema),
+            "num_reviews_required": other.num_reviews_required,
+        },
+    )
+    assert response.status_code == 200
+    assert not response.context["form"].is_valid()
+    assert "already exists" in str(response.context["form"].errors)
+    other.refresh_from_db()
+    assert other.name == "Other Queue"
+
+
+@pytest.mark.django_db()
 def test_edit_queue_saves_optional_field(client, team_with_users, queue):
     """Editing a queue to set required=false should persist via the update view."""
     edit_url = reverse("human_annotations:queue_edit", args=[team_with_users.slug, queue.pk])

@@ -78,6 +78,35 @@ For each migration in that list (except your new one), remove the call and its i
 
 > **Why?** Data migrations like `notify_deprecated_models` and `remove_deprecated_models` would fire multiple times, sending duplicate notifications to teams.
 
+### Step 5: Seed pricing for the model
+
+Registering a model does not give it a price. Add pricing rows for the new model to the seed file `apps/cost_tracking/seed_data/llm_pricing.json`, then apply them with `load_ai_pricing` via the `load_pricing_data()` helper. This can go in the **same migration** that seeds the model (Step 3):
+
+```python
+from django.db import migrations
+
+from apps.cost_tracking.migration_utils import load_pricing_data
+from apps.service_providers.migration_utils import llm_model_migration
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("service_providers", "0061_previous_migration"),
+        ("cost_tracking", "0001_initial"),  # required so the PricingRule table exists
+    ]
+
+    operations = [
+        llm_model_migration(),
+        load_pricing_data(),
+    ]
+```
+
+`load_ai_pricing` is idempotent and supersedes on change, so the **same step applies to pricing changes for existing models** — edit the prices in the seed JSON and add a `load_pricing_data()` migration. Unlike `llm_model_migration()`, it is safe to leave earlier `load_pricing_data()` calls in place; each run only reseeds the current JSON. You can also run it locally after editing the seed file:
+
+```bash
+python manage.py load_ai_pricing
+```
+
 ---
 
 ## Deprecating a Model
@@ -215,7 +244,7 @@ When no replacement is specified:
 
 ## User Notifications
 
-Both the deprecation notification and the deletion command use the OCS notifications system (see [notifications guide](notifications.md)) rather than admin emails. Notifications are sent to team members with the `service_providers.change_llmprovidermodel` permission.
+Both the deprecation notification and the deletion command use the OCS notifications system (see [notifications guide](../developer_guides/code_systems/notifications.md)) rather than admin emails. Notifications are sent to team members with the `service_providers.change_llmprovidermodel` permission.
 
 Notifications include:
 - Which model was deprecated/deleted

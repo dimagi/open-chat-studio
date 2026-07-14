@@ -3,21 +3,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.http import Http404
 
-from apps.channels.channels_v2.api_channel import NoOpSender
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.stages.core import (
+from apps.channels.api_channel import NoOpSender
+from apps.channels.callbacks import ChannelCallbacks
+from apps.channels.capabilities import ChannelCapabilities
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.stages.core import (
     ConsentFlowStage,
     SessionResolutionStage,
 )
-from apps.channels.channels_v2.stages.terminal import (
+from apps.channels.stages.terminal import (
     ActivityTrackingStage,
     PersistenceStage,
     ResponseSendingStage,
     SendingErrorHandlerStage,
 )
-from apps.channels.channels_v2.web_channel import WebChannel
-from apps.chat.channels import MESSAGE_TYPES
+from apps.channels.web_channel import WebChannel
 from apps.chat.exceptions import ChannelException
 from apps.experiments.models import Experiment
 
@@ -105,8 +105,8 @@ class TestWebChannelCapabilities:
         assert caps.supported_message_types == [MESSAGE_TYPES.TEXT]
 
 
-_START_SESSION = "apps.channels.channels_v2.web_channel._start_experiment_session"
-_CHECK_SEED = "apps.channels.channels_v2.web_channel.WebChannel.check_and_process_seed_message"
+_START_SESSION = "apps.channels.web_channel.start_experiment_session"
+_CHECK_SEED = "apps.channels.web_channel.WebChannel.check_and_process_seed_message"
 _GET_WEB_CHANNEL = "apps.channels.models.ExperimentChannelObjectManager.get_team_web_channel"
 
 
@@ -145,7 +145,7 @@ class TestWebChannelStartNewSession:
         )
 
         mock_get_channel.assert_called_once_with(mock_experiment.team)
-        # Verify the web channel was passed to _start_experiment_session
+        # Verify the web channel was passed to start_experiment_session
         call_args = mock_start.call_args
         assert call_args[0][1] == mock_channel  # second positional arg is experiment_channel
 
@@ -234,7 +234,7 @@ class TestWebChannelStartNewSession:
             metadata=metadata,
         )
 
-        # metadata should be passed through to _start_experiment_session
+        # metadata should be passed through to start_experiment_session
         assert mock_start.call_args.kwargs.get("metadata") == metadata
 
 

@@ -11,6 +11,20 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 logger = logging.getLogger("ocs.channels.connect")
 
 
+def _raise_for_status(response: httpx.Response) -> None:
+    """Raise on HTTP errors, attaching the response body so it surfaces in logs and Sentry.
+
+    ``httpx.HTTPStatusError`` only stringifies the status line, so the CommCare Connect error
+    body (e.g. ``{"errors": "no_user_consent"}``) would otherwise be lost. The note preserves the
+    exception type and grouping while making the reason visible.
+    """
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        e.add_note(f"Response body: {response.text}")
+        raise
+
+
 class Message(TypedDict):
     timestamp: str
     message_id: UUID
@@ -41,10 +55,18 @@ class CommCareConnectClient:
         stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
-    def create_channel(self, connect_id: str, channel_source: str) -> dict:
+    def create_channel(self, connect_id: str, channel_source: str, channel_name: str | None = None) -> dict:
+        """Create (or fetch, idempotently) the Connect channel for a participant.
+
+        ``channel_source`` is Connect's identity key for the channel (per participant) and must be
+        a stable identifier; ``channel_name`` is the display name shown to the participant.
+        """
         url = f"{self._base_url}/messaging/create_channel/"
-        response = self.client.post(url, json={"connectid": str(connect_id), "channel_source": channel_source})
-        response.raise_for_status()
+        data = {"connectid": str(connect_id), "channel_source": channel_source}
+        if channel_name:
+            data["channel_name"] = channel_name
+        response = self.client.post(url, json=data)
+        _raise_for_status(response)
         return response.json()
 
     def decrypt_messages(self, key: bytes, messages: list[Message]) -> list[str]:
@@ -87,7 +109,7 @@ class CommCareConnectClient:
     def _send_fcm(self, payload: dict) -> None:
         url = f"{self._base_url}/messaging/send_fcm/"
         response = self.client.post(url, json=payload)
-        response.raise_for_status()
+        _raise_for_status(response)
 
     def _encrypt_message(self, key: bytes, message: str) -> tuple[str, str, str]:
         cipher = AES.new(key, AES.MODE_GCM)

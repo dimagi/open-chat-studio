@@ -3,13 +3,13 @@
  *
  * These tests run outside Stencil's test environment (which uses a mock DOM
  * that doesn't support DOMPurify) using Node's built-in test runner with
- * happy-dom for a real DOM implementation.
+ * jsdom for a real DOM implementation.
  *
  * Run: npm run test:security
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Window } from 'happy-dom';
+import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
 import { marked } from 'marked';
 
@@ -31,7 +31,7 @@ const SANITIZE_CONFIG = {
   FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover'],
 };
 
-const window = new Window();
+const { window } = new JSDOM('');
 const DOMPurify = createDOMPurify(window);
 
 function sanitizeMarkdown(content) {

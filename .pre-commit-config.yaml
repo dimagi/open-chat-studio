@@ -24,37 +24,37 @@ repos:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.16
+    rev: v0.15.21
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
       - id: ruff-format
   - repo: https://github.com/djlint/djLint
-    rev: v1.39.0
+    rev: v1.40.6
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v10.4.1'
+    rev: 'v10.7.0'
     hooks:
       - id: eslint
         additional_dependencies:
-          - eslint@9.16.0
-          - '@eslint/js@9.16.0'
-          - eslint-plugin-react@7.37.2
-          - typescript-eslint@8.17.0
+          - eslint@9.39.1
+          - '@eslint/js@9.39.2'
+          - eslint-plugin-react@7.37.5
+          - typescript-eslint@8.46.1
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: 'v3.8.3'
+    rev: 'v3.9.5'
     hooks:
       - id: prettier
         files: ^components/chat_widget/src/.*\.(ts|tsx|css)$
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.44
+    rev: v0.0.59
     hooks:
       # Run the type checker.
       - id: ty-check

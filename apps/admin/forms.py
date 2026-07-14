@@ -41,6 +41,13 @@ class FindProviderByKeyForm(forms.Form):
         return ServiceProvider[self.cleaned_data["provider_type"]]
 
 
+class TeamMetadataImportForm(forms.Form):
+    file = forms.FileField(
+        label="CSV file",
+        help_text="CSV in the team-metadata export format. Teams are matched by the 'Slug' column.",
+    )
+
+
 class DateRanges(TextChoices):
     THIS_MONTH = "m0", "Month to date"
     LAST_MONTH = "m1", "Last month"

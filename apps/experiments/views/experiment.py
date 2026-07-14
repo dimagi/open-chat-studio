@@ -1,12 +1,9 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import cast
 from urllib.parse import urlencode, urlparse
 
 import jwt
-from celery.result import AsyncResult
-from celery_progress.backend import Progress
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -22,6 +19,7 @@ from django.http import (
     FileResponse,
     Http404,
     HttpResponse,
+    HttpResponseBadRequest,
     HttpResponseForbidden,
     HttpResponseRedirect,
     JsonResponse,
@@ -44,9 +42,9 @@ from field_audit.models import AuditAction
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.channels.channels_v2.web_channel import WebChannel
-from apps.channels.datamodels import Attachment, AttachmentType
+from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform
+from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
@@ -79,8 +77,7 @@ from apps.experiments.tasks import (
     async_export_chat,
     get_response_for_webchat_task,
 )
-from apps.experiments.views.utils import get_max_char_limit
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
@@ -126,6 +123,33 @@ def experiment_session_message_embed(
     return _experiment_session_message(request, version_number, embedded=True)
 
 
+def _process_uploaded_files(request, session):
+    uploaded_files = request.FILES
+    attachments = []
+    created_files = []
+    for resource_type in ["code_interpreter", "file_search", "ocs_attachments"]:
+        if resource_type not in uploaded_files:
+            continue
+
+        tool_resource, _created = ChatAttachment.objects.get_or_create(
+            chat_id=session.chat_id,
+            tool_type=resource_type,
+        )
+
+        # Participant uploads within a conversation are message media, regardless of
+        # which tool they feed. ASSISTANT is reserved for bot-configuration files.
+        for uploaded_file in uploaded_files.getlist(resource_type):
+            new_file = File.objects.create(
+                name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
+            )
+            attachments.append(Attachment.from_file(new_file, resource_type, session.id))
+            created_files.append(new_file)
+
+        tool_resource.files.add(*created_files)
+
+    return attachments, created_files
+
+
 def _experiment_session_message(request, version_number: int, embedded=False):
     working_experiment = request.experiment
     session = request.experiment_session
@@ -138,24 +162,11 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     except Experiment.DoesNotExist:
         raise Http404() from None
 
-    message_text = request.POST["message"]
-    uploaded_files = request.FILES
-    attachments = []
-    created_files = []
-    for resource_type in ["code_interpreter", "file_search", "ocs_attachments"]:
-        if resource_type not in uploaded_files:
-            continue
+    message_text = request.POST.get("message", "")
+    attachments, created_files = _process_uploaded_files(request, session)
 
-        tool_resource, _created = ChatAttachment.objects.get_or_create(
-            chat_id=session.chat_id,
-            tool_type=resource_type,
-        )
-        for uploaded_file in uploaded_files.getlist(resource_type):
-            new_file = File.objects.create(name=uploaded_file.name, file=uploaded_file, team=request.team)
-            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
-            created_files.append(new_file)
-
-        tool_resource.files.add(*created_files)
+    if not message_text and not attachments:
+        return HttpResponseBadRequest("A message or attachment is required.")
 
     if attachments and not message_text:
         message_text = "Please look at the attachments and respond appropriately"
@@ -169,7 +180,6 @@ def _experiment_session_message(request, version_number: int, embedded=False):
     version_specific_vars = {
         "assistant": experiment_version.get_assistant(),
         "experiment_version_number": experiment_version.version_number,
-        "max_char_limit": get_max_char_limit(experiment_version),
     }
     return TemplateResponse(
         request,
@@ -349,7 +359,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 @xframe_options_exempt
 @team_required
 def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
+    """Special view for starting sessions from embedded widgets. This will ignore consent and
     will ALWAYS create anonymous participants.
 
     Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
@@ -432,21 +442,6 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )
-
-
-@permission_required("experiments.download_chats", raise_exception=True)
-@login_and_team_required
-def get_export_download_link(request, team_slug: str, experiment_id: str, task_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    info = Progress(AsyncResult(task_id)).get_info()
-    context: dict[str, object] = {"experiment": experiment}
-    if info["complete"] and info["success"]:
-        file_id = info["result"]["file_id"]
-        download_url = reverse("files:base", kwargs={"team_slug": team_slug, "pk": file_id}) + "?allow_s3=1"
-        context["export_download_url"] = download_url
-    else:
-        context["task_id"] = task_id
-    return TemplateResponse(request, "experiments/components/exports.html", context)
 
 
 def _record_consent_and_redirect(

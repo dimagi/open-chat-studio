@@ -22,9 +22,9 @@ from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.session_tokens import issue_session_token
-from apps.channels.channels_v2.web_channel import WebChannel
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import ChannelBase
+from apps.channels.registry import get_channel_class_for_platform
+from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
@@ -47,7 +47,7 @@ from apps.experiments.views import ExperimentVersionsTableView
 from apps.experiments.views.experiment import (
     start_session_public,
 )
-from apps.experiments.views.utils import get_channels_context, get_max_char_limit
+from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
@@ -474,6 +474,58 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         return f"{url}#versions"
 
 
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def chatbot_revert_confirm(request, team_slug: str, experiment_id: int, version_number: int):
+    """Render the revert confirmation modal: a diff of the working state vs the target version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    has_unreleased_changes = experiment.compare_with_latest()
+
+    version_details = experiment.version_details
+    version_details.compare(version.version_details)
+    context = {
+        "experiment": experiment,
+        "version": version,
+        "version_details": version_details,
+        "has_unreleased_changes": has_unreleased_changes,
+    }
+    return render(request, "experiments/components/revert_confirm_content.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("experiments.change_experiment", raise_exception=True)
+def revert_chatbot_version(request, team_slug: str, experiment_id: int, version_number: int):
+    """Revert the working chatbot to the content (fields + pipeline) of a previous version."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    try:
+        version = experiment.versions.get(version_number=version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    if experiment.is_archived:
+        raise PermissionDenied("Unable to revert an archived chatbot.")
+
+    # Hold the version-operation lock for the whole revert so a concurrent publish/revert can't
+    # interleave with it. acquire_version_operation_lock claims it atomically (no TOCTOU gap).
+    if experiment.acquire_version_operation_lock(f"revert-{experiment.id}-{version_number}"):
+        try:
+            experiment.revert_to_version(version)
+        finally:
+            Experiment.release_version_operation_lock(experiment.id)
+        messages.success(request, f"Reverted to v{version_number}.")
+    else:
+        messages.error(request, "A version operation is already in progress.")
+
+    url = reverse("chatbots:single_chatbot_home", args=[team_slug, experiment_id])
+    return HttpResponseRedirect(f"{url}#versions")
+
+
 class ChatbotVersionsTableView(ExperimentVersionsTableView):
     model = Experiment
     table_class = ExperimentVersionsTable
@@ -601,7 +653,7 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
     participant = old_session.participant
 
     # Create new session using the same channel as the old session
-    channel_cls = ChannelBase.get_channel_class_for_platform(experiment_channel.platform)
+    channel_cls = get_channel_class_for_platform(experiment_channel.platform)
     new_session = channel_cls.start_new_session(
         working_experiment=experiment,
         participant_identifier=participant.identifier,
@@ -639,7 +691,6 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
         "experiment_name": experiment_version.name,
         "experiment_version": experiment_version,
         "experiment_version_number": experiment_version.version_number,
-        "max_char_limit": get_max_char_limit(experiment_version),
     }
     return TemplateResponse(
         request,
@@ -744,7 +795,7 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
 @xframe_options_exempt
 @team_required
 def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
+    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and
     will ALWAYS create anonymous participants.
 
     Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
@@ -789,7 +840,6 @@ def _chatbot_chat_ui(request, embedded=False):
         "chatbot_name": chatbot_version.name,
         "experiment_version": chatbot_version,
         "experiment_version_number": chatbot_version.version_number,
-        "max_char_limit": get_max_char_limit(chatbot_version),
     }
     return TemplateResponse(
         request,
@@ -863,7 +913,7 @@ def home(
 
 
 class AllSessionsHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
-    template_name = "generic/object_home.html"
+    template_name = "chatbots/all_sessions_home.html"
     permission_required = "experiments.view_experimentsession"
 
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]

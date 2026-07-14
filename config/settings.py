@@ -39,6 +39,8 @@ IS_TESTING = "pytest" in sys.modules
 USE_DEBUG_TOOLBAR = env.bool("USE_DEBUG_TOOLBAR", default=DEBUG)
 if IS_TESTING:
     USE_DEBUG_TOOLBAR = False
+    # Use a fast (insecure) hasher in tests; the default PBKDF2 hasher is deliberately slow.
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
@@ -378,7 +380,7 @@ if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
     # use private storage by default
-    STORAGES["default"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["default"] = {
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
         "OPTIONS": {
             "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
@@ -390,7 +392,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = f"https://{AWS_PUBLIC_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{PUBLIC_MEDIA_LOCATION}/"
-    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["public"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
@@ -451,15 +453,40 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Open Chat Studio",
     "DESCRIPTION": "Build, deploy and monitor chatbots.",
-    "VERSION": "1",
+    # Left blank so info.version is just the API version (e.g. "v1"/"v2"); drf-spectacular would
+    # otherwise prefix it as "<VERSION> (<api_version>)".
+    "VERSION": "",
     "SERVE_INCLUDE_SCHEMA": False,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.api.schema.prune_unused_tags",
+        "apps.api.schema.set_export_description",
+        "apps.api.schema.set_example_urls",
+    ],
+    "PREPROCESSING_HOOKS": [
+        "apps.api.schema.exclude_legacy_participants_path",
+    ],
+    # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
+    # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
+    "ENUM_NAME_OVERRIDES": {
+        "ChatbotSessionStatusEnum": "apps.experiments.models.SessionStatus",
+    },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
         {
             "name": "Channels",
             "description": "Trigger bot messages or deliver messages directly to users on a channel.",
+        },
+        {
+            "name": "Chatbots",
+            "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
+        },
+        {
+            "name": "Me",
+            "description": "Information about the authenticated user and the team the token is scoped to.",
         },
         {
             "name": "Chat",
@@ -570,10 +597,9 @@ CACHES = {
 }
 
 if IS_TESTING:
-    # Isolate the cache per pytest-xdist worker. Workers get separate databases
-    # but share one Redis, so without this, cached DB-backed objects (e.g. waffle
-    # flags) leak between workers and cause flaky failures.
-    CACHES["default"]["KEY_PREFIX"] = os.environ.get("PYTEST_XDIST_WORKER", "test")
+    # Use an in-process cache for tests: faster than Redis (no network round-trips) and
+    # naturally isolated per pytest-xdist worker, since each worker is a separate process.
+    CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
 
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
@@ -761,7 +787,6 @@ DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
     "consent": "/concepts/consent/",
     "chat_widget": "/chat_widget/",
-    "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
     "concepts.prompt_variables": "/concepts/prompt_variables/",
@@ -777,6 +802,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data-node",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
+    "deploy_channels": "/how-to/deploy_to_different_channels/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",
@@ -854,6 +880,12 @@ COMMCARE_CONNECT_SERVER_ID = env("COMMCARE_CONNECT_SERVER_ID", default="")
 COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_SERVER_ID
 COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
 COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
+
+### Internal team metadata
+# Staff-only, instance-configurable free-text metadata fields shown on a team's internal
+# metadata page and included in admin exports.
+# Format: list of {"key": <slug>, "label": <display label>}
+TEAM_METADATA_FIELDS = env.json("TEAM_METADATA_FIELDS", default=[{"key": "team_owner", "label": "Team Owner"}])
 
 ### System Agent
 # Models for use by the system agent. Separate multiple models (for fallback) using the ',' character.

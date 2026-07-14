@@ -31,6 +31,8 @@ def connect_channel_error_details(error: Exception, identifier: str) -> tuple[in
             identifier,
             status_code,
             error.response.text,
+            # Attach the exception for 400s so Sentry records the full error, not just a log message.
+            exc_info=error if status_code == 400 else None,
         )
         if status_code == 404:
             return 404, "Failed to create channel: Participant not found in CommCare Connect"
@@ -105,14 +107,19 @@ def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: 
 
 
 def create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data):
+    # channel_source is Connect's per-participant identity key, so it must be stable: the bot
+    # name is mutable and reusable, which previously caused distinct experiments to collide on
+    # the same Connect channel (https://github.com/dimagi/open-chat-studio/issues/3620). The
+    # bot name is sent separately as the display name.
     bot_name = channel.extra_data["commcare_connect_bot_name"]
-    response = connect_client.create_channel(connect_id=connect_id, channel_source=bot_name)
+    response = connect_client.create_channel(
+        connect_id=connect_id, channel_source=str(channel.external_id), channel_name=bot_name
+    )
     channel_id = response["channel_id"]
 
-    # Connect's create_channel is idempotent on (connect_user, channel_source), so a reused bot
-    # name returns a channel_id that may already be bound to another ParticipantData row. A
-    # channel_id can only route to one experiment, so never store it on a second row.
-    # See https://github.com/dimagi/open-chat-studio/issues/3620.
+    # Defense in depth: legacy Connect channels are keyed by bot name, so a returned channel_id
+    # may still be bound to another ParticipantData row. A channel_id can only route to one
+    # experiment, so never store it on a second row.
     existing = (
         ParticipantData.objects.filter(system_metadata__commcare_connect_channel_id=channel_id)
         .exclude(pk=participant_data.pk)

@@ -17,7 +17,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationMessage, Evaluator
-from apps.experiments.models import ConsentForm, Experiment, SourceMaterial, Survey
+from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider, LlmProviderModel, TraceProvider, VoiceProvider
 from apps.teams import backends
@@ -44,7 +44,6 @@ class CloneContext:
     # Phase 3: Content
     source_materials: dict[int, SourceMaterial] = field(default_factory=dict)
     consent_forms: dict[int, ConsentForm] = field(default_factory=dict)
-    surveys: dict[int, Survey] = field(default_factory=dict)
 
     # Phase 4: Complex
     pipelines: dict[int, Pipeline] = field(default_factory=dict)
@@ -197,8 +196,6 @@ class Command(BaseCommand):
         self.stdout.write(f"    Source Materials: {sm_count}")
         cf_count = ConsentForm.objects.working_versions_queryset().filter(team=team).count()
         self.stdout.write(f"    Consent Forms: {cf_count}")
-        survey_count = Survey.objects.working_versions_queryset().filter(team=team).count()
-        self.stdout.write(f"    Surveys: {survey_count}")
         pipeline_count = Pipeline.objects.working_versions_queryset().filter(team=team).count()
         self.stdout.write(f"    Pipelines: {pipeline_count}")
         exp_count = Experiment.objects.working_versions_queryset().filter(team=team).count()
@@ -340,16 +337,6 @@ class Command(BaseCommand):
                 )
                 ctx.consent_forms[cf.id] = new_cf
 
-        # Surveys
-        for survey in Survey.objects.working_versions_queryset().filter(team=ctx.source_team):
-            new_survey = Survey.objects.create(
-                team=ctx.target_team,
-                name=survey.name,
-                url=survey.url,
-                confirmation_text=survey.confirmation_text,
-            )
-            ctx.surveys[survey.id] = new_survey
-
     def _remap_node_params(self, ctx: CloneContext, node: Node):
         """Remap FK IDs in node params to new team's objects."""
         params = node.params
@@ -404,8 +391,7 @@ class Command(BaseCommand):
             changed = True
 
         if changed:
-            node.params = params
-            node.save(update_fields=["params"])
+            node.set_params(params)
 
     def _clone_experiments(self, ctx: CloneContext):
         """Clone experiments and remap team + FKs."""

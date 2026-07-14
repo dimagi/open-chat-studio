@@ -1,0 +1,33 @@
+<div class="modal-header">
+    <h3 class="text-base text-xl font-bold mb-2">Revert to v{{ version.version_number }}</h3>
+</div>
+<div class="divider"></div>
+<div class="modal-body">
+    {% if has_unreleased_changes %}
+        <div role="alert" class="alert alert-warning mb-4">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>The working version has unreleased changes that will be overwritten by this revert.</span>
+        </div>
+    {% endif %}
+
+    {% if version_details.fields_changed %}
+        <p class="text-sm mb-2">Reverting will apply the following changes to the working version:</p>
+        <div class="p-3 border border-base-300 rounded-lg">
+            {% include "experiments/components/versions/compare.html" %}
+        </div>
+    {% else %}
+        <p class="text-sm">The working version already matches v{{ version.version_number }}. Reverting will make no changes.</p>
+    {% endif %}
+</div>
+<div class="divider"></div>
+<div class="modal-action">
+    <form method="dialog">
+        <button class="btn btn-sm">Cancel</button>
+    </form>
+    <form method="post" action="{% url 'chatbots:revert-version' team_slug=team.slug experiment_id=experiment.id version_number=version.version_number %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-primary">
+            <i class="fas fa-rotate-left"></i> Revert to v{{ version.version_number }}
+        </button>
+    </form>
+</div>

@@ -65,7 +65,7 @@ class ParticipantDataInline(ReadonlyAdminMixin, admin.TabularInline):
 class ParticipantAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("identifier", "team", "public_id", "platform")
     list_filter = ("team", "platform")
-    search_fields = ("external_chat_id",)
+    search_fields = ("identifier",)
     inlines = [ParticipantDataInline]
 
 
@@ -73,16 +73,6 @@ class ParticipantAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
 class ParticipantData(ReadonlyAdminMixin, admin.ModelAdmin):
     list_display = ("participant", "experiment")
     list_filter = ("participant",)
-
-
-@admin.register(models.Survey)
-class SurveyAdmin(ReadonlyAdminMixin, VersionedModelAdminMixin, admin.ModelAdmin):
-    list_display = (
-        "name",
-        "team",
-        "url",
-    )
-    list_filter = ("team",)
 
 
 @admin.register(models.Experiment)

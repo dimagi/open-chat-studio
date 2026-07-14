@@ -70,7 +70,6 @@ CONTENT_TYPES = {
         "participantdata",
         "promptbuilderhistory",
         "sourcematerial",
-        "survey",
         "syntheticvoice",
     ],
     "files": ["file", "filechunkembedding"],

@@ -307,6 +307,51 @@ class TestExperimentSessionFilters:
         assert filtered.count() == 1
         assert filtered.first() == sessions[1]
 
+    def test_tags_filter_resolves_names_to_ids_and_avoids_tag_name_join(self, sessions_with_tags):
+        """Regression guard: the tags filter must filter on ``tag_id`` rather than join
+        ``annotations_tag`` on ``name``. The name join hides the tag's identity from the
+        planner, which then estimates the match count from the table-wide average and, for
+        a rare tag, picks a catastrophic brute-force join order on large teams.
+        """
+        sessions, _ = sessions_with_tags
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps(["important"]),
+        }
+        qs = ExperimentSessionFilter().apply(
+            sessions[0].experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        sql = str(qs.query).lower()
+        assert "annotations_tag" not in sql, sql
+        assert "tag_id" in sql, sql
+
+    def test_tags_filter_stays_team_scoped_with_colliding_tag_names(self):
+        """Tag names are resolved globally (apply has no ``team``), so a different team's
+        identically-named tag also resolves to an id. The object correlation must still
+        keep matches within the team: a chat can only carry its own team's tags.
+        """
+        session = ExperimentSessionFactory.create()
+        tag = _get_tag(team=session.team, name="shared")
+        session.chat.add_tag(tag, team=session.team, added_by=None)
+        untagged = ExperimentSessionFactory.create(experiment=session.experiment)
+
+        # A different team with a tag of the same name, applied to its own chat.
+        other = ExperimentSessionFactory.create()
+        other_tag = _get_tag(team=other.team, name="shared")
+        other.chat.add_tag(other_tag, team=other.team, added_by=None)
+
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps(["shared"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert list(filtered) == [session]
+        assert untagged not in filtered
+
     def test_version_filters(self, sessions_with_versions):
         """Test version tag filtering"""
         sessions, version_tags = sessions_with_versions

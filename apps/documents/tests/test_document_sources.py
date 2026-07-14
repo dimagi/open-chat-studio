@@ -82,7 +82,7 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
+        manager._index_files = Mock()
         result = manager.sync_collection()
 
         assert result.success
@@ -104,8 +104,8 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
-        manager._update_file = Mock(wraps=manager._update_file)  # ty: ignore[invalid-assignment]
+        manager._index_files = Mock()
+        manager._update_file = Mock(wraps=manager._update_file)
         result = manager.sync_collection()
 
         assert result.success
@@ -150,8 +150,8 @@ class TestDocumentSourceManager:
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
         manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()  # ty: ignore[invalid-assignment]
-        manager._remove_files = Mock()  # ty: ignore[invalid-assignment]
+        manager._index_files = Mock()
+        manager._remove_files = Mock()
         result = manager.sync_collection()
 
         assert result.success
@@ -167,6 +167,40 @@ class TestDocumentSourceManager:
         assert result.files_removed == 1
         manager._remove_files.assert_called_once()
         manager._index_files.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            pytest.param(
+                "https://example.com/files/Loa%20Loa_bringing%20an%20end.pdf",
+                "Loa Loa_bringing an end.pdf",
+                id="url-encoded-path",
+            ),
+            pytest.param("https://example.com/plain.pdf", "plain.pdf", id="plain-path"),
+            pytest.param("just_a_name.pdf", "just_a_name.pdf", id="no-slash"),
+        ],
+    )
+    def test_extract_filename_url_decodes_source(self, document_source, source, expected):
+        manager = DocumentSourceManager(document_source)
+        document = Document(page_content="x", metadata={"source": source})
+        assert manager._extract_filename(document, source) == expected
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_update_file_refreshes_decoded_name(self, create_loader, collection, document_source):
+        url = "https://example.com/files/My%20Doc.pdf"
+        docs = [Mock(page_content="v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+        manager.sync_collection()
+
+        updated_docs = [Mock(page_content="v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
+        create_loader.return_value = MockLoader(collection, updated_docs)
+        manager.sync_collection()
+
+        file = CollectionFile.objects.get(collection=collection).file
+        assert file.name == "My Doc.pdf"
+        assert file.file.read() == b"v2"
 
     def test_sync_log_created(self, document_source):
         initial_count = DocumentSourceSyncLog.objects.count()

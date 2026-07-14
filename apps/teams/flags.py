@@ -74,6 +74,14 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    AI_COST_MONITORING = (
+        "flag_ai_cost_monitoring",
+        "AI cost tracking - surface the usage dashboard and pricing UI (data is recorded for all teams)",
+        "",
+        [],
+        True,
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)

@@ -52,6 +52,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-4o", 128000),
     ],
     "anthropic": [
+        Model("claude-sonnet-5", k(1000), parameters=ClaudeSonnet46Parameters),
         Model("claude-fable-5", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-opus-4-8", k(1000), parameters=ClaudeOpus47Parameters),
         Model("claude-opus-4-7", k(1000), parameters=ClaudeOpus47Parameters),
@@ -60,13 +61,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-sonnet-4-5-20250929", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
-        Model(
-            "claude-sonnet-4-20250514",
-            k(200),
-            deprecated=True,
-            replacement="claude-sonnet-4-6",
-            parameters=AnthropicReasoningParameters,
-        ),
         Model(
             "claude-opus-4-20250514",
             k(200),
@@ -102,6 +96,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.4-mini", 400000, parameters=GPT52Parameters),
         Model("gpt-5.4-nano", 400000, parameters=GPT52Parameters),
         Model("gpt-5.5", 1050000, parameters=GPT55Parameters),
+        Model("gpt-5.6-terra", 1100000, parameters=GPT52Parameters),
+        Model("gpt-5.6-sol", 1100000, parameters=GPT52Parameters),
+        Model("gpt-5.6-luna", 1100000, parameters=GPT52Parameters),
         Model("gpt-5-mini", k(400), parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
@@ -160,6 +157,7 @@ DELETED_MODELS = [
     ("anthropic", "claude-2.0"),
     ("anthropic", "claude-2.1"),
     ("anthropic", "claude-instant-1.2"),
+    ("anthropic", "claude-sonnet-4-20250514", "claude-sonnet-4-6"),
     # OpenAI
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),
@@ -219,7 +217,8 @@ for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
 def get_model_parameters(model_name: str, **param_overrides) -> dict:
     """Return the model parameters, with any overrides applied."""
     parameters_model = LLM_MODEL_PARAMETERS.get(model_name, BasicParameters)
-    return parameters_model(**param_overrides).model_dump()
+    filtered = parameters_model.filter_overrides(param_overrides)
+    return parameters_model(**filtered).model_dump()
 
 
 def get_default_model(provider_type: str) -> Model | None:
@@ -277,44 +276,54 @@ def _update_llm_provider_models(LlmProviderModel):
     for m in existing_custom_by_team.values():
         existing_custom_global[(m.type, m.name)].append(m)
 
-    created_models = dict()
+    created_models = {}
     for provider_type, provider_models in DEFAULT_LLM_PROVIDER_MODELS.items():
         for model in provider_models:
             key = (provider_type, model.name)
             if key in existing:
-                # update existing global models
-                existing_global_model = existing.pop(key)
-                if (
-                    existing_global_model.max_token_limit != model.token_limit
-                    or existing_global_model.deprecated != model.deprecated
-                ):
-                    existing_global_model.max_token_limit = model.token_limit
-                    existing_global_model.deprecated = model.deprecated
-                    existing_global_model.save()
-            else:
-                if not model.deprecated:
-                    created_models[(provider_type, model.name)] = LlmProviderModel.objects.create(
-                        team=None,
-                        type=provider_type,
-                        name=model.name,
-                        max_token_limit=model.token_limit,
-                    )
+                _update_existing_global_model(existing.pop(key), model)
+            elif not model.deprecated:
+                created_models[key] = LlmProviderModel.objects.create(
+                    team=None,
+                    type=provider_type,
+                    name=model.name,
+                    max_token_limit=model.token_limit,
+                )
 
     # replace existing custom models with the new global model and delete the custom models
     for key, model in created_models.items():
-        if key in existing_custom_global:
-            for custom_model in existing_custom_global[key]:
-                related_objects = get_related_objects(custom_model)
-                for obj in related_objects:
-                    field = [f for f in obj._meta.fields if f.related_model == LlmProviderModel][0]
-                    setattr(obj, field.attname, model.id)
-                    obj.save(update_fields=[field.name])
+        for custom_model in existing_custom_global.get(key, []):
+            _replace_custom_model_with_global(custom_model, model, LlmProviderModel)
 
-                related_pipeline_nodes = get_related_pipelines_queryset(custom_model, "llm_provider_model_id")
-                for node in related_pipeline_nodes.select_related("pipeline").all():
-                    _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", model.id)
 
-                custom_model.delete()
+def _update_existing_global_model(existing_global_model, model):
+    """Sync an existing global model's token limit and deprecated flag with the defaults."""
+    if (
+        existing_global_model.max_token_limit != model.token_limit
+        or existing_global_model.deprecated != model.deprecated
+    ):
+        existing_global_model.max_token_limit = model.token_limit
+        existing_global_model.deprecated = model.deprecated
+        existing_global_model.save()
+
+
+def _replace_custom_model_with_global(custom_model, global_model, LlmProviderModel):
+    """Repoint everything referencing ``custom_model`` at ``global_model``, then delete it."""
+    for obj in get_related_objects(custom_model):
+        fields = [f for f in obj._meta.fields if f.related_model == LlmProviderModel]
+        if not fields:
+            # Pipelines surfaced via the Node.llm_provider_model reverse FK have no
+            # direct field to repoint here; their nodes are handled via params below.
+            continue
+        field = fields[0]
+        setattr(obj, field.attname, global_model.id)
+        obj.save(update_fields=[field.name])
+
+    related_pipeline_nodes = get_related_pipelines_queryset(custom_model, "llm_provider_model_id")
+    for node in related_pipeline_nodes.select_related("pipeline").all():
+        _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", global_model.id)
+
+    custom_model.delete()
 
 
 def _get_or_create_custom_model(team_object, key, global_model, existing_custom_by_team):
@@ -339,7 +348,7 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
 def _update_pipeline_node_param(pipeline, node, param_name, param_value, commit=True):
     node.params[param_name] = param_value
     if commit:
-        node.save()
+        node.set_params(node.params)
 
     data = pipeline.data
     raw_node = [n for n in data["nodes"] if n["id"] == node.flow_id][0]

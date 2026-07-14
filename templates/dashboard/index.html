@@ -66,7 +66,7 @@
                     {{ option }}
                   {% endfor %}
                 </select>
-              {% endpartialdef %}
+              {% endpartialdef "select_filter" %}
             {% endwith %}
           </div>
 
@@ -135,14 +135,29 @@
       </template>
     </div>
 
+  <div id="cost-tracking-panel-container">
+    {% if cost_tracking_enabled %}
+      {% include "dashboard/_cost_tracking_panel.html" %}
+    {% endif %}
+  </div>
+
   <!-- Charts Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 
     <!-- Active Participants Chart -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <div class="card-title flex items-center justify-between">
-            <span>{% translate "Active Participants" %}</span>
+          <div class="card-title flex items-center gap-1 justify-between">
+            <div class="flex items-center gap-1">
+              <span>{% translate "Active Participants" %}</span>
+
+              {% blocktranslate asvar active_info %}
+                Users who have participated in at least one chat message within the selected date range.
+              {% endblocktranslate %}
+
+              {% include "generic/help.html" with help_content=active_info %}
+            </div>
+
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.activeParticipants"></div>
           </div>
           <div class="h-80">
@@ -154,8 +169,17 @@
     <!-- Session Analytics Chart -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <div class="card-title flex items-center justify-between">
-            <span>{% translate "Active Sessions" %}</span>
+          <div class="card-title flex items-center gap-1 justify-between">
+            <div class="flex items-center gap-1">
+              <span>{% translate "Active Sessions" %}</span>
+
+              {% blocktranslate asvar active_info %}
+                A session is considered active if it has a message from either the bot or the participant.
+              {% endblocktranslate %}
+
+              {% include "generic/help.html" with help_content=active_info %}
+            </div>
+
             <div class="loading loading-spinner loading-sm" x-show="loadingStates.sessionAnalytics"></div>
           </div>
           <div class="h-80">
@@ -249,6 +273,20 @@
                     <i :class="getSortIcon('completion_rate')" class="text-xs"></i>
                   </div>
                 </th>
+                {% if cost_tracking_enabled %}
+                  <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-right" @click="sortBotPerformance('cost')">
+                    <div class="flex items-center justify-end gap-1">
+                      {% translate "Cost" %}
+                      <i :class="getSortIcon('cost')" class="text-xs"></i>
+                    </div>
+                  </th>
+                  <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-right" @click="sortBotPerformance('cost_per_session')">
+                    <div class="flex items-center justify-end gap-1">
+                      {% translate "Cost / session" %}
+                      <i :class="getSortIcon('cost_per_session')" class="text-xs"></i>
+                    </div>
+                  </th>
+                {% endif %}
               </tr>
             </thead>
             <tbody>
@@ -272,6 +310,10 @@
                       <span class="text-xs" x-text="`${(item.completion_rate * 100).toFixed(1)}%`"></span>
                     </div>
                   </td>
+                  {% if cost_tracking_enabled %}
+                    <td class="text-right" x-text="formatCurrency(item.cost)"></td>
+                    <td class="text-right" x-text="item.cost_per_session != null ? formatCurrency(item.cost_per_session) : '-'"></td>
+                  {% endif %}
                 </tr>
               </template>
             </tbody>

@@ -66,15 +66,15 @@ class Command(BaseCommand):
                         )
                         original_nodes = Node.objects.filter(pipeline=shared_pipeline)
                         for node in original_nodes:
-                            Node.objects.create(
+                            new_node = Node.objects.create(
                                 flow_id=node.flow_id,
                                 type=node.type,
                                 label=node.label,
-                                params=node.params,
                                 working_version=None,
                                 is_archived=node.is_archived,
                                 pipeline=new_pipeline,
                             )
+                            new_node.set_params(node.params)
                         experiment.pipeline = new_pipeline
                         experiment.save(update_fields=["pipeline"])
 

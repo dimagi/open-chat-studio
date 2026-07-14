@@ -23,6 +23,9 @@
       {% endif %}
       <div class="w-full">
         {% include "banners/banner.html" %}
+        {% if request.team.is_migrating %}
+          {% include "teams/migration_lock_banner.html" %}
+        {% endif %}
         {% block breadcrumbs %}
         {% endblock breadcrumbs %}
         {% block app %}

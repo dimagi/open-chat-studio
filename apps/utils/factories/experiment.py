@@ -11,15 +11,6 @@ from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
 
-class SurveyFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = models.Survey
-
-    name = "Name"
-    url = "https://example.com/participant={participant_id}"
-    team = factory.SubFactory(TeamFactory)
-
-
 class ConsentFormFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.ConsentForm
@@ -108,6 +99,16 @@ class ParticipantFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Test Participant {n}")
 
 
+class ParticipantDataFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = models.ParticipantData
+
+    team = factory.SubFactory(TeamFactory)
+    experiment = factory.SubFactory(ExperimentFactory, team=factory.SelfAttribute("..team"))
+    participant = factory.SubFactory(ParticipantFactory, team=factory.SelfAttribute("..team"))
+    data = factory.LazyFunction(dict)
+
+
 class ExperimentSessionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.ExperimentSession
@@ -120,3 +121,11 @@ class ExperimentSessionFactory(factory.django.DjangoModelFactory):
         "apps.utils.factories.channels.ExperimentChannelFactory", team=factory.SelfAttribute("..team")
     )
     platform = factory.LazyAttribute(lambda obj: obj.experiment_channel.platform)
+
+
+class ChatAttachmentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "chat.ChatAttachment"
+
+    chat = factory.SubFactory(ChatFactory)
+    tool_type = "code_interpreter"

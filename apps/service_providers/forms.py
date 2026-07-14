@@ -1,4 +1,5 @@
 import hashlib
+from decimal import Decimal
 
 from django import forms
 from django.core.validators import URLValidator
@@ -352,6 +353,33 @@ class BearerAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     token = forms.CharField(label=_("Bearer Token"))
 
 
+class OAuthClientCredentialsConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["client_secret"]
+    additional_searchable_fields = ["client_id"]
+
+    client_id = forms.CharField(label=_("Client ID"))
+    client_secret = forms.CharField(label=_("Client Secret"))
+    token_url = forms.URLField(
+        label=_("Token URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The OAuth token endpoint that issues access tokens."),
+    )
+    scope = forms.CharField(
+        label=_("Scope"),
+        required=False,
+        help_text=_("Optional space-separated list of scopes to request."),
+    )
+    token_endpoint_auth_method = forms.ChoiceField(
+        label=_("Token Endpoint Authentication"),
+        choices=[
+            ("client_secret_basic", _("HTTP Basic")),
+            ("client_secret_post", _("Request Body (client_secret_post)")),
+        ],
+        initial="client_secret_basic",
+        help_text=_("How the client credentials are sent to the token endpoint."),
+    )
+
+
 class SlackMessagingConfigForm(ProviderTypeConfigForm):
     custom_template = "service_providers/slack_config_form.html"
 
@@ -372,7 +400,21 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
     host = forms.URLField(label=_("Host"))
 
 
+def _price_per_million_field(label):
+    """Per-million-token decimal field used by both the custom-model creation
+    form and the team-scoped pricing-override form. Single source of truth
+    for the (required, min_value, decimal_places) contract."""
+    return forms.DecimalField(label=label, required=False, min_value=Decimal("0"), decimal_places=6)
+
+
 class LlmProviderModelForm(forms.ModelForm):
+    """Custom-model creation form. Optional pricing fields are shown only
+    when `flag_ai_cost_monitoring` is on for the team; the view converts
+    per-million to per-1K tokens before persisting `PricingRule` rows."""
+
+    input_price_per_million_tokens = _price_per_million_field(_("Input price ($ / 1M tokens)"))
+    output_price_per_million_tokens = _price_per_million_field(_("Output price ($ / 1M tokens)"))
+
     class Meta:
         model = LlmProviderModel
         fields = ("type", "name", "max_token_limit")
@@ -397,3 +439,29 @@ class LlmProviderModelForm(forms.ModelForm):
             raise forms.ValidationError(_("A model with this name and max token limit already exists for your team"))
 
         return cleaned_data
+
+
+class PricingOverrideForm(forms.Form):
+    """Team-scoped override on a globally-priced model. Prices entered per
+    million tokens (the friendlier unit on provider pricing pages); the
+    view converts to per-1K-tokens before inserting `PricingRule` rows.
+    Leave a field blank to omit a service_kind from the override.
+    """
+
+    input_price_per_million_tokens = _price_per_million_field(_("Input price ($ / 1M tokens)"))
+    output_price_per_million_tokens = _price_per_million_field(_("Output price ($ / 1M tokens)"))
+    cached_input_price_per_million_tokens = _price_per_million_field(_("Cached input price ($ / 1M tokens)"))
+
+    def clean(self):
+        cleaned = super().clean()
+        provided = [
+            cleaned.get(f)
+            for f in (
+                "input_price_per_million_tokens",
+                "output_price_per_million_tokens",
+                "cached_input_price_per_million_tokens",
+            )
+        ]
+        if not any(p is not None for p in provided):
+            raise forms.ValidationError(_("Set at least one rate."))
+        return cleaned

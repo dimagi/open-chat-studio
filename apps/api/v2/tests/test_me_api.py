@@ -1,4 +1,5 @@
 import pytest
+from allauth.account.models import EmailAddress
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient
 
@@ -41,9 +42,38 @@ def test_me_returns_user_and_team(auth_method):
     assert data["first_name"] == user.first_name
     assert data["last_name"] == user.last_name
 
+    # Email verified (no EmailAddress record → False)
+    assert data["email_verified"] is False
+
     # Team scoped to this token
     assert data["team"]["name"] == team.name
     assert data["team"]["slug"] == team.slug
+
+
+@pytest.mark.django_db()
+def test_me_email_verified_true():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse("api:v2:me"))
+
+    assert response.status_code == 200
+    assert response.json()["email_verified"] is True
+
+
+@pytest.mark.django_db()
+def test_me_email_verified_false_when_unverified():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    EmailAddress.objects.create(user=user, email=user.email, verified=False, primary=True)
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse("api:v2:me"))
+
+    assert response.status_code == 200
+    assert response.json()["email_verified"] is False
 
 
 @pytest.mark.django_db()

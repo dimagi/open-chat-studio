@@ -1,0 +1,26 @@
+{% load i18n %}
+<div class="pg-subtitle">{% translate "Platform Breakdown" %}</div>
+{% if platform_breakdown %}
+<div class="overflow-x-auto mb-6">
+  <table class="table table-zebra table-sm">
+    <thead>
+      <tr>
+        <th>{% translate "Platform" %}</th>
+        <th>{% translate "Sessions" %}</th>
+        <th>{% translate "Messages" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in platform_breakdown %}
+      <tr>
+        <td>{{ row.platform }}</td>
+        <td>{{ row.session_count }}</td>
+        <td>{{ row.msg_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm opacity-60 mb-6">{% translate "No data for the selected date range." %}</p>
+{% endif %}

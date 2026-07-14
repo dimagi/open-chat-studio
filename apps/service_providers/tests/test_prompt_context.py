@@ -1,3 +1,4 @@
+import re
 from unittest.mock import Mock, patch
 
 import pytest
@@ -40,6 +41,19 @@ def test_builds_context_with_specified_variables(mock_session, mock_participant_
     assert "participant_data" not in result
 
     mock_participant_data_proxy.get.assert_not_called()
+
+
+def test_coarse_datetime_renders_day_precision(mock_session):
+    """With coarse_datetime, current_datetime resolves to a day-precision date (no time). See #3625."""
+    repo = InMemoryPipelineRepository(session=mock_session)
+    context = PromptTemplateContext(mock_session, repo)
+
+    full = context.get_context(["current_datetime"])["current_datetime"]
+    coarse = context.get_context(["current_datetime"], coarse_datetime=True)["current_datetime"]
+
+    time_pattern = re.compile(r"\d{2}:\d{2}:\d{2}")
+    assert time_pattern.search(full)
+    assert not time_pattern.search(coarse)
 
 
 def test_repeated_calls_are_cached(mock_session, mock_participant_data_proxy):

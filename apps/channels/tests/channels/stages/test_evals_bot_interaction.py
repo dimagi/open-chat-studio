@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from apps.channels.channels_v2.stages.core import EvalsBotInteractionStage
+from apps.channels.stages.core import EvalsBotInteractionStage
 from apps.channels.tests.channels.conftest import make_context
 
 
@@ -12,7 +12,7 @@ class TestEvalsBotInteractionStage:
         ctx = make_context(user_query=None)
         assert self.stage.should_run(ctx) is False
 
-    @patch("apps.channels.channels_v2.stages.core.EvalsBot")
+    @patch("apps.channels.stages.core.EvalsBot")
     def test_constructs_evals_bot_with_participant_data(self, mock_evals_bot_cls):
         mock_bot = MagicMock()
         mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
@@ -40,7 +40,7 @@ class TestEvalsBotInteractionStage:
         )
         assert ctx.bot is mock_bot
 
-    @patch("apps.channels.channels_v2.stages.core.EvalsBot")
+    @patch("apps.channels.stages.core.EvalsBot")
     def test_sets_bot_response_and_files(self, mock_evals_bot_cls):
         files = [MagicMock(), MagicMock()]
         bot_response = MagicMock(content="bot says hi")

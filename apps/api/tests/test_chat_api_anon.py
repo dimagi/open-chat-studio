@@ -22,7 +22,7 @@ def session(experiment):
 @pytest.mark.django_db()
 def test_start_chat_session(team_with_users, api_client, experiment):
     url = reverse("api:chat:start-session")
-    session_state = {"source": "widget", "page_url": "https://example.com"}
+    session_state = {"page_url": "https://example.com"}
     data = {
         "chatbot_id": experiment.public_id,
         "session_data": session_state,

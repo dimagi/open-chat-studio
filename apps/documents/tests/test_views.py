@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from waffle.testutils import override_flag
 
@@ -13,7 +14,7 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -157,6 +158,21 @@ class TestDeleteCollection:
         assert response.status_code == 200
         collection.refresh_from_db()
         assert collection.is_archived
+
+
+@pytest.mark.django_db()
+class TestAddCollectionFiles:
+    def test_uploaded_files_get_collection_purpose(self, client):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(team=team, is_index=False)
+        client.force_login(team.members.first())
+
+        upload = SimpleUploadedFile("notes.txt", b"hello world", content_type="text/plain")
+        url = reverse("documents:add_collection_files", args=[team.slug, collection.id])
+        client.post(url, {"files": [upload], "notes.txt": "a summary"})
+
+        file = File.objects.get(name="notes.txt", team=team)
+        assert file.purpose == FilePurpose.COLLECTION
 
 
 @pytest.mark.django_db()

@@ -98,7 +98,6 @@
                         type="button"
                         @click="selectAllTagOptions(index)"
                         :disabled="areAllTagsSelected(index)"
-                        :class="areAllTagsSelected(index) ? 'btn-disabled' : ''"
                         class="btn btn-xs btn-outline flex-1">
                         Select All
                       </button>
@@ -106,7 +105,6 @@
                         type="button"
                         @click="clearAllOptions(index)"
                         :disabled="filter.selectedValues.length === 0"
-                        :class="filter.selectedValues.length === 0 ? 'btn-disabled' : ''"
                         class="btn btn-xs btn-outline flex-1">
                         Clear All
                       </button>

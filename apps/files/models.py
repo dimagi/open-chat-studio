@@ -64,14 +64,21 @@ class File(BaseTeamModel, VersionsMixin):
 
     @classmethod
     def from_external_source(
-        cls, filename, external_file, external_id, external_source, team_id, metadata: dict | None = None
+        cls,
+        filename,
+        external_file,
+        external_id,
+        external_source,
+        team_id,
+        metadata: dict | None = None,
+        purpose: FilePurpose | None = None,
     ):
         if existing := File.objects.filter(
             external_id=external_id, external_source=external_source, team_id=team_id
         ).first():
             return existing
 
-        return cls.create(filename, external_file, team_id, external_id, external_source, metadata)
+        return cls.create(filename, external_file, team_id, external_id, external_source, metadata, purpose=purpose)
 
     @classmethod
     def create(
@@ -180,7 +187,6 @@ class File(BaseTeamModel, VersionsMixin):
                 self.name = filename
             if not self.content_type:
                 self.content_type = File.get_content_type(self.file)
-        self._clear_version_cache()
         super().save(*args, **kwargs)
 
     def duplicate(self):

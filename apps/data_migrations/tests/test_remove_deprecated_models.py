@@ -7,10 +7,16 @@ from apps.pipelines.models import Pipeline
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
 
-def _make_pipeline_referencing(llm_provider_model):
+def _make_pipeline_referencing(llm_provider_model, llm_provider=None):
+    params = {
+        "llm_provider_model_id": str(llm_provider_model.id),
+        "prompt": "You are a helpful assistant",
+    }
+    if llm_provider is not None:
+        params["llm_provider_id"] = str(llm_provider.id)
     pipeline: Pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
     pipeline.data["nodes"].append(
         {
@@ -19,10 +25,7 @@ def _make_pipeline_referencing(llm_provider_model):
                 "id": "1",
                 "label": "LLM",
                 "type": "LLMResponseWithPrompt",
-                "params": {
-                    "llm_provider_model_id": str(llm_provider_model.id),
-                    "prompt": "You are a helpful assistant",
-                },
+                "params": params,
             },
         }
     )
@@ -74,6 +77,35 @@ class TestRemoveDeprecatedModelsCommand:
         assert not LlmProviderModel.objects.filter(id=old_model.id).exists()
         node.refresh_from_db()
         assert node.params["llm_provider_model_id"] == replacement_model.id
+        assert node.llm_provider_model_id == replacement_model.id
+
+    @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
+    def test_stale_deleted_provider_in_params_not_resurrected(self, mock_notify):
+        """Regression: a node whose params still reference an already-deleted LlmProvider must
+        not have that dangling id re-derived into the llm_provider_id FK column when the node is
+        touched. Resurrecting it violated the deferred FK constraint at commit on prod deploy."""
+        model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4-old")
+        provider = LlmProviderFactory()
+        provider_id = provider.id
+        pipeline = _make_pipeline_referencing(model, llm_provider=provider)
+        node = pipeline.node_set.get(type="LLMResponseWithPrompt")
+        assert node.llm_provider_id == provider_id
+
+        # Delete the provider: SET_NULL nulls the FK column but the stale id lingers in params.
+        provider.delete()
+        node.refresh_from_db()
+        assert node.llm_provider_id is None
+        assert str(node.params["llm_provider_id"]) == str(provider_id)
+
+        deleted_models = [("openai", "gpt-4-old")]
+        with patch(
+            "apps.data_migrations.management.commands.remove_deprecated_models.DELETED_MODELS",
+            deleted_models,
+        ):
+            call_command("remove_deprecated_models", force=True)
+
+        node.refresh_from_db()
+        assert node.llm_provider_id is None
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_notifies_affected_team(self, mock_notify):

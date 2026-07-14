@@ -1,57 +1,35 @@
-import enum
+from django.db.models import Prefetch
 
-from apps.api.v2.utils import parse_custom_actions
-from apps.pipelines.nodes import nodes as pipeline_nodes
-
-
-class ResourceKind(enum.StrEnum):
-    """The kinds of resource a pipeline node can reference. A ``StrEnum``, so members double as
-    their string values."""
-
-    SOURCE_MATERIAL = "source_material"
-    ASSISTANT = "assistant"
-    CUSTOM_ACTION = "custom_action"
-    COLLECTION = "collection"
-    SYNTHETIC_VOICE = "synthetic_voice"
-    VOICE_PROVIDER = "voice_provider"
-    LLM_PROVIDER = "llm_provider"
-    LLM_PROVIDER_MODEL = "llm_provider_model"
-
-    def iter_raw_ids(self, value):
-        """Yield the resource ids held in a node param ``value`` for this kind.
-
-        Custom-action values are ``"{action_id}:{operation_id}"`` strings, so the action ids are
-        parsed out; every other kind is a single id or a list of them.
-        """
-        if self is ResourceKind.CUSTOM_ACTION:
-            for action_id, _operation_ids in parse_custom_actions(value):
-                yield action_id
-        elif isinstance(value, list):
-            yield from value
-        else:
-            yield value
+from apps.documents.models import Collection
+from apps.pipelines.models import Node
 
 
-# Each resource param field (the real pydantic field name, across all node types) -> the kind/model
-# it loads. Keys are the flat set of "which params are resources"; values are how to load each.
-# list-vs-scalar is sniffed from the value at load time; how fields group into render keys is the
-# serializer's job (e.g. ``llm`` draws from the two llm_provider* fields, both collection fields
-# share the COLLECTION kind so they batch-load as one query).
-RESOURCE_PARAM_FIELDS: dict[str, ResourceKind] = {
-    "llm_provider_id": ResourceKind.LLM_PROVIDER,
-    "llm_provider_model_id": ResourceKind.LLM_PROVIDER_MODEL,
-    "synthetic_voice_id": ResourceKind.SYNTHETIC_VOICE,
-    "source_material_id": ResourceKind.SOURCE_MATERIAL,
-    "assistant_id": ResourceKind.ASSISTANT,
-    "custom_actions": ResourceKind.CUSTOM_ACTION,
-    "collection_id": ResourceKind.COLLECTION,
-    "collection_index_ids": ResourceKind.COLLECTION,
-}
+def inspect_node_queryset():
+    """A Node queryset with every resource relation the inspect serializers render preloaded.
 
-
-def node_class_for(node_type: str):
-    """Look up a node's pydantic class by type name, or return ``None`` if the type is unknown."""
-    return getattr(pipeline_nodes, node_type, None)
+    Used for the chatbot's own pipeline and any embedded pipeline_start pipeline, so a node's
+    FK/M2M relations resolve without per-node queries.
+    """
+    return Node.objects.select_related(
+        "llm_provider",
+        "llm_provider_model",
+        "source_material",
+        "assistant",
+        "synthetic_voice",
+        "synthetic_voice__voice_provider",
+        "collection",
+        "collection__llm_provider",
+        "collection__embedding_provider_model",
+    ).prefetch_related(
+        "collection__files",
+        Prefetch(
+            "collection_indexes",
+            queryset=Collection.objects.select_related("llm_provider", "embedding_provider_model").prefetch_related(
+                "files"
+            ),
+        ),
+        "custom_action_operations__custom_action__auth_provider",
+    )
 
 
 def node_render_order(node) -> int:

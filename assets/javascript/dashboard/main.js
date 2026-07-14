@@ -342,8 +342,47 @@ function dashboard() {
                 this.loadBotPerformanceData(),
                 this.loadUserEngagementData(),
                 this.loadTagAnalytics(),
-                this.loadAverageResponseTimeChart()
+                this.loadAverageResponseTimeChart(),
+                this.loadCostTrackingPanel()
             ]);
+        },
+
+        async loadCostTrackingPanel() {
+            const container = document.getElementById("cost-tracking-panel-container");
+            if (!container) return;
+
+            const sanitized = this.sanitizeParams(this.filters);
+            const urlParams = new URLSearchParams();
+            for (const [key, value] of Object.entries(sanitized)) {
+                if (Array.isArray(value)) {
+                    value.forEach(item => urlParams.append(key, item));
+                } else {
+                    urlParams.set(key, value);
+                }
+            }
+
+            try {
+                const response = await fetch(`api/cost-tracking-panel/?${urlParams}`);
+                if (response.ok) {
+                    container.innerHTML = await response.text();
+                    // The panel HTML (and its chart canvas) is replaced on each
+                    // refresh, so render the chart after the swap.
+                    await this.loadCostTimeseriesChart();
+                }
+            } catch (error) {
+                console.error("Failed to refresh cost tracking panel:", error);
+            }
+        },
+
+        async loadCostTimeseriesChart() {
+            if (!document.getElementById("costTimeseriesChart")) return;
+
+            try {
+                const data = await this.apiRequest('api/cost-timeseries/');
+                window.chartManager.renderCostTimeseriesChart(data);
+            } catch (error) {
+                console.error("Failed to load cost timeseries chart:", error);
+            }
         },
 
         async loadOverviewStats() {
@@ -699,6 +738,14 @@ function dashboard() {
                 return (num / 1000).toFixed(1) + 'K';
             }
             return num.toString();
+        },
+
+        // Mirrors the server-side `cost_display` filter: 2 decimals for $0.01+,
+        // 4 for sub-cent so small early-usage spend doesn't flatten to $0.00.
+        formatCurrency(value) {
+            const num = value || 0;
+            const decimals = num !== 0 && num < 0.01 ? 4 : 2;
+            return `$${num.toFixed(decimals)}`;
         },
 
         formatDuration(minutes) {

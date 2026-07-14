@@ -5,17 +5,18 @@ import pytest
 from django.test import override_settings
 from django.urls import reverse
 
-from apps.channels.channels_v2.whatsapp_channel import WhatsappChannel
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TwilioMessage, WhatsAppMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_meta_cloud_api_message, handle_turn_message, handle_twilio_message
-from apps.chat.channels import MESSAGE_TYPES
+from apps.channels.whatsapp_channel import WhatsappChannel
 from apps.chat.models import Chat, ChatMessage
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.files.models import File
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
 
@@ -40,7 +41,8 @@ class TestTwilio:
     def test_parse_messages(self, message, message_type):
         whatsapp_message = TwilioMessage.parse(message)
         assert whatsapp_message.platform == ChannelPlatform.WHATSAPP
-        assert whatsapp_message.participant_id == "+27456897512"
+        assert whatsapp_message.participant_id == "US.13491208655302741918"
+        assert whatsapp_message.remote_id == "+27456897512"
         if message_type == "text":
             assert whatsapp_message.content_type == MESSAGE_TYPES.TEXT
             assert whatsapp_message.media_url is None
@@ -56,7 +58,7 @@ class TestTwilio:
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
+    @patch("apps.channels.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -118,6 +120,51 @@ class TestTwilio:
         assert attachment_call_2.kwargs["body"] == file2.name
         assert attachment_call_2.kwargs["media_url"] == file2.download_link(session.id)
 
+    @pytest.mark.django_db()
+    @patch("apps.service_providers.messaging_service.TwilioService.client")
+    @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_existing_phone_keyed_participant_reused_for_bsuid_message(
+        self, bot_process_input, send_text_message, twilio_client, twilio_provider
+    ):
+        """Twilio sends the BSUID (ExternalUserId) alongside the phone (From). A participant who
+        chatted before the rollout is keyed by their E.164 phone; that existing participant and
+        session must be reused rather than forking a new BSUID-keyed one."""
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP,
+            messaging_provider=twilio_provider,
+            team=twilio_provider.team,
+            extra_data={"number": "+14155238886"},
+        )
+        experiment = channel.experiment
+        team = experiment.team
+        phone = "+27456897512"
+        bsuid = "US.13491208655302741918"
+
+        legacy = ParticipantFactory.create(team=team, identifier=phone, platform=ChannelPlatform.WHATSAPP)
+        existing_session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=legacy,
+            experiment_channel=channel,
+            team=team,
+            status=SessionStatus.ACTIVE,
+        )
+        bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=existing_session.chat)
+
+        handle_twilio_message(message_data=twilio_messages.Whatsapp.text_message())
+
+        participants = Participant.objects.filter(team=team, platform=ChannelPlatform.WHATSAPP)
+        assert participants.count() == 1
+        assert participants.get().id == legacy.id
+        assert not Participant.objects.filter(team=team, identifier=bsuid).exists()
+
+        legacy.refresh_from_db()
+        assert legacy.remote_id == phone
+
+        sessions = ExperimentSession.objects.filter(participant=legacy, experiment=experiment)
+        assert sessions.count() == 1
+        assert sessions.get().id == existing_session.id
+
 
 class TestTurnio:
     @pytest.mark.parametrize(
@@ -129,7 +176,8 @@ class TestTurnio:
     )
     def test_parse_text_message(self, message, message_type):
         message = WhatsAppMessage.parse(message)
-        assert message.participant_id == "27456897512"
+        assert message.participant_id == "US.13491208655302741918"
+        assert message.remote_id == "27456897512"
         if message_type == "text":
             assert message.message_text == "Hi there!"
             assert message.content_type == MESSAGE_TYPES.TEXT
@@ -144,7 +192,7 @@ class TestTurnio:
     )
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
+    @patch("apps.channels.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -179,6 +227,28 @@ class TestTurnio:
         incoming_message["messages"][0]["video"] = {}
         handle_turn_message(experiment_id=turnio_whatsapp_channel.experiment.public_id, message_data=incoming_message)
         bot_process_input.assert_not_called()
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        "message",
+        [
+            turnio_messages.system_user_changed_number_message(),
+            turnio_messages.unsupported_message(),
+        ],
+    )
+    @patch("apps.channels.tasks.handle_turn_message")
+    def test_non_conversational_messages_not_dispatched(self, handle_turn_message_task, message, client):
+        """Regression test for the KeyError: system/unsupported payloads have a
+        "messages" array but no "contacts", so the webhook must skip them in-line
+        instead of dispatching a Celery task that would crash on the missing key."""
+        messaging_provider = MessagingProviderFactory.create(type=MessagingProviderType.turnio)
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.WHATSAPP, messaging_provider=messaging_provider
+        )
+        url = reverse("channels:new_turn_message", kwargs={"experiment_id": channel.experiment.public_id})
+        response = client.post(url, data=message, content_type="application/json")
+        assert response.status_code == 200
+        handle_turn_message_task.delay.assert_not_called()
 
     @pytest.mark.django_db()
     @pytest.mark.parametrize("message", [turnio_messages.outbound_message(), turnio_messages.status_message()])
@@ -224,7 +294,8 @@ class TestMetaCloudApi:
     )
     def test_parse_messages(self, message, message_type):
         parsed = WhatsAppMessage.parse(message)
-        assert parsed.participant_id == "27456897512"
+        assert parsed.participant_id == "US.13491208655302741918"
+        assert parsed.remote_id == "27456897512"
         if message_type == "text":
             assert parsed.message_text == "Hello"
             assert parsed.content_type == MESSAGE_TYPES.TEXT
@@ -244,7 +315,7 @@ class TestMetaCloudApi:
     )
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.channels.channels_v2.stages.core.QueryExtractionStage._transcribe_voice")
+    @patch("apps.channels.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_voice_message")
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -286,6 +357,54 @@ class TestMetaCloudApi:
             message_data=incoming_message,
         )
         bot_process_input.assert_not_called()
+
+    @pytest.mark.django_db()
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_existing_phone_keyed_participant_reused_for_bsuid_message(
+        self, bot_process_input, send_text_message, meta_cloud_api_whatsapp_channel
+    ):
+        """A participant who chatted before BSUID rollout is keyed by phone. When a message now
+        arrives carrying both the BSUID and the phone, we must reuse that existing participant
+        and continue their session -- not fork a new BSUID-keyed participant."""
+        channel = meta_cloud_api_whatsapp_channel
+        experiment = channel.experiment
+        # The pipeline keys participants by the experiment's team (the channel may carry its own
+        # team in the fixture); create the legacy data under the team the pipeline actually uses.
+        team = experiment.team
+        phone = "27456897512"
+        bsuid = "US.13491208655302741918"
+
+        legacy = ParticipantFactory.create(team=team, identifier=phone, platform=ChannelPlatform.WHATSAPP)
+        existing_session = ExperimentSessionFactory.create(
+            experiment=experiment,
+            participant=legacy,
+            experiment_channel=channel,
+            team=team,
+            status=SessionStatus.ACTIVE,
+        )
+        bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=existing_session.chat)
+
+        handle_meta_cloud_api_message(
+            channel_id=channel.id,
+            team_slug=team.slug,
+            message_data=meta_cloud_api_messages.text_message_value(),
+        )
+
+        # The legacy phone-keyed participant is reused; no BSUID-keyed participant is forked.
+        participants = Participant.objects.filter(team=team, platform=ChannelPlatform.WHATSAPP)
+        assert participants.count() == 1
+        assert participants.get().id == legacy.id
+        assert not Participant.objects.filter(team=team, identifier=bsuid).exists()
+
+        # The phone is captured on remote_id so outbound messages can reach the user.
+        legacy.refresh_from_db()
+        assert legacy.remote_id == phone
+
+        # Their existing session is continued, not forked.
+        sessions = ExperimentSession.objects.filter(participant=legacy, experiment=experiment)
+        assert sessions.count() == 1
+        assert sessions.get().id == existing_session.id
 
     @pytest.mark.django_db()
     @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_typing_indicator")

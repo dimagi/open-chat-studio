@@ -1,10 +1,11 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.db import IntegrityError
 
-from apps.channels.channels_v2.evaluation_channel import EvaluationChannel
 from apps.channels.datamodels import BaseMessage
-from apps.channels.models import ExperimentChannel
+from apps.channels.evaluation_channel import EvaluationChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage
@@ -33,8 +34,26 @@ def evals_channel(evals_experiment):
 
 
 @pytest.mark.django_db()
+def test_get_team_evaluations_channel_is_idempotent(evals_experiment):
+    """Repeated calls return the same team channel instead of creating duplicates"""
+    channel1 = ExperimentChannel.objects.get_team_evaluations_channel(evals_experiment.team)
+    channel2 = ExperimentChannel.objects.get_team_evaluations_channel(evals_experiment.team)
+    assert channel1.id == channel2.id
+
+
+@pytest.mark.django_db()
+def test_team_evaluations_channel_is_unique_per_team(evals_experiment):
+    """The DB constraint itself rejects a second evaluations channel for the same team"""
+    team = evals_experiment.team
+    ExperimentChannel.objects.get_team_evaluations_channel(team)
+
+    with pytest.raises(IntegrityError):
+        ExperimentChannel.objects.create(team=team, platform=ChannelPlatform.EVALUATIONS, name="another-evals-channel")
+
+
+@pytest.mark.django_db()
 class TestEvaluationChannelEndToEnd:
-    @patch("apps.channels.channels_v2.stages.core.EvalsBot")
+    @patch("apps.channels.stages.core.EvalsBot")
     def test_processes_message_with_evals_bot(self, mock_evals_bot_cls, evals_experiment, evals_channel):
         mock_bot = MagicMock()
         mock_bot.process_input.return_value = ChatMessage(content="Bot response")
@@ -57,7 +76,7 @@ class TestEvaluationChannelEndToEnd:
         mock_evals_bot_cls.assert_called_once()
         assert mock_evals_bot_cls.call_args.kwargs["participant_data"] == participant_data
 
-    @patch("apps.channels.channels_v2.stages.core.enqueue_static_triggers")
+    @patch("apps.channels.stages.core.enqueue_static_triggers")
     @patch("apps.chat.bots.PipelineBot.process_input")
     def test_static_triggers_suppressed(self, mock_process, mock_triggers, evals_experiment, evals_channel):
         mock_process.return_value = ChatMessage(content="Bot response")

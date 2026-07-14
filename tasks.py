@@ -79,8 +79,9 @@ def translations(c: Context):
 
 @task
 def schema(c: Context):
-    """Generate OpenAPI schema file for the API."""
-    c.run("python manage.py spectacular --file api-schemas/v1.yml --validate")
+    """Generate an OpenAPI schema file per API surface (v1/v2, plus the standalone export surface)."""
+    for version in ("v1", "v2", "export"):
+        c.run(f"python manage.py spectacular --api-version {version} --file api-schemas/{version}.yml --validate")
 
 
 @task(help={"step": "Run setup interactively, confirming each step"})
@@ -275,7 +276,7 @@ def npm(c: Context, watch=False, install=False):
 @task(help={"port": "Port to serve docs on (default: 8001)"})
 def docs(c: Context, port=8001):
     """Serve the developer documentation site locally using MkDocs."""
-    c.run(f"mkdocs serve --dev-addr localhost:{port}", echo=True, pty=True)
+    c.run(f"zensical serve --dev-addr localhost:{port}", echo=True, pty=True)
 
 
 def _confirm(message, _exit=True, exit_message="Done"):

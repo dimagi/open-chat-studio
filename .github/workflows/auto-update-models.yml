@@ -1,9 +1,18 @@
 name: Auto Update LLM Models
 
-# Daily check against llm-stats.com (via the zeroeval Stats API) for newly
-# released LLM models from providers we use in OCS. When a candidate is found,
-# Claude Code is invoked to add the model following docs/developer_guides/managing_models.md
-# and open a PR.
+# Daily reconciliation against llm-stats.com (via the zeroeval Stats API):
+# scripts/reconcile_models.py runs once and produces three signals:
+#
+#   - new_models      candidates not yet registered in OCS
+#   - price_changes   existing seed entries whose upstream rate has moved
+#   - missing_pricing OCS-managed (default_models) models with no seed entry
+#
+# Job 1 (reconcile) runs the script. The price-change side effects (rewrite
+# seed + emit migration) are deterministic, so the same job opens the
+# "Pricing update" PR and the "missing pricing" issue. Job 2 (new-models-pr)
+# only runs when there are candidates and invokes Claude Code for the
+# judgement calls (which providers, which params class, deprecations) per
+# docs/developer_guides/managing_models.md.
 #
 # Model metadata is sourced from https://llm-stats.com (via api.zeroeval.com).
 
@@ -26,108 +35,107 @@ permissions:
   contents: read
 
 jobs:
-  fetch-updates:
+  reconcile:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
     outputs:
-      has_models: ${{ steps.fetch.outputs.has_models }}
-      model_count: ${{ steps.fetch.outputs.model_count }}
-      model_ids: ${{ steps.fetch.outputs.model_ids }}
+      has_new_models: ${{ steps.reconcile.outputs.has_new_models }}
+      new_model_count: ${{ steps.reconcile.outputs.new_model_count }}
+      new_model_ids: ${{ steps.reconcile.outputs.new_model_ids }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
-      - name: Fetch model updates from llm-stats.com
-        id: fetch
+      - name: Reconcile upstream model catalogue and pricing seed
+        id: reconcile
         env:
           LLM_STATS_BEARER_TOKEN: ${{ secrets.LLM_STATS_BEARER_TOKEN }}
-          DAYS: ${{ inputs.days || '1' }}
         run: |
-          python3 << 'PY'
-          import json
-          import os
-          import sys
-          import urllib.error
-          import urllib.request
+          # Stdlib-only - no dependency install needed.
+          python3 scripts/reconcile_models.py \
+            --bearer-token "$LLM_STATS_BEARER_TOKEN" \
+            --days "${{ inputs.days || '1' }}" \
+            --output reconciliation.json
 
-          BEARER = os.environ["LLM_STATS_BEARER_TOKEN"]
-          DAYS = os.environ.get("DAYS", "1")
-
-          # Organizations on llm-stats.com that map to OCS default_models providers.
-          # Strict match — other orgs (xai, mistral, qwen, moonshotai, etc.) are ignored.
-          OCS_ORGS = {"openai", "anthropic", "google", "deepseek", "perplexity"}
-
-          def api_get(url: str) -> dict:
-              req = urllib.request.Request(
-                  url,
-                  headers={
-                      "Authorization": f"Bearer {BEARER}",
-                      "User-Agent": "ocs-auto-models-workflow/1.0",
-                      "Accept": "application/json",
-                  },
-              )
-              with urllib.request.urlopen(req, timeout=30) as resp:
-                  return json.load(resp)
-
-          updates_url = f"https://api.zeroeval.com/stats/v1/updates?days={DAYS}&limit=30"
-          updates = api_get(updates_url)
-
-          matched = [
-              m for m in updates.get("models", [])
-              if m.get("organization", {}).get("id") in OCS_ORGS
-              and m.get("model_type") == "llm"
-          ]
-
-          # Fields on the detail response that are noisy and not useful for adding
-          # a model to default_models.py — drop them to keep the JSON lean.
-          NOISY_DETAIL_FIELDS = {"scores", "top_scores", "providers"}
-
-          enriched = []
-          for m in matched:
-              model_id = m["id"]
-              try:
-                  details = api_get(f"https://api.zeroeval.com/stats/v1/models/{model_id}")
-                  for field in NOISY_DETAIL_FIELDS:
-                      details.pop(field, None)
-                  m["details"] = details
-                  # Prefer context_window from detail endpoint when present
-                  if details.get("context_window") and not m.get("context_window"):
-                      m["context_window"] = details["context_window"]
-              except urllib.error.HTTPError as e:
-                  m["details_error"] = f"HTTP {e.code}: {e.reason}"
-              except Exception as e:
-                  m["details_error"] = str(e)
-              enriched.append(m)
-
-          with open("matched_models.json", "w") as f:
-              json.dump(enriched, f, indent=2)
-
-          model_ids = ",".join(m["id"] for m in enriched)
-          gh_out = os.environ["GITHUB_OUTPUT"]
-          with open(gh_out, "a") as f:
-              f.write(f"has_models={'true' if enriched else 'false'}\n")
-              f.write(f"model_count={len(enriched)}\n")
-              f.write(f"model_ids={model_ids}\n")
-
-          print(f"Found {len(enriched)} candidate model(s) from OCS providers")
-          for m in enriched:
-              org = m.get("organization", {}).get("id", "?")
-              ctx = m.get("context_window") or "unknown"
-              print(f"  - [{org}] {m['id']} (context_window={ctx})")
-          PY
-
-      - name: Upload matched models payload
-        if: steps.fetch.outputs.has_models == 'true'
-        uses: actions/upload-artifact@v7
+      - name: Upload reconciliation payload
+        if: steps.reconcile.outputs.has_new_models == 'true'
+        uses: actions/upload-artifact@v7.0.1
         with:
-          name: matched-models
-          path: matched_models.json
+          name: reconciliation-payload
+          path: |
+            reconciliation.json
           retention-days: 7
 
-  update-models:
-    needs: fetch-updates
-    if: needs.fetch-updates.outputs.has_models == 'true'
+      - name: Configure git author
+        if: steps.reconcile.outputs.has_price_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit, push, and open Pricing update PR
+        if: steps.reconcile.outputs.has_price_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ steps.reconcile.outputs.pricing_pr_title }}
+          PR_BODY_PATH: ${{ steps.reconcile.outputs.pricing_pr_body_path }}
+        run: |
+          BRANCH="auto-pricing/$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          git add apps/cost_tracking/seed_data/llm_pricing.json apps/cost_tracking/migrations/
+          git commit -m "$PR_TITLE"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$PR_TITLE" \
+            --body-file "$PR_BODY_PATH"
+
+      - name: Open or update missing-pricing issue
+        if: steps.reconcile.outputs.has_missing_pricing == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY_PATH: ${{ steps.reconcile.outputs.missing_pricing_issue_body_path }}
+          MISSING_COUNT: ${{ steps.reconcile.outputs.missing_pricing_count }}
+        run: |
+          # One open issue at a time. Edit it if it already exists so the body
+          # reflects the latest gap list; otherwise open a new one. Labelled
+          # `cost-tracking,auto-models` so it filters cleanly. Body is
+          # prefixed with a team @-mention so the platform team is notified.
+          TITLE="Missing pricing for ${MISSING_COUNT} OCS-managed model(s)"
+          {
+            echo "cc @dimagi/open-chat-studio"
+            echo
+            cat "$ISSUE_BODY_PATH"
+          } > issue-body.md
+          EXISTING=$(gh issue list \
+            --state open \
+            --label cost-tracking \
+            --search "Missing pricing for in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --title "$TITLE" --body-file issue-body.md
+          else
+            gh issue create \
+              --title "$TITLE" \
+              --body-file issue-body.md \
+              --label cost-tracking \
+              --label auto-models
+          fi
+
+  new-models-pr:
+    needs: reconcile
+    if: needs.reconcile.outputs.has_new_models == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -166,10 +174,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download matched models payload
+      - name: Download reconciliation payload
         uses: actions/download-artifact@v8
         with:
-          name: matched-models
+          name: reconciliation-payload
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -185,7 +193,7 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -205,7 +213,7 @@ jobs:
         run: |
           BRANCH_NAME="auto-models/$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude Code
         id: claude
@@ -215,91 +223,94 @@ jobs:
           prompt: |
             You are adding newly released LLM models to Open Chat Studio.
 
-            ## Source
-            Model metadata was fetched from the llm-stats.com Stats API (api.zeroeval.com).
-            The matched payload is saved at `./matched_models.json` in the working
-            directory. It contains models released in the last ${{ inputs.days || '1' }}
-            day(s) whose `organization.id` matches one of OCS's providers (openai,
-            anthropic, google, deepseek, perplexity).
+            ## Input
+            `scripts/reconcile_models.py` has already fetched candidates from
+            llm-stats.com, removed models already registered in OCS, and resolved
+            per-1K-token pricing. Its output is at `./reconciliation.json`. Do
+            NOT re-fetch, re-dedup, or re-derive pricing - that work is done and
+            unit-tested. You only care about the `new_models[]` section of the
+            payload here; the `price_changes` and `missing_pricing` sections are
+            handled in a separate job and are not your concern.
 
-            ${{ needs.fetch-updates.outputs.model_count }} candidate model(s) were
-            found: ${{ needs.fetch-updates.outputs.model_ids }}
+            The payload covers the last ${{ inputs.days || '1' }} day(s). Key fields:
+            - `new_models[]` - candidates to consider. Each has: `id`, `org`,
+              `context_window`, `ocs_providers` (the default OCS provider mapping),
+              `already_registered_providers`, `already_priced_providers`,
+              `source_url`, `sources`, `details_error`, and `pricing`.
+            - `pricing.has_pricing` / `pricing.rates` (per-1K-token) /
+              `pricing.source` (`llm_stats` or `litellm`) /
+              `pricing.llm_pricing_entries` - ready-to-paste `llm_pricing.json`
+              entries, one per provider that still needs pricing.
+            - `pricing_entries` - flat list of all generated pricing entries.
+            - `unpriced_models[]` - models the script could not price.
 
-            ## Your task
-            1. Read `matched_models.json` and `apps/service_providers/llm_service/default_models.py`.
-            2. For each candidate, decide whether it should be added:
-               - Skip any model already present in `DEFAULT_LLM_PROVIDER_MODELS` or
-                 listed in `DELETED_MODELS`.
-               - Skip models that don't make sense for OCS (e.g., embedding-only
-                 models, image-only models, deprecated preview models that have
-                 already been superseded).
-               - Map organizations to OCS providers using these rules:
-                 * `openai` → add to both `openai` and `azure` provider lists
-                   when the model is generally available in both. If unsure, add
-                   to `openai` only.
-                 * `anthropic` → `anthropic`
-                 * `google` → add to both `google` and `google_vertex_ai`
-                 * `deepseek` → `deepseek`
-                 * `perplexity` → `perplexity`
-            3. Follow `docs/developer_guides/managing_models.md` exactly when adding
-               a model:
-               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using the
-                 `context_window` from the payload as `token_limit`.
-               - Pick an existing parameters class that matches the model family.
-                 Only create a new parameters class if no existing one fits.
+            ${{ needs.reconcile.outputs.new_model_count }} new model(s):
+            ${{ needs.reconcile.outputs.new_model_ids }}
+
+            ## Your task (judgement + applying the generated output)
+            1. Read `reconciliation.json` and
+               `apps/service_providers/llm_service/default_models.py`.
+            2. For each model in `new_models`, decide whether to add it:
+               - Skip models that don't make sense for OCS (embedding-only,
+                 image-only, or preview models already superseded).
+               - Use `ocs_providers` as the default provider mapping. Apply
+                 judgement: for an `openai` model keep `azure` only if it is
+                 generally available on Azure OpenAI - otherwise drop `azure` and
+                 add to `openai` only. Skip any provider already in
+                 `already_registered_providers`.
+            3. Follow `docs/developer_guides/managing_models.md` exactly when adding:
+               - Register it in `DEFAULT_LLM_PROVIDER_MODELS` using `context_window`
+                 as `token_limit`.
+               - Pick an existing parameters class that matches the model family;
+                 only create a new one if none fits.
                - Create a new Django migration that calls `llm_model_migration()`.
                - Strip `llm_model_migration()` (and any `notify_deprecated_models` /
                  `remove_deprecated_models` data migrations) from earlier migrations
                  in `apps/service_providers/migrations/` so they only run once.
-            4. If a candidate's `context_window` (or other info you need, e.g.
-               parameter ranges, modality, deprecation hints) is missing from the
-               top-level payload, consult `details.sources` in the model detail
-               response — it typically has keys like `api_ref`, `paper`, `weights`,
-               `repo` pointing to the provider's official docs. Use the WebFetch
-               tool to read those URLs if you need more context to make a confident
-               decision. Also check `details.url` (the llm-stats.com page).
-               If a candidate has a `details_error` field set, the detail fetch
-               failed — still try to add the model using only the top-level fields
-               and any knowledge you have about the model family.
-            5. If after consulting sources you STILL cannot determine `context_window`
-               or other essential info, you should STILL add the model but:
-               - Use a conservative placeholder token_limit (e.g. 128000) and add a
-                 comment on that line: `# TODO: verify token_limit — context_window
-                 not available from source`
-               - Flag the model in the PR description under a `## Needs follow-up`
-                 section, listing each model with the specific info that was
-                 missing (token_limit, parameters class choice, etc.) and the
-                 sources you already checked.
-            6. Run linters and tests on the changed files:
-               - `uv run ruff check apps/service_providers/ --fix`
-               - `uv run ruff format apps/service_providers/`
+            4. Apply pricing: for each model you add, append its
+               `pricing.llm_pricing_entries` to
+               `apps/cost_tracking/seed_data/llm_pricing.json`, keeping only the
+               providers you actually registered. Trust the unit conversion but
+               sanity-check the magnitudes. Do NOT invent prices - any model in
+               `unpriced_models` (or a provider with no generated entry) goes under
+               `## Needs follow-up` instead. After editing, confirm the file is
+               still valid JSON.
+            5. If `context_window` or other essential info is missing, consult
+               `sources` / `source_url` with WebFetch. If a model has a
+               `details_error`, the detail fetch failed - use the top-level fields
+               and what you know about the family. If you still can't determine
+               `token_limit`, add the model with a conservative placeholder
+               (e.g. 128000) and a `# TODO: verify token_limit` comment, and flag
+               it under `## Needs follow-up`.
+            6. Lint and test the changed files:
+               - `uv run ruff check apps/ --fix`
+               - `uv run ruff format apps/service_providers/ apps/cost_tracking/`
                - `uv run pytest apps/service_providers/tests/test_default_models.py -v`
-               If the migration touched other files, lint/test those too.
+               Lint/test any other files your migration touched.
             7. Commit the changes with a descriptive message.
-            8. Push the branch and open a PR against `main`. Use the repo's PR
-               template (`.github/pull_request_template.md`) and fill it in.
+            8. Push the branch and open a PR against `main` using the repo's PR
+               template (`.github/pull_request_template.md`).
                - PR title: `Auto: add new LLM models from llm-stats.com (YYYY-MM-DD)`
-                 (use today's UTC date).
+                 (today's UTC date).
                - The PR description MUST:
-                 * List each added model and its source URL from the payload (the
-                   `url` field — typically `https://llm-stats.com/models/<id>`).
+                 * List each added model with its `source_url`.
                  * Include the line: `Model metadata sourced from
                    [llm-stats.com](https://llm-stats.com) via the zeroeval Stats
                    API.`
-                 * Include a `## Needs follow-up` section listing any models where
-                   you couldn't gather enough info, with what's missing.
-                 * Check the "The migrations are backwards compatible" box —
+                 * Include a `## Needs follow-up` section for any unpriced models or
+                   missing info.
+                 * Check the "The migrations are backwards compatible" box -
                    `llm_model_migration()` is additive (only seeds new rows) so
                    these migrations are inherently backwards-compatible.
             9. Apply the `claude` and `auto-models` labels to the PR if they exist.
-            10. If after dedup there is nothing to add, comment-only outcome: do NOT
-                open an empty PR — instead print a short summary to stdout and exit.
+            10. If after review there is nothing to add, do NOT open an empty PR -
+                print a short summary to stdout and exit.
             11. ALWAYS write a decision report to `./decision_report.md` before
                 exiting, regardless of outcome (PR opened, nothing to add, or
                 partial). Use this exact structure:
 
                 ```markdown
-                # Auto Update Models — Decision Report
+                # Auto Update Models - Decision Report
 
                 **Run date (UTC):** <YYYY-MM-DD HH:MM>
                 **Candidates considered:** <count>
@@ -311,21 +322,21 @@ jobs:
                 ### `<model-id>` (org: `<org>`)
                 - **Verdict:** Added | Skipped | Needs follow-up
                 - **Mapped providers:** <e.g. openai, azure>  (if added)
-                - **Reason:** <one-sentence rationale — why added/skipped, or
+                - **Pricing:** <source: llm_stats | litellm | unpriced>
+                - **Reason:** <one-sentence rationale - why added/skipped, or
                   what info was missing>
-                - **Source:** <llm-stats.com URL from payload>
+                - **Source:** <source_url>
 
-                <repeat for every candidate in matched_models.json>
+                <repeat for every model in new_models>
 
                 ## Notes
-                <any other context worth surfacing — sources consulted, edge
+                <any other context worth surfacing - sources consulted, edge
                 cases, decisions deferred to follow-up, etc.>
                 ```
 
-                Every candidate from `matched_models.json` MUST appear in the
-                "Per-model decisions" section with an explicit verdict and
-                reason — including skips and dedup matches. This file is the
-                audit trail for the run.
+                Every model in `new_models` MUST appear in the "Per-model
+                decisions" section with an explicit verdict and reason. This
+                file is the audit trail for the run.
 
             Branch: ${{ steps.branch.outputs.branch_name }} (already created and
             checked out).
@@ -339,7 +350,7 @@ jobs:
             cat decision_report.md >> "$GITHUB_STEP_SUMMARY"
           else
             {
-              echo "# Auto Update Models — Decision Report"
+              echo "# Auto Update Models - Decision Report"
               echo ""
               echo "**No decision report was produced.** Claude Code exited without"
               echo "writing \`decision_report.md\`. Check the Claude step logs above"

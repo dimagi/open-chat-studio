@@ -14,11 +14,16 @@ from django.utils import timezone
 from django.utils.http import http_date
 from packaging.version import InvalidVersion, Version
 
-LATEST_VERSION = "0.9.1"
+LATEST_VERSION = "0.10.0"
 
 # Widgets older than 0.5.1 (Sept 2025) do not send the x-ocs-widget-version
 # header, so a missing/unparseable version is treated as older than everything.
 MAX_VERSION_LENGTH = 32
+
+# Recorded for widgets that authenticate but report no x-ocs-widget-version header
+# (pre-0.5.1, e.g. 0.4.x). The deprecation helpers treat it as older than every
+# release, and it matches the label teams already see for unreported versions.
+UNKNOWN_WIDGET_VERSION = "unknown"
 
 
 def widget_docs_url() -> str:
@@ -125,15 +130,45 @@ def get_widget_update_status(version: str | None) -> WidgetUpdateStatus | None:
 
 WIDGET_VERSION_HEADER = "x-ocs-widget-version"
 
+# Request attribute the view sets to flag a pre-header widget (see mark_widget_request).
+_WIDGET_REQUEST_ATTR = "_ocs_is_widget_request"
+
+
+def is_widget_request(request, session_data: dict | None = None) -> bool:
+    """Whether the request comes from an embedded chat widget.
+
+    Widgets 0.5.1+ send the x-ocs-widget-version header. Older widgets (e.g. 0.4.x)
+    send no header but declare `source == "widget"` in the start-session body.
+    """
+    if WIDGET_VERSION_HEADER in request.headers:
+        return True
+    return bool(session_data) and session_data.get("source") == "widget"
+
+
+def mark_widget_request(request) -> None:
+    """Flag a request as widget traffic so sunset headers still apply when the
+    widget sends no x-ocs-widget-version header (pre-0.5.1, e.g. 0.4.x).
+
+    The sunset-header decorator wraps the view from outside DRF's @api_view, so it
+    sees the underlying Django request rather than the DRF one the view holds. Flag
+    that underlying request (falling back to the request itself) so the marker
+    survives the DRF request/response boundary.
+    """
+    target = getattr(request, "_request", request)
+    setattr(target, _WIDGET_REQUEST_ATTR, True)
+
 
 def apply_widget_sunset_headers(request, response):
     """Add RFC 8594 headers when the calling widget's version is deprecated.
 
-    Only applies when the widget version header is present: requests without
-    it (API users, authenticated sessions) are not widget traffic.
+    Applies to widget traffic only: either the x-ocs-widget-version header is present
+    (0.5.1+) or the view flagged a pre-header widget via `mark_widget_request` (0.4.x
+    and older send no header). A missing/unparseable version is treated as older than
+    every deprecation cutoff. Other requests (API users, authenticated sessions) are
+    left untouched.
     """
     raw = request.headers.get(WIDGET_VERSION_HEADER)
-    if raw is None:
+    if raw is None and not getattr(request, _WIDGET_REQUEST_ATTR, False):
         return response
     deprecation = get_deprecation(clean_widget_version(raw))
     if deprecation:

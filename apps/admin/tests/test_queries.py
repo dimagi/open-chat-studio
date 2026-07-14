@@ -12,6 +12,9 @@ from apps.admin.queries import (
     get_usage_data,
     get_whatsapp_message_stats,
     get_whatsapp_number_data,
+    team_metadata_to_csv,
+    top_teams_to_csv,
+    usage_to_csv,
 )
 from apps.admin.views import _compute_growth
 from apps.channels.models import ChannelPlatform
@@ -59,6 +62,52 @@ class TestGetTopTeams:
         assert result[0]["participant_count"] == 1
         assert result[1]["team"] == "Team B"
         assert result[1]["msg_count"] == 1
+
+
+@pytest.mark.django_db()
+class TestTeamMetadataExports:
+    def test_top_teams_csv_includes_metadata_columns(self, date_range, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        start, end = date_range
+        team = TeamFactory.create(name="Team A", metadata={"team_owner": "Jane Doe"})
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+
+        csv_output = top_teams_to_csv(start, end)
+        lines = csv_output.strip().splitlines()
+        assert lines[0] == "Team,Messages,Sessions,Participants,Team Owner"
+        assert lines[1].startswith("Team A,")
+        assert lines[1].endswith(",Jane Doe")
+
+    def test_usage_csv_includes_metadata_columns(self, date_range, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        start, end = date_range
+        team = TeamFactory.create(name="Team A", metadata={"team_owner": "Jane Doe"})
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+        TraceFactory.create(
+            team=team,
+            experiment=session.experiment,
+            session=session,
+            participant=session.participant,
+            status=TraceStatus.SUCCESS,
+            n_total_tokens=100,
+        )
+
+        csv_output = usage_to_csv(start, end)
+        lines = csv_output.strip().splitlines()
+        assert lines[0] == "Team,Run Count,Total Tokens,Team Owner"
+        assert lines[1] == "Team A,1,100,Jane Doe"
+
+    def test_team_metadata_csv_lists_all_teams(self, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        TeamFactory.create(name="Team A", slug="team-a", metadata={"team_owner": "Jane Doe"})
+        TeamFactory.create(name="Team B", slug="team-b", metadata={})
+
+        csv_output = team_metadata_to_csv()
+        lines = csv_output.strip().splitlines()
+        assert lines[0] == "Team,Slug,Team Owner"
+        assert "Team A,team-a,Jane Doe" in lines
+        assert "Team B,team-b," in lines
 
 
 @pytest.mark.django_db()
@@ -285,7 +334,7 @@ class TestGetUsageData:
         self._make_trace(session=session_a, tokens=50)
         self._make_trace(session=session_b, tokens=200)
 
-        rows = {team: (run_count, tokens) for team, run_count, tokens in get_usage_data(start, end)}
+        rows = {team: (run_count, tokens) for team, run_count, tokens, _ in get_usage_data(start, end)}
         assert rows["Team A"] == (2, 150)
         assert rows["Team B"] == (1, 200)
 
@@ -324,7 +373,7 @@ class TestGetUsageData:
         self._make_trace(session=eval_session, tokens=99999)
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 100)]
+        assert rows == [("T", 1, 100, {})]
 
     def test_excludes_pending_traces_but_includes_errors(self, date_range):
         start, end = date_range
@@ -335,7 +384,7 @@ class TestGetUsageData:
         self._make_trace(session=session, status=TraceStatus.PENDING, tokens=99999)
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 2, 15)]
+        assert rows == [("T", 2, 15, {})]
 
     def test_handles_null_token_counts(self, date_range):
         start, end = date_range
@@ -350,7 +399,7 @@ class TestGetUsageData:
         )
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 0)]
+        assert rows == [("T", 1, 0, {})]
 
     def test_does_not_merge_teams_sharing_a_display_name(self, date_range):
         # Team.name has no uniqueness constraint, so grouping by name alone would
@@ -384,7 +433,7 @@ class TestGetUsageData:
         Trace.objects.filter(id=in_window.id).update(timestamp=start + timedelta(seconds=1))
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 10)]
+        assert rows == [("T", 1, 10, {})]
 
 
 class TestComputeGrowth:

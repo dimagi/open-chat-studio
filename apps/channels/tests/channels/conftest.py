@@ -3,13 +3,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.callbacks import ChannelCallbacks
-from apps.channels.channels_v2.capabilities import ChannelCapabilities
-from apps.channels.channels_v2.channel_base import ChannelBase
-from apps.channels.channels_v2.pipeline import MessageProcessingContext
-from apps.channels.channels_v2.sender import ChannelSender
+from apps.channels.callbacks import ChannelCallbacks
+from apps.channels.capabilities import ChannelCapabilities
+from apps.channels.channel_base import ChannelBase
+from apps.channels.const import MESSAGE_TYPES
+from apps.channels.pipeline import MessageProcessingContext
+from apps.channels.sender import ChannelSender
 from apps.channels.tests.message_examples.base_messages import text_message
-from apps.chat.channels import MESSAGE_TYPES
 
 
 class StubSender(ChannelSender):

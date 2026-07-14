@@ -10,6 +10,7 @@ from django.db.models.functions import Coalesce, TruncDate
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.experiments.models import ExperimentSession, Participant
+from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
 
@@ -39,7 +40,13 @@ def get_participant_stats(start: datetime, end: datetime):
 
 
 def usage_to_csv(start: datetime, end: datetime):
-    return _write_data_to_csv(["Team", "Run Count", "Total Tokens"], get_usage_data(start, end))
+    metadata_fields = get_team_metadata_fields()
+    headers = ["Team", "Run Count", "Total Tokens"] + [field["label"] for field in metadata_fields]
+    rows = (
+        (team_name, run_count, total_tokens, *(metadata.get(field["key"], "") for field in metadata_fields))
+        for team_name, run_count, total_tokens, metadata in get_usage_data(start, end)
+    )
+    return _write_data_to_csv(headers, rows)
 
 
 def get_usage_data(start: datetime, end: datetime):
@@ -53,7 +60,7 @@ def get_usage_data(start: datetime, end: datetime):
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
         .exclude(session__platform=ChannelPlatform.EVALUATIONS)
-        .values("team_id", "team__name")
+        .values("team_id", "team__name", "team__metadata")
         .annotate(
             run_count=Count("id"),
             total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
@@ -61,7 +68,7 @@ def get_usage_data(start: datetime, end: datetime):
         .order_by("-run_count", "team__name")
     )
     for data in usage_data:
-        yield data["team__name"], data["run_count"], data["total_tokens"]
+        yield data["team__name"], data["run_count"], data["total_tokens"], data["team__metadata"] or {}
 
 
 def get_whatsapp_numbers():
@@ -177,7 +184,7 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
     msg_data = (
         ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
         .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
-        .values("chat__team_id", "chat__team__name", "chat__team__slug")
+        .values("chat__team_id", "chat__team__name", "chat__team__slug", "chat__team__metadata")
         .annotate(
             msg_count=Count("id"),
             session_count=Count("chat__experiment_session", distinct=True),
@@ -197,6 +204,7 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
         {
             "team": row["chat__team__name"],
             "team_slug": row["chat__team__slug"],
+            "metadata": row["chat__team__metadata"] or {},
             "msg_count": row["msg_count"],
             "session_count": row["session_count"],
             "participant_count": participant_map.get(row["chat__team_id"], 0),
@@ -304,9 +312,34 @@ def get_top_experiments(start: datetime, end: datetime, limit: int = 10):
 
 
 def top_teams_to_csv(start: datetime, end: datetime):
+    metadata_fields = get_team_metadata_fields()
     data = get_top_teams(start, end)
-    rows = ((d["team"], d["msg_count"], d["session_count"], d["participant_count"]) for d in data)
-    return _write_data_to_csv(["Team", "Messages", "Sessions", "Participants"], rows)
+    headers = ["Team", "Messages", "Sessions", "Participants"] + [field["label"] for field in metadata_fields]
+    rows = (
+        (
+            d["team"],
+            d["msg_count"],
+            d["session_count"],
+            d["participant_count"],
+            *(d["metadata"].get(field["key"], "") for field in metadata_fields),
+        )
+        for d in data
+    )
+    return _write_data_to_csv(headers, rows)
+
+
+def get_all_teams_metadata():
+    metadata_fields = get_team_metadata_fields()
+    teams = Team.objects.order_by("name").values("name", "slug", "metadata")
+    for team in teams:
+        metadata = team["metadata"] or {}
+        yield (team["name"], team["slug"], *(metadata.get(field["key"], "") for field in metadata_fields))
+
+
+def team_metadata_to_csv():
+    metadata_fields = get_team_metadata_fields()
+    headers = ["Team", "Slug"] + [field["label"] for field in metadata_fields]
+    return _write_data_to_csv(headers, get_all_teams_metadata())
 
 
 def top_experiments_to_csv(start: datetime, end: datetime):

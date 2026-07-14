@@ -309,6 +309,22 @@ class TestNewMetaCloudApiMessage:
         assert response.status_code == 200
         mock_delay.assert_not_called()
 
+    @patch("apps.channels.tasks.handle_meta_cloud_api_message.delay")
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            meta_cloud_api_messages.system_user_changed_number_message(),
+            meta_cloud_api_messages.unsupported_message(),
+        ],
+    )
+    def test_non_conversational_messages_not_dispatched(self, mock_delay, payload, meta_cloud_api_channel):
+        """Regression test for the KeyError: system/unsupported payloads have a
+        "messages" array but no "contacts", so the webhook must skip them in the
+        dispatch loop instead of queuing a task that would crash on the missing key."""
+        response = self._post(payload)
+        assert response.status_code == 200
+        mock_delay.assert_not_called()
+
     def test_invalid_json_returns_400(self):
         factory = RequestFactory()
         body = b"not json"

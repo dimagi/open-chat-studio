@@ -453,4 +453,216 @@ describe('ocs-chat', () => {
       expect(starterQuestions).toBeTruthy();
     });
   });
+
+  describe('Public event API', () => {
+    function collectEvents(widget: Element, ...names: string[]): Record<string, CustomEvent[]> {
+      const collected: Record<string, CustomEvent[]> = {};
+      for (const name of names) {
+        collected[name] = [];
+        widget.addEventListener(name, (e: Event) => collected[name].push(e as CustomEvent));
+      }
+      return collected;
+    }
+
+    it('dispatches ocs:open when the widget becomes visible', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>`,
+      });
+
+      const events = collectEvents(page.root!, 'ocs:open', 'ocs:close');
+
+      page.root!.visible = true;
+      await page.waitForChanges();
+
+      expect(events['ocs:open']).toHaveLength(1);
+      expect(events['ocs:close']).toHaveLength(0);
+    });
+
+    it('dispatches ocs:close when the widget is hidden', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible></open-chat-studio-widget>`,
+      });
+
+      const events = collectEvents(page.root!, 'ocs:open', 'ocs:close');
+
+      page.root!.visible = false;
+      await page.waitForChanges();
+
+      expect(events['ocs:close']).toHaveLength(1);
+      expect(events['ocs:open']).toHaveLength(0);
+    });
+
+    it('ocs:open and ocs:close are composed and bubbling', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1"></open-chat-studio-widget>`,
+      });
+
+      let capturedOpen: CustomEvent | null = null;
+      page.root!.addEventListener('ocs:open', (e: Event) => {
+        capturedOpen = e as CustomEvent;
+      });
+
+      page.root!.visible = true;
+      await page.waitForChanges();
+
+      expect(capturedOpen).not.toBeNull();
+      expect((capturedOpen as unknown as CustomEvent).bubbles).toBe(true);
+      expect((capturedOpen as unknown as CustomEvent).composed).toBe(true);
+    });
+
+    it('ocs:message:before-send fires before ocs:message:sent', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'session-abc';
+
+      const order: string[] = [];
+      page.root!.addEventListener('ocs:message:before-send', () => order.push('before'));
+      page.root!.addEventListener('ocs:message:sent', () => order.push('sent'));
+
+      (component as any).chatService = {
+        sendMessage: jest.fn().mockResolvedValue({ status: 'processing', task_id: 'task-1' }),
+        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
+        stopMessagePolling: jest.fn(),
+        startMessagePolling: jest.fn().mockReturnValue({ stop: jest.fn() }),
+        setSessionToken: jest.fn(),
+      };
+
+      await (component as any).sendMessage('hello');
+
+      expect(order[0]).toBe('before');
+      expect(order[1]).toBe('sent');
+    });
+
+    it('ocs:message:before-send detail contains message and sessionId', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'session-xyz';
+
+      let detail: any = null;
+      page.root!.addEventListener('ocs:message:before-send', (e: Event) => {
+        detail = (e as CustomEvent).detail;
+      });
+
+      (component as any).chatService = {
+        sendMessage: jest.fn().mockResolvedValue({ status: 'processing', task_id: 't1' }),
+        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
+        stopMessagePolling: jest.fn(),
+        startMessagePolling: jest.fn().mockReturnValue({ stop: jest.fn() }),
+        setSessionToken: jest.fn(),
+      };
+
+      await (component as any).sendMessage('test message');
+
+      expect(detail).toEqual({ message: 'test message', sessionId: 'session-xyz' });
+    });
+
+    it('ocs:message:before-send allows pageContext to be updated before the API call', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'session-ctx';
+
+      const freshCtx = { url: '/new-page', title: 'New Page' };
+      page.root!.addEventListener('ocs:message:before-send', () => {
+        // Simulate what an embedder would do: update pageContext at send time
+        page.root!.pageContext = freshCtx;
+      });
+
+      let capturedRequestBody: any = null;
+      (component as any).chatService = {
+        sendMessage: jest.fn().mockImplementation((_: string, body: unknown) => {
+          capturedRequestBody = body;
+          return Promise.resolve({ status: 'processing', task_id: 't1' });
+        }),
+        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
+        stopMessagePolling: jest.fn(),
+        startMessagePolling: jest.fn().mockReturnValue({ stop: jest.fn() }),
+        setSessionToken: jest.fn(),
+      };
+
+      await (component as any).sendMessage('hello');
+
+      expect(capturedRequestBody.context).toEqual(freshCtx);
+    });
+
+    it('dispatches ocs:message:received for each non-user message via startMessagePolling', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'poll-session';
+
+      const receivedEvents: CustomEvent[] = [];
+      page.root!.addEventListener('ocs:message:received', (e: Event) => {
+        receivedEvents.push(e as CustomEvent);
+      });
+
+      let capturedCallbacks: any = null;
+      (component as any).chatService = {
+        sendMessage: jest.fn(),
+        pollTask: jest.fn().mockReturnValue({ cancel: jest.fn() }),
+        stopMessagePolling: jest.fn(),
+        startMessagePolling: jest.fn().mockImplementation((_sessionId: string, callbacks: any) => {
+          capturedCallbacks = callbacks;
+          return { stop: jest.fn() };
+        }),
+        setSessionToken: jest.fn(),
+      };
+
+      // Trigger startMessagePolling by calling the private method directly
+      (component as any).startMessagePolling();
+
+      const assistantMessage = { created_at: '2026-01-01T00:00:00Z', role: 'assistant', content: 'Hello!' };
+      const userMessage = { created_at: '2026-01-01T00:00:01Z', role: 'user', content: 'Hi' };
+
+      capturedCallbacks.onMessages([assistantMessage, userMessage]);
+      await page.waitForChanges();
+
+      // Only the assistant message should fire ocs:message:received
+      expect(receivedEvents).toHaveLength(1);
+      expect(receivedEvents[0].detail).toEqual({
+        message: { ...assistantMessage },
+        sessionId: 'poll-session',
+      });
+    });
+
+    // ocs:session:started is tested in ocs-chat_session_handling.spec.tsx
+    // which has the full ChatSessionService module mock wired up.
+
+    it('dispatches ocs:session:ended with sessionId when session ends', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="bot-1" visible></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'ending-session';
+      (component as any).chatService = { stopMessagePolling: jest.fn() };
+
+      let detail: any = null;
+      page.root!.addEventListener('ocs:session:ended', (e: Event) => {
+        detail = (e as CustomEvent).detail;
+      });
+
+      (component as any).handleSessionEnded();
+
+      expect(detail).toEqual({ sessionId: 'ending-session' });
+    });
+  });
 });

@@ -48,6 +48,9 @@ def pipeline(llm_provider, llm_provider_model):
 class TestServiceProviderModel:
     @pytest.mark.django_db()
     def test_provider_models_for_team_includes_global(self, llm_provider_model):
+        # Global models are normally seeded by a data migration; create them explicitly so the test
+        # does not depend on migration-seeded data.
+        LlmProviderModelFactory.create_batch(2, team=None)
         team_models = LlmProviderModel.objects.for_team(llm_provider_model.team).all()
         # There is a single team model that we just created in the factory
         assert len([m for m in team_models if m.team == llm_provider_model.team]) == 1

@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING, Annotated, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
-from langchain_core.messages import AIMessage
-from langchain_core.messages.utils import count_tokens_approximately
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
@@ -14,8 +13,7 @@ from apps.chat.models import ChatMessageMetadataKeys
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
-from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message
-from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
+from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
@@ -41,10 +39,12 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
     user_input = context.input
     session = context.session
     tool_callbacks = ToolCallbacks()
-    agent = build_node_agent(node, context, session, tool_callbacks)
+    prompt_context = _get_prompt_context(node, session, context)
+    agent = build_node_agent(node, context, session, tool_callbacks, prompt_context=prompt_context)
 
     attachments = list(context.attachments)
     formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
+    _add_current_datetime_to_turn(node, prompt_context, formatted_input)
 
     inputs = StateSchema(
         messages=[formatted_input],
@@ -53,7 +53,7 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
         input_message_id=context.input_message_id,
     )
     result = agent.invoke(inputs)
-    final_message = result["messages"][-1]
+    final_message = _get_final_ai_message(result["messages"])
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
 
@@ -97,15 +97,16 @@ def _process_agent_output(node: PipelineNode, session: ExperimentSession, messag
 
 
 def build_node_agent(
-    node: PipelineNode, context: NodeContext, session: ExperimentSession, tool_callbacks: ToolCallbacks
+    node: PipelineNode,
+    context: NodeContext,
+    session: ExperimentSession,
+    tool_callbacks: ToolCallbacks,
+    prompt_context: PromptTemplateContext,
 ):
-    prompt_context = _get_prompt_context(node, session, context)
     tools = _get_configured_tools(node, session=session, tool_callbacks=tool_callbacks)
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
     middleware = get_agent_middleware(node, system_message)
-    # MessageSizeValidationMiddleware temporarily disabled — over-counts tool outputs and blocks
-    # legitimate conversations. Re-enable after switching to a tool-aware token check.
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
@@ -115,15 +116,6 @@ def build_node_agent(
         middleware=middleware,
         state_schema=StateSchema,
     )
-
-
-def _build_size_validation_middleware(node: PipelineNode, system_message) -> MessageSizeValidationMiddleware | None:
-    max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
-    if not max_token_limit:
-        return None
-    system_tokens = count_tokens_approximately([system_message])
-    effective_limit = max(max_token_limit - system_tokens, 0)
-    return MessageSizeValidationMiddleware(token_limit=effective_limit)
 
 
 def _process_files(node: PipelineNode, cited_files: set[File], generated_files: set[File]) -> dict:
@@ -138,6 +130,28 @@ def _process_files(node: PipelineNode, cited_files: set[File], generated_files: 
         ChatMessageMetadataKeys.CITED_FILES: [file.id for file in cited_files],
         ChatMessageMetadataKeys.GENERATED_FILES: [file.id for file in generated_files],
     }
+
+
+def _add_current_datetime_to_turn(
+    node: PipelineNode, prompt_context: PromptTemplateContext, message: HumanMessage
+) -> None:
+    """Prepend the precise, tz-aware current datetime to the latest message turn.
+
+    Keeping the volatile value out of the cached system prompt prefix (see ``get_system_message``)
+    and on the newest, uncached turn instead lets prompt caching keep the large stable prefix warm
+    across turns. Only injected when the node's prompt opts into ``{current_datetime}``. See #3625.
+    """
+    if not prompt_uses_current_datetime(node.prompt):
+        return
+
+    datetime_block = {
+        "type": "text",
+        "text": f"<current_datetime>{prompt_context.get_current_datetime()}</current_datetime>",
+    }
+    if isinstance(message.content, list):
+        message.content.insert(0, datetime_block)
+    else:
+        message.content = [datetime_block, {"type": "text", "text": message.content}]
 
 
 def _get_prompt_context(node: PipelineNode, session: ExperimentSession, context: NodeContext):
@@ -215,3 +229,22 @@ def _get_search_tool(node):
             allowed_collection_ids=node.collection_index_ids,
         )
         return search_tool
+
+
+def _get_final_ai_message(messages: list) -> AIMessage:
+    """Return the last AI message with non-empty text content.
+
+    Claude (and some other models) sometimes respond with a non-empty message
+    alongside tool calls, then send further turns that carry only tool calls
+    (a ``tool_use`` block with no text) or an empty content array — signalling
+    completion via the tool flow rather than a follow-up text turn.  Those
+    trailing turns render to empty output, so we walk backwards and return the
+    last message that actually has text.  ``message.text`` handles both plain
+    string content and structured content blocks, ignoring tool-call blocks.
+    """
+    for message in reversed(messages):
+        if isinstance(message, AIMessage) and message.text:
+            return message
+    # Fallback: return the last message as-is (preserves existing behaviour
+    # when no AI message has text, e.g. pure tool-call chains).
+    return messages[-1]

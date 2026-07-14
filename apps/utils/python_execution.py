@@ -2,6 +2,8 @@ import datetime
 import inspect
 import json
 import logging
+import random
+import re
 import sys
 import time
 import traceback
@@ -12,7 +14,7 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
-from RestrictedPython.Guards import guarded_iter_unpack_sequence
+from RestrictedPython.Guards import guarded_iter_unpack_sequence, guarded_unpack_sequence
 
 logger = logging.getLogger("ocs.utils")
 
@@ -104,11 +106,14 @@ class RestrictedPythonExecutionMixin(BaseModel):
         custom_globals = {
             "__builtins__": cls._get_custom_builtins(),
             "json": json,
+            "re": re,
             "datetime": datetime,
             "time": time,
+            "random": random,
             "_getitem_": default_guarded_getitem,
             "_getiter_": default_guarded_getiter,
             "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
+            "_unpack_sequence_": guarded_unpack_sequence,
             "_write_": lambda x: x,
         }
         return custom_globals

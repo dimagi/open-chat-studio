@@ -52,6 +52,15 @@ def experiment_session():
     return ExperimentSessionFactory.create()
 
 
+@pytest.fixture()
+def general_synthetic_voices():
+    """The general (non-team-scoped) voices normally seeded by data migrations."""
+    return [
+        SyntheticVoiceFactory.create(service=service, voice_provider=None)
+        for service in (SyntheticVoice.AWS, SyntheticVoice.OpenAI, SyntheticVoice.Azure)
+    ]
+
+
 class TestSyntheticVoice:
     @pytest.mark.django_db()
     def test_team_scoped_services(self):
@@ -68,13 +77,13 @@ class TestSyntheticVoice:
         assert voices_queryset.count() == SyntheticVoice.objects.count()
 
     @pytest.mark.django_db()
-    def test_get_for_team_excludes_service(self):
+    def test_get_for_team_excludes_service(self, general_synthetic_voices):
         voices_queryset = SyntheticVoice.get_for_team(team=None, exclude_services=[SyntheticVoice.AWS])
         services = set(voices_queryset.values_list("service", flat=True))
         assert services == {SyntheticVoice.OpenAI, SyntheticVoice.Azure}
 
     @pytest.mark.django_db()
-    def test_get_for_team_do_not_include_other_team_exclusive_voices(self):
+    def test_get_for_team_do_not_include_other_team_exclusive_voices(self, general_synthetic_voices):
         """Tests that `get_for_team` returns both general and team exclusive synthetic voices. Exclusive synthetic
         voices are those whose service is one of SyntheticVoice.TEAM_SCOPED_SERVICES
         """
@@ -370,7 +379,7 @@ class TestExperimentSession:
         }
 
     @pytest.mark.parametrize("fail_silently", [True, False])
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.registry.from_experiment_session")
     @patch.object(ExperimentSession, "_bot_prompt_for_user")
     def test_ad_hoc_message(self, mock_bot_prompt, from_experiment_session, fail_silently, experiment_session):
         mock_channel = Mock()
@@ -393,7 +402,7 @@ class TestExperimentSession:
         else:
             _test()
 
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.registry.from_experiment_session")
     @patch.object(ExperimentSession, "_bot_prompt_for_user")
     def test_ad_hoc_message_transaction_rollback(self, mock_bot_prompt, from_experiment_session, experiment_session):
         """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
@@ -429,7 +438,7 @@ class TestExperimentSession:
         final_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
         assert final_message_count == initial_message_count, "Transaction should have rolled back the message creation"
 
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.registry.from_experiment_session")
     @patch("apps.service_providers.models.LlmProvider.get_llm_service")
     def test_ad_hoc_message_links_ai_message_to_trace(
         self, mock_get_llm_service, from_experiment_session, experiment_session
@@ -447,7 +456,7 @@ class TestExperimentSession:
         trace = Trace.objects.get(session=experiment_session)
         assert trace.output_message_id == ai_message.id
 
-    @patch("apps.chat.channels.ChannelBase.from_experiment_session")
+    @patch("apps.channels.registry.from_experiment_session")
     @patch.object(ExperimentSession, "_bot_prompt_for_user")
     def test_ad_hoc_message_direct_delivery(self, mock_bot_prompt, from_experiment_session, experiment_session):
         """When ``message_text`` is provided the message is delivered verbatim, bypassing the LLM,
