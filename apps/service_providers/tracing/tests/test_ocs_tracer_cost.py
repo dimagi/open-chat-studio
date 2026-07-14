@@ -59,7 +59,7 @@ class TestRecordCostsShortCircuits:
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.metrics_collector = None
         tracer.trace_record = Mock(spec=Trace)
-        with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
+        with patch("apps.service_providers.tracing.ocs_tracer.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
 
@@ -67,7 +67,7 @@ class TestRecordCostsShortCircuits:
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.metrics_collector = self._collector_with_events()
         tracer.trace_record = None
-        with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
+        with patch("apps.service_providers.tracing.ocs_tracer.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
 
@@ -76,7 +76,7 @@ class TestRecordCostsShortCircuits:
         tracer = OCSTracer(experiment, experiment.team_id)
         tracer.metrics_collector = MetricsCollector(start_time=0.0)
         tracer.trace_record = Mock(spec=Trace)
-        with patch("apps.cost_tracking.services.recorder.record_usage_bulk") as recorder:
+        with patch("apps.service_providers.tracing.ocs_tracer.record_usage_bulk") as recorder:
             tracer._record_costs()
             recorder.assert_not_called()
 
