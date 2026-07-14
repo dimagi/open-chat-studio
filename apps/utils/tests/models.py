@@ -4,13 +4,15 @@ These only exist in the test database. Changes to the model classes require
 rebuilding the test database (use `--create-db`).
 
 Audited models: Collection, Bot, Tool
-Unaudited models: Param
+Unaudited models: Param, Webhook, CycleA, CycleB
 
 Relationships:
 - Bot -> Collection (CASCADE)
 - Bot -> Tool (M2M)
 - Tool -> Collection (SET_NULL)
 - Param -> Tool (CASCADE)
+- Webhook -> Bot (PROTECT)
+- CycleA <-> CycleB (PROTECT both ways, for deletion-order cycle tests)
 """
 
 from django.db import models
@@ -57,6 +59,27 @@ class Collection(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Webhook(models.Model):
+    bot = models.ForeignKey(Bot, on_delete=models.PROTECT)
+
+    def __str__(self):
+        return str(self.pk)
+
+
+class CycleA(models.Model):
+    other = models.ForeignKey("CycleB", on_delete=models.PROTECT, null=True)
+
+    def __str__(self):
+        return str(self.pk)
+
+
+class CycleB(models.Model):
+    other = models.ForeignKey(CycleA, on_delete=models.PROTECT, null=True)
+
+    def __str__(self):
+        return str(self.pk)
 
 
 MODEL_NAMES = [f"{model.__module__}.{model.__name__}" for model in [Bot, Tool, Collection, Param]]
