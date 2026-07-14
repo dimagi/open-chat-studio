@@ -52,7 +52,7 @@ def test_form_rejects_legacy_filter_query():
         dataset=dataset,
         data={
             "source_experiment": experiment.id,
-            "filter_query_string": "f_tags=tag1~tag2&op_tags=any%20of",
+            "filter_query_string": "filter_0_column=tags&filter_0_operator=any%20of&filter_0_value=tag1~tag2",
             "is_enabled": True,
         },
     )

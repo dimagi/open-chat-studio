@@ -42,13 +42,8 @@ def test_trace_detail_view_renders_filter_links(client, team_with_users):
     links = {}
     for href in re.findall(rf'href="({re.escape(home_url)}\?[^"]+)"', content):
         params = parse_qs(urlparse(unescape(href)).query)
-        links[
-            params["f_session_id"][0]
-            if "f_session_id" in params
-            else params["f_experiment"][0]
-            if "f_experiment" in params
-            else params["f_participant"][0]
-        ] = params
+        column = next(key[2:] for key in params if key.startswith("f_"))
+        links[column] = params
 
     session_link = links["session_id"]
     assert session_link["op_session_id"] == ["equals"]

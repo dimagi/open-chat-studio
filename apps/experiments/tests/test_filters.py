@@ -315,9 +315,8 @@ class TestExperimentSessionFilters:
         """
         sessions, _ = sessions_with_tags
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["important"]),
+            "f_tags": "important",
+            "op_tags": Operators.ANY_OF,
         }
         qs = ExperimentSessionFilter().apply(
             sessions[0].experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -342,9 +341,8 @@ class TestExperimentSessionFilters:
         other.chat.add_tag(other_tag, team=other.team, added_by=None)
 
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["shared"]),
+            "f_tags": "shared",
+            "op_tags": Operators.ANY_OF,
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))

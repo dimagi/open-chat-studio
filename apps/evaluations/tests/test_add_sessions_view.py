@@ -126,5 +126,5 @@ def test_post_reads_filter_params_from_post_body(client_with_user, team_with_use
     # 5th positional arg is the filter_query string passed to the Celery task.
     filter_query = mock_delay.call_args.args[4]
     assert filter_query, "filter_query should be populated from POST body, not empty"
-    assert "f_tags=+1" in filter_query
+    assert "f_tags=%2B1" in filter_query
     assert "op_tags=any" in filter_query
