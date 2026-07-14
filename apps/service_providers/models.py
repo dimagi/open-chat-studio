@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -440,24 +441,24 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
                 warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")
         elif self.type == VoiceProviderType.intron.value:
-            try:
-                # Nested savepoint: any IntegrityError from the seeding loop rolls back its own
-                # rows without poisoning the outer transaction, so the provider itself still commits.
-                with transaction.atomic(savepoint=True):
-                    build_intron_synthetic_voices(self)
-            except Exception:
-                log.exception("Failed to seed Intron voices for provider %s", self.pk)
-                warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
+            self._seed_builtin_voices(build_intron_synthetic_voices, warnings)
         elif self.type == VoiceProviderType.minimax.value:
-            try:
-                # Nested savepoint: any IntegrityError from the seeding loop rolls back its own
-                # rows without poisoning the outer transaction, so the provider itself still commits.
-                with transaction.atomic(savepoint=True):
-                    build_minimax_synthetic_voices(self)
-            except Exception:
-                log.exception("Failed to seed MiniMax voices for provider %s", self.pk)
-                warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
+            self._seed_builtin_voices(build_minimax_synthetic_voices, warnings)
         return warnings
+
+    def _seed_builtin_voices(self, builder: Callable[["VoiceProvider"], None], warnings: list[str]) -> None:
+        """Seed a provider's built-in synthetic voices, collecting any failure as a warning.
+
+        The seeding runs inside a nested savepoint so that an ``IntegrityError`` from the
+        seeding loop rolls back only its own rows without poisoning the outer transaction —
+        the provider itself still commits.
+        """
+        try:
+            with transaction.atomic(savepoint=True):
+                builder(self)
+        except Exception:
+            log.exception("Failed to seed voices for %s provider %s", self.type, self.pk)
+            warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
 
     @transaction.atomic()
     def sync_voices(self):
