@@ -42,18 +42,22 @@ _MASK_RULES = {
 
 
 def mask_secret(secret: str, provider_type: str) -> str:
-    """Redact ``secret`` in the style the given provider uses for its own keys."""
-    if not secret:
+    """Redact ``secret`` in the style the given provider uses for its own keys.
+
+    Non-string secrets (e.g. Vertex's service-account JSON dict) have no
+    key-style fingerprint to join on, so they mask to an empty string.
+    """
+    if not isinstance(secret, str) or not secret:
         return ""
     if len(secret) <= _LAST:
         return f"...{secret}"
 
     last = secret[-_LAST:]
     rule = _MASK_RULES.get(provider_type)
-    if rule and rule.header and secret.startswith(rule.header):
-        body = secret[len(rule.header) :]
-        return f"{rule.header}{body[: rule.lead]}...{last}"
-    return f"...{last}"
+    if rule is None or not secret.startswith(rule.header):
+        return f"...{last}"
+    body = secret[len(rule.header) :]
+    return f"{rule.header}{body[: rule.lead]}...{last}"
 
 
 def get_provider_key_fingerprints() -> Iterator[dict]:

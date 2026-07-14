@@ -26,6 +26,8 @@ def superuser_client(client):
         pytest.param("deepseek", "sk-somethingXYZW", "...XYZW", id="generic-fallback"),
         pytest.param("openai", "", "", id="empty"),
         pytest.param("openai", "abc", "...abc", id="too-short"),
+        pytest.param("google_vertex_ai", {"type": "service_account"}, "", id="non-string-dict"),
+        pytest.param("openai", None, "", id="none"),
     ],
 )
 def test_mask_secret(provider_type, secret, expected):
@@ -61,3 +63,18 @@ def test_masks_keys_and_never_leaks_secret(superuser_client):
     body = response.content.decode()
     assert OPENAI_KEY not in body
     assert ANTHROPIC_KEY not in body
+
+
+@pytest.mark.django_db()
+def test_vertex_dict_credentials_do_not_crash(superuser_client):
+    # Vertex stores credentials as a JSON dict, not a string key; the endpoint
+    # must not choke on it (masks to an empty fingerprint).
+    LlmProviderFactory(
+        type=str(LlmProviderTypes.google_vertex_ai),
+        config={"credentials_json": {"type": "service_account", "private_key_id": "abc"}},
+    )
+    response = superuser_client.get(reverse("ocs_admin:provider_keys_api"))
+
+    assert response.status_code == 200
+    vertex = {p["provider_type"]: p for p in response.json()["providers"]}["google_vertex_ai"]
+    assert vertex["masked_key"] == ""

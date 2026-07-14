@@ -125,6 +125,9 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
     """Cross-team usage: token totals for every team (always populated) merged
     with per-model cost detail where cost tracking is on. `cost_tracking_enabled`
     flags which teams' cost detail is complete vs. token-only.
+
+    `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
+    records in more than one currency and summing them would be meaningless.
     """
     token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
@@ -145,7 +148,7 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
                 "run_count": 0,
                 "total_tokens": 0,
                 "cost_tracking_enabled": team_id in enabled_team_ids,
-                "total_cost": _ZERO,
+                "total_cost": defaultdict(Decimal),  # currency -> amount
                 "models": [],
             }
         return teams[team_id]
@@ -157,7 +160,7 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
 
     for row in cost_rows:
         entry = _entry(row["team_id"])
-        entry["total_cost"] += row["cost"]
+        entry["total_cost"][row["currency"]] += row["cost"]
         entry["models"].append(
             {
                 "provider_type": row["provider_type"],
@@ -170,7 +173,7 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
 
     result = sorted(teams.values(), key=lambda t: (-t["run_count"], t["team_name"] or ""))
     for entry in result:
-        entry["total_cost"] = str(entry["total_cost"])
+        entry["total_cost"] = {currency: str(amount) for currency, amount in entry["total_cost"].items()}
 
     return {"start": start.isoformat(), "end": end.isoformat(), "teams": result}
 

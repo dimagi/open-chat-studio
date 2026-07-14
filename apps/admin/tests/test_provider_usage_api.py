@@ -75,7 +75,7 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
     assert alpha["run_count"] == 2
     assert alpha["total_tokens"] == 800
     assert alpha["cost_tracking_enabled"] is True
-    assert Decimal(alpha["total_cost"]) == Decimal("2.00")
+    assert Decimal(alpha["total_cost"]["USD"]) == Decimal("2.00")
     models = {m["model_name"]: m for m in alpha["models"]}
     assert Decimal(models["gpt-4o"]["cost"]) == Decimal("1.25")
     assert models["gpt-4o"]["tokens"] == 500
@@ -84,6 +84,23 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
     assert bravo["run_count"] == 1
     assert bravo["cost_tracking_enabled"] is False
     assert bravo["models"] == []
+    assert bravo["total_cost"] == {}
+
+
+@pytest.mark.django_db()
+def test_total_cost_keeps_currencies_separate(superuser_client):
+    team = TeamFactory(name="Alpha")
+    _trace(team, 100)
+    UsageRecordFactory(team=team, model_name="gpt-4o", cost=Decimal("1.25"), currency="USD", at=WHEN)
+    UsageRecordFactory(team=team, model_name="claude", cost=Decimal("0.90"), currency="EUR", at=WHEN)
+    _enable_cost_tracking(team)
+
+    response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
+
+    alpha = {t["team_name"]: t for t in response.json()["teams"]}["Alpha"]
+    # Mixed currencies are never summed into one meaningless scalar.
+    assert Decimal(alpha["total_cost"]["USD"]) == Decimal("1.25")
+    assert Decimal(alpha["total_cost"]["EUR"]) == Decimal("0.90")
 
 
 @pytest.mark.django_db()
