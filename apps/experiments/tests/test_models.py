@@ -68,6 +68,7 @@ class TestSyntheticVoice:
             SyntheticVoice.OpenAIVoiceEngine,
             SyntheticVoice.ElevenLabs,
             SyntheticVoice.Intron,
+            SyntheticVoice.MiniMax,
         ] == SyntheticVoice.TEAM_SCOPED_SERVICES
 
     @pytest.mark.django_db()
