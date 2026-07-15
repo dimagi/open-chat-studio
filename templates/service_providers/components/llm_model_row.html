@@ -34,12 +34,14 @@
                 <i class="fa-solid fa-pencil"></i>
               </button>
               {% if rates.has_team_override %}
-                <button class="btn btn-xs btn-ghost"
+                <button id="revert-pricing-{{ model.id }}"
+                        class="btn btn-xs btn-ghost"
                         title="Revert to global pricing"
                         hx-post="{% url 'service_providers:pricing_revert' request.team.slug model.id %}"
                         hx-target="#model_{{ model.id }}"
                         hx-swap="outerHTML"
-                        hx-confirm="Remove the team override and fall back to the global rate?">
+                        hx-trigger="confirmed"
+                        onclick="confirmThenTrigger('revert-pricing-{{ model.id }}', 'Remove the team override and fall back to the global rate?')">
                   <i class="fa-solid fa-rotate-left"></i>
                 </button>
               {% endif %}
@@ -65,10 +67,13 @@
   <div class="place-self-center">{{ model.max_token_limit }}</div>
   {% if show_delete %}
     <div class="place-self-start">
-      <button class="btn btn-xs btn-ghost"
+      <button id="delete-llm-model-{{ model.id }}"
+              class="btn btn-xs btn-ghost"
               hx-delete="{% url 'service_providers:llm_provider_model_delete' request.team.slug model.id %}"
               hx-target="#model_{{ model.id }}"
-              hx-swap="outerHTML">
+              hx-swap="outerHTML"
+              hx-trigger="confirmed"
+              onclick="confirmThenTrigger('delete-llm-model-{{ model.id }}', 'Are you sure you want to delete \'{{ model.display_name|escapejs }}\'? This cannot be undone.')">
         <i class="fa-solid fa-trash"></i>
       </button>
     </div>
