@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 from typing import TypedDict
 from uuid import UUID, uuid4
@@ -9,6 +10,11 @@ from django.conf import settings
 from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger("ocs.channels.connect")
+
+# Connect returns this in a 400 body when a message with the same message_id was already
+# received. Because we reuse the message_id across retries, this happens when a prior attempt
+# timed out client-side but actually arrived — the message is delivered, so it's not an error.
+MESSAGE_ID_ALREADY_EXISTS = "MESSAGE_ID_ALREADY_EXISTS"
 
 
 def _raise_for_status(response: httpx.Response) -> None:
@@ -109,7 +115,17 @@ class CommCareConnectClient:
     def _send_fcm(self, payload: dict) -> None:
         url = f"{self._base_url}/messaging/send_fcm/"
         response = self.client.post(url, json=payload)
+        if response.status_code == 400 and self._is_message_already_exists(response):
+            logger.info("Message %s already delivered to Connect; treating as success", payload.get("message_id"))
+            return
         _raise_for_status(response)
+
+    @staticmethod
+    def _is_message_already_exists(response: httpx.Response) -> bool:
+        try:
+            return response.json().get("errors") == MESSAGE_ID_ALREADY_EXISTS
+        except (json.JSONDecodeError, AttributeError):
+            return False
 
     def _encrypt_message(self, key: bytes, message: str) -> tuple[str, str, str]:
         cipher = AES.new(key, AES.MODE_GCM)
