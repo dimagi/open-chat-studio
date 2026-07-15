@@ -67,11 +67,13 @@
                     </a>
                     {% if show_legacy %}
                       <button
+                        id="delete-flag-{{ flag.id }}"
                         class="btn btn-sm btn-error"
                         hx-delete="{% url 'ocs_admin:delete_flag' flag.name %}"
                         hx-target="#flag-{{ flag.id }}"
                         hx-swap="outerHTML"
-                        hx-confirm="Are you sure you want to delete the legacy flag '{{ flag.name }}'? This action cannot be undone."
+                        hx-trigger="confirmed"
+                        onclick="confirmThenTrigger('delete-flag-{{ flag.id }}', 'Are you sure you want to delete the legacy flag \'{{ flag.name|escapejs }}\'? This action cannot be undone.')"
                         aria-label="Delete flag"
                       >
                         <i class="fa fa-trash" aria-hidden="true"></i>
