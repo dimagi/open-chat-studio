@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 from langchain_core.messages import AIMessage
 from pydantic import ValidationError
+from pydantic_core import SchemaSerializer
 
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
@@ -350,3 +351,66 @@ def test_evaluators_return_typed_pydantic_model(get_llm_service):
     # Should raise validation error for invalid enum value
     with pytest.raises(ValueError, match="invalid_choice"):
         invalid_structured_llm.invoke("test prompt")
+
+
+def test_dynamic_model_has_a_built_serializer():
+    """Regression guard for the ``MockValSer`` ``TypeError``.
+
+    ``schema_to_pydantic_model`` calls ``model.model_rebuild()`` so the model's
+    serializer is finalised into a real ``SchemaSerializer``. If it is left in a
+    ``MockValSer`` placeholder state, serialising an instance raises
+    ``TypeError: 'MockValSer' object is not an instance of 'SchemaSerializer'``
+    (see Sentry OPEN-CHAT-STUDIO-29V), which is exactly what ``LlmEvaluator.run``
+    triggers via ``result_model.model_dump()``.
+    """
+    output_schema = {
+        "sentiment": StringFieldDefinition(type="string", description="the sentiment of the conversation"),
+        "value": IntFieldDefinition(type="int", description="the value of the conversation"),
+        "choices": ChoiceFieldDefinition(
+            type="choice", description="the choice of the conversation", choices=["foo", "bar", "baz"]
+        ),
+    }
+    output_model = schema_to_pydantic_model(output_schema)
+
+    # A finalised model has a real SchemaSerializer, not the MockValSer placeholder.
+    assert isinstance(output_model.__pydantic_serializer__, SchemaSerializer)
+
+    # Serialising an instance mirrors LlmEvaluator.run and must not raise.
+    instance = output_model(sentiment="positive", value=5, choices="foo")
+    assert instance.model_dump() == {"sentiment": "positive", "value": 5, "choices": "foo"}
+
+
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_dynamic_model_result_can_be_serialized(get_llm_service):
+    """The structured-output result from the evaluator flow must serialise cleanly.
+
+    This exercises the same path as ``LlmEvaluator.run``: build a model, bind it
+    with ``with_structured_output``, invoke, then ``model_dump()`` the result.
+    """
+    output_schema = {
+        "sentiment": StringFieldDefinition(type="string", description="the sentiment of the conversation"),
+        "value": IntFieldDefinition(type="int", description="the value of the conversation"),
+        "choices": ChoiceFieldDefinition(
+            type="choice", description="the choice of the conversation", choices=["foo", "bar", "baz"]
+        ),
+    }
+    output_model = schema_to_pydantic_model(output_schema)
+
+    response = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "DynamicModel",
+                "args": {"sentiment": "positive", "value": 5, "choices": "foo"},
+                "id": "call_123",
+            }
+        ],
+    )
+    service = build_fake_llm_service(responses=[response])
+    get_llm_service.return_value = service
+
+    structured_llm = service.get_chat_model("gpt-4o").with_structured_output(output_model)
+    result = structured_llm.invoke("test prompt")
+
+    # This mirrors ``LlmEvaluator.run`` and previously raised the MockValSer TypeError.
+    assert result.model_dump() == {"sentiment": "positive", "value": 5, "choices": "foo"}
