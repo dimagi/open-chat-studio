@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0060_authprovider__auth_data_alter_authprovider_type'),
+        ('service_providers', '0062_load_ai_pricing'),
     ]
 
     operations = [
