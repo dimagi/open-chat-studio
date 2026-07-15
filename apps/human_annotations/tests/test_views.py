@@ -973,6 +973,32 @@ def test_pivot_flagged_item_with_no_annotations_produces_one_blank_row():
 
 
 @pytest.mark.django_db()
+def test_pivot_flagged_item_with_submitted_annotation_produces_single_flagged_row():
+    """A flagged item can already have a submitted annotation (flagging doesn't block prior
+    submissions). It must not also produce a separate, contradictory blank flagged=True row."""
+    queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    flag_reason = "Needs review"
+    item = AnnotationItemFactory.create(
+        queue=queue,
+        status=AnnotationItemStatus.FLAGGED,
+        flags=[{"user": "alice", "user_id": alice.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}],
+    )
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=alice, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    _, rows = _pivot(queue)
+
+    item_rows = [r for r in rows if r["item_id"] == item.pk]
+    assert len(item_rows) == 1
+    row = item_rows[0]
+    assert row["flagged"] is True
+    assert row["field"] == "quality_score"
+    assert row["alice@example.com"] == 5
+
+
+@pytest.mark.django_db()
 def test_pivot_pending_item_with_no_annotations_produces_no_rows():
     queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
     annotated_item = AnnotationItemFactory.create(queue=queue)
@@ -1060,6 +1086,39 @@ def test_export_csv(client, team_with_users, queue, user):
     assert flag_reason in flagged["flags"]
     assert flagged["field"] == ""
     assert flagged[user.email] == ""
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected_cell"),
+    [
+        pytest.param("=1+1", "'=1+1", id="equals-prefix"),
+        pytest.param("+1+1", "'+1+1", id="plus-prefix"),
+        pytest.param("-1+1", "'-1+1", id="minus-prefix"),
+        pytest.param("@SUM(A1)", "'@SUM(A1)", id="at-prefix"),
+        pytest.param("Great", "Great", id="ordinary-value-untouched"),
+    ],
+)
+@pytest.mark.django_db()
+def test_export_csv_neutralizes_formula_injection_in_annotation_values(
+    client, team_with_users, queue, user, raw_value, expected_cell
+):
+    """Annotation values are annotator-controlled free text. A leading =, +, -, or @ would
+    execute as a formula if the CSV is opened in spreadsheet software, so it must be neutralized."""
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=user,
+        data={"quality_score": 5, "notes": raw_value},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url, {"format": "csv"})
+    reader = csv.DictReader(io.StringIO(response.content.decode()))
+    rows = list(reader)
+
+    notes_row = next(r for r in rows if r["field"] == "notes")
+    assert notes_row[user.email] == expected_cell
 
 
 @pytest.mark.django_db()

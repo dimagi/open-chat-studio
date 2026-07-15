@@ -54,6 +54,21 @@ def _safe_filename(name: str) -> str:
     return re.sub(r"[^\w\s\-.]", "_", name).strip()
 
 
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralize_csv_formula(value):
+    """Prefix annotator-controlled values that could execute as a spreadsheet formula.
+
+    csv.DictWriter's quoting protects against delimiter injection but not formula
+    injection: a value starting with =, +, -, or @ runs as a formula when the export
+    is opened in Excel/Sheets. Prepending an apostrophe forces it to be read as text.
+    """
+    if isinstance(value, str) and value.startswith(_CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
+
 class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
     permission_required = "human_annotations.view_annotationqueue"
@@ -558,6 +573,9 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         `annotations` and `flagged_items` are the same querysets ExportAnnotations.get() builds.
         Returns (fieldnames, rows) where every row dict has every key in fieldnames present.
         """
+        flagged_items = list(flagged_items)
+        flagged_item_ids = {item.pk for item in flagged_items}
+
         by_item = {}
         for ann in annotations:
             by_item.setdefault(ann.item_id, []).append(ann)
@@ -576,14 +594,17 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         ] + annotator_emails
 
         rows = []
-        for item_annotations in by_item.values():
-            rows.extend(self._pivot_item_rows(item_annotations, schema_fields, annotator_emails))
+        for item_id, item_annotations in by_item.items():
+            is_flagged = item_id in flagged_item_ids
+            rows.extend(self._pivot_item_rows(item_annotations, schema_fields, annotator_emails, is_flagged))
         for item in flagged_items:
+            if item.pk in by_item:
+                continue
             rows.append(self._pivot_flagged_row(item, annotator_emails))
 
         return fieldnames, rows
 
-    def _pivot_item_rows(self, item_annotations, schema_fields, annotator_emails):
+    def _pivot_item_rows(self, item_annotations, schema_fields, annotator_emails, is_flagged):
         """Build one export row per schema field for a single item's annotations."""
         item = item_annotations[0].item
         authoritative = next((a for a in item_annotations if a.is_authoritative), None)
@@ -595,7 +616,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "item_id": item.pk,
             "item_type": item.item_type,
             "session_id": self._get_session_external_id(item),
-            "flagged": False,
+            "flagged": is_flagged,
             "flags": json.dumps(item.flags),
             "authoritative_annotator": authoritative_email,
             "annotated_at": annotated_at,
@@ -604,7 +625,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         for field in schema_fields:
             row = dict(base, field=field)
             for email in annotator_emails:
-                row[email] = data_by_email.get(email, {}).get(field, "")
+                row[email] = _neutralize_csv_formula(data_by_email.get(email, {}).get(field, ""))
             rows.append(row)
         return rows
 
