@@ -184,6 +184,7 @@
 
 {% block page_js %}
   {{ block.super }}
+  <script src="{% static 'js/evaluations-bundle.js' %}"></script>
   <script src="{% static 'js/editors-bundle.js' %}"></script>
   <script>
     window.addEventListener('load', () => {
