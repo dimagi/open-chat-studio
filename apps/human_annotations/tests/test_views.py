@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from datetime import UTC, datetime
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -18,6 +19,7 @@ from apps.human_annotations.models import (
     AnnotationStatus,
 )
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
+from apps.human_annotations.views.queue_views import ExportAnnotations
 from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.teams.models import Flag
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
@@ -27,6 +29,7 @@ from apps.utils.factories.human_annotations import (
     AnnotationQueueFactory,
 )
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
+from apps.utils.factories.user import UserFactory
 
 User = get_user_model()
 
@@ -756,6 +759,264 @@ def test_edit_annotation_works_after_item_completed(client, team_with_users, que
 
 # ===== Export =====
 
+# ----- _pivot_annotations -----
+
+
+def _pivot(queue):
+    """Build the same querysets ExportAnnotations.get() does and run the pivot."""
+    annotations = Annotation.objects.filter(item__queue=queue, status=AnnotationStatus.SUBMITTED)
+    flagged_items = AnnotationItem.objects.filter(queue=queue, status=AnnotationItemStatus.FLAGGED)
+    return ExportAnnotations()._pivot_annotations(annotations, flagged_items, list(queue.schema.keys()))
+
+
+@pytest.mark.django_db()
+def test_pivot_single_annotator_single_field():
+    queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
+    item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=alice, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    fieldnames, rows = _pivot(queue)
+
+    assert fieldnames == [
+        "item_id",
+        "item_type",
+        "session_id",
+        "flagged",
+        "flags",
+        "field",
+        "authoritative_annotator",
+        "annotated_at",
+        "alice@example.com",
+    ]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["item_id"] == item.pk
+    assert row["item_type"] == item.item_type
+    assert row["field"] == "quality_score"
+    assert row["flagged"] is False
+    assert row["alice@example.com"] == 5
+
+
+@pytest.mark.django_db()
+def test_pivot_multiple_schema_fields_produces_one_row_per_field():
+    queue = AnnotationQueueFactory.create()  # default schema: quality_score, notes
+    item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    Annotation.objects.create(
+        item=item,
+        team=queue.team,
+        reviewer=alice,
+        data={"quality_score": 5, "notes": "Great"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    _, rows = _pivot(queue)
+
+    assert len(rows) == 2
+    rows_by_field = {r["field"]: r for r in rows}
+    assert rows_by_field.keys() == {"quality_score", "notes"}
+    assert rows_by_field["quality_score"]["alice@example.com"] == 5
+    assert rows_by_field["notes"]["alice@example.com"] == "Great"
+
+
+@pytest.mark.parametrize(
+    ("alice_score", "bob_score"),
+    [
+        pytest.param(5, 5, id="agreeing"),
+        pytest.param(5, 2, id="disagreeing"),
+    ],
+)
+@pytest.mark.django_db()
+def test_pivot_two_annotators_values_attributed_to_correct_columns(alice_score, bob_score):
+    queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
+    item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    bob = UserFactory.create(username="bob@example.com", email="bob@example.com")
+    Annotation.objects.create(
+        item=item,
+        team=queue.team,
+        reviewer=alice,
+        data={"quality_score": alice_score},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=bob, data={"quality_score": bob_score}, status=AnnotationStatus.SUBMITTED
+    )
+
+    _, rows = _pivot(queue)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["alice@example.com"] == alice_score
+    assert row["bob@example.com"] == bob_score
+
+
+@pytest.mark.django_db()
+def test_pivot_three_annotators_each_value_attributed_to_own_column():
+    queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
+    item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    bob = UserFactory.create(username="bob@example.com", email="bob@example.com")
+    carol = UserFactory.create(username="carol@example.com", email="carol@example.com")
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=alice, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=bob, data={"quality_score": 3}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=carol, data={"quality_score": 1}, status=AnnotationStatus.SUBMITTED
+    )
+
+    fieldnames, rows = _pivot(queue)
+
+    assert fieldnames[8:] == ["alice@example.com", "bob@example.com", "carol@example.com"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["alice@example.com"] == 5
+    assert row["bob@example.com"] == 3
+    assert row["carol@example.com"] == 1
+
+
+@pytest.mark.django_db()
+def test_pivot_authoritative_annotator_populated_when_pick_set():
+    queue = AnnotationQueueFactory.create(
+        schema={"quality_score": {"type": "int", "description": "Quality"}}, num_reviews_required=1
+    )
+    item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    # num_reviews_required=1 means a single submitted review auto-marks itself authoritative.
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=alice, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+
+    _, rows = _pivot(queue)
+
+    assert rows[0]["authoritative_annotator"] == "alice@example.com"
+
+
+@pytest.mark.django_db()
+def test_pivot_authoritative_annotator_blank_when_no_pick_set():
+    queue = AnnotationQueueFactory.create(
+        schema={"quality_score": {"type": "int", "description": "Quality"}}, num_reviews_required=2
+    )
+    item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    bob = UserFactory.create(username="bob@example.com", email="bob@example.com")
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=alice, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=bob, data={"quality_score": 2}, status=AnnotationStatus.SUBMITTED
+    )
+
+    _, rows = _pivot(queue)
+
+    assert rows[0]["authoritative_annotator"] == ""
+
+
+@pytest.mark.django_db()
+def test_pivot_annotated_at_is_max_created_at_across_item_annotations():
+    queue = AnnotationQueueFactory.create(
+        schema={"quality_score": {"type": "int", "description": "Quality"}}, num_reviews_required=2
+    )
+    item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    bob = UserFactory.create(username="bob@example.com", email="bob@example.com")
+    earlier = Annotation.objects.create(
+        item=item, team=queue.team, reviewer=alice, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.filter(pk=earlier.pk).update(created_at=datetime(2024, 1, 1, tzinfo=UTC))
+    later = Annotation.objects.create(
+        item=item, team=queue.team, reviewer=bob, data={"quality_score": 2}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.filter(pk=later.pk).update(created_at=datetime(2024, 6, 1, tzinfo=UTC))
+
+    _, rows = _pivot(queue)
+
+    assert rows[0]["annotated_at"] == datetime(2024, 6, 1, tzinfo=UTC).isoformat()
+
+
+@pytest.mark.django_db()
+def test_pivot_flagged_item_with_no_annotations_produces_one_blank_row():
+    queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
+    normal_item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    Annotation.objects.create(
+        item=normal_item,
+        team=queue.team,
+        reviewer=alice,
+        data={"quality_score": 5},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    flag_reason = "Needs review"
+    flagged_item = AnnotationItemFactory.create(
+        queue=queue,
+        status=AnnotationItemStatus.FLAGGED,
+        flags=[{"user": "alice", "user_id": alice.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}],
+    )
+
+    _, rows = _pivot(queue)
+
+    flagged_rows = [r for r in rows if r["item_id"] == flagged_item.pk]
+    assert len(flagged_rows) == 1
+    row = flagged_rows[0]
+    assert row["flagged"] is True
+    assert row["field"] == ""
+    assert row["authoritative_annotator"] == ""
+    assert row["annotated_at"] == ""
+    assert row["alice@example.com"] == ""
+    assert flag_reason in row["flags"]
+
+
+@pytest.mark.django_db()
+def test_pivot_pending_item_with_no_annotations_produces_no_rows():
+    queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
+    annotated_item = AnnotationItemFactory.create(queue=queue)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    Annotation.objects.create(
+        item=annotated_item,
+        team=queue.team,
+        reviewer=alice,
+        data={"quality_score": 5},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    pending_item = AnnotationItemFactory.create(queue=queue)  # no annotation, not flagged
+
+    _, rows = _pivot(queue)
+
+    assert len(rows) == 1  # only the annotated item's single schema field
+    assert all(r["item_id"] != pending_item.pk for r in rows)
+
+
+@pytest.mark.django_db()
+def test_pivot_annotator_columns_sorted_alphabetically_regardless_of_submission_order():
+    queue = AnnotationQueueFactory.create(schema={"quality_score": {"type": "int", "description": "Quality"}})
+    item = AnnotationItemFactory.create(queue=queue)
+    zack = UserFactory.create(username="zack@example.com", email="zack@example.com")
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    mike = UserFactory.create(username="mike@example.com", email="mike@example.com")
+    # Submitted in reverse-alphabetical order on purpose.
+    Annotation.objects.create(
+        item=item, team=queue.team, reviewer=zack, data={"quality_score": 1}, status=AnnotationStatus.SUBMITTED
+    )
+
+    other_item = AnnotationItemFactory.create(queue=queue)
+    Annotation.objects.create(
+        item=other_item, team=queue.team, reviewer=mike, data={"quality_score": 2}, status=AnnotationStatus.SUBMITTED
+    )
+    Annotation.objects.create(
+        item=other_item, team=queue.team, reviewer=alice, data={"quality_score": 3}, status=AnnotationStatus.SUBMITTED
+    )
+
+    fieldnames, _ = _pivot(queue)
+
+    annotator_columns = fieldnames[8:]  # everything after the 8 fixed columns
+    assert annotator_columns == ["alice@example.com", "mike@example.com", "zack@example.com"]
+
 
 @pytest.mark.django_db()
 def test_export_csv(client, team_with_users, queue, user):
@@ -780,21 +1041,54 @@ def test_export_csv(client, team_with_users, queue, user):
     assert response.status_code == 200
     assert response["Content-Type"] == "text/csv"
     reader = csv.DictReader(io.StringIO(response.content.decode()))
-    rows = {int(r["item_id"]): r for r in reader}
-    assert len(rows) == 2
+    rows = list(reader)
 
-    # Normal item
-    normal = rows[item.pk]
-    assert normal["session_id"] == str(item.session.external_id)
-    assert normal["flagged"] == "False"
-    assert normal["quality_score"] == "5"
+    # Normal item: one row per schema field, value under the reviewer's email column
+    normal_rows = {r["field"]: r for r in rows if r["item_id"] == str(item.pk)}
+    assert normal_rows.keys() == {"quality_score", "notes"}
+    assert normal_rows["quality_score"][user.email] == "5"
+    assert normal_rows["notes"][user.email] == "Great"
+    assert normal_rows["quality_score"]["session_id"] == str(item.session.external_id)
+    assert normal_rows["quality_score"]["flagged"] == "False"
 
-    # Flagged item
-    flagged = rows[flagged_item.pk]
+    # Flagged item: exactly one row, no field, no annotator value
+    flagged_rows = [r for r in rows if r["item_id"] == str(flagged_item.pk)]
+    assert len(flagged_rows) == 1
+    flagged = flagged_rows[0]
     assert flagged["session_id"] == str(flagged_item.session.external_id)
     assert flagged["flagged"] == "True"
     assert flag_reason in flagged["flags"]
-    assert flagged["quality_score"] == ""
+    assert flagged["field"] == ""
+    assert flagged[user.email] == ""
+
+
+@pytest.mark.django_db()
+def test_export_csv_query_count_does_not_scale_with_annotation_count(
+    client, team_with_users, queue, user, django_assert_max_num_queries
+):
+    other_user = UserFactory.create(username="other@example.com", email="other@example.com")
+    for _ in range(3):
+        item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+        Annotation.objects.create(
+            item=item, team=team_with_users, reviewer=user, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+        )
+        Annotation.objects.create(
+            item=item,
+            team=team_with_users,
+            reviewer=other_user,
+            data={"quality_score": 3},
+            status=AnnotationStatus.SUBMITTED,
+        )
+    # 6 annotations from 2 distinct reviewers. Without select_related("reviewer") on the
+    # annotations queryset, accessing ann.reviewer.email in _pivot_annotations issues one
+    # query per annotation instead of per distinct reviewer - this bounds it regardless of
+    # how many annotations exist. Baseline with the fix in place is 12 (session/auth/permission
+    # overhead + queue/annotations/flagged_items lookups); ceiling leaves headroom for
+    # unrelated incidental query changes without masking a real N+1 regression.
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    with django_assert_max_num_queries(15):
+        response = client.get(url, {"format": "csv"})
+    assert response.status_code == 200
 
 
 @pytest.mark.django_db()
@@ -1631,7 +1925,7 @@ def test_queue_detail_shows_awaiting_resolution_callout(client, team_with_users,
 
 
 @pytest.mark.django_db()
-def test_export_csv_includes_is_authoritative(client, team_with_users, user):
+def test_export_csv_includes_authoritative_annotator(client, team_with_users, user):
     queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=1)
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     Annotation.objects.create(
@@ -1646,9 +1940,10 @@ def test_export_csv_includes_is_authoritative(client, team_with_users, user):
     reader = csv.DictReader(io.StringIO(content))
     fieldnames = reader.fieldnames
     assert fieldnames is not None
-    assert "is_authoritative" in fieldnames
+    assert "authoritative_annotator" in fieldnames
+    assert "is_authoritative" not in fieldnames
     rows = list(reader)
-    assert rows[0]["is_authoritative"] == "True"
+    assert rows[0]["authoritative_annotator"] == user.email
 
 
 @pytest.mark.django_db()

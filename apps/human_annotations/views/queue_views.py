@@ -524,6 +524,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "item__session",
             "item__message",
             "item__message__chat__experiment_session",
+            "reviewer",
         )
         flagged_items = AnnotationItem.objects.filter(queue=queue, status=AnnotationItemStatus.FLAGGED).select_related(
             "session", "message", "message__chat__experiment_session"
@@ -551,43 +552,80 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             "flags": item.flags,
         }
 
+    def _pivot_annotations(self, annotations, flagged_items, schema_fields):
+        """Pivot (item, annotation) rows into (item, schema field) rows, one column per annotator.
+
+        `annotations` and `flagged_items` are the same querysets ExportAnnotations.get() builds.
+        Returns (fieldnames, rows) where every row dict has every key in fieldnames present.
+        """
+        by_item = {}
+        for ann in annotations:
+            by_item.setdefault(ann.item_id, []).append(ann)
+
+        annotator_emails = sorted({ann.reviewer.email for ann in annotations})
+
+        fieldnames = [
+            "item_id",
+            "item_type",
+            "session_id",
+            "flagged",
+            "flags",
+            "field",
+            "authoritative_annotator",
+            "annotated_at",
+        ] + annotator_emails
+
+        rows = []
+        for item_annotations in by_item.values():
+            item = item_annotations[0].item
+            authoritative = next((a for a in item_annotations if a.is_authoritative), None)
+            authoritative_email = authoritative.reviewer.email if authoritative else ""
+            annotated_at = max(a.created_at for a in item_annotations).isoformat()
+
+            base = {
+                "item_id": item.pk,
+                "item_type": item.item_type,
+                "session_id": self._get_session_external_id(item),
+                "flagged": False,
+                "flags": json.dumps(item.flags),
+                "authoritative_annotator": authoritative_email,
+                "annotated_at": annotated_at,
+            }
+            for field in schema_fields:
+                row = dict(base, field=field)
+                for email in annotator_emails:
+                    row[email] = ""
+                for ann in item_annotations:
+                    row[ann.reviewer.email] = ann.data.get(field, "")
+                rows.append(row)
+
+        for item in flagged_items:
+            row = {
+                "item_id": item.pk,
+                "item_type": item.item_type,
+                "session_id": self._get_session_external_id(item),
+                "flagged": True,
+                "flags": json.dumps(item.flags),
+                "field": "",
+                "authoritative_annotator": "",
+                "annotated_at": "",
+            }
+            for email in annotator_emails:
+                row[email] = ""
+            rows.append(row)
+
+        return fieldnames, rows
+
     def _export_csv(self, queue, annotations, flagged_items):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
 
         schema_fields = list(queue.schema.keys())
-        fieldnames = [
-            "item_id",
-            "item_type",
-            "session_id",
-            "annotated_at",
-            "flagged",
-            "is_authoritative",
-            "flags",
-        ] + schema_fields
+        fieldnames, rows = self._pivot_annotations(annotations, flagged_items, schema_fields)
 
         writer = csv.DictWriter(response, fieldnames=fieldnames)
         writer.writeheader()
-
-        for ann in annotations:
-            row = {
-                "item_id": ann.item_id,
-                "item_type": ann.item.item_type,
-                "session_id": self._get_session_external_id(ann.item),
-                "annotated_at": ann.created_at.isoformat(),
-                "flagged": False,
-                "is_authoritative": ann.is_authoritative,
-                "flags": json.dumps(ann.item.flags),
-            }
-            for field in schema_fields:
-                row[field] = ann.data.get(field, "")
-            writer.writerow(row)
-
-        for item in flagged_items:
-            row = self._build_flagged_row(item)
-            row["flags"] = json.dumps(row["flags"])
-            for field in schema_fields:
-                row[field] = ""
+        for row in rows:
             writer.writerow(row)
 
         return response
