@@ -460,7 +460,9 @@ def schema_to_pydantic_model(schema: dict[str, FieldDefinition], model_name: str
             Field(**field_def.pydantic_fields),
         )
 
-    return create_model(model_name, **pydantic_fields)
+    model = create_model(model_name, **pydantic_fields)
+    model.model_rebuild()
+    return model
 
 
 def get_use_in_aggregations(field_def: dict) -> bool:
