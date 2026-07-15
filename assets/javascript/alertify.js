@@ -10,7 +10,10 @@ window.confirmThenTrigger = function (elementId, message) {
     message: message,
     transition: 'fade',
     onok: function () {
-      htmx.trigger('#' + elementId, 'confirmed');
+      const element = document.getElementById(elementId);
+      if (element) {
+        htmx.trigger(element, 'confirmed');
+      }
     },
   }).show();
 };
