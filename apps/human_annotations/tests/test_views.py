@@ -19,7 +19,7 @@ from apps.human_annotations.models import (
     AnnotationStatus,
 )
 from apps.human_annotations.tables import AnnotationSessionsSelectionTable
-from apps.human_annotations.views.queue_views import ExportAnnotations
+from apps.human_annotations.views.export_views import ExportAnnotations
 from apps.teams.backends import ANNOTATION_REVIEWER_GROUP
 from apps.teams.models import Flag
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluationMessageFactory
