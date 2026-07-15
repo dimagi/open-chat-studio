@@ -1,5 +1,4 @@
 import base64
-import json
 import logging
 from typing import TypedDict
 from uuid import UUID, uuid4
@@ -124,7 +123,9 @@ class CommCareConnectClient:
     def _is_message_already_exists(response: httpx.Response) -> bool:
         try:
             return response.json().get("errors") == MESSAGE_ID_ALREADY_EXISTS
-        except (json.JSONDecodeError, AttributeError):
+        except (ValueError, AttributeError):
+            # ValueError covers both a non-JSON body and an undecodable one (UnicodeDecodeError);
+            # AttributeError covers valid JSON that isn't an object. All mean "not the dedupe error".
             return False
 
     def _encrypt_message(self, key: bytes, message: str) -> tuple[str, str, str]:

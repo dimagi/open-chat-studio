@@ -57,6 +57,15 @@ class TestConnectClientSendRetry:
         assert len(httpx_mock.get_requests()) == 2
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
+    def test_malformed_400_body_still_raises(self, httpx_mock, disable_retry_wait):
+        """A 400 with an undecodable body must not be swallowed; it still raises via _raise_for_status."""
+        httpx_mock.add_response(method="POST", url=self._send_url, content=b"\xff\xfe", status_code=400)
+
+        client = CommCareConnectClient()
+        with pytest.raises(httpx.HTTPStatusError):
+            client.send_message_to_user(str(uuid4()), message="hello", encryption_key=os.urandom(32))
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
     def test_message_id_stable_across_retries(self, httpx_mock, disable_retry_wait):
         httpx_mock.add_exception(httpx.ReadTimeout("read timed out"), url=self._send_url)
         httpx_mock.add_response(method="POST", url=self._send_url, status_code=200)
