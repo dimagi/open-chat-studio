@@ -1458,12 +1458,12 @@ class ExperimentSession(BaseTeamModel):
         else:
             return self.chat.messages.all()
 
-    def get_participant_chip(self) -> Chip:
+    def get_participant_chip(self, include_link: bool = True) -> Chip:
         if self.participant:
-            return Chip(
-                label=str(self.participant),
-                url=self.participant.get_link_to_experiment_data(experiment=self.experiment),
-            )
+            url = ""
+            if include_link:
+                url = self.participant.get_link_to_experiment_data(experiment=self.experiment)
+            return Chip(label=str(self.participant), url=url)
         else:
             return Chip(label="Anonymous", url="")
 

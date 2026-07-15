@@ -11,6 +11,7 @@ from apps.teams.backends import (
     CONTENT_TYPES,
     CUSTOM_PERMISSIONS,
     GROUPS,
+    SUPER_ADMIN_GROUP,
     VIEW,
     AppPermSetDef,
     GroupDef,
@@ -253,7 +254,9 @@ def test_chat_viewer_isolation_can_reach_transcripts_but_not_config(client):
     team = TeamFactory.create()
     user = UserFactory.create()
     add_user_to_team(team, user, groups=[CHAT_VIEWER_GROUP])
-    session = ExperimentSessionFactory.create(team=team)
+    # experiment__team (not team=) so the experiment shares the session's team; the transcript view
+    # looks the experiment up scoped to request.team.
+    session = ExperimentSessionFactory.create(experiment__team=team)
     experiment = session.experiment
 
     client.force_login(user)
@@ -270,9 +273,38 @@ def test_chat_viewer_isolation_can_reach_transcripts_but_not_config(client):
     )
     assert client.get(transcript_url).status_code == 200
 
+    # Config links the role cannot open must not render (they would 403). Derive hrefs from the same
+    # helpers the code uses; the admin test asserts these same hrefs ARE present, so this isn't vacuous.
+    chatbot_href = f'href="{experiment.get_absolute_url()}"'
+    participant_href = f'href="{session.participant.get_link_to_experiment_data(experiment=experiment)}"'
+    sessions_list = client.get(reverse("chatbots:all_sessions_list", args=[team.slug])).content.decode()
+    assert chatbot_href not in sessions_list
+    assert participant_href not in sessions_list
+    assert participant_href not in client.get(transcript_url).content.decode()
+
     # Chatbot/experiment configuration views are denied (view-only, transcripts only).
     assert client.get(reverse("chatbots:chatbots_home", args=[team.slug])).status_code == 403
     assert client.get(reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])).status_code == 403
+
+
+@pytest.mark.django_db()
+def test_admin_sees_chatbot_and_participant_links_in_session_list(client):
+    """Counterpart to the Chat Viewer isolation test: a user with full config access still
+    gets the chatbot and participant chips rendered as links."""
+    create_default_groups()
+    team = TeamFactory.create()
+    user = UserFactory.create()
+    add_user_to_team(team, user, groups=[SUPER_ADMIN_GROUP])
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    experiment = session.experiment
+
+    client.force_login(user)
+
+    chatbot_href = f'href="{experiment.get_absolute_url()}"'
+    participant_href = f'href="{session.participant.get_link_to_experiment_data(experiment=experiment)}"'
+    sessions_list = client.get(reverse("chatbots:all_sessions_list", args=[team.slug])).content.decode()
+    assert chatbot_href in sessions_list
+    assert participant_href in sessions_list
 
 
 def test_custom_permissions():
