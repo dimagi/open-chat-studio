@@ -73,7 +73,7 @@
               hx-target="#model_{{ model.id }}"
               hx-swap="outerHTML"
               hx-trigger="confirmed"
-              onclick="confirmThenTrigger('delete-llm-model-{{ model.id }}', 'Are you sure you want to delete \'{{ model.display_name|escapejs }}\'? This cannot be undone.')">
+              onclick="confirmThenTrigger('delete-llm-model-{{ model.id }}', 'Are you sure you want to delete \'{{ model.display_name|escape|escapejs }}\'? This cannot be undone.')">
         <i class="fa-solid fa-trash"></i>
       </button>
     </div>

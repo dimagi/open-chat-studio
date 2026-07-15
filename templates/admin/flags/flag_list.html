@@ -73,7 +73,7 @@
                         hx-target="#flag-{{ flag.id }}"
                         hx-swap="outerHTML"
                         hx-trigger="confirmed"
-                        onclick="confirmThenTrigger('delete-flag-{{ flag.id }}', 'Are you sure you want to delete the legacy flag \'{{ flag.name|escapejs }}\'? This action cannot be undone.')"
+                        onclick="confirmThenTrigger('delete-flag-{{ flag.id }}', 'Are you sure you want to delete the legacy flag \'{{ flag.name|escape|escapejs }}\'? This action cannot be undone.')"
                         aria-label="Delete flag"
                       >
                         <i class="fa fa-trash" aria-hidden="true"></i>
