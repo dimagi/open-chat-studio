@@ -577,44 +577,52 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
         rows = []
         for item_annotations in by_item.values():
-            item = item_annotations[0].item
-            authoritative = next((a for a in item_annotations if a.is_authoritative), None)
-            authoritative_email = authoritative.reviewer.email if authoritative else ""
-            annotated_at = max(a.created_at for a in item_annotations).isoformat()
-
-            base = {
-                "item_id": item.pk,
-                "item_type": item.item_type,
-                "session_id": self._get_session_external_id(item),
-                "flagged": False,
-                "flags": json.dumps(item.flags),
-                "authoritative_annotator": authoritative_email,
-                "annotated_at": annotated_at,
-            }
-            for field in schema_fields:
-                row = dict(base, field=field)
-                for email in annotator_emails:
-                    row[email] = ""
-                for ann in item_annotations:
-                    row[ann.reviewer.email] = ann.data.get(field, "")
-                rows.append(row)
-
+            rows.extend(self._pivot_item_rows(item_annotations, schema_fields, annotator_emails))
         for item in flagged_items:
-            row = {
-                "item_id": item.pk,
-                "item_type": item.item_type,
-                "session_id": self._get_session_external_id(item),
-                "flagged": True,
-                "flags": json.dumps(item.flags),
-                "field": "",
-                "authoritative_annotator": "",
-                "annotated_at": "",
-            }
-            for email in annotator_emails:
-                row[email] = ""
-            rows.append(row)
+            rows.append(self._pivot_flagged_row(item, annotator_emails))
 
         return fieldnames, rows
+
+    def _pivot_item_rows(self, item_annotations, schema_fields, annotator_emails):
+        """Build one export row per schema field for a single item's annotations."""
+        item = item_annotations[0].item
+        authoritative = next((a for a in item_annotations if a.is_authoritative), None)
+        authoritative_email = authoritative.reviewer.email if authoritative else ""
+        annotated_at = max(a.created_at for a in item_annotations).isoformat()
+        data_by_email = {ann.reviewer.email: ann.data for ann in item_annotations}
+
+        base = {
+            "item_id": item.pk,
+            "item_type": item.item_type,
+            "session_id": self._get_session_external_id(item),
+            "flagged": False,
+            "flags": json.dumps(item.flags),
+            "authoritative_annotator": authoritative_email,
+            "annotated_at": annotated_at,
+        }
+        rows = []
+        for field in schema_fields:
+            row = dict(base, field=field)
+            for email in annotator_emails:
+                row[email] = data_by_email.get(email, {}).get(field, "")
+            rows.append(row)
+        return rows
+
+    def _pivot_flagged_row(self, item, annotator_emails):
+        """Build the single blank row representing a flagged item with no annotations."""
+        row = {
+            "item_id": item.pk,
+            "item_type": item.item_type,
+            "session_id": self._get_session_external_id(item),
+            "flagged": True,
+            "flags": json.dumps(item.flags),
+            "field": "",
+            "authoritative_annotator": "",
+            "annotated_at": "",
+        }
+        for email in annotator_emails:
+            row[email] = ""
+        return row
 
     def _export_csv(self, queue, annotations, flagged_items):
         response = HttpResponse(content_type="text/csv")
