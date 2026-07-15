@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+import time_machine
 from django.urls import reverse
 
 from apps.cost_tracking.models import Confidence
@@ -12,6 +13,17 @@ from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _freeze_now():
+    """Pin `timezone.now()` to `_NOW` so the panel's default date window lines up
+    with the fixed timestamps this module places its usage records at. Without
+    this the default "last 30 days" window drifts with the wall clock and
+    excludes the test data.
+    """
+    with time_machine.travel(_NOW, tick=False):
+        yield
 
 
 def _enable_flag_for(team):
