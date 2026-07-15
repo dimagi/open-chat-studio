@@ -1,6 +1,7 @@
 import pytest
 from django.apps import apps
 from django.contrib.auth.models import Group
+from django.urls import reverse
 
 from apps.teams.backends import (
     ALL,
@@ -14,7 +15,12 @@ from apps.teams.backends import (
     AppPermSetDef,
     GroupDef,
     ModelPermSetDef,
+    add_user_to_team,
+    create_default_groups,
 )
+from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.user import UserFactory
 
 
 def test_content_types():
@@ -205,6 +211,68 @@ def test_chat_viewer_can_view_files_regression():
     assert "view_file" in _group_codenames(CHAT_VIEWER_GROUP), (
         "Chat Viewer must include files.view_file so users can download session attachments via FileView."
     )
+
+
+def test_chat_viewer_can_view_sessions_regression():
+    """Regression test for #3827: Chat Viewer must include experiments.view_experimentsession.
+
+    The session list views (All Sessions page and per-chatbot session tables) require
+    `experiments.view_experimentsession`. Without it a Chat Viewer-only user has no UI path
+    to any transcript.
+    """
+    codenames = _group_codenames(CHAT_VIEWER_GROUP)
+    assert "view_experimentsession" in codenames, (
+        "Chat Viewer must include experiments.view_experimentsession so the role can reach session lists."
+    )
+
+
+def test_chat_viewer_cannot_view_experiment_config_regression():
+    """Regression test for #3827: Chat Viewer must NOT gain experiment/chatbot configuration access.
+
+    The role is transcript-only. Granting `experiments.view_experiment` (or any change perm)
+    would expose chatbot configuration views, which is out of scope for this role.
+    """
+    codenames = _group_codenames(CHAT_VIEWER_GROUP)
+    assert "view_experiment" not in codenames, (
+        "Chat Viewer must not gain view_experiment; it exposes chatbot configuration views."
+    )
+    assert not any(c.startswith(("change_", "add_", "delete_")) for c in codenames), (
+        "Chat Viewer is view-only; it must not gain change/add/delete permissions."
+    )
+
+
+@pytest.mark.django_db()
+def test_chat_viewer_isolation_can_reach_transcripts_but_not_config(client):
+    """End-to-end: a Chat Viewer-only user can reach session lists and a transcript,
+    but is denied on experiment/chatbot configuration views.
+
+    create_default_groups() is called explicitly so the DB-backed groups reflect the current
+    backends.py definition even though pytest runs with --reuse-db.
+    """
+    create_default_groups()
+    team = TeamFactory.create()
+    user = UserFactory.create()
+    add_user_to_team(team, user, groups=[CHAT_VIEWER_GROUP])
+    session = ExperimentSessionFactory.create(team=team)
+    experiment = session.experiment
+
+    client.force_login(user)
+
+    # Session lists are reachable.
+    assert client.get(reverse("chatbots:all_sessions_home", args=[team.slug])).status_code == 200
+    assert client.get(reverse("chatbots:all_sessions_list", args=[team.slug])).status_code == 200
+    assert client.get(reverse("chatbots:sessions-list", args=[team.slug, experiment.id])).status_code == 200
+
+    # The transcript (session detail) is reachable — gated by chat.view_chat via the access-cookie fallback.
+    transcript_url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, experiment.public_id, session.external_id],
+    )
+    assert client.get(transcript_url).status_code == 200
+
+    # Chatbot/experiment configuration views are denied (view-only, transcripts only).
+    assert client.get(reverse("chatbots:chatbots_home", args=[team.slug])).status_code == 403
+    assert client.get(reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])).status_code == 403
 
 
 def test_custom_permissions():
