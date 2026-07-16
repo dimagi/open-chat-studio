@@ -1262,5 +1262,47 @@
         "unit_price": "0.000025"
       }
     ]
+  },
+  {
+    "provider_type": "minimax",
+    "model_name": "MiniMax-M3",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0006"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0024"
+      }
+    ]
+  },
+  {
+    "provider_type": "minimax",
+    "model_name": "MiniMax-M2.7",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0012"
+      }
+    ]
+  },
+  {
+    "provider_type": "minimax",
+    "model_name": "MiniMax-M2",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0012"
+      }
+    ]
   }
 ]
