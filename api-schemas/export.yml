@@ -3096,7 +3096,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/TypeB19Enum'
         name:
           type: string
           description: The name of the model. e.g. 'text-embedding-3-small'
@@ -4232,7 +4232,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/TypeB19Enum'
         name:
           type: string
           maxLength: 255
@@ -4279,7 +4279,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/TypeB19Enum'
         name:
           type: string
           description: The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'
@@ -5824,7 +5824,7 @@ components:
       - cursor
       - has_more
       - results
-    TypeB81Enum:
+    TypeB19Enum:
       enum:
       - openai
       - azure
@@ -5832,6 +5832,7 @@ components:
       - groq
       - perplexity
       - deepseek
+      - minimax
       - google
       - google_vertex_ai
       - voyage
@@ -5843,6 +5844,7 @@ components:
         * `groq` - Groq
         * `perplexity` - Perplexity
         * `deepseek` - DeepSeek
+        * `minimax` - MiniMax
         * `google` - Google Gemini
         * `google_vertex_ai` - Google Vertex AI
         * `voyage` - Voyage AI

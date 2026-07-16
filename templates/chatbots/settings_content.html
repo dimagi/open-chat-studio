@@ -33,9 +33,11 @@
                   hx-swap="outerHTML">
             Edit
           </button>
-          <button class="btn btn-error btn-sm"
+          <button id="archive-chatbot-button"
+                  class="btn btn-error btn-sm"
                   hx-post="{% url 'chatbots:archive' request.team.slug experiment.id %}"
-                  hx-confirm="Are you sure you wish to archive this chatbot?">
+                  hx-trigger="confirmed"
+                  onclick="confirmThenTrigger('archive-chatbot-button', 'Are you sure you wish to archive this chatbot?')">
             Archive
           </button>
         {% endif %}

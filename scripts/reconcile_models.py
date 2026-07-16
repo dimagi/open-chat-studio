@@ -72,6 +72,7 @@ ORG_TO_OCS_PROVIDERS: dict[str, list[str]] = {
     "google": ["google", "google_vertex_ai"],
     "deepseek": ["deepseek"],
     "perplexity": ["perplexity"],
+    "minimax": ["minimax"],
 }
 
 # Providers we can diff against llm-stats. llm-stats prices an upstream

@@ -6,7 +6,9 @@ The command is a thin shell: it wires the resource fetcher to the import engine 
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 """
 
+import os
 import time
+from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 
@@ -28,6 +30,7 @@ from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
 FILES_CONFIRMED_FLAG = "files_confirmed"
+PRIVATE_KEY_ENV_VAR = "SYNC_TEAM_PRIVATE_KEY"
 MIGRATION_MODE_REQUIRED = "Migration mode needs to be enabled on the source team before you can continue."
 MISSING_PUBLIC_KEY_MESSAGE = (
     "The source team has no public key registered, so its secret data cannot be exported. "
@@ -58,6 +61,19 @@ def _friendly_http_error_message(exc: requests.HTTPError) -> str | None:
     for status_code, marker, message in _FRIENDLY_HTTP_ERRORS:
         if response.status_code == status_code and marker in detail:
             return message
+    return None
+
+
+def _load_private_key(private_key_path: str | None):
+    """Load the RSA private key used to unseal secret fields, or None when no key is configured.
+
+    The --private-key-path flag points to a key file and takes precedence. When it is omitted, the
+    SYNC_TEAM_PRIVATE_KEY env var is read for the key contents themselves (PEM), not a path to it."""
+    if private_key_path:
+        return load_private_key(Path(private_key_path).read_bytes())
+    env_key = os.environ.get(PRIVATE_KEY_ENV_VAR)
+    if env_key:
+        return load_private_key(env_key.encode())
     return None
 
 
@@ -207,7 +223,12 @@ def run_sync(
 ):
     manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
-    importer = Importer(store, private_key=private_key, on_user_created=on_user_created)
+    importer = Importer(
+        store,
+        private_key=private_key,
+        on_user_created=on_user_created,
+        fetch_file_content=client.get_file_content,
+    )
     try:
         with mute_signals():
             load_team(importer, client, store, write)
@@ -254,7 +275,14 @@ class Command(BaseCommand):
             required=True,
             help="Names the local run state DB and identifies the team to drop when --force-delete is set.",
         )
-        parser.add_argument("--private-key-path", help="RSA private key used to unseal secret fields.")
+        parser.add_argument(
+            "--private-key-path",
+            help=(
+                "Path to the RSA private key file used to unseal secret fields. When omitted, the "
+                f"key is read from the {PRIVATE_KEY_ENV_VAR} env var, which holds the key itself "
+                "(PEM contents) rather than a path. The flag takes precedence over the env var."
+            ),
+        )
         parser.add_argument("--state-dir", default=".", help="Directory for the per-team SQLite state DB.")
         parser.add_argument("--limit", type=int, default=100, help="Page size for resource requests.")
         parser.add_argument(
@@ -270,9 +298,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         start_time = time.monotonic()
-        private_key = None
-        if options["private_key_path"]:
-            private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
+        private_key = _load_private_key(options["private_key_path"])
 
         client = ResourceFetcher(options["source_url"], options["api_key"])
         enforce_schema = not options["skip_schema_check"]
@@ -284,7 +310,7 @@ class Command(BaseCommand):
 
         check_sync_preconditions(client, private_key, enforce_schema, store=store)
 
-        run_sync(
+        importer = run_sync(
             client,
             store,
             private_key,
@@ -295,7 +321,12 @@ class Command(BaseCommand):
         )
 
         duration = timedelta(seconds=round(time.monotonic() - start_time))
-        self._report(sync_complete=not store.has_unfilled_targets(), team_slug=options["team_slug"], duration=duration)
+        self._report(
+            sync_complete=not store.has_unfilled_targets(),
+            team_slug=options["team_slug"],
+            duration=duration,
+            missing_files=importer.missing_files,
+        )
 
     def _run_force_delete(self, options):
         """Confirm and delete the local team plus its sync state."""
@@ -307,18 +338,35 @@ class Command(BaseCommand):
             write=lambda message: self.stdout.write(self.style.WARNING(message)),
         )
 
-    def _report(self, *, sync_complete: bool, team_slug: str, duration: timedelta | None = None) -> None:
+    def _report(
+        self,
+        *,
+        sync_complete: bool,
+        team_slug: str,
+        duration: timedelta | None = None,
+        missing_files: Sequence[str] = (),
+    ) -> None:
         """Print everything the operator needs after a sync, so ``handle`` stays a thin wiring shell:
-        which resources need manual setup, whether the sync finished or must be rerun, how long the
-        run took, and the follow-up step for channel webhooks (a separate command -- see
-        ``reregister_webhooks``). Sections are headed and blank-line separated so the report stands
-        apart from the row-by-row progress log above it."""
+        which resources need manual setup, which files the source had no content for, whether the sync
+        finished or must be rerun, how long the run took, and the follow-up step for channel webhooks
+        (a separate command -- see ``reregister_webhooks``). Sections are headed and blank-line
+        separated so the report stands apart from the row-by-row progress log above it."""
         self.stdout.write("")
         self.stdout.write(self.style.MIGRATE_HEADING("Sync report"))
         self.stdout.write(self.style.MIGRATE_HEADING("=" * 60))
 
         if duration is not None:
             self.stdout.write(f"Duration: {duration}")
+
+        if missing_files:
+            self.stdout.write("")
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{len(missing_files)} file(s) had no content on the source and were imported without it:"
+                )
+            )
+            for name in missing_files:
+                self.stdout.write(f"  - {name}")
 
         self.stdout.write("")
         self.stdout.write(self.style.WARNING("Channel webhooks were not re-registered."))
@@ -345,7 +393,8 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.WARNING(
                 f"--force-delete will permanently delete the local team '{team_slug}' and all its data "
-                "before re-importing."
+                "before re-importing. This also removes the team's files from backend storage, so they "
+                "must be re-imported after the delete completes."
             )
         )
         return _prompt("Type 'yes' to continue: ") == "yes"

@@ -5,10 +5,11 @@ plain functions plus a thin loop so the transforms can be unit-tested without a 
 import contextlib
 import copy
 import functools
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.db import models, transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.utils.dateparse import parse_datetime
@@ -18,6 +19,7 @@ from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
 
+from .client import FileContentNotFound
 from .manifest import (
     EXCLUDE_REGISTRY,
     GLOBAL_CONFIG,
@@ -164,11 +166,34 @@ def _match_queue_aggregate(model, row: dict, store: FKTranslationStore, target_t
     return model.objects.filter(queue_id=target_queue).first() if target_queue else None
 
 
+def _match_existing_score(model, row: dict, store: FKTranslationStore, target_team) -> models.Model | None:
+    """Map onto the Score a side effect already wrote for this review/result rather than inserting a
+    duplicate that violates the per-review / per-result unique constraint. Importing a submitted
+    Annotation runs write_scores_from_annotation from its save() (a save() override, not a signal, so
+    mute_signals doesn't stop it), so the review's scores exist on the target before the manifest's own
+    score rows arrive. Matched on whichever partial-unique key the row carries -- (review, name) or
+    (automated_result, name) -- with the FK translated to its target."""
+    name = row["name"]
+    parents = (
+        ("review", "human_annotations.annotation"),
+        ("automated_result", "evaluations.evaluationresult"),
+    )
+    for field, model_label in parents:
+        source_pk = row.get(field)
+        if source_pk is None:
+            continue
+        target_pk = store.get_target(model_label, source_pk)
+        if target_pk is not None:
+            return model.objects.filter(name=name, **{f"{field}_id": target_pk}).first()
+    return None
+
+
 # Rows matched to a pre-existing target row by natural key instead of created.
 _MATCH_EXISTING = {
     "users.customuser": _match_existing_user,
     "experiments.consentform": _match_default_consent_form,
     "human_annotations.annotationqueueaggregate": _match_queue_aggregate,
+    "assessments.score": _match_existing_score,
 }
 
 # Matched/existing rows that must not be overwritten by synced values (an account the operator
@@ -177,12 +202,22 @@ _NO_UPDATE_MODELS = {"users.customuser"}
 
 
 class Importer:
-    def __init__(self, store: FKTranslationStore, private_key=None, on_user_created=None):
+    def __init__(
+        self,
+        store: FKTranslationStore,
+        private_key=None,
+        on_user_created=None,
+        fetch_file_content: Callable[[int], bytes] | None = None,
+    ):
         """``private_key`` unseals secret fields when supplied; ``on_user_created`` is called once
-        per newly created user (e.g. to send an invite)."""
+        per newly created user (e.g. to send an invite); ``fetch_file_content`` is a ``(source_pk) ->
+        bytes`` callable used to backfill a file whose blob is missing from this server's storage.
+        When it's None (the default), a missing blob surfaces as an error instead."""
         self.store = store
         self.private_key = private_key
         self.on_user_created = on_user_created
+        self.fetch_file_content = fetch_file_content
+        self.missing_files: list[str] = []
         # The single team every resource is imported into. Captured from the team row (first in the
         # manifest) and assigned to every team-scoped row, since the per-row team FK isn't exported.
         self.target_team = None
@@ -240,7 +275,7 @@ class Importer:
     ) -> tuple[models.Model, bool]:
         with transaction.atomic():
             field_values, m2m_values, timestamps = self._build_values(model_label, model, row)
-            instance, created = self._get_or_create(model_label, model, source_pk, row, field_values)
+            instance, created = self._create_or_update(model_label, model, source_pk, row, field_values)
 
             for name, target_pks in m2m_values.items():
                 getattr(instance, name).set([pk for pk in target_pks if pk is not None])
@@ -253,15 +288,60 @@ class Importer:
             self.store.record(model_label, source_pk, instance.pk)
         return instance, created
 
+    def _create_or_update(
+        self, model_label: str, model: type[models.Model], source_pk: int, row: dict, field_values: dict
+    ) -> tuple[models.Model, bool]:
+        """Create or update the row. Saving a ``files.file`` whose blob is missing from this server's
+        storage raises FileNotFoundError (File.save reads its size from storage); delegate that to
+        ``_handle_missing_object`` to recover, rather than let it abort the sync."""
+        try:
+            return self._get_or_create(model_label, model, source_pk, row, field_values)
+        except FileNotFoundError as exc:
+            return self._handle_missing_object(exc, model_label, model, source_pk, row, field_values)
+
+    def _handle_missing_object(
+        self,
+        exc: FileNotFoundError,
+        model_label: str,
+        model: type[models.Model],
+        source_pk: int,
+        row: dict,
+        field_values: dict,
+    ) -> tuple[models.Model, bool]:
+        """Recover a row whose backing storage object is missing. Only files are recoverable today:
+        backfill the blob from the source and retry, or on a 404 import the row without content and
+        record it. Anything else re-raises."""
+        fetch = self.fetch_file_content
+        if model_label != "files.file" or fetch is None:
+            raise exc
+        name = field_values["file"]
+        print(f"fetching content for missing file '{name}' from source")
+        try:
+            content = fetch(source_pk)
+        except FileContentNotFound:
+            print(f"file '{name}' has no content on the source; importing without it")
+            self.missing_files.append(name)
+            field_values["file"] = ""
+            return self._get_or_create(model_label, model, source_pk, row, field_values)
+        self._write_file_content(model, name, content)
+        return self._get_or_create(model_label, model, source_pk, row, field_values)
+
+    def _write_file_content(self, model: type[models.Model], name: str, content: bytes) -> None:
+        """Write a backfilled file's bytes to this server's storage at the path the row carries, so
+        the retried save finds the blob."""
+        model._meta.get_field("file").storage.save(name, ContentFile(content))
+
     def _get_or_create(
         self, model_label: str, model: type[models.Model], source_pk: int, row: dict, field_values: dict
     ) -> tuple[models.Model, bool]:
         """Find the existing target row (via the translation map, then a model-specific natural-key
-        match) or create it. Returns (instance, created)."""
+        match) or create it. Returns (instance, created). The lookup goes through ``_base_manager`` so
+        an archived or soft-deleted target row -- hidden by the default manager -- is still matched on
+        re-import rather than duplicated (which would break the unique external_id on channels)."""
         target_pk = self.store.get_target(model_label, source_pk)
         instance = None
-        if target_pk is not None and model.objects.filter(pk=target_pk).exists():
-            instance = model.objects.get(pk=target_pk)
+        if target_pk is not None and model._base_manager.filter(pk=target_pk).exists():
+            instance = model._base_manager.get(pk=target_pk)
         elif model_label in _MATCH_EXISTING:
             instance = _MATCH_EXISTING[model_label](model, row, self.store, self.target_team)
 

@@ -234,7 +234,7 @@ def async_create_collection_version(self, collection_id: int):
 )
 def delete_collection_task(self, collection_id: int):
     try:
-        collection = Collection.objects.get(id=collection_id)
+        collection = Collection.objects.get_all().get(id=collection_id)
     except Collection.DoesNotExist:
         return
 

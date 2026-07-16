@@ -90,7 +90,7 @@ dependencies = [
     "python-json-logger>=3.2.1",
     "chardet",
     "dictdiffer>=0.9.0",
-    "djlint>=1.40.3",
+    "djlint>=1.40.6",
     "transformers",
     "packaging>=23.2",
 ]
@@ -163,7 +163,7 @@ banned-module-level-imports = [
 
 [dependency-groups]
 dev = [
-    "ruff>=0.15.20",
+    "ruff>=0.15.21",
     "mock",
     "invoke",
     "termcolor",
@@ -178,7 +178,7 @@ dev = [
     "django-debug-toolbar>=5.2.0",
     "prek>=0.3.2",
     "django-types",
-    "ty>=0.0.56",
+    "ty>=0.0.59",
     "honcho>=2.0.0",
     # Used only by scripts/mock_connect_server.py — a dev tool that impersonates
     # the CommCare Connect backend for local development.

@@ -175,17 +175,21 @@ class ChatbotSessionsTable(tables.Table):
 
     def render_participant(self, record):
         template = get_template("generic/chip.html")
-        participant = record.participant
-        chip = chips.Chip(
-            label=str(participant), url=participant.get_link_to_experiment_data(experiment=record.experiment)
-        )
+        chip = record.get_participant_chip(include_link=self._user_has_perm("experiments.view_participant"))
         return template.render({"chip": chip})
 
     def render_chatbot(self, record):
         template = get_template("generic/chip.html")
         chatbot = record.experiment
-        chip = chips.Chip(label=str(chatbot), url=chatbot.get_absolute_url())
+        url = chatbot.get_absolute_url() if self._user_has_perm("experiments.view_experiment") else ""
+        chip = chips.Chip(label=str(chatbot), url=url)
         return template.render({"chip": chip})
+
+    def _user_has_perm(self, perm: str) -> bool:
+        # `request` is only set when the table is built via RequestConfig/SingleTableView; guard
+        # against a direct-instantiation caller, denying the link rather than raising AttributeError.
+        request = getattr(self, "request", None)
+        return bool(request and request.user.has_perm(perm))
 
     class Meta:
         model = ExperimentSession

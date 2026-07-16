@@ -795,7 +795,7 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
 @xframe_options_exempt
 @team_required
 def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and pre-surveys and
+    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and
     will ALWAYS create anonymous participants.
 
     Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).

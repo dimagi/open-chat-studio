@@ -2,6 +2,8 @@ import datetime
 import inspect
 import json
 import logging
+import random
+import re
 import sys
 import time
 import traceback
@@ -104,8 +106,10 @@ class RestrictedPythonExecutionMixin(BaseModel):
         custom_globals = {
             "__builtins__": cls._get_custom_builtins(),
             "json": json,
+            "re": re,
             "datetime": datetime,
             "time": time,
+            "random": random,
             "_getitem_": default_guarded_getitem,
             "_getiter_": default_guarded_getiter,
             "_iter_unpack_sequence_": guarded_iter_unpack_sequence,

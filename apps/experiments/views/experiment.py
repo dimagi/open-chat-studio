@@ -1,7 +1,6 @@
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import cast
 from urllib.parse import urlencode, urlparse
 
 import jwt
@@ -20,6 +19,7 @@ from django.http import (
     FileResponse,
     Http404,
     HttpResponse,
+    HttpResponseBadRequest,
     HttpResponseForbidden,
     HttpResponseRedirect,
     JsonResponse,
@@ -42,7 +42,7 @@ from field_audit.models import AuditAction
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.channels.datamodels import Attachment, AttachmentType
+from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
@@ -123,19 +123,7 @@ def experiment_session_message_embed(
     return _experiment_session_message(request, version_number, embedded=True)
 
 
-def _experiment_session_message(request, version_number: int, embedded=False):
-    working_experiment = request.experiment
-    session = request.experiment_session
-
-    if working_experiment.is_archived:
-        raise PermissionDenied("Cannot chat with an archived experiment.")
-
-    try:
-        experiment_version = working_experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    message_text = request.POST["message"]
+def _process_uploaded_files(request, session):
     uploaded_files = request.FILES
     attachments = []
     created_files = []
@@ -154,10 +142,31 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             new_file = File.objects.create(
                 name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
             )
-            attachments.append(Attachment.from_file(new_file, cast(AttachmentType, resource_type), session.id))
+            attachments.append(Attachment.from_file(new_file, resource_type, session.id))
             created_files.append(new_file)
 
         tool_resource.files.add(*created_files)
+
+    return attachments, created_files
+
+
+def _experiment_session_message(request, version_number: int, embedded=False):
+    working_experiment = request.experiment
+    session = request.experiment_session
+
+    if working_experiment.is_archived:
+        raise PermissionDenied("Cannot chat with an archived experiment.")
+
+    try:
+        experiment_version = working_experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise Http404() from None
+
+    message_text = request.POST.get("message", "")
+    attachments, created_files = _process_uploaded_files(request, session)
+
+    if not message_text and not attachments:
+        return HttpResponseBadRequest("A message or attachment is required.")
 
     if attachments and not message_text:
         message_text = "Please look at the attachments and respond appropriately"
@@ -350,7 +359,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 @xframe_options_exempt
 @team_required
 def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting sessions from embedded widgets. This will ignore consent and pre-surveys and
+    """Special view for starting sessions from embedded widgets. This will ignore consent and
     will ALWAYS create anonymous participants.
 
     Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).

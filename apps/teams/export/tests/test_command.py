@@ -13,7 +13,9 @@ from apps.teams.export.manifest import schema_checksum
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
+    PRIVATE_KEY_ENV_VAR,
     Command,
+    _load_private_key,
     check_sync_preconditions,
     force_delete_team,
     run_sync,
@@ -55,6 +57,9 @@ class FakeClient:
         self.iter_calls.append((resource, start_cursor))
         return list(self.rows_by_resource.get(resource, []))
 
+    def get_file_content(self, file_id):
+        return b""
+
 
 def _manifest(entries, checksum=None):
     return {"schema_checksum": checksum if checksum is not None else schema_checksum(), "entries": entries}
@@ -95,6 +100,50 @@ def _scenario(public_key):
         ],
     }
     return _manifest(entries), rows
+
+
+def _private_pem(private):
+    return private.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
+def _unseals(loaded_key, public_key):
+    """The loaded private key can unseal what its matching public key sealed -- proves the right key
+    was loaded, not just that some key came back."""
+    return seal_mod.unseal(seal_mod.seal({"x": 1}, public_key), loaded_key) == {"x": 1}
+
+
+def test_load_private_key_from_flag_file(tmp_path, keypair):
+    public_key, private = keypair
+    key_file = tmp_path / "key.pem"
+    key_file.write_bytes(_private_pem(private))
+
+    assert _unseals(_load_private_key(str(key_file)), public_key)
+
+
+def test_load_private_key_from_env_holds_key_contents(monkeypatch, keypair):
+    """The env var carries the PEM key itself, not a path to it."""
+    public_key, private = keypair
+    monkeypatch.setenv(PRIVATE_KEY_ENV_VAR, _private_pem(private).decode())
+
+    assert _unseals(_load_private_key(None), public_key)
+
+
+def test_flag_file_takes_precedence_over_env(tmp_path, keypair, monkeypatch):
+    public_key, private = keypair
+    key_file = tmp_path / "key.pem"
+    key_file.write_bytes(_private_pem(private))
+    monkeypatch.setenv(PRIVATE_KEY_ENV_VAR, "not-a-real-key")  # would raise if the env were consulted
+
+    assert _unseals(_load_private_key(str(key_file)), public_key)
+
+
+def test_load_private_key_returns_none_when_unset(monkeypatch):
+    monkeypatch.delenv(PRIVATE_KEY_ENV_VAR, raising=False)
+    assert _load_private_key(None) is None
 
 
 def test_schema_checksum_mismatch_aborts(tmp_path, keypair):
