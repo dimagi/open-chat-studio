@@ -53,7 +53,7 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
         input_message_id=context.input_message_id,
     )
     result = agent.invoke(inputs)
-    final_message = result["messages"][-1]
+    final_message = _get_final_ai_message(result["messages"])
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
 
@@ -229,3 +229,22 @@ def _get_search_tool(node):
             allowed_collection_ids=node.collection_index_ids,
         )
         return search_tool
+
+
+def _get_final_ai_message(messages: list) -> AIMessage:
+    """Return the last AI message with non-empty text content.
+
+    Claude (and some other models) sometimes respond with a non-empty message
+    alongside tool calls, then send further turns that carry only tool calls
+    (a ``tool_use`` block with no text) or an empty content array — signalling
+    completion via the tool flow rather than a follow-up text turn.  Those
+    trailing turns render to empty output, so we walk backwards and return the
+    last message that actually has text.  ``message.text`` handles both plain
+    string content and structured content blocks, ignoring tool-call blocks.
+    """
+    for message in reversed(messages):
+        if isinstance(message, AIMessage) and message.text:
+            return message
+    # Fallback: return the last message as-is (preserves existing behaviour
+    # when no AI message has text, e.g. pure tool-call chains).
+    return messages[-1]

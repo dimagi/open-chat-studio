@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -16,7 +17,7 @@ LANGFUSE_TRACE_ID = "lf-trace-abc123"
 LANGFUSE_TRACE_URL = "https://cloud.langfuse.com/project/xxx/traces/lf-trace-abc123"
 
 
-def _make_observation(obs_id, name, level="DEFAULT", parent_id=None):
+def _make_observation(obs_id, name, level="DEFAULT", parent_id=None, start_time=None):
     return SimpleNamespace(
         id=obs_id,
         name=name,
@@ -26,7 +27,7 @@ def _make_observation(obs_id, name, level="DEFAULT", parent_id=None):
         input={"prompt": "test"},
         output={"response": "test"},
         latency=0.5,
-        start_time=None,
+        start_time=start_time,
         parent_observation_id=parent_id,
     )
 
@@ -113,6 +114,31 @@ class TestBuildChildMap:
         root = _make_observation("obs-1", "Root")
         result = view._build_child_map([root])
         assert result == {}
+
+    @pytest.mark.parametrize(
+        ("children", "expected_order"),
+        [
+            pytest.param(
+                [("Later", datetime(2024, 1, 1, 12, 0, 1)), ("Earlier", datetime(2024, 1, 1, 12, 0, 0))],
+                ["Earlier", "Later"],
+                id="sorted_by_start_time",
+            ),
+            pytest.param(
+                [("NoTime", None), ("Timed", datetime(2024, 1, 1, 12, 0, 0))],
+                ["Timed", "NoTime"],
+                id="missing_start_time_sorts_last",
+            ),
+        ],
+    )
+    def test_children_sorted_by_start_time(self, children, expected_order):
+        view = TraceLangfuseSpansView()
+        root = _make_observation("obs-1", "Root")
+        child_obs = [
+            _make_observation(f"obs-{i + 2}", name, parent_id="obs-1", start_time=start_time)
+            for i, (name, start_time) in enumerate(children)
+        ]
+        result = view._build_child_map([root, *child_obs])
+        assert [obs.name for obs in result["obs-1"]] == expected_order
 
     def test_flatten_observations_depth_first_with_depths(self):
         view = TraceLangfuseSpansView()
@@ -324,3 +350,22 @@ class TestTraceLangfuseSpansView:
         mock_api.trace.get.assert_called_once_with(LANGFUSE_TRACE_ID)
         assert "flattened_observations" in response.context
         assert response.context["auto_selected_span_id"] == "obs-1"  # no errors, first span
+
+    def test_root_observations_sorted_by_start_time(self, anon_client, team, user, trace):
+        """Root observations render in chronological order regardless of the order Langfuse returns them."""
+        later_root = _make_observation("obs-2", "Second", start_time=datetime(2024, 1, 1, 12, 0, 1))
+        earlier_root = _make_observation("obs-1", "First", start_time=datetime(2024, 1, 1, 12, 0, 0))
+        mock_trace_data = MagicMock()
+        mock_trace_data.observations = [later_root, earlier_root]
+
+        anon_client.force_login(user)
+        with patch("apps.trace.views.get_langfuse_api_client") as mock_client_factory:
+            mock_api = MagicMock()
+            mock_api.trace.get.return_value = mock_trace_data
+            mock_client_factory.return_value = mock_api
+            response = anon_client.get(self._url(team, trace))
+
+        assert response.status_code == 200
+        names = [item["observation"].name for item in response.context["flattened_observations"]]
+        assert names == ["First", "Second"]
+        assert response.context["auto_selected_span_id"] == "obs-1"

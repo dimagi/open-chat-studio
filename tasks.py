@@ -276,7 +276,7 @@ def npm(c: Context, watch=False, install=False):
 @task(help={"port": "Port to serve docs on (default: 8001)"})
 def docs(c: Context, port=8001):
     """Serve the developer documentation site locally using MkDocs."""
-    c.run(f"mkdocs serve --dev-addr localhost:{port}", echo=True, pty=True)
+    c.run(f"zensical serve --dev-addr localhost:{port}", echo=True, pty=True)
 
 
 def _confirm(message, _exit=True, exit_message="Done"):

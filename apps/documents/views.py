@@ -42,7 +42,7 @@ from apps.documents.models import (
 from apps.documents.tables import CollectionsTable
 from apps.documents.tasks import sync_document_source_task
 from apps.documents.utils import delete_collection_file
-from apps.files.models import File, FileChunkEmbedding
+from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
@@ -402,6 +402,7 @@ def add_collection_files(request, team_slug: str, pk: int):
                     name=uploaded_file.name,
                     file=uploaded_file,
                     summary=request.POST[uploaded_file.name] if not collection.is_index else "",
+                    purpose=FilePurpose.COLLECTION,
                 )
             )
 

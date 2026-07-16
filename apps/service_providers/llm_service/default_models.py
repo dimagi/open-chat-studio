@@ -62,13 +62,6 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("claude-haiku-4-5-20251001", k(200), parameters=AnthropicReasoningParameters),
         Model("claude-opus-4-5-20251101", k(200), parameters=AnthropicReasoningParameters),
         Model(
-            "claude-sonnet-4-20250514",
-            k(200),
-            deprecated=True,
-            replacement="claude-sonnet-4-6",
-            parameters=AnthropicReasoningParameters,
-        ),
-        Model(
             "claude-opus-4-20250514",
             k(200),
             deprecated=True,
@@ -103,6 +96,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gpt-5.4-mini", 400000, parameters=GPT52Parameters),
         Model("gpt-5.4-nano", 400000, parameters=GPT52Parameters),
         Model("gpt-5.5", 1050000, parameters=GPT55Parameters),
+        Model("gpt-5.6-terra", 1100000, parameters=GPT52Parameters),
+        Model("gpt-5.6-sol", 1100000, parameters=GPT52Parameters),
+        Model("gpt-5.6-luna", 1100000, parameters=GPT52Parameters),
         Model("gpt-5-mini", k(400), parameters=GPT5Parameters),
         Model("gpt-5-nano", k(400), parameters=GPT5Parameters),
         Model("gpt-5-pro", k(400), parameters=GPT5ProParameters),
@@ -129,6 +125,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "deepseek": [
         Model("deepseek-chat", 128000, is_default=True),
         Model("deepseek-reasoner", 128000, is_translation_default=True),
+    ],
+    "minimax": [
+        Model("MiniMax-M3", k(1000), is_default=True),
+        Model("MiniMax-M2.7", 200000),
+        Model("MiniMax-M2", 200000),
     ],
     "google": [
         Model("gemini-3.5-flash", 1048576),
@@ -161,6 +162,7 @@ DELETED_MODELS = [
     ("anthropic", "claude-2.0"),
     ("anthropic", "claude-2.1"),
     ("anthropic", "claude-instant-1.2"),
+    ("anthropic", "claude-sonnet-4-20250514", "claude-sonnet-4-6"),
     # OpenAI
     ("openai", "o1-preview"),
     ("openai", "o1-mini"),
@@ -220,7 +222,8 @@ for _provider, models in DEFAULT_LLM_PROVIDER_MODELS.items():
 def get_model_parameters(model_name: str, **param_overrides) -> dict:
     """Return the model parameters, with any overrides applied."""
     parameters_model = LLM_MODEL_PARAMETERS.get(model_name, BasicParameters)
-    return parameters_model(**param_overrides).model_dump()
+    filtered = parameters_model.filter_overrides(param_overrides)
+    return parameters_model(**filtered).model_dump()
 
 
 def get_default_model(provider_type: str) -> Model | None:

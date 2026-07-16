@@ -440,7 +440,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
 @patch("apps.events.tasks.enqueue_static_triggers")
-@patch("apps.channels.channels_v2.channel_base.ChannelBase.start_new_session")
+@patch("apps.channels.channel_base.ChannelBase.start_new_session")
 @patch("apps.chatbots.views.send_bot_message.delay")
 def test_new_chatbot_session_view(
     task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
@@ -730,7 +730,7 @@ def test_session_table_session_query_uses_limit(team_with_users):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+@patch("apps.experiments.services.enqueue_static_triggers", Mock())
 def test_start_chatbot_session_public_embed_returns_deprecation_headers(client):
     """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
     chatbot = ExperimentFactory.create()
@@ -763,7 +763,7 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+@patch("apps.experiments.services.enqueue_static_triggers", Mock())
 def test_start_authed_web_session_with_default_version_chats_with_published_version(client, team_with_users):
     """The chatbots table chat button posts version 0 so sessions run against the published version."""
     user = team_with_users.members.first()

@@ -10,6 +10,8 @@
 # Notes:
 # - Dependabot PRs are excluded — they get their own review via
 #   claude-dependabot.yml
+# - Sentry (Seer) bot PRs are reviewed; the action's non-human-actor guard
+#   is opened for them via allowed_bots
 # - Draft PRs are skipped; the review runs when the PR is marked ready
 # - A new push cancels any in-progress review of the same PR
 
@@ -50,6 +52,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_bots: "sentry[bot]"
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment"

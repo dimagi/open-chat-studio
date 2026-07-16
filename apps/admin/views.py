@@ -25,7 +25,9 @@ from apps.admin.forms import (
 )
 from apps.admin.imports import import_team_metadata_from_csv
 from apps.admin.models import OcsConfiguration
+from apps.admin.provider_keys import get_provider_key_fingerprints
 from apps.admin.queries import (
+    build_usage_report,
     get_message_stats,
     get_participant_stats,
     get_period_totals,
@@ -458,6 +460,28 @@ def users_api(request):
 
     data = [{"value": user.id, "text": user.username} for user in users]
     return JsonResponse(data, safe=False)
+
+
+@is_superuser
+def provider_usage_api(request):
+    """Cross-team LLM usage over a date range: per-team token totals merged with
+    per-model cost detail where cost tracking is enabled. Requires `range_type`,
+    `start`, and `end` query params (as the dashboard date-range form).
+    """
+    result = _validated_range(request)
+    if result is None:
+        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
+    _, _, start_timestamp, end_timestamp = result
+    return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
+
+
+@is_superuser
+def provider_keys_api(request):
+    """Masked API-key fingerprint → team mapping across all LLM providers, so a
+    report can attribute provider-side cost (keyed by the provider's redacted
+    key) back to the owning team. Never returns the raw secret.
+    """
+    return JsonResponse({"providers": list(get_provider_key_fingerprints())})
 
 
 @is_superuser

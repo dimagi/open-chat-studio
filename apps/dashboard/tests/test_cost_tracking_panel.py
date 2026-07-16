@@ -5,11 +5,24 @@ from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from time_machine import travel
 
+from apps.cost_tracking.models import Confidence
 from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.utils.factories.experiment import ExperimentFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _freeze_now():
+    """Anchor "now" to _NOW so the dashboard's default date window deterministically
+    covers the seeded usage. Without this the tests rot: the default window is
+    [now - 30 days, now] against real time, so once wall-clock time passes _NOW + 30
+    days the window no longer includes the test data and the assertions fail."""
+    with travel(_NOW, tick=False):
+        yield
 
 
 def _enable_flag_for(team):
@@ -53,24 +66,49 @@ class TestCostTrackingPanel:
         assert response.context["cost_summary"].total_cost == Decimal("2.50000000")
         assert b"2.50" in response.content
 
-    def test_lists_top_bots(self, authenticated_client, team, experiment):
-        _enable_flag_for(team)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment)
-
-        response = self._get_dashboard(authenticated_client, team)
-
-        bots = response.context["cost_top_bots"]
-        assert len(bots) == 1
-        assert bots[0].experiment_name == experiment.name
-
     def test_empty_state_when_no_usage(self, authenticated_client, team):
         _enable_flag_for(team)
 
         response = self._get_dashboard(authenticated_client, team)
 
         assert response.context["cost_summary"].total_cost == Decimal(0)
-        assert response.context["cost_top_bots"] == []
         assert b"No chatbot usage in this period." in response.content
+
+    def test_hides_exact_estimated_split_without_estimated_spend(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
+
+        response = self._get_dashboard(authenticated_client, team)
+
+        assert response.context["cost_summary"].estimated_cost == Decimal(0)
+        assert b">Estimated<" not in response.content
+        assert b">Exact<" not in response.content
+
+    def test_shows_exact_estimated_split_with_estimated_spend(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), confidence=Confidence.EXACT)
+        _usage(team, cost="0.50", when=_NOW - timedelta(days=1), confidence=Confidence.ESTIMATED)
+
+        response = self._get_dashboard(authenticated_client, team)
+
+        assert response.context["cost_summary"].estimated_cost > 0
+        assert b">Estimated<" in response.content
+        assert b">Exact<" in response.content
+
+    def test_coverage_gap_detail_lists_models(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(
+            team,
+            cost="0.00",
+            when=_NOW - timedelta(days=1),
+            model_name="mystery-model",
+            confidence=Confidence.EXACT,
+        )
+
+        response = self._get_dashboard(authenticated_client, team)
+
+        assert response.context["cost_summary"].unpriced_call_count == 1
+        assert b"mystery-model" in response.content
 
     def test_other_team_data_isolated(self, authenticated_client, team, experiment_team):
         _enable_flag_for(team)
@@ -129,3 +167,71 @@ class TestCostTrackingPanelEndpoint:
         response = authenticated_client.get(self._url(team))
 
         assert b"999" not in response.content
+
+
+@pytest.mark.django_db()
+class TestCostTimeseriesEndpoint:
+    """`api/cost-timeseries/` feeds the panel's daily-spend chart. Flag-gated."""
+
+    def _url(self, team):
+        return reverse("dashboard:api_cost_timeseries", kwargs={"team_slug": team.slug})
+
+    def test_empty_when_flag_off(self, authenticated_client, team):
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+
+        response = authenticated_client.get(self._url(team))
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_returns_series_when_flag_on(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+
+        response = authenticated_client.get(
+            self._url(team) + "?date_range=custom&start_date=2026-06-01&end_date=2026-06-20"
+        )
+
+        payload = response.json()
+        assert len(payload) == 1
+        assert payload[0]["cost"] == 1.0
+
+    def test_respects_experiment_filter(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        other_experiment = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment)
+        base = self._url(team) + "?date_range=custom&start_date=2026-06-01&end_date=2026-06-20"
+
+        matching = authenticated_client.get(base + f"&experiments={experiment.id}")
+        other = authenticated_client.get(base + f"&experiments={other_experiment.id}")
+
+        assert matching.json()[0]["cost"] == 1.0
+        assert other.json() == []
+
+
+@pytest.mark.django_db()
+class TestBotPerformanceCostColumns:
+    """The Bot Performance API surfaces cost only when the team has the flag."""
+
+    _RANGE = "?date_range=custom&start_date=2026-06-01&end_date=2026-06-20"
+
+    def _url(self, team):
+        return reverse("dashboard:api_bot_performance", kwargs={"team_slug": team.slug})
+
+    def test_no_cost_fields_when_flag_off(self, authenticated_client, team, experiment):
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment)
+
+        response = authenticated_client.get(self._url(team) + self._RANGE)
+
+        results = response.json()["results"]
+        assert results
+        assert "cost" not in results[0]
+
+    def test_cost_fields_present_when_flag_on(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment)
+
+        response = authenticated_client.get(self._url(team) + self._RANGE)
+
+        row = next(r for r in response.json()["results"] if r["experiment_id"] == experiment.id)
+        assert row["cost"] == 1.0

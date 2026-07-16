@@ -1593,7 +1593,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TeamDetail'
+                $ref: '#/components/schemas/TeamExport'
           description: ''
   /api/export/timeout_triggers/:
     get:
@@ -2250,12 +2250,14 @@ components:
       - api_key
       - bearer
       - commcare
+      - oauth_client_credentials
       type: string
       description: |-
         * `basic` - Basic
         * `api_key` - API Key
         * `bearer` - Bearer Auth
         * `commcare` - CommCare
+        * `oauth_client_credentials` - OAuth (Client Credentials)
     AuthProviderList:
       type: object
       properties:
@@ -3094,7 +3096,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/TypeB19Enum'
         name:
           type: string
           description: The name of the model. e.g. 'text-embedding-3-small'
@@ -4230,7 +4232,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/TypeB19Enum'
         name:
           type: string
           maxLength: 255
@@ -4277,7 +4279,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB81Enum'
+          $ref: '#/components/schemas/TypeB19Enum'
         name:
           type: string
           description: The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'
@@ -5394,10 +5396,6 @@ components:
         id:
           type: integer
           readOnly: true
-        slug:
-          type: string
-          pattern: ^[-\w]+$
-          maxLength: 100
         created_at:
           type: string
           format: date-time
@@ -5422,7 +5420,6 @@ components:
       - created_at
       - id
       - name
-      - slug
       - updated_at
     TagList:
       type: object
@@ -5442,7 +5439,7 @@ components:
       - cursor
       - has_more
       - results
-    TeamDetail:
+    TeamExport:
       type: object
       properties:
         id:
@@ -5453,6 +5450,11 @@ components:
           items:
             type: string
           readOnly: true
+        has_public_key:
+          type: boolean
+          readOnly: true
+          description: Whether the team has a public key registered. The key itself
+            is never exported.
         created_at:
           type: string
           format: date-time
@@ -5470,9 +5472,22 @@ components:
           pattern: ^[-a-zA-Z0-9_]+$
         metadata:
           description: Internal staff-only metadata for this team.
+        files_export_task_id:
+          type: string
+          description: Celery task id of an in-progress team-files export, if any.
+          maxLength: 255
+        is_migrating:
+          type: boolean
+          description: When set, the team's outbound message firing is frozen while
+            its data is migrated.
+        files_export:
+          type: integer
+          nullable: true
+          description: Most recently generated team-files export, if any.
       required:
       - created_at
       - feature_flags
+      - has_public_key
       - id
       - name
       - slug
@@ -5805,7 +5820,7 @@ components:
       - cursor
       - has_more
       - results
-    TypeB81Enum:
+    TypeB19Enum:
       enum:
       - openai
       - azure
@@ -5813,6 +5828,7 @@ components:
       - groq
       - perplexity
       - deepseek
+      - minimax
       - google
       - google_vertex_ai
       - voyage
@@ -5824,6 +5840,7 @@ components:
         * `groq` - Groq
         * `perplexity` - Perplexity
         * `deepseek` - DeepSeek
+        * `minimax` - MiniMax
         * `google` - Google Gemini
         * `google_vertex_ai` - Google Vertex AI
         * `voyage` - Voyage AI

@@ -1,9 +1,9 @@
 import pytest
 from django.db.models import Q
 
-from apps.channels.channels_v2.stages.core import ParticipantResolverStage, get_or_create_participant
 from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.models import ChannelPlatform
+from apps.channels.stages.core import ParticipantResolverStage, get_or_create_participant
 from apps.channels.tests.channels.conftest import make_context
 from apps.channels.tests.message_examples import meta_cloud_api_messages
 from apps.experiments.models import Participant

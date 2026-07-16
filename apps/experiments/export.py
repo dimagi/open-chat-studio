@@ -18,6 +18,7 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
+PROGRESS_UPDATE_INTERVAL = 100
 
 UTF8_BOM = "\ufeff"  # Prepended to CSV exports so Excel detects UTF-8 encoding.
 
@@ -63,6 +64,14 @@ def _get_participant_data_for_message(message) -> dict:
                 return dictdiffer.patch(trace.participant_data_diff, start_data)
             return start_data
     return {}
+
+
+def count_export_messages(sessions_queryset) -> int:
+    """Total number of messages an export of these sessions will produce.
+
+    Used as the denominator for export progress reporting.
+    """
+    return _build_message_queryset(sessions_queryset).count()
 
 
 def _build_message_queryset(sessions_queryset):
@@ -172,7 +181,9 @@ def _yield_row_for_message(message, session_cache, experiment, translation_langu
     return _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language)
 
 
-def generate_export_rows(experiment, sessions_queryset, translation_language=None) -> Generator[list]:
+def generate_export_rows(
+    experiment, sessions_queryset, translation_language=None, progress_callback=None
+) -> Generator[list]:
     """Yield the header row, then one data row per message across all matching sessions.
 
     Messages are processed in chunks of EXPORT_CHUNK_SIZE using keyset pagination so
@@ -187,6 +198,11 @@ def generate_export_rows(experiment, sessions_queryset, translation_language=Non
     base_qs = _build_message_queryset(sessions_queryset)
     last_pk = 0
     session_cache: dict[int, dict] = {}
+    processed = 0
+
+    def report(count):
+        if progress_callback:
+            progress_callback(count)
 
     while True:
         chunk = list(base_qs.filter(pk__gt=last_pk)[:EXPORT_CHUNK_SIZE])
@@ -195,10 +211,18 @@ def generate_export_rows(experiment, sessions_queryset, translation_language=Non
 
         for message in chunk:
             yield _yield_row_for_message(message, session_cache, experiment, translation_language)
+            processed += 1
+            if processed % PROGRESS_UPDATE_INTERVAL == 0:
+                report(processed)
 
         last_pk = chunk[-1].pk
         if len(chunk) < EXPORT_CHUNK_SIZE:
             break
+
+    # Report the final tally so the last partial interval (and exports smaller than one
+    # interval) still reach 100%. processed == 0 is a no-op since 0 % INTERVAL == 0.
+    if processed % PROGRESS_UPDATE_INTERVAL != 0:
+        report(processed)
 
 
 def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
@@ -219,7 +243,7 @@ def export_rows_to_csv_stream(rows: Iterator[list]) -> Generator[str]:
 
 
 def export_to_tempfile(
-    experiment, sessions_queryset, translation_language=None, compress=False
+    experiment, sessions_queryset, translation_language=None, compress=False, progress_callback=None
 ) -> io.BufferedRandom | tempfile.SpooledTemporaryFile[bytes]:
     """Write the CSV export to a temporary file and return it, seeked to 0.
 
@@ -250,7 +274,7 @@ def export_to_tempfile(
         tmp = tempfile.TemporaryFile(mode="wb+")  # noqa: SIM115
         with gzip.open(tmp, "wt", encoding="utf-8", newline="") as gz:
             writer = csv.writer(gz, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            for row in generate_export_rows(experiment, sessions_queryset, translation_language):
+            for row in generate_export_rows(experiment, sessions_queryset, translation_language, progress_callback):
                 writer.writerow(row)
     else:
         # Wrap in a TextIOWrapper so csv.writer receives a text-mode file object.
@@ -259,7 +283,7 @@ def export_to_tempfile(
         tmp = tempfile.SpooledTemporaryFile(max_size=_SPOOLED_MAX_BYTES, mode="wb+")  # noqa: SIM115
         text_wrapper = io.TextIOWrapper(tmp, encoding="utf-8", newline="")
         writer = csv.writer(text_wrapper, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for row in generate_export_rows(experiment, sessions_queryset, translation_language):
+        for row in generate_export_rows(experiment, sessions_queryset, translation_language, progress_callback):
             writer.writerow(row)
         text_wrapper.flush()
         text_wrapper.detach()

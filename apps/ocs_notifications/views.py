@@ -96,8 +96,8 @@ class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
             .with_mute_status()
             .filter(user=self.request.user, team=self.request.team)
             .select_related("event_type")
-            .filter(latest_event__created_at__isnull=False)
-            .order_by("-latest_event__created_at")
+            .filter(latest_event_created_at__isnull=False)
+            .order_by("-latest_event_created_at")
         )
 
         # Apply filters

@@ -3,8 +3,13 @@ from django.apps import apps
 
 from apps.annotations.models import TaggedModelMixin, UserCommentsMixin
 from apps.api.export.serializers import build_resource_serializer
+from apps.files.models import FilePurpose
 from apps.teams.export import manifest
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import PricingRuleFactory
+from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory
+from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.files import FileFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -39,7 +44,6 @@ IGNORED_MODELS = frozenset(
         "events.eventlog",
         "events.scheduledmessageattempt",
         "experiments.promptbuilderhistory",
-        "experiments.survey",
         "filters.filterset",
         "mcp_integrations.mcpserver",
         "oauth.oauth2accesstoken",
@@ -188,6 +192,70 @@ def test_pricing_rules_queryset_excludes_global_rules():
     pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
     assert mine.pk in pks
     assert global_rule.pk not in pks
+
+
+@pytest.mark.django_db()
+def test_files_queryset_excludes_data_export_files():
+    """Data-export files are transient download bundles (24h expiry), not shareable content, so the
+    team-scoped queryset must leave them out while keeping every other purpose."""
+    team = TeamFactory()
+    kept = FileFactory(team=team, purpose=FilePurpose.COLLECTION)
+    export_file = FileFactory(team=team, purpose=FilePurpose.DATA_EXPORT)
+
+    entry = manifest.get_manifest_entry("files")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert kept.pk in pks
+    assert export_file.pk not in pks
+
+
+@pytest.mark.django_db()
+def test_collection_files_queryset_includes_files_of_archived_collections():
+    """Archived collections are exported (team_scoped_queryset uses _base_manager), so their CollectionFile
+    rows must be exported too -- otherwise the archived collection would arrive on the target with no
+    files. The queryset must return files of both live and archived collections."""
+    team = TeamFactory()
+    # llm_provider/embedding_provider_model share a per-team unique key, so leave them unset to keep
+    # two collections in the same team from colliding -- this test only cares about is_archived.
+    live_collection = CollectionFactory(team=team, llm_provider=None, embedding_provider_model=None)
+    archived_collection = CollectionFactory(
+        team=team, llm_provider=None, embedding_provider_model=None, is_archived=True
+    )
+    live = CollectionFileFactory(collection=live_collection)
+    of_archived = CollectionFileFactory(collection=archived_collection)
+
+    entry = manifest.get_manifest_entry("collection_files")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert live.pk in pks
+    assert of_archived.pk in pks
+
+
+@pytest.mark.django_db()
+def test_queryset_includes_archived_rows_of_versioned_models():
+    """Versioned models filter is_archived=False on their default manager. The export must bypass that
+    (via _base_manager) so archived rows are shared across servers along with the live ones."""
+    team = TeamFactory()
+    live = ExperimentFactory(team=team)
+    archived = ExperimentFactory(team=team, is_archived=True)
+
+    entry = manifest.get_manifest_entry("chatbots")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert live.pk in pks
+    assert archived.pk in pks
+
+
+@pytest.mark.django_db()
+def test_queryset_includes_soft_deleted_channels():
+    """ExperimentChannel's default manager filters deleted=False. The export bypasses that (via
+    _base_manager) so soft-deleted channels are shared across servers too, keeping the snapshot
+    faithful."""
+    team = TeamFactory()
+    live = ExperimentChannelFactory(team=team)
+    deleted = ExperimentChannelFactory(team=team, deleted=True)
+
+    entry = manifest.get_manifest_entry("chatbot_channels")
+    pks = set(manifest.team_scoped_queryset(entry, team).values_list("pk", flat=True))
+    assert live.pk in pks
+    assert deleted.pk in pks
 
 
 @pytest.mark.django_db()

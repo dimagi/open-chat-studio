@@ -139,6 +139,7 @@ nav:
       - Slack Channel Integration: developer_guides/code_systems/slack_channel_integration.md
       - Meta Cloud API Integration: developer_guides/code_systems/meta_cloud_api_integration.md
       - Index Managers: developer_guides/code_systems/index_managers.md
+      - Citations: developer_guides/code_systems/citations.md
       - Notifications: developer_guides/code_systems/notifications.md
     - Testing:
       - Integration Testing: developer_guides/testing/integration_testing.md

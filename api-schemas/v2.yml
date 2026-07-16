@@ -256,6 +256,7 @@ components:
         url:
           type: string
           format: uri
+          example: https://example.com/api/v2/chatbots/123e4567-e89b-12d3-a456-426614174000/
           readOnly: true
           title: API URL
         version_number:
@@ -1105,12 +1106,12 @@ components:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cD00ODY%3D"
+          example: https://example.com/api/?cursor=cD00ODY%3D
         previous:
           type: string
           nullable: true
           format: uri
-          example: http://api.example.org/accounts/?cursor=cj0xJnA9NDg3
+          example: https://example.com/api/?cursor=cj0xJnA9NDg3
         results:
           type: array
           items:

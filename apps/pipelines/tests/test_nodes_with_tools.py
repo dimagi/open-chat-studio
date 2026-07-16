@@ -256,3 +256,57 @@ def test_tool_artifact_response(get_configured_tools, get_llm_service, provider,
 
 def _tool_call(name, args):
     return AIMessage(tool_calls=[ToolCall(name=name, args=args, id="123")], content="")
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+def test_tool_only_followup_after_tool_call_uses_earlier_message(get_llm_service, provider, provider_model):
+    """Regression test: after the text turn, Claude can emit trailing turns that carry no text — a turn
+    whose content is a list holding *only* a ``tool_use`` block (truthy content, but no text) and/or an
+    empty content array.  Both render to empty output, so a naive ``message.content`` check returns the
+    tool-only turn.  We must skip them and use the last turn that actually has text.
+
+    Scenario (mirrors a real Langfuse trace):
+      1. LLM responds: content="...text..." + tool_calls=[UPDATE_PARTICIPANT_DATA]
+      2. tool result sent back
+      3. LLM responds: content=[{tool_use}] only (no text) + tool_calls=[UPDATE_PARTICIPANT_DATA]
+      4. tool result sent back
+      5. LLM responds: content=[]  (empty – Claude signals it's done via tools, not text)
+    """
+    first_response = AIMessage(
+        content="I'll update your participant data now.",
+        tool_calls=[
+            ToolCall(name=AgentTools.UPDATE_PARTICIPANT_DATA, args={"key": "mood", "value": "happy"}, id="tc1")
+        ],
+    )
+    # Follow-up turn carrying only a tool_use block – truthy content, but no text
+    tool_only_followup = AIMessage(
+        content=[{"type": "tool_use", "id": "tc2", "name": AgentTools.UPDATE_PARTICIPANT_DATA, "input": {}}],
+        tool_calls=[ToolCall(name=AgentTools.UPDATE_PARTICIPANT_DATA, args={"key": "done", "value": "yes"}, id="tc2")],
+    )
+    empty_followup = AIMessage(content=[])
+
+    service = build_fake_llm_service(responses=[first_response, tool_only_followup, empty_followup])
+    get_llm_service.return_value = service
+
+    nodes = [
+        start_node(),
+        llm_response_with_prompt_node(
+            str(provider.id),
+            str(provider_model.id),
+            prompt="Be helpful. {participant_data}",
+            name="llm1",
+            tools=[AgentTools.UPDATE_PARTICIPANT_DATA],
+        ),
+        end_node(),
+    ]
+    pipeline = PipelineFactory.create()
+    session = ExperimentSessionFactory.create()
+    graph = create_runnable(pipeline, nodes)
+    state = PipelineState(
+        messages=["Update my mood to happy"],
+        experiment_session=session,
+        participant_data={},
+    )
+    output = graph.invoke(state, config={"configurable": {"repo": ORMRepository(session=session)}})
+    assert output["messages"][-1] == "I'll update your participant data now."

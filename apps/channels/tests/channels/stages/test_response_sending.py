@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from apps.channels.channels_v2.stages.terminal import FileDeliveryFailure, MessageDeliveryFailure, ResponseSendingStage
+from apps.channels.stages.terminal import FileDeliveryFailure, MessageDeliveryFailure, ResponseSendingStage
 from apps.channels.tests.channels.conftest import StubSender, make_context
 
 
@@ -189,3 +189,119 @@ class TestResponseSendingStage:
         assert isinstance(exc, MessageDeliveryFailure)
         assert exc.original_exc is error
         assert exc.context == "flush"
+
+
+class TestVoiceToTextFallback:
+    """A channel can pass should_voice_fallback_to_text into the stage. When voice delivery
+    fails and the predicate approves the exception, the full formatted message is sent as
+    text instead and no delivery failure is recorded."""
+
+    def _voice_ctx(self, sender, **kwargs):
+        kwargs.setdefault("formatted_message", "full reply text")
+        return make_context(
+            sender=sender,
+            voice_audio=MagicMock(),
+            participant_identifier="user1",
+            **kwargs,
+        )
+
+    def _failing_voice_sender(self, error):
+        sender = MagicMock()
+        sender.send_voice.side_effect = error
+        return sender
+
+    def test_falls_back_to_text_when_predicate_approves(self):
+        error = RuntimeError("window expired")
+        sender = self._failing_voice_sender(error)
+        stage = ResponseSendingStage(should_voice_fallback_to_text=lambda exc: exc is error)
+        ctx = self._voice_ctx(sender)
+
+        stage(ctx)
+
+        sender.send_text.assert_called_once_with("full reply text", "user1")
+        assert ctx.sending_exceptions == []
+        # Response is no longer voice: persistence must not tag it or attach audio
+        assert ctx.voice_audio is None
+
+    def test_fallback_does_not_send_additional_text_message(self):
+        """The URLs split into additional_text_message for the voice path are still inline
+        in formatted_message (it's captured before URL-stripping), so the fallback delivers
+        them as part of the full text; sending the follow-up too would duplicate them."""
+        error = RuntimeError("window expired")
+        sender = self._failing_voice_sender(error)
+        stage = ResponseSendingStage(should_voice_fallback_to_text=lambda exc: True)
+        ctx = self._voice_ctx(
+            sender,
+            formatted_message="full reply text https://example.com",
+            additional_text_message="https://example.com",
+        )
+
+        stage(ctx)
+
+        sender.send_text.assert_called_once_with("full reply text https://example.com", "user1")
+
+    def test_voice_failure_raises_when_predicate_declines(self):
+        error = RuntimeError("some other failure")
+        sender = self._failing_voice_sender(error)
+        stage = ResponseSendingStage(should_voice_fallback_to_text=lambda exc: False)
+        ctx = self._voice_ctx(sender)
+
+        stage(ctx)
+
+        sender.send_text.assert_not_called()
+        assert len(ctx.sending_exceptions) == 1
+        exc = ctx.sending_exceptions[0]
+        assert isinstance(exc, MessageDeliveryFailure)
+        assert exc.original_exc is error
+        assert exc.context == "voice message"
+
+    def test_voice_failure_raises_by_default(self):
+        """Without a predicate the stage keeps its original behavior."""
+        error = RuntimeError("voice failed")
+        sender = self._failing_voice_sender(error)
+        stage = ResponseSendingStage()
+        ctx = self._voice_ctx(sender)
+
+        stage(ctx)
+
+        sender.send_text.assert_not_called()
+        assert len(ctx.sending_exceptions) == 1
+        assert ctx.sending_exceptions[0].context == "voice message"
+
+    def test_fallback_text_failure_recorded_as_text_delivery_failure(self):
+        """If the text retry also fails, the team still gets notified via the
+        generic path -- about the text failure that ultimately blocked the reply."""
+        voice_error = RuntimeError("window expired")
+        text_error = RuntimeError("no template")
+        sender = self._failing_voice_sender(voice_error)
+        sender.send_text.side_effect = text_error
+        stage = ResponseSendingStage(should_voice_fallback_to_text=lambda exc: True)
+        ctx = self._voice_ctx(sender)
+
+        stage(ctx)
+
+        assert len(ctx.sending_exceptions) == 1
+        exc = ctx.sending_exceptions[0]
+        assert isinstance(exc, MessageDeliveryFailure)
+        assert exc.original_exc is text_error
+        assert exc.context == "text message"
+
+    def test_no_fallback_without_formatted_message(self):
+        """Nothing to retry with -> the voice failure is recorded as usual."""
+        error = RuntimeError("window expired")
+        sender = self._failing_voice_sender(error)
+        stage = ResponseSendingStage(should_voice_fallback_to_text=lambda exc: True)
+        ctx = make_context(
+            sender=sender,
+            formatted_message=None,
+            early_exit_response=None,
+            voice_audio=MagicMock(),
+            participant_identifier="user1",
+        )
+        # should_run is False without formatted_message; drive process directly to
+        # pin the guard inside the voice path as well
+        stage.process(ctx)
+
+        sender.send_text.assert_not_called()
+        assert len(ctx.sending_exceptions) == 1
+        assert ctx.sending_exceptions[0].context == "voice message"

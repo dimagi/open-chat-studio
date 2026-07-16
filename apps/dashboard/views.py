@@ -8,7 +8,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 from waffle import flag_is_active
 
-from apps.cost_tracking.services.reporting import cost_summary, top_n_bots
+from apps.cost_tracking.services.reporting import CostFilters, cost_summary, cost_timeseries, coverage_gaps
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
@@ -26,26 +26,34 @@ def _cost_tracking_context(request, filter_form: DashboardFilterForm) -> dict:
     """
     if not flag_is_active(request, COST_TRACKING_FLAG):
         return {"cost_tracking_enabled": False}
-    start, end = _cost_panel_period(filter_form)
+    start, end, filters = _cost_panel_scope(filter_form)
     return {
         "cost_tracking_enabled": True,
-        "cost_summary": cost_summary(request.team, start=start, end=end),
-        "cost_top_bots": top_n_bots(request.team, start=start, end=end),
+        "cost_summary": cost_summary(request.team, start=start, end=end, filters=filters),
+        "cost_coverage_gaps": coverage_gaps(request.team, start=start, end=end, filters=filters),
     }
 
 
-def _cost_panel_period(filter_form: DashboardFilterForm) -> tuple[datetime, datetime]:
-    """Mirror the dashboard's date range so the panel stays in sync with the
-    rest of the charts. Falls back to the last 30 days when no filter is set.
+def _cost_panel_scope(filter_form: DashboardFilterForm) -> tuple[datetime, datetime, CostFilters]:
+    """Mirror the dashboard's date range and (chatbot / platform / participant)
+    filters so the panel stays in sync with the rest of the charts. Falls back
+    to the last 30 days when no date range is set.
     """
+    start = end = None
+    filters = CostFilters()
     if filter_form.is_valid():
         params = filter_form.get_filter_params()
         start = params.get("start_date")
         end = params.get("end_date")
-        if start and end:
-            return start, end
-    end = timezone.now()
-    return end - timedelta(days=DEFAULT_COST_PERIOD_DAYS), end
+        filters = CostFilters(
+            experiment_ids=params.get("experiment_ids"),
+            platform_names=params.get("platform_names"),
+            participant_ids=params.get("participant_ids"),
+        )
+    if not (start and end):
+        end = timezone.now()
+        start = end - timedelta(days=DEFAULT_COST_PERIOD_DAYS)
+    return start, end, filters
 
 
 @method_decorator(login_and_team_required, name="dispatch")
@@ -169,8 +177,27 @@ class BotPerformanceApiView(DashboardApiView):
         order_dir = request.GET.get("order_dir", "desc")
 
         data = service.get_bot_performance_summary(
-            page=page, page_size=page_size, order_by=order_by, order_dir=order_dir, **filter_params
+            page=page,
+            page_size=page_size,
+            order_by=order_by,
+            order_dir=order_dir,
+            include_cost=flag_is_active(request, COST_TRACKING_FLAG),
+            **filter_params,
         )
+        return self.json_response(data)
+
+
+class CostTrackingApiView(DashboardApiView):
+    """Cost-tracking data endpoint, gated on the team's cost-monitoring flag.
+    Returns an empty payload when the flag is off so the frontend can no-op.
+    """
+
+    def get(self, request, *args, **kwargs):
+        if not flag_is_active(request, COST_TRACKING_FLAG):
+            return self.json_response([])
+        start, end, filters = _cost_panel_scope(DashboardFilterForm(data=request.GET, team=request.team))
+        granularity = request.GET.get("granularity", "daily")
+        data = cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters)
         return self.json_response(data)
 
 

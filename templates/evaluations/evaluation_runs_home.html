@@ -45,12 +45,7 @@
                   hx-post="{% url 'evaluations:clear_evaluation_runs' request.team.slug config.id %}"
                   hx-trigger="confirmed"
                   hx-disabled-elt="this"
-                  onclick="alertify.confirm().setting({
-                    title: 'Confirm',
-                    message: 'Clear all? This removes the tags these runs applied to their targets and deletes all run history and results. This cannot be undone.',
-                    transition: 'fade',
-                    onok: function() { htmx.trigger('#clear-all-runs-button', 'confirmed'); },
-                  }).show();">
+                  onclick="confirmThenTrigger('clear-all-runs-button', 'Clear all? This removes the tags these runs applied to their targets and deletes all run history and results. This cannot be undone.')">
             <i class="fa-solid fa-eraser htmx-hide"></i>
             <span class="loading loading-spinner loading-sm htmx-show"></span>
             Clear all
@@ -62,12 +57,7 @@
                   type="button"
                   hx-delete="{% url 'evaluations:delete' request.team.slug config.id %}?redirect=1"
                   hx-trigger="confirmed"
-                  onclick="alertify.confirm().setting({
-                    title: 'Confirm',
-                    message: 'Delete this evaluation? This will also delete all run history and results. This cannot be undone.',
-                    transition: 'fade',
-                    onok: function() { htmx.trigger('#delete-evaluation-button', 'confirmed'); },
-                  }).show();">
+                  onclick="confirmThenTrigger('delete-evaluation-button', 'Delete this evaluation? This will also delete all run history and results. This cannot be undone.')">
             <i class="fa-solid fa-trash"></i>
             Delete
           </button>

@@ -2,10 +2,10 @@ from unittest.mock import patch
 
 import pytest
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import SureAdhereMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_sureadhere_message
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import ChatMessage
 from apps.utils.factories.channels import ExperimentChannelFactory
 

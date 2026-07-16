@@ -16,7 +16,11 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.api.tasks import DuplicateConnectChannelError, create_connect_channel_for_participant
+from apps.api.tasks import (
+    DuplicateConnectChannelError,
+    connect_channel_error_details,
+    create_connect_channel_for_participant,
+)
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData, SessionStatus
 from apps.teams.backends import CHATBOT_ADMIN_GROUP, add_user_to_team
@@ -483,6 +487,27 @@ def test_update_participant_data_connect_channel_failure(httpx_mock, upstream, e
     assert "commcare_connect_channel_id" not in participant_data.system_metadata
 
 
+@pytest.mark.parametrize(
+    ("status_code", "expect_captured"),
+    [
+        pytest.param(400, True, id="400-captured"),
+        pytest.param(404, False, id="404-not-captured"),
+        pytest.param(500, False, id="500-not-captured"),
+    ],
+)
+def test_connect_channel_error_details_reports_400_to_sentry(status_code, expect_captured):
+    """400s from Connect attach the exception so Sentry records the full error; others don't."""
+    error = httpx.HTTPStatusError(
+        "error",
+        request=httpx.Request("POST", "http://connect/messaging/create_channel/"),
+        response=httpx.Response(status_code, text="bad request"),
+    )
+    with patch("apps.api.tasks.logger") as mock_logger:
+        connect_channel_error_details(error, "connectid_1")
+
+    assert mock_logger.error.call_args.kwargs["exc_info"] is (error if expect_captured else None)
+
+
 @pytest.mark.django_db()
 @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
 def test_update_participant_data_duplicate_channel_id_conflict(httpx_mock):
@@ -809,7 +834,7 @@ def _setup_participant_data(
 
 @pytest.mark.django_db()
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, django_capture_on_commit_callbacks):
     """
@@ -902,7 +927,7 @@ def test_generate_bot_message_and_send(ConnectClient, experiment, auth_method, d
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("consented", [True, False])
 def test_generate_bot_message_auto_creates_participant(
     ConnectClient, experiment, httpx_mock, consented, django_capture_on_commit_callbacks
@@ -1086,7 +1111,7 @@ def test_trigger_bot_duplicate_channel_id_conflict(ConnectClientView, experiment
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
 @patch("apps.api.views.channels.CommCareConnectClient")
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_trigger_bot_direct_message(
     ConnectClientChat, ConnectClientView, experiment, auth_method, django_capture_on_commit_callbacks
@@ -1183,7 +1208,7 @@ def test_trigger_bot_direct_message_for_email_channel(experiment, django_capture
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
 @patch("apps.api.views.channels.CommCareConnectClient")
-@patch("apps.channels.channels_v2.connect_channel.CommCareConnectClient")
+@patch("apps.channels.connect_channel.CommCareConnectClient")
 def test_trigger_bot_direct_message_consent_required(ConnectClientChat, ConnectClientView, experiment, httpx_mock):
     """
     trigger_bot with message_text should return 400 when the participant has not consented (CCC platform).

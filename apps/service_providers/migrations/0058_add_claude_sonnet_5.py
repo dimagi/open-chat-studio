@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.service_providers.migration_utils import llm_model_migration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -10,5 +8,5 @@ class Migration(migrations.Migration):
 
     operations = [
         # Add claude-sonnet-5 for the `anthropic` provider (1M context)
-        llm_model_migration(),
+        # llm_model_migration() moved to 0059_delete_claude_sonnet_4_20250514
     ]

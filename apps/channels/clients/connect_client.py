@@ -10,6 +10,25 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 
 logger = logging.getLogger("ocs.channels.connect")
 
+# Connect returns this in a 400 body when a message with the same message_id was already
+# received. Because we reuse the message_id across retries, this happens when a prior attempt
+# timed out client-side but actually arrived — the message is delivered, so it's not an error.
+MESSAGE_ID_ALREADY_EXISTS = "MESSAGE_ID_ALREADY_EXISTS"
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    """Raise on HTTP errors, attaching the response body so it surfaces in logs and Sentry.
+
+    ``httpx.HTTPStatusError`` only stringifies the status line, so the CommCare Connect error
+    body (e.g. ``{"errors": "no_user_consent"}``) would otherwise be lost. The note preserves the
+    exception type and grouping while making the reason visible.
+    """
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        e.add_note(f"Response body: {response.text}")
+        raise
+
 
 class Message(TypedDict):
     timestamp: str
@@ -52,7 +71,7 @@ class CommCareConnectClient:
         if channel_name:
             data["channel_name"] = channel_name
         response = self.client.post(url, json=data)
-        response.raise_for_status()
+        _raise_for_status(response)
         return response.json()
 
     def decrypt_messages(self, key: bytes, messages: list[Message]) -> list[str]:
@@ -95,7 +114,19 @@ class CommCareConnectClient:
     def _send_fcm(self, payload: dict) -> None:
         url = f"{self._base_url}/messaging/send_fcm/"
         response = self.client.post(url, json=payload)
-        response.raise_for_status()
+        if response.status_code == 400 and self._is_message_already_exists(response):
+            logger.info("Message %s already delivered to Connect; treating as success", payload.get("message_id"))
+            return
+        _raise_for_status(response)
+
+    @staticmethod
+    def _is_message_already_exists(response: httpx.Response) -> bool:
+        try:
+            return response.json().get("errors") == MESSAGE_ID_ALREADY_EXISTS
+        except (ValueError, AttributeError):
+            # ValueError covers both a non-JSON body and an undecodable one (UnicodeDecodeError);
+            # AttributeError covers valid JSON that isn't an object. All mean "not the dedupe error".
+            return False
 
     def _encrypt_message(self, key: bytes, message: str) -> tuple[str, str, str]:
         cipher = AES.new(key, AES.MODE_GCM)

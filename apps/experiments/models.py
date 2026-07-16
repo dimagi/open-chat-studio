@@ -18,7 +18,6 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import models, transaction
 from django.db.models import (
-    BooleanField,
     Case,
     Count,
     F,
@@ -189,74 +188,6 @@ class SourceMaterial(BaseTeamModel, VersionsMixin):
                 VersionField(name="topic", raw_value=self.topic),
                 VersionField(name="description", raw_value=self.description),
                 VersionField(name="material", raw_value=self.material),
-            ],
-        )
-
-
-class SurveyObjectManager(VersionsObjectManagerMixin, models.Manager):
-    def get_queryset(self) -> models.QuerySet:
-        return (
-            super()
-            .get_queryset()
-            .annotate(
-                is_version=Case(
-                    When(working_version_id__isnull=False, then=True),
-                    When(working_version_id__isnull=True, then=False),
-                    output_field=BooleanField(),
-                )
-            )
-        )
-
-
-class Survey(BaseTeamModel, VersionsMixin):
-    """
-    A survey.
-    """
-
-    name = models.CharField(max_length=128)
-    url = models.URLField(max_length=500)
-    confirmation_text = models.TextField(
-        null=False,
-        default=(
-            "Please complete the following survey by clicking on the survey link."
-            " When you have finished, respond with '1' to let us know that you've completed it."
-            " Survey link: {survey_link}"
-        ),
-    )
-    working_version = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="versions",
-    )
-    is_archived = models.BooleanField(default=False)
-    objects = SurveyObjectManager()
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
-    def get_link(self, participant, experiment_session):
-        participant_public_id = participant.public_id if participant else "[anonymous]"
-        return self.url.format(
-            participant_id=participant_public_id,
-            session_id=experiment_session.external_id,
-            experiment_id=experiment_session.experiment.public_id,
-        )
-
-    def get_absolute_url(self):
-        return reverse("experiments:survey_edit", args=[get_slug_for_team(self.team_id), self.id])
-
-    def _get_version_details(self) -> VersionDetails:
-        return VersionDetails(
-            instance=self,
-            fields=[
-                VersionField(name="name", raw_value=self.name),
-                VersionField(name="url", raw_value=self.url),
-                VersionField(name="confirmation_text", raw_value=self.confirmation_text),
             ],
         )
 
@@ -1502,6 +1433,7 @@ class ExperimentSession(BaseTeamModel):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["team", "-last_activity_at"], name="expsession_team_lastact_idx"),
+            models.Index(fields=["team", "first_activity_at"], name="expsession_team_firstact_idx"),
             # Supports the global (cross-team) date-range scans in the admin dashboard.
             models.Index(fields=["created_at"], name="expsession_created_at_idx"),
         ]
@@ -1526,12 +1458,12 @@ class ExperimentSession(BaseTeamModel):
         else:
             return self.chat.messages.all()
 
-    def get_participant_chip(self) -> Chip:
+    def get_participant_chip(self, include_link: bool = True) -> Chip:
         if self.participant:
-            return Chip(
-                label=str(self.participant),
-                url=self.participant.get_link_to_experiment_data(experiment=self.experiment),
-            )
+            url = ""
+            if include_link:
+                url = self.participant.get_link_to_experiment_data(experiment=self.experiment)
+            return Chip(label=str(self.participant), url=url)
         else:
             return Chip(label="Anonymous", url="")
 
@@ -1714,9 +1646,9 @@ class ExperimentSession(BaseTeamModel):
         """Tries to send a message to this user session as the bot. Note that `message` will be send to the user
         directly. This is not an instruction to the bot.
         """
-        from apps.chat.channels import ChannelBase  # noqa: PLC0415 - circular: chat.channels imports experiments.models
+        from apps.channels import registry  # noqa: PLC0415 - circular import
 
-        channel = ChannelBase.from_experiment_session(self)
+        channel = registry.from_experiment_session(self)
         channel.send_message_to_user(message)
 
     @cached_property

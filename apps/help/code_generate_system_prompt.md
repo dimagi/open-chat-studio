@@ -84,7 +84,7 @@ def get_node_output(node_name: str) -> Any:
     Returns the output of the specified node if it has been executed.
     If the node has not been executed, it returns `None`.
 
-def abort_pipeline(message, tag_name: str = None) -> None:
+def abort_with_message(message, tag_name: str = None) -> None:
     Calling this will terminate the pipeline execution. No further nodes will get executed in
     any branch of the pipeline graph.
 

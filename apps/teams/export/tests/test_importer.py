@@ -1,28 +1,34 @@
 from datetime import UTC, datetime
 
 import pytest
+import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.db import models
 from django.db.models.signals import post_save
 
-from apps.annotations.models import UserComment
+from apps.annotations.models import Tag, UserComment
 from apps.api.export.serializers import build_resource_serializer
+from apps.assessments.models import Score
+from apps.channels.models import ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
 from apps.experiments.models import ConsentForm, ExperimentSession
-from apps.human_annotations.models import AnnotationQueue
+from apps.files.models import File
+from apps.human_annotations.models import Annotation, AnnotationQueue
 from apps.pipelines.models import Node, Pipeline
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
+from apps.teams.export.client import FileContentNotFound
 from apps.teams.export.importer import Importer, MissingGlobalRow, UnresolvedForeignKey, mute_signals
 from apps.teams.export.manifest import GLOBAL_CONFIG, MANIFEST_ENTRIES, entry_model, generic_fk_fields
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.models import Membership, Team
 from apps.users.models import CustomUser
 from apps.utils.factories.analysis import AnalysisQueryFactory, TranscriptAnalysisFactory
-from apps.utils.factories.annotations import CustomTaggedItemFactory, UserCommentFactory
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory, UserCommentFactory
 from apps.utils.factories.assessments import ScoreFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import PricingRuleFactory, UsageRecordFactory
@@ -180,6 +186,36 @@ def test_rerun_does_not_duplicate(store):
     importer.import_rows("teams.team", [_team_row()])
     assert store.get_target("teams.team", 9001) == first_pk
     assert Team.objects.filter(slug="imported-team-xyz").count() == 1
+
+
+def test_reimporting_soft_deleted_channel_is_idempotent(store):
+    """A soft-deleted channel is exported (deleted=True). Re-importing it must map to the existing
+    target row, not create a duplicate -- so the existence check has to see deleted rows, which the
+    default manager filters out. A duplicate would also violate the channel's unique external_id."""
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])  # captures the target team
+
+    channel_row = {
+        "id": 555,
+        "name": "Deleted TG",
+        "experiment": None,
+        "deleted": True,
+        "extra_data": {"bot_token": "x"},
+        "external_id": "31cfe1e9-4b5a-4ffd-8d17-e8cb161d3921",
+        "platform": "telegram",
+        "messaging_provider": None,
+        "widget_version": None,
+        "widget_version_updated_at": None,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("bot_channels.experimentchannel", [dict(channel_row)])
+    first_pk = store.get_target("bot_channels.experimentchannel", 555)
+    importer.import_rows("bot_channels.experimentchannel", [dict(channel_row)])
+
+    assert store.get_target("bot_channels.experimentchannel", 555) == first_pk
+    channels = ExperimentChannel.objects.get_unfiltered_queryset()
+    assert channels.filter(external_id=channel_row["external_id"]).count() == 1
 
 
 # A natural-key sample per GLOBAL_CONFIG model, used to build a matching pair of rows. Keyed by
@@ -481,6 +517,32 @@ def test_default_consent_form_maps_to_auto_created_default(store):
     assert ConsentForm.objects.filter(team_id=team_pk, is_default=True).count() == 1
 
 
+def test_tag_slug_taken_by_another_team_gets_a_fresh_slug(store):
+    """Tag slugs are unique across the whole server (taggit) while tags are team-scoped, so a source
+    tag's slug may already be taken by another team on the target. The slug is regenerated on import
+    rather than copied, so the create can't collide -- even when an older source still sends it."""
+    TagFactory(name="urgent")  # another team already holds slug "urgent"
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    row = {
+        "id": 55,
+        "name": "urgent",
+        "slug": "urgent",
+        "is_system_tag": False,
+        "category": "",
+        "created_by": None,
+        "created_at": PAST,
+        "updated_at": PAST,
+    }
+    importer.import_rows("annotations.tag", [row])
+
+    tag = Tag.objects.get(pk=store.get_target("annotations.tag", 55))
+    assert tag.name == "urgent"
+    assert tag.slug
+    assert tag.slug != "urgent"
+
+
 def test_existing_user_matched_by_username_is_not_overwritten_or_emailed(store):
     """A user already on the target is mapped by username, left unchanged, and gets no reset email --
     but is still given a membership in the synced team so they can access the imported data."""
@@ -643,6 +705,182 @@ def test_m2m_member_with_untranslated_target_raises(store):
 
     with pytest.raises(UnresolvedForeignKey):
         importer.import_rows("human_annotations.annotationqueue", [_annotation_queue_row(600, assignees=[71, 72])])
+
+
+def test_importing_a_score_maps_onto_the_annotation_side_effect_row(store):
+    """Regression for the sync_team UniqueViolation on ``score_unique_per_review_field``.
+
+    Importing a submitted Annotation runs ``Annotation.save()``, which calls
+    ``write_scores_from_annotation`` and writes Score rows on the target as a side effect. Because
+    that write lives in a ``save()`` override -- not a signal -- ``mute_signals`` doesn't stop it. The
+    manifest then imports the source's own Score rows (assessments.score comes after annotations), and
+    each one used to collide on ``(review, name)`` with the score the annotation save just wrote. The
+    score is now matched onto that existing row instead of inserting a duplicate.
+    """
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+    target_team = Team.objects.get(pk=store.get_target("teams.team", 9001))
+
+    # Source graph: a submitted annotation whose save() already wrote its Score rows on the source.
+    source_annotation = AnnotationFactory(data={"accuracy": "yes"})
+    source_score = source_annotation.scores.get()
+
+    # Target-side rows the annotation/score FKs resolve to, with their translations recorded.
+    target_item = AnnotationItemFactory(team=target_team)
+    target_reviewer = UserFactory()
+    store.record("human_annotations.annotationitem", source_annotation.item_id, target_item.id)
+    store.record("users.customuser", source_annotation.reviewer_id, target_reviewer.id)
+    store.record("experiments.experimentsession", source_annotation.item.session_id, target_item.session_id)
+
+    annotation_row = dict(build_resource_serializer(Annotation)(source_annotation).data)
+    score_row = dict(build_resource_serializer(Score)(source_score).data)
+
+    with mute_signals():
+        importer.import_rows("human_annotations.annotation", [annotation_row])
+        target_annotation_pk = store.get_target("human_annotations.annotation", source_annotation.id)
+        # Importing the annotation already wrote a Score for (target review, "accuracy").
+        side_effect_score = Score.objects.get(review_id=target_annotation_pk, name="accuracy")
+
+        # Importing the source's own score row for the same field maps onto that row, not a duplicate.
+        importer.import_rows("assessments.score", [score_row])
+
+    assert Score.objects.filter(review_id=target_annotation_pk, name="accuracy").count() == 1
+    # The imported score is recorded as the existing row, so a rerun resolves its FK straight to it.
+    assert store.get_target("assessments.score", source_score.id) == side_effect_score.pk
+
+
+# ---------------------------------------------------------------------------
+# File content backfill
+# ---------------------------------------------------------------------------
+
+FILE_STORAGE = File._meta.get_field("file").storage
+
+
+class _RecordingFetcher:
+    """Stand-in for ResourceFetcher.get_file_content: records the source pks it's asked for and
+    returns canned bytes (or raises, to simulate the source also missing the blob)."""
+
+    def __init__(self, content=b"remote-bytes", error=None):
+        self.content = content
+        self.error = error
+        self.calls = []
+
+    def __call__(self, source_pk):
+        self.calls.append(source_pk)
+        if self.error is not None:
+            raise self.error
+        return self.content
+
+
+def _file_row(source_id=501, *, path="synced-file.txt", external_id="", external_source=""):
+    """A serialized files.file row whose ``file`` field is the stored relative ``path`` (as the export
+    serializer emits it). The blob is not written to storage here, so importing it hits the missing-file
+    path unless the caller seeds storage first. ``name`` is deterministic so tests can look the row up."""
+    file = FileFactory.build()
+    file.pk = source_id
+    file.name = f"file-{source_id}"
+    file.file = path
+    file.external_id = external_id
+    file.external_source = external_source
+    file.working_version = None
+    return dict(build_resource_serializer(File)(file, context={"public_key": None}).data)
+
+
+def _clear_storage(*paths):
+    # delete() is a safe no-op when the object is absent -- and unlike exists(), it doesn't depend on
+    # the storage backend reporting existence reliably (real S3 is used in tests), so a stale blob
+    # from a prior run can't make a "missing file" case silently find content.
+    for path in paths:
+        if path:
+            FILE_STORAGE.delete(path)
+
+
+def test_importing_file_backfills_missing_blob_from_the_source(store):
+    """A file row whose blob isn't in this server's storage is backfilled: the bytes are fetched from
+    the source's file content API (keyed by the source pk) and written at the stored path."""
+    _clear_storage("backfilled-501.txt")
+    fetcher = _RecordingFetcher(content=b"remote-bytes")
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(501, path="backfilled-501.txt")])
+
+    assert fetcher.calls == [501]
+    file = File.objects.get(pk=store.get_target("files.file", 501))
+    assert file.file.read() == b"remote-bytes"
+    _clear_storage("backfilled-501.txt")
+
+
+def test_importing_file_with_present_blob_does_not_fetch(store):
+    """When the blob is already in storage (the operator copied it across), the file imports without
+    touching the content API."""
+    saved_path = FILE_STORAGE.save("present-502.txt", ContentFile(b"already-here"))
+    fetcher = _RecordingFetcher()
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(502, path=saved_path)])
+
+    assert fetcher.calls == []
+    file = File.objects.get(pk=store.get_target("files.file", 502))
+    assert file.file.read() == b"already-here"
+    _clear_storage(saved_path)
+
+
+def test_importing_file_without_a_fetcher_raises_when_blob_missing(store):
+    """With no fetcher wired in (the default), a missing blob surfaces as it does today -- File.save()
+    reads its size from storage and fails -- rather than being silently swallowed."""
+    _clear_storage("missing-503.txt")
+    importer = Importer(store)
+    importer.import_rows("teams.team", [_team_row()])
+
+    with pytest.raises(FileNotFoundError):
+        importer.import_rows("files.file", [_file_row(503, path="missing-503.txt")])
+
+
+def test_importing_external_file_without_a_blob_is_imported_without_fetch(store):
+    """External-source rows (e.g. OpenAI assistant files) carry no local blob, so File.save() never
+    reads a size and there's nothing to backfill."""
+    fetcher = _RecordingFetcher()
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(504, path="", external_id="ext-1", external_source="openai")])
+
+    assert fetcher.calls == []
+    file = File.objects.get(pk=store.get_target("files.file", 504))
+    assert not file.file
+
+
+def test_file_not_found_on_source_imports_the_row_without_content_and_records_it(store):
+    """A 404 from the content API means the source is missing the blob too. Rather than aborting,
+    import the file's metadata without content (so references to it still resolve) and record it so
+    the operator gets a report of what couldn't be recovered."""
+    _clear_storage("gone-505.txt")
+    fetcher = _RecordingFetcher(error=FileContentNotFound(505))
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    importer.import_rows("files.file", [_file_row(505, path="gone-505.txt")])
+
+    file = File.objects.get(pk=store.get_target("files.file", 505))
+    assert not file.file
+    assert "gone-505.txt" in importer.missing_files
+
+
+def test_non_404_fetch_failure_aborts_import_and_commits_no_row(store):
+    """A transport/server error isn't a 'file is gone' signal, so the sync still aborts and the row
+    rolls back rather than silently landing a file with no content."""
+    _clear_storage("fail-507.txt")
+    fetcher = _RecordingFetcher(error=requests.HTTPError("500"))
+    importer = Importer(store, fetch_file_content=fetcher)
+    importer.import_rows("teams.team", [_team_row()])
+
+    with pytest.raises(requests.HTTPError):
+        importer.import_rows("files.file", [_file_row(507, path="fail-507.txt")])
+
+    assert store.get_target("files.file", 507) is None
+    assert not File.objects.filter(name="file-507").exists()
 
 
 # ---------------------------------------------------------------------------

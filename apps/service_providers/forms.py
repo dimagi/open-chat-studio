@@ -353,6 +353,33 @@ class BearerAuthConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     token = forms.CharField(label=_("Bearer Token"))
 
 
+class OAuthClientCredentialsConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["client_secret"]
+    additional_searchable_fields = ["client_id"]
+
+    client_id = forms.CharField(label=_("Client ID"))
+    client_secret = forms.CharField(label=_("Client Secret"))
+    token_url = forms.URLField(
+        label=_("Token URL"),
+        validators=[URLValidator(schemes=["https"])],
+        help_text=_("The OAuth token endpoint that issues access tokens."),
+    )
+    scope = forms.CharField(
+        label=_("Scope"),
+        required=False,
+        help_text=_("Optional space-separated list of scopes to request."),
+    )
+    token_endpoint_auth_method = forms.ChoiceField(
+        label=_("Token Endpoint Authentication"),
+        choices=[
+            ("client_secret_basic", _("HTTP Basic")),
+            ("client_secret_post", _("Request Body (client_secret_post)")),
+        ],
+        initial="client_secret_basic",
+        help_text=_("How the client credentials are sent to the token endpoint."),
+    )
+
+
 class SlackMessagingConfigForm(ProviderTypeConfigForm):
     custom_template = "service_providers/slack_config_form.html"
 

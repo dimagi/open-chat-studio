@@ -13,6 +13,8 @@ from django.db import connection
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 
+from apps.files.models import FilePurpose
+
 
 @dataclass(frozen=True)
 class ManifestEntry:
@@ -117,13 +119,19 @@ SECRET_REGISTRY: dict[str, list[str]] = {
 # not propagated (is_staff/is_superuser are crosscutting perms). The user's auth ``groups`` stay in --
 # the serializer's ``groups`` method field overrides them with the team role.
 EXCLUDE_REGISTRY: dict[str, list[str]] = {
-    "teams.team": ["members", "public_key"],
+    "teams.team": ["members", "public_key", "files_export", "files_export_task_id", "is_migrating"],
     "users.customuser": ["password", "user_permissions", "is_staff", "is_superuser"],
+    # System-managed OAuth token cache; the target refetches it from the copied client credentials.
+    "service_providers.authprovider": ["_auth_data"],
     # Collection.files / DocumentSource.files are M2M through CollectionFile (extra columns). Excluding
     # them stops the serializer emitting a bare pk list the importer would .set() -- Django rejects
     # that for explicit through models. CollectionFile rows (their own entry) carry the link.
     "documents.collection": ["files"],
     "documents.documentsource": ["files"],
+    # Tag slugs are unique across the whole server (taggit) while tags are team-scoped, so a source
+    # slug may already be taken by another team on the target. TagBase.save() regenerates a
+    # collision-free slug when it's absent.
+    "annotations.tag": ["slug"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).
@@ -160,6 +168,8 @@ EXTRA_FILTERS: dict[str, Q] = {
     # Assistant-attached operations can't be synced (assistants are excluded). Only node-attached
     # operations, so the check constraint (assistant OR node non-null) is satisfied on import.
     "custom_actions.customactionoperation": Q(node__isnull=False),
+    # Data-export files are transient download bundles, so they're never shared across servers.
+    "files.file": ~Q(purpose=FilePurpose.DATA_EXPORT),
 }
 
 
@@ -223,8 +233,14 @@ def model_has_team_field(model: type[Model]) -> bool:
 
 
 def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
-    """The model's rows for this team, including any shared global rows."""
+    """The model's rows for this team, including any shared global rows and any archived or
+    soft-deleted rows.
+
+    Some default managers hide rows: versioned models filter ``is_archived=False`` and
+    ``ExperimentChannel`` filters ``deleted=False``. ``_base_manager`` is Django's unfiltered manager
+    (docs: Model._base_manager), so those rows are shared across servers along with the live ones."""
     model = entry_model(entry.model)
+    base = model._base_manager
     paths = TEAM_PATH_REGISTRY.get(entry.model, "team")
     if isinstance(paths, str):
         paths = [paths]
@@ -234,7 +250,7 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     spec = GLOBAL_CONFIG.get(entry.model)
     if spec:
         team_q |= Q(**{f"{spec.null_field}__isnull": True})
-    queryset = model.objects.filter(team_q)
+    queryset = base.filter(team_q)
     if len(paths) > 1:
         queryset = queryset.distinct()
     extra_filter = EXTRA_FILTERS.get(entry.model)

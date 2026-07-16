@@ -76,7 +76,7 @@ class Flags(FlagInfo, Enum):
 
     AI_COST_MONITORING = (
         "flag_ai_cost_monitoring",
-        "AI cost tracking - record per-call cost and surface a usage dashboard",
+        "AI cost tracking - surface the usage dashboard and pricing UI (data is recorded for all teams)",
         "",
         [],
         True,

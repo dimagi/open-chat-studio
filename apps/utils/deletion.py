@@ -45,10 +45,11 @@ def delete_object_with_auditing_of_related_objects(obj):
     with transaction.atomic():
         _perform_updates_for_delete(updates_not_part_of_delete)
 
-        for model, instances in reversed(collector.data.items()):
+        for model in _deletion_order(collector.data):
             if model._meta.auto_created:
                 continue
 
+            instances = collector.data[model]
             audit_kwargs = {}
             if model in get_audited_models() and isinstance(model._default_manager, AuditingManager):
                 audit_kwargs["audit_action"] = AuditAction.AUDIT
@@ -56,6 +57,54 @@ def delete_object_with_auditing_of_related_objects(obj):
             _, stats = model.objects.filter(pk__in=[instance.pk for instance in instances]).delete(**audit_kwargs)
             counter.update(stats)
     return dict(counter)
+
+
+def _deletion_order(collector_data):
+    """Order the collected models so each is safe to delete before the next.
+
+    Reversing ``collector_data`` already respects CASCADE relations, so that is our starting point.
+    On top of it we honour PROTECT (and RESTRICT, same effect here) foreign keys: a model that
+    PROTECT-references another collected model must be deleted first, otherwise deleting the
+    referenced model raises ``ProtectedError``.
+
+    CASCADE foreign keys impose the same referencer-first ordering: deleting the referenced model
+    first would cascade-delete the referencer's rows outside its own audited delete. The base order
+    already satisfies this, but it is added as an explicit constraint so PROTECT-driven reordering
+    cannot violate it.
+    """
+    base_order = list(reversed(collector_data))
+
+    # on_delete behaviors that require the referencing model's rows to be gone first
+    ordering_on_delete = (models.PROTECT, models.RESTRICT, models.CASCADE)
+
+    # must_follow[target] = models that must be deleted before `target`
+    must_follow = {model: set() for model in base_order}
+    for model in base_order:
+        for field in model._meta.concrete_fields:
+            if not isinstance(field, models.ForeignKey):
+                continue
+            if field.remote_field.on_delete not in ordering_on_delete:
+                continue
+            target = field.related_model
+            if target is not model and target in must_follow:
+                must_follow[target].add(model)
+
+    # Repeatedly pick the first model in `remaining` whose blockers have all been handled.
+    # Since `remaining` is in base order, models keep their original position unless a
+    # constraint forces them to wait.
+    ordered = []
+    done = set()
+    remaining = list(base_order)
+    while remaining:
+        model = next((m for m in remaining if must_follow[m] <= done), None)
+        if model is None:
+            # A constraint cycle; fall back to base order for what's left.
+            ordered.extend(remaining)
+            break
+        ordered.append(model)
+        done.add(model)
+        remaining.remove(model)
+    return ordered
 
 
 def _perform_updates_for_delete(updates_not_part_of_delete):
@@ -87,10 +136,10 @@ def _queryset_update_with_auditing(queryset, **kw):
     Copied from `field_audit.models.AuditingQuerySet.update` so that it can be called with querysets
     that are not AuditingQuerySets.
     """
-    from field_audit import AuditService  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
+    from field_audit import get_audit_service  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
     from field_audit.models import AuditEvent  # noqa: PLC0415 - init-order: apps.py loads before app registry is ready
 
-    audit_service = AuditService()
+    audit_service = get_audit_service()
     fields_to_update = set(kw.keys())
     audited_fields = set(audit_service.get_field_names(queryset.model))
     fields_to_audit = fields_to_update & audited_fields
