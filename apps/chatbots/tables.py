@@ -186,8 +186,8 @@ class ChatbotSessionsTable(tables.Table):
         return template.render({"chip": chip})
 
     def _user_has_perm(self, perm: str) -> bool:
-        # request is unset when the table is built without RequestConfig (e.g. the participant page);
-        # deny the link rather than raise AttributeError.
+        # `request` is only set when the table is built via RequestConfig/SingleTableView; guard
+        # against a direct-instantiation caller, denying the link rather than raising AttributeError.
         request = getattr(self, "request", None)
         return bool(request and request.user.has_perm(perm))
 
