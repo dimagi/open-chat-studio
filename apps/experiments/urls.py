@@ -47,7 +47,7 @@ urlpatterns = [
     ),
     path(
         "versions/bulk-archive/",
-        views.bulk_archive_experiment_versions,
+        views.bulk_archive_chatbot_versions,
         name="bulk_archive_versions",
     ),
     path(

@@ -876,7 +876,7 @@ def archive_experiment_version(request, team_slug: str, experiment_id: int, vers
 @require_POST
 @transaction.atomic
 @login_and_team_required
-def bulk_archive_experiment_versions(request, team_slug: str):
+def bulk_archive_chatbot_versions(request, team_slug: str):
     """
     Archives multiple non-working, non-published experiment versions by ID.
     Used from the "Cannot delete" modal to clear bulk-archiveable references.
