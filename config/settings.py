@@ -27,6 +27,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 env.read_env(os.path.join(BASE_DIR, ".env"))
 
+# The OpenAI SDK defers building its Pydantic models by default (defer_build=True), which leaves
+# nested/generic response models with a MockValSer placeholder serializer. Serializing such a
+# response (e.g. langchain_openai calling response.model_dump() on a ParsedResponse) then raises
+# "TypeError: 'MockValSer' object is not an instance of 'SchemaSerializer'". Building eagerly avoids
+# this. Must be set before `openai` is first imported, hence here. See openai/openai-python#1306.
+os.environ.setdefault("DEFER_PYDANTIC_BUILD", "0")
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
