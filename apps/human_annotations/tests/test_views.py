@@ -1328,6 +1328,29 @@ def test_export_jsonl_preserves_raw_types_and_nulls_missing_fields(client, team_
 
 
 @pytest.mark.django_db()
+def test_export_jsonl_does_not_neutralize_formula_like_values(client, team_with_users):
+    """CSV formula neutralization must never reach JSONL: a `=`-prefixed value survives verbatim."""
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        schema={"notes": {"type": "string", "description": "Notes"}},
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    reviewer = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=reviewer,
+        data={"notes": "=1+1"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    record = json.loads(client.get(url, {"format": "jsonl"}).content.decode().strip())
+
+    assert record["fields"]["notes"]["alice@example.com"] == "=1+1"
+
+
+@pytest.mark.django_db()
 def test_export_jsonl_flagged_item_with_annotations_produces_single_record(client, team_with_users):
     """A flagged item that also has annotations gets one record marked flagged, not a duplicate blank."""
     queue = AnnotationQueueFactory.create(
