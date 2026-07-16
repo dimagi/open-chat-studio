@@ -24,6 +24,7 @@ _PROVIDER_VARS = [
     "AZURE_OPENAI_API_VERSION",
     "GROQ_API_KEY",
     "PERPLEXITY_API_KEY",
+    "MINIMAX_API_KEY",
 ]
 
 
@@ -91,6 +92,13 @@ def test_google_vertex_ai_invalid_json_raises(clean_env):
     clean_env.setenv("GOOGLE_VERTEX_AI_CREDENTIALS_JSON", "{not valid json")
     with pytest.raises(ValueError, match="not valid JSON"):
         get_provider_credentials_for_type(LlmProviderTypes.google_vertex_ai)
+
+
+def test_minimax_minimal_config(clean_env):
+    clean_env.setenv("MINIMAX_API_KEY", "mm-test")
+    creds = get_provider_credentials_for_type(LlmProviderTypes.minimax)
+    assert creds is not None
+    assert creds.config == {"openai_api_key": "mm-test"}
 
 
 def test_returns_one_entry_per_configured_provider(clean_env):

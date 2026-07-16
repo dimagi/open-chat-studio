@@ -6,6 +6,7 @@ The command is a thin shell: it wires the resource fetcher to the import engine 
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 """
 
+import os
 import time
 from collections.abc import Sequence
 from datetime import timedelta
@@ -29,6 +30,7 @@ from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 
 FILES_CONFIRMED_FLAG = "files_confirmed"
+PRIVATE_KEY_ENV_VAR = "SYNC_TEAM_PRIVATE_KEY"
 MIGRATION_MODE_REQUIRED = "Migration mode needs to be enabled on the source team before you can continue."
 MISSING_PUBLIC_KEY_MESSAGE = (
     "The source team has no public key registered, so its secret data cannot be exported. "
@@ -59,6 +61,19 @@ def _friendly_http_error_message(exc: requests.HTTPError) -> str | None:
     for status_code, marker, message in _FRIENDLY_HTTP_ERRORS:
         if response.status_code == status_code and marker in detail:
             return message
+    return None
+
+
+def _load_private_key(private_key_path: str | None):
+    """Load the RSA private key used to unseal secret fields, or None when no key is configured.
+
+    The --private-key-path flag points to a key file and takes precedence. When it is omitted, the
+    SYNC_TEAM_PRIVATE_KEY env var is read for the key contents themselves (PEM), not a path to it."""
+    if private_key_path:
+        return load_private_key(Path(private_key_path).read_bytes())
+    env_key = os.environ.get(PRIVATE_KEY_ENV_VAR)
+    if env_key:
+        return load_private_key(env_key.encode())
     return None
 
 
@@ -260,7 +275,14 @@ class Command(BaseCommand):
             required=True,
             help="Names the local run state DB and identifies the team to drop when --force-delete is set.",
         )
-        parser.add_argument("--private-key-path", help="RSA private key used to unseal secret fields.")
+        parser.add_argument(
+            "--private-key-path",
+            help=(
+                "Path to the RSA private key file used to unseal secret fields. When omitted, the "
+                f"key is read from the {PRIVATE_KEY_ENV_VAR} env var, which holds the key itself "
+                "(PEM contents) rather than a path. The flag takes precedence over the env var."
+            ),
+        )
         parser.add_argument("--state-dir", default=".", help="Directory for the per-team SQLite state DB.")
         parser.add_argument("--limit", type=int, default=100, help="Page size for resource requests.")
         parser.add_argument(
@@ -276,9 +298,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         start_time = time.monotonic()
-        private_key = None
-        if options["private_key_path"]:
-            private_key = load_private_key(Path(options["private_key_path"]).read_bytes())
+        private_key = _load_private_key(options["private_key_path"])
 
         client = ResourceFetcher(options["source_url"], options["api_key"])
         enforce_schema = not options["skip_schema_check"]
