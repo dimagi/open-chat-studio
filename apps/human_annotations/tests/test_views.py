@@ -1151,6 +1151,31 @@ def test_export_csv_query_count_does_not_scale_with_annotation_count(
 
 
 @pytest.mark.django_db()
+def test_export_jsonl_query_count_does_not_scale_with_annotation_count(
+    client, team_with_users, queue, user, django_assert_max_num_queries
+):
+    other_user = UserFactory.create(username="other@example.com", email="other@example.com")
+    for _ in range(3):
+        item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+        Annotation.objects.create(
+            item=item, team=team_with_users, reviewer=user, data={"quality_score": 5}, status=AnnotationStatus.SUBMITTED
+        )
+        Annotation.objects.create(
+            item=item,
+            team=team_with_users,
+            reviewer=other_user,
+            data={"quality_score": 3},
+            status=AnnotationStatus.SUBMITTED,
+        )
+    # Same N+1 guard as the CSV path: _jsonl_item_record reads ann.reviewer.email, covered by the
+    # shared select_related("reviewer") on the annotations queryset. Ceiling matches the CSV test.
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    with django_assert_max_num_queries(15):
+        response = client.get(url, {"format": "jsonl"})
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
 def test_export_jsonl(client, team_with_users, queue, user):
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     Annotation.objects.create(
@@ -1191,25 +1216,143 @@ def test_export_jsonl(client, team_with_users, queue, user):
     records = [json.loads(line) for line in response.content.decode().strip().split("\n")]
     records_by_item = {r["item_id"]: r for r in records}
 
-    # Normal item — has submitted annotation
+    # Normal item — one record per item, per-field values keyed by annotator
     normal = records_by_item[item.pk]
-    assert normal["annotation"]["quality_score"] == 5
+    assert normal["fields"]["quality_score"] == {user.email: 5}
     assert normal["session_id"] == str(item.session.external_id)
     assert normal["flagged"] is False
     assert normal["flags"] == []
+    assert "annotation" not in normal
 
-    # Flagged item — no annotation, but still appears in export
+    # Flagged item — no annotation, but still appears in export with empty fields
     flagged = records_by_item[flagged_item.pk]
     assert flagged["flagged"] is True
     assert flagged["flags"] == [
         {"user": user.username, "user_id": user.id, "reason": flag_reason, "timestamp": "2024-01-01T00:00:00"}
     ]
     assert flagged["annotated_at"] == ""
-    assert flagged["annotation"] == {}
+    assert flagged["fields"] == {}
 
     # Message item — session_id falls back to message.chat.experiment_session
     msg = records_by_item[message_item.pk]
     assert msg["session_id"] == str(experiment_session.external_id)
+
+
+@pytest.mark.django_db()
+def test_export_jsonl_pivots_to_one_record_per_item_with_fields_nested(client, team_with_users):
+    """Option B: one JSONL record per item, item-level facts once, per-field values keyed by annotator."""
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        num_reviews_required=2,
+        schema={
+            "tone": {"type": "string", "description": "Tone"},
+            "accuracy": {"type": "string", "description": "Accuracy"},
+        },
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    bob = UserFactory.create(username="bob@example.com", email="bob@example.com")
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=alice,
+        data={"tone": "friendly and encouraging", "accuracy": "fully accurate"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    bob_annotation = Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=bob,
+        data={"tone": "overly casual", "accuracy": "partially accurate"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    Annotation.objects.filter(pk=bob_annotation.pk).update(is_authoritative=True)
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    response = client.get(url, {"format": "jsonl"})
+
+    assert response.status_code == 200
+    lines = response.content.decode().strip().split("\n")
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+
+    assert record["item_id"] == item.pk
+    assert record["item_type"] == item.item_type
+    assert record["flagged"] is False
+    assert record["authoritative_annotator"] == "bob@example.com"
+    assert record["fields"] == {
+        "tone": {"alice@example.com": "friendly and encouraging", "bob@example.com": "overly casual"},
+        "accuracy": {"alice@example.com": "fully accurate", "bob@example.com": "partially accurate"},
+    }
+    # Annotator keys are sorted for deterministic output / stable diffs.
+    assert list(record["fields"]["tone"].keys()) == ["alice@example.com", "bob@example.com"]
+    assert "is_authoritative" not in record
+    assert "annotation" not in record
+
+
+@pytest.mark.django_db()
+def test_export_jsonl_preserves_raw_types_and_nulls_missing_fields(client, team_with_users):
+    """Values keep their JSON types (int stays int); a field an annotator didn't answer is null."""
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        num_reviews_required=2,
+        schema={
+            "quality_score": {"type": "int", "description": "Quality"},
+            "notes": {"type": "string", "description": "Notes"},
+        },
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    bob = UserFactory.create(username="bob@example.com", email="bob@example.com")
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=alice,
+        data={"quality_score": 5, "notes": "great"},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=bob,
+        data={"quality_score": 3},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    record = json.loads(client.get(url, {"format": "jsonl"}).content.decode().strip())
+
+    assert record["fields"]["quality_score"] == {"alice@example.com": 5, "bob@example.com": 3}
+    assert isinstance(record["fields"]["quality_score"]["alice@example.com"], int)
+    assert record["fields"]["notes"] == {"alice@example.com": "great", "bob@example.com": None}
+
+
+@pytest.mark.django_db()
+def test_export_jsonl_flagged_item_with_annotations_produces_single_record(client, team_with_users):
+    """A flagged item that also has annotations gets one record marked flagged, not a duplicate blank."""
+    queue = AnnotationQueueFactory.create(
+        team=team_with_users,
+        num_reviews_required=2,
+        schema={"quality_score": {"type": "int", "description": "Quality"}},
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
+    alice = UserFactory.create(username="alice@example.com", email="alice@example.com")
+    Annotation.objects.create(
+        item=item,
+        team=team_with_users,
+        reviewer=alice,
+        data={"quality_score": 4},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    AnnotationItem.objects.filter(pk=item.pk).update(status=AnnotationItemStatus.FLAGGED)
+
+    url = reverse("human_annotations:queue_export", args=[team_with_users.slug, queue.pk])
+    lines = client.get(url, {"format": "jsonl"}).content.decode().strip().split("\n")
+
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["flagged"] is True
+    assert record["fields"]["quality_score"] == {"alice@example.com": 4}
 
 
 # ===== Multi-Review =====
@@ -2006,7 +2149,7 @@ def test_export_csv_includes_authoritative_annotator(client, team_with_users, us
 
 
 @pytest.mark.django_db()
-def test_export_jsonl_includes_is_authoritative(client, team_with_users, user):
+def test_export_jsonl_includes_authoritative_annotator(client, team_with_users, user):
     queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, num_reviews_required=1)
     item = AnnotationItemFactory.create(queue=queue, team=team_with_users)
     Annotation.objects.create(
@@ -2019,5 +2162,5 @@ def test_export_jsonl_includes_is_authoritative(client, team_with_users, user):
     assert response.status_code == 200
     lines = response.content.decode().strip().splitlines()
     record = json.loads(lines[0])
-    assert "is_authoritative" in record
-    assert record["is_authoritative"] is True
+    assert record["authoritative_annotator"] == user.email
+    assert "is_authoritative" not in record
