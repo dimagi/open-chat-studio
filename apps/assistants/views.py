@@ -18,13 +18,12 @@ from apps.generics import actions
 from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_llm_provider_choices
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.deletion import is_bulk_archiveable
 from apps.utils.tables import render_table_row
 from apps.web.waf import WafRule, waf_allow
 
 from ..files.models import File
 from ..generics.chips import Chip
-from ..generics.referenced_objects import render_referenced_objects_modal
+from ..generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required, team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
 from .models import OpenAiAssistant, ToolResources
@@ -232,31 +231,15 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMi
             all_experiments = list(
                 assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
             )
-            manual_experiments = [
-                Chip(
-                    label=(
-                        f"{e.name} [{e.get_version_name()}]"
-                        if e.is_working_version
-                        else f"{e.name} {e.get_version_name()} [published]"
-                    ),
-                    url=e.get_absolute_url(),
-                )
-                for e in all_experiments
-                if not is_bulk_archiveable(e)
-            ]
-            bulk_archiveable_experiments = [
-                Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
-                for e in all_experiments
-                if is_bulk_archiveable(e)
-            ]
+            experiment_context = get_referenced_experiment_context(all_experiments, team_slug)
             return render_referenced_objects_modal(
                 "assistant",
                 request=request,
                 pipeline_nodes=pipeline_nodes,
-                experiments_with_pipeline_nodes=manual_experiments,
-                bulk_archiveable_experiments=bulk_archiveable_experiments,
-                bulk_archiveable_ids=[e.id for e in all_experiments if is_bulk_archiveable(e)],
-                bulk_archive_url=reverse("experiments:bulk_archive_versions", args=[team_slug]),
+                experiments_with_pipeline_nodes=experiment_context.manual,
+                bulk_archiveable_experiments=experiment_context.bulk_archiveable,
+                bulk_archiveable_ids=experiment_context.bulk_archiveable_ids,
+                bulk_archive_url=experiment_context.bulk_archive_url,
             )
 
 

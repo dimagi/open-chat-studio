@@ -36,12 +36,11 @@ from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
-from apps.utils.deletion import is_bulk_archiveable
 from apps.web.waf import WafRule, waf_allow
 
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
-from ..generics.referenced_objects import render_referenced_objects_modal
+from ..generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from ..utils.prompt import PromptVars
 
 
@@ -197,23 +196,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             return HttpResponse()
         else:
             all_experiments = list(pipeline.get_related_experiments_queryset())
-            manual_experiments = [
-                Chip(
-                    label=(
-                        f"{e.name} [{e.get_version_name()}]"
-                        if e.is_working_version
-                        else f"{e.name} {e.get_version_name()} [published]"
-                    ),
-                    url=e.get_absolute_url(),
-                )
-                for e in all_experiments
-                if not is_bulk_archiveable(e)
-            ]
-            bulk_archiveable_experiments = [
-                Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
-                for e in all_experiments
-                if is_bulk_archiveable(e)
-            ]
+            experiment_context = get_referenced_experiment_context(all_experiments, team_slug)
 
             query = pipeline.get_static_trigger_experiment_ids()
             static_trigger_experiments = [
@@ -224,11 +207,11 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             return render_referenced_objects_modal(
                 "pipeline",
                 request=request,
-                experiments=manual_experiments,
+                experiments=experiment_context.manual,
                 static_trigger_experiments=static_trigger_experiments,
-                bulk_archiveable_experiments=bulk_archiveable_experiments,
-                bulk_archiveable_ids=[e.id for e in all_experiments if is_bulk_archiveable(e)],
-                bulk_archive_url=reverse("experiments:bulk_archive_versions", args=[team_slug]),
+                bulk_archiveable_experiments=experiment_context.bulk_archiveable,
+                bulk_archiveable_ids=experiment_context.bulk_archiveable_ids,
+                bulk_archive_url=experiment_context.bulk_archive_url,
             )
 
 

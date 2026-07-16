@@ -1,5 +1,56 @@
+from dataclasses import dataclass
+
 from django.http import HttpResponse
 from django.template.loader import render_to_string
+from django.urls import reverse
+
+from apps.generics.chips import Chip
+from apps.utils.deletion import is_bulk_archiveable
+
+
+@dataclass
+class ReferencedExperimentContext:
+    """Experiment chips referencing an object, grouped by how the reference can be cleared.
+
+    ``manual`` versions must be archived or unpublished by hand; ``bulk_archiveable``
+    versions can be cleared together via the bulk-archive form in the modal.
+    """
+
+    manual: list[Chip]
+    bulk_archiveable: list[Chip]
+    bulk_archiveable_ids: list[int]
+    bulk_archive_url: str
+
+
+def get_referenced_experiment_context(experiments, team_slug: str) -> ReferencedExperimentContext:
+    """Split experiments referencing an object into manual vs bulk-archiveable chips.
+
+    Every delete view that surfaces referencing experiments needs this same split, so
+    the classification (and the ``is_bulk_archiveable`` check) happens here in a single
+    pass rather than being duplicated at each call site.
+    """
+    manual: list[Chip] = []
+    bulk_archiveable: list[Chip] = []
+    bulk_archiveable_ids: list[int] = []
+    for experiment in experiments:
+        if is_bulk_archiveable(experiment):
+            bulk_archiveable.append(
+                Chip(label=f"{experiment.name} {experiment.get_version_name()}", url=experiment.get_absolute_url())
+            )
+            bulk_archiveable_ids.append(experiment.id)
+        else:
+            label = (
+                f"{experiment.name} [{experiment.get_version_name()}]"
+                if experiment.is_working_version
+                else f"{experiment.name} {experiment.get_version_name()} [published]"
+            )
+            manual.append(Chip(label=label, url=experiment.get_absolute_url()))
+    return ReferencedExperimentContext(
+        manual=manual,
+        bulk_archiveable=bulk_archiveable,
+        bulk_archiveable_ids=bulk_archiveable_ids,
+        bulk_archive_url=reverse("experiments:bulk_archive_versions", args=[team_slug]),
+    )
 
 
 def render_referenced_objects_modal(

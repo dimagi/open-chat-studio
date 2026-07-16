@@ -46,13 +46,12 @@ from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
-from apps.generics.referenced_objects import render_referenced_objects_modal
+from apps.generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
 from apps.teams.flags import Flags
 from apps.teams.mixins import LoginAndTeamRequiredMixin
-from apps.utils.deletion import is_bulk_archiveable
 from apps.utils.search import similarity_search
 from apps.web.waf import WafRule, waf_allow
 
@@ -637,31 +636,15 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
                 for node in collection.get_related_nodes_queryset()
             ]
             all_experiments = list(collection.get_related_experiments_queryset())
-            manual_experiments = [
-                Chip(
-                    label=(
-                        f"{e.name} [{e.get_version_name()}]"
-                        if e.is_working_version
-                        else f"{e.name} {e.get_version_name()} [published]"
-                    ),
-                    url=e.get_absolute_url(),
-                )
-                for e in all_experiments
-                if not is_bulk_archiveable(e)
-            ]
-            bulk_archiveable_experiments = [
-                Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
-                for e in all_experiments
-                if is_bulk_archiveable(e)
-            ]
+            experiment_context = get_referenced_experiment_context(all_experiments, team_slug)
             return render_referenced_objects_modal(
                 "collection",
                 request=request,
                 pipeline_nodes=pipeline_node_chips,
-                experiments_with_pipeline_nodes=manual_experiments,
-                bulk_archiveable_experiments=bulk_archiveable_experiments,
-                bulk_archiveable_ids=[e.id for e in all_experiments if is_bulk_archiveable(e)],
-                bulk_archive_url=reverse("experiments:bulk_archive_versions", args=[team_slug]),
+                experiments_with_pipeline_nodes=experiment_context.manual,
+                bulk_archiveable_experiments=experiment_context.bulk_archiveable,
+                bulk_archiveable_ids=experiment_context.bulk_archiveable_ids,
+                bulk_archive_url=experiment_context.bulk_archive_url,
             )
 
 

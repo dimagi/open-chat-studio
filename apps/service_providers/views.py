@@ -32,10 +32,10 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
-from apps.utils.deletion import get_related_objects, is_blocking_object, is_bulk_archiveable
+from apps.utils.deletion import get_related_objects, is_blocking_object
 
 from ..generics.chips import Chip
-from ..generics.referenced_objects import render_referenced_objects_modal
+from ..generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
 from .usages import get_provider_usages
@@ -136,23 +136,7 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
                 p for p in pipeline_objects.values() if p.pk not in covered_pipeline_ids and p.is_working_version
             ]
 
-        manual_experiments = [
-            Chip(
-                label=(
-                    f"{e.name} [{e.get_version_name()}]"
-                    if e.is_working_version
-                    else f"{e.name} {e.get_version_name()} [published]"
-                ),
-                url=e.get_absolute_url(),
-            )
-            for e in experiment_objects
-            if not is_bulk_archiveable(e)
-        ]
-        bulk_archiveable_experiments = [
-            Chip(label=f"{e.name} {e.get_version_name()}", url=e.get_absolute_url())
-            for e in experiment_objects
-            if is_bulk_archiveable(e)
-        ]
+        experiment_context = get_referenced_experiment_context(experiment_objects, team_slug)
         related_assistants = [
             Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in assistant_objects
         ]
@@ -163,12 +147,12 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
             return render_referenced_objects_modal(
                 "service provider",
                 request=request,
-                experiments=manual_experiments,
+                experiments=experiment_context.manual,
                 pipeline_nodes=pipeline_chips,
                 assistants=related_assistants,
-                bulk_archiveable_experiments=bulk_archiveable_experiments,
-                bulk_archiveable_ids=[e.id for e in experiment_objects if is_bulk_archiveable(e)],
-                bulk_archive_url=reverse("experiments:bulk_archive_versions", args=[team_slug]),
+                bulk_archiveable_experiments=experiment_context.bulk_archiveable,
+                bulk_archiveable_ids=experiment_context.bulk_archiveable_ids,
+                bulk_archive_url=experiment_context.bulk_archive_url,
             )
     service_config.delete()
     return HttpResponse()
