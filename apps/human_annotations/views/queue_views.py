@@ -1,8 +1,5 @@
 import contextlib
-import csv
-import json
 import random
-import re
 import uuid
 
 from django.contrib import messages
@@ -38,7 +35,6 @@ from ..forms import AnnotationQueueForm, ImportFromDatasetForm
 from ..models import (
     Annotation,
     AnnotationItem,
-    AnnotationItemStatus,
     AnnotationItemType,
     AnnotationQueue,
     AnnotationStatus,
@@ -47,11 +43,6 @@ from ..models import (
 from ..tables import AnnotationItemTable, AnnotationQueueTable, AnnotationSessionsSelectionTable
 
 User = get_user_model()
-
-
-def _safe_filename(name: str) -> str:
-    """Sanitize a string for use in Content-Disposition filename."""
-    return re.sub(r"[^\w\s\-.]", "_", name).strip()
 
 
 class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -508,115 +499,6 @@ class ManageAssignees(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         queue.assignees.set(users)
         messages.success(request, "Assignees updated.")
         return redirect("human_annotations:queue_detail", team_slug=team_slug, pk=pk)
-
-
-class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
-    permission_required = "human_annotations.view_annotation"
-
-    def get(self, request, team_slug: str, pk: int):
-        queue = get_object_or_404(AnnotationQueue, id=pk, team=request.team)
-        export_format = request.GET.get("format", "csv")
-        annotations = Annotation.objects.filter(
-            item__queue=queue,
-            status=AnnotationStatus.SUBMITTED,
-        ).select_related(
-            "item",
-            "item__session",
-            "item__message",
-            "item__message__chat__experiment_session",
-        )
-        flagged_items = AnnotationItem.objects.filter(queue=queue, status=AnnotationItemStatus.FLAGGED).select_related(
-            "session", "message", "message__chat__experiment_session"
-        )
-
-        if export_format == "jsonl":
-            return self._export_jsonl(queue, annotations, flagged_items)
-        return self._export_csv(queue, annotations, flagged_items)
-
-    def _get_session_external_id(self, item):
-        if item.session_id:
-            return str(item.session.external_id)
-        if item.message_id:
-            return str(item.message.chat.experiment_session.external_id)
-        return ""
-
-    def _build_flagged_row(self, item):
-        return {
-            "item_id": item.pk,
-            "item_type": item.item_type,
-            "session_id": self._get_session_external_id(item),
-            "annotated_at": "",
-            "flagged": True,
-            "is_authoritative": False,
-            "flags": item.flags,
-        }
-
-    def _export_csv(self, queue, annotations, flagged_items):
-        response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.csv"'
-
-        schema_fields = list(queue.schema.keys())
-        fieldnames = [
-            "item_id",
-            "item_type",
-            "session_id",
-            "annotated_at",
-            "flagged",
-            "is_authoritative",
-            "flags",
-        ] + schema_fields
-
-        writer = csv.DictWriter(response, fieldnames=fieldnames)
-        writer.writeheader()
-
-        for ann in annotations:
-            row = {
-                "item_id": ann.item_id,
-                "item_type": ann.item.item_type,
-                "session_id": self._get_session_external_id(ann.item),
-                "annotated_at": ann.created_at.isoformat(),
-                "flagged": False,
-                "is_authoritative": ann.is_authoritative,
-                "flags": json.dumps(ann.item.flags),
-            }
-            for field in schema_fields:
-                row[field] = ann.data.get(field, "")
-            writer.writerow(row)
-
-        for item in flagged_items:
-            row = self._build_flagged_row(item)
-            row["flags"] = json.dumps(row["flags"])
-            for field in schema_fields:
-                row[field] = ""
-            writer.writerow(row)
-
-        return response
-
-    def _export_jsonl(self, queue, annotations, flagged_items):
-        lines = []
-        for ann in annotations:
-            record = {
-                "item_id": ann.item_id,
-                "item_type": ann.item.item_type,
-                "session_id": self._get_session_external_id(ann.item),
-                "annotated_at": ann.created_at.isoformat(),
-                "flagged": False,
-                "is_authoritative": ann.is_authoritative,
-                "flags": ann.item.flags,
-                "annotation": ann.data,
-            }
-            lines.append(json.dumps(record))
-
-        for item in flagged_items:
-            record = self._build_flagged_row(item)
-            # Flagged items have no annotation data; emit an empty dict so every record has the same shape.
-            record["annotation"] = {}
-            lines.append(json.dumps(record))
-
-        content = "\n".join(lines)
-        response = HttpResponse(content, content_type="application/jsonl")
-        response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.jsonl"'
-        return response
 
 
 class ImportFromDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
