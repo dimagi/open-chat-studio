@@ -62,7 +62,7 @@
       {% endfor %}
     </ul>
     {% if bulk_archive_url %}
-      <form action="{{ bulk_archive_url }}" method="post">
+      <form hx-post="{{ bulk_archive_url }}">
         {% csrf_token %}
         {% for id in bulk_archiveable_ids %}
           <input type="hidden" name="version_ids" value="{{ id }}">
