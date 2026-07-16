@@ -166,7 +166,7 @@ class TestLoadDocumentsNoFetchableLink:
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
 
         loader = _make_loader(json_config)
-        with caplog.at_level(logging.DEBUG, logger="apps.documents.source_loaders.json_collection"):
+        with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
             docs = list(loader.load_documents())
 
         assert docs == []
@@ -200,6 +200,7 @@ class TestItemMetadataPropagation:
                 countries=["US", "CA"],
                 diseases=["malaria"],
                 tags=["health"],
+                topics=["Elimination", "M&E"],
                 regions=["AFRO"],
             )
         ]
@@ -218,9 +219,23 @@ class TestItemMetadataPropagation:
             ("countries", ["US", "CA"]),
             ("diseases", ["malaria"]),
             ("tags", ["health"]),
+            ("topics", ["Elimination", "M&E"]),
             ("regions", ["AFRO"]),
         ]:
             assert meta[k] == v
+
+    def test_topics_field_propagates_to_metadata(self, json_config, httpx_mock):
+        """Regression: 'topics' was omitted from _build_item_metadata (issue #3816)."""
+        feed = [_single_attachment_item(topics=["MDA / PC", "Gender"])]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+        loader = _make_loader(json_config)
+        with mock.patch(
+            "apps.documents.source_loaders.json_collection.markitdown_read",
+            return_value=_stub_doc("body"),
+        ):
+            meta = list(loader.load_documents())[0].metadata
+        assert meta["topics"] == ["MDA / PC", "Gender"]
 
     def test_optional_metadata_fields_absent_when_missing(self, json_config, httpx_mock):
         feed = [_single_attachment_item()]
@@ -232,7 +247,7 @@ class TestItemMetadataPropagation:
             return_value=_stub_doc("body"),
         ):
             meta = list(loader.load_documents())[0].metadata
-        for k in ("authors", "publisher", "countries", "diseases", "tags", "regions"):
+        for k in ("authors", "publisher", "countries", "diseases", "tags", "topics", "regions"):
             assert k not in meta
 
     def test_item_missing_title_and_uri_is_skipped(self, json_config, httpx_mock, caplog):
@@ -602,3 +617,61 @@ class TestAuthHeadersPropagation:
             docs = list(loader.load_documents())
         assert len(docs) == 1
         assert docs[0].page_content == "body"
+
+
+class TestLoadDocumentsSummaryLog:
+    """load_documents() emits an INFO summary at the end so operators can spot gaps."""
+
+    def test_summary_logged_for_mixed_feed(self, json_config, httpx_mock, caplog):
+        """A feed with some items that have no attachments produces an INFO summary
+        showing total items, documents loaded, and skipped item count.
+        """
+        feed = [
+            _single_attachment_item(title="Has attachment"),
+            {"title": "No attachment", "URI": "https://example.com/empty", "attachments": []},
+        ]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+        loader = _make_loader(json_config)
+        with (
+            caplog.at_level(logging.INFO, logger="apps.documents.source_loaders.json_collection"),
+            mock.patch(
+                "apps.documents.source_loaders.json_collection.markitdown_read",
+                return_value=_stub_doc("body"),
+            ),
+        ):
+            docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        summary = next(
+            (r for r in caplog.records if "sync complete" in r.message),
+            None,
+        )
+        assert summary is not None, "expected a sync-complete INFO log"
+        assert "2 item(s) in feed" in summary.message
+        assert "1 document(s) loaded" in summary.message
+        assert "1 item(s) produced no documents" in summary.message
+
+    def test_summary_logged_when_all_loaded(self, json_config, httpx_mock, caplog):
+        feed = [_single_attachment_item()]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+        loader = _make_loader(json_config)
+        with (
+            caplog.at_level(logging.INFO, logger="apps.documents.source_loaders.json_collection"),
+            mock.patch(
+                "apps.documents.source_loaders.json_collection.markitdown_read",
+                return_value=_stub_doc("body"),
+            ),
+        ):
+            docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        summary = next(
+            (r for r in caplog.records if "sync complete" in r.message),
+            None,
+        )
+        assert summary is not None
+        assert "1 item(s) in feed" in summary.message
+        assert "1 document(s) loaded" in summary.message
+        assert "0 item(s) produced no documents" in summary.message

@@ -34,8 +34,22 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
     def load_documents(self) -> Iterator[Document]:
         """Load documents from a JSON indexed-collections feed."""
         items = self._fetch_json_list()
+        total = len(items)
+        skipped = 0
+        loaded = 0
         for item in items:
-            yield from self._process_item(item)
+            before = loaded
+            for doc in self._process_item(item):
+                loaded += 1
+                yield doc
+            if loaded == before:
+                skipped += 1
+        logger.info(
+            "JSON collection sync complete: %d item(s) in feed, %d document(s) loaded, %d item(s) produced no documents",
+            total,
+            loaded,
+            skipped,
+        )
 
     def _fetch_json_list(self) -> list[dict[str, Any]]:
         try:
@@ -64,7 +78,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
 
         fetchable = self._fetchable_attachments(item)
         if not fetchable:
-            logger.debug(
+            logger.warning(
                 "Skipping item %s: no attachments with a document link",
                 uri or title,
             )
@@ -105,6 +119,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             "countries",
             "diseases",
             "tags",
+            "topics",
             "regions",
         ):
             if key in item:
