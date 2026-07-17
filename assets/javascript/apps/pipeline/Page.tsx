@@ -94,12 +94,6 @@ export default function Page() {
               </div>
               <div className="flex gap-2 shrink-0">
                 <button
-                  className="btn btn-sm btn-ghost"
-                  onClick={dismissConflict}
-                >
-                  Dismiss
-                </button>
-                <button
                   className="btn btn-sm btn-warning"
                   onClick={() => {
                     dismissConflict();
