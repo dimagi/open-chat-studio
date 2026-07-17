@@ -12,6 +12,7 @@ from apps.service_providers.models import (
     VoiceProviderType,
 )
 from apps.service_providers.utils import ServiceProvider
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
@@ -323,6 +324,25 @@ class TestDeleteServiceProviderReferenceChecks:
         content = response.content.decode()
         assert "Non-published versions" in content
         assert "Archive All Non-published Versions" in content
+
+    def test_delete_blocked_by_unmodelled_blocking_reference(self, team_with_users, authed_client):
+        """Deletion is blocked by a live reference the modal can't render (here, a channel).
+
+        The delete modal only knows how to display experiments, assistants and pipelines, but any
+        non-archived related object still blocks deletion. Without the catch-all guard the provider
+        would be silently deleted (channel FK is SET_NULL) even though a live channel uses it.
+        """
+        messaging_provider = MessagingProviderFactory.create(team=team_with_users)
+        ExperimentChannelFactory.create(team=team_with_users, messaging_provider=messaging_provider)
+
+        url = reverse(
+            "service_providers:delete",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "messaging", "pk": messaging_provider.pk},
+        )
+        response = authed_client.delete(url)
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert MessagingProvider.objects.filter(pk=messaging_provider.pk).exists()
 
 
 @pytest.mark.django_db()

@@ -136,6 +136,14 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
                 p for p in pipeline_objects.values() if p.pk not in covered_pipeline_ids and p.is_working_version
             ]
 
+        # Pipelines are fully accounted for above (resolved to experiments, kept as standalone
+        # working pipelines, or intentionally dropped when a dormant version). Anything else still
+        # in blocking_objects is a live reference we can't render (e.g. a channel's messaging
+        # provider or a collection's auth provider); block deletion rather than silently deleting
+        # the provider (or letting a PROTECT constraint 500).
+        handled_types = (Experiment, OpenAiAssistant, Pipeline)
+        other_blocking = [obj for obj in blocking_objects if not isinstance(obj, handled_types)]
+
         experiment_context = get_referenced_experiment_context(experiment_objects, team_slug)
         related_assistants = [
             Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in assistant_objects
@@ -143,7 +151,10 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
         pipeline_chips = [
             Chip(label=pipeline.name, url=pipeline.get_absolute_url()) for pipeline in standalone_pipelines
         ]
-        if experiment_objects or assistant_objects or standalone_pipelines:
+        has_blocking_references = bool(
+            experiment_objects or assistant_objects or standalone_pipelines or other_blocking
+        )
+        if has_blocking_references:
             return render_referenced_objects_modal(
                 "service provider",
                 request=request,
