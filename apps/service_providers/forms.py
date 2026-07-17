@@ -7,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
+from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
 from apps.service_providers.models import LlmProviderModel
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
@@ -138,6 +139,27 @@ class IntronVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
             "https://docs.voice.intron.io/docs/tts/tts-queue",
             link_text="Intron TTS documentation",
         ),
+    )
+
+
+class MinimaxVoiceConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
+    obfuscate_fields = ["minimax_api_key"]
+
+    minimax_api_key = forms.CharField(
+        label=_("API Key"),
+        help_text=render_help_with_link(
+            "Get your API key and GroupId from the MiniMax platform. Voices are seeded automatically on "
+            "provider creation.",
+            "https://platform.minimax.io/docs/api-reference/speech-t2a-http",
+            link_text="MiniMax T2A documentation",
+        ),
+    )
+    minimax_group_id = forms.CharField(label=_("Group ID"))
+    minimax_model = forms.CharField(
+        label=_("Model"),
+        required=False,
+        initial=DEFAULT_MINIMAX_TTS_MODEL,
+        help_text=_("MiniMax T2A model, e.g. speech-2.8-hd."),
     )
 
 

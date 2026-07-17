@@ -293,6 +293,7 @@ class SyntheticVoice(BaseModel):
     OpenAIVoiceEngine = "OpenAIVoiceEngine"
     ElevenLabs = "ElevenLabs"
     Intron = "Intron"
+    MiniMax = "MiniMax"
 
     SERVICES = (
         ("AWS", AWS),
@@ -301,8 +302,9 @@ class SyntheticVoice(BaseModel):
         ("OpenAIVoiceEngine", OpenAIVoiceEngine),
         ("ElevenLabs", ElevenLabs),
         ("Intron", Intron),
+        ("MiniMax", MiniMax),
     )
-    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine, ElevenLabs, Intron]
+    TEAM_SCOPED_SERVICES = [OpenAIVoiceEngine, ElevenLabs, Intron, MiniMax]
 
     objects = SyntheticVoiceObjectManager()
     name = models.CharField(
