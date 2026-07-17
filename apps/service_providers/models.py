@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -20,6 +21,7 @@ from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
 from apps.service_providers.auth_service.oauth import OAuthTokenManager
 from apps.service_providers.intron import build_intron_synthetic_voices
+from apps.service_providers.minimax import build_minimax_synthetic_voices
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -75,6 +77,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
+    minimax = "minimax", _("MiniMax"), {"openai_api_base": "https://api.minimax.io/v1"}
     google = "google", _("Google Gemini")
     google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
     voyage = "voyage", _("Voyage AI")
@@ -111,7 +114,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AzureOpenAIConfigForm
             case LlmProviderTypes.anthropic:
                 return forms.AnthropicConfigForm
-            case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return forms.OpenAIGenericConfigForm
             case LlmProviderTypes.deepseek:
                 return forms.DeepSeekConfigForm
@@ -148,7 +151,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return llm_service.AzureLlmService(**config)
             case LlmProviderTypes.anthropic:
                 return llm_service.AnthropicLlmService(**config)
-            case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return llm_service.OpenAIGenericService(**config)
             case LlmProviderTypes.deepseek:
                 return llm_service.DeepSeekLlmService(**config)
@@ -286,6 +289,7 @@ class VoiceProviderType(models.TextChoices):
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
     elevenlabs = "elevenlabs", _("ElevenLabs")
     intron = "intron", _("Intron")
+    minimax = "minimax", _("MiniMax")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -304,6 +308,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.ElevenLabsVoiceConfigForm
             case VoiceProviderType.intron:
                 return forms.IntronVoiceConfigForm
+            case VoiceProviderType.minimax:
+                return forms.MinimaxVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
@@ -323,6 +329,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.ElevenLabsSpeechService(**config)
                 case VoiceProviderType.intron:
                     return speech_service.IntronSpeechService(**config)
+                case VoiceProviderType.minimax:
+                    return speech_service.MinimaxSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -433,15 +441,24 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
                 warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")
         elif self.type == VoiceProviderType.intron.value:
-            try:
-                # Nested savepoint: any IntegrityError from the seeding loop rolls back its own
-                # rows without poisoning the outer transaction, so the provider itself still commits.
-                with transaction.atomic(savepoint=True):
-                    build_intron_synthetic_voices(self)
-            except Exception:
-                log.exception("Failed to seed Intron voices for provider %s", self.pk)
-                warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
+            self._seed_builtin_voices(build_intron_synthetic_voices, warnings)
+        elif self.type == VoiceProviderType.minimax.value:
+            self._seed_builtin_voices(build_minimax_synthetic_voices, warnings)
         return warnings
+
+    def _seed_builtin_voices(self, builder: Callable[["VoiceProvider"], None], warnings: list[str]) -> None:
+        """Seed a provider's built-in synthetic voices, collecting any failure as a warning.
+
+        The seeding runs inside a nested savepoint so that an ``IntegrityError`` from the
+        seeding loop rolls back only its own rows without poisoning the outer transaction —
+        the provider itself still commits.
+        """
+        try:
+            with transaction.atomic(savepoint=True):
+                builder(self)
+        except Exception:
+            log.exception("Failed to seed voices for %s provider %s", self.type, self.pk)
+            warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
 
     @transaction.atomic()
     def sync_voices(self):

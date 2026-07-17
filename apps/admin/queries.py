@@ -3,16 +3,24 @@ import hashlib
 import io
 from collections import defaultdict
 from datetime import datetime
+from decimal import Decimal
 
-from django.db.models import Count, Q, Sum, Value
+from django.db.models import Count, DecimalField, Q, Sum, Value
 from django.db.models.functions import Coalesce, TruncDate
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
+from apps.cost_tracking.models import UsageRecord
 from apps.experiments.models import ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
-from apps.teams.models import Team
+from apps.teams.models import Flag, Team
 from apps.trace.models import Trace, TraceStatus
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
+
+_ZERO = Decimal(0)
+_COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
+_QUANTITY_FIELD = DecimalField(max_digits=18, decimal_places=4)
 
 
 def get_message_stats(start: datetime, end: datetime):
@@ -69,6 +77,105 @@ def get_usage_data(start: datetime, end: datetime):
     )
     for data in usage_data:
         yield data["team__name"], data["run_count"], data["total_tokens"], data["team__metadata"] or {}
+
+
+def get_token_usage_by_team(start: datetime, end: datetime):
+    """Per-team run count + total tokens from settled, non-eval traces."""
+    return (
+        Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
+        .exclude(status=TraceStatus.PENDING)
+        .exclude(session__platform=ChannelPlatform.EVALUATIONS)
+        .values("team_id", "team__name")
+        .annotate(
+            run_count=Count("id"),
+            total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
+        )
+        .order_by("-run_count", "team__name")
+    )
+
+
+def get_cost_usage_by_team(start: datetime, end: datetime):
+    """Per (team, provider, model, currency) cost + tokens from UsageRecord.
+
+    Only teams with `flag_ai_cost_monitoring` enabled record UsageRecords, so
+    this covers a subset of the teams returned by `get_token_usage_by_team`.
+    """
+    return (
+        UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
+        .values("team_id", "provider_type", "model_name", "currency")
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+        )
+        .order_by("team_id", "-cost")
+    )
+
+
+def get_cost_tracking_team_ids() -> set[int]:
+    """Team ids for which `flag_ai_cost_monitoring` is active."""
+    flag = Flag.objects.filter(name=COST_TRACKING_FLAG).prefetch_related("teams").first()
+    if flag is None or flag.everyone is False:
+        return set()
+    if flag.everyone is True:
+        return set(Team.objects.values_list("id", flat=True))
+    return set(flag.teams.values_list("id", flat=True))
+
+
+def build_usage_report(start: datetime, end: datetime) -> dict:
+    """Cross-team usage: token totals for every team (always populated) merged
+    with per-model cost detail where cost tracking is on. `cost_tracking_enabled`
+    flags which teams' cost detail is complete vs. token-only.
+
+    `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
+    records in more than one currency and summing them would be meaningless.
+    """
+    token_rows = list(get_token_usage_by_team(start, end))
+    cost_rows = list(get_cost_usage_by_team(start, end))
+    enabled_team_ids = get_cost_tracking_team_ids()
+
+    team_names = {row["team_id"]: row["team__name"] for row in token_rows}
+    missing_ids = {row["team_id"] for row in cost_rows} - team_names.keys()
+    if missing_ids:
+        team_names.update(dict(Team.objects.filter(id__in=missing_ids).values_list("id", "name")))
+
+    teams: dict[int, dict] = {}
+
+    def _entry(team_id: int) -> dict:
+        if team_id not in teams:
+            teams[team_id] = {
+                "team_id": team_id,
+                "team_name": team_names.get(team_id),
+                "run_count": 0,
+                "total_tokens": 0,
+                "cost_tracking_enabled": team_id in enabled_team_ids,
+                "total_cost": defaultdict(Decimal),  # currency -> amount
+                "models": [],
+            }
+        return teams[team_id]
+
+    for row in token_rows:
+        entry = _entry(row["team_id"])
+        entry["run_count"] = row["run_count"]
+        entry["total_tokens"] = row["total_tokens"]
+
+    for row in cost_rows:
+        entry = _entry(row["team_id"])
+        entry["total_cost"][row["currency"]] += row["cost"]
+        entry["models"].append(
+            {
+                "provider_type": row["provider_type"],
+                "model_name": row["model_name"],
+                "currency": row["currency"],
+                "tokens": int(row["tokens"] or 0),
+                "cost": str(row["cost"]),
+            }
+        )
+
+    result = sorted(teams.values(), key=lambda t: (-t["run_count"], t["team_name"] or ""))
+    for entry in result:
+        entry["total_cost"] = {currency: str(amount) for currency, amount in entry["total_cost"].items()}
+
+    return {"start": start.isoformat(), "end": end.isoformat(), "teams": result}
 
 
 def get_whatsapp_numbers():

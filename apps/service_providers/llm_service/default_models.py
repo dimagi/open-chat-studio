@@ -126,6 +126,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("deepseek-chat", 128000, is_default=True),
         Model("deepseek-reasoner", 128000, is_translation_default=True),
     ],
+    "minimax": [
+        Model("MiniMax-M3", k(1000), is_default=True),
+        Model("MiniMax-M2.7", 200000),
+        Model("MiniMax-M2", 200000),
+    ],
     "google": [
         Model("gemini-3.5-flash", 1048576),
         Model("gemini-2.5-flash", 1048576, is_default=True),
