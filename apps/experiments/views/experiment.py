@@ -884,6 +884,10 @@ def bulk_archive_chatbot_versions(request, team_slug: str):
     version_ids = request.POST.getlist("version_ids")
     if not version_ids:
         return HttpResponse(status=400)
+    try:
+        version_ids = [int(v) for v in version_ids]
+    except (TypeError, ValueError):
+        return HttpResponse(status=400)
     experiments = list(
         Experiment.objects.get_all().filter(
             id__in=version_ids,
