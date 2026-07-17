@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('service_providers', '0062_load_ai_pricing'),
+        ('service_providers', '0064_seed_minimax_models'),
     ]
 
     operations = [
