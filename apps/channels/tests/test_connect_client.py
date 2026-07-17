@@ -81,7 +81,7 @@ class TestConnectClient:
             tag=base64.b64encode(tag).decode(),
             nonce=base64.b64encode(cipher.nonce).decode(),
         )
-        messages = connect_client.decrypt_messages(key=encryption_key, messages=[payload])
+        messages = connect_client.decrypt_messages(encryption_key=encryption_key, messages=[payload])
         assert messages[0] == "this is a secret message"
 
     @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")

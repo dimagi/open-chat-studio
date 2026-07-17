@@ -51,7 +51,7 @@ def _build_user_message(encryption_key, commcare_connect_channel_id, message_spe
     connect_client = CommCareConnectClient()
     messages = []
     for timestamp, message in message_spec.items():
-        ciphertext, tag, nonce = connect_client._encrypt_message(key=encryption_key, message=message)
+        ciphertext, tag, nonce = connect_client._encrypt_message(encryption_key=encryption_key, message=message)
         messages.append(
             Message(
                 timestamp=timestamp,
