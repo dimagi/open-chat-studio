@@ -32,7 +32,7 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
-from apps.utils.deletion import get_related_objects, is_blocking_object
+from apps.utils.deletion import get_cascade_owned_models, get_related_objects, is_blocking_object
 
 from ..generics.chips import Chip
 from ..generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
@@ -137,12 +137,19 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
             ]
 
         # Pipelines are fully accounted for above (resolved to experiments, kept as standalone
-        # working pipelines, or intentionally dropped when a dormant version). Anything else still
-        # in blocking_objects is a live reference we can't render (e.g. a channel's messaging
-        # provider or a collection's auth provider); block deletion rather than silently deleting
-        # the provider (or letting a PROTECT constraint 500).
+        # working pipelines, or intentionally dropped when a dormant version). Any *other* live
+        # reference we can't render (e.g. a channel's messaging provider, a collection's auth
+        # provider) must still block deletion rather than falling through to a silent delete
+        # (SET_NULL) or a ProtectedError 500 (PROTECT). CASCADE-owned rows (e.g. a voice
+        # provider's synthetic voices) are excluded: they're deleted with the provider, so they
+        # signal ownership, not external use.
         handled_types = (Experiment, OpenAiAssistant, Pipeline)
-        other_blocking = [obj for obj in blocking_objects if not isinstance(obj, handled_types)]
+        cascade_owned_models = get_cascade_owned_models(service_config)
+        other_blocking = [
+            obj
+            for obj in blocking_objects
+            if not isinstance(obj, handled_types) and type(obj) not in cascade_owned_models
+        ]
 
         experiment_context = get_referenced_experiment_context(experiment_objects, team_slug)
         related_assistants = [

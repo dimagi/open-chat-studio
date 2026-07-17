@@ -13,7 +13,7 @@ from apps.service_providers.models import (
 )
 from apps.service_providers.utils import ServiceProvider
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ExperimentFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
@@ -343,6 +343,18 @@ class TestDeleteServiceProviderReferenceChecks:
         assert response.status_code == 200
         assert response["HX-Retarget"] == "body"
         assert MessagingProvider.objects.filter(pk=messaging_provider.pk).exists()
+
+    def test_delete_allowed_with_only_cascade_owned_references(self, team_with_users, authed_client, voice_provider):
+        """A provider's CASCADE-owned rows (its synthetic voices) do not block deletion.
+
+        SyntheticVoice.voice_provider is CASCADE, so the voices are deleted with the provider;
+        they signal ownership, not external use, and must not trip the catch-all guard.
+        """
+        SyntheticVoiceFactory.create(voice_provider=voice_provider)
+        response = authed_client.delete(self._delete_url(team_with_users, voice_provider))
+        assert response.status_code == 200
+        assert "HX-Retarget" not in response
+        assert not VoiceProvider.objects.filter(pk=voice_provider.pk).exists()
 
 
 @pytest.mark.django_db()
