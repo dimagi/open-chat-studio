@@ -209,9 +209,7 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 request=request,
                 experiments=experiment_context.manual,
                 static_trigger_experiments=static_trigger_experiments,
-                bulk_archiveable_experiments=experiment_context.bulk_archiveable,
-                bulk_archiveable_ids=experiment_context.bulk_archiveable_ids,
-                bulk_archive_url=experiment_context.bulk_archive_url,
+                **experiment_context.bulk_archive_kwargs(),
             )
 
 

@@ -150,9 +150,7 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
                 experiments=experiment_context.manual,
                 pipeline_nodes=pipeline_chips,
                 assistants=related_assistants,
-                bulk_archiveable_experiments=experiment_context.bulk_archiveable,
-                bulk_archiveable_ids=experiment_context.bulk_archiveable_ids,
-                bulk_archive_url=experiment_context.bulk_archive_url,
+                **experiment_context.bulk_archive_kwargs(),
             )
     service_config.delete()
     return HttpResponse()

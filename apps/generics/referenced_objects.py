@@ -21,6 +21,19 @@ class ReferencedExperimentContext:
     bulk_archiveable_ids: list[int]
     bulk_archive_url: str
 
+    def bulk_archive_kwargs(self) -> dict:
+        """The bulk-archive keyword arguments for ``render_referenced_objects_modal``.
+
+        These three are identical at every call site, so they can be spread with ``**``.
+        The ``manual`` chips are passed separately because different call sites map them
+        to different modal sections (``experiments`` vs ``experiments_with_pipeline_nodes``).
+        """
+        return {
+            "bulk_archiveable_experiments": self.bulk_archiveable,
+            "bulk_archiveable_ids": self.bulk_archiveable_ids,
+            "bulk_archive_url": self.bulk_archive_url,
+        }
+
 
 def get_referenced_experiment_context(experiments, team_slug: str) -> ReferencedExperimentContext:
     """Split experiments referencing an object into manual vs bulk-archiveable chips.

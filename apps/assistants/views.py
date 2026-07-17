@@ -237,9 +237,7 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 request=request,
                 pipeline_nodes=pipeline_nodes,
                 experiments_with_pipeline_nodes=experiment_context.manual,
-                bulk_archiveable_experiments=experiment_context.bulk_archiveable,
-                bulk_archiveable_ids=experiment_context.bulk_archiveable_ids,
-                bulk_archive_url=experiment_context.bulk_archive_url,
+                **experiment_context.bulk_archive_kwargs(),
             )
 
 
