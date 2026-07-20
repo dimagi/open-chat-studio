@@ -514,6 +514,10 @@ SPECTACULAR_SETTINGS = {
             "name": "Participants",
             "description": "Manage participants, their data, and their schedules.",
         },
+        {
+            "name": "Usage",
+            "description": "Inspect team usage and activity data (message counts, and more).",
+        },
     ],
 }
 
@@ -1000,6 +1004,7 @@ OAUTH2_PROVIDER = {
         "files:read": "Download file content",
         "participants:read": "Read Participant Data",
         "participants:write": "Update Participant Data",
+        "usage:read": "Read usage and activity data",
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
