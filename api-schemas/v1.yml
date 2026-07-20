@@ -1943,6 +1943,7 @@ components:
             files:read: Download file content
             participants:read: Read Participant Data
             participants:write: Update Participant Data
+            usage:read: Read usage and activity data
     apiKeyAuth:
       type: apiKey
       in: header
