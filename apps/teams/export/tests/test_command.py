@@ -346,6 +346,35 @@ def test_first_time_import_creates_team(tmp_path, keypair):
     assert Team.objects.filter(slug="imported-team-z").exists()
 
 
+def test_first_time_import_enables_migration_mode_on_target(tmp_path, keypair):
+    """The target team is frozen (migration mode on) the moment it's created, so this server doesn't
+    start firing the team's events and scheduled messages while the still-live source is migrating.
+    Migration mode isn't exported, so the sync sets it explicitly."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    assert Team.objects.get(slug="imported-team-z").is_migrating is True
+
+
+def test_rerun_does_not_re_enable_migration_mode(tmp_path, keypair):
+    """Migration mode is set only when the team is first created. If an operator turns it off (e.g. at
+    cutover), a later rerun of the sync must not silently turn it back on."""
+    manifest, rows = _scenario(keypair[0])
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    team = Team.objects.get(slug="imported-team-z")
+    team.is_migrating = False
+    team.save(update_fields=["is_migrating"])
+
+    run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+    team.refresh_from_db()
+    assert team.is_migrating is False
+
+
 class _FakeHTTPResponse:
     def __init__(self, status_code, detail):
         self.status_code = status_code
