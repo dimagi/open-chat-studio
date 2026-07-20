@@ -33,7 +33,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Frontend build: `webpack.config.js`
 * Package management: `pyproject.toml`, `package.json`
 * Environment template: `.env.example`
-* Django app root: `apps/`
+* Django app root: `apps/` (see `docs/architecture/package-map.md` for what each app does and how dependencies flow)
 * Django template root: `templates/`
 * Shared FactoryBoy factories for test data generation: `apps/utils/factories/`
 * Shared pytest fixtures: `apps/conftest.py`
