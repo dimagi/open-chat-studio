@@ -4320,18 +4320,14 @@ components:
       - results
     Manifest:
       type: object
-      description: 'The sync manifest: the call order and per-model config, plus a
-        checksum of the applied schema.'
+      description: 'The sync manifest: the call order and per-model config.'
       properties:
-        schema_checksum:
-          type: string
         entries:
           type: array
           items:
             $ref: '#/components/schemas/ManifestEntry'
       required:
       - entries
-      - schema_checksum
     ManifestEntry:
       type: object
       description: 'One row of the manifest: which model to pull and the config the
