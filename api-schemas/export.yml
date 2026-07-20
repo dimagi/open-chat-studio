@@ -5108,6 +5108,7 @@ components:
       - OpenAIVoiceEngine
       - ElevenLabs
       - Intron
+      - MiniMax
       type: string
       description: |-
         * `AWS` - AWS
@@ -5116,6 +5117,7 @@ components:
         * `OpenAIVoiceEngine` - OpenAIVoiceEngine
         * `ElevenLabs` - ElevenLabs
         * `Intron` - Intron
+        * `MiniMax` - MiniMax
     ServiceKindEnum:
       enum:
       - llm_input
@@ -5353,6 +5355,7 @@ components:
             * `OpenAIVoiceEngine` - OpenAIVoiceEngine
             * `ElevenLabs` - ElevenLabs
             * `Intron` - Intron
+            * `MiniMax` - MiniMax
         voice_provider:
           type: integer
           nullable: true
@@ -6085,6 +6088,7 @@ components:
       - openaivoiceengine
       - elevenlabs
       - intron
+      - minimax
       type: string
       description: |-
         * `aws` - AWS Polly
@@ -6093,6 +6097,7 @@ components:
         * `openaivoiceengine` - OpenAI Voice Engine Text to Speech
         * `elevenlabs` - ElevenLabs
         * `intron` - Intron
+        * `minimax` - MiniMax
     VoiceProviderList:
       type: object
       properties:
