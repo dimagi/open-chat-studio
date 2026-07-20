@@ -1,16 +1,12 @@
 """The single maintenance surface for the team data sync: which models to pull, in what order,
 and the per-model config (secrets, team scoping, global matching) the endpoint and importer need."""
 
-import hashlib
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from django.apps import apps
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import FieldDoesNotExist
-from django.db import connection
-from django.db.migrations.recorder import MigrationRecorder
 from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
 
 from apps.files.models import FilePurpose
@@ -261,23 +257,8 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     return queryset.prefetch_related(*prefetch_factory(team)) if prefetch_factory else queryset
 
 
-def schema_checksum() -> str:
-    """Hash of the set of applied migrations, identified by ``(app, name)`` -- the same key
-    ``MigrationRecorder`` uses, so schemas that share a filename like ``0001_initial`` across apps
-    don't collide. Unaffected by apply order. Returns the hash of an empty set when the migrations
-    table is absent (e.g. tests run with --no-migrations); that's consistent as long as the source
-    and target both lack it."""
-    recorder = MigrationRecorder(connection)
-    applied = []
-    if recorder.has_table():
-        applied = list(recorder.migration_qs.order_by("app", "name").values_list("app", "name"))
-    data = json.dumps(applied, separators=(",", ":"))
-    return hashlib.sha256(data.encode("utf-8")).hexdigest()
-
-
 def build_manifest() -> dict:
     return {
-        "schema_checksum": schema_checksum(),
         "entries": [
             {
                 "model": e.model,

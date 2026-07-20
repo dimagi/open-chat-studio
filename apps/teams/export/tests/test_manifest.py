@@ -157,13 +157,6 @@ def test_get_manifest_entry_returns_matching_entry():
 
 
 @pytest.mark.django_db()
-def test_schema_checksum_is_reproducible():
-    first = manifest.schema_checksum()
-    assert isinstance(first, str)
-    assert first == manifest.schema_checksum()
-
-
-@pytest.mark.django_db()
 def test_team_scoped_queryset_isolates_teams_and_includes_globals():
     """team_scoped_queryset returns the team's own rows plus shared global rows, never another team's."""
     team = TeamFactory()
@@ -261,7 +254,6 @@ def test_queryset_includes_soft_deleted_channels():
 @pytest.mark.django_db()
 def test_build_manifest_payload_shape():
     payload = manifest.build_manifest()
-    assert isinstance(payload["schema_checksum"], str)
     assert {e["resource"] for e in payload["entries"]} == {e.resource for e in manifest.MANIFEST_ENTRIES}
     first = payload["entries"][0]
     assert set(first) >= {"model", "resource", "cursor", "secret"}

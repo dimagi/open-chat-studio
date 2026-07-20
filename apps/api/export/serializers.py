@@ -144,9 +144,8 @@ class ManifestEntrySerializer(serializers.Serializer):
 
 
 class ManifestSerializer(serializers.Serializer):
-    """The sync manifest: the call order and per-model config, plus a checksum of the applied schema."""
+    """The sync manifest: the call order and per-model config."""
 
-    schema_checksum = serializers.CharField()
     entries = ManifestEntrySerializer(many=True)
 
 

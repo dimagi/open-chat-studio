@@ -60,7 +60,6 @@ def test_manifest_is_public_and_returns_entries():
     response = APIClient().get(reverse("api:export:manifest"))
     assert response.status_code == 200
     body = response.json()
-    assert "schema_checksum" in body
     resources = {e["resource"] for e in body["entries"]}
     assert "chatbots" in resources
     assert "teams" not in resources  # the team is served on its own, not as a manifest resource
