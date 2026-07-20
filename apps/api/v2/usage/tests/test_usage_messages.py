@@ -11,7 +11,7 @@ from apps.api.v2.usage.param_serializers import UsageQuerySerializer
 from apps.api.v2.usage.services import PERIOD_CURRENT_MONTH, PERIOD_PREVIOUS_MONTH, _month_bounds
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.experiment import ExperimentSessionFactory, ParticipantFactory
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
 USAGE_URL = "api:v2:usage"
@@ -177,6 +177,18 @@ def test_invalid_params_return_400(params, detail_contains):
 
     assert response.status_code == 400
     assert detail_contains.lower() in str(response.json()).lower()
+
+
+@pytest.mark.django_db()
+def test_member_without_chatmessage_permission_is_forbidden():
+    """Usage is gated on chat.view_chatmessage; a member lacking it gets 403, not the data."""
+    team = TeamWithUsersFactory.create()
+    membership = MembershipFactory.create(team=team, groups=[])  # no permissions
+
+    client = ApiTestClient(membership.user, team)
+    response = client.get(reverse(USAGE_URL), {"metric": "messages"})
+
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db()

@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.v2.usage.param_serializers import UsageQuerySerializer
+from apps.api.v2.usage.permissions import CanViewUsage
 from apps.api.v2.usage.serializers import UsageResponseSerializer
 from apps.api.v2.usage.services import usage_query
 from apps.oauth.permissions import TokenHasOAuthResourceScope
@@ -15,7 +16,7 @@ class UsageView(APIView):
     # Team-scoped usage inspection. Returns human/AI/total message counts for a calendar month,
     # optionally narrowed to a single participant. See docs/design/usage-api.md.
 
-    permission_classes = [IsAuthenticated, TokenHasOAuthResourceScope]
+    permission_classes = [IsAuthenticated, CanViewUsage, TokenHasOAuthResourceScope]
     required_scopes = ["usage"]
 
     @extend_schema(

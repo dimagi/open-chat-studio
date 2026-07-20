@@ -20,7 +20,7 @@ granularity), optionally **grouped** by `participant`, `chatbot`, or `platform`,
 the same dimensions. The client's original ask — a participant's human-message count this
 calendar month — is one call: `?metric=messages&period=current_month&participant=<public_id>`.
 
-Six decisions shape the work:
+Seven decisions shape the work:
 
 1. **One flexible query endpoint, not a resource tree.** `/api/v2/usage/` with a constrained,
    documented query vocabulary. Generic enough for "inspect their usage data" without new endpoints.
@@ -35,6 +35,9 @@ Six decisions shape the work:
    `experiment`, consistent with ADR-0023.
 6. **Tokens come from `UsageRecord`.** Single source of truth alongside cost; `prompt`/`completion`
    derive from `service_kind`. Not `Trace`. (See [D6](#d6-tokens-from-usagerecord).)
+7. **Authorize on `chat.view_chatmessage`.** Usage is an aggregate over chat messages, so gate it on
+   the read permission for the underlying data — not a team-admin/write permission. (See
+   [D7](#d7-authorize-on-chatview_chatmessage).)
 
 ## Context
 
@@ -77,8 +80,8 @@ surface, so the overlap is acceptable; no v1 change.
 
 `GET /api/v2/usage/` — an `APIView` (a query, not a resource collection; same shape as `MeView`).
 
-- **Auth:** `IsAuthenticated` + `TokenHasOAuthResourceScope` with a new `usage` scope. API-key and
-  bearer auth work as elsewhere.
+- **Auth:** `IsAuthenticated` + `CanViewUsage` + `TokenHasOAuthResourceScope` with a new `usage`
+  scope. API-key and bearer auth work as elsewhere. See [D7](#d7-authorize-on-chatview_chatmessage).
 - **Scoping:** every query filters to `request.team`.
 - **Docs:** new `"Usage"` tag in `SPECTACULAR_SETTINGS["TAGS"]`; `@extend_schema` on the view.
 - **Pagination:** the shared `CursorPagination` when `group_by` is set (breakdown rows); a single
@@ -191,6 +194,20 @@ Token counts come from `UsageRecord.quantity` (split by `service_kind`), not `Tr
 Keeps tokens and cost on a single source of truth (same rows, same team/participant/chatbot filters,
 same time index), so a client's `cost` and `tokens` for a window always reconcile. `Trace` token
 fields are left for the admin usage export.
+
+### D7. Authorize on `chat.view_chatmessage`
+
+Usage figures are aggregates over chat messages, so the endpoint requires the read permission for
+the underlying data (`chat.view_chatmessage`, granted by the `Chat Viewer` group) via a small
+`CanViewUsage` permission class. This gates every auth type — including API keys, which the OAuth
+scope check alone does not cover — and mirrors how `ChatbotViewSet` gates on `view_experiment`.
+
+**Rejected:** a team-admin/write permission such as `team.change_team` — that gates *editing the
+team*, the wrong axis for a read endpoint. **Also considered:** membership-only (matching the
+dashboard UI, which shows this aggregate to any member) — rejected because it leaves API keys
+ungated by role and under-gates relative to the sibling v2 read endpoints. As the API grows to
+cost/tokens (more sensitive than message counts), a dedicated `view_usage` permission may supersede
+this; revisit then.
 
 ## Cross-cutting concerns
 
