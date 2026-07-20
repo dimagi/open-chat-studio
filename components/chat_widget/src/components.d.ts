@@ -50,7 +50,7 @@ export namespace Components {
          */
         "chatbotId": string;
         /**
-          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable but the message input and send controls are hidden, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
+          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable and the message input and send controls remain visible but disabled, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
           * @default false
          */
         "disabled": boolean;
@@ -196,7 +196,7 @@ declare namespace LocalJSX {
          */
         "chatbotId": string;
         /**
-          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable but the message input and send controls are hidden, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
+          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable and the message input and send controls remain visible but disabled, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
           * @default false
          */
         "disabled"?: boolean;

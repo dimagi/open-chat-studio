@@ -679,7 +679,7 @@ describe('ocs-chat', () => {
       expect(page.root?.shadowRoot?.querySelector('.input-area')).toBeTruthy();
     });
 
-    it('hides the input area when disabled', async () => {
+    it('keeps the input area visible but disabled when disabled', async () => {
       const page = await newSpecPage({
         components: [OcsChat],
         html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" disabled="true"></open-chat-studio-widget>`,
@@ -688,7 +688,15 @@ describe('ocs-chat', () => {
       component.activeSessionId = 'test-session';
       await page.waitForChanges();
 
-      expect(page.root?.shadowRoot?.querySelector('.input-area')).toBeFalsy();
+      const inputArea = page.root?.shadowRoot?.querySelector('.input-area');
+      expect(inputArea).toBeTruthy();
+
+      const textarea = inputArea?.querySelector('.message-textarea');
+      expect(textarea?.hasAttribute('disabled')).toBe(true);
+
+      const sendButton = inputArea?.querySelector('.send-button');
+      expect(sendButton?.hasAttribute('disabled')).toBe(true);
+      expect(sendButton?.classList.contains('send-button-disabled')).toBe(true);
     });
 
     it('keeps chat history visible when disabled', async () => {
@@ -776,6 +784,14 @@ describe('ocs-chat', () => {
       expect(banner?.getAttribute('role')).toBe('alert');
     });
 
+    // Index of a `.chat-content` descendant among its siblings, or -1. Used to
+    // assert document order (compareDocumentPosition is a no-op in the mock DOM).
+    const siblingIndex = (content: Element | null | undefined, selector: string): number => {
+      const el = content?.querySelector(selector);
+      if (!content || !el) return -1;
+      return Array.from(content.children).indexOf(el);
+    };
+
     it('renders the banner at the top by default', async () => {
       const page = await newSpecPage({
         components: [OcsChat],
@@ -787,10 +803,9 @@ describe('ocs-chat', () => {
 
       const content = page.root?.shadowRoot?.querySelector('.chat-content');
       const banner = content?.querySelector('.chat-banner');
-      const messages = content?.querySelector('.messages-container');
       expect(banner?.classList.contains('chat-banner-top')).toBe(true);
       // The top banner should appear before the messages container in document order.
-      expect(banner?.compareDocumentPosition(messages!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(siblingIndex(content, '.chat-banner')).toBeLessThan(siblingIndex(content, '.messages-container'));
     });
 
     it('renders the banner at the bottom when configured', async () => {
@@ -804,10 +819,23 @@ describe('ocs-chat', () => {
 
       const content = page.root?.shadowRoot?.querySelector('.chat-content');
       const banner = content?.querySelector('.chat-banner');
-      const messages = content?.querySelector('.messages-container');
       expect(banner?.classList.contains('chat-banner-bottom')).toBe(true);
       // The bottom banner should appear after the messages container in document order.
-      expect(banner?.compareDocumentPosition(messages!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+      expect(siblingIndex(content, '.chat-banner')).toBeGreaterThan(siblingIndex(content, '.messages-container'));
+    });
+
+    it('renders the bottom banner directly above the input area', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" banner-message="Bottom notice" banner-position="bottom"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      const content = page.root?.shadowRoot?.querySelector('.chat-content');
+      // The bottom banner should sit immediately before the input area.
+      expect(siblingIndex(content, '.chat-banner')).toBe(siblingIndex(content, '.input-area') - 1);
     });
 
     it('renders a banner alongside a disabled widget', async () => {
@@ -820,7 +848,9 @@ describe('ocs-chat', () => {
       await page.waitForChanges();
 
       expect(page.root?.shadowRoot?.querySelector('.chat-banner-error')).toBeTruthy();
-      expect(page.root?.shadowRoot?.querySelector('.input-area')).toBeFalsy();
+      const inputArea = page.root?.shadowRoot?.querySelector('.input-area');
+      expect(inputArea).toBeTruthy();
+      expect(inputArea?.querySelector('.message-textarea')?.hasAttribute('disabled')).toBe(true);
     });
   });
 });

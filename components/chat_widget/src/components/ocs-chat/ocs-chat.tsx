@@ -190,9 +190,10 @@ export class OcsChat {
 
   /**
    * Render the widget in a read-only state. When `true`, the chat history stays
-   * visible and scrollable but the message input and send controls are hidden,
-   * and message sending is blocked at the source. Useful for maintenance
-   * windows, expired sessions, scheduled downtime or post-session review.
+   * visible and scrollable and the message input and send controls remain
+   * visible but disabled, and message sending is blocked at the source. Useful
+   * for maintenance windows, expired sessions, scheduled downtime or
+   * post-session review.
    */
   @Prop() disabled: boolean = false;
 
@@ -1796,8 +1797,8 @@ export class OcsChat {
   }
 
   /**
-   * The widget is read-only: chat history is visible but the composer is hidden
-   * and sending is blocked.
+   * The widget is read-only: chat history is visible and the composer is shown
+   * but disabled, and sending is blocked.
    */
   private isReadOnly(): boolean {
     return this.disabled;
@@ -2007,8 +2008,10 @@ export class OcsChat {
                 </div>
               )}
 
-              {/* Input Area — hidden when the widget is read-only */}
-              {!this.isReadOnly() && (
+              {/* Banner (bottom) — sits directly above the input area */}
+              {this.renderBanner('bottom')}
+
+              {/* Input Area — kept visible but disabled when the widget is read-only */}
               <div class="input-area">
                 <div class="input-container">
                   <textarea
@@ -2019,7 +2022,7 @@ export class OcsChat {
                     value={this.messageInput}
                     onInput={e => this.handleInputChange(e)}
                     onKeyPress={e => this.handleKeyPress(e)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+                    disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                   ></textarea>
                   {/* File Upload Button */}
                   {this.allowAttachments && (
@@ -2042,7 +2045,7 @@ export class OcsChat {
                     <button
                       class="file-attachment-button"
                       onClick={() => this.fileInputRef?.click()}
-                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+                      disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                       title={this.translationManager.get('attach.add')}
                       aria-label={this.translationManager.get('attach.add')}
                     >
@@ -2050,15 +2053,14 @@ export class OcsChat {
                     </button>
                   )}
                   <button
-                    class={`send-button ${!this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
+                    class={`send-button ${!this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
                     onClick={() => this.sendMessage(this.messageInput)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
+                    disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
                   >
                     {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                   </button>
                 </div>
               </div>
-              )}
               <div class="flex items-center justify-center text-[0.8em] font-light w-full text-slate-500 py-[2px]">
                 <p>
                   {this.translationManager.get('branding.poweredBy')}{' '}
@@ -2067,9 +2069,6 @@ export class OcsChat {
                   </a>
                 </p>
               </div>
-
-              {/* Banner (bottom) */}
-              {this.renderBanner('bottom')}
             </div>
           </div>
         )}
