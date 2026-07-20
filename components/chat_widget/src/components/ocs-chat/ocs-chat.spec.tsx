@@ -665,4 +665,162 @@ describe('ocs-chat', () => {
       expect(detail).toEqual({ sessionId: 'ending-session' });
     });
   });
+
+  describe('disabled prop', () => {
+    it('renders the input area by default', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      expect(page.root?.shadowRoot?.querySelector('.input-area')).toBeTruthy();
+    });
+
+    it('hides the input area when disabled', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" disabled="true"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      expect(page.root?.shadowRoot?.querySelector('.input-area')).toBeFalsy();
+    });
+
+    it('keeps chat history visible when disabled', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" disabled="true"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      component.messages = [{ created_at: new Date().toISOString(), role: 'assistant', content: 'History stays visible', attachments: [] }];
+      await page.waitForChanges();
+
+      const messages = page.root?.shadowRoot?.querySelectorAll('.messages-container .message-bubble');
+      expect(messages?.length).toBe(1);
+    });
+
+    it('hides starter questions when disabled', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" disabled="true" starter-questions='["Q1", "Q2"]'></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      component.messages = [];
+      await page.waitForChanges();
+
+      expect(page.root?.shadowRoot?.querySelector('.starter-questions')).toBeFalsy();
+    });
+
+    it('blocks sendMessage when disabled', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" disabled="true"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      const startSession = jest.fn();
+      (component as any).startSession = startSession;
+
+      await (component as any).sendMessage('hello');
+
+      expect(startSession).not.toHaveBeenCalled();
+      expect(component.messages.length).toBe(0);
+    });
+  });
+
+  describe('banner', () => {
+    it('does not render a banner when no message is set', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      expect(page.root?.shadowRoot?.querySelector('.chat-banner')).toBeFalsy();
+    });
+
+    it('renders the banner message when set', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" banner-message="Heads up!"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      const banner = page.root?.shadowRoot?.querySelector('.chat-banner');
+      expect(banner).toBeTruthy();
+      expect(banner?.textContent).toContain('Heads up!');
+    });
+
+    it('applies the banner style class', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" banner-message="Careful" banner-style="warning"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      const banner = page.root?.shadowRoot?.querySelector('.chat-banner');
+      expect(banner?.classList.contains('chat-banner-warning')).toBe(true);
+      expect(banner?.getAttribute('role')).toBe('alert');
+    });
+
+    it('renders the banner at the top by default', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" banner-message="Top notice"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      const content = page.root?.shadowRoot?.querySelector('.chat-content');
+      const banner = content?.querySelector('.chat-banner');
+      const messages = content?.querySelector('.messages-container');
+      expect(banner?.classList.contains('chat-banner-top')).toBe(true);
+      // The top banner should appear before the messages container in document order.
+      expect(banner?.compareDocumentPosition(messages!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('renders the banner at the bottom when configured', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" banner-message="Bottom notice" banner-position="bottom"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      const content = page.root?.shadowRoot?.querySelector('.chat-content');
+      const banner = content?.querySelector('.chat-banner');
+      const messages = content?.querySelector('.messages-container');
+      expect(banner?.classList.contains('chat-banner-bottom')).toBe(true);
+      // The bottom banner should appear after the messages container in document order.
+      expect(banner?.compareDocumentPosition(messages!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    });
+
+    it('renders a banner alongside a disabled widget', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" disabled="true" banner-message="Currently unavailable" banner-style="error"></open-chat-studio-widget>`,
+      });
+      const component = page.rootInstance as OcsChat;
+      component.activeSessionId = 'test-session';
+      await page.waitForChanges();
+
+      expect(page.root?.shadowRoot?.querySelector('.chat-banner-error')).toBeTruthy();
+      expect(page.root?.shadowRoot?.querySelector('.input-area')).toBeFalsy();
+    });
+  });
 });
