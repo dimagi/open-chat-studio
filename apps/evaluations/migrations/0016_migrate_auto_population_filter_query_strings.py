@@ -1,9 +1,5 @@
-import json
-import re
-from urllib.parse import urlencode
-
 from django.db import migrations
-from django.http import QueryDict
+
 from apps.dashboard.filter_format import convert_saved_filter_data
 
 

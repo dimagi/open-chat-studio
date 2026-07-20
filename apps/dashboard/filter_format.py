@@ -1,9 +1,23 @@
 import json
 import re
+from urllib.parse import urlencode
+
+from django.http import QueryDict
 
 
 def convert_saved_filter_data(filter_data):
-    """Convert legacy dashboard filter payloads to the new f_/op_ query style."""
+    """Convert legacy dashboard filter payloads to the new f_/op_ query style.
+
+    Accepts either a mapping of legacy filter fields or a raw query string. When
+    given a query string, the converted result is returned as a query string too;
+    when given a dict, a dict is returned.
+    """
+    if isinstance(filter_data, str):
+        query_params = QueryDict(filter_data)
+        legacy_filter_data = {key: values[0] if len(values) == 1 else values for key, values in query_params.lists()}
+        converted = convert_saved_filter_data(legacy_filter_data)
+        return urlencode(converted, doseq=True)
+
     if not isinstance(filter_data, dict):
         return filter_data
 
