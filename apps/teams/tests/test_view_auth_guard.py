@@ -10,6 +10,11 @@ Scope is deliberately limited to the team-scoped URL tree (``team_urlpatterns``)
 The public root surface — webhooks, marketing pages, auth, DRF ``/api/`` — is
 authorized by other mechanisms (signature checks, DRF global permission defaults)
 and is out of scope here.
+
+Only *team-scoped* authorization counts: authentication-only auth (a bare login check)
+is rejected, because it confirms the user is logged in but not that they belong to the
+team in the URL. There are currently no DRF views under this prefix; if one is added it
+will fail this guard until it opts into a team-scoped mechanism (or the allowlist).
 """
 
 import inspect
@@ -19,26 +24,25 @@ from django.urls import URLPattern, URLResolver
 from apps.teams.decorators import ENFORCES_TEAM_AUTH_ATTR
 from config.urls import team_urlpatterns
 
-# Class names (matched across the view's MRO) that gate a CBV on authentication/authorization.
-# PermissionRequiredMixin is included because the custom team backend scopes permission checks
-# to the current team (see apps/teams/backends.py).
+# Class names (matched across the view's MRO) that gate a CBV on *team-scoped* authorization.
+# Deliberately excludes authentication-only mixins (LoginRequiredMixin, UserPassesTestMixin):
+# they confirm the user is logged in but not that they belong to the team in the URL, so
+# accepting them would let the guard pass tenant-isolation bypasses. PermissionRequiredMixin
+# is team-scoped because the custom backend scopes permission checks to the current team
+# (see apps/teams/backends.py).
 _AUTH_MIXIN_NAMES = frozenset(
     {
         "LoginAndTeamRequiredMixin",
-        "LoginRequiredMixin",
-        "UserPassesTestMixin",
         "PermissionRequiredMixin",
     }
 )
 
-# Qualname fragments of Django's function-view auth decorators. `functools.wraps` hides the
-# decorator identity on the wrapper, but these decorators close over a nested check function
-# whose qualname still identifies them, so we detect them by walking the closure chain.
-_DJANGO_AUTH_DECORATOR_FRAGMENTS = (
-    "permission_required.<locals>",
-    "login_required.<locals>",
-    "user_passes_test.<locals>",
-)
+# Qualname fragment of Django's team-scoped function-view auth decorator. `functools.wraps`
+# hides the decorator identity on the wrapper, but permission_required closes over a nested
+# check function whose qualname still identifies it, so we detect it by walking the closure
+# chain. login_required / user_passes_test are excluded for the same reason as above: they
+# are authentication-only, not team-scoped.
+_DJANGO_AUTH_DECORATOR_FRAGMENTS = ("permission_required.<locals>",)
 
 # Team-scoped views that are intentionally NOT team-membership gated. Each entry is a
 # view identifier (module.qualname) with a reason. Adding here is an "Ask first" decision
@@ -86,21 +90,14 @@ def _closure_functions(fn):
 
 
 def _is_team_authorized(callback) -> bool:
-    # Class-based views: auth mixin in MRO, or a DRF view with non-empty permission_classes.
+    # Class-based views: a team-scoped auth mixin in the MRO.
     view_class = getattr(callback, "view_class", None)
-    if view_class is not None:
-        if any(klass.__name__ in _AUTH_MIXIN_NAMES for klass in view_class.__mro__):
-            return True
-        if getattr(view_class, "permission_classes", None):
-            return True
-    # DRF function views wrapped by @api_view expose the generated view class as `.cls`.
-    drf_cls = getattr(callback, "cls", None)
-    if drf_cls is not None and getattr(drf_cls, "permission_classes", None):
+    if view_class is not None and any(klass.__name__ in _AUTH_MIXIN_NAMES for klass in view_class.__mro__):
         return True
     # Function views wrapped by the project's team-auth decorators carry the marker.
     if getattr(callback, ENFORCES_TEAM_AUTH_ATTR, False):
         return True
-    # Function views wrapped by Django's permission_required / login_required.
+    # Function views wrapped by Django's permission_required.
     return any(
         fragment in fn.__qualname__
         for fn in _closure_functions(callback)
