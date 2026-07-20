@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
+from dateutil.relativedelta import relativedelta
 from django.db.models import Count, Q
 from django.utils import timezone
 
@@ -93,20 +94,11 @@ def _message_counts(
 
 def _month_bounds(period: str, tz: ZoneInfo) -> tuple[datetime, datetime]:
     """Half-open ``[start, end)`` for a calendar month, computed in ``tz``. Returns tz-aware
-    datetimes; Django converts them for the UTC-stored ``created_at`` column.
+    datetimes; Django converts them for the UTC-stored ``created_at`` column. ``relativedelta``
+    keeps the same ``tz`` instance, and midnight-on-the-1st stays midnight across a DST transition.
     """
     now_local = timezone.now().astimezone(tz)
     month_start = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if period == PERIOD_PREVIOUS_MONTH:
-        return _shift_month(month_start, -1), month_start
-    return month_start, _shift_month(month_start, +1)
-
-
-def _shift_month(month_start: datetime, delta: int) -> datetime:
-    """First-of-month ``delta`` months away from ``month_start`` (``month_start`` is always the 1st at
-    midnight). ``replace`` on a tz-aware datetime recomputes the offset from the wall-clock time, so
-    midnight is preserved across a DST transition."""
-    month_index = month_start.month - 1 + delta
-    year = month_start.year + month_index // 12
-    month = month_index % 12 + 1
-    return month_start.replace(year=year, month=month)
+        return month_start - relativedelta(months=1), month_start
+    return month_start, month_start + relativedelta(months=1)
