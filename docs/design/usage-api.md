@@ -24,8 +24,8 @@ Seven decisions shape the work:
 
 1. **One flexible query endpoint, not a resource tree.** `/api/v2/usage/` with a constrained,
    documented query vocabulary. Generic enough for "inspect their usage data" without new endpoints.
-2. **Metrics are additive per request.** `metric` is a comma list; the response carries one block
-   per requested metric, so activity + cost come back in a single call.
+2. **Metrics are additive per request.** `metric` is a repeated query param; the response carries
+   one block per requested metric, so activity + cost come back in a single call.
 3. **Reuse the existing read paths.** `cost_tracking.services.reporting` for cost/tokens; the
    `DashboardService`/`admin.queries` aggregation patterns for messages/sessions/participants.
    New code lives in `apps/api/v2/usage/services.py`; no coupling to `DashboardService` internals.
@@ -91,7 +91,7 @@ surface, so the overlap is acceptable; no v1 change.
 
 | Param | Values | Notes |
 |---|---|---|
-| `metric` | `messages`, `sessions`, `participants`, `cost`, `tokens` (comma list, ≥1, required) | One response block per metric |
+| `metric` | `messages`, `sessions`, `participants`, `cost`, `tokens` (repeated param, ≥1, required) | One response block per metric |
 | `period` | `current_month`, `previous_month` | Convenience; mutually exclusive with `start`/`end` |
 | `start` / `end` | ISO date/datetime | Half-open `[start, end)`; explicit alternative to `period` |
 | `granularity` | `total` (default), `daily`, `weekly`, `monthly` | Time-bucketing of results |
@@ -160,8 +160,11 @@ needs without new endpoints, and maps cleanly onto the existing dashboard/cost r
 
 ### D2. Additive metrics per request
 
-`metric` is a comma list; the response carries one block per metric. Lets "activity + cost/tokens"
-resolve in one round-trip instead of N calls, and keeps the response self-describing.
+`metric` is a repeated query param (`?metric=messages&metric=sessions`), served by DRF's stock
+`MultipleChoiceField` — so the OpenAPI schema advertises the allowed metrics as an enum array rather
+than an opaque string, and no custom field is needed. The response carries one block per metric,
+which lets "activity + cost/tokens" resolve in one round-trip instead of N calls. A comma-separated
+value was considered but rejected: DRF has no built-in for it, and it would forfeit the enum schema.
 
 ### D3. Reuse existing read paths; new service module
 

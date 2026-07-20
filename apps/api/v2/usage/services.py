@@ -48,7 +48,7 @@ class UsageResult:
 def usage_query(
     team: Team,
     *,
-    metrics: list[str],
+    metrics: set[str],
     period: str,
     tz: ZoneInfo,
     participant: str | None = None,

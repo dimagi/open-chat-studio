@@ -155,7 +155,7 @@ def test_tz_shifts_month_boundary():
     ("params", "detail_contains"),
     [
         pytest.param({}, "metric", id="missing-metric"),
-        pytest.param({"metric": "bogus"}, "Unknown value", id="unknown-metric"),
+        pytest.param({"metric": "bogus"}, "not a valid choice", id="unknown-metric"),
         pytest.param({"metric": "messages", "tz": "Not/AZone"}, "timezone", id="bad-timezone"),
         pytest.param(
             {
@@ -204,10 +204,10 @@ def test_unknown_participant_returns_zeroed_block():
     assert response.json()["results"]["messages"] == {"human": 0, "ai": 0, "total": 0}
 
 
-def test_metric_list_is_deduplicated_and_order_preserved():
-    serializer = UsageQuerySerializer(data={"metric": "messages, messages"})
+def test_repeated_metric_params_are_deduplicated():
+    serializer = UsageQuerySerializer(data={"metric": ["messages", "messages"]})
     assert serializer.is_valid(), serializer.errors
-    assert serializer.validated_data["metric"] == ["messages"]
+    assert serializer.validated_data["metric"] == {"messages"}
 
 
 @pytest.mark.parametrize(

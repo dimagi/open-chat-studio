@@ -124,9 +124,13 @@ paths:
       - in: query
         name: metric
         schema:
-          type: string
-          minLength: 1
-        description: 'Comma-separated list of metrics to return. Supported: messages.'
+          type: array
+          items:
+            enum:
+            - messages
+            type: string
+            description: '* `messages` - messages'
+        description: Metrics to return; repeat the parameter for several.
         required: true
       - in: query
         name: participant

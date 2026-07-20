@@ -13,30 +13,13 @@ from rest_framework import serializers
 from apps.api.v2.usage.services import PERIOD_CHOICES, PERIOD_CURRENT_MONTH, SUPPORTED_METRICS
 
 
-class CommaSeparatedChoiceField(serializers.CharField):
-    """A query param accepting a comma-separated list of values drawn from a fixed set. Returns the
-    parsed list with duplicates removed and order preserved."""
-
-    def __init__(self, *, choices, **kwargs):
-        self._choices = frozenset(choices)
-        super().__init__(**kwargs)
-
-    def to_internal_value(self, data) -> list[str]:
-        raw = super().to_internal_value(data)
-        items = [item.strip() for item in raw.split(",") if item.strip()]
-        if not items:
-            raise serializers.ValidationError("At least one value is required.")
-        unknown = [item for item in items if item not in self._choices]
-        if unknown:
-            supported = ", ".join(sorted(self._choices))
-            raise serializers.ValidationError(f"Unknown value(s): {', '.join(unknown)}. Supported: {supported}.")
-        return list(dict.fromkeys(items))
-
-
 class UsageQuerySerializer(serializers.Serializer):
-    metric = CommaSeparatedChoiceField(
-        choices=SUPPORTED_METRICS,
-        help_text=f"Comma-separated list of metrics to return. Supported: {', '.join(sorted(SUPPORTED_METRICS))}.",
+    # Repeat the param to request several metrics: ``?metric=messages&metric=sessions``. Returns a
+    # set, so duplicates collapse. MultipleChoiceField reads repeated query params via ``getlist``.
+    metric = serializers.MultipleChoiceField(
+        choices=sorted(SUPPORTED_METRICS),
+        allow_empty=False,
+        help_text="Metrics to return; repeat the parameter for several.",
     )
     period = serializers.ChoiceField(
         choices=list(PERIOD_CHOICES),
