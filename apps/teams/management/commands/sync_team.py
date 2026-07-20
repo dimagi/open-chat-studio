@@ -194,7 +194,9 @@ def load_team(importer, client, store, write):
     - Present in the target DB under the same slug but not in the store: a team this sync doesn't track
       (created by hand, or its state DB was lost). Refuse to import over it and tell the operator to
       re-run with --force-delete, rather than silently overwriting a team we didn't create.
-    - Neither: a first-time import; fetch and create the team from the source."""
+    - Neither: a first-time import; fetch and create the team from the source, then put the new team
+      into migration mode so this server freezes its outbound firing too (see
+      ``_enable_target_migration_mode``)."""
     team = _committed_team(store)
     if team is not None:
         importer.set_target_team(team)
@@ -207,7 +209,18 @@ def load_team(importer, client, store, write):
             "sync's state. Re-run with --force-delete to delete it and re-import from scratch."
         )
     importer.import_rows(TEAM_MODEL, [team_row])
+    _enable_target_migration_mode(importer.target_team)
     write("synced team")
+
+
+def _enable_target_migration_mode(team: Team) -> None:
+    """Freeze the freshly imported team on this server by turning on migration mode. The source team is
+    already migrating; without this the target would start firing the team's events and scheduled
+    messages the moment it's imported, duplicating what the still-live source sends. Migration mode is
+    a per-server operational flag (not exported), so it's set here on creation and stays on until an
+    operator turns it off at cutover -- reruns load the team from the sync state and leave it alone."""
+    team.is_migrating = True
+    team.save(update_fields=["is_migrating"])
 
 
 def run_sync(
