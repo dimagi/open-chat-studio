@@ -103,6 +103,7 @@ class Evaluator(BaseTeamModel):
         return f"{self.name} ({label})"
 
     def delete(self, *args, **kwargs):
+        """Block deletion while any config using this evaluator has an in-flight run."""
         raise_if_runs_in_flight(EvaluationRun.objects.filter(config__evaluators=self), "evaluator")
         return super().delete(*args, **kwargs)
 
@@ -159,9 +160,11 @@ class EvaluationMessage(BaseModel):
         return f"{input_role}: {input_content}, {output_role}: {output_content}"
 
     def delete(self, *args, **kwargs):
-        # Blocks on any in-flight run whose dataset contains this message OR that scoped it directly.
-        # A PREVIEW/DELTA run that will not actually process this message is over-blocked here; that
-        # is the safe direction (never strand a run) and in-flight runs are short-lived.
+        """Block deletion while an in-flight run references this message, via its dataset or DELTA scoping.
+
+        A PREVIEW/DELTA run that will not actually process this message is over-blocked here; that
+        is the safe direction (never strand a run) and in-flight runs are short-lived.
+        """
         related_runs = EvaluationRun.objects.filter(
             models.Q(config__dataset__messages=self) | models.Q(scoped_messages=self)
         )
@@ -278,6 +281,7 @@ class EvaluationDataset(BaseTeamModel):
         return f"{self.name} ({self.messages.count()} {mode}s)"
 
     def delete(self, *args, **kwargs):
+        """Block deletion while any config using this dataset has an in-flight run."""
         raise_if_runs_in_flight(EvaluationRun.objects.filter(config__dataset=self), "dataset")
         return super().delete(*args, **kwargs)
 
@@ -457,6 +461,7 @@ class EvaluationConfig(BaseTeamModel):
         return f"EvaluationConfig ({self.name})"
 
     def delete(self, *args, **kwargs):
+        """Block deletion while any of this config's runs is still in progress."""
         raise_if_runs_in_flight(EvaluationRun.objects.filter(config=self), "evaluation")
         return super().delete(*args, **kwargs)
 

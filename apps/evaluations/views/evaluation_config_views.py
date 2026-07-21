@@ -135,6 +135,7 @@ class DeleteEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
     permission_required = "evaluations.delete_evaluationconfig"
 
     def delete(self, request, team_slug: str, pk: int):
+        """Delete the config, returning 409 if a related run is still in progress."""
         evaluation = get_object_or_404(EvaluationConfig, team=request.team, pk=pk)
         try:
             evaluation.delete()
@@ -173,6 +174,7 @@ class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vi
     permission_required = "evaluations.delete_evaluationrun"
 
     def post(self, request, team_slug: str, evaluation_pk: int):
+        """Un-apply this config's eval tags and delete all its runs, returning 409 if any run is in progress."""
         config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
         run_ids = list(EvaluationRun.objects.filter(config=config).values_list("id", flat=True))
         runs = EvaluationRun.objects.filter(id__in=run_ids)

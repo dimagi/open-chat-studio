@@ -180,6 +180,7 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluator"
 
     def delete(self, request, team_slug: str, pk: int):
+        """Delete the evaluator, returning 409 if a related run is still in progress."""
         evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
         try:
             evaluator.delete()
