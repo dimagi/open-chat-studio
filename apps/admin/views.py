@@ -69,7 +69,9 @@ def _has_valid_reporting_token(request):
         return False
     prefix = "Bearer "
     header = request.headers.get("Authorization", "")
-    return header.startswith(prefix) and hmac.compare_digest(header.removeprefix(prefix), token)
+    if not header.startswith(prefix):
+        return False
+    return hmac.compare_digest(header.removeprefix(prefix).encode("utf-8"), token.encode("utf-8"))
 
 
 def superuser_or_reporting_token(view_func):

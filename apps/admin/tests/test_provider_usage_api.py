@@ -44,24 +44,19 @@ def test_invalid_range_returns_400(superuser_client):
 
 
 @pytest.mark.django_db()
-def test_valid_reporting_token_grants_access(client, settings):
-    settings.PROVIDER_REPORTING_API_TOKEN = "s3cret-token"
-    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION="Bearer s3cret-token")
-    assert response.status_code == 200
-
-
-@pytest.mark.django_db()
-def test_invalid_reporting_token_falls_back_to_session(client, settings):
-    settings.PROVIDER_REPORTING_API_TOKEN = "s3cret-token"
-    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION="Bearer wrong")
-    assert response.status_code == 302  # no valid token, no superuser session
-
-
-@pytest.mark.django_db()
-def test_reporting_token_ignored_when_unset(client, settings):
-    settings.PROVIDER_REPORTING_API_TOKEN = None
-    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION="Bearer anything")
-    assert response.status_code == 302
+@pytest.mark.parametrize(
+    ("configured_token", "auth_header", "expected_status"),
+    [
+        pytest.param("s3cret-token", "Bearer s3cret-token", 200, id="valid-token-grants-access"),
+        pytest.param("s3cret-token", "Bearer wrong", 302, id="invalid-token-falls-back-to-session"),
+        pytest.param(None, "Bearer anything", 302, id="token-ignored-when-unset"),
+        pytest.param("s3cret-token", "Bearer nön-ascii", 302, id="non-ascii-header-rejected"),
+    ],
+)
+def test_reporting_token_auth(client, settings, configured_token, auth_header, expected_status):
+    settings.PROVIDER_REPORTING_API_TOKEN = configured_token
+    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION=auth_header)
+    assert response.status_code == expected_status
 
 
 @pytest.mark.django_db()
