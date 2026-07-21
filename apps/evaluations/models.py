@@ -15,6 +15,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
     ConditionType,
@@ -39,6 +40,22 @@ class EvaluationRunStatus(models.TextChoices):
     PROCESSING = "processing", "Processing"
     COMPLETED = "completed", "Completed"
     FAILED = "failed", "Failed"
+
+
+NON_TERMINAL_RUN_STATUSES = (EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING)
+
+
+def raise_if_runs_in_flight(runs: models.QuerySet[EvaluationRun], resource_label: str) -> None:
+    """Raise InFlightRunsError if any run in `runs` is PENDING or PROCESSING.
+
+    `runs` is an EvaluationRun queryset; `resource_label` is the user-facing
+    noun for the object being deleted (e.g. "evaluation", "evaluator", "dataset").
+    """
+    if runs.filter(status__in=NON_TERMINAL_RUN_STATUSES).exists():
+        raise InFlightRunsError(
+            f"Cannot delete this {resource_label} while evaluation runs are in progress. "
+            "Wait for the runs to finish, then try again."
+        )
 
 
 class EvaluationRunType(models.TextChoices):
@@ -414,6 +431,10 @@ class EvaluationConfig(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
+
+    def delete(self, *args, **kwargs):
+        raise_if_runs_in_flight(EvaluationRun.objects.filter(config=self), "evaluation")
+        return super().delete(*args, **kwargs)
 
     def get_generation_experiment_version(self):
         """Resolve the actual experiment version based on selection type.

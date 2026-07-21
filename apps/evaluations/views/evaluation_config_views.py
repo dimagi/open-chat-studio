@@ -22,6 +22,7 @@ from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
@@ -129,7 +130,10 @@ class DeleteEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
 
     def delete(self, request, team_slug: str, pk: int):
         evaluation = get_object_or_404(EvaluationConfig, team=request.team, pk=pk)
-        evaluation.delete()
+        try:
+            evaluation.delete()
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         response = HttpResponse(status=200)
         if request.GET.get("redirect") == "1":
             response["HX-Redirect"] = reverse("evaluations:home", args=[self.request.team.slug])
