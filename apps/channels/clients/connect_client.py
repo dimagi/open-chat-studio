@@ -74,9 +74,12 @@ class CommCareConnectClient:
         _raise_for_status(response)
         return response.json()
 
-    def decrypt_messages(self, key: bytes, messages: list[Message]) -> list[str]:
+    def decrypt_messages(self, encryption_key: bytes, messages: list[Message]) -> list[str]:
         """
         Decrypts the `MessagePayload` list using the provided key and verifies the message authenticity
+
+        The key argument is named ``encryption_key`` so Sentry's ``EventScrubber`` denylist scrubs it
+        from captured stack-frame locals; see ``SENTRY_DSN`` setup in ``config/settings.py``.
 
         Raises:
             ValueError if the message authenticity cannot be trusted
@@ -84,14 +87,14 @@ class CommCareConnectClient:
         decrypted_messages = []
         for message in messages:
             message_text = self._decrypt_message(
-                key, ciphertext=message["ciphertext"], tag=message["tag"], nonce=message["nonce"]
+                encryption_key, ciphertext=message["ciphertext"], tag=message["tag"], nonce=message["nonce"]
             )
             decrypted_messages.append(message_text)
 
         return decrypted_messages
 
     def send_message_to_user(self, channel_id: str, message: str, encryption_key: bytes):
-        ciphertext, tag, nonce = self._encrypt_message(key=encryption_key, message=message)
+        ciphertext, tag, nonce = self._encrypt_message(encryption_key=encryption_key, message=message)
 
         payload = {
             "channel": channel_id,
@@ -128,17 +131,17 @@ class CommCareConnectClient:
             # AttributeError covers valid JSON that isn't an object. All mean "not the dedupe error".
             return False
 
-    def _encrypt_message(self, key: bytes, message: str) -> tuple[str, str, str]:
-        cipher = AES.new(key, AES.MODE_GCM)
+    def _encrypt_message(self, encryption_key: bytes, message: str) -> tuple[str, str, str]:
+        cipher = AES.new(encryption_key, AES.MODE_GCM)
         ciphertext_bytes, tag_bytes = cipher.encrypt_and_digest(message.encode())
         ciphertext = base64.b64encode(ciphertext_bytes).decode()
         tag = base64.b64encode(tag_bytes).decode()
         nonce = base64.b64encode(cipher.nonce).decode()
         return ciphertext, tag, nonce
 
-    def _decrypt_message(self, key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
+    def _decrypt_message(self, encryption_key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
         ciphertext_bytes = base64.b64decode(ciphertext)
         tag_bytes = base64.b64decode(tag)
         nonce_bytes = base64.b64decode(nonce)
-        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce_bytes)
+        cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce_bytes)
         return cipher.decrypt_and_verify(ciphertext_bytes, tag_bytes).decode()

@@ -13,10 +13,8 @@ from apps.chat.models import ChatMessage
 from apps.cost_tracking.models import UsageRecord
 from apps.experiments.models import ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
-from apps.teams.models import Flag, Team
+from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
-
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 _ZERO = Decimal(0)
 _COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
@@ -85,7 +83,7 @@ def get_token_usage_by_team(start: datetime, end: datetime):
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
         .exclude(session__platform=ChannelPlatform.EVALUATIONS)
-        .values("team_id", "team__name")
+        .values("team_id", "team__name", "team__slug")
         .annotate(
             run_count=Count("id"),
             total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
@@ -95,11 +93,7 @@ def get_token_usage_by_team(start: datetime, end: datetime):
 
 
 def get_cost_usage_by_team(start: datetime, end: datetime):
-    """Per (team, provider, model, currency) cost + tokens from UsageRecord.
-
-    Only teams with `flag_ai_cost_monitoring` enabled record UsageRecords, so
-    this covers a subset of the teams returned by `get_token_usage_by_team`.
-    """
+    """Per (team, provider, model, currency) cost + tokens from UsageRecord."""
     return (
         UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .values("team_id", "provider_type", "model_name", "currency")
@@ -111,43 +105,33 @@ def get_cost_usage_by_team(start: datetime, end: datetime):
     )
 
 
-def get_cost_tracking_team_ids() -> set[int]:
-    """Team ids for which `flag_ai_cost_monitoring` is active."""
-    flag = Flag.objects.filter(name=COST_TRACKING_FLAG).prefetch_related("teams").first()
-    if flag is None or flag.everyone is False:
-        return set()
-    if flag.everyone is True:
-        return set(Team.objects.values_list("id", flat=True))
-    return set(flag.teams.values_list("id", flat=True))
-
-
 def build_usage_report(start: datetime, end: datetime) -> dict:
-    """Cross-team usage: token totals for every team (always populated) merged
-    with per-model cost detail where cost tracking is on. `cost_tracking_enabled`
-    flags which teams' cost detail is complete vs. token-only.
+    """Cross-team usage: per-team token totals (always populated) merged with
+    per-model cost detail from recorded UsageRecords.
 
     `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
     records in more than one currency and summing them would be meaningless.
     """
     token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
-    enabled_team_ids = get_cost_tracking_team_ids()
 
-    team_names = {row["team_id"]: row["team__name"] for row in token_rows}
-    missing_ids = {row["team_id"] for row in cost_rows} - team_names.keys()
+    team_meta = {row["team_id"]: (row["team__name"], row["team__slug"]) for row in token_rows}
+    missing_ids = {row["team_id"] for row in cost_rows} - team_meta.keys()
     if missing_ids:
-        team_names.update(dict(Team.objects.filter(id__in=missing_ids).values_list("id", "name")))
+        missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug")
+        team_meta.update({tid: (name, slug) for tid, name, slug in missing})
 
     teams: dict[int, dict] = {}
 
     def _entry(team_id: int) -> dict:
         if team_id not in teams:
+            name, slug = team_meta.get(team_id, (None, None))
             teams[team_id] = {
                 "team_id": team_id,
-                "team_name": team_names.get(team_id),
+                "team_name": name,
+                "team_slug": slug,
                 "run_count": 0,
                 "total_tokens": 0,
-                "cost_tracking_enabled": team_id in enabled_team_ids,
                 "total_cost": defaultdict(Decimal),  # currency -> amount
                 "models": [],
             }
