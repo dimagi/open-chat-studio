@@ -43,6 +43,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.runnables")
 
+# Matches a markdown link `[text](url)`, skipping footnote refs like `[1]`. The two character
+# classes are each terminated by their delimiter (`]` / `)`) so matching stays linear-time; the
+# example.com check happens in the callback rather than inside the pattern to avoid a ReDoS.
+_MARKDOWN_LINK_RE = re.compile(r"\[(?!\d+\])([^\]]+)\]\(([^)]+)\)")
+
+
+def _strip_example_com_links(text: str) -> str:
+    """Replace `[label](…example.com…)` links with just the emphasised label."""
+
+    def replace(match: re.Match) -> str:
+        label, url = match.group(1), match.group(2)
+        return f"*{label}*" if "example.com" in url else match.group(0)
+
+    return _MARKDOWN_LINK_RE.sub(replace, text)
+
 
 class GenerationError(Exception):
     pass
@@ -249,7 +264,7 @@ class AssistantChat(RunnableSerializable[dict, ChainOutput]):
 
         # replace all instance of `[some filename.pdf](https://example.com/download/file-abc)` with
         # just the link text
-        output_message = re.sub(r"\[(?!\d+\])([^]]+)\]\([^)]+example\.com[^)]+\)", r"*\1*", output_message)
+        output_message = _strip_example_com_links(output_message)
 
         return output_message.strip(), list(file_ids)
 
