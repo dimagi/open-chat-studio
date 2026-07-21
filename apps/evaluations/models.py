@@ -50,6 +50,12 @@ def raise_if_runs_in_flight(runs: models.QuerySet[EvaluationRun], resource_label
 
     `runs` is an EvaluationRun queryset; `resource_label` is the user-facing
     noun for the object being deleted (e.g. "evaluation", "evaluator", "dataset").
+
+    This only guards instance `Model.delete()` calls. Bulk `QuerySet.delete()`
+    and parent-cascade deletes execute SQL-level deletes that bypass the model
+    override entirely, so this is best-effort UX protection, not a hard invariant;
+    the evaluation tasks are hardened to degrade to a logged no-op if a run or
+    message vanishes out from under them.
     """
     if runs.filter(status__in=NON_TERMINAL_RUN_STATUSES).exists():
         raise InFlightRunsError(
@@ -153,6 +159,9 @@ class EvaluationMessage(BaseModel):
         return f"{input_role}: {input_content}, {output_role}: {output_content}"
 
     def delete(self, *args, **kwargs):
+        # Blocks on any in-flight run whose dataset contains this message OR that scoped it directly.
+        # A PREVIEW/DELTA run that will not actually process this message is over-blocked here; that
+        # is the safe direction (never strand a run) and in-flight runs are short-lived.
         related_runs = EvaluationRun.objects.filter(
             models.Q(config__dataset__messages=self) | models.Q(scoped_messages=self)
         )

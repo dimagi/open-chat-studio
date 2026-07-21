@@ -11,6 +11,7 @@ from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
+    EvaluationMessage,
     EvaluationResult,
     EvaluationRun,
     EvaluationRunType,
@@ -353,3 +354,18 @@ def test_run_evaluation_task_handles_deleted_run(evaluation_run):
     run_evaluation_task(run_id)
 
     assert not EvaluationRun.objects.filter(id=run_id).exists()
+
+
+@pytest.mark.django_db()
+def test_evaluate_single_message_task_skips_deleted_message(evaluation_run, evaluation_message):
+    """Message deleted out from under a surviving in-flight run -> no result written, no exception.
+
+    Uses a bulk queryset delete to mimic the cascade/race path that bypasses the model guard.
+    """
+    run, evaluator = evaluation_run
+    message_id = evaluation_message.id
+    EvaluationMessage.objects.filter(id=message_id).delete()
+
+    evaluate_single_message_task(run.id, [evaluator.id], message_id)
+
+    assert not EvaluationResult.objects.filter(run=run).exists()
