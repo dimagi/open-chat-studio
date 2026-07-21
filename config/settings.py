@@ -33,6 +33,11 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
 
+# Shared bearer token for the cross-team provider usage/key reporting admin
+# endpoints, so headless consumers (e.g. a reporting script) can call them
+# without a superuser browser session. Unset disables token auth.
+PROVIDER_REPORTING_API_TOKEN = env("PROVIDER_REPORTING_API_TOKEN", default=None)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules

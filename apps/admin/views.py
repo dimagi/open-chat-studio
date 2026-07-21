@@ -1,7 +1,10 @@
+import functools
+import hmac
 import logging
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ValidationError
@@ -57,6 +60,34 @@ User = get_user_model()
 
 is_staff = user_passes_test(lambda u: u.is_staff, login_url="/404")
 is_superuser = user_passes_test(lambda u: u.is_superuser, login_url="/404")
+
+
+def _has_valid_reporting_token(request):
+    """True if the request carries the configured provider-reporting bearer token."""
+    token = settings.PROVIDER_REPORTING_API_TOKEN
+    if not token:
+        return False
+    prefix = "Bearer "
+    header = request.headers.get("Authorization", "")
+    if not header.startswith(prefix):
+        return False
+    return hmac.compare_digest(header.removeprefix(prefix).encode("utf-8"), token.encode("utf-8"))
+
+
+def superuser_or_reporting_token(view_func):
+    """Allow a valid reporting token, else fall back to the superuser-session check.
+
+    Lets headless consumers authenticate with the shared token while the browser
+    admin UI keeps working via the session (same 302-to-/404 for everyone else).
+    """
+
+    @functools.wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if _has_valid_reporting_token(request):
+            return view_func(request, *args, **kwargs)
+        return is_superuser(view_func)(request, *args, **kwargs)
+
+    return _wrapped
 
 
 @is_staff
@@ -462,7 +493,7 @@ def users_api(request):
     return JsonResponse(data, safe=False)
 
 
-@is_superuser
+@superuser_or_reporting_token
 def provider_usage_api(request):
     """Cross-team LLM usage over a date range: per-team token totals merged with
     per-model cost detail where cost tracking is enabled. Requires `range_type`,
@@ -475,7 +506,7 @@ def provider_usage_api(request):
     return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
 
 
-@is_superuser
+@superuser_or_reporting_token
 def provider_keys_api(request):
     """Masked API-key fingerprint → team mapping across all LLM providers, so a
     report can attribute provider-side cost (keyed by the provider's redacted
