@@ -43,10 +43,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.runnables")
 
-# Matches a markdown link `[text](url)`, skipping footnote refs like `[1]`. The two character
-# classes are each terminated by their delimiter (`]` / `)`) so matching stays linear-time; the
-# example.com check happens in the callback rather than inside the pattern to avoid a ReDoS.
-_MARKDOWN_LINK_RE = re.compile(r"\[(?!\d+\])([^\]]+)\]\(([^)]+)\)")
+# Matches a markdown link `[text](url)`, skipping footnote refs like `[1]`. Each character class
+# excludes both its delimiters and is possessive (`++`), so a failed match backtracks in constant
+# time and the whole scan stays linear even on adversarial input (ReDoS-safe). The example.com
+# check happens in the callback rather than inside the pattern to keep the classes unambiguous.
+_MARKDOWN_LINK_RE = re.compile(r"\[(?!\d+\])([^\[\]]++)\]\(([^()]++)\)")
 
 
 def _strip_example_com_links(text: str) -> str:

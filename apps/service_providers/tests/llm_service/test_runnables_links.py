@@ -30,10 +30,18 @@ def test_strip_example_com_links(text, expected):
     assert _strip_example_com_links(text) == expected
 
 
-def test_strip_example_com_links_is_linear_time():
-    # Regression for ReDoS (py/polynomial-redos): a malicious/degenerate string must not
-    # cause polynomial backtracking. This would hang with the old two-quantifier pattern.
-    malicious = "[" + "\\](" * 50000
+@pytest.mark.parametrize(
+    "malicious",
+    [
+        pytest.param("[\\" * 200_000, id="many-open-brackets"),
+        pytest.param("[a](" * 200_000, id="many-unclosed-links"),
+        pytest.param("[" * 200_000, id="pure-open-brackets"),
+    ],
+)
+def test_strip_example_com_links_is_linear_time(malicious):
+    # Regression for ReDoS (py/polynomial-redos). These inputs are quadratic against a pattern
+    # whose classes only exclude the closing delimiter; excluding the opening delimiter too (and
+    # using possessive quantifiers) keeps it linear. 200k chars completes in well under a second.
     start = time.perf_counter()
     _strip_example_com_links(malicious)
     assert time.perf_counter() - start < 1.0
