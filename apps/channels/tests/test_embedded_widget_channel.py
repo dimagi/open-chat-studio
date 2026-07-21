@@ -66,26 +66,14 @@ class TestEmbeddedWidgetChannelForm:
         assert form.is_valid()
         assert form.cleaned_data["allowed_domains"] == expected_domains
 
-    def test_required_auth_level_defaults_to_session_token(self):
+    def test_required_auth_level_is_not_user_editable(self):
+        """required_auth_level is a system-managed policy; it must not be exposed on the form."""
         form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
-        assert form.is_valid()
-        # not stored in extra_data — applied directly to the channel in post_save
-        assert "required_auth_level" not in form.cleaned_data
-        assert form._required_auth_level == WidgetAuthLevel.SESSION_TOKEN
-
-    @pytest.mark.parametrize(
-        "level",
-        [WidgetAuthLevel.NONE, WidgetAuthLevel.EMBED_KEY, WidgetAuthLevel.SESSION_TOKEN],
-    )
-    def test_required_auth_level_accepts_explicit_value(self, level):
-        form = EmbeddedWidgetChannelForm(
-            data={"allowed_domains": "example.com", "required_auth_level": level.value}, experiment=Mock()
-        )
-        assert form.is_valid()
-        assert form._required_auth_level == level
+        assert "required_auth_level" not in form.fields
 
     @pytest.mark.django_db()
-    def test_post_save_persists_required_auth_level(self):
+    def test_user_cannot_override_required_auth_level_via_form(self):
+        """A submitted required_auth_level is ignored; the channel keeps the model default."""
         channel = ExperimentChannelFactory.create(
             platform=ChannelPlatform.EMBEDDED_WIDGET,
             required_auth_level=WidgetAuthLevel.SESSION_TOKEN,
@@ -97,16 +85,10 @@ class TestEmbeddedWidgetChannelForm:
             experiment=channel.experiment,
         )
         assert form.is_valid()
+        assert "required_auth_level" not in form.cleaned_data
         form.post_save(channel)
         channel.refresh_from_db()
-        assert channel.required_auth_level == WidgetAuthLevel.NONE
-
-    def test_existing_channel_initializes_level_from_instance(self):
-        channel = Mock()
-        channel.extra_data = {"widget_token": "existing_token_12345678901234567890", "allowed_domains": ["example.com"]}
-        channel.required_auth_level = WidgetAuthLevel.EMBED_KEY
-        form = EmbeddedWidgetChannelForm(channel=channel, experiment=Mock())
-        assert form.initial["required_auth_level"] == WidgetAuthLevel.EMBED_KEY
+        assert channel.required_auth_level == WidgetAuthLevel.SESSION_TOKEN
 
 
 class TestEmbeddedWidgetUtils:

@@ -32,8 +32,9 @@ than inferring it from per-request heuristics:
 - Migration `0029_experimentchannel_required_auth_level` grandfathers existing
   channels from their last-reported `widget_version`: `unknown`/`< 0.5.1` → `NONE`,
   `0.5.1–0.8.x` → `EMBED_KEY`, `>= 0.9.0` and never-connected (`null`) → `SESSION_TOKEN`.
-- Teams can downgrade a specific channel in the channel edit form if they know it is
-  running an older widget; the field is also visible in the Django admin.
+- The level is system-managed, not user-editable: it is set by the model default for new
+  channels and by the grandfathering migration for existing ones. It is visible (read-only)
+  in the Django admin for inspection/support.
 
 ## Releasing a new widget version
 
