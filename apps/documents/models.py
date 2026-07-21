@@ -75,6 +75,11 @@ class CollectionFile(models.Model):
         return FileStatus(self.status)
 
 
+class ContextualizerStrategy(models.TextChoices):
+    STATIC = "static", _("Static (no LLM, zero cost)")
+    LLM = "llm", _("LLM-generated")
+
+
 @audit_fields(
     "name",
     "version_number",
@@ -121,6 +126,15 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
+    enable_contextual_retrieval = models.BooleanField(
+        default=False,
+        help_text="If enabled, a short context header is generated for each chunk and stored for retrieval.",
+    )
+    contextualizer_strategy = models.CharField(
+        max_length=16,
+        choices=ContextualizerStrategy.choices,
+        default=ContextualizerStrategy.STATIC,
+    )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
@@ -321,7 +335,38 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_index and self.is_remote_index:
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
         else:
-            return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
+            return self.llm_provider.get_local_index_manager(
+                embedding_model_name=self.embedding_provider_model.name,
+                contextualizer_strategy=self._contextualizer_strategy(),
+            )
+
+    def _contextualizer_strategy(self) -> str | None:
+        """Return the contextualizer strategy string for indexing, or None if disabled.
+
+        Returns None (unchanged indexing behaviour) unless the contextual retrieval
+        feature flag is active and this collection has enable_contextual_retrieval set.
+        The 'llm' strategy currently falls back to 'static' pending a decision on how
+        to resolve the chat model for contextualization (see PR description).
+        """
+        from apps.teams.flags import Flags  # noqa: PLC0415
+        from apps.teams.models import Flag  # noqa: PLC0415
+
+        if not self.enable_contextual_retrieval:
+            return None
+        flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
+        if not flag:
+            return None
+        # Mirror Waffle's Flag.is_active precedence outside a request context:
+        # explicit everyone True/False overrides, otherwise check team membership.
+        if flag.everyone is True:
+            active = True
+        elif flag.everyone is False:
+            active = False
+        else:
+            active = flag.is_active_for_team(self.team)
+        if not active:
+            return None
+        return ContextualizerStrategy.STATIC
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""

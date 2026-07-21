@@ -189,11 +189,13 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def get_remote_index_manager(self, index_id: str):
         return self.get_llm_service().get_remote_index_manager(index_id)
 
-    def get_local_index_manager(self, embedding_model_name: str):
+    def get_local_index_manager(self, embedding_model_name: str, contextualizer_strategy: str | None = None):
         """
         Returns a LocalIndexManager for the given embedding model.
         """
-        return self.get_llm_service().get_local_index_manager(embedding_model_name)
+        return self.get_llm_service().get_local_index_manager(
+            embedding_model_name, contextualizer_strategy=contextualizer_strategy
+        )
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """

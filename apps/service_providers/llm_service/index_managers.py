@@ -247,9 +247,10 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     generating embedding vectors and chunking text content.
     """
 
-    def __init__(self, api_key: str, embedding_model_name: str):
+    def __init__(self, api_key: str, embedding_model_name: str, contextualizer_strategy: str | None = None):
         self._api_key = api_key
         self.embedding_model_name = embedding_model_name
+        self._contextualizer_strategy = contextualizer_strategy
 
     @abstractmethod
     def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
@@ -277,6 +278,8 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             embeddings = []
             try:
                 text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                contextualizer = self._get_contextualizer(file)
+                document_text = file.read_content() if contextualizer else ""
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
                     if not safe_chunk:
@@ -288,7 +291,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                             extra={"file_id": file.id, "chunk_index": idx, "total_chunks": len(text_chunks)},
                         )
                         continue
-                    embedding_vector = self.get_embedding_vector(safe_chunk, input_type="document")
+                    context = ""
+                    if contextualizer:
+                        context = contextualizer.get_context(document=document_text, chunk=safe_chunk)
+                    embed_input = f"{context}\n\n{safe_chunk}" if context else safe_chunk
+                    embedding_vector = self.get_embedding_vector(embed_input, input_type="document")
                     embeddings.append(
                         FileChunkEmbedding.objects.create(
                             team_id=file.team_id,
@@ -296,6 +303,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                             collection_id=collection_file.collection_id,
                             chunk_number=idx + 1,  # Start chunk numbering from 1
                             text=safe_chunk,
+                            context=context,
                             embedding=embedding_vector,
                             # TODO: Get the page number if possible. Also, what file types are supported?
                             page_number=0,
@@ -317,6 +325,17 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                     logger.exception(
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
+
+    def _get_contextualizer(self, file: File):
+        """Build a per-file contextualizer for the configured strategy, or None.
+
+        Only the 'static' strategy is wired currently (zero-cost, no external calls).
+        """
+        if self._contextualizer_strategy == "static":
+            from apps.service_providers.llm_service.contextualizer import StaticContextualizer  # noqa: PLC0415
+
+            return StaticContextualizer(file_name=file.name)
+        return None
 
     def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
@@ -383,6 +402,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
         api_key: str,
         embedding_model_name: str,
         openai_api_base: str | None = None,
+        contextualizer_strategy: str | None = None,
     ):
         """Build an OpenAI local index manager.
 
@@ -390,7 +410,11 @@ class OpenAILocalIndexManager(LocalIndexManager):
         `OpenAIEmbeddings` so local indexing routes through an
         OpenAI-compatible endpoint (e.g. LiteLLM, a self-hosted gateway).
         """
-        super().__init__(api_key=api_key, embedding_model_name=embedding_model_name)
+        super().__init__(
+            api_key=api_key,
+            embedding_model_name=embedding_model_name,
+            contextualizer_strategy=contextualizer_strategy,
+        )
         self._openai_api_base = openai_api_base
 
     def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
