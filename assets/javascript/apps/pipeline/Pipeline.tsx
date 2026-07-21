@@ -52,7 +52,6 @@ export default function Pipeline() {
   const addNode = usePipelineStore((state) => state.addNode);
   const deleteEdge = usePipelineStore((state) => state.deleteEdge);
   const deleteNode = usePipelineStore((state) => state.deleteNode);
-  const reactFlowInstance = usePipelineStore((state) => state.reactFlowInstance);
   const setReactFlowInstance = usePipelineStore((state) => state.setReactFlowInstance);
   const currentPipeline = usePipelineStore((state) => state.currentPipeline);
   const autoSaveCurrentPipline = usePipelineStore((state) => state.autoSaveCurrentPipline);
@@ -109,8 +108,8 @@ export default function Pipeline() {
   );
 
   const onNodeDragStop: NodeDragHandler = useCallback(() => {
-    autoSaveCurrentPipline(nodes, edges);
-  }, [autoSaveCurrentPipline, nodes, edges, reactFlowInstance]);
+    autoSaveCurrentPipline();
+  }, [autoSaveCurrentPipline]);
 
   function handleDelete(e: KeyboardEvent) {
     if (lastSelection) {
