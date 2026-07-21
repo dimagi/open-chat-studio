@@ -94,6 +94,23 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
 
 
 @pytest.mark.django_db()
+def test_includes_team_metadata(superuser_client, settings):
+    settings.TEAM_METADATA_FIELDS = [
+        {"key": "team_owner", "label": "Team Owner"},
+        {"key": "region", "label": "Region"},
+    ]
+    team = TeamFactory(name="Alpha", metadata={"team_owner": "Jia", "internal_only": "hidden"})
+    _trace(team, 100)
+
+    payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
+
+    assert payload["metadata_fields"] == settings.TEAM_METADATA_FIELDS
+    alpha = {t["team_name"]: t for t in payload["teams"]}["Alpha"]
+    # Only configured fields are exposed; unconfigured keys stay hidden, missing ones blank.
+    assert alpha["metadata"] == {"team_owner": "Jia", "region": ""}
+
+
+@pytest.mark.django_db()
 def test_total_cost_keeps_currencies_separate(superuser_client):
     team = TeamFactory(name="Alpha")
     _trace(team, 100)
