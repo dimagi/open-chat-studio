@@ -6,7 +6,7 @@ import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, WidgetAuthLevel
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
@@ -20,10 +20,15 @@ def api_client():
 
 @pytest.fixture()
 def embedded_widget_channel(experiment):
-    """Create an embedded widget channel with a token and allowed domains."""
+    """Create an embedded widget channel with a token and allowed domains.
+
+    Uses EMBED_KEY auth level: these tests exercise the embed-key + domain flow, where a
+    valid embed key alone grants access (no session token required).
+    """
     return ExperimentChannelFactory.create(
         experiment=experiment,
         platform=ChannelPlatform.EMBEDDED_WIDGET,
+        required_auth_level=WidgetAuthLevel.EMBED_KEY,
         extra_data={
             "widget_token": "test_widget_token_123456789012",
             "allowed_domains": ["example.com", "*.test.com"],

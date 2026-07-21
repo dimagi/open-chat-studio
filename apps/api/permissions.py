@@ -114,16 +114,21 @@ class SessionAccessPermission(BasePermission):
         return True
 
     def _has_legacy_access(self, request, session) -> bool:
-        if isinstance(request.auth, ExperimentChannel):
-            # widget-authed requests rely on the embed key + domain check
-            return True
-
-        # Embedded widget channels carry a durable auth policy. At EMBED_KEY and above,
-        # a valid embed key is mandatory (handled by the branch above), so the public /
-        # allowlist fallback is not reachable without one. Only NONE-level widget
-        # channels keep the fully permissive legacy path.
+        # Embedded widget channels carry a durable auth policy. The level gates every
+        # branch below so a valid embed key can never stand in for a stronger level.
         channel = session.experiment_channel
         level = channel.widget_auth_level if channel is not None else None
+
+        if isinstance(request.auth, ExperimentChannel):
+            # Widget-authed request: a valid embed key + domain check (already done by
+            # WidgetDomainPermission) satisfies EMBED_KEY and NONE channels. It never
+            # satisfies a SESSION_TOKEN channel — that always requires the token, even
+            # if the session was (mis)configured with session_token_required=False.
+            return level != WidgetAuthLevel.SESSION_TOKEN
+
+        # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the
+        # public / allowlist fallback is only reachable for NONE-level widget channels
+        # (and non-widget sessions, where level is None).
         if level is not None and level != WidgetAuthLevel.NONE:
             return False
 

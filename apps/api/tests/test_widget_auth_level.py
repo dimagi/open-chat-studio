@@ -154,6 +154,19 @@ def test_session_token_level_rejects_embed_key_only(api_client, experiment):
     assert allowed.status_code == 200
 
 
+@pytest.mark.django_db()
+def test_session_token_level_embed_key_cannot_bypass_opted_out_session(api_client, experiment):
+    """Defense in depth: even a session mis-configured with session_token_required=False on a
+    SESSION_TOKEN channel must not be reachable with an embed key alone — the level gates the
+    legacy embed-key path."""
+    channel = _widget_channel(experiment, WidgetAuthLevel.SESSION_TOKEN)
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, experiment_channel=channel, session_token_required=False
+    )
+    denied = api_client.get(poll_url(session), HTTP_X_EMBED_KEY=WIDGET_TOKEN, HTTP_ORIGIN="https://example.com")
+    assert denied.status_code == 403
+
+
 # --- migration version → level mapping -------------------------------------------------
 
 _migration = importlib.import_module("apps.channels.migrations.0029_experimentchannel_required_auth_level")
