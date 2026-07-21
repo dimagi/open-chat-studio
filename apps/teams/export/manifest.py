@@ -1,13 +1,17 @@
 """The single maintenance surface for the team data sync: which models to pull, in what order,
 and the per-model config (secrets, team scoping, global matching) the endpoint and importer need."""
 
+import hashlib
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
 
 from django.apps import apps
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import FieldDoesNotExist
 from django.db.models import ForeignKey, Model, Prefetch, Q, QuerySet
+from drf_spectacular.generators import SchemaGenerator
 
 from apps.files.models import FilePurpose
 
@@ -257,8 +261,22 @@ def team_scoped_queryset(entry: ManifestEntry, team) -> QuerySet:
     return queryset.prefetch_related(*prefetch_factory(team)) if prefetch_factory else queryset
 
 
+@cache
+def schema_checksum() -> str:
+    """Hash of the export API's OpenAPI schema -- the exact shape of the data the sync transfers
+    (endpoints, fields, types), generated from the running code. Two servers produce the same
+    checksum exactly when their export surfaces match, making it a code-compatibility check that,
+    unlike migration history, ignores squashes and renames. Generated without a request so
+    host-dependent example URLs stay at their fixed placeholder; keys are sorted so the hash doesn't
+    depend on dict ordering. Cached: the schema can't change within a process."""
+    schema = SchemaGenerator(api_version="export").get_schema(request=None, public=True)
+    data = json.dumps(schema, separators=(",", ":"), sort_keys=True, default=str)
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+
 def build_manifest() -> dict:
     return {
+        "schema_checksum": schema_checksum(),
         "entries": [
             {
                 "model": e.model,

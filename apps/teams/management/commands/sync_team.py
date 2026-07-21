@@ -5,10 +5,11 @@
 The command is a thin shell: it wires the resource fetcher to the import engine and the local FK
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
 
-Run this against the latest code on both the source and target servers. The sync assumes their
-schemas are the same shape rather than checking it: matching code is what guarantees that, whereas
-migration history is a poor proxy (a squash or rename changes the recorded migrations without
-changing the schema), so a runtime check on migration state gave false mismatches.
+Run this against the latest code on both the source and target servers. Compatibility is verified
+by comparing checksums of the two servers' export OpenAPI schemas -- the exact shape of the data
+being transferred -- rather than their migration history, which is a poor proxy (a squash or rename
+changes the recorded migrations without changing the schema). A mismatch means the servers run
+different export code; deploy the latest code on both, or pass --skip-schema-check to override.
 """
 
 import os
@@ -23,7 +24,7 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.teams.export.client import ResourceFetcher
 from apps.teams.export.emails import send_password_reset_email
 from apps.teams.export.importer import Importer, mute_signals
-from apps.teams.export.manifest import TEAM_MODEL, entry_model
+from apps.teams.export.manifest import TEAM_MODEL, entry_model, schema_checksum
 from apps.teams.export.seal import MISSING_PUBLIC_KEY_DETAIL, load_private_key
 from apps.teams.export.translation import (
     FKTranslationStore,
@@ -120,16 +121,23 @@ def _prompt(message: str) -> str:
         raise CommandError("This command must be run interactively; stdin is closed.") from None
 
 
-def check_sync_preconditions(client, private_key, store=None) -> dict:
+def check_sync_preconditions(client, private_key, enforce_schema=True, store=None) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
-    we hold a key for any sealed secrets, and the source team is ready to export (migration mode on,
-    public key set). When a ``store`` is given, also ask the operator to confirm the team's files were
-    moved to this server's storage backend -- that happens outside this command and the sync fails
-    without it. The answer is recorded in the store only once every check passes, so an aborted run
-    asks again while a rerun after a clean preflight doesn't. Returns the manifest. Raises
-    CommandError on any failure, before any rows are imported."""
+    its export schema matches ours, we hold a key for any sealed secrets, and the source team is
+    ready to export (migration mode on, public key set). When a ``store`` is given, also ask the
+    operator to confirm the team's files were moved to this server's storage backend -- that happens
+    outside this command and the sync fails without it. The answer is recorded in the store only once
+    every check passes, so an aborted run asks again while a rerun after a clean preflight doesn't.
+    Returns the manifest. Raises CommandError on any failure, before any rows are imported."""
 
     manifest = client.get_manifest()
+    if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
+        raise CommandError(
+            "Source and target export schema checksums differ, so the servers are running different "
+            "export code. Deploy the same (latest) code on both servers before syncing, or pass "
+            "--skip-schema-check to override."
+        )
+
     if private_key is None and any(entry.get("secret") for entry in manifest["entries"]):
         raise CommandError(
             "The source exports sealed secret fields but no private key was provided; the secrets "
@@ -216,10 +224,11 @@ def run_sync(
     private_key,
     write=lambda _m: None,
     page_limit=100,
+    enforce_schema=True,
     on_user_created=send_password_reset_email,
     style=None,
 ):
-    manifest = check_sync_preconditions(client, private_key)
+    manifest = check_sync_preconditions(client, private_key, enforce_schema)
 
     importer = Importer(
         store,
@@ -284,6 +293,11 @@ class Command(BaseCommand):
         parser.add_argument("--state-dir", default=".", help="Directory for the per-team SQLite state DB.")
         parser.add_argument("--limit", type=int, default=100, help="Page size for resource requests.")
         parser.add_argument(
+            "--skip-schema-check",
+            action="store_true",
+            help="Sync even if the source and target export schema checksums differ.",
+        )
+        parser.add_argument(
             "--force-delete",
             action="store_true",
             help="Delete the local team and its sync state before syncing, for a clean re-import.",
@@ -294,13 +308,14 @@ class Command(BaseCommand):
         private_key = _load_private_key(options["private_key_path"])
 
         client = ResourceFetcher(options["source_url"], options["api_key"])
+        enforce_schema = not options["skip_schema_check"]
 
         if options["force_delete"]:
             self._run_force_delete(options)
 
         store = FKTranslationStore(Path(options["state_dir"]) / f"{options['team_slug']}.sqlite")
 
-        check_sync_preconditions(client, private_key, store=store)
+        check_sync_preconditions(client, private_key, enforce_schema, store=store)
 
         importer = run_sync(
             client,
@@ -308,6 +323,7 @@ class Command(BaseCommand):
             private_key,
             write=self.stdout.write,
             page_limit=options["limit"],
+            enforce_schema=enforce_schema,
             style=self.style,
         )
 

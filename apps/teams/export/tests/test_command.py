@@ -9,6 +9,7 @@ from apps.api.export.serializers import build_resource_serializer
 from apps.service_providers.models import LlmProvider
 from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import Importer
+from apps.teams.export.manifest import schema_checksum
 from apps.teams.export.translation import FKTranslationStore
 from apps.teams.management.commands import sync_team
 from apps.teams.management.commands.sync_team import (
@@ -60,8 +61,8 @@ class FakeClient:
         return b""
 
 
-def _manifest(entries):
-    return {"entries": entries}
+def _manifest(entries, checksum=None):
+    return {"schema_checksum": checksum if checksum is not None else schema_checksum(), "entries": entries}
 
 
 def _scenario(public_key):
@@ -145,6 +146,24 @@ def test_load_private_key_returns_none_when_unset(monkeypatch):
     assert _load_private_key(None) is None
 
 
+def test_schema_checksum_mismatch_aborts(tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+    with pytest.raises(CommandError, match="schema"):
+        run_sync(FakeClient(manifest, rows), store, keypair[1])
+
+
+def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    run_sync(FakeClient(manifest, rows), store, keypair[1], enforce_schema=False)
+
+    assert Team.objects.filter(slug="imported-team-z").exists()
+
+
 def test_aborts_when_secrets_present_but_no_private_key(tmp_path, keypair):
     """Without the private key the sealed secret fields would be imported as unreadable tokens, so
     the sync must refuse up front rather than silently corrupt provider configs / participant data."""
@@ -178,13 +197,12 @@ def test_files_confirmation_is_asked_once_and_remembered(tmp_path, keypair, monk
 def test_files_confirmation_is_not_remembered_when_preconditions_fail(tmp_path, keypair, monkeypatch):
     """A "yes" is only recorded once every other check passes, so an aborted run asks again."""
     manifest, rows = _scenario(keypair[0])
+    manifest["schema_checksum"] += "-mismatch"
     store = FKTranslationStore(tmp_path / "t.sqlite")
     monkeypatch.setattr("builtins.input", lambda *a, **k: "yes")
 
-    # No private key while the manifest exports sealed secrets -- a precondition that fails before the
-    # files prompt is reached.
-    with pytest.raises(CommandError, match="private key"):
-        check_sync_preconditions(FakeClient(manifest, rows), None, store=store)
+    with pytest.raises(CommandError, match="schema"):
+        check_sync_preconditions(FakeClient(manifest, rows), keypair[1], store=store)
 
     assert not store.has_flag(sync_team.FILES_CONFIRMED_FLAG)
 
@@ -443,6 +461,7 @@ def _force_delete_options(tmp_path, **overrides):
         "private_key_path": None,
         "state_dir": str(tmp_path),
         "limit": 100,
+        "skip_schema_check": False,
         "force_delete": True,
     }
     options.update(overrides)
