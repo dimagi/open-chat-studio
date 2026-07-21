@@ -155,6 +155,20 @@ class ChannelPlatform(models.TextChoices):
         return identifier
 
 
+class WidgetAuthLevel(models.IntegerChoices):
+    """Minimum authentication a chat widget channel requires from the client.
+
+    Only meaningful for EMBEDDED_WIDGET channels. New channels default to the
+    strictest level (SESSION_TOKEN); existing channels are migrated to the level
+    matching the widget version they last reported. See
+    docs/developer_guides/widget_versioning.md and issue #3858.
+    """
+
+    NONE = 0, "None (pre-0.5.1 legacy)"
+    EMBED_KEY = 1, "Embed key only (0.5.1 – 0.8.x)"
+    SESSION_TOKEN = 2, "Session token required (0.9.0+)"
+
+
 class ExperimentChannelObjectManager(AuditingManager):
     def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
         extra_data_filter = Q(extra_data__contains={key: value})
@@ -204,6 +218,17 @@ class ExperimentChannel(BaseTeamModel):
     # EXPERIMENT_CHANNEL_FIELDS auditing (written from the request path).
     widget_version = models.CharField(max_length=32, null=True, blank=True)  # noqa: DJ001
     widget_version_updated_at = models.DateTimeField(null=True, blank=True)
+    # Durable per-channel auth policy for embedded widgets. New channels default to the
+    # strictest level; the request path enforces it rather than inferring a mode from
+    # per-request heuristics. Only meaningful for EMBEDDED_WIDGET channels.
+    required_auth_level = models.PositiveSmallIntegerField(
+        choices=WidgetAuthLevel.choices,
+        default=WidgetAuthLevel.SESSION_TOKEN,
+        help_text=(
+            "Minimum authentication an embedded widget must provide. New widgets (0.9.0+) send a "
+            "session token; only downgrade this for a channel you know is running an older widget."
+        ),
+    )
 
     class Meta:
         db_table = "channels_experimentchannel"
@@ -233,6 +258,17 @@ class ExperimentChannel(BaseTeamModel):
         if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         return widget_versions.get_widget_update_status(self.widget_version)
+
+    @property
+    def widget_auth_level(self) -> "WidgetAuthLevel | None":
+        """The required auth level for embedded widget channels, or None for other platforms.
+
+        `required_auth_level` is only meaningful for EMBEDDED_WIDGET channels; every other
+        platform returns None so callers fall back to their non-widget behaviour.
+        """
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+            return None
+        return WidgetAuthLevel(self.required_auth_level)
 
     def record_widget_version(self, raw_version: str | None) -> None:
         """Persist the version reported by the widget (x-ocs-widget-version header).

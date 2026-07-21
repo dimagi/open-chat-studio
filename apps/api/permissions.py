@@ -13,7 +13,7 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModel
 from rest_framework_api_key.permissions import KeyParser
 
 from apps.api.session_tokens import session_token_expired, validate_session_token
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
@@ -117,6 +117,15 @@ class SessionAccessPermission(BasePermission):
         if isinstance(request.auth, ExperimentChannel):
             # widget-authed requests rely on the embed key + domain check
             return True
+
+        # Embedded widget channels carry a durable auth policy. At EMBED_KEY and above,
+        # a valid embed key is mandatory (handled by the branch above), so the public /
+        # allowlist fallback is not reachable without one. Only NONE-level widget
+        # channels keep the fully permissive legacy path.
+        channel = session.experiment_channel
+        level = channel.widget_auth_level if channel is not None else None
+        if level is not None and level != WidgetAuthLevel.NONE:
+            return False
 
         experiment = session.experiment
         if experiment.is_public:

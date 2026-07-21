@@ -3780,6 +3780,17 @@ components:
           type: string
           format: date-time
           nullable: true
+        required_auth_level:
+          allOf:
+          - $ref: '#/components/schemas/RequiredAuthLevelEnum'
+          description: |-
+            Minimum authentication an embedded widget must provide. New widgets (0.9.0+) send a session token; only downgrade this for a channel you know is running an older widget.
+
+            * `0` - None (pre-0.5.1 legacy)
+            * `1` - Embed key only (0.5.1 – 0.8.x)
+            * `2` - Session token required (0.9.0+)
+          minimum: 0
+          maximum: 32767
         experiment:
           type: integer
           nullable: true
@@ -4936,6 +4947,16 @@ components:
         * `evaluation_dataset` - Evaluation Dataset
         * `data_export` - Data Export
         * `message_media` - Message Media
+    RequiredAuthLevelEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      type: integer
+      description: |-
+        * `0` - None (pre-0.5.1 legacy)
+        * `1` - Embed key only (0.5.1 – 0.8.x)
+        * `2` - Session token required (0.9.0+)
     ScheduledMessageDetail:
       type: object
       properties:

@@ -12,6 +12,29 @@ version policy lives in `apps/channels/widget_versions.py`.
 - The channel button and widget params dialog show upgrade/deprecation badges
   based on `get_widget_update_status()`.
 
+## Per-channel authentication policy
+
+Each embedded-widget channel stores a durable `ExperimentChannel.required_auth_level`
+(`WidgetAuthLevel`) that fixes the minimum authentication the server demands, rather
+than inferring it from per-request heuristics:
+
+| Level | Value | What the server enforces |
+|---|---|---|
+| `NONE` | 0 | Legacy path: embed key optional, `is_public`/allowlist fallback permitted (pre-0.5.1 widgets). |
+| `EMBED_KEY` | 1 | A valid `X-Embed-Key` + allowed-domain check; no session token. The `is_public` fallback is blocked. |
+| `SESSION_TOKEN` | 2 | A valid `X-Embed-Key` **and** `X-Session-Token`. No legacy path reachable. |
+
+- New channels default to `SESSION_TOKEN` (the strictest level).
+- `chat_start_session` consults the resolved channel's level (see
+  `_issue_or_opt_out_session_token`): `SESSION_TOKEN` always issues and enforces a
+  token; `EMBED_KEY`/`NONE` opt the session out of token enforcement.
+- `SessionAccessPermission` enforces the level on every subsequent request.
+- Migration `0029_experimentchannel_required_auth_level` grandfathers existing
+  channels from their last-reported `widget_version`: `unknown`/`< 0.5.1` → `NONE`,
+  `0.5.1–0.8.x` → `EMBED_KEY`, `>= 0.9.0` and never-connected (`null`) → `SESSION_TOKEN`.
+- Teams can downgrade a specific channel in the channel edit form if they know it is
+  running an older widget; the field is also visible in the Django admin.
+
 ## Releasing a new widget version
 
 1. Publish the new version to npm (see `components/chat_widget`).

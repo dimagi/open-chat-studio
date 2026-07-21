@@ -13,7 +13,7 @@ from telebot import TeleBot, apihelper
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import (
     ALL_DOMAINS,
     get_allowed_email_domains,
@@ -631,9 +631,24 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         help_text="Configuration parameters for the widget",
     )
 
+    required_auth_level = forms.TypedChoiceField(
+        label="Required authentication level",
+        choices=WidgetAuthLevel.choices,
+        coerce=int,
+        required=False,
+        empty_value=WidgetAuthLevel.SESSION_TOKEN,
+        initial=WidgetAuthLevel.SESSION_TOKEN,
+        help_text=(
+            "The minimum authentication the embedded widget must send. New widgets (0.9.0+) send a "
+            "session token — leave this on the strictest level unless you know this channel is running "
+            "an older widget that cannot."
+        ),
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.channel:
+            self.initial["required_auth_level"] = self.channel.required_auth_level
             allowed_domains = self.channel.extra_data.get("allowed_domains", [])
             self.initial["allowed_domains"] = [domain for domain in allowed_domains if domain != ALL_DOMAINS]
             if not self.is_bound:
@@ -661,6 +676,10 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         """Generate or preserve the widget token"""
         cleaned_data = super().clean()
 
+        # required_auth_level is a model field, not widget config; pop it out of the data
+        # that gets stored in extra_data and apply it directly to the channel in post_save.
+        self._required_auth_level = cleaned_data.pop("required_auth_level", WidgetAuthLevel.SESSION_TOKEN)
+
         allow_all_domains = cleaned_data.pop("allow_all_domains", False)
         if not allow_all_domains and not cleaned_data.get("allowed_domains"):
             raise ValidationError(
@@ -680,6 +699,10 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         return cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
+        level = getattr(self, "_required_auth_level", WidgetAuthLevel.SESSION_TOKEN)
+        if channel.required_auth_level != level:
+            channel.required_auth_level = level
+            channel.save(update_fields=["required_auth_level"])
         self.success_message = "Channel saved successfully"
 
 
