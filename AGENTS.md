@@ -33,7 +33,7 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Frontend build: `webpack.config.js`
 * Package management: `pyproject.toml`, `package.json`
 * Environment template: `.env.example`
-* Django app root: `apps/`
+* Django app root: `apps/` (see `docs/architecture/package-map.md` for what each app does and how dependencies flow)
 * Django template root: `templates/`
 * Shared FactoryBoy factories for test data generation: `apps/utils/factories/`
 * Shared pytest fixtures: `apps/conftest.py`
@@ -53,12 +53,28 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Django migrations: `uv run python manage.py migrate`
 * Create migration: `uv run python manage.py makemigrations <app_name>`
 
+## Verifying changes
+
+Tests and typecheck are necessary but not sufficient. For any change with a runtime surface, exercise it end-to-end and observe the behaviour, not just green tests:
+
+* Run the app with `uv run inv runserver` and drive the affected flow (the `/run` and `/verify` skills automate this if available).
+* Chat/pipeline changes emit `Trace`/`Span` records (`apps/trace/models.py`) — inspect them to confirm a pipeline actually took the path you expect, rather than inferring from logs alone.
+* For UI/UX regressions, the `dogfood` skill drives the browser and captures reproduction screenshots.
+* When fixing a bug, reproduce it first (failing test or observed trace), then confirm the fix flips that same signal.
+
 ## Do
 * Always lint, test, and typecheck updated files. Use project-wide build sparingly
 * When adding new features: write or update unit tests first, then code to green
 * For regressions: add a failing test that reproduces the bug, then fix to green
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
+
+## Ask first
+Confirm with a human before these — they are hard to reverse or change a shared contract:
+* Running `makemigrations`/`migrate` against anything but a local dev DB, or writing a data migration that mutates existing rows
+* Deleting or removing a feature flag, or removing a public API field/endpoint
+* Editing an accepted ADR (reverse a decision with a new superseding ADR instead — see `docs/adr/`)
+* Adding a new LLM/messaging/service provider integration or a new third-party dependency
 
 ## Don't
 * Do not local imports for any reason other than to avoid circular imports or as a means to reduce startup time (reserved for specific imports)
