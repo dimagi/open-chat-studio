@@ -12,6 +12,7 @@ from apps.evaluations.models import (
     EvaluationMode,
     EvaluationResult,
     EvaluationRun,
+    EvaluationRunStatus,
 )
 from apps.evaluations.tagging import remove_applied_tags_for_runs
 from apps.utils.factories.evaluations import (
@@ -189,7 +190,7 @@ class TestClearEvaluationRunsView:
 
         dataset = EvaluationDatasetFactory.create(team=team, messages=[message])
         config = EvaluationConfigFactory.create(team=team, dataset=dataset, evaluators=[evaluator])
-        run = EvaluationRunFactory.create(team=team, config=config)
+        run = EvaluationRunFactory.create(team=team, config=config, status=EvaluationRunStatus.COMPLETED)
         result = EvaluationResultFactory.create(team=team, evaluator=evaluator, message=message, run=run, output={})
         AppliedTagFactory.create(team=team, evaluation_result=result, rule=rule, tag=tag)
         return config, chat_message, tag
@@ -286,3 +287,30 @@ class TestClearEvaluationRunsView:
 
         clear_url = reverse("evaluations:clear_evaluation_runs", args=[team_with_users.slug, config.id])
         assert clear_url not in response.content.decode()
+
+    @pytest.mark.django_db()
+    def test_clear_all_blocked_when_run_in_flight(self, client, team_with_users):
+        user = team_with_users.members.first()
+        config = EvaluationConfigFactory.create(team=team_with_users)
+        EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.PROCESSING)
+
+        client.force_login(user)
+        url = reverse("evaluations:clear_evaluation_runs", args=[team_with_users.slug, config.id])
+        response = client.post(url)
+
+        assert response.status_code == 409
+        assert EvaluationRun.objects.filter(config=config).exists()
+
+    @pytest.mark.django_db()
+    def test_clear_all_blocked_leaves_applied_tags_untouched(self, client, team_with_users):
+        """A blocked clear must not run tag removal (guard precedes the atomic block)."""
+        user = team_with_users.members.first()
+        config, chat_message, tag = self._setup_config_with_applied_tag(team_with_users)
+        EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.PROCESSING)
+
+        client.force_login(user)
+        url = reverse("evaluations:clear_evaluation_runs", args=[team_with_users.slug, config.id])
+        response = client.post(url)
+
+        assert response.status_code == 409
+        assert CustomTaggedItem.objects.filter(tag=tag).exists()
