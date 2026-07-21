@@ -189,6 +189,31 @@ export class OcsChat {
   @Prop() allowAttachments: boolean = false;
 
   /**
+   * Render the widget in a read-only state. When `true`, the chat history stays
+   * visible and scrollable and the message input and send controls remain
+   * visible but disabled, and message sending is blocked at the source. Useful
+   * for maintenance windows, expired sessions, scheduled downtime or
+   * post-session review.
+   */
+  @Prop() disabled: boolean = false;
+
+  /**
+   * Optional banner message shown whenever it is set. The banner is always
+   * visible (not dismissable) and does not block normal widget usage.
+   */
+  @Prop() bannerMessage?: string;
+
+  /**
+   * Visual style of the banner. One of `default`, `info`, `warning` or `error`.
+   */
+  @Prop() bannerStyle: 'default' | 'info' | 'warning' | 'error' = 'default';
+
+  /**
+   * Where the banner is positioned relative to the chat area: `top` or `bottom`.
+   */
+  @Prop() bannerPosition: 'top' | 'bottom' = 'top';
+
+  /**
    * The text to display while the assistant is typing/preparing a response.
    */
   @Prop() typingIndicatorText?: string;
@@ -640,6 +665,9 @@ export class OcsChat {
   }
 
   private async sendMessage(message: string): Promise<void> {
+    // Block sending when the widget is disabled so direct calls cannot bypass
+    // the hidden composer.
+    if (this.disabled) return;
     if (!message.trim() || this.sessionEnded) return;
     const epoch = this.sessionEpoch;
 
@@ -1768,6 +1796,31 @@ export class OcsChat {
     this.fullscreenPosition = { x: 0 };
   }
 
+  /**
+   * The widget is read-only: chat history is visible and the composer is shown
+   * but disabled, and sending is blocked.
+   */
+  private isReadOnly(): boolean {
+    return this.disabled;
+  }
+
+  private hasBanner(): boolean {
+    return !!(this.bannerMessage && this.bannerMessage.trim());
+  }
+
+  private renderBanner(position: 'top' | 'bottom') {
+    if (!this.hasBanner() || this.bannerPosition !== position) {
+      return null;
+    }
+    const style = ['default', 'info', 'warning', 'error'].includes(this.bannerStyle) ? this.bannerStyle : 'default';
+    const role = style === 'error' || style === 'warning' ? 'alert' : 'status';
+    return (
+      <div class={`chat-banner chat-banner-${style} chat-banner-${position}`} role={role}>
+        {this.bannerMessage}
+      </div>
+    );
+  }
+
   render() {
     // Only show error state for critical errors that prevent the widget from functioning
     if (this.error && !this.activeSessionId) {
@@ -1849,6 +1902,9 @@ export class OcsChat {
 
             {/* Chat Content */}
             <div class="chat-content">
+              {/* Banner (top) */}
+              {this.renderBanner('top')}
+
               {/* Loading State */}
               {this.isLoading && !this.activeSessionId && (
                 <div class="loading-container">
@@ -1912,7 +1968,7 @@ export class OcsChat {
               }
 
               {/* Starter Questions */}
-              {this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
+              {!this.isReadOnly() && this.messages.length === 0 && this.getStarterQuestions().length > 0 && (
                 <div class="starter-questions">
                   {this.getStarterQuestions().map((question, index) => (
                     <div key={`starter-${index}`} class="starter-question-row">
@@ -1952,7 +2008,10 @@ export class OcsChat {
                 </div>
               )}
 
-              {/* Input Area */}
+              {/* Banner (bottom) — sits directly above the input area */}
+              {this.renderBanner('bottom')}
+
+              {/* Input Area — kept visible but disabled when the widget is read-only */}
               <div class="input-area">
                 <div class="input-container">
                   <textarea
@@ -1963,7 +2022,7 @@ export class OcsChat {
                     value={this.messageInput}
                     onInput={e => this.handleInputChange(e)}
                     onKeyPress={e => this.handleKeyPress(e)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+                    disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                   ></textarea>
                   {/* File Upload Button */}
                   {this.allowAttachments && (
@@ -1986,7 +2045,7 @@ export class OcsChat {
                     <button
                       class="file-attachment-button"
                       onClick={() => this.fileInputRef?.click()}
-                      disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
+                      disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded}
                       title={this.translationManager.get('attach.add')}
                       aria-label={this.translationManager.get('attach.add')}
                     >
@@ -1994,9 +2053,9 @@ export class OcsChat {
                     </button>
                   )}
                   <button
-                    class={`send-button ${!this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
+                    class={`send-button ${!this.isReadOnly() && !this.isTyping && !this.isLoading && !this.sessionEnded && !!this.messageInput.trim() ? 'send-button-enabled' : 'send-button-disabled'}`}
                     onClick={() => this.sendMessage(this.messageInput)}
-                    disabled={this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
+                    disabled={this.isReadOnly() || this.isTyping || this.isUploadingFiles || this.isLoading || this.sessionEnded || !this.messageInput.trim()}
                   >
                     {this.isUploadingFiles ? `${this.translationManager.get('status.uploading')}...` : this.translationManager.get('composer.send')}
                   </button>

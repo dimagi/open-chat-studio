@@ -207,6 +207,36 @@
   </div>
 </div>
 
+<div class="widget-demo light">
+  <p>Disabled (read-only) kiosk with an error banner</p>
+  <div style="width: 100%; height: 400px; position: relative; border: 2px dashed #999;">
+    <open-chat-studio-widget
+      api-base-url="http://localhost:8000"
+      chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+      mode="kiosk"
+      disabled="true"
+      banner-message="This chat is currently unavailable while we perform scheduled maintenance."
+      banner-style="error"
+      banner-position="top"
+      welcome-messages="['Hi there! While the widget is disabled you can still read the history, and the composer stays visible but disabled so you cannot send new messages.']"
+    ></open-chat-studio-widget>
+  </div>
+</div>
+
+<div class="widget-demo light">
+  <p>Info banner at the bottom (widget still usable)</p>
+  <div style="width: 100%; height: 400px; position: relative; border: 2px dashed #999;">
+    <open-chat-studio-widget
+      api-base-url="http://localhost:8000"
+      chatbot-id="183312ac-cbe5-4c91-9e7b-d9df96b088e4"
+      mode="kiosk"
+      banner-message="By chatting you agree to our terms of service."
+      banner-style="info"
+      banner-position="bottom"
+    ></open-chat-studio-widget>
+  </div>
+</div>
+
 <script>
     function updatePageContext() {
       const contextInput = document.getElementById('context-input');
