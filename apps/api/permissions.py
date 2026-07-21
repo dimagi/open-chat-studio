@@ -13,7 +13,7 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModel
 from rest_framework_api_key.permissions import KeyParser
 
 from apps.api.session_tokens import session_token_expired, validate_session_token
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
@@ -114,9 +114,28 @@ class SessionAccessPermission(BasePermission):
         return True
 
     def _has_legacy_access(self, request, session) -> bool:
+        # Embedded widget channels carry a durable auth policy. The level gates every
+        # branch below so a valid embed key can never stand in for a stronger level.
+        channel = session.experiment_channel
+        level = channel.widget_auth_level if channel is not None else None
+
         if isinstance(request.auth, ExperimentChannel):
-            # widget-authed requests rely on the embed key + domain check
-            return True
+            # The embed key must authenticate *this* session's channel. Auth only proves
+            # some channel's key was valid, and WidgetDomainPermission checked that
+            # channel's own allowed_domains — so a valid key for a different channel (of
+            # the same experiment) must not grant cross-channel access to this session.
+            if request.auth != channel:
+                return False
+            # A valid embed key + domain check satisfies EMBED_KEY and NONE channels. It
+            # never satisfies a SESSION_TOKEN channel — that always requires the token,
+            # even if the session was (mis)configured with session_token_required=False.
+            return level != WidgetAuthLevel.SESSION_TOKEN
+
+        # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the
+        # public / allowlist fallback is only reachable for NONE-level widget channels
+        # (and non-widget sessions, where level is None).
+        if level is not None and level != WidgetAuthLevel.NONE:
+            return False
 
         experiment = session.experiment
         if experiment.is_public:
