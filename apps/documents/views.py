@@ -46,7 +46,7 @@ from apps.files.models import File, FileChunkEmbedding, FilePurpose
 from apps.generics import actions
 from apps.generics.chips import Chip
 from apps.generics.help import render_help_with_link
-from apps.generics.referenced_objects import render_referenced_objects_modal
+from apps.generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_embedding_provider_choices
 from apps.teams.decorators import login_and_team_required
@@ -635,23 +635,14 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
                 )
                 for node in collection.get_related_nodes_queryset()
             ]
-            experiment_chips = []
-            for version in collection.versions.all():
-                if experiments := version.get_related_experiments_queryset():
-                    experiment_chips.extend(
-                        [
-                            Chip(
-                                label=f"{experiment.name} {experiment.get_version_name()} [published]",
-                                url=experiment.get_absolute_url(),
-                            )
-                            for experiment in experiments
-                        ]
-                    )
-
+            all_experiments = list(collection.get_related_experiments_queryset())
+            experiment_context = get_referenced_experiment_context(all_experiments, team_slug)
             return render_referenced_objects_modal(
                 "collection",
+                request=request,
                 pipeline_nodes=pipeline_node_chips,
-                experiments_with_pipeline_nodes=experiment_chips,
+                experiments_with_pipeline_nodes=experiment_context.manual,
+                **experiment_context.bulk_archive_kwargs(),
             )
 
 

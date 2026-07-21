@@ -24,6 +24,7 @@ from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
+from apps.pipelines.models import Pipeline
 from apps.service_providers.forms import LlmProviderModelForm, PricingOverrideForm
 from apps.service_providers.models import (
     EmbeddingProviderModel,
@@ -31,10 +32,10 @@ from apps.service_providers.models import (
     VoiceProvider,
     VoiceProviderType,
 )
-from apps.utils.deletion import get_related_objects
+from apps.utils.deletion import get_cascade_owned_models, get_related_objects, is_blocking_object
 
 from ..generics.chips import Chip
-from ..generics.referenced_objects import render_referenced_objects_modal
+from ..generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required
 from ..teams.mixins import LoginAndTeamRequiredMixin
 from .usages import get_provider_usages
@@ -105,10 +106,6 @@ class ServiceProviderTableView(
         return self.provider_type.table
 
 
-def matches_blocking_deletion_condition(obj):
-    return (getattr(obj, "working_version_id", None) is None) or (getattr(obj, "is_default_version", False) is True)
-
-
 @require_http_methods(["DELETE"])
 @login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
@@ -118,28 +115,60 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
     service_config = get_object_or_404(provider.model, team=request.team, pk=pk)
     related_objects = get_related_objects(service_config)
 
-    if related_objects:
-        filtered_objects = [obj for obj in related_objects if matches_blocking_deletion_condition(obj)]
-        related_experiments = [
-            Chip(
-                label=(
-                    f"{experiment.name} [{experiment.get_version_name()}]"
-                    if experiment.is_working_version
-                    else f"{experiment.name} {experiment.get_version_name()} [published]"
-                ),
-                url=experiment.get_absolute_url(),
-            )
-            for experiment in [obj for obj in filtered_objects if isinstance(obj, Experiment)]
+    blocking_objects = [obj for obj in related_objects if is_blocking_object(obj)]
+    if blocking_objects:
+        experiment_objects = [obj for obj in blocking_objects if isinstance(obj, Experiment)]
+        assistant_objects = [obj for obj in blocking_objects if isinstance(obj, OpenAiAssistant)]
+
+        # Pipeline references come from node params (e.g. an LLM node's llm_provider_id), which
+        # get_related_objects surfaces as the nodes' pipelines. Resolve them to the chatbots that
+        # use them; working pipelines without a live chatbot still block on their own.
+        pipeline_objects = {obj.pk: obj for obj in blocking_objects if isinstance(obj, Pipeline)}
+        standalone_pipelines = []
+        if pipeline_objects:
+            seen_experiment_ids = {e.pk for e in experiment_objects}
+            pipeline_experiments = Experiment.objects.filter(
+                pipeline__in=pipeline_objects.values(), is_archived=False
+            ).exclude(pk__in=seen_experiment_ids)
+            experiment_objects.extend(pipeline_experiments)
+            covered_pipeline_ids = {e.pipeline_id for e in experiment_objects}
+            standalone_pipelines = [
+                p for p in pipeline_objects.values() if p.pk not in covered_pipeline_ids and p.is_working_version
+            ]
+
+        # Pipelines are fully accounted for above (resolved to experiments, kept as standalone
+        # working pipelines, or intentionally dropped when a dormant version). Any *other* live
+        # reference we can't render (e.g. a channel's messaging provider, a collection's auth
+        # provider) must still block deletion rather than falling through to a silent delete
+        # (SET_NULL) or a ProtectedError 500 (PROTECT). CASCADE-owned rows (e.g. a voice
+        # provider's synthetic voices) are excluded: they're deleted with the provider, so they
+        # signal ownership, not external use.
+        handled_types = (Experiment, OpenAiAssistant, Pipeline)
+        cascade_owned_models = get_cascade_owned_models(service_config)
+        other_blocking = [
+            obj
+            for obj in blocking_objects
+            if not isinstance(obj, handled_types) and type(obj) not in cascade_owned_models
         ]
+
+        experiment_context = get_referenced_experiment_context(experiment_objects, team_slug)
         related_assistants = [
-            Chip(label=assistant.name, url=assistant.get_absolute_url())
-            for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
+            Chip(label=assistant.name, url=assistant.get_absolute_url()) for assistant in assistant_objects
         ]
-        if related_experiments or related_assistants:
+        pipeline_chips = [
+            Chip(label=pipeline.name, url=pipeline.get_absolute_url()) for pipeline in standalone_pipelines
+        ]
+        has_blocking_references = bool(
+            experiment_objects or assistant_objects or standalone_pipelines or other_blocking
+        )
+        if has_blocking_references:
             return render_referenced_objects_modal(
                 "service provider",
-                experiments=related_experiments,
+                request=request,
+                experiments=experiment_context.manual,
+                pipeline_nodes=pipeline_chips,
                 assistants=related_assistants,
+                **experiment_context.bulk_archive_kwargs(),
             )
     service_config.delete()
     return HttpResponse()

@@ -23,7 +23,7 @@ from apps.web.waf import WafRule, waf_allow
 
 from ..files.models import File
 from ..generics.chips import Chip
-from ..generics.referenced_objects import render_referenced_objects_modal
+from ..generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from ..teams.decorators import login_and_team_required, team_required
 from .forms import ImportAssistantForm, OpenAiAssistantForm, ToolResourceFileFormsets
 from .models import OpenAiAssistant, ToolResources
@@ -228,17 +228,16 @@ class LocalDeleteOpenAiAssistant(LoginAndTeamRequiredMixin, PermissionRequiredMi
                     "pipeline"
                 )
             ]
-            experiments_with_pipeline_nodes = [
-                Chip(
-                    label=f"{experiment.name} {experiment.get_version_name()} [published]",
-                    url=experiment.get_absolute_url(),
-                )
-                for experiment in assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
-            ]
+            all_experiments = list(
+                assistant.get_related_experiments_with_pipeline_queryset(assistant_ids=version_query)
+            )
+            experiment_context = get_referenced_experiment_context(all_experiments, team_slug)
             return render_referenced_objects_modal(
                 "assistant",
+                request=request,
                 pipeline_nodes=pipeline_nodes,
-                experiments_with_pipeline_nodes=experiments_with_pipeline_nodes,
+                experiments_with_pipeline_nodes=experiment_context.manual,
+                **experiment_context.bulk_archive_kwargs(),
             )
 
 

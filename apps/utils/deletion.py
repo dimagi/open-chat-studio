@@ -239,6 +239,36 @@ def _get_m2m_related_models(model):
     return m2m_models
 
 
+def is_blocking_object(obj) -> bool:
+    """Returns True if an object blocks deletion (i.e. it is not archived)."""
+    return not getattr(obj, "is_archived", False)
+
+
+def get_cascade_owned_models(instance) -> set[type]:
+    """Model classes that are CASCADE-deleted together with ``instance``.
+
+    Objects of these types are cleaned up automatically when ``instance`` is deleted
+    (e.g. a ``VoiceProvider``'s ``SyntheticVoice`` rows), so they represent ownership
+    rather than external use and should never block the delete. References that instead
+    survive the delete (SET_NULL, PROTECT, ...) do block, since deleting would silently
+    orphan them or raise ``ProtectedError``.
+    """
+    return {
+        rel.related_model
+        for rel in get_candidate_relations_to_delete(instance._meta)
+        if rel.related_model is not None and rel.field.remote_field.on_delete is models.CASCADE
+    }
+
+
+def is_bulk_archiveable(obj) -> bool:
+    """Returns True if an object can be bulk-archived (non-working, non-published, non-archived version)."""
+    return (
+        not getattr(obj, "is_archived", False)
+        and getattr(obj, "working_version_id", None) is not None
+        and not getattr(obj, "is_default_version", False)
+    )
+
+
 def get_related_objects(instance, pipeline_param_key: str | None = None) -> list:
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 

@@ -40,7 +40,7 @@ from apps.web.waf import WafRule, waf_allow
 
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
-from ..generics.referenced_objects import render_referenced_objects_modal
+from ..generics.referenced_objects import get_referenced_experiment_context, render_referenced_objects_modal
 from ..utils.prompt import PromptVars
 
 
@@ -195,10 +195,8 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
             messages.success(request, "Pipeline Archived")
             return HttpResponse()
         else:
-            experiments = [
-                Chip(label=experiment.name, url=experiment.get_absolute_url())
-                for experiment in pipeline.get_related_experiments_queryset()
-            ]
+            all_experiments = list(pipeline.get_related_experiments_queryset())
+            experiment_context = get_referenced_experiment_context(all_experiments, team_slug)
 
             query = pipeline.get_static_trigger_experiment_ids()
             static_trigger_experiments = [
@@ -208,8 +206,10 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 
             return render_referenced_objects_modal(
                 "pipeline",
-                experiments=experiments,
+                request=request,
+                experiments=experiment_context.manual,
                 static_trigger_experiments=static_trigger_experiments,
+                **experiment_context.bulk_archive_kwargs(),
             )
 
 

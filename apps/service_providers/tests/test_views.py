@@ -12,6 +12,8 @@ from apps.service_providers.models import (
     VoiceProviderType,
 )
 from apps.service_providers.utils import ServiceProvider
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
@@ -129,33 +131,92 @@ def test_sync_voices_endpoint(team_with_users, authed_client):
 
 
 @pytest.mark.django_db()
-def test_delete_llm_provider_referenced_by_pipeline_nullifies_node_fk(team_with_users, authed_client):
-    """Deleting an LLM provider referenced by a pipeline node succeeds (SET_NULL): the node's
-    llm_provider FK is nulled, while params (authoritative) is left untouched.
+class TestDeleteLlmProviderPipelineReferences:
+    """LLM providers are referenced from pipeline node params, not experiment FKs.
+    Deletion must be blocked while a live pipeline or chatbot version still uses the provider."""
 
-    In practice this only happens for an archived pipeline: the delete guards block removing a
-    provider that a live (working) node still references, so the FK is only nulled once the
-    pipeline holding the node has been archived and the provider is then deleted.
-    """
-    provider = LlmProviderFactory(team=team_with_users)
-    node = NodeFactory.create(
-        type="LLMResponseWithPrompt",
-        params={"llm_provider_id": provider.id},
-        llm_provider=provider,
-    )
-
-    response = authed_client.delete(
-        reverse(
+    def _delete_url(self, team, provider):
+        return reverse(
             "service_providers:delete",
-            kwargs={"team_slug": team_with_users.slug, "provider_type": ServiceProvider.llm.slug, "pk": provider.pk},
+            kwargs={"team_slug": team.slug, "provider_type": ServiceProvider.llm.slug, "pk": provider.pk},
         )
-    )
 
-    assert response.status_code == 200
-    assert not LlmProvider.objects.filter(pk=provider.pk).exists()
-    node.refresh_from_db()
-    assert node.llm_provider_id is None
-    assert node.params["llm_provider_id"] == provider.id  # params unchanged (authoritative)
+    def _make_node(self, provider, **kwargs):
+        return NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"llm_provider_id": provider.id},
+            llm_provider=provider,
+            **kwargs,
+        )
+
+    def test_blocked_by_working_pipeline_without_experiment(self, team_with_users, authed_client):
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert node.pipeline.name in response.content.decode()
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_blocked_by_working_chatbot(self, team_with_users, authed_client):
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert experiment.name in response.content.decode()
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_blocked_by_published_version_only(self, team_with_users, authed_client):
+        """Blocked even when only the published version's pipeline references the provider."""
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+        experiment.create_new_version()  # v1, auto-published
+        node.set_params({})  # working pipeline no longer references the provider
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_non_published_version_is_bulk_archiveable(self, team_with_users, authed_client):
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+        experiment.create_new_version()  # v1, auto-published
+        experiment.create_new_version()  # v2, non-published
+        node.set_params({})
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert "Archive All Non-published Versions" in response.content.decode()
+        assert LlmProvider.objects.filter(pk=provider.pk).exists()
+
+    def test_allowed_when_only_archived_references(self, team_with_users, authed_client):
+        """Deleting a provider referenced only by archived pipelines succeeds (SET_NULL):
+        the node's FK is nulled while params (authoritative) is left untouched."""
+        provider = LlmProviderFactory(team=team_with_users)
+        node = self._make_node(provider)
+        experiment = ExperimentFactory.create(team=team_with_users, pipeline=node.pipeline)
+        experiment.create_new_version()
+        experiment.archive()
+        node.pipeline.archive()
+
+        response = authed_client.delete(self._delete_url(team_with_users, provider))
+
+        assert response.status_code == 200
+        assert not LlmProvider.objects.filter(pk=provider.pk).exists()
+        node.refresh_from_db()
+        assert node.llm_provider_id is None
+        assert node.params["llm_provider_id"] == provider.id  # params unchanged (authoritative)
 
 
 @pytest.mark.django_db()
@@ -173,3 +234,208 @@ def test_create_view_404_for_filtered_subtype(team_with_users, authed_client, se
         )
     )
     assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+class TestDeleteServiceProviderReferenceChecks:
+    """Tests that deletion is blocked when any non-archived version references the service provider."""
+
+    @pytest.fixture()
+    def voice_provider(self, team_with_users):
+        return VoiceProviderFactory.create(team=team_with_users)
+
+    def _delete_url(self, team_with_users, voice_provider):
+        return reverse(
+            "service_providers:delete",
+            kwargs={
+                "team_slug": team_with_users.slug,
+                "provider_type": "voice",
+                "pk": voice_provider.pk,
+            },
+        )
+
+    def test_delete_blocked_by_working_version(self, team_with_users, authed_client, voice_provider):
+        """Deletion is blocked when the working (unreleased) experiment references the provider."""
+        ExperimentFactory.create(team=team_with_users, voice_provider=voice_provider)
+        response = authed_client.delete(self._delete_url(team_with_users, voice_provider))
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert "referenced-objects-modal" in response.content.decode()
+        assert VoiceProvider.objects.filter(pk=voice_provider.pk).exists()
+
+    def test_delete_blocked_by_non_published_version(self, team_with_users, authed_client, voice_provider):
+        """Deletion is blocked when a non-published (versioned) experiment references the provider.
+
+        The first create_new_version() call auto-sets is_default_version=True (version_number=1),
+        so we create a second version which is non-published.
+        """
+        working_exp = ExperimentFactory.create(team=team_with_users)
+        working_exp.create_new_version()  # v1 auto-becomes published
+        # v2 is non-published (version_number=2, is_default_version=False)
+        non_published = working_exp.create_new_version()
+        non_published.voice_provider = voice_provider
+        non_published.save()
+
+        response = authed_client.delete(self._delete_url(team_with_users, voice_provider))
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert VoiceProvider.objects.filter(pk=voice_provider.pk).exists()
+
+    def test_delete_blocked_by_published_version(self, team_with_users, authed_client, voice_provider):
+        """Deletion is blocked when the published experiment version references the provider.
+
+        The first create_new_version() call auto-sets is_default_version=True.
+        """
+        working_exp = ExperimentFactory.create(team=team_with_users)
+        published = working_exp.create_new_version()  # auto is_default_version=True
+        published.voice_provider = voice_provider
+        published.save()
+
+        response = authed_client.delete(self._delete_url(team_with_users, voice_provider))
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert VoiceProvider.objects.filter(pk=voice_provider.pk).exists()
+
+    def test_delete_allowed_when_only_archived_version_references(self, team_with_users, authed_client, voice_provider):
+        """Deletion is allowed when only archived versions reference the provider."""
+        working_exp = ExperimentFactory.create(team=team_with_users)
+        working_exp.create_new_version()  # v1 auto-becomes published; we won't archive it
+        non_published = working_exp.create_new_version()  # v2
+        non_published.voice_provider = voice_provider
+        non_published.is_archived = True
+        non_published.save()
+
+        response = authed_client.delete(self._delete_url(team_with_users, voice_provider))
+        assert response.status_code == 200
+        assert "HX-Retarget" not in response
+        assert not VoiceProvider.objects.filter(pk=voice_provider.pk).exists()
+
+    def test_bulk_archiveable_experiments_listed_in_response(self, team_with_users, authed_client, voice_provider):
+        """Non-published versions appear in the bulk-archiveable section of the modal response."""
+        working_exp = ExperimentFactory.create(team=team_with_users)
+        working_exp.create_new_version()  # v1 auto-becomes published
+        non_published = working_exp.create_new_version()  # v2 = non-published
+        non_published.voice_provider = voice_provider
+        non_published.save()
+
+        response = authed_client.delete(self._delete_url(team_with_users, voice_provider))
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        content = response.content.decode()
+        assert "Non-published versions" in content
+        assert "Archive All Non-published Versions" in content
+
+    def test_delete_blocked_by_unmodelled_blocking_reference(self, team_with_users, authed_client):
+        """Deletion is blocked by a live reference the modal can't render (here, a channel).
+
+        The delete modal only knows how to display experiments, assistants and pipelines, but any
+        non-archived related object still blocks deletion. Without the catch-all guard the provider
+        would be silently deleted (channel FK is SET_NULL) even though a live channel uses it.
+        """
+        messaging_provider = MessagingProviderFactory.create(team=team_with_users)
+        ExperimentChannelFactory.create(team=team_with_users, messaging_provider=messaging_provider)
+
+        url = reverse(
+            "service_providers:delete",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "messaging", "pk": messaging_provider.pk},
+        )
+        response = authed_client.delete(url)
+        assert response.status_code == 200
+        assert response["HX-Retarget"] == "body"
+        assert MessagingProvider.objects.filter(pk=messaging_provider.pk).exists()
+
+    def test_delete_allowed_with_only_cascade_owned_references(self, team_with_users, authed_client, voice_provider):
+        """A provider's CASCADE-owned rows (its synthetic voices) do not block deletion.
+
+        SyntheticVoice.voice_provider is CASCADE, so the voices are deleted with the provider;
+        they signal ownership, not external use, and must not trip the catch-all guard.
+        """
+        SyntheticVoiceFactory.create(voice_provider=voice_provider)
+        response = authed_client.delete(self._delete_url(team_with_users, voice_provider))
+        assert response.status_code == 200
+        assert "HX-Retarget" not in response
+        assert not VoiceProvider.objects.filter(pk=voice_provider.pk).exists()
+
+
+@pytest.mark.django_db()
+class TestBulkArchiveExperimentVersions:
+    """Tests for the bulk archive endpoint."""
+
+    def test_bulk_archive_non_published_versions(self, team_with_users, authed_client):
+        """Non-published, non-working versions are archived.
+
+        v1 auto-becomes published (is_default_version=True); v2 and v3 are non-published.
+        """
+        working_exp = ExperimentFactory.create(team=team_with_users)
+        working_exp.create_new_version()  # v1 auto-becomes published; not passed to endpoint
+        v2 = working_exp.create_new_version()  # non-published
+        v3 = working_exp.create_new_version()  # non-published
+
+        url = reverse("experiments:bulk_archive_versions", args=[team_with_users.slug])
+        response = authed_client.post(url, data={"version_ids": [v2.id, v3.id]})
+
+        assert response.status_code == 200
+        v2.refresh_from_db()
+        v3.refresh_from_db()
+        assert v2.is_archived
+        assert v3.is_archived
+        # Working version must not be archived
+        working_exp.refresh_from_db()
+        assert not working_exp.is_archived
+
+    def test_bulk_archive_ignores_published_version(self, team_with_users, authed_client):
+        """Published (default) versions are not archived via this endpoint.
+
+        The first create_new_version() call auto-sets is_default_version=True.
+        """
+        working_exp = ExperimentFactory.create(team=team_with_users)
+        published = working_exp.create_new_version()  # auto is_default_version=True
+
+        url = reverse("experiments:bulk_archive_versions", args=[team_with_users.slug])
+        response = authed_client.post(url, data={"version_ids": [published.id]})
+
+        assert response.status_code == 200
+        published.refresh_from_db()
+        assert not published.is_archived
+
+    def test_bulk_archive_ignores_working_version(self, team_with_users, authed_client):
+        """Working versions are not archived via this endpoint."""
+        working_exp = ExperimentFactory.create(team=team_with_users)
+
+        url = reverse("experiments:bulk_archive_versions", args=[team_with_users.slug])
+        response = authed_client.post(url, data={"version_ids": [working_exp.id]})
+
+        assert response.status_code == 200
+        working_exp.refresh_from_db()
+        assert not working_exp.is_archived
+
+    def test_bulk_archive_empty_ids_returns_400(self, team_with_users, authed_client):
+        """Empty version_ids returns 400."""
+        url = reverse("experiments:bulk_archive_versions", args=[team_with_users.slug])
+        response = authed_client.post(url, data={})
+        assert response.status_code == 400
+
+    def test_bulk_archive_cross_team_denied(self, team_with_users, authed_client):
+        """Cannot archive versions belonging to another team."""
+        other_exp = ExperimentFactory.create()
+        other_exp.create_new_version()  # v1 auto-becomes published
+        other_version = other_exp.create_new_version()  # v2 non-published, different team
+
+        url = reverse("experiments:bulk_archive_versions", args=[team_with_users.slug])
+        response = authed_client.post(url, data={"version_ids": [other_version.id]})
+
+        assert response.status_code == 200
+        other_version.refresh_from_db()
+        assert not other_version.is_archived
+
+    def test_bulk_archive_returns_hx_refresh(self, team_with_users, authed_client):
+        """On success the endpoint returns HX-Refresh header to reload the page."""
+        working_exp = ExperimentFactory.create(team=team_with_users)
+        working_exp.create_new_version()  # v1 auto-becomes published
+        v2 = working_exp.create_new_version()  # v2 non-published
+
+        url = reverse("experiments:bulk_archive_versions", args=[team_with_users.slug])
+        response = authed_client.post(url, data={"version_ids": [v2.id]})
+
+        assert response.status_code == 200
+        assert response.headers.get("HX-Refresh") == "true"
