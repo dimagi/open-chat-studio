@@ -3,8 +3,12 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from apps.evaluations.models import EvaluationDataset
-from apps.utils.factories.evaluations import EvaluationDatasetFactory
+from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun, EvaluationRunStatus
+from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
+    EvaluationDatasetFactory,
+    EvaluationRunFactory,
+)
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import GroupFactory
 
@@ -39,6 +43,46 @@ def test_delete_dataset_without_delete_perm_is_forbidden(client, team_with_users
 
     assert response.status_code == 403
     assert EvaluationDataset.objects.filter(id=dataset.id).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(EvaluationRunStatus.PENDING, id="pending"),
+        pytest.param(EvaluationRunStatus.PROCESSING, id="processing"),
+    ],
+)
+def test_delete_dataset_blocked_while_run_in_flight(status, client, team_with_users):
+    user = team_with_users.members.first()
+    dataset = EvaluationDatasetFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=dataset)
+    EvaluationRunFactory.create(team=team_with_users, config=config, status=status)
+
+    client.force_login(user)
+    url = reverse("evaluations:dataset_delete", args=[team_with_users.slug, dataset.id])
+    response = client.delete(url)
+
+    assert response.status_code == 409
+    assert EvaluationDataset.objects.filter(id=dataset.id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_dataset_allowed_and_cascades_when_runs_terminal(client, team_with_users):
+    """Allowed delete proceeds AND the cascade actually removes config + runs."""
+    user = team_with_users.members.first()
+    dataset = EvaluationDatasetFactory.create(team=team_with_users)
+    config = EvaluationConfigFactory.create(team=team_with_users, dataset=dataset)
+    run = EvaluationRunFactory.create(team=team_with_users, config=config, status=EvaluationRunStatus.FAILED)
+
+    client.force_login(user)
+    url = reverse("evaluations:dataset_delete", args=[team_with_users.slug, dataset.id])
+    response = client.delete(url)
+
+    assert response.status_code == 200
+    assert not EvaluationDataset.objects.filter(id=dataset.id).exists()
+    assert not EvaluationConfig.objects.filter(id=config.id).exists()
+    assert not EvaluationRun.objects.filter(id=run.id).exists()
 
 
 @pytest.mark.django_db()

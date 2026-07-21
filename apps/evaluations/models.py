@@ -261,6 +261,10 @@ class EvaluationDataset(BaseTeamModel):
         mode = EvaluationMode(self.evaluation_mode).label
         return f"{self.name} ({self.messages.count()} {mode}s)"
 
+    def delete(self, *args, **kwargs):
+        raise_if_runs_in_flight(EvaluationRun.objects.filter(config__dataset=self), "dataset")
+        return super().delete(*args, **kwargs)
+
     def get_absolute_url(self):
         return reverse("evaluations:dataset_edit", args=[get_slug_for_team(self.team_id), self.id])
 
