@@ -25,7 +25,13 @@ from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
-from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.models import (
+    EvaluationConfig,
+    EvaluationRun,
+    EvaluationRunStatus,
+    EvaluationRunType,
+    raise_if_runs_in_flight,
+)
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tagging import remove_applied_tags_for_runs
 from apps.evaluations.tasks import (
@@ -168,7 +174,12 @@ class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vi
 
     def post(self, request, team_slug: str, evaluation_pk: int):
         config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
-        runs = EvaluationRun.objects.filter(config=config)
+        run_ids = list(EvaluationRun.objects.filter(config=config).values_list("id", flat=True))
+        runs = EvaluationRun.objects.filter(id__in=run_ids)
+        try:
+            raise_if_runs_in_flight(runs, "evaluation")
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         with transaction.atomic():
             remove_applied_tags_for_runs(runs)
             runs.delete()
