@@ -152,6 +152,13 @@ class EvaluationMessage(BaseModel):
         output_content = self.output.get("content", "no content")
         return f"{input_role}: {input_content}, {output_role}: {output_content}"
 
+    def delete(self, *args, **kwargs):
+        related_runs = EvaluationRun.objects.filter(
+            models.Q(config__dataset__messages=self) | models.Q(scoped_messages=self)
+        )
+        raise_if_runs_in_flight(related_runs, "message")
+        return super().delete(*args, **kwargs)
+
     @classmethod
     def create_from_sessions(
         cls, team: Team, external_session_ids, filtered_session_ids=None, filter_params=None, timezone=None

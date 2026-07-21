@@ -524,7 +524,10 @@ def _get_message_form_data(request) -> dict:
 def delete_message(request, team_slug, message_id):
     """Delete a message from the dataset"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team=request.team)
-    message.delete()
+    try:
+        message.delete()
+    except InFlightRunsError as e:
+        return HttpResponse(", ".join(e.messages), status=409)
     return HttpResponse("", status=200)
 
 
