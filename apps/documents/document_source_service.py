@@ -105,45 +105,47 @@ class DocumentSourceManager:
         result = SyncResult(success=True)
         documents = loader.load_documents()
 
-        with transaction.atomic():
-            existing_files = CollectionFile.objects.filter(
-                collection=self.collection, document_source=self.document_source
-            ).select_related("file")
+        existing_files = CollectionFile.objects.filter(
+            collection=self.collection, document_source=self.document_source
+        ).select_related("file")
 
-            existing_files_map = {}
-            for file in existing_files:
-                if file.external_id:
-                    existing_files_map[file.external_id] = file
+        existing_files_map = {}
+        for file in existing_files:
+            if file.external_id:
+                existing_files_map[file.external_id] = file
 
-            seen_identifiers = set()
+        seen_identifiers = set()
 
-            files_to_index = []
-            for document in documents:
-                identifier = loader.get_document_identifier(document)
-                seen_identifiers.add(identifier)
+        files_to_index = []
+        for document in documents:
+            identifier = loader.get_document_identifier(document)
+            seen_identifiers.add(identifier)
 
-                if identifier in existing_files_map:
-                    existing_file = existing_files_map[identifier]
-                    if loader.should_update_document(document, existing_file):
+            if identifier in existing_files_map:
+                existing_file = existing_files_map[identifier]
+                if loader.should_update_document(document, existing_file):
+                    with transaction.atomic():
                         self._update_file(existing_file, document, identifier)
-                        files_to_index.append(existing_file.id)
-                        result.files_updated += 1
-                else:
+                    files_to_index.append(existing_file.id)
+                    result.files_updated += 1
+            else:
+                with transaction.atomic():
                     new_file = self._create_file(document, identifier)
-                    files_to_index.append(new_file.id)
-                    result.files_added += 1
+                files_to_index.append(new_file.id)
+                result.files_added += 1
 
-            # Remove files that are no longer in the source
-            files_to_remove = [
-                file for identifier, file in existing_files_map.items() if identifier not in seen_identifiers
-            ]
+        # Remove files that are no longer in the source
+        files_to_remove = [
+            file for identifier, file in existing_files_map.items() if identifier not in seen_identifiers
+        ]
 
-            if files_to_remove:
+        if files_to_remove:
+            with transaction.atomic():
                 self._remove_files(files_to_remove)
-                result.files_removed += len(files_to_remove)
+            result.files_removed += len(files_to_remove)
 
-            if files_to_index:
-                self._index_files(files_to_index)
+        if files_to_index:
+            self._index_files(files_to_index)
 
         return result
 
