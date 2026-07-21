@@ -167,6 +167,41 @@ def test_session_token_level_embed_key_cannot_bypass_opted_out_session(api_clien
     assert denied.status_code == 403
 
 
+@pytest.mark.django_db()
+def test_embed_key_for_other_channel_denied(api_client, experiment):
+    """Cross-channel isolation: a valid embed key for a *different* widget channel of the
+    same experiment must not grant access to this session, even at EMBED_KEY level."""
+    session_channel = ExperimentChannelFactory.create(
+        experiment=experiment,
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        required_auth_level=WidgetAuthLevel.EMBED_KEY,
+        extra_data={"widget_token": "session_channel_token_0000001", "allowed_domains": ["b.example.com"]},
+    )
+    ExperimentChannelFactory.create(
+        experiment=experiment,
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        required_auth_level=WidgetAuthLevel.EMBED_KEY,
+        extra_data={"widget_token": "attacker_channel_token_000001", "allowed_domains": ["a.example.com"]},
+    )
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, experiment_channel=session_channel, session_token_required=False
+    )
+    # The attacker sends their own valid embed key + their own allowed origin.
+    denied = api_client.get(
+        poll_url(session),
+        HTTP_X_EMBED_KEY="attacker_channel_token_000001",
+        HTTP_ORIGIN="https://a.example.com",
+    )
+    assert denied.status_code == 403
+    # the session's own channel key still works
+    allowed = api_client.get(
+        poll_url(session),
+        HTTP_X_EMBED_KEY="session_channel_token_0000001",
+        HTTP_ORIGIN="https://b.example.com",
+    )
+    assert allowed.status_code == 200
+
+
 # --- migration version → level mapping -------------------------------------------------
 
 _migration = importlib.import_module("apps.channels.migrations.0029_experimentchannel_required_auth_level")

@@ -120,10 +120,15 @@ class SessionAccessPermission(BasePermission):
         level = channel.widget_auth_level if channel is not None else None
 
         if isinstance(request.auth, ExperimentChannel):
-            # Widget-authed request: a valid embed key + domain check (already done by
-            # WidgetDomainPermission) satisfies EMBED_KEY and NONE channels. It never
-            # satisfies a SESSION_TOKEN channel — that always requires the token, even
-            # if the session was (mis)configured with session_token_required=False.
+            # The embed key must authenticate *this* session's channel. Auth only proves
+            # some channel's key was valid, and WidgetDomainPermission checked that
+            # channel's own allowed_domains — so a valid key for a different channel (of
+            # the same experiment) must not grant cross-channel access to this session.
+            if request.auth != channel:
+                return False
+            # A valid embed key + domain check satisfies EMBED_KEY and NONE channels. It
+            # never satisfies a SESSION_TOKEN channel — that always requires the token,
+            # even if the session was (mis)configured with session_token_required=False.
             return level != WidgetAuthLevel.SESSION_TOKEN
 
         # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the
