@@ -69,29 +69,29 @@ def _convert_legacy_query_string(raw_query):
     return urlencode(converted)
 
 
-def migrate_auto_population_filter_query_strings(apps, schema_editor):
-    DatasetAutoPopulationRule = apps.get_model("evaluations", "DatasetAutoPopulationRule")
+def migrate_saved_filters(apps, schema_editor):
+    FilterSet = apps.get_model("filters", "FilterSet")
     batch_size = 500
-    rules_to_update = []
+    filter_sets_to_update = []
 
-    for rule in DatasetAutoPopulationRule.objects.all().iterator(chunk_size=batch_size):
-        raw_query = rule.filter_query_string or ""
+    for filter_set in FilterSet.objects.all().iterator(chunk_size=batch_size):
+        raw_query = filter_set.filter_query_string or ""
         if not raw_query:
             continue
 
         converted = _convert_legacy_query_string(raw_query)
         if converted and converted != raw_query:
-            rule.filter_query_string = converted
-            rules_to_update.append(rule)
-            if len(rules_to_update) >= batch_size:
-                DatasetAutoPopulationRule.objects.bulk_update(rules_to_update, ["filter_query_string"])
-                rules_to_update.clear()
+            filter_set.filter_query_string = converted
+            filter_sets_to_update.append(filter_set)
+            if len(filter_sets_to_update) >= batch_size:
+                FilterSet.objects.bulk_update(filter_sets_to_update, ["filter_query_string"])
+                filter_sets_to_update.clear()
 
-    if rules_to_update:
-        DatasetAutoPopulationRule.objects.bulk_update(rules_to_update, ["filter_query_string"])
+    if filter_sets_to_update:
+        FilterSet.objects.bulk_update(filter_sets_to_update, ["filter_query_string"])
 
 
 class Migration(migrations.Migration):
-    dependencies = [("evaluations", "0015_auto_populate_schema")]
+    dependencies = [("filters", "0003_alter_filterset_table_type")]
 
-    operations = [migrations.RunPython(migrate_auto_population_filter_query_strings, migrations.RunPython.noop)]
+    operations = [migrations.RunPython(migrate_saved_filters, migrations.RunPython.noop)]

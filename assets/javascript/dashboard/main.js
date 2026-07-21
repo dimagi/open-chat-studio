@@ -6,6 +6,22 @@
 import TomSelect from "tom-select";
 import {formatDistanceToNow} from "date-fns";
 
+/**
+ * Serialize values into the tilde-separated CSV wire format used by the dynamic
+ * filters (f_* params), quoting values containing "~" or '"'. Mirrors the
+ * serializeCSVTildeValues helper in the Alpine filter component and the Python
+ * serialize_csv_tilde_values so producers and parsers agree on the format.
+ */
+function serializeCSVTildeValues(values) {
+    return values.map(v => {
+        const str = String(v);
+        if (str.includes('~') || str.includes('"')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    }).join('~');
+}
+
 // Constants
 const DEFAULTS = {
     DATE_RANGE: '30',
@@ -834,7 +850,7 @@ function dashboard() {
                 "date_range": "message_date",
             };
             let params = this.sanitizeParams(this.filters);
-            Object.entries(params).forEach(([key, value], index) => {
+            Object.entries(params).forEach(([key, value]) => {
                 if (key === "granularity" || key === "tags" || value === "custom" || key === "participants") {
                     // dynamic filters do not support granularity, and the tags filter is already added
                     return;
@@ -856,8 +872,8 @@ function dashboard() {
                     operator = "range";
                     parsedValue = value + "d";
                 } else {
-                    // Non-date fields expects array values
-                    parsedValue = JSON.stringify((Array.isArray(value) ? value : [value]))
+                    // Non-date fields expect array values in the tilde/CSV wire format
+                    parsedValue = serializeCSVTildeValues(Array.isArray(value) ? value : [value]);
                 }
                 urlParams.append(`f_${keyMapped}`, parsedValue);
                 urlParams.append(`op_${keyMapped}`, operator);

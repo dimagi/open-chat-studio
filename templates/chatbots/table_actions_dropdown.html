@@ -27,7 +27,7 @@
     function createDatasetWithFilters(linkElement, experimentId) {
       const params = new URLSearchParams(window.location.search);
 
-      params.set('f_experiment', JSON.stringify([experimentId]));
+      params.set('f_experiment', experimentId);
       params.set('op_experiment', 'any of');
 
       const newUrl = linkElement.href + '?' + params.toString();

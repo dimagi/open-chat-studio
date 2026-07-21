@@ -25,7 +25,7 @@
     <script>
       (function(){
         const existing = "{{ object.filter_query_string|default_if_none:''|escapejs }}";
-        if (existing) {
+        if (existing && !window.location.search.includes('f_/op_')) {
           history.replaceState({}, '', window.location.pathname + '?' + existing + window.location.hash);
         }
       })();

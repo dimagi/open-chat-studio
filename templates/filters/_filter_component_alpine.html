@@ -236,34 +236,26 @@
 
       loadFiltersFromQueryString(queryString) {
         const urlParams = new URLSearchParams(queryString);
-        const filters = [];
         const columns = new Set();
 
-        // Detect columns using new format (f_*) vs old format (filter_*_column)
+        // Detect columns using the new format (f_* parameters)
         for (const [key] of urlParams.entries()) {
           if (key.startsWith('f_')) {
             columns.add(key.substring(2));
           }
         }
 
-        let maxIndex = -1;
+        // Keep only columns that have both a value (f_*) and an operator (op_*)
+        const validColumns = Array.from(columns)
+          .filter(columnName => urlParams.has(`f_${columnName}`) && urlParams.has(`op_${columnName}`))
+          .sort();
 
-        // Load new format filters
-        let filterIndex = 0;
-        for (const columnName of columns) {
-          const opKey = `op_${columnName}`;
-          if (urlParams.has(`f_${columnName}`) && urlParams.has(opKey)) {
-            const valueParam = urlParams.get(`f_${columnName}`);
-            const operatorParam = urlParams.get(opKey);
+        const filters = validColumns.map(columnName => {
+          const valueParam = urlParams.get(`f_${columnName}`);
+          const operatorParam = urlParams.get(`op_${columnName}`);
 
-            if (filterIndex > maxIndex) maxIndex = filterIndex;
-            filterIndex++;
-          }
-        }
-
-        for (let i = 0; i <= maxIndex; i++) {
-          filters.push({
-            column: '',
+          const filter = {
+            column: columnName,
             operator: '',
             value: '',
             selectedValues: [],
@@ -271,63 +263,38 @@
             showOptions: false,
             searchQuery: '',
             filteredOptions: []
-          });
-        }
+          };
 
-        // Process new format filters
-        let newFormatIndex = 0;
-        const validNewFormatColumns = Array.from(columns)
-          .filter(columnName =>
-            urlParams.has(`f_${columnName}`) &&
-            urlParams.has(`op_${columnName}`)
-          )
-          .sort();
+          const columnConfig = this.filterData.columns[columnName];
+          if (!columnConfig) {
+            return filter;
+          }
 
-        validNewFormatColumns.forEach((columnName, newFormatIndex) => {
-          const valueParam = urlParams.get(`f_${columnName}`);
-          const operatorParam = urlParams.get(`op_${columnName}`);
+          filter.availableOperators = columnConfig.operators;
+          filter.operator = operatorParam;
 
-          const filterIndex =
-            Object.keys(filters).length -
-            validNewFormatColumns.length +
-            newFormatIndex;
-
-          if (filterIndex >= 0 && filterIndex < filters.length) {
-            const filter = filters[filterIndex];
-            filter.column = columnName;
-
-              if (this.filterData.columns[columnName]) {
-                filter.availableOperators = this.filterData.columns[columnName].operators;
-                filter.operator = operatorParam;
-
-                if (operatorParam === 'range' && valueParam) {
-                  filter.options = this.filterData.columns[columnName].options || this.dateRangeOptions;
-                  const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
-                  if (matchedOption) {
-                    filter.value = matchedOption.value.toString();
-                  } else {
-                    filter.value = valueParam;
-                  }
-                }
-                else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
-                  // Parse CSV with tilde separator
-                  const parsedValues = this.parseCSVTildeValue(valueParam);
-                  if (this.isObjectChoiceFilter(filter)) {
-                    filter.selectedValues = parsedValues.filter(id => {
-                      return this.filterData.columns[filter.column].options.findIndex(exp => String(exp.id) === String(id)) >= 0;
-                    });
-                  } else {
-                    filter.selectedValues = parsedValues;
-                  }
-                  if (this.filterData.columns[columnName].options) {
-                    filter.filteredOptions = [...this.filterData.columns[columnName].options];
-                  }
-                } else if (valueParam) {
-                  filter.value = valueParam;
-                }
-              }
+          if (operatorParam === 'range' && valueParam) {
+            filter.options = columnConfig.options || this.dateRangeOptions;
+            const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
+            filter.value = matchedOption ? matchedOption.value.toString() : valueParam;
+          } else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
+            // Parse CSV with tilde separator
+            const parsedValues = this.parseCSVTildeValue(valueParam);
+            if (this.isObjectChoiceFilter(filter)) {
+              filter.selectedValues = parsedValues.filter(id =>
+                columnConfig.options.findIndex(exp => String(exp.id) === String(id)) >= 0
+              );
+            } else {
+              filter.selectedValues = parsedValues;
             }
-          newFormatIndex++;
+            if (columnConfig.options) {
+              filter.filteredOptions = [...columnConfig.options];
+            }
+          } else if (valueParam) {
+            filter.value = valueParam;
+          }
+
+          return filter;
         });
 
         this.filterData.filters = this.getActiveFilters(filters);

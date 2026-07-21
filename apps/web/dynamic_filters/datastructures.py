@@ -23,7 +23,13 @@ def _parse_csv_tilde_values(value: str) -> list[str]:
     return row
 
 
-def _serialize_csv_tilde_values(values: list[str] | tuple[str, ...] | list[object]) -> str:
+def serialize_csv_tilde_values(values: list[str] | tuple[str, ...] | list[object]) -> str:
+    """Serialize a list of values into the tilde-delimited CSV wire format.
+
+    This is the single source of truth for the ``f_*`` list-value wire format and is the
+    inverse of :func:`_parse_csv_tilde_values`. Values containing the ``~`` separator are
+    quoted so they round-trip correctly (e.g. ``["tag~2", "a"]`` -> ``"tag~2"~a``).
+    """
     output = StringIO()
     writer = csv.writer(output, delimiter="~", quotechar='"', quoting=csv.QUOTE_MINIMAL, lineterminator="")
     writer.writerow([str(item) for item in values])
@@ -66,14 +72,12 @@ class ColumnFilterData(BaseModel):
                 parsed = _coerce_list_filter_values(self.value)
                 if parsed is not None:
                     self.value = json.dumps(parsed)
-                elif "~" in self.value:
-                    parsed = _parse_csv_tilde_values(self.value)
-                    if parsed:
-                        self.value = json.dumps(parsed)
-                    else:
-                        self.value = json.dumps([self.value])
                 else:
-                    self.value = json.dumps([self.value])
+                    # Always CSV-parse: the wire format quotes values containing "~" or '"'
+                    # (matching the frontend serializer), and a bare value without delimiters
+                    # parses back to itself. Only fall back for an empty value.
+                    parsed = _parse_csv_tilde_values(self.value)
+                    self.value = json.dumps(parsed if parsed else [self.value])
             else:
                 self.value = json.dumps([str(self.value)])
         return self
@@ -131,7 +135,7 @@ class FilterParams:
             query_value = filter_data.value
             if filter_data.operator in _LIST_OPERATORS:
                 if parsed := _coerce_list_filter_values(query_value):
-                    query_value = _serialize_csv_tilde_values(parsed)
+                    query_value = serialize_csv_tilde_values(parsed)
 
             query_data[f"f_{filter_data.column}"] = query_value
             query_data[f"op_{filter_data.column}"] = filter_data.operator
