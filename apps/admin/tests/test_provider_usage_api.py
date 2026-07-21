@@ -44,6 +44,27 @@ def test_invalid_range_returns_400(superuser_client):
 
 
 @pytest.mark.django_db()
+def test_valid_reporting_token_grants_access(client, settings):
+    settings.PROVIDER_REPORTING_API_TOKEN = "s3cret-token"
+    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION="Bearer s3cret-token")
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_invalid_reporting_token_falls_back_to_session(client, settings):
+    settings.PROVIDER_REPORTING_API_TOKEN = "s3cret-token"
+    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION="Bearer wrong")
+    assert response.status_code == 302  # no valid token, no superuser session
+
+
+@pytest.mark.django_db()
+def test_reporting_token_ignored_when_unset(client, settings):
+    settings.PROVIDER_REPORTING_API_TOKEN = None
+    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION="Bearer anything")
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db()
 def test_merges_token_totals_and_cost_detail(superuser_client):
     team_a = TeamFactory(name="Alpha")
     team_b = TeamFactory(name="Bravo")
