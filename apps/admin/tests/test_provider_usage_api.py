@@ -65,6 +65,7 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
     alpha = teams["Alpha"]
     assert alpha["run_count"] == 2
     assert alpha["total_tokens"] == 800
+    assert alpha["team_slug"] == team_a.slug
     assert Decimal(alpha["total_cost"]["USD"]) == Decimal("2.00")
     models = {m["model_name"]: m for m in alpha["models"]}
     assert Decimal(models["gpt-4o"]["cost"]) == Decimal("1.25")

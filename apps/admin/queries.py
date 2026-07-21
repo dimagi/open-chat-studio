@@ -83,7 +83,7 @@ def get_token_usage_by_team(start: datetime, end: datetime):
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
         .exclude(session__platform=ChannelPlatform.EVALUATIONS)
-        .values("team_id", "team__name")
+        .values("team_id", "team__name", "team__slug")
         .annotate(
             run_count=Count("id"),
             total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
@@ -93,11 +93,7 @@ def get_token_usage_by_team(start: datetime, end: datetime):
 
 
 def get_cost_usage_by_team(start: datetime, end: datetime):
-    """Per (team, provider, model, currency) cost + tokens from UsageRecord.
-
-    Only teams with `flag_ai_cost_monitoring` enabled record UsageRecords, so
-    this covers a subset of the teams returned by `get_token_usage_by_team`.
-    """
+    """Per (team, provider, model, currency) cost + tokens from UsageRecord."""
     return (
         UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .values("team_id", "provider_type", "model_name", "currency")
@@ -119,18 +115,21 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
     token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
 
-    team_names = {row["team_id"]: row["team__name"] for row in token_rows}
-    missing_ids = {row["team_id"] for row in cost_rows} - team_names.keys()
+    team_meta = {row["team_id"]: (row["team__name"], row["team__slug"]) for row in token_rows}
+    missing_ids = {row["team_id"] for row in cost_rows} - team_meta.keys()
     if missing_ids:
-        team_names.update(dict(Team.objects.filter(id__in=missing_ids).values_list("id", "name")))
+        missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug")
+        team_meta.update({tid: (name, slug) for tid, name, slug in missing})
 
     teams: dict[int, dict] = {}
 
     def _entry(team_id: int) -> dict:
         if team_id not in teams:
+            name, slug = team_meta.get(team_id, (None, None))
             teams[team_id] = {
                 "team_id": team_id,
-                "team_name": team_names.get(team_id),
+                "team_name": name,
+                "team_slug": slug,
                 "run_count": 0,
                 "total_tokens": 0,
                 "total_cost": defaultdict(Decimal),  # currency -> amount
