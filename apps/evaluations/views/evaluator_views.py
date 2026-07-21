@@ -13,6 +13,7 @@ from django_tables2 import SingleTableView
 from apps.annotations.models import Tag
 from apps.custom_actions.schema_utils import resolve_references
 from apps.evaluations import evaluators
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import Evaluator
 from apps.evaluations.tables import EvaluatorTable
@@ -180,7 +181,10 @@ class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
 
     def delete(self, request, team_slug: str, pk: int):
         evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
-        evaluator.delete()
+        try:
+            evaluator.delete()
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         return HttpResponse(status=200)
 
 

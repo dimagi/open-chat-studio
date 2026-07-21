@@ -96,6 +96,10 @@ class Evaluator(BaseTeamModel):
             label = self.type
         return f"{self.name} ({label})"
 
+    def delete(self, *args, **kwargs):
+        raise_if_runs_in_flight(EvaluationRun.objects.filter(config__evaluators=self), "evaluator")
+        return super().delete(*args, **kwargs)
+
     @cached_property
     def evaluator(self):
         module = importlib.import_module("apps.evaluations.evaluators")
