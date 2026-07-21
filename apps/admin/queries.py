@@ -13,10 +13,8 @@ from apps.chat.models import ChatMessage
 from apps.cost_tracking.models import UsageRecord
 from apps.experiments.models import ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
-from apps.teams.models import Flag, Team
+from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
-
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 _ZERO = Decimal(0)
 _COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
@@ -111,27 +109,15 @@ def get_cost_usage_by_team(start: datetime, end: datetime):
     )
 
 
-def get_cost_tracking_team_ids() -> set[int]:
-    """Team ids for which `flag_ai_cost_monitoring` is active."""
-    flag = Flag.objects.filter(name=COST_TRACKING_FLAG).prefetch_related("teams").first()
-    if flag is None or flag.everyone is False:
-        return set()
-    if flag.everyone is True:
-        return set(Team.objects.values_list("id", flat=True))
-    return set(flag.teams.values_list("id", flat=True))
-
-
 def build_usage_report(start: datetime, end: datetime) -> dict:
-    """Cross-team usage: token totals for every team (always populated) merged
-    with per-model cost detail where cost tracking is on. `cost_tracking_enabled`
-    flags which teams' cost detail is complete vs. token-only.
+    """Cross-team usage: per-team token totals (always populated) merged with
+    per-model cost detail from recorded UsageRecords.
 
     `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
     records in more than one currency and summing them would be meaningless.
     """
     token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
-    enabled_team_ids = get_cost_tracking_team_ids()
 
     team_names = {row["team_id"]: row["team__name"] for row in token_rows}
     missing_ids = {row["team_id"] for row in cost_rows} - team_names.keys()
@@ -147,7 +133,6 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
                 "team_name": team_names.get(team_id),
                 "run_count": 0,
                 "total_tokens": 0,
-                "cost_tracking_enabled": team_id in enabled_team_ids,
                 "total_cost": defaultdict(Decimal),  # currency -> amount
                 "models": [],
             }
