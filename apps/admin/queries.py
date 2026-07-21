@@ -83,7 +83,7 @@ def get_token_usage_by_team(start: datetime, end: datetime):
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
         .exclude(session__platform=ChannelPlatform.EVALUATIONS)
-        .values("team_id", "team__name", "team__slug", "team__metadata")
+        .values("team_id", "team__name", "team__slug")
         .annotate(
             run_count=Count("id"),
             total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
@@ -120,19 +120,23 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
     token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
 
-    team_meta = {
-        row["team_id"]: (row["team__name"], row["team__slug"], row["team__metadata"] or {}) for row in token_rows
-    }
+    team_meta = {row["team_id"]: (row["team__name"], row["team__slug"]) for row in token_rows}
     missing_ids = {row["team_id"] for row in cost_rows} - team_meta.keys()
     if missing_ids:
-        missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug", "metadata")
-        team_meta.update({tid: (name, slug, metadata or {}) for tid, name, slug, metadata in missing})
+        missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug")
+        team_meta.update({tid: (name, slug) for tid, name, slug in missing})
+
+    # Fetch metadata separately (keyed by PK): grouping the aggregate query by
+    # the JSON `metadata` column would be needlessly expensive, and metadata is
+    # per-team so it never affects the grouping anyway.
+    metadata_by_team = dict(Team.objects.filter(id__in=list(team_meta)).values_list("id", "metadata"))
 
     teams: dict[int, dict] = {}
 
     def _entry(team_id: int) -> dict:
         if team_id not in teams:
-            name, slug, metadata = team_meta.get(team_id, (None, None, {}))
+            name, slug = team_meta.get(team_id, (None, None))
+            metadata = metadata_by_team.get(team_id) or {}
             teams[team_id] = {
                 "team_id": team_id,
                 "team_name": name,
