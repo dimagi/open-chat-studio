@@ -644,6 +644,8 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import ignore_logger
 
+    from config.sentry import get_event_scrubber
+
     ignore_logger("ocs.request")
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
     # so Django correctly rejects them with a 400. These are pure noise in Sentry.
@@ -654,6 +656,9 @@ if SENTRY_DSN:
         send_default_pii=True,  # include user details in events
         attach_stacktrace=True,  # include stack trace in all events
         environment=env("SENTRY_ENVIRONMENT", default="development"),
+        # `attach_stacktrace=True` sends stack-frame locals with every event; the scrubber redacts
+        # secrets (e.g. the CommCare Connect encryption key) from them. See config/sentry.py.
+        event_scrubber=get_event_scrubber(),
         integrations=[
             DjangoIntegration(),
             CeleryIntegration(),
