@@ -4321,10 +4321,12 @@ components:
     Manifest:
       type: object
       description: 'The sync manifest: the call order and per-model config, plus a
-        checksum of the applied schema.'
+        checksum of the export schema.'
       properties:
         schema_checksum:
           type: string
+          description: SHA-256 of this server's export OpenAPI schema; clients compare
+            it against their own to detect an incompatible export surface.
         entries:
           type: array
           items:
