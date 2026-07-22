@@ -47,8 +47,6 @@ from apps.admin.queries import (
     whatsapp_message_stats_to_csv,
 )
 from apps.admin.serializers import StatsSerializer
-from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Participant
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.teams.flags import get_all_flag_info
 from apps.teams.metadata import get_team_metadata_fields
@@ -225,12 +223,7 @@ def section_charts(request):
         context={
             "chart_data": {
                 "message_data": usage_data.data,
-                "participant_data": {
-                    "data": participant_data.data,
-                    "start_value": Participant.objects.filter(created_at__lt=start_timestamp)
-                    .exclude(platform=ChannelPlatform.EVALUATIONS)
-                    .count(),
-                },
+                "participant_data": participant_data.data,
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
