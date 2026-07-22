@@ -187,6 +187,23 @@ def test_pending_cleared_on_intermediate_downgrade_from_none_floor():
 
 
 @pytest.mark.django_db()
+def test_pending_not_recorded_when_notification_fails():
+    """A swallowed notification failure must not start the grace clock, so the next run retries."""
+    channel = _widget_channel(
+        required_auth_level=WidgetAuthLevel.EMBED_KEY,
+        widget_version="0.9.1",
+    )
+    with patch("apps.channels.tasks.widget_auth_level_upgrade_notification", return_value=None) as notify:
+        ratchet_widget_auth_levels()
+
+    channel.refresh_from_db()
+    assert channel.required_auth_level == WidgetAuthLevel.EMBED_KEY
+    assert channel.pending_auth_level is None
+    assert channel.auth_level_notified_at is None
+    notify.assert_called_once()
+
+
+@pytest.mark.django_db()
 def test_notifications_grouped_by_team():
     channel = _widget_channel(required_auth_level=WidgetAuthLevel.EMBED_KEY, widget_version="0.9.1")
     team = channel.team

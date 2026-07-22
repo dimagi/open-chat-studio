@@ -307,16 +307,14 @@ def ratchet_widget_auth_levels():
             # No bump pending yet. Start one only if the widget now implies a higher level.
             if target <= channel.required_auth_level:
                 continue
-            # Pending state is workflow bookkeeping, not an audited field change (like the
-            # widget_version telemetry writes); bypass auditing so it creates no empty events.
-            ExperimentChannel.objects.filter(pk=channel.pk).update(
-                pending_auth_level=target, auth_level_notified_at=now, audit_action=AuditAction.IGNORE
-            )
+            # Defer recording the pending state until the team notification succeeds (below),
+            # so a swallowed notification failure never silently starts the grace clock.
             team_data = notify_by_team.setdefault(
-                channel.team_id, {"team": channel.team, "chatbots": {}, "min_level": target}
+                channel.team_id, {"team": channel.team, "chatbots": {}, "min_level": target, "pending": []}
             )
             team_data["chatbots"][channel.experiment.name] = channel.experiment.get_absolute_url()
             team_data["min_level"] = max(team_data["min_level"], target)
+            team_data["pending"].append((channel.pk, target))
         elif target < channel.pending_auth_level:
             # The widget dropped back below the *pending* level before the grace period
             # elapsed; abandon the raise (ADR-0045). Comparing against the pending level
@@ -333,13 +331,23 @@ def ratchet_widget_auth_levels():
 
     effective_date = now + ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE
     for data in notify_by_team.values():
-        widget_auth_level_upgrade_notification(
+        notified = widget_auth_level_upgrade_notification(
             team=data["team"],
             affected_chatbots=data["chatbots"],
             min_version=widget_versions.min_version_for_level(data["min_level"]),
             effective_date=effective_date,
             docs_url=widget_versions.widget_docs_url(),
         )
+        if not notified:
+            # Notification creation failed (and was swallowed); leave these channels
+            # untouched so the next run retries rather than ratcheting them unannounced.
+            continue
+        for pk, target in data["pending"]:
+            # Pending state is workflow bookkeeping, not an audited field change (like the
+            # widget_version telemetry writes); bypass auditing so it creates no empty events.
+            ExperimentChannel.objects.filter(pk=pk).update(
+                pending_auth_level=target, auth_level_notified_at=now, audit_action=AuditAction.IGNORE
+            )
 
 
 def _clear_pending_auth_level(channel: ExperimentChannel) -> None:
