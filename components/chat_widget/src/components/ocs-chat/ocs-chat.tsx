@@ -582,7 +582,6 @@ export class OcsChat {
 
       const requestBody: Record<string, unknown> = {
         chatbot_id: this.chatbotId,
-        use_session_token: true,
         session_data: {
           source: 'widget',
           page_url: window.location.href,

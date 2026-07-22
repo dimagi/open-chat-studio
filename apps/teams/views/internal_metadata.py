@@ -8,6 +8,16 @@ from apps.teams.decorators import login_and_team_required
 from apps.teams.metadata import get_team_metadata_fields
 
 
+def _build_field(field: dict, initial: str) -> forms.Field:
+    field_type = field["type"]
+    if field_type == "select":
+        choices = [("", "---------")] + [(option, option) for option in field["options"]]
+        return forms.ChoiceField(label=field["label"], required=False, initial=initial, choices=choices)
+    if field_type == "email":
+        return forms.EmailField(label=field["label"], required=False, initial=initial)
+    return forms.CharField(label=field["label"], required=False, initial=initial)
+
+
 class TeamMetadataForm(forms.Form):
     """Form for editing a team's internal (staff-only) metadata."""
 
@@ -18,11 +28,7 @@ class TeamMetadataForm(forms.Form):
         metadata = self.team.metadata or {}
         for field in get_team_metadata_fields():
             key = field["key"]
-            self.fields[key] = forms.CharField(
-                label=field["label"],
-                required=False,
-                initial=metadata.get(key, ""),
-            )
+            self.fields[key] = _build_field(field, initial=metadata.get(key, ""))
 
     def save(self):
         metadata = dict(self.team.metadata or {})

@@ -36,6 +36,26 @@ than inferring it from per-request heuristics:
   channels and by the grandfathering migration for existing ones. It is visible (read-only)
   in the Django admin for inspection/support.
 
+### Ratcheting the level up when a widget upgrades
+
+A grandfathered channel keeps recording the version its widget reports
+(`widget_version`), but that never moves `required_auth_level` on its own. The
+`ratchet_widget_auth_levels` Celery task (daily; `apps/channels/tasks.py`) closes that
+gap. For each embedded-widget channel it maps the recorded version to the level it can
+satisfy (`widget_versions.level_for_version`) and, if that is **higher** than the current
+`required_auth_level`, runs a two-phase, notify-then-apply upgrade:
+
+1. **First detection** — record `pending_auth_level` + `auth_level_notified_at` and notify
+   the team (`widget_auth_level_upgrade_notification`) with the minimum widget version
+   every embed must run before the change lands.
+2. **After the grace period** (`ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE`, 14 days) —
+   apply the level via an audited `save()`, then clear the pending state.
+
+The ratchet is **monotonic**: it only ever raises a level, so a stale or spoofed version
+header can only tighten auth, never relax it. If the reported version drops back below the
+pending level before the grace period elapses, the pending bump is dropped. The channel
+details dialog shows the current minimum required version and any pending upgrade.
+
 ## Releasing a new widget version
 
 1. Publish the new version to npm (see `components/chat_widget`).

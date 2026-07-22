@@ -113,6 +113,121 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v2/trigger_bot/:
+    post:
+      operationId: trigger_bot_message
+      description: |-
+        Trigger the bot to send a message to the user, or deliver a message directly.
+
+        Provide either ``prompt_text`` (routes through the LLM/bot pipeline) or ``message_text``
+        (sends the exact text to the participant without any LLM processing). Exactly one is required.
+
+        The response ``channel`` is an object of ``{platform, data}``; for CommCare Connect, ``data``
+        carries the ``external_channel_id`` of the session's Connect channel.
+      summary: Trigger the bot to send a message to the user, or deliver a message
+        directly
+      tags:
+      - Channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerBotMessageRequest'
+            examples:
+              GenerateBotMessageAndSend:
+                value:
+                  identifier: '+15556793'
+                  experiment: exp1
+                  platform: whatsapp
+                  prompt_text: Tell the user to do something
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
+                summary: Generates a bot message and sends it to the user (auto-creates
+                  participant if needed).
+              SendMessageDirectly:
+                value:
+                  identifier: '+15556793'
+                  experiment: exp1
+                  platform: whatsapp
+                  message_text: Your appointment is confirmed for tomorrow at 10am.
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
+                summary: Send a pre-written message directly to the participant, bypassing
+                  the bot/LLM.
+              ExperimentChannelNotFound:
+                value:
+                  detail: Experiment cannot send messages on the connect_messaging
+                    channel
+                summary: Experiment cannot send messages on the specified channel
+              ConsentNotGiven:
+                value:
+                  detail: User has not given consent
+                summary: User has not given consent
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:interact
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerBotMessageResponse'
+              examples:
+                GenerateBotMessageAndSend:
+                  value:
+                    identifier: '+15556793'
+                    experiment: exp1
+                    platform: whatsapp
+                    prompt_text: Tell the user to do something
+                    session_data:
+                      key: value
+                    participant_data:
+                      key: value
+                  summary: Generates a bot message and sends it to the user (auto-creates
+                    participant if needed).
+                SendMessageDirectly:
+                  value:
+                    identifier: '+15556793'
+                    experiment: exp1
+                    platform: whatsapp
+                    message_text: Your appointment is confirmed for tomorrow at 10am.
+                    session_data:
+                      key: value
+                    participant_data:
+                      key: value
+                  summary: Send a pre-written message directly to the participant,
+                    bypassing the bot/LLM.
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Bad Request
+              examples:
+                ConsentNotGiven:
+                  value:
+                    detail: User has not given consent
+                  summary: User has not given consent
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Not Found
+              examples:
+                ExperimentChannelNotFound:
+                  value:
+                    detail: Experiment cannot send messages on the connect_messaging
+                      channel
+                  summary: Experiment cannot send messages on the specified channel
+          description: ''
   /api/v2/usage/:
     get:
       operationId: usage
@@ -1404,22 +1519,89 @@ components:
       required:
       - name
       - slug
-    Tokens:
+    TriggerBotChannel:
+      type: object
+      description: |-
+        The channel a trigger_bot session runs on, plus any platform-specific data.
+
+        Unlike v1 (where ``channel`` is just the platform slug), v2 nests the platform under a dict so
+        platform-specific fields can live alongside it in ``data`` without widening the top-level shape.
+      properties:
+        platform:
+          type: string
+          description: Channel platform slug, e.g. 'commcare_connect'.
+        data:
+          type: object
+          additionalProperties: {}
+          description: Platform-specific channel data. For CommCare Connect this includes
+            'external_channel_id'; empty for platforms without extra channel data.
+      required:
+      - data
+      - platform
+    TriggerBotMessageRequest:
       type: object
       properties:
-        prompt:
-          type: integer
-          description: Input tokens (fresh plus cached).
-        completion:
-          type: integer
-          description: Output tokens.
-        total:
-          type: integer
-          description: All LLM tokens; prompt and completion need not sum to it.
+        identifier:
+          type: string
+          title: Participant Identifier
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          title: Participant Platform
+        experiment:
+          type: string
+          format: uuid
+          title: Experiment ID
+        prompt_text:
+          type: string
+          nullable: true
+          title: Prompt to go to bot
+        message_text:
+          type: string
+          nullable: true
+          title: Message to send directly to participant (bypasses bot/LLM)
+        start_new_session:
+          type: boolean
+          default: false
+          title: Starts a new session
+        session_data:
+          type: object
+          additionalProperties: {}
+          description: Update session data. This will be merged with existing session
+            data
+        participant_data:
+          type: object
+          additionalProperties: {}
+          description: Update Participant data. This will be merged with existing
+            participant data
       required:
-      - completion
-      - prompt
-      - total
+      - experiment
+      - identifier
+      - platform
+    TriggerBotMessageResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
+          readOnly: true
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+        channel:
+          allOf:
+          - $ref: '#/components/schemas/TriggerBotChannel'
+          readOnly: true
+      required:
+      - channel
+      - session_id
+      - team
+      - url
     UsagePeriod:
       type: object
       properties:
@@ -1497,6 +1679,8 @@ components:
       type: http
       scheme: bearer
 tags:
+- name: Channels
+  description: Trigger bot messages or deliver messages directly to users on a channel.
 - name: Chatbots
   description: List, retrieve and inspect chatbots (v2; formerly 'experiments').
 - name: Me

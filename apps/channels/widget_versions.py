@@ -128,6 +128,46 @@ def get_widget_update_status(version: str | None) -> WidgetUpdateStatus | None:
     return None
 
 
+# Auth levels an embedded-widget channel can require. Kept as ints mirroring
+# apps.channels.models.WidgetAuthLevel; not the enum itself, because models.py
+# imports this module (importing the enum here would be circular).
+AUTH_LEVEL_NONE = 0
+AUTH_LEVEL_EMBED_KEY = 1
+AUTH_LEVEL_SESSION_TOKEN = 2
+
+# Widget releases that introduced each auth capability.
+EMBED_KEY_INTRODUCED = Version("0.5.1")
+SESSION_TOKEN_INTRODUCED = Version("0.9.0")
+
+
+def level_for_version(version: str | None) -> int:
+    """The highest auth level a widget on `version` can satisfy.
+
+    Mirrors the grandfathering logic in channels migration 0029:
+    - None (never connected)         -> SESSION_TOKEN (treat as new/current)
+    - "unknown"/unparseable/< 0.5.1  -> NONE (predates the embed key)
+    - 0.5.1 <= v < 0.9.0             -> EMBED_KEY (embed key, no token)
+    - >= 0.9.0                       -> SESSION_TOKEN (full token flow)
+    """
+    if version is None:
+        return AUTH_LEVEL_SESSION_TOKEN
+    parsed = _parse(version)
+    if parsed is None or parsed < EMBED_KEY_INTRODUCED:
+        return AUTH_LEVEL_NONE
+    if parsed < SESSION_TOKEN_INTRODUCED:
+        return AUTH_LEVEL_EMBED_KEY
+    return AUTH_LEVEL_SESSION_TOKEN
+
+
+def min_version_for_level(level: int) -> str | None:
+    """The minimum widget version that satisfies `level`, or None for NONE."""
+    if level >= AUTH_LEVEL_SESSION_TOKEN:
+        return str(SESSION_TOKEN_INTRODUCED)
+    if level == AUTH_LEVEL_EMBED_KEY:
+        return str(EMBED_KEY_INTRODUCED)
+    return None
+
+
 WIDGET_VERSION_HEADER = "x-ocs-widget-version"
 
 # Request attribute the view sets to flag a pre-header widget (see mark_widget_request).

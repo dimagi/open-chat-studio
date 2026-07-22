@@ -200,6 +200,9 @@ class ExperimentChannel(BaseTeamModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
     WIDGET_VERSION_REFRESH_INTERVAL = timedelta(hours=24)
+    # Grace period between notifying a team of a pending required_auth_level increase
+    # and actually applying it (see apps.channels.tasks.ratchet_widget_auth_levels).
+    AUTH_LEVEL_RATCHET_GRACE = timedelta(days=14)
 
     name = models.CharField(max_length=255, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
@@ -229,6 +232,11 @@ class ExperimentChannel(BaseTeamModel):
             "session token; only downgrade this for a channel you know is running an older widget."
         ),
     )
+    # Set when a widget upgrade is detected: the level required_auth_level will be raised to
+    # once the team has been notified and the grace period elapses. Workflow state written by
+    # ratchet_widget_auth_levels; not audited (the audited change is required_auth_level itself).
+    pending_auth_level = models.PositiveSmallIntegerField(choices=WidgetAuthLevel.choices, null=True, blank=True)
+    auth_level_notified_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "channels_experimentchannel"
@@ -269,6 +277,31 @@ class ExperimentChannel(BaseTeamModel):
         if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         return WidgetAuthLevel(self.required_auth_level)
+
+    @property
+    def min_widget_version(self) -> str | None:
+        """Minimum widget version required by this channel's current auth level.
+
+        None for non-widget channels or a NONE-level widget channel (no floor).
+        """
+        level = self.widget_auth_level
+        if level is None:
+            return None
+        return widget_versions.min_version_for_level(level)
+
+    @property
+    def pending_min_widget_version(self) -> str | None:
+        """Minimum widget version the pending auth level will require, if a bump is pending."""
+        if self.pending_auth_level is None:
+            return None
+        return widget_versions.min_version_for_level(self.pending_auth_level)
+
+    @property
+    def pending_auth_level_effective_at(self):
+        """When a pending auth-level increase will be applied, or None if none is pending."""
+        if self.auth_level_notified_at is None:
+            return None
+        return self.auth_level_notified_at + self.AUTH_LEVEL_RATCHET_GRACE
 
     def record_widget_version(self, raw_version: str | None) -> None:
         """Persist the version reported by the widget (x-ocs-widget-version header).
