@@ -8,6 +8,7 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from .helpers import create_default_team_for_user
+from .metadata import get_team_metadata_fields
 from .models import Invitation, Membership, Team
 
 
@@ -93,6 +94,35 @@ class TeamSignupForm(SignupForm):
             create_default_team_for_user(user, team_name)
 
         return user
+
+
+class TeamMetadataForm(forms.Form):
+    """Edit a team's internal (staff-only) metadata.
+
+    Fields are built dynamically from the configured ``TEAM_METADATA_FIELDS`` so the
+    form stays in sync with the setting. Values are stored as stripped strings in the
+    team's ``metadata`` JSON. Used by both the per-team settings page and the global
+    admin team-detail page.
+    """
+
+    def __init__(self, *args, team: Team, **kwargs):
+        self.team = team
+        super().__init__(*args, **kwargs)
+        metadata = team.metadata or {}
+        for field in get_team_metadata_fields():
+            key = field["key"]
+            self.fields[key] = forms.CharField(
+                label=field["label"],
+                required=False,
+                initial=metadata.get(key, ""),
+            )
+
+    def save(self):
+        metadata = dict(self.team.metadata or {})
+        metadata.update({key: (value or "").strip() for key, value in self.cleaned_data.items()})
+        self.team.metadata = metadata
+        self.team.save(update_fields=["metadata"])
+        return self.team
 
 
 class TeamChangeForm(forms.ModelForm):
