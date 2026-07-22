@@ -14,6 +14,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.api.v2.usage.services import (
+    BUCKETABLE_METRICS,
     GRANULARITY_CHOICES,
     GRANULARITY_TOTAL,
     PERIOD_CHOICES,
@@ -103,9 +104,14 @@ class UsageQuerySerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Provide only one of 'participant' or 'participant_identifier', not both."
             )
+        granularity = attrs["granularity"]
+        non_bucketable = attrs["metric"] - BUCKETABLE_METRICS
+        if granularity != GRANULARITY_TOTAL and non_bucketable:
+            listed = ", ".join(f"'{m}'" for m in sorted(non_bucketable))
+            raise serializers.ValidationError(f"The {listed} metric(s) are only available at granularity=total.")
         tz = attrs["tz"]
         start, end = self._resolve_window(attrs, tz)
-        self._guard_window(start, end, attrs["granularity"])
+        self._guard_window(start, end, granularity)
         attrs["start"] = start
         attrs["end"] = end
         return attrs

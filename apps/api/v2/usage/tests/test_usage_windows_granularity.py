@@ -221,3 +221,38 @@ def test_max_window_guard(granularity, start, end, rejected):
         assert "too large" in str(response.json()).lower()
     else:
         assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("metric", ["cost", "tokens"])
+def test_cost_and_tokens_reject_non_total_granularity(metric):
+    """cost/tokens are total-only for now; requesting them with a finer granularity is a clear 400
+    rather than silently dropping the metric from bucketed rows."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+
+    response = client.get(reverse(USAGE_URL), {"metric": metric, "granularity": "daily"})
+
+    assert response.status_code == 400
+    body = str(response.json()).lower()
+    assert metric in body
+    assert "granularity=total" in body
+
+
+@pytest.mark.django_db()
+def test_cost_and_tokens_allowed_with_explicit_window_at_total():
+    """An explicit window at the default 'total' granularity is fine for cost/tokens."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+
+    response = client.get(
+        reverse(USAGE_URL),
+        {"metric": ["cost", "tokens"], "start": "2026-07-01", "end": "2026-08-01"},
+    )
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results["cost"] == {"total": "0.00000000", "currency": "USD"}
+    assert results["tokens"] == {"prompt": 0, "completion": 0, "total": 0}

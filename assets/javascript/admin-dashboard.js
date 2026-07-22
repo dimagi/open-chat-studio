@@ -17,7 +17,7 @@ function getTimeSeriesData (start, end, data) {
   const dataDict = listToDict(data)
   const chartData = []
   const current = new Date(start)
-  while (current <= end) {  
+  while (current <= end) {
     const curString = toDateString(current)
     chartData.push({
       x: curString,
@@ -36,58 +36,6 @@ export const barChartWithDates = (ctx, start, end, data, label) => {
       datasets: [
         {
           label,
-          data: chartData
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false
-        }
-      },
-      scales: {
-        x: {
-          title: {
-            display: true,
-            text: 'Date'
-          }
-        },
-        y: {
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: label
-          }
-        }
-      }
-    }
-  })
-}
-
-export const cumulativeChartWithDates = (
-  ctx,
-  start,
-  end,
-  data,
-  label,
-  startValue
-) => {
-  const chartData = getTimeSeriesData(start, end, data)
-  let currentValue = startValue || 0
-  for (const row of chartData) {
-    currentValue += row.y
-    row.y = currentValue
-  }
-  return new Chart(ctx, {
-    type: 'line',
-    data: {
-      datasets: [
-        {
-          label,
-          fill: true,
           data: chartData
         }
       ]

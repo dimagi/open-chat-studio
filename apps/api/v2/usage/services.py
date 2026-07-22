@@ -1,14 +1,16 @@
 """Query orchestration for the usage API (``GET /api/v2/usage/``).
 
 This is the single place that turns a validated ``UsageQuery`` into team-scoped aggregates. It
-supports the ``messages``, ``sessions``, and ``participants`` metrics over an explicit ``[start, end)``
-window (resolved from ``period`` or ``start``/``end`` by the param serializer) at ``total``/``daily``/
-``weekly``/``monthly`` granularity; later slices add cost/tokens and grouping without changing this
-contract. See ``docs/design/usage-api.md``.
+supports the ``messages``, ``sessions``, ``participants``, ``cost``, and ``tokens`` metrics over an
+explicit ``[start, end)`` window (resolved from ``period`` or ``start``/``end`` by the param
+serializer). Activity metrics (messages/sessions/participants) bucket at ``total``/``daily``/
+``weekly``/``monthly`` granularity; ``cost``/``tokens`` are ``total``-only for now. Later slices add
+per-bucket cost/tokens and grouping without changing this contract. See ``docs/design/usage-api.md``.
 """
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
@@ -19,14 +21,20 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.cost_tracking.services import reporting
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.teams.models import Team
 
 # Metric identifiers. Later slices extend SUPPORTED_METRICS; the param serializer validates against it.
 METRIC_MESSAGES = "messages"
 METRIC_SESSIONS = "sessions"
 METRIC_PARTICIPANTS = "participants"
-SUPPORTED_METRICS = frozenset({METRIC_MESSAGES, METRIC_SESSIONS, METRIC_PARTICIPANTS})
+METRIC_COST = "cost"
+METRIC_TOKENS = "tokens"
+SUPPORTED_METRICS = frozenset({METRIC_MESSAGES, METRIC_SESSIONS, METRIC_PARTICIPANTS, METRIC_COST, METRIC_TOKENS})
+# Metrics that support time-bucketing. cost/tokens read UsageRecord via the cost report path, which
+# has no tz-aware per-bucket token series yet, so they are total-only until a later slice adds it.
+BUCKETABLE_METRICS = frozenset({METRIC_MESSAGES, METRIC_SESSIONS, METRIC_PARTICIPANTS})
 
 # Calendar-month period selectors.
 PERIOD_CURRENT_MONTH = "current_month"
@@ -61,6 +69,17 @@ class MessageCounts(TypedDict):
     total: int
 
 
+class CostBlock(TypedDict):
+    total: Decimal
+    currency: str
+
+
+class TokenCounts(TypedDict):
+    prompt: int
+    completion: int
+    total: int
+
+
 @dataclass(frozen=True)
 class UsageResult:
     """The endpoint response, pre-serialisation.
@@ -91,6 +110,16 @@ class UsageQuery:
     participant_identifier: str | None = None
 
 
+@dataclass(frozen=True)
+class _CostFilter:
+    """A resolved participant filter for the cost read path. ``filters`` is passed to ``reporting``;
+    ``is_empty`` is True when a participant filter was requested but matched no one, so the caller
+    short-circuits to zeros (``CostFilters`` treats an empty id list as "no filter", not "match none")."""
+
+    filters: reporting.CostFilters
+    is_empty: bool
+
+
 def usage_query(query: UsageQuery) -> UsageResult:
     results = _aggregate(query) if query.granularity == GRANULARITY_TOTAL else _bucketed(query)
     return UsageResult(
@@ -111,13 +140,21 @@ def _aggregate(query: UsageQuery) -> dict:
         results[METRIC_SESSIONS] = _session_count(query)
     if METRIC_PARTICIPANTS in query.metrics:
         results[METRIC_PARTICIPANTS] = _active_participant_count(query)
+    if METRIC_COST in query.metrics or METRIC_TOKENS in query.metrics:
+        # cost/tokens share the UsageRecord read path, so resolve the participant filter to ids once.
+        cost_filter = _cost_filter(query)
+        if METRIC_COST in query.metrics:
+            results[METRIC_COST] = _cost(query, cost_filter)
+        if METRIC_TOKENS in query.metrics:
+            results[METRIC_TOKENS] = _token_counts(query, cost_filter)
     return results
 
 
 def _bucketed(query: UsageQuery) -> list[dict]:
     """One row per time bucket in ``[start, end)``, zero-filled so every bucket in the window appears
     (the max-window guard in the param serializer bounds how many that can be). Each metric runs a
-    single grouped query truncated in ``tz``; results are keyed back onto the buckets by local date."""
+    single grouped query truncated in ``tz``; results are keyed back onto the buckets by local date.
+    Only activity metrics bucket — the param serializer rejects cost/tokens at this granularity."""
     trunc = _TRUNC[query.granularity]
     starts = list(_iter_bucket_starts(query.start, query.end, query.granularity, query.tz))
     rows: list[dict] = [{"bucket_start": bucket} for bucket in starts]
@@ -136,6 +173,36 @@ def _bucketed(query: UsageQuery) -> list[dict]:
         for row in rows:
             row[metric] = by_date.get(row["bucket_start"].date(), empty())
     return rows
+
+
+def _cost(query: UsageQuery, cost_filter: _CostFilter) -> CostBlock:
+    """Total priced spend for the window with its currency, from ``UsageRecord`` via the cost read path
+    so it reconciles with the dashboard's cost panel. A participant filter that matches nobody zeroes
+    the total without touching the DB."""
+    if cost_filter.is_empty:
+        return CostBlock(total=Decimal(0), currency="USD")
+    total = reporting.cost_total(query.team, start=query.start, end=query.end, filters=cost_filter.filters)
+    return CostBlock(total=total.total, currency=total.currency)
+
+
+def _token_counts(query: UsageQuery, cost_filter: _CostFilter) -> TokenCounts:
+    """Prompt/completion/total token counts from ``UsageRecord``, split by ``service_kind``. Shares the
+    window and filters with ``_cost`` so a client's cost and tokens for one window reconcile."""
+    if cost_filter.is_empty:
+        return TokenCounts(prompt=0, completion=0, total=0)
+    counts = reporting.token_counts(query.team, start=query.start, end=query.end, filters=cost_filter.filters)
+    return TokenCounts(prompt=counts.prompt, completion=counts.completion, total=counts.total)
+
+
+def _cost_filter(query: UsageQuery) -> _CostFilter:
+    """Resolve the participant filter to ``UsageRecord`` participant ids. An identifier can match several
+    participants (one per platform), so this returns a list. Returns an unfiltered ``CostFilters`` when
+    no participant filter was requested."""
+    if not query.participant and not query.participant_identifier:
+        return _CostFilter(filters=reporting.CostFilters(), is_empty=False)
+    lookup = {"public_id": query.participant} if query.participant else {"identifier": query.participant_identifier}
+    participant_ids = list(Participant.objects.filter(team=query.team, **lookup).values_list("id", flat=True))
+    return _CostFilter(filters=reporting.CostFilters(participant_ids=participant_ids), is_empty=not participant_ids)
 
 
 def _session_queryset(query: UsageQuery) -> QuerySet[ExperimentSession]:

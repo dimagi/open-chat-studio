@@ -137,7 +137,7 @@ paths:
               GenerateBotMessageAndSend:
                 value:
                   identifier: '+15556793'
-                  experiment: exp1
+                  experiment: 123e4567-e89b-12d3-a456-426614174000
                   platform: whatsapp
                   prompt_text: Tell the user to do something
                   session_data:
@@ -149,7 +149,7 @@ paths:
               SendMessageDirectly:
                 value:
                   identifier: '+15556793'
-                  experiment: exp1
+                  experiment: 123e4567-e89b-12d3-a456-426614174000
                   platform: whatsapp
                   message_text: Your appointment is confirmed for tomorrow at 10am.
                   session_data:
@@ -158,15 +158,6 @@ paths:
                     key: value
                 summary: Send a pre-written message directly to the participant, bypassing
                   the bot/LLM.
-              ExperimentChannelNotFound:
-                value:
-                  detail: Experiment cannot send messages on the connect_messaging
-                    channel
-                summary: Experiment cannot send messages on the specified channel
-              ConsentNotGiven:
-                value:
-                  detail: User has not given consent
-                summary: User has not given consent
         required: true
       security:
       - OAuth2:
@@ -180,30 +171,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/TriggerBotMessageResponse'
               examples:
-                GenerateBotMessageAndSend:
+                MessageTriggered:
                   value:
-                    identifier: '+15556793'
-                    experiment: exp1
-                    platform: whatsapp
-                    prompt_text: Tell the user to do something
-                    session_data:
-                      key: value
-                    participant_data:
-                      key: value
-                  summary: Generates a bot message and sends it to the user (auto-creates
-                    participant if needed).
-                SendMessageDirectly:
-                  value:
-                    identifier: '+15556793'
-                    experiment: exp1
-                    platform: whatsapp
-                    message_text: Your appointment is confirmed for tomorrow at 10am.
-                    session_data:
-                      key: value
-                    participant_data:
-                      key: value
-                  summary: Send a pre-written message directly to the participant,
-                    bypassing the bot/LLM.
+                    session_id: 123e4567-e89b-12d3-a456-426614174000
+                    url: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
+                    team:
+                      name: My Team
+                      slug: my-team
+                    channel:
+                      platform: whatsapp
+                      data: {}
+                  summary: The session the message will be delivered on, including
+                    its channel details.
           description: ''
         '400':
           content:
@@ -211,6 +190,11 @@ paths:
               schema:
                 description: Bad Request
               examples:
+                ChannelNotConfigured:
+                  value:
+                    detail: Experiment cannot send messages on the whatsapp channel.
+                      Create the channel first.
+                  summary: Experiment cannot send messages on the specified channel
                 ConsentNotGiven:
                   value:
                     detail: User has not given consent
@@ -222,11 +206,10 @@ paths:
               schema:
                 description: Not Found
               examples:
-                ExperimentChannelNotFound:
+                ExperimentNotFound:
                   value:
-                    detail: Experiment cannot send messages on the connect_messaging
-                      channel
-                  summary: Experiment cannot send messages on the specified channel
+                    detail: No Experiment matches the given query.
+                  summary: No experiment with the given ID exists in the team
           description: ''
   /api/v2/usage/:
     get:
@@ -234,9 +217,11 @@ paths:
       description: 'Return team-scoped usage data for a time window. The window is
         either a calendar ''period'' (current/previous month) or an explicit half-open
         ''start''/''end''. Each requested metric gets its own block: ''messages''
-        (human/AI/total counts), ''sessions'' (count), and ''participants'' (distinct
-        count). With ''granularity'' finer than ''total'', results are one row per
-        time bucket. Optionally narrowed to a single participant.'
+        (human/AI/total counts), ''sessions'' (count), ''participants'' (distinct
+        count), ''cost'' (total spend and currency), and ''tokens'' (prompt/completion/total).
+        With ''granularity'' finer than ''total'', the activity metrics return one
+        row per time bucket (cost/tokens require ''total''). Optionally narrowed to
+        a single participant.'
       summary: Usage
       parameters:
       - in: query
@@ -270,14 +255,18 @@ paths:
           type: array
           items:
             enum:
+            - cost
             - messages
             - participants
             - sessions
+            - tokens
             type: string
             description: |-
+              * `cost` - cost
               * `messages` - messages
               * `participants` - participants
               * `sessions` - sessions
+              * `tokens` - tokens
         description: Metrics to return; repeat the parameter for several.
         required: true
       - in: query
@@ -618,6 +607,20 @@ components:
       - consent_text
       - id
       - name
+    Cost:
+      type: object
+      properties:
+        total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+          description: Total priced spend in the window.
+        currency:
+          type: string
+          description: ISO currency code of the spend.
+      required:
+      - currency
+      - total
     CustomAction:
       type: object
       description: |-
@@ -1533,6 +1536,22 @@ components:
       required:
       - name
       - slug
+    Tokens:
+      type: object
+      properties:
+        prompt:
+          type: integer
+          description: Input tokens (fresh plus cached).
+        completion:
+          type: integer
+          description: Output tokens.
+        total:
+          type: integer
+          description: All LLM tokens; prompt and completion need not sum to it.
+      required:
+      - completion
+      - prompt
+      - total
     TriggerBotChannel:
       type: object
       description: |-
@@ -1631,6 +1650,10 @@ components:
         participants:
           type: integer
           description: Distinct participants active in the window.
+        cost:
+          $ref: '#/components/schemas/Cost'
+        tokens:
+          $ref: '#/components/schemas/Tokens'
         bucket_start:
           type: string
           format: date-time
@@ -1696,6 +1719,10 @@ components:
         participants:
           type: integer
           description: Distinct participants active in the window.
+        cost:
+          $ref: '#/components/schemas/Cost'
+        tokens:
+          $ref: '#/components/schemas/Tokens'
     UsageResultsOrBuckets:
       oneOf:
       - $ref: '#/components/schemas/UsageResults'

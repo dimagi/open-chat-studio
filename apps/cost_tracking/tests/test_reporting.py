@@ -12,9 +12,11 @@ from apps.cost_tracking.services.reporting import (
     CostFilters,
     cost_summary,
     cost_timeseries,
+    cost_total,
     costs_by_experiment,
     coverage_gaps,
     session_usage,
+    token_counts,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -321,6 +323,138 @@ class TestCostTimeseries:
         _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
         assert cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW) == []
+
+
+@pytest.mark.django_db()
+class TestTokenCounts:
+    """Token split by service_kind: prompt = input + cached input, completion = output, total = all."""
+
+    def _record(self, team, kind, quantity, when=_NOW - timedelta(days=1)):
+        return UsageRecordFactory.create(team=team, service_kind=kind, quantity=quantity, at=when)
+
+    def test_splits_by_service_kind(self):
+        team = TeamFactory.create()
+        self._record(team, ServiceKind.LLM_INPUT, 100)
+        self._record(team, ServiceKind.LLM_CACHED_INPUT, 20)
+        self._record(team, ServiceKind.LLM_OUTPUT, 40)
+        self._record(team, ServiceKind.LLM_CACHE_WRITE, 5)
+
+        counts = token_counts(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert counts.prompt == 120  # input + cached input
+        assert counts.completion == 40  # output
+        assert counts.total == 165  # every LLM kind, including cache-write
+
+    def test_zeroes_empty_window(self):
+        team = TeamFactory.create()
+        self._record(team, ServiceKind.LLM_INPUT, 100, when=_NOW - timedelta(days=40))  # outside window
+
+        counts = token_counts(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert (counts.prompt, counts.completion, counts.total) == (0, 0, 0)
+
+    def test_scoped_to_team(self):
+        team = TeamFactory.create()
+        other = TeamFactory.create()
+        self._record(other, ServiceKind.LLM_INPUT, 999)
+
+        counts = token_counts(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert counts.total == 0
+
+    def test_honours_participant_filter(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        keep = ExperimentSessionFactory.create(experiment=exp, team=team)
+        drop = ExperimentSessionFactory.create(experiment=exp, team=team)
+        UsageRecordFactory.create(
+            team=team, service_kind=ServiceKind.LLM_INPUT, quantity=10, participant=keep.participant, at=_NOW
+        )
+        UsageRecordFactory.create(
+            team=team, service_kind=ServiceKind.LLM_INPUT, quantity=99, participant=drop.participant, at=_NOW
+        )
+
+        counts = token_counts(
+            team,
+            start=_NOW - timedelta(days=30),
+            end=_NOW + timedelta(days=1),
+            filters=CostFilters(participant_ids=[keep.participant_id]),
+        )
+
+        assert counts.prompt == 10
+
+    def test_single_window_scoped_query(self):
+        team = TeamFactory.create()
+        self._record(team, ServiceKind.LLM_INPUT, 100)
+
+        with CaptureQueriesContext(connection) as ctx:
+            token_counts(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        # A single aggregate, window-filtered on the queryset so it index-ranges on
+        # (team, timestamp) rather than scanning the team's whole history.
+        assert len(ctx.captured_queries) == 1
+        assert "timestamp" in ctx.captured_queries[0]["sql"]
+
+
+@pytest.mark.django_db()
+class TestCostTotal:
+    def test_sums_period_records_excluding_outside(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        _usage(team, cost="0.50", when=_NOW - timedelta(days=2))
+        _usage(team, cost="9.99", when=_NOW - timedelta(days=40))  # outside window
+
+        result = cost_total(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert result.total == Decimal("1.50")
+
+    def test_scoped_to_team(self):
+        team = TeamFactory.create()
+        other = TeamFactory.create()
+        _usage(other, cost="9.99", when=_NOW - timedelta(days=1))
+
+        result = cost_total(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert result.total == Decimal(0)
+
+    def test_single_query_for_total_and_currency(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+
+        with CaptureQueriesContext(connection) as ctx:
+            cost_total(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        # One grouped aggregate covers both total and currency - no prior-period scan, no second query.
+        assert len(ctx.captured_queries) == 1
+
+    def test_honours_participant_filter(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        keep = ExperimentSessionFactory.create(experiment=exp, team=team)
+        drop = ExperimentSessionFactory.create(experiment=exp, team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=keep.participant)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), participant=drop.participant)
+
+        result = cost_total(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(participant_ids=[keep.participant_id])
+        )
+
+        assert result.total == Decimal("1.00")
+
+    @pytest.mark.parametrize(
+        ("currencies", "expected"),
+        [
+            pytest.param(["EUR"], "EUR", id="single-currency-present"),
+            pytest.param([], "USD", id="empty-defaults-usd"),
+            pytest.param(["USD", "EUR"], "USD", id="mixed-defaults-usd"),
+        ],
+    )
+    def test_currency(self, currencies, expected):
+        team = TeamFactory.create()
+        for currency in currencies:
+            _usage(team, cost="0.10", when=_NOW - timedelta(days=1), currency=currency)
+
+        assert cost_total(team, start=_NOW - timedelta(days=30), end=_NOW).currency == expected
 
 
 @pytest.mark.django_db()
