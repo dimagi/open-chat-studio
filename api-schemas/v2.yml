@@ -116,9 +116,10 @@ paths:
   /api/v2/usage/:
     get:
       operationId: usage
-      description: Return team-scoped usage data. Currently reports human, AI, and
-        total message counts for a calendar month, optionally narrowed to a single
-        participant.
+      description: 'Return team-scoped usage data for a calendar month. Each requested
+        metric gets its own block: ''messages'' (human/AI/total counts), ''sessions''
+        (count), and ''participants'' (distinct count). Optionally narrowed to a single
+        participant.'
       summary: Usage
       parameters:
       - in: query
@@ -128,8 +129,13 @@ paths:
           items:
             enum:
             - messages
+            - participants
+            - sessions
             type: string
-            description: '* `messages` - messages'
+            description: |-
+              * `messages` - messages
+              * `participants` - participants
+              * `sessions` - sessions
         description: Metrics to return; repeat the parameter for several.
         required: true
       - in: query
@@ -1421,6 +1427,13 @@ components:
       properties:
         messages:
           $ref: '#/components/schemas/MessageCounts'
+        sessions:
+          type: integer
+          description: Sessions started in the window, excluding evaluation-harness
+            and never-engaged sessions.
+        participants:
+          type: integer
+          description: Distinct participants active in the window.
   securitySchemes:
     OAuth2:
       type: oauth2

@@ -13,8 +13,9 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
 class UsageView(APIView):
     # A comment, not a docstring: drf-spectacular would publish a docstring as the operation
     # description, and the per-operation description below is the client-facing one.
-    # Team-scoped usage inspection. Returns human/AI/total message counts for a calendar month,
-    # optionally narrowed to a single participant. See docs/design/usage-api.md.
+    # Team-scoped usage inspection. Returns message counts, session counts, and distinct participant
+    # counts for a calendar month, optionally narrowed to a single participant.
+    # See docs/design/usage-api.md.
 
     permission_classes = [IsAuthenticated, CanViewUsage, TokenHasOAuthResourceScope]
     required_scopes = ["usage"]
@@ -23,8 +24,9 @@ class UsageView(APIView):
         operation_id="usage",
         summary="Usage",
         description=(
-            "Return team-scoped usage data. Currently reports human, AI, and total message counts "
-            "for a calendar month, optionally narrowed to a single participant."
+            "Return team-scoped usage data for a calendar month. Each requested metric gets its own "
+            "block: 'messages' (human/AI/total counts), 'sessions' (count), and 'participants' "
+            "(distinct count). Optionally narrowed to a single participant."
         ),
         tags=["Usage"],
         # Query parameters are derived from the request serializer so the docs can't drift from validation.

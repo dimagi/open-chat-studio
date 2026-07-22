@@ -22,6 +22,11 @@ class UsageResultsSerializer(serializers.Serializer):
     metrics it asked for."""
 
     messages = MessageCountsSerializer(required=False)
+    sessions = serializers.IntegerField(
+        required=False,
+        help_text="Sessions started in the window, excluding evaluation-harness and never-engaged sessions.",
+    )
+    participants = serializers.IntegerField(required=False, help_text="Distinct participants active in the window.")
 
 
 class UsageResponseSerializer(serializers.Serializer):
