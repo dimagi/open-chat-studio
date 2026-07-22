@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework import routers
 
 from apps.api.v2 import views
+from apps.api.v2.channels import TriggerBotMessageView
 from apps.api.v2.usage.views import UsageView
 
 app_name = "v2"
@@ -14,5 +15,6 @@ router.register(r"chatbots", views.ChatbotViewSet, basename="chatbot")
 urlpatterns = [
     path("me/", views.MeView.as_view(), name="me"),
     path("usage/", UsageView.as_view(), name="usage"),
+    path("trigger_bot/", TriggerBotMessageView.as_view(), name="trigger_bot"),
     path("", include(router.urls)),
 ]
