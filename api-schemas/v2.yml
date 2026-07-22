@@ -231,12 +231,39 @@ paths:
   /api/v2/usage/:
     get:
       operationId: usage
-      description: 'Return team-scoped usage data for a calendar month. Each requested
-        metric gets its own block: ''messages'' (human/AI/total counts), ''sessions''
-        (count), and ''participants'' (distinct count). Optionally narrowed to a single
-        participant.'
+      description: 'Return team-scoped usage data for a time window. The window is
+        either a calendar ''period'' (current/previous month) or an explicit half-open
+        ''start''/''end''. Each requested metric gets its own block: ''messages''
+        (human/AI/total counts), ''sessions'' (count), and ''participants'' (distinct
+        count). With ''granularity'' finer than ''total'', results are one row per
+        time bucket. Optionally narrowed to a single participant.'
       summary: Usage
       parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+        description: Exclusive end of an explicit window (ISO date or datetime). Requires
+          'start'.
+      - in: query
+        name: granularity
+        schema:
+          enum:
+          - total
+          - daily
+          - weekly
+          - monthly
+          type: string
+          default: total
+          minLength: 1
+        description: |-
+          Time-bucketing of results. 'total' (default) returns a single object; the others return one row per bucket, each carrying 'bucket_start'.
+
+          * `total` - total
+          * `daily` - daily
+          * `weekly` - weekly
+          * `monthly` - monthly
       - in: query
         name: metric
         schema:
@@ -273,20 +300,26 @@ paths:
           - current_month
           - previous_month
           type: string
-          default: current_month
           minLength: 1
         description: |-
-          Calendar month to report on, evaluated in the given timezone.
+          Calendar month to report on, evaluated in the given timezone. Mutually exclusive with 'start'/'end'; defaults to the current month when no explicit window is given.
 
           * `current_month` - current_month
           * `previous_month` - previous_month
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+        description: Inclusive start of an explicit window (ISO date or datetime).
+          Requires 'end'.
       - in: query
         name: tz
         schema:
           type: string
           default: UTC
           minLength: 1
-        description: IANA timezone name defining calendar-month boundaries. Defaults
+        description: IANA timezone name defining calendar and bucket boundaries. Defaults
           to UTC.
       tags:
       - Usage
@@ -1583,6 +1616,27 @@ components:
       - session_id
       - team
       - url
+    UsageBucketResult:
+      type: object
+      description: |-
+        A single time bucket: the per-metric blocks plus the bucket's inclusive start (in the request
+        timezone). Emitted when ``granularity`` is finer than ``total``.
+      properties:
+        messages:
+          $ref: '#/components/schemas/MessageCounts'
+        sessions:
+          type: integer
+          description: Sessions started in the window, excluding evaluation-harness
+            and never-engaged sessions.
+        participants:
+          type: integer
+          description: Distinct participants active in the window.
+        bucket_start:
+          type: string
+          format: date-time
+          description: Inclusive start of this bucket, in the request timezone.
+      required:
+      - bucket_start
     UsagePeriod:
       type: object
       properties:
@@ -1606,14 +1660,24 @@ components:
       properties:
         period:
           $ref: '#/components/schemas/UsagePeriod'
+        granularity:
+          type: string
+          description: Time-bucketing applied to the results.
         group_by:
           type: string
           nullable: true
           readOnly: true
           description: Dimension the results are grouped by, or null when ungrouped.
         results:
-          $ref: '#/components/schemas/UsageResults'
+          allOf:
+          - $ref: '#/components/schemas/UsageResultsOrBuckets'
+          readOnly: true
+          description: For granularity 'total' (default), a single object with one
+            block per requested metric. For 'daily'/'weekly'/'monthly', an array of
+            such objects — one per time bucket, each with a 'bucket_start' — covering
+            the whole window (empty buckets are zero-filled).
       required:
+      - granularity
       - group_by
       - period
       - results
@@ -1632,6 +1696,10 @@ components:
         participants:
           type: integer
           description: Distinct participants active in the window.
+    UsageResultsOrBuckets:
+      oneOf:
+      - $ref: '#/components/schemas/UsageResults'
+      - $ref: '#/components/schemas/UsageBucketResult'
   securitySchemes:
     OAuth2:
       type: oauth2

@@ -14,7 +14,7 @@ class UsageView(APIView):
     # A comment, not a docstring: drf-spectacular would publish a docstring as the operation
     # description, and the per-operation description below is the client-facing one.
     # Team-scoped usage inspection. Returns message counts, session counts, and distinct participant
-    # counts for a calendar month, optionally narrowed to a single participant.
+    # counts over a time window, optionally bucketed and narrowed to a single participant.
     # See docs/design/usage-api.md.
 
     permission_classes = [IsAuthenticated, CanViewUsage, TokenHasOAuthResourceScope]
@@ -24,9 +24,11 @@ class UsageView(APIView):
         operation_id="usage",
         summary="Usage",
         description=(
-            "Return team-scoped usage data for a calendar month. Each requested metric gets its own "
-            "block: 'messages' (human/AI/total counts), 'sessions' (count), and 'participants' "
-            "(distinct count). Optionally narrowed to a single participant."
+            "Return team-scoped usage data for a time window. The window is either a calendar 'period' "
+            "(current/previous month) or an explicit half-open 'start'/'end'. Each requested metric "
+            "gets its own block: 'messages' (human/AI/total counts), 'sessions' (count), and "
+            "'participants' (distinct count). With 'granularity' finer than 'total', results are one "
+            "row per time bucket. Optionally narrowed to a single participant."
         ),
         tags=["Usage"],
         # Query parameters are derived from the request serializer so the docs can't drift from validation.
@@ -40,7 +42,9 @@ class UsageView(APIView):
         result = usage_query(
             request.team,
             metrics=validated["metric"],
-            period=validated["period"],
+            start=validated["start"],
+            end=validated["end"],
+            granularity=validated["granularity"],
             tz=validated["tz"],
             participant=validated.get("participant"),
             participant_identifier=validated.get("participant_identifier"),

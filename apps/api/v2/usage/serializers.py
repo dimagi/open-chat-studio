@@ -1,8 +1,10 @@
 """Response serializers for ``GET /api/v2/usage/``. Render the plain aggregates from
 ``services.usage_query`` and provide the OpenAPI response schema."""
 
-from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema_field
 from rest_framework import serializers
+
+from apps.api.v2.usage.services import GRANULARITY_TOTAL
 
 
 class MessageCountsSerializer(serializers.Serializer):
@@ -29,14 +31,40 @@ class UsageResultsSerializer(serializers.Serializer):
     participants = serializers.IntegerField(required=False, help_text="Distinct participants active in the window.")
 
 
+class UsageBucketResultSerializer(UsageResultsSerializer):
+    """A single time bucket: the per-metric blocks plus the bucket's inclusive start (in the request
+    timezone). Emitted when ``granularity`` is finer than ``total``."""
+
+    bucket_start = serializers.DateTimeField(help_text="Inclusive start of this bucket, in the request timezone.")
+
+
 class UsageResponseSerializer(serializers.Serializer):
     period = UsagePeriodSerializer(source="*")
+    granularity = serializers.CharField(help_text="Time-bucketing applied to the results.")
     group_by = serializers.SerializerMethodField(
         help_text="Dimension the results are grouped by, or null when ungrouped."
     )
-    results = UsageResultsSerializer()
+    results = serializers.SerializerMethodField(
+        help_text=(
+            "For granularity 'total' (default), a single object with one block per requested metric. "
+            "For 'daily'/'weekly'/'monthly', an array of such objects — one per time bucket, each with "
+            "a 'bucket_start' — covering the whole window (empty buckets are zero-filled)."
+        )
+    )
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_group_by(self, obj) -> None:
         # Grouping arrives in a later slice; this slice is always ungrouped.
         return None
+
+    @extend_schema_field(
+        PolymorphicProxySerializer(
+            component_name="UsageResultsOrBuckets",
+            serializers=[UsageResultsSerializer, UsageBucketResultSerializer],
+            resource_type_field_name=None,
+        )
+    )
+    def get_results(self, obj):
+        if obj.granularity == GRANULARITY_TOTAL:
+            return UsageResultsSerializer(obj.results).data
+        return UsageBucketResultSerializer(obj.results, many=True).data
