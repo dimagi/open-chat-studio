@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from apps.api.v2.usage.param_serializers import UsageQuerySerializer
 from apps.api.v2.usage.permissions import CanViewUsage
 from apps.api.v2.usage.serializers import UsageResponseSerializer
-from apps.api.v2.usage.services import usage_query
+from apps.api.v2.usage.services import UsageQuery, usage_query
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
@@ -40,13 +40,15 @@ class UsageView(APIView):
         params.is_valid(raise_exception=True)
         validated = params.validated_data
         result = usage_query(
-            request.team,
-            metrics=validated["metric"],
-            start=validated["start"],
-            end=validated["end"],
-            granularity=validated["granularity"],
-            tz=validated["tz"],
-            participant=validated.get("participant"),
-            participant_identifier=validated.get("participant_identifier"),
+            UsageQuery(
+                team=request.team,
+                metrics=validated["metric"],
+                start=validated["start"],
+                end=validated["end"],
+                granularity=validated["granularity"],
+                tz=validated["tz"],
+                participant=validated.get("participant"),
+                participant_identifier=validated.get("participant_identifier"),
+            )
         )
         return Response(UsageResponseSerializer(result).data)
