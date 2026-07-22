@@ -327,16 +327,24 @@ def get_team_stats(team: Team) -> dict[str, int]:
     """All-time resource counts for a single team, for the admin team detail page.
 
     Versioned resources (chatbots, collections) are counted via their working-version
-    querysets so archived version snapshots aren't double-counted. Participants and
-    sessions exclude the evaluations platform, matching the dashboard totals.
+    querysets so archived version snapshots aren't double-counted. Participants,
+    sessions and messages drop only the evaluations platform; a NULL/unset platform
+    isn't evaluations, so it's still counted (a plain ``.exclude(platform=...)`` would
+    silently drop those rows since ``NOT (NULL = x)`` is NULL).
     """
+    # ExperimentSession.platform is nullable, so keep NULL rows explicitly.
+    not_evaluations = Q(platform__isnull=True) | ~Q(platform=ChannelPlatform.EVALUATIONS)
     return {
         "chatbots": Experiment.objects.working_versions_queryset().filter(team=team).count(),
         "collections": Collection.objects.working_versions_queryset().filter(team=team).count(),
+        # Participant.platform is non-nullable, so a plain exclude is fine here.
         "participants": Participant.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS).count(),
-        "sessions": ExperimentSession.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS).count(),
+        "sessions": ExperimentSession.objects.filter(team=team).filter(not_evaluations).count(),
         "messages": ChatMessage.objects.filter(chat__team=team)
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        .filter(
+            Q(chat__experiment_session__platform__isnull=True)
+            | ~Q(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        )
         .count(),
         "members": team.membership_set.count(),
         "pending_invitations": team.pending_invitations().count(),

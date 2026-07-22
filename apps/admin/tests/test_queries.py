@@ -173,6 +173,17 @@ class TestGetTeamStats:
         # The evaluations participant is excluded; only the session's default-platform one counts.
         assert stats["participants"] == 1
 
+    def test_counts_null_platform_sessions_and_messages(self):
+        # ExperimentSession.platform is nullable; a NULL platform isn't the evaluations
+        # platform, so it must still be counted (a plain exclude would silently drop it).
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team, platform=None)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+
+        stats = get_team_stats(team)
+        assert stats["sessions"] == 1
+        assert stats["messages"] == 1
+
 
 @pytest.mark.django_db()
 class TestGetPlatformBreakdown:
