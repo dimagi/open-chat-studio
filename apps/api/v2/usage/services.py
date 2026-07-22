@@ -1,13 +1,14 @@
 """Query orchestration for the usage API (``GET /api/v2/usage/``).
 
 This is the single place that turns validated query params into team-scoped aggregates. It supports
-the ``messages``, ``sessions``, and ``participants`` metrics over a calendar month; later slices add
-cost/tokens, explicit windows, granularity, and grouping without changing this contract. See
-``docs/design/usage-api.md``.
+the ``messages``, ``sessions``, ``participants``, ``cost``, and ``tokens`` metrics over a calendar
+month; later slices add explicit windows, granularity, and grouping without changing this contract.
+See ``docs/design/usage-api.md``.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import TypedDict
 from zoneinfo import ZoneInfo
 
@@ -17,14 +18,17 @@ from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.cost_tracking.services import reporting
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.teams.models import Team
 
 # Metric identifiers. Later slices extend SUPPORTED_METRICS; the param serializer validates against it.
 METRIC_MESSAGES = "messages"
 METRIC_SESSIONS = "sessions"
 METRIC_PARTICIPANTS = "participants"
-SUPPORTED_METRICS = frozenset({METRIC_MESSAGES, METRIC_SESSIONS, METRIC_PARTICIPANTS})
+METRIC_COST = "cost"
+METRIC_TOKENS = "tokens"
+SUPPORTED_METRICS = frozenset({METRIC_MESSAGES, METRIC_SESSIONS, METRIC_PARTICIPANTS, METRIC_COST, METRIC_TOKENS})
 
 # Calendar-month period selectors.
 PERIOD_CURRENT_MONTH = "current_month"
@@ -35,6 +39,17 @@ PERIOD_CHOICES = (PERIOD_CURRENT_MONTH, PERIOD_PREVIOUS_MONTH)
 class MessageCounts(TypedDict):
     human: int
     ai: int
+    total: int
+
+
+class CostBlock(TypedDict):
+    total: Decimal
+    currency: str
+
+
+class TokenCounts(TypedDict):
+    prompt: int
+    completion: int
     total: int
 
 
@@ -67,7 +82,54 @@ def usage_query(
         results[METRIC_SESSIONS] = _session_count(team, start, end, participant, participant_identifier)
     if METRIC_PARTICIPANTS in metrics:
         results[METRIC_PARTICIPANTS] = _active_participant_count(team, start, end, participant, participant_identifier)
+    if METRIC_COST in metrics or METRIC_TOKENS in metrics:
+        # cost/tokens share the UsageRecord read path, so resolve the participant filter to ids once.
+        cost_filter = _cost_filter(team, participant, participant_identifier)
+        if METRIC_COST in metrics:
+            results[METRIC_COST] = _cost(team, start, end, cost_filter)
+        if METRIC_TOKENS in metrics:
+            results[METRIC_TOKENS] = _token_counts(team, start, end, cost_filter)
     return UsageResult(period_start=start, period_end=end, timezone=str(tz), results=results)
+
+
+def _cost(team: Team, start: datetime, end: datetime, cost_filter: "_CostFilter") -> CostBlock:
+    """Total priced spend for the window with its currency, from ``UsageRecord`` via the cost read path
+    so it reconciles with the dashboard's cost panel. A participant filter that matches nobody zeroes
+    the total without touching the DB."""
+    if cost_filter.is_empty:
+        return CostBlock(total=Decimal(0), currency="USD")
+    total = reporting.cost_total(team, start=start, end=end, filters=cost_filter.filters)
+    return CostBlock(total=total.total, currency=total.currency)
+
+
+def _token_counts(team: Team, start: datetime, end: datetime, cost_filter: "_CostFilter") -> TokenCounts:
+    """Prompt/completion/total token counts from ``UsageRecord``, split by ``service_kind``. Shares the
+    window and filters with ``_cost`` so a client's cost and tokens for one window reconcile."""
+    if cost_filter.is_empty:
+        return TokenCounts(prompt=0, completion=0, total=0)
+    counts = reporting.token_counts(team, start=start, end=end, filters=cost_filter.filters)
+    return TokenCounts(prompt=counts.prompt, completion=counts.completion, total=counts.total)
+
+
+@dataclass(frozen=True)
+class _CostFilter:
+    """A resolved participant filter for the cost read path. ``filters`` is passed to ``reporting``;
+    ``is_empty`` is True when a participant filter was requested but matched no one, so the caller
+    short-circuits to zeros (``CostFilters`` treats an empty id list as "no filter", not "match none")."""
+
+    filters: reporting.CostFilters
+    is_empty: bool
+
+
+def _cost_filter(team: Team, participant: str | None, participant_identifier: str | None) -> _CostFilter:
+    """Resolve the participant filter to ``UsageRecord`` participant ids. An identifier can match several
+    participants (one per platform), so this returns a list. Returns an unfiltered ``CostFilters`` when
+    no participant filter was requested."""
+    if not participant and not participant_identifier:
+        return _CostFilter(filters=reporting.CostFilters(), is_empty=False)
+    lookup = {"public_id": participant} if participant else {"identifier": participant_identifier}
+    participant_ids = list(Participant.objects.filter(team=team, **lookup).values_list("id", flat=True))
+    return _CostFilter(filters=reporting.CostFilters(participant_ids=participant_ids), is_empty=not participant_ids)
 
 
 def _session_count(
