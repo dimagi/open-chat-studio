@@ -135,6 +135,7 @@ def test_score_from_field_strips_nul_bytes(session_target, schema_field, raw_val
         automated_result=None,
         schema_field=schema_field,
     )
+    assert s.value_string is not None
     assert "\x00" not in s.value_string
     assert "\x00" not in s.name
 
