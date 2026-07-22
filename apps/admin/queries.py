@@ -111,7 +111,12 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
 
     `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
     records in more than one currency and summing them would be meaningless.
+
+    Each team carries a `metadata` object with the configured staff-only team
+    metadata fields (`TEAM_METADATA_FIELDS`); their definitions are echoed at the
+    top level as `metadata_fields` so a consumer can build labelled columns.
     """
+    metadata_fields = get_team_metadata_fields()
     token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
 
@@ -121,15 +126,22 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
         missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug")
         team_meta.update({tid: (name, slug) for tid, name, slug in missing})
 
+    # Fetch metadata separately (keyed by PK): grouping the aggregate query by
+    # the JSON `metadata` column would be needlessly expensive, and metadata is
+    # per-team so it never affects the grouping anyway.
+    metadata_by_team = dict(Team.objects.filter(id__in=list(team_meta)).values_list("id", "metadata"))
+
     teams: dict[int, dict] = {}
 
     def _entry(team_id: int) -> dict:
         if team_id not in teams:
             name, slug = team_meta.get(team_id, (None, None))
+            metadata = metadata_by_team.get(team_id) or {}
             teams[team_id] = {
                 "team_id": team_id,
                 "team_name": name,
                 "team_slug": slug,
+                "metadata": {field["key"]: metadata.get(field["key"], "") for field in metadata_fields},
                 "run_count": 0,
                 "total_tokens": 0,
                 "total_cost": defaultdict(Decimal),  # currency -> amount
@@ -159,7 +171,12 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
     for entry in result:
         entry["total_cost"] = {currency: str(amount) for currency, amount in entry["total_cost"].items()}
 
-    return {"start": start.isoformat(), "end": end.isoformat(), "teams": result}
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "metadata_fields": metadata_fields,
+        "teams": result,
+    }
 
 
 def get_whatsapp_numbers():
