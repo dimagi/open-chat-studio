@@ -71,10 +71,14 @@ class UsageResponseSerializer(serializers.Serializer):
         return None
 
     @extend_schema_field(
+        # ``many=False`` puts the proxy in drf-spectacular's manual mode (issue #692), which is what
+        # lets one branch be an array: ``total`` returns a single ``UsageResults`` object, the bucketed
+        # granularities an array of ``UsageBucketResult`` — so the schema matches ``get_results`` below.
         PolymorphicProxySerializer(
             component_name="UsageResultsOrBuckets",
-            serializers=[UsageResultsSerializer, UsageBucketResultSerializer],
+            serializers=[UsageResultsSerializer, UsageBucketResultSerializer(many=True)],
             resource_type_field_name=None,
+            many=False,
         )
     )
     def get_results(self, obj):

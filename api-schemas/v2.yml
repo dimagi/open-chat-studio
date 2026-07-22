@@ -1725,7 +1725,9 @@ components:
     UsageResultsOrBuckets:
       oneOf:
       - $ref: '#/components/schemas/UsageResults'
-      - $ref: '#/components/schemas/UsageBucketResult'
+      - type: array
+        items:
+          $ref: '#/components/schemas/UsageBucketResult'
   securitySchemes:
     OAuth2:
       type: oauth2
