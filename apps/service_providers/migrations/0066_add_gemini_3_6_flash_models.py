@@ -18,9 +18,6 @@ class Migration(migrations.Migration):
         # Add gemini-3.6-flash and gemini-3.5-flash-lite for the `google` and
         # `google_vertex_ai` providers (1M context).
         llm_model_migration(),
-        # Migrate references to claude-sonnet-4-20250514 to claude-sonnet-4-6 and notify affected teams
-        # (moved here from 0061 so the data migration only runs once per deployment).
-        RunDataMigration("remove_deprecated_models", command_options={"force": True}),
         # Seed pricing for the newly added Gemini models.
         load_pricing_data(),
     ]
