@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.db.models import Count, DecimalField, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
@@ -300,6 +301,59 @@ def cost_timeseries(
         .order_by("bucket")
     )
     return [{"date": row["bucket"], "cost": float(row["cost"])} for row in rows]
+
+
+def usage_timeseries(
+    team: Team,
+    *,
+    start: datetime,
+    end: datetime,
+    granularity: str,
+    tz: ZoneInfo,
+    filters: CostFilters | None = None,
+) -> list[dict]:
+    """Cost + token counts per time bucket in [start, end), truncated in ``tz``. One row per non-empty
+    bucket: ``{'bucket', 'cost' (Decimal), 'currency', 'prompt', 'completion', 'total'}``. Empty buckets
+    are absent (the caller zero-fills). Shares the scoped-record path with ``cost_total``/``token_counts``
+    so a bucketed usage response reconciles with the same window's totals. This is the API read; the
+    dashboard's Chart.js series is ``cost_timeseries`` (float, UTC-bucketed).
+    """
+    trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
+    scoped = _scoped_records(team, filters).filter(timestamp__gte=start, timestamp__lt=end)
+    currency = _single_currency(scoped)
+    rows = (
+        scoped.annotate(bucket=trunc("timestamp", tzinfo=tz))
+        .values("bucket")
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            prompt=Coalesce(
+                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), _ZERO, output_field=_QUANTITY_FIELD
+            ),
+            completion=Coalesce(
+                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), _ZERO, output_field=_QUANTITY_FIELD
+            ),
+            total=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+        )
+        .order_by("bucket")
+    )
+    return [
+        {
+            "bucket": row["bucket"],
+            "cost": row["cost"],
+            "currency": currency,
+            "prompt": int(row["prompt"]),
+            "completion": int(row["completion"]),
+            "total": int(row["total"]),
+        }
+        for row in rows
+    ]
+
+
+def _single_currency(scoped) -> str:
+    """The one currency present in a scoped queryset, or ``"USD"`` when there are none or (defensively)
+    a mix — the same single-currency assumption ``cost_total`` makes."""
+    currencies = list(scoped.values_list("currency", flat=True).distinct())
+    return currencies[0] if len(currencies) == 1 else "USD"
 
 
 def _coverage_gap_from_row(row: dict, call_count: int) -> ModelCoverageGap:
