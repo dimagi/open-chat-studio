@@ -383,6 +383,18 @@ class TestTokenCounts:
 
         assert counts.prompt == 10
 
+    def test_single_window_scoped_query(self):
+        team = TeamFactory.create()
+        self._record(team, ServiceKind.LLM_INPUT, 100)
+
+        with CaptureQueriesContext(connection) as ctx:
+            token_counts(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        # A single aggregate, window-filtered on the queryset so it index-ranges on
+        # (team, timestamp) rather than scanning the team's whole history.
+        assert len(ctx.captured_queries) == 1
+        assert "timestamp" in ctx.captured_queries[0]["sql"]
+
 
 @pytest.mark.django_db()
 class TestCostTotal:

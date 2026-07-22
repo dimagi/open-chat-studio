@@ -181,17 +181,18 @@ def token_counts(team: Team, *, start: datetime, end: datetime, filters: CostFil
     Shares the scoped-record path (team + ``CostFilters``) with ``cost_summary`` so tokens and cost for
     the same window reconcile against the same rows.
     """
-    period_q = Q(timestamp__gte=start, timestamp__lt=end)
-    agg = _scoped_records(team, filters).aggregate(
-        prompt=Coalesce(
-            Sum("quantity", filter=period_q & Q(service_kind__in=_PROMPT_KINDS)), _ZERO, output_field=_QUANTITY_FIELD
-        ),
-        completion=Coalesce(
-            Sum("quantity", filter=period_q & Q(service_kind=ServiceKind.LLM_OUTPUT)),
-            _ZERO,
-            output_field=_QUANTITY_FIELD,
-        ),
-        total=Coalesce(Sum("quantity", filter=period_q), _ZERO, output_field=_QUANTITY_FIELD),
+    agg = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=start, timestamp__lt=end)
+        .aggregate(
+            prompt=Coalesce(
+                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), _ZERO, output_field=_QUANTITY_FIELD
+            ),
+            completion=Coalesce(
+                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), _ZERO, output_field=_QUANTITY_FIELD
+            ),
+            total=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+        )
     )
     return TokenCounts(prompt=int(agg["prompt"]), completion=int(agg["completion"]), total=int(agg["total"]))
 
