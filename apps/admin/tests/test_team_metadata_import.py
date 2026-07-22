@@ -64,14 +64,31 @@ class TestImportTeamMetadataFromCsv:
         assert result.updated == []
         assert "no columns matching" in result.errors[0]
 
-    def test_select_value_outside_options_is_rejected(self, settings):
-        settings.TEAM_METADATA_FIELDS = TIER_FIELDS
+    @pytest.mark.parametrize(
+        ("fields", "csv_content", "expected_error"),
+        [
+            pytest.param(
+                TIER_FIELDS,
+                "Slug,Tier\nteam-a,Enterprise\n",
+                "not a valid option for 'Tier'",
+                id="select-value-outside-options",
+            ),
+            pytest.param(
+                [{"key": "contact", "label": "Contact", "type": "email"}],
+                "Slug,Contact\nteam-a,not-an-email\n",
+                "not a valid email for 'Contact'",
+                id="invalid-email",
+            ),
+        ],
+    )
+    def test_invalid_value_is_rejected(self, settings, fields, csv_content, expected_error):
+        settings.TEAM_METADATA_FIELDS = fields
         team = TeamFactory.create(slug="team-a", metadata={})
 
-        result = import_team_metadata_from_csv(_csv("Slug,Tier\nteam-a,Enterprise\n"))
+        result = import_team_metadata_from_csv(_csv(csv_content))
 
         assert result.updated == []
-        assert "not a valid option for 'Tier'" in result.errors[0]
+        assert expected_error in result.errors[0]
         team.refresh_from_db()
         assert team.metadata == {}
 
@@ -84,17 +101,6 @@ class TestImportTeamMetadataFromCsv:
         assert result.updated == ["team-a"]
         team.refresh_from_db()
         assert team.metadata == {"tier": "Paid"}
-
-    def test_invalid_email_is_rejected(self, settings):
-        settings.TEAM_METADATA_FIELDS = [{"key": "contact", "label": "Contact", "type": "email"}]
-        team = TeamFactory.create(slug="team-a", metadata={})
-
-        result = import_team_metadata_from_csv(_csv("Slug,Contact\nteam-a,not-an-email\n"))
-
-        assert result.updated == []
-        assert "not a valid email for 'Contact'" in result.errors[0]
-        team.refresh_from_db()
-        assert team.metadata == {}
 
     def test_blank_value_clears_without_validation(self, settings):
         settings.TEAM_METADATA_FIELDS = TIER_FIELDS
