@@ -11,7 +11,9 @@ from django.db.models.functions import Coalesce, TruncDate
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.models import UsageRecord
-from apps.experiments.models import ExperimentSession, Participant
+from apps.documents.models import Collection
+from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun
+from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
@@ -319,6 +321,29 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
         }
         for row in msg_data
     ]
+
+
+def get_team_stats(team: Team) -> dict[str, int]:
+    """All-time resource counts for a single team, for the admin team detail page.
+
+    Versioned resources (chatbots, collections) are counted via their working-version
+    querysets so archived version snapshots aren't double-counted. Participants and
+    sessions exclude the evaluations platform, matching the dashboard totals.
+    """
+    return {
+        "chatbots": Experiment.objects.working_versions_queryset().filter(team=team).count(),
+        "collections": Collection.objects.working_versions_queryset().filter(team=team).count(),
+        "participants": Participant.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS).count(),
+        "sessions": ExperimentSession.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS).count(),
+        "messages": ChatMessage.objects.filter(chat__team=team)
+        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        .count(),
+        "members": team.membership_set.count(),
+        "pending_invitations": team.pending_invitations().count(),
+        "evaluation_configs": EvaluationConfig.objects.filter(team=team).count(),
+        "evaluation_runs": EvaluationRun.objects.filter(team=team).count(),
+        "evaluation_datasets": EvaluationDataset.objects.filter(team=team).count(),
+    }
 
 
 def get_platform_breakdown(start: datetime, end: datetime):
