@@ -114,16 +114,11 @@ class UsageQuerySerializer(serializers.Serializer):
         period = attrs.get("period")
         start = _localize(attrs.get("start"), tz)
         end = _localize(attrs.get("end"), tz)
-        has_window = start is not None or end is not None
-        if period and has_window:
-            raise serializers.ValidationError("Provide either 'period' or an explicit 'start'/'end' window, not both.")
-        if not has_window:
+        if start is None and end is None:
             return _month_bounds(period or PERIOD_CURRENT_MONTH, tz)
-        if start is None or end is None:
-            raise serializers.ValidationError("Both 'start' and 'end' are required for an explicit window.")
-        if end <= start:
-            raise serializers.ValidationError("'end' must be after 'start'.")
-        return start, end
+        if period:
+            raise serializers.ValidationError("Provide either 'period' or an explicit 'start'/'end' window, not both.")
+        return _explicit_window(start, end)
 
     def _guard_window(self, start: datetime, end: datetime, granularity: str) -> None:
         # ``total`` is a single row regardless of window size, so window length is unconstrained there.
@@ -136,6 +131,14 @@ class UsageQuerySerializer(serializers.Serializer):
                 f"The requested window is too large for '{granularity}' granularity "
                 f"(it would exceed {MAX_BUCKETS} buckets). Use a coarser granularity or a smaller window."
             )
+
+
+def _explicit_window(start: datetime | None, end: datetime | None) -> tuple[datetime, datetime]:
+    if start is None or end is None:
+        raise serializers.ValidationError("Both 'start' and 'end' are required for an explicit window.")
+    if end <= start:
+        raise serializers.ValidationError("'end' must be after 'start'.")
+    return start, end
 
 
 def _localize(value: datetime | None, tz: ZoneInfo) -> datetime | None:
