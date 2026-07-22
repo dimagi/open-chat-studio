@@ -163,6 +163,30 @@ def test_pending_cleared_when_widget_downgrades_before_grace():
 
 
 @pytest.mark.django_db()
+def test_pending_cleared_on_intermediate_downgrade_from_none_floor():
+    """A grandfathered NONE channel whose widget rolls back to an intermediate level (still
+    above the NONE floor, but below the pending level) must abandon the pending bump rather
+    than apply a level the widget can no longer satisfy, even past the grace window. See
+    ADR-0045."""
+    channel = _widget_channel(
+        required_auth_level=WidgetAuthLevel.NONE,
+        widget_version="0.6.0",  # EMBED_KEY: above the NONE floor, below pending SESSION_TOKEN
+        pending_auth_level=WidgetAuthLevel.SESSION_TOKEN,
+    )
+    channel.auth_level_notified_at = _past(ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE + timedelta(days=1))
+    channel.save(update_fields=["auth_level_notified_at"])
+
+    with patch("apps.channels.tasks.widget_auth_level_upgrade_notification") as notify:
+        ratchet_widget_auth_levels()
+
+    channel.refresh_from_db()
+    assert channel.required_auth_level == WidgetAuthLevel.NONE  # not raised to the stale pending level
+    assert channel.pending_auth_level is None
+    assert channel.auth_level_notified_at is None
+    notify.assert_not_called()
+
+
+@pytest.mark.django_db()
 def test_notifications_grouped_by_team():
     channel = _widget_channel(required_auth_level=WidgetAuthLevel.EMBED_KEY, widget_version="0.9.1")
     team = channel.team

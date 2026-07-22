@@ -302,13 +302,11 @@ def ratchet_widget_auth_levels():
     notify_by_team: dict[int, dict] = {}
     for channel in channels:
         target = widget_versions.level_for_version(channel.widget_version)
-        if target <= channel.required_auth_level:
-            # Widget no longer implies a higher level; drop any stale pending bump.
-            if channel.auth_level_notified_at is not None:
-                _clear_pending_auth_level(channel)
-            continue
 
         if channel.auth_level_notified_at is None:
+            # No bump pending yet. Start one only if the widget now implies a higher level.
+            if target <= channel.required_auth_level:
+                continue
             # Pending state is workflow bookkeeping, not an audited field change (like the
             # widget_version telemetry writes); bypass auditing so it creates no empty events.
             ExperimentChannel.objects.filter(pk=channel.pk).update(
@@ -319,6 +317,12 @@ def ratchet_widget_auth_levels():
             )
             team_data["chatbots"][channel.experiment.name] = channel.experiment.get_absolute_url()
             team_data["min_level"] = max(team_data["min_level"], target)
+        elif target < channel.pending_auth_level:
+            # The widget dropped back below the *pending* level before the grace period
+            # elapsed; abandon the raise (ADR-0045). Comparing against the pending level
+            # (not the current floor) also covers grandfathered NONE channels, where an
+            # intermediate downgrade stays above the floor but below the pending level.
+            _clear_pending_auth_level(channel)
         elif now - channel.auth_level_notified_at >= ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE:
             channel.required_auth_level = channel.pending_auth_level
             channel.pending_auth_level = None
