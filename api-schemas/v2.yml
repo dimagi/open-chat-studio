@@ -1519,6 +1519,22 @@ components:
       required:
       - name
       - slug
+    Tokens:
+      type: object
+      properties:
+        prompt:
+          type: integer
+          description: Input tokens (fresh plus cached).
+        completion:
+          type: integer
+          description: Output tokens.
+        total:
+          type: integer
+          description: All LLM tokens; prompt and completion need not sum to it.
+      required:
+      - completion
+      - prompt
+      - total
     TriggerBotChannel:
       type: object
       description: |-
