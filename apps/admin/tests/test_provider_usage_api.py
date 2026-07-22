@@ -104,7 +104,10 @@ def test_includes_team_metadata(superuser_client, settings):
 
     payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
 
-    assert payload["metadata_fields"] == settings.TEAM_METADATA_FIELDS
+    assert payload["metadata_fields"] == [
+        {"key": "team_owner", "label": "Team Owner", "type": "text"},
+        {"key": "region", "label": "Region", "type": "text"},
+    ]
     alpha = {t["team_name"]: t for t in payload["teams"]}["Alpha"]
     # Only configured fields are exposed; unconfigured keys stay hidden, missing ones blank.
     assert alpha["metadata"] == {"team_owner": "Jia", "region": ""}

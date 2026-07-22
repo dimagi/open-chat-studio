@@ -96,13 +96,23 @@ class TeamSignupForm(SignupForm):
         return user
 
 
+def _build_metadata_field(field: dict, initial: str) -> forms.Field:
+    field_type = field["type"]
+    if field_type == "select":
+        choices = [("", "---------")] + [(option, option) for option in field["options"]]
+        return forms.ChoiceField(label=field["label"], required=False, initial=initial, choices=choices)
+    if field_type == "email":
+        return forms.EmailField(label=field["label"], required=False, initial=initial)
+    return forms.CharField(label=field["label"], required=False, initial=initial)
+
+
 class TeamMetadataForm(forms.Form):
     """Edit a team's internal (staff-only) metadata.
 
-    Fields are built dynamically from the configured ``TEAM_METADATA_FIELDS`` so the
-    form stays in sync with the setting. Values are stored as stripped strings in the
-    team's ``metadata`` JSON. Used by both the per-team settings page and the global
-    admin team-detail page.
+    Fields are built dynamically from the configured ``TEAM_METADATA_FIELDS`` (honouring
+    each field's ``type``: text, email or select) so the form stays in sync with the
+    setting. Values are stored as stripped strings in the team's ``metadata`` JSON. Used
+    by both the per-team settings page and the global admin team-detail page.
     """
 
     def __init__(self, *args, team: Team, **kwargs):
@@ -111,11 +121,7 @@ class TeamMetadataForm(forms.Form):
         metadata = team.metadata or {}
         for field in get_team_metadata_fields():
             key = field["key"]
-            self.fields[key] = forms.CharField(
-                label=field["label"],
-                required=False,
-                initial=metadata.get(key, ""),
-            )
+            self.fields[key] = _build_metadata_field(field, initial=metadata.get(key, ""))
 
     def save(self):
         metadata = dict(self.team.metadata or {})
