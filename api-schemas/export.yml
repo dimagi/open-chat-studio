@@ -3791,6 +3791,17 @@ components:
             * `2` - Session token required (0.9.0+)
           minimum: 0
           maximum: 32767
+        pending_auth_level:
+          nullable: true
+          minimum: 0
+          maximum: 32767
+          oneOf:
+          - $ref: '#/components/schemas/PendingAuthLevelEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        auth_level_notified_at:
+          type: string
+          format: date-time
+          nullable: true
         experiment:
           type: integer
           nullable: true
@@ -4565,6 +4576,9 @@ components:
       - cursor
       - has_more
       - results
+    NullEnum:
+      enum:
+      - null
     ParticipantDataDetail:
       type: object
       properties:
@@ -4671,6 +4685,16 @@ components:
       - cursor
       - has_more
       - results
+    PendingAuthLevelEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      type: integer
+      description: |-
+        * `0` - None (pre-0.5.1 legacy)
+        * `1` - Embed key only (0.5.1 – 0.8.x)
+        * `2` - Session token required (0.9.0+)
     PipelineChatHistoryDetail:
       type: object
       properties:
