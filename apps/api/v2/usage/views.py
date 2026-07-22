@@ -29,8 +29,8 @@ class UsageView(APIView):
             "(current/previous month) or an explicit half-open 'start'/'end'. Each requested metric "
             "gets its own block: 'messages' (human/AI/total counts), 'sessions' (count), 'participants' "
             "(distinct count), 'cost' (total spend and currency), and 'tokens' (prompt/completion/total). "
-            "With 'granularity' finer than 'total', the activity metrics return one row per time bucket "
-            "(cost/tokens require 'total'). Optionally narrowed to a single participant."
+            "With 'granularity' finer than 'total', results are one row per time bucket. Optionally "
+            "narrowed to a single participant."
         ),
         tags=["Usage"],
         # Query parameters are derived from the request serializer so the docs can't drift from validation.

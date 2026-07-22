@@ -3,9 +3,8 @@
 This is the single place that turns a validated ``UsageQuery`` into team-scoped aggregates. It
 supports the ``messages``, ``sessions``, ``participants``, ``cost``, and ``tokens`` metrics over an
 explicit ``[start, end)`` window (resolved from ``period`` or ``start``/``end`` by the param
-serializer). Activity metrics (messages/sessions/participants) bucket at ``total``/``daily``/
-``weekly``/``monthly`` granularity; ``cost``/``tokens`` are ``total``-only for now. Later slices add
-per-bucket cost/tokens and grouping without changing this contract. See ``docs/design/usage-api.md``.
+serializer) at ``total``/``daily``/``weekly``/``monthly`` granularity. Later slices add grouping
+without changing this contract. See ``docs/design/usage-api.md``.
 """
 
 from dataclasses import dataclass
@@ -32,9 +31,6 @@ METRIC_PARTICIPANTS = "participants"
 METRIC_COST = "cost"
 METRIC_TOKENS = "tokens"
 SUPPORTED_METRICS = frozenset({METRIC_MESSAGES, METRIC_SESSIONS, METRIC_PARTICIPANTS, METRIC_COST, METRIC_TOKENS})
-# Metrics that support time-bucketing. cost/tokens read UsageRecord via the cost report path, which
-# has no tz-aware per-bucket token series yet, so they are total-only until a later slice adds it.
-BUCKETABLE_METRICS = frozenset({METRIC_MESSAGES, METRIC_SESSIONS, METRIC_PARTICIPANTS})
 
 # Calendar-month period selectors.
 PERIOD_CURRENT_MONTH = "current_month"
@@ -153,8 +149,7 @@ def _aggregate(query: UsageQuery) -> dict:
 def _bucketed(query: UsageQuery) -> list[dict]:
     """One row per time bucket in ``[start, end)``, zero-filled so every bucket in the window appears
     (the max-window guard in the param serializer bounds how many that can be). Each metric runs a
-    single grouped query truncated in ``tz``; results are keyed back onto the buckets by local date.
-    Only activity metrics bucket — the param serializer rejects cost/tokens at this granularity."""
+    single grouped query truncated in ``tz``; results are keyed back onto the buckets by local date."""
     trunc = _TRUNC[query.granularity]
     starts = list(_iter_bucket_starts(query.start, query.end, query.granularity, query.tz))
     rows: list[dict] = [{"bucket_start": bucket} for bucket in starts]
@@ -172,7 +167,47 @@ def _bucketed(query: UsageQuery) -> list[dict]:
         by_date = counts_by_bucket(query, trunc)
         for row in rows:
             row[metric] = by_date.get(row["bucket_start"].date(), empty())
+
+    _fill_cost_tokens_buckets(query, rows)
     return rows
+
+
+def _fill_cost_tokens_buckets(query: UsageQuery, rows: list[dict]) -> None:
+    """Add the ``cost``/``tokens`` blocks to each bucket row, if requested. Both come from one
+    ``UsageRecord`` timeseries (via the cost read path) so they reconcile with each other and with the
+    ``total``-granularity figures; buckets with no records are zero-filled."""
+    if METRIC_COST not in query.metrics and METRIC_TOKENS not in query.metrics:
+        return
+    by_date = _cost_tokens_by_bucket(query)
+    for row in rows:
+        block = by_date.get(row["bucket_start"].date())
+        if METRIC_COST in query.metrics:
+            row[METRIC_COST] = block["cost"] if block else CostBlock(total=Decimal(0), currency="USD")
+        if METRIC_TOKENS in query.metrics:
+            row[METRIC_TOKENS] = block["tokens"] if block else TokenCounts(prompt=0, completion=0, total=0)
+
+
+def _cost_tokens_by_bucket(query: UsageQuery) -> dict:
+    """``{local date: {'cost': CostBlock, 'tokens': TokenCounts}}`` for the window. A participant filter
+    that matches nobody yields ``{}`` so every bucket zero-fills, matching ``_cost``/``_token_counts``."""
+    cost_filter = _cost_filter(query)
+    if cost_filter.is_empty:
+        return {}
+    rows = reporting.usage_timeseries(
+        query.team,
+        start=query.start,
+        end=query.end,
+        granularity=query.granularity,
+        tz=query.tz,
+        filters=cost_filter.filters,
+    )
+    return {
+        _bucket_date(row["bucket"], query.tz): {
+            "cost": CostBlock(total=row["cost"], currency=row["currency"]),
+            "tokens": TokenCounts(prompt=row["prompt"], completion=row["completion"], total=row["total"]),
+        }
+        for row in rows
+    }
 
 
 def _cost(query: UsageQuery, cost_filter: _CostFilter) -> CostBlock:

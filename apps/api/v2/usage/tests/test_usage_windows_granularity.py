@@ -2,11 +2,14 @@
 guard (issue #3851)."""
 
 import datetime
+from decimal import Decimal
 
 import pytest
 from django.urls import reverse
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.cost_tracking.models import ServiceKind
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -224,23 +227,6 @@ def test_max_window_guard(granularity, start, end, rejected):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("metric", ["cost", "tokens"])
-def test_cost_and_tokens_reject_non_total_granularity(metric):
-    """cost/tokens are total-only for now; requesting them with a finer granularity is a clear 400
-    rather than silently dropping the metric from bucketed rows."""
-    team = TeamWithUsersFactory.create()
-    user = team.members.first()
-    client = ApiTestClient(user, team)
-
-    response = client.get(reverse(USAGE_URL), {"metric": metric, "granularity": "daily"})
-
-    assert response.status_code == 400
-    body = str(response.json()).lower()
-    assert metric in body
-    assert "granularity=total" in body
-
-
-@pytest.mark.django_db()
 def test_cost_and_tokens_allowed_with_explicit_window_at_total():
     """An explicit window at the default 'total' granularity is fine for cost/tokens."""
     team = TeamWithUsersFactory.create()
@@ -256,3 +242,45 @@ def test_cost_and_tokens_allowed_with_explicit_window_at_total():
     results = response.json()["results"]
     assert results["cost"] == {"total": "0.00000000", "currency": "USD"}
     assert results["tokens"] == {"prompt": 0, "completion": 0, "total": 0}
+
+
+@pytest.mark.django_db()
+def test_cost_and_tokens_bucket_daily_and_zero_fill():
+    """cost/tokens bucket by day like the activity metrics: each row carries its own cost/token block,
+    days with no UsageRecords are zero-filled, and the buckets reconcile with the per-record data."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    UsageRecordFactory.create(
+        team=team, service_kind=ServiceKind.LLM_INPUT, quantity=100, cost=Decimal("0.10"), at=_utc(2026, 7, 1, 8)
+    )
+    UsageRecordFactory.create(
+        team=team, service_kind=ServiceKind.LLM_OUTPUT, quantity=50, cost=Decimal("0.05"), at=_utc(2026, 7, 1, 9)
+    )
+    # 7/2 has no records → zero-filled.
+    UsageRecordFactory.create(
+        team=team, service_kind=ServiceKind.LLM_INPUT, quantity=200, cost=Decimal("0.20"), at=_utc(2026, 7, 3, 10)
+    )
+
+    client = ApiTestClient(user, team)
+    response = client.get(
+        reverse(USAGE_URL),
+        {"metric": ["cost", "tokens"], "start": "2026-07-01", "end": "2026-07-04", "granularity": "daily"},
+    )
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert [row["bucket_start"] for row in results] == [
+        "2026-07-01T00:00:00Z",
+        "2026-07-02T00:00:00Z",
+        "2026-07-03T00:00:00Z",
+    ]
+    assert [row["cost"] for row in results] == [
+        {"total": "0.15000000", "currency": "USD"},
+        {"total": "0.00000000", "currency": "USD"},
+        {"total": "0.20000000", "currency": "USD"},
+    ]
+    assert [row["tokens"] for row in results] == [
+        {"prompt": 100, "completion": 50, "total": 150},
+        {"prompt": 0, "completion": 0, "total": 0},
+        {"prompt": 200, "completion": 0, "total": 200},
+    ]
