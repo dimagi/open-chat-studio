@@ -137,7 +137,7 @@ paths:
               GenerateBotMessageAndSend:
                 value:
                   identifier: '+15556793'
-                  experiment: exp1
+                  experiment: 123e4567-e89b-12d3-a456-426614174000
                   platform: whatsapp
                   prompt_text: Tell the user to do something
                   session_data:
@@ -149,7 +149,7 @@ paths:
               SendMessageDirectly:
                 value:
                   identifier: '+15556793'
-                  experiment: exp1
+                  experiment: 123e4567-e89b-12d3-a456-426614174000
                   platform: whatsapp
                   message_text: Your appointment is confirmed for tomorrow at 10am.
                   session_data:
@@ -158,15 +158,6 @@ paths:
                     key: value
                 summary: Send a pre-written message directly to the participant, bypassing
                   the bot/LLM.
-              ExperimentChannelNotFound:
-                value:
-                  detail: Experiment cannot send messages on the connect_messaging
-                    channel
-                summary: Experiment cannot send messages on the specified channel
-              ConsentNotGiven:
-                value:
-                  detail: User has not given consent
-                summary: User has not given consent
         required: true
       security:
       - OAuth2:
@@ -180,30 +171,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/TriggerBotMessageResponse'
               examples:
-                GenerateBotMessageAndSend:
+                MessageTriggered:
                   value:
-                    identifier: '+15556793'
-                    experiment: exp1
-                    platform: whatsapp
-                    prompt_text: Tell the user to do something
-                    session_data:
-                      key: value
-                    participant_data:
-                      key: value
-                  summary: Generates a bot message and sends it to the user (auto-creates
-                    participant if needed).
-                SendMessageDirectly:
-                  value:
-                    identifier: '+15556793'
-                    experiment: exp1
-                    platform: whatsapp
-                    message_text: Your appointment is confirmed for tomorrow at 10am.
-                    session_data:
-                      key: value
-                    participant_data:
-                      key: value
-                  summary: Send a pre-written message directly to the participant,
-                    bypassing the bot/LLM.
+                    session_id: 123e4567-e89b-12d3-a456-426614174000
+                    url: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
+                    team:
+                      name: My Team
+                      slug: my-team
+                    channel:
+                      platform: whatsapp
+                      data: {}
+                  summary: The session the message will be delivered on, including
+                    its channel details.
           description: ''
         '400':
           content:
@@ -211,6 +190,11 @@ paths:
               schema:
                 description: Bad Request
               examples:
+                ChannelNotConfigured:
+                  value:
+                    detail: Experiment cannot send messages on the whatsapp channel.
+                      Create the channel first.
+                  summary: Experiment cannot send messages on the specified channel
                 ConsentNotGiven:
                   value:
                     detail: User has not given consent
@@ -222,11 +206,10 @@ paths:
               schema:
                 description: Not Found
               examples:
-                ExperimentChannelNotFound:
+                ExperimentNotFound:
                   value:
-                    detail: Experiment cannot send messages on the connect_messaging
-                      channel
-                  summary: Experiment cannot send messages on the specified channel
+                    detail: No Experiment matches the given query.
+                  summary: No experiment with the given ID exists in the team
           description: ''
   /api/v2/usage/:
     get:
