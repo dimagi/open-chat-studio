@@ -36,6 +36,7 @@ from apps.admin.queries import (
     get_period_totals,
     get_platform_breakdown,
     get_team_activity_summary,
+    get_team_stats,
     get_top_experiments,
     get_top_teams,
     get_whatsapp_message_stats,
@@ -47,10 +48,9 @@ from apps.admin.queries import (
     whatsapp_message_stats_to_csv,
 )
 from apps.admin.serializers import StatsSerializer
-from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Participant
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.teams.flags import get_all_flag_info
+from apps.teams.forms import TeamMetadataForm
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Flag, Team
 
@@ -225,12 +225,7 @@ def section_charts(request):
         context={
             "chart_data": {
                 "message_data": usage_data.data,
-                "participant_data": {
-                    "data": participant_data.data,
-                    "start_value": Participant.objects.filter(created_at__lt=start_timestamp)
-                    .exclude(platform=ChannelPlatform.EVALUATIONS)
-                    .count(),
-                },
+                "participant_data": participant_data.data,
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
@@ -241,6 +236,43 @@ def section_charts(request):
 @is_staff
 def section_top_teams(request):
     return _render_section(request, "admin/sections/top_teams.html", "top_teams", get_top_teams)
+
+
+@is_staff
+def team_detail(request, slug):
+    """Per-team admin page: resource counts plus an editable metadata form."""
+    team = get_object_or_404(Team, slug=slug)
+    form = TeamMetadataForm(request.POST or None, team=team)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        return redirect("ocs_admin:team_detail", slug=team.slug)
+
+    stats = get_team_stats(team)
+    stat_tiles = [
+        (label, stats[key])
+        for key, label in [
+            ("chatbots", "Chatbots"),
+            ("participants", "Participants"),
+            ("sessions", "Sessions"),
+            ("messages", "Messages"),
+            ("members", "Members"),
+            ("pending_invitations", "Pending Invites"),
+            ("collections", "Collections"),
+            ("evaluation_configs", "Eval Configs"),
+            ("evaluation_runs", "Eval Runs"),
+            ("evaluation_datasets", "Eval Datasets"),
+        ]
+    ]
+    return TemplateResponse(
+        request,
+        "admin/team_detail.html",
+        context={
+            "active_tab": "admin",
+            "team": team,
+            "stat_tiles": stat_tiles,
+            "form": form,
+        },
+    )
 
 
 @is_staff
@@ -455,7 +487,9 @@ def flag_history(request, flag_name):
     )
 
 
-@is_superuser
+# Staff-level: team names/slugs are already visible to staff via the dashboard's
+# top-teams table and the team_detail page, which drive this search endpoint.
+@is_staff
 def teams_api(request):
     query = request.GET.get("q", "").strip()
 
@@ -470,7 +504,7 @@ def teams_api(request):
 
     teams = teams.order_by("name")[:20]  # Limit to 20 results
 
-    data = [{"value": team.id, "text": team.name} for team in teams]
+    data = [{"value": team.id, "text": team.name, "slug": team.slug} for team in teams]
     return JsonResponse(data, safe=False)
 
 
