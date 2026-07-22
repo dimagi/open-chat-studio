@@ -8,17 +8,13 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 
 from apps.assessments.models import Score
+from apps.utils.fields import sanitize_control_chars
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationResult
     from apps.human_annotations.models import Annotation
 
 logger = logging.getLogger(__name__)
-
-
-def _strip_nul(s: str) -> str:
-    """Remove NUL bytes that PostgreSQL text fields cannot store."""
-    return s.replace("\x00", "")
 
 
 def _score_from_field(
@@ -45,7 +41,7 @@ def _score_from_field(
     # choice values like "0" / "1" without misclassifying them as numeric.
     if schema_type == "choice":
         data_type = Score.DataType.CATEGORICAL
-        value_string = _strip_nul(str(raw_value))
+        value_string = sanitize_control_chars(str(raw_value))
     elif isinstance(raw_value, bool):
         data_type = Score.DataType.BOOLEAN
         value_numeric = Decimal(1) if raw_value else Decimal(0)
@@ -58,7 +54,7 @@ def _score_from_field(
         data_type = Score.DataType.NUMERIC
     elif isinstance(raw_value, str):
         data_type = Score.DataType.CATEGORICAL
-        value_string = _strip_nul(raw_value)
+        value_string = sanitize_control_chars(raw_value)
     else:
         logger.warning(
             "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
@@ -71,7 +67,7 @@ def _score_from_field(
         team=team,
         target_content_type=ContentType.objects.get_for_model(target),
         target_object_id=target.pk,
-        name=_strip_nul(name),
+        name=sanitize_control_chars(name),
         data_type=data_type,
         value_numeric=value_numeric,
         value_string=value_string,
