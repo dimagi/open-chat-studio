@@ -11,6 +11,17 @@ class MessageCountsSerializer(serializers.Serializer):
     total = serializers.IntegerField(help_text="Sum of human and AI messages.")
 
 
+class CostSerializer(serializers.Serializer):
+    total = serializers.DecimalField(max_digits=14, decimal_places=8, help_text="Total priced spend in the window.")
+    currency = serializers.CharField(help_text="ISO currency code of the spend.")
+
+
+class TokensSerializer(serializers.Serializer):
+    prompt = serializers.IntegerField(help_text="Input tokens (fresh plus cached).")
+    completion = serializers.IntegerField(help_text="Output tokens.")
+    total = serializers.IntegerField(help_text="All LLM tokens; prompt and completion need not sum to it.")
+
+
 class UsagePeriodSerializer(serializers.Serializer):
     start = serializers.DateTimeField(source="period_start", help_text="Inclusive start of the window.")
     end = serializers.DateTimeField(source="period_end", help_text="Exclusive end of the window.")
@@ -27,6 +38,8 @@ class UsageResultsSerializer(serializers.Serializer):
         help_text="Sessions started in the window, excluding evaluation-harness and never-engaged sessions.",
     )
     participants = serializers.IntegerField(required=False, help_text="Distinct participants active in the window.")
+    cost = CostSerializer(required=False)
+    tokens = TokensSerializer(required=False)
 
 
 class UsageResponseSerializer(serializers.Serializer):

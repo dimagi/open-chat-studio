@@ -118,7 +118,8 @@ paths:
       operationId: usage
       description: 'Return team-scoped usage data for a calendar month. Each requested
         metric gets its own block: ''messages'' (human/AI/total counts), ''sessions''
-        (count), and ''participants'' (distinct count). Optionally narrowed to a single
+        (count), ''participants'' (distinct count), ''cost'' (total spend and currency),
+        and ''tokens'' (prompt/completion/total). Optionally narrowed to a single
         participant.'
       summary: Usage
       parameters:
@@ -128,14 +129,18 @@ paths:
           type: array
           items:
             enum:
+            - cost
             - messages
             - participants
             - sessions
+            - tokens
             type: string
             description: |-
+              * `cost` - cost
               * `messages` - messages
               * `participants` - participants
               * `sessions` - sessions
+              * `tokens` - tokens
         description: Metrics to return; repeat the parameter for several.
         required: true
       - in: query
@@ -470,6 +475,20 @@ components:
       - consent_text
       - id
       - name
+    Cost:
+      type: object
+      properties:
+        total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+          description: Total priced spend in the window.
+        currency:
+          type: string
+          description: ISO currency code of the spend.
+      required:
+      - currency
+      - total
     CustomAction:
       type: object
       description: |-
@@ -1385,6 +1404,22 @@ components:
       required:
       - name
       - slug
+    Tokens:
+      type: object
+      properties:
+        prompt:
+          type: integer
+          description: Input tokens (fresh plus cached).
+        completion:
+          type: integer
+          description: Output tokens.
+        total:
+          type: integer
+          description: All LLM tokens; prompt and completion need not sum to it.
+      required:
+      - completion
+      - prompt
+      - total
     UsagePeriod:
       type: object
       properties:
@@ -1434,6 +1469,10 @@ components:
         participants:
           type: integer
           description: Distinct participants active in the window.
+        cost:
+          $ref: '#/components/schemas/Cost'
+        tokens:
+          $ref: '#/components/schemas/Tokens'
   securitySchemes:
     OAuth2:
       type: oauth2
