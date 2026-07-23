@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import time
 from urllib.parse import unquote
@@ -18,6 +19,25 @@ from apps.documents.models import (
 from apps.documents.source_loaders.base import SyncResult
 from apps.documents.source_loaders.registry import create_loader
 from apps.documents.utils import bulk_delete_collection_files
+
+_EXTERNAL_ID_MAX_LENGTH = 255
+_EXTERNAL_ID_HASH_LENGTH = 64  # SHA-256 hex digest length
+_EXTERNAL_ID_PREFIX_LENGTH = _EXTERNAL_ID_MAX_LENGTH - _EXTERNAL_ID_HASH_LENGTH
+
+
+def _safe_external_id(identifier: str) -> str:
+    """Return identifier truncated to fit in CharField(max_length=255).
+
+    If the identifier is too long, the first 191 characters are kept and a
+    SHA-256 hex digest of the full identifier is appended (191 + 64 = 255),
+    guaranteeing uniqueness without collisions.
+    """
+    if len(identifier) <= _EXTERNAL_ID_MAX_LENGTH:
+        return identifier
+    digest = hashlib.sha256(identifier.encode()).hexdigest()
+    return identifier[:_EXTERNAL_ID_PREFIX_LENGTH] + digest
+
+
 from apps.files.models import File, FilePurpose
 
 logger = logging.getLogger("ocs.document_source")
@@ -118,7 +138,7 @@ class DocumentSourceManager:
 
         files_to_index = []
         for document in documents:
-            identifier = loader.get_document_identifier(document)
+            identifier = _safe_external_id(loader.get_document_identifier(document))
             seen_identifiers.add(identifier)
 
             if identifier in existing_files_map:
