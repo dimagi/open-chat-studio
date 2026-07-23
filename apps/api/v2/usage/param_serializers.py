@@ -21,6 +21,7 @@ from apps.api.v2.usage.services import (
     SUPPORTED_METRICS,
     _month_bounds,
 )
+from apps.channels.models import ChannelPlatform
 
 # Cap on how many buckets a single response may span, applied per granularity. It bounds both the
 # response size and the aggregation cost, and is what rejects e.g. ``daily`` over a multi-year range.
@@ -86,6 +87,17 @@ class UsageQuerySerializer(serializers.Serializer):
         required=False,
         max_length=320,
         help_text="Restrict to a single participant by their raw identifier (email/phone).",
+    )
+    chatbot = serializers.UUIDField(
+        required=False,
+        help_text="Restrict to a single chatbot by its ``public_id``.",
+    )
+    platform = serializers.ChoiceField(
+        # ``evaluations`` is excluded: the usage API drops evaluation-harness sessions, so filtering or
+        # grouping by that platform would report messages while ``sessions`` stayed structurally zero.
+        choices=[value for value in ChannelPlatform.values if value != ChannelPlatform.EVALUATIONS],
+        required=False,
+        help_text="Restrict to a single channel platform by its slug (e.g. 'web', 'whatsapp').",
     )
     tz = serializers.CharField(
         default="UTC",

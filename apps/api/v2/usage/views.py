@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from apps.api.v2.usage.param_serializers import UsageQuerySerializer
 from apps.api.v2.usage.permissions import CanViewUsage
 from apps.api.v2.usage.serializers import UsageResponseSerializer
-from apps.api.v2.usage.services import UsageQuery, usage_query
+from apps.api.v2.usage.services import UsageQuery, resolve_query_filters, usage_query
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
@@ -41,16 +41,19 @@ class UsageView(APIView):
         params = UsageQuerySerializer(data=request.query_params)
         params.is_valid(raise_exception=True)
         validated = params.validated_data
-        result = usage_query(
-            UsageQuery(
-                team=request.team,
-                metrics=validated["metric"],
-                start=validated["start"],
-                end=validated["end"],
-                granularity=validated["granularity"],
-                tz=validated["tz"],
-                participant=validated.get("participant"),
-                participant_identifier=validated.get("participant_identifier"),
-            )
+        query = UsageQuery(
+            team=request.team,
+            metrics=validated["metric"],
+            start=validated["start"],
+            end=validated["end"],
+            granularity=validated["granularity"],
+            tz=validated["tz"],
+            participant=validated.get("participant"),
+            participant_identifier=validated.get("participant_identifier"),
+            chatbot=validated.get("chatbot"),
+            platform=validated.get("platform"),
         )
+        # Resolve the participant/chatbot handles to FK ids once, so every metric filters on ids.
+        query = resolve_query_filters(query)
+        result = usage_query(query)
         return Response(UsageResponseSerializer(result).data)
