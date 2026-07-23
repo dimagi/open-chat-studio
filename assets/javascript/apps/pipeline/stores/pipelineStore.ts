@@ -15,9 +15,8 @@ import {getNodeId} from "../utils";
 import {cloneDeep} from "lodash";
 import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStore";
 import {apiClient} from "../api/api";
-import {PipelineType} from "../types/pipeline";
-import {isEqual} from "lodash";
-
+import {PipelineDiffPayload, PipelineType, PipelineSaveResponse} from "../types/pipeline";
+import {computePipelineDiff} from "../diffPipeline";
 let saveTimeoutId: NodeJS.Timeout | null = null;
 
 const createPipelineStore: StateCreator<
@@ -61,10 +60,7 @@ const createPipelineStore: StateCreator<
       nodes: newChange,
     });
 
-    get().autoSaveCurrentPipline(
-      newChange,
-      newEdges,
-    );
+    get().autoSaveCurrentPipline();
   },
   setEdges: (change) => {
     if (get().readOnly) return;
@@ -74,10 +70,7 @@ const createPipelineStore: StateCreator<
       edges: newChange,
     });
 
-    get().autoSaveCurrentPipline(
-      get().nodes,
-      newChange,
-    );
+    get().autoSaveCurrentPipline();
   },
   setNode: (id: string, change: Node | ((oldState: Node) => Node)) => {
     if (get().readOnly) return;
@@ -173,10 +166,7 @@ const createPipelineStore: StateCreator<
       newEdges = addEdge(connection, oldEdges);
       return newEdges;
     });
-    get().autoSaveCurrentPipline(
-        get().nodes,
-        newEdges,
-      );
+    get().autoSaveCurrentPipline();
   },
   addNode: (node, position) => {
     if (get().readOnly) return;
@@ -246,6 +236,11 @@ const createPipelineManagerStore: StateCreator<
   isSaving: false,
   isLoading: true,
   errors: {},
+  conflictDetected: false,
+  currentRevision: 0,
+  dismissConflict: () => {
+    set({conflictDetected: false});
+  },
   loadPipeline: async (pipelineId: number) => {
     set({isLoading: true});
     apiClient.getPipeline(pipelineId).then((pipeline) => {
@@ -253,7 +248,11 @@ const createPipelineManagerStore: StateCreator<
         if (pipeline.data) {
           updateEdgeClasses(pipeline.data.edges, pipeline.errors);
         }
-        set({currentPipeline: pipeline, currentPipelineId: pipelineId});
+        set({
+          currentPipeline: pipeline,
+          currentPipelineId: pipelineId,
+          currentRevision: pipeline.edit_revision ?? 0,
+        });
         set({errors: pipeline.errors});
         set({isLoading: false});
         if (get().reactFlowInstance) {
@@ -273,20 +272,11 @@ const createPipelineManagerStore: StateCreator<
     }
   },
   setIsLoading: (isLoading: boolean) => set({isLoading}),
-  autoSaveCurrentPipline: (nodes: Node[], edges: Edge[]) => {
-    if (!get().currentPipeline) {
-      return
-    }
-    const dataToSave = getDataToSave(
-      {
-        nodes: get().currentPipeline!.data?.nodes || [],
-        edges: get().currentPipeline!.data?.edges || [],
-      },
-      {nodes, edges}
-    )
-    if (!dataToSave) {
+  autoSaveCurrentPipline: () => {
+    if (!get().currentPipeline || get().conflictDetected) {
       return;
     }
+
     set({dirty: true});
     // Clear the previous timeout if it exists.
     if (saveTimeoutId) {
@@ -295,41 +285,104 @@ const createPipelineManagerStore: StateCreator<
 
     // Set up a new timeout.
     saveTimeoutId = setTimeout(() => {
-      if (get().currentPipeline) {
-        get().savePipeline(
-          {...get().currentPipeline!, data: dataToSave},
-          true,
-        );
+      if (!get().currentPipeline || get().conflictDetected) {
+        return;
       }
+
+      // Compute diff from the latest state right before sending, not from captured params
+      const oldNodes = get().currentPipeline!.data?.nodes || [];
+      const oldEdges = get().currentPipeline!.data?.edges || [];
+
+      const diff = computePipelineDiff(
+        oldNodes as Node[],
+        get().nodes,
+        oldEdges as Edge[],
+        get().edges,
+        get().currentRevision,
+      );
+
+      if (!diff) {
+        return;
+      }
+
+      get()._patchPipeline(diff);
     }, 1000);
   },
-  savePipeline: (pipeline: PipelineType,) => {
-    set({isSaving: true});
+  savePipeline: (pipeline: PipelineType) => {
+    set({isSaving: true, conflictDetected: false});
     if (saveTimeoutId) {
       clearTimeout(saveTimeoutId);
     }
     return new Promise<void>((resolve, reject) => {
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
-        .then((response) => {
-          if (response) {
-            pipeline.data = response.data;
-            set({currentPipeline: pipeline, dirty: false});
-            set({errors: response.errors});
-            if (get().reactFlowInstance && response.errors) {
+        .then((saveResponse: PipelineSaveResponse) => {
+          if (saveResponse) {
+            pipeline.data = saveResponse.data as PipelineType["data"];
+            set({
+              currentPipeline: pipeline,
+              dirty: false,
+              currentRevision: saveResponse.edit_revision,
+            });
+            set({errors: saveResponse.errors as ErrorsType});
+            if (get().reactFlowInstance && saveResponse.errors) {
               set({
-                edges: updateEdgeClasses(get().edges, response.errors)
+                edges: updateEdgeClasses(get().edges, saveResponse.errors as ErrorsType)
               })
             }
             resolve();
           }
         })
         .catch((err) => {
-          alertify.error("There was an error saving");
+          if ((err as {status?: number}).status === 409) {
+            set({conflictDetected: true});
+          } else {
+            alertify.error("There was an error saving");
+          }
           reject(err);
         }).finally(() => {
         set({isSaving: false});
       });
     });
+  },
+  _patchPipeline: async (diff: PipelineDiffPayload) => {
+    set({isSaving: true});
+    try {
+      const response = await apiClient.patchPipeline(get().currentPipelineId!, diff);
+      if (response) {
+        // Update local state with merged data from server
+        const edges = response.data?.edges as Edge[] | undefined;
+        set({
+          currentRevision: response.edit_revision,
+          errors: response.errors as ErrorsType,
+          dirty: false,
+        });
+        if (edges) {
+          set({
+            edges: updateEdgeClasses(edges, response.errors as ErrorsType),
+          });
+        }
+        if (get().currentPipeline) {
+          // Ensure the current pipeline reflects the merged server state
+          set({
+            currentPipeline: {
+              ...get().currentPipeline!,
+              data: response.data as PipelineType["data"],
+            },
+          });
+        }
+      }
+    } catch (err) {
+      if ((err as {status?: number; currentRevision?: number}).status === 409) {
+        set({
+          conflictDetected: true,
+          currentRevision: (err as {currentRevision?: number}).currentRevision ?? get().currentRevision,
+        });
+      } else {
+        alertify.error("There was an error saving");
+      }
+    } finally {
+      set({isSaving: false});
+    }
   },
   nodeHasErrors: (nodeId: string) => {
     return !!get().errors["node"] && !!get().errors["node"]![nodeId];
@@ -381,51 +434,4 @@ function updateEdgeClasses(edges: Edge[], errors: ErrorsType) {
     }
   }
   return edges;
-}
-
-interface NodesAndEdges {
-  nodes: Node[],
-  edges: Edge[],
-}
-
-/**
- * Returns the data to save if it is different from the data that was saved before.
- *
- * @param oldPipelineData - The data that was saved before
- * @param newPipelineData - The data that is currently in the editor
- *
- * @returns The data to save if it is different from the data that was saved before, otherwise undefined
- */
-const getDataToSave = (oldPipelineData: NodesAndEdges, newPipelineData: NodesAndEdges) => {
-  // See `apps.pipelines.flow.FlowNode
-  const newNodes = byId(newPipelineData.nodes.map(({id, position, type, data}) => ({id, position, type, data})));
-  const oldNodes = byId(oldPipelineData.nodes);
-  if (!isEqual(oldNodes, newNodes)) {
-    return newPipelineData;
-  }
-
-  // See `apps.pipelines.flow.FlowEdge`
-  const newEdges = byId(newPipelineData.edges.map(({id, source, target, sourceHandle, targetHandle}) => ({
-        id,
-        source,
-        target,
-        sourceHandle,
-        targetHandle
-      })));
-  const oldEdges = byId(oldPipelineData.edges);
-  if (!isEqual(oldEdges, newEdges)) {
-    return newPipelineData;
-  }
-  return undefined;
-}
-
-/**
- * Returns an object with the given array of objects as values, with the `id` field as the key.
- * @param arr
- */
-const byId = <T extends {id: string}>(arr: T[]) => {
-  return arr.reduce((acc, node) => {
-      acc[node.id] = node;
-      return acc;
-    }, {} as {[key: string]: T});
 }

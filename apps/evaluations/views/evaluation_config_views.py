@@ -22,9 +22,16 @@ from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
-from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.models import (
+    EvaluationConfig,
+    EvaluationRun,
+    EvaluationRunStatus,
+    EvaluationRunType,
+    raise_if_runs_in_flight,
+)
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
 from apps.evaluations.tagging import remove_applied_tags_for_runs
 from apps.evaluations.tasks import (
@@ -128,8 +135,12 @@ class DeleteEvaluation(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
     permission_required = "evaluations.delete_evaluationconfig"
 
     def delete(self, request, team_slug: str, pk: int):
+        """Delete the config, returning 409 if a related run is still in progress."""
         evaluation = get_object_or_404(EvaluationConfig, team=request.team, pk=pk)
-        evaluation.delete()
+        try:
+            evaluation.delete()
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         response = HttpResponse(status=200)
         if request.GET.get("redirect") == "1":
             response["HX-Redirect"] = reverse("evaluations:home", args=[self.request.team.slug])
@@ -163,8 +174,14 @@ class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Vi
     permission_required = "evaluations.delete_evaluationrun"
 
     def post(self, request, team_slug: str, evaluation_pk: int):
+        """Un-apply this config's eval tags and delete all its runs, returning 409 if any run is in progress."""
         config = get_object_or_404(EvaluationConfig, id=evaluation_pk, team=request.team)
-        runs = EvaluationRun.objects.filter(config=config)
+        run_ids = list(EvaluationRun.objects.filter(config=config).values_list("id", flat=True))
+        runs = EvaluationRun.objects.filter(id__in=run_ids)
+        try:
+            raise_if_runs_in_flight(runs, "evaluation")
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         with transaction.atomic():
             remove_applied_tags_for_runs(runs)
             runs.delete()

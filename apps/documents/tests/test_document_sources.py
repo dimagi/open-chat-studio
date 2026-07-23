@@ -7,7 +7,11 @@ import pytest
 from langchain_core.documents import Document
 
 from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig, JSONCollectionSourceConfig
-from apps.documents.document_source_service import DocumentSourceManager
+from apps.documents.document_source_service import (
+    _EXTERNAL_ID_MAX_LENGTH,
+    DocumentSourceManager,
+    _safe_external_id,
+)
 from apps.documents.models import (
     Collection,
     CollectionFile,
@@ -167,6 +171,96 @@ class TestDocumentSourceManager:
         assert result.files_removed == 1
         manager._remove_files.assert_called_once()
         manager._index_files.assert_not_called()
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_sync_truncates_long_external_id_and_is_stable(self, create_loader, collection, document_source):
+        """A >255-char identifier is truncated on store and matches on re-sync (no DataError, no churn)."""
+        long_source = "https://example.com/" + "a" * 300
+        docs = [
+            Mock(
+                page_content="content",
+                metadata={"path": "doc.md", "source": long_source, "sha": "1", "source_type": "test"},
+            )
+        ]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+
+        result = manager.sync_collection()
+        assert result.success
+        assert result.files_added == 1
+
+        collection_file = CollectionFile.objects.get(collection=collection)
+        assert len(collection_file.external_id) <= _EXTERNAL_ID_MAX_LENGTH
+        assert collection_file.external_id == _safe_external_id(long_source)
+
+        # Re-syncing the same document must reuse the existing record: no add, update, or delete.
+        create_loader.return_value = MockLoader(collection, docs)
+        result = manager.sync_collection()
+        assert result.success
+        assert result.files_added == 0
+        assert result.files_updated == 0
+        assert result.files_removed == 0
+        assert CollectionFile.objects.filter(collection=collection).count() == 1
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_sync_continues_when_a_file_fails(self, create_loader, collection, document_source):
+        """A single document that fails to process is recorded but does not abort the sync."""
+        docs = [
+            Mock(page_content="doc1", metadata={"source": "a.md", "sha": "1", "source_type": "test"}),
+            Mock(page_content="doc2", metadata={"source": "b.md", "sha": "2", "source_type": "test"}),
+            Mock(page_content="doc3", metadata={"source": "c.md", "sha": "3", "source_type": "test"}),
+        ]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+
+        real_create = manager._create_file
+
+        def create_side_effect(document, identifier):
+            if identifier == "b.md":
+                raise RuntimeError("boom")
+            return real_create(document, identifier)
+
+        manager._create_file = Mock(side_effect=create_side_effect)
+
+        result = manager.sync_collection()
+
+        assert result.success
+        assert result.files_added == 2
+        assert result.files_failed == 1
+        assert any("b.md" in failure for failure in result.failures)
+
+        # Only the successful files are persisted and handed to indexing.
+        names = set(CollectionFile.objects.filter(collection=collection).values_list("file__name", flat=True))
+        assert names == {"a.md", "c.md"}
+        manager._index_files.assert_called_once()
+        assert len(manager._index_files.call_args[0][0]) == 2
+
+        log = DocumentSourceSyncLog.objects.filter(document_source=document_source).first()
+        assert log.status == SyncStatus.SUCCESS
+        assert log.files_failed == 1
+        assert log.completed_with_errors is True
+        assert "b.md" in log.error_message
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_late_failure_preserves_per_file_detail(self, create_loader, collection, document_source):
+        """A failure after per-file errors are recorded must not erase the detail."""
+        create_loader.return_value = MockLoader.for_document_source(collection, document_source)
+        manager = DocumentSourceManager(document_source)
+
+        with (
+            patch.object(manager, "_sync_documents") as mock_sync,
+            patch.object(document_source, "save", side_effect=RuntimeError("db down")),
+        ):
+            mock_sync.return_value = SyncResult(success=True, files_added=1, files_failed=1, failures=["b.md: boom"])
+            result = manager.sync_collection()
+
+        assert result.success is False
+        log = DocumentSourceSyncLog.objects.filter(document_source=document_source).latest("sync_date")
+        assert log.status == SyncStatus.FAILED
+        assert "b.md" in log.error_message
+        assert "db down" in log.error_message
 
     @pytest.mark.parametrize(
         ("source", "expected"),

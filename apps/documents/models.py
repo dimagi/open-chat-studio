@@ -512,9 +512,9 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
             delete_document_source_task.delay(self.id)
 
     def has_sync_errors(self) -> bool:
-        """Check if the last sync had errors"""
+        """Check if the last sync failed outright or completed with per-file failures."""
         last_log = self.sync_logs.first()
-        return last_log is not None and last_log.status == SyncStatus.FAILED
+        return last_log is not None and (last_log.status == SyncStatus.FAILED or last_log.files_failed > 0)
 
 
 class DocumentSourceSyncLog(models.Model):
@@ -529,7 +529,8 @@ class DocumentSourceSyncLog(models.Model):
     files_added = models.IntegerField(default=0, help_text="Number of files added during sync")
     files_updated = models.IntegerField(default=0, help_text="Number of files updated during sync")
     files_removed = models.IntegerField(default=0, help_text="Number of files removed during sync")
-    error_message = models.TextField(blank=True, help_text="Error message if sync failed")
+    files_failed = models.IntegerField(default=0, help_text="Number of files that failed to process during sync")
+    error_message = models.TextField(blank=True, help_text="Error message if sync failed, or per-file failure details")
     duration_seconds = models.FloatField(null=True, blank=True, help_text="Duration of the sync in seconds")
 
     class Meta:
@@ -541,3 +542,8 @@ class DocumentSourceSyncLog(models.Model):
     @property
     def total_files_processed(self) -> int:
         return self.files_added + self.files_updated + self.files_removed
+
+    @property
+    def completed_with_errors(self) -> bool:
+        """A sync that finished (not FAILED) but had one or more files fail to process."""
+        return self.status == SyncStatus.SUCCESS and self.files_failed > 0

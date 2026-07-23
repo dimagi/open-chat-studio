@@ -1,5 +1,34 @@
 {% load i18n %}
-<div class="pg-subtitle">{% translate "Top Teams" %}</div>
+{% translate "Find any team..." as team_search_placeholder %}
+<div class="flex items-center justify-between gap-4 mb-2">
+  <div class="pg-subtitle">{% translate "Top Teams" %}</div>
+  <div
+    class="w-72 team-search"
+    x-data
+    x-init="
+      new TomSelect($refs.teamSearch, {
+        valueField: 'slug',
+        labelField: 'text',
+        searchField: 'text',
+        maxItems: 1,
+        placeholder: '{{ team_search_placeholder|escapejs }}',
+        load: (query, callback) => {
+          if (!query.length) { callback(); return; }
+          fetch(`{% url 'ocs_admin:teams_api' %}?q=${encodeURIComponent(query)}`)
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(callback)
+            .catch(() => callback());
+        },
+        render: { option: (data, escape) => `<div>${escape(data.text)}</div>` },
+        onChange: (slug) => {
+          if (slug) { window.location = '{% url 'ocs_admin:team_detail' '__slug__' %}'.replace('__slug__', slug); }
+        }
+      });
+    "
+  >
+    <select x-ref="teamSearch"></select>
+  </div>
+</div>
 {% if top_teams %}
 <div class="overflow-x-auto mb-6">
   <table class="table table-zebra table-sm">
@@ -16,7 +45,7 @@
       {% for row in top_teams %}
       <tr>
         <td>{{ forloop.counter }}</td>
-        <td><a href="{% url 'web_team:home' row.team_slug %}" class="link">{{ row.team }}</a></td>
+        <td><a href="{% url 'ocs_admin:team_detail' row.team_slug %}" class="link">{{ row.team }}</a></td>
         <td>{{ row.msg_count }}</td>
         <td>{{ row.session_count }}</td>
         <td>{{ row.participant_count }}</td>

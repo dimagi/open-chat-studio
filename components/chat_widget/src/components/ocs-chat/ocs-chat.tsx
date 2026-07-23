@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { Component, Host, h, Prop, State, Element, Watch, Env } from '@stencil/core';
+import { Component, Host, h, Prop, State, Element, Watch, Method, Env } from '@stencil/core';
 import {
   XMarkIcon,
   GripDotsVerticalIcon,
@@ -306,7 +306,20 @@ export class OcsChat {
   private currentSessionToken?: string;
   @Element() host: HTMLElement;
 
+  /**
+   * The widget's build version. Read this to identify which release is deployed
+   * on a page, e.g. `await el.getVersion()`. Also mirrored to the
+   * `data-widget-version` attribute on the host element for inspection.
+   */
+  @Method()
+  async getVersion(): Promise<string> {
+    return Env.version;
+  }
+
   async componentWillLoad() {
+    // Always expose the build version, even when chatbotId is missing.
+    this.host.setAttribute('data-widget-version', Env.version);
+
     if (!this.chatbotId) {
       this.error = 'Chatbot ID is required';
       return;
@@ -582,7 +595,6 @@ export class OcsChat {
 
       const requestBody: Record<string, unknown> = {
         chatbot_id: this.chatbotId,
-        use_session_token: true,
         session_data: {
           source: 'widget',
           page_url: window.location.href,

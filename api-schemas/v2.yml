@@ -113,23 +113,159 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v2/trigger_bot/:
+    post:
+      operationId: trigger_bot_message
+      description: |-
+        Trigger the bot to send a message to the user, or deliver a message directly.
+
+        Provide either ``prompt_text`` (routes through the LLM/bot pipeline) or ``message_text``
+        (sends the exact text to the participant without any LLM processing). Exactly one is required.
+
+        The response ``channel`` is an object of ``{platform, data}``; for CommCare Connect, ``data``
+        carries the ``external_channel_id`` of the session's Connect channel.
+      summary: Trigger the bot to send a message to the user, or deliver a message
+        directly
+      tags:
+      - Channels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerBotMessageRequest'
+            examples:
+              GenerateBotMessageAndSend:
+                value:
+                  identifier: '+15556793'
+                  experiment: 123e4567-e89b-12d3-a456-426614174000
+                  platform: whatsapp
+                  prompt_text: Tell the user to do something
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
+                summary: Generates a bot message and sends it to the user (auto-creates
+                  participant if needed).
+              SendMessageDirectly:
+                value:
+                  identifier: '+15556793'
+                  experiment: 123e4567-e89b-12d3-a456-426614174000
+                  platform: whatsapp
+                  message_text: Your appointment is confirmed for tomorrow at 10am.
+                  session_data:
+                    key: value
+                  participant_data:
+                    key: value
+                summary: Send a pre-written message directly to the participant, bypassing
+                  the bot/LLM.
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:interact
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerBotMessageResponse'
+              examples:
+                MessageTriggered:
+                  value:
+                    session_id: 123e4567-e89b-12d3-a456-426614174000
+                    url: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
+                    team:
+                      name: My Team
+                      slug: my-team
+                    channel:
+                      platform: whatsapp
+                      data: {}
+                  summary: The session the message will be delivered on, including
+                    its channel details.
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Bad Request
+              examples:
+                ChannelNotConfigured:
+                  value:
+                    detail: Experiment cannot send messages on the whatsapp channel.
+                      Create the channel first.
+                  summary: Experiment cannot send messages on the specified channel
+                ConsentNotGiven:
+                  value:
+                    detail: User has not given consent
+                  summary: User has not given consent
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Not Found
+              examples:
+                ExperimentNotFound:
+                  value:
+                    detail: No Experiment matches the given query.
+                  summary: No experiment with the given ID exists in the team
+          description: ''
   /api/v2/usage/:
     get:
       operationId: usage
-      description: Return team-scoped usage data. Currently reports human, AI, and
-        total message counts for a calendar month, optionally narrowed to a single
-        participant.
+      description: 'Return team-scoped usage data for a time window. The window is
+        either a calendar ''period'' (current/previous month) or an explicit half-open
+        ''start''/''end''. Each requested metric gets its own block: ''messages''
+        (human/AI/total counts), ''sessions'' (count), ''participants'' (distinct
+        count), ''cost'' (total spend and currency), and ''tokens'' (prompt/completion/total).
+        With ''granularity'' finer than ''total'', results are one row per time bucket.
+        Optionally narrowed to a single participant.'
       summary: Usage
       parameters:
+      - in: query
+        name: end
+        schema:
+          type: string
+          format: date-time
+        description: Exclusive end of an explicit window (ISO date or datetime). Requires
+          'start'.
+      - in: query
+        name: granularity
+        schema:
+          enum:
+          - total
+          - daily
+          - weekly
+          - monthly
+          type: string
+          default: total
+          minLength: 1
+        description: |-
+          Time-bucketing of results. 'total' (default) returns a single object; the others return one row per bucket, each carrying 'bucket_start'.
+
+          * `total` - total
+          * `daily` - daily
+          * `weekly` - weekly
+          * `monthly` - monthly
       - in: query
         name: metric
         schema:
           type: array
           items:
             enum:
+            - cost
             - messages
+            - participants
+            - sessions
+            - tokens
             type: string
-            description: '* `messages` - messages'
+            description: |-
+              * `cost` - cost
+              * `messages` - messages
+              * `participants` - participants
+              * `sessions` - sessions
+              * `tokens` - tokens
         description: Metrics to return; repeat the parameter for several.
         required: true
       - in: query
@@ -152,20 +288,26 @@ paths:
           - current_month
           - previous_month
           type: string
-          default: current_month
           minLength: 1
         description: |-
-          Calendar month to report on, evaluated in the given timezone.
+          Calendar month to report on, evaluated in the given timezone. Mutually exclusive with 'start'/'end'; defaults to the current month when no explicit window is given.
 
           * `current_month` - current_month
           * `previous_month` - previous_month
+      - in: query
+        name: start
+        schema:
+          type: string
+          format: date-time
+        description: Inclusive start of an explicit window (ISO date or datetime).
+          Requires 'end'.
       - in: query
         name: tz
         schema:
           type: string
           default: UTC
           minLength: 1
-        description: IANA timezone name defining calendar-month boundaries. Defaults
+        description: IANA timezone name defining calendar and bucket boundaries. Defaults
           to UTC.
       tags:
       - Usage
@@ -464,6 +606,20 @@ components:
       - consent_text
       - id
       - name
+    Cost:
+      type: object
+      properties:
+        total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,8})?$
+          description: Total priced spend in the window.
+        currency:
+          type: string
+          description: ISO currency code of the spend.
+      required:
+      - currency
+      - total
     CustomAction:
       type: object
       description: |-
@@ -1379,6 +1535,130 @@ components:
       required:
       - name
       - slug
+    Tokens:
+      type: object
+      properties:
+        prompt:
+          type: integer
+          description: Input tokens (fresh plus cached).
+        completion:
+          type: integer
+          description: Output tokens.
+        total:
+          type: integer
+          description: All LLM tokens; prompt and completion need not sum to it.
+      required:
+      - completion
+      - prompt
+      - total
+    TriggerBotChannel:
+      type: object
+      description: |-
+        The channel a trigger_bot session runs on, plus any platform-specific data.
+
+        Unlike v1 (where ``channel`` is just the platform slug), v2 nests the platform under a dict so
+        platform-specific fields can live alongside it in ``data`` without widening the top-level shape.
+      properties:
+        platform:
+          type: string
+          description: Channel platform slug, e.g. 'commcare_connect'.
+        data:
+          type: object
+          additionalProperties: {}
+          description: Platform-specific channel data. For CommCare Connect this includes
+            'external_channel_id'; empty for platforms without extra channel data.
+      required:
+      - data
+      - platform
+    TriggerBotMessageRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          title: Participant Identifier
+        platform:
+          allOf:
+          - $ref: '#/components/schemas/PlatformEnum'
+          title: Participant Platform
+        experiment:
+          type: string
+          format: uuid
+          title: Experiment ID
+        prompt_text:
+          type: string
+          nullable: true
+          title: Prompt to go to bot
+        message_text:
+          type: string
+          nullable: true
+          title: Message to send directly to participant (bypasses bot/LLM)
+        start_new_session:
+          type: boolean
+          default: false
+          title: Starts a new session
+        session_data:
+          type: object
+          additionalProperties: {}
+          description: Update session data. This will be merged with existing session
+            data
+        participant_data:
+          type: object
+          additionalProperties: {}
+          description: Update Participant data. This will be merged with existing
+            participant data
+      required:
+      - experiment
+      - identifier
+      - platform
+    TriggerBotMessageResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          example: https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/
+          readOnly: true
+        team:
+          allOf:
+          - $ref: '#/components/schemas/Team'
+          readOnly: true
+        channel:
+          allOf:
+          - $ref: '#/components/schemas/TriggerBotChannel'
+          readOnly: true
+      required:
+      - channel
+      - session_id
+      - team
+      - url
+    UsageBucketResult:
+      type: object
+      description: |-
+        A single time bucket: the per-metric blocks plus the bucket's inclusive start (in the request
+        timezone). Emitted when ``granularity`` is finer than ``total``.
+      properties:
+        messages:
+          $ref: '#/components/schemas/MessageCounts'
+        sessions:
+          type: integer
+          description: Sessions started in the window, excluding evaluation-harness
+            and never-engaged sessions.
+        participants:
+          type: integer
+          description: Distinct participants active in the window.
+        cost:
+          $ref: '#/components/schemas/Cost'
+        tokens:
+          $ref: '#/components/schemas/Tokens'
+        bucket_start:
+          type: string
+          format: date-time
+          description: Inclusive start of this bucket, in the request timezone.
+      required:
+      - bucket_start
     UsagePeriod:
       type: object
       properties:
@@ -1402,14 +1682,24 @@ components:
       properties:
         period:
           $ref: '#/components/schemas/UsagePeriod'
+        granularity:
+          type: string
+          description: Time-bucketing applied to the results.
         group_by:
           type: string
           nullable: true
           readOnly: true
           description: Dimension the results are grouped by, or null when ungrouped.
         results:
-          $ref: '#/components/schemas/UsageResults'
+          allOf:
+          - $ref: '#/components/schemas/UsageResultsOrBuckets'
+          readOnly: true
+          description: For granularity 'total' (default), a single object with one
+            block per requested metric. For 'daily'/'weekly'/'monthly', an array of
+            such objects — one per time bucket, each with a 'bucket_start' — covering
+            the whole window (empty buckets are zero-filled).
       required:
+      - granularity
       - group_by
       - period
       - results
@@ -1421,6 +1711,23 @@ components:
       properties:
         messages:
           $ref: '#/components/schemas/MessageCounts'
+        sessions:
+          type: integer
+          description: Sessions started in the window, excluding evaluation-harness
+            and never-engaged sessions.
+        participants:
+          type: integer
+          description: Distinct participants active in the window.
+        cost:
+          $ref: '#/components/schemas/Cost'
+        tokens:
+          $ref: '#/components/schemas/Tokens'
+    UsageResultsOrBuckets:
+      oneOf:
+      - $ref: '#/components/schemas/UsageResults'
+      - type: array
+        items:
+          $ref: '#/components/schemas/UsageBucketResult'
   securitySchemes:
     OAuth2:
       type: oauth2
@@ -1445,6 +1752,8 @@ components:
       type: http
       scheme: bearer
 tags:
+- name: Channels
+  description: Trigger bot messages or deliver messages directly to users on a channel.
 - name: Chatbots
   description: List, retrieve and inspect chatbots (v2; formerly 'experiments').
 - name: Me

@@ -5,6 +5,14 @@ from django.template.loader import render_to_string
 
 from apps.teams.models import Team
 
+# AWS SES rejects a single SendEmail call with more than 50 recipients, so chunk larger admin lists.
+MAX_RECIPIENTS_PER_EMAIL = 50
+
+
+def _chunked(items, size):
+    for start in range(0, len(items), size):
+        yield items[start : start + size]
+
 
 def send_bulk_team_admin_emails(
     teams_context: dict[int, dict], subject_template: str, body_template_path: str, fail_silently=False
@@ -60,15 +68,17 @@ def send_bulk_team_admin_emails(
         try:
             # Render subject from template string
             subject = Template(subject_template).render(Context(email_context))
+            message = render_to_string(body_template_path, context=email_context)
 
-            # Send email
-            send_mail(
-                subject=subject,
-                message=render_to_string(body_template_path, context=email_context),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=admin_emails,
-                fail_silently=fail_silently,
-            )
+            # Send in chunks so no single SendEmail call exceeds the SES recipient limit.
+            for recipient_chunk in _chunked(admin_emails, MAX_RECIPIENTS_PER_EMAIL):
+                send_mail(
+                    subject=subject,
+                    message=message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=recipient_chunk,
+                    fail_silently=fail_silently,
+                )
             results["sent"] += 1
 
         except Exception as e:

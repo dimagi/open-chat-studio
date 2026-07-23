@@ -2,6 +2,7 @@ import pytest
 from django.urls import reverse
 
 from apps.users.models import CustomUser
+from apps.utils.factories.team import TeamFactory
 
 SECTION_NAMES = [
     "section_growth",
@@ -73,3 +74,46 @@ class TestDashboardSections:
         response = staff_client.get(reverse(f"ocs_admin:{section}"), INVALID_RANGE)
         assert response.status_code == 200
         assert response.content.decode().strip() == ""
+
+
+@pytest.mark.django_db()
+class TestTeamDetail:
+    def test_blocks_non_staff(self, client):
+        team = TeamFactory.create()
+        client.force_login(CustomUser.objects.create(username="member-detail@acme.com"))
+        response = client.get(reverse("ocs_admin:team_detail", args=[team.slug]))
+        assert response.status_code == 302
+
+    def test_renders_stats_and_metadata_form(self, staff_client, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        team = TeamFactory.create(name="Acme", metadata={"team_owner": "Jane Doe"})
+        response = staff_client.get(reverse("ocs_admin:team_detail", args=[team.slug]))
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Acme" in content
+        assert "Team Owner" in content
+        assert "Jane Doe" in content
+
+    def test_saves_metadata_on_post(self, staff_client, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        team = TeamFactory.create(metadata={"team_owner": "Old"})
+        response = staff_client.post(
+            reverse("ocs_admin:team_detail", args=[team.slug]),
+            {"team_owner": "New Owner"},
+        )
+        assert response.status_code == 302
+        team.refresh_from_db()
+        assert team.metadata["team_owner"] == "New Owner"
+
+
+@pytest.mark.django_db()
+class TestTeamsApi:
+    def test_returns_slug_for_navigation(self, staff_client):
+        # Staff (not superuser): the search box is rendered in a staff-level section,
+        # so the endpoint it drives must be reachable by staff.
+        TeamFactory.create(name="Searchable Team", slug="searchable-team")
+        response = staff_client.get(reverse("ocs_admin:teams_api"), {"q": "Searchable"})
+        assert response.status_code == 200
+        data = response.json()
+        assert {"value", "text", "slug"} <= set(data[0])
+        assert data[0]["slug"] == "searchable-team"

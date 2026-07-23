@@ -11,7 +11,9 @@ from django.db.models.functions import Coalesce, TruncDate
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.models import UsageRecord
-from apps.experiments.models import ExperimentSession, Participant
+from apps.documents.models import Collection
+from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun
+from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
@@ -111,7 +113,12 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
 
     `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
     records in more than one currency and summing them would be meaningless.
+
+    Each team carries a `metadata` object with the configured staff-only team
+    metadata fields (`TEAM_METADATA_FIELDS`); their definitions are echoed at the
+    top level as `metadata_fields` so a consumer can build labelled columns.
     """
+    metadata_fields = get_team_metadata_fields()
     token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
 
@@ -121,15 +128,22 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
         missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug")
         team_meta.update({tid: (name, slug) for tid, name, slug in missing})
 
+    # Fetch metadata separately (keyed by PK): grouping the aggregate query by
+    # the JSON `metadata` column would be needlessly expensive, and metadata is
+    # per-team so it never affects the grouping anyway.
+    metadata_by_team = dict(Team.objects.filter(id__in=list(team_meta)).values_list("id", "metadata"))
+
     teams: dict[int, dict] = {}
 
     def _entry(team_id: int) -> dict:
         if team_id not in teams:
             name, slug = team_meta.get(team_id, (None, None))
+            metadata = metadata_by_team.get(team_id) or {}
             teams[team_id] = {
                 "team_id": team_id,
                 "team_name": name,
                 "team_slug": slug,
+                "metadata": {field["key"]: metadata.get(field["key"], "") for field in metadata_fields},
                 "run_count": 0,
                 "total_tokens": 0,
                 "total_cost": defaultdict(Decimal),  # currency -> amount
@@ -159,7 +173,12 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
     for entry in result:
         entry["total_cost"] = {currency: str(amount) for currency, amount in entry["total_cost"].items()}
 
-    return {"start": start.isoformat(), "end": end.isoformat(), "teams": result}
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "metadata_fields": metadata_fields,
+        "teams": result,
+    }
 
 
 def get_whatsapp_numbers():
@@ -302,6 +321,37 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
         }
         for row in msg_data
     ]
+
+
+def get_team_stats(team: Team) -> dict[str, int]:
+    """All-time resource counts for a single team, for the admin team detail page.
+
+    Versioned resources (chatbots, collections) are counted via their working-version
+    querysets so archived version snapshots aren't double-counted. Participants,
+    sessions and messages drop only the evaluations platform; a NULL/unset platform
+    isn't evaluations, so it's still counted (a plain ``.exclude(platform=...)`` would
+    silently drop those rows since ``NOT (NULL = x)`` is NULL).
+    """
+    # ExperimentSession.platform is nullable, so keep NULL rows explicitly.
+    not_evaluations = Q(platform__isnull=True) | ~Q(platform=ChannelPlatform.EVALUATIONS)
+    return {
+        "chatbots": Experiment.objects.working_versions_queryset().filter(team=team).count(),
+        "collections": Collection.objects.working_versions_queryset().filter(team=team).count(),
+        # Participant.platform is non-nullable, so a plain exclude is fine here.
+        "participants": Participant.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS).count(),
+        "sessions": ExperimentSession.objects.filter(team=team).filter(not_evaluations).count(),
+        "messages": ChatMessage.objects.filter(chat__team=team)
+        .filter(
+            Q(chat__experiment_session__platform__isnull=True)
+            | ~Q(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        )
+        .count(),
+        "members": team.membership_set.count(),
+        "pending_invitations": team.pending_invitations().count(),
+        "evaluation_configs": EvaluationConfig.objects.filter(team=team).count(),
+        "evaluation_runs": EvaluationRun.objects.filter(team=team).count(),
+        "evaluation_datasets": EvaluationDataset.objects.filter(team=team).count(),
+    }
 
 
 def get_platform_breakdown(start: datetime, end: datetime):

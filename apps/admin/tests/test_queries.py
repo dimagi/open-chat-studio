@@ -7,6 +7,7 @@ from apps.admin.queries import (
     get_period_totals,
     get_platform_breakdown,
     get_team_activity_summary,
+    get_team_stats,
     get_top_experiments,
     get_top_teams,
     get_usage_data,
@@ -20,12 +21,19 @@ from apps.admin.views import _compute_growth
 from apps.channels.models import ChannelPlatform
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
+    EvaluationDatasetFactory,
+    EvaluationRunFactory,
+)
 from apps.utils.factories.experiment import (
     ChatMessageFactory,
+    ExperimentFactory,
     ExperimentSessionFactory,
     ParticipantFactory,
 )
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.traces import TraceFactory
 
 
@@ -108,6 +116,73 @@ class TestTeamMetadataExports:
         assert lines[0] == "Team,Slug,Team Owner"
         assert "Team A,team-a,Jane Doe" in lines
         assert "Team B,team-b," in lines
+
+
+@pytest.mark.django_db()
+class TestGetTeamStats:
+    def test_resource_counts_scoped_to_team(self):
+        # No session/channel factories here: those spawn extra experiments, which would
+        # make the chatbot count non-deterministic.
+        team = TeamFactory.create()
+        other = TeamFactory.create()
+
+        ExperimentFactory.create(team=team)
+        ExperimentFactory.create(team=other)  # excluded: different team
+        CollectionFactory.create(team=team)
+        MembershipFactory.create(team=team)
+        EvaluationConfigFactory.create(team=team)
+        EvaluationRunFactory.create(team=team)
+        EvaluationDatasetFactory.create(team=team)
+
+        stats = get_team_stats(team)
+        assert stats["chatbots"] == 1
+        assert stats["collections"] == 1
+        assert stats["members"] == 1
+        assert stats["evaluation_configs"] == 1
+        assert stats["evaluation_runs"] == 1
+        assert stats["evaluation_datasets"] == 1
+
+    def test_activity_counts(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=session.chat, message_type="ai", content="hello")
+        ParticipantFactory.create(team=team)
+
+        stats = get_team_stats(team)
+        assert stats["messages"] == 2
+        assert stats["sessions"] == 1
+        # The session factory creates a participant; ParticipantFactory adds one more.
+        assert stats["participants"] == 2
+
+    def test_excludes_evaluations_platform(self):
+        team = TeamFactory.create()
+        eval_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.EVALUATIONS)
+        eval_session = ExperimentSessionFactory.create(
+            team=team,
+            experiment=eval_channel.experiment,
+            experiment_channel=eval_channel,
+            platform=ChannelPlatform.EVALUATIONS,
+        )
+        ChatMessageFactory.create(chat=eval_session.chat, message_type="human", content="hi")
+        ParticipantFactory.create(team=team, platform=ChannelPlatform.EVALUATIONS)
+
+        stats = get_team_stats(team)
+        assert stats["messages"] == 0
+        assert stats["sessions"] == 0
+        # The evaluations participant is excluded; only the session's default-platform one counts.
+        assert stats["participants"] == 1
+
+    def test_counts_null_platform_sessions_and_messages(self):
+        # ExperimentSession.platform is nullable; a NULL platform isn't the evaluations
+        # platform, so it must still be counted (a plain exclude would silently drop it).
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team, platform=None)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+
+        stats = get_team_stats(team)
+        assert stats["sessions"] == 1
+        assert stats["messages"] == 1
 
 
 @pytest.mark.django_db()

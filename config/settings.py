@@ -584,6 +584,10 @@ SCHEDULED_TASKS = {
         "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
         "schedule": crontab(minute="5"),
     },
+    "channels.tasks.ratchet_widget_auth_levels": {
+        "task": "apps.channels.tasks.ratchet_widget_auth_levels",
+        "schedule": crontab(minute="0", hour="2"),
+    },
     "ocs_notifications.tasks.cleanup_old_notification_events": {
         "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",
         "schedule": timedelta(days=1),
@@ -1042,7 +1046,7 @@ RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_c
 # Restricted HTTP client settings (used by RestrictedHttpClient in the Python sandbox)
 RESTRICTED_HTTP_MAX_REQUESTS = 10
 RESTRICTED_HTTP_DEFAULT_TIMEOUT = 5  # seconds
-RESTRICTED_HTTP_MAX_TIMEOUT = 30  # seconds
+RESTRICTED_HTTP_MAX_TIMEOUT = 60  # seconds
 MB = 1_048_576  # 1 MB
 RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 5 * MB
 RESTRICTED_HTTP_MAX_REQUEST_BYTES = MB

@@ -2,6 +2,9 @@ import csv
 import io
 from dataclasses import dataclass, field
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
 
@@ -40,13 +43,13 @@ def import_team_metadata_from_csv(uploaded_file) -> TeamMetadataImportResult:
     return result
 
 
-def _resolve_columns(fieldnames) -> tuple[dict[str, str], str | None]:
-    """Map present CSV headers to field keys, or return an error describing why we can't."""
+def _resolve_columns(fieldnames) -> tuple[dict[str, dict], str | None]:
+    """Map present CSV headers to their field definitions, or return an error describing why we can't."""
     if SLUG_COLUMN not in fieldnames:
         return {}, f"CSV must include a '{SLUG_COLUMN}' column."
 
-    label_to_key = {f["label"]: f["key"] for f in get_team_metadata_fields()}
-    present_fields = {header: label_to_key[header] for header in fieldnames if header in label_to_key}
+    fields_by_label = {f["label"]: f for f in get_team_metadata_fields()}
+    present_fields = {header: fields_by_label[header] for header in fieldnames if header in fields_by_label}
     if not present_fields:
         return {}, "CSV has no columns matching configured metadata fields."
     return present_fields, None
@@ -66,9 +69,37 @@ def _apply_row(line_number, row, present_fields, teams_by_slug) -> tuple[str | N
     if team is None:
         return None, f"Row {line_number}: no team with slug '{slug}'."
 
+    values = {}
+    for header, field_def in present_fields.items():
+        value = (row.get(header) or "").strip()
+        error = _validate_value(line_number, field_def, value)
+        if error:
+            return None, error
+        values[field_def["key"]] = value
+
     metadata = dict(team.metadata or {})
-    for header, key in present_fields.items():
-        metadata[key] = (row.get(header) or "").strip()
+    metadata.update(values)
     team.metadata = metadata
     team.save(update_fields=["metadata"])
     return slug, None
+
+
+def _validate_value(line_number, field_def, value) -> str | None:
+    """Return an error string for an invalid cell value, or None if it's acceptable.
+
+    Blank values are always allowed (they clear the field); non-blank values must satisfy
+    the field's ``type`` constraints.
+    """
+    if not value:
+        return None
+    field_type = field_def["type"]
+    label = field_def["label"]
+    if field_type == "select" and value not in field_def["options"]:
+        allowed = ", ".join(field_def["options"])
+        return f"Row {line_number}: '{value}' is not a valid option for '{label}' (expected one of: {allowed})."
+    if field_type == "email":
+        try:
+            validate_email(value)
+        except ValidationError:
+            return f"Row {line_number}: '{value}' is not a valid email for '{label}'."
+    return None
