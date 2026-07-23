@@ -72,13 +72,31 @@ def test_remap_node_params_leaves_out_of_scope_refs_untouched():
     assert remap_node_params(params, FakeStore({}))["collection_id"] == 42
 
 
-def test_remap_pipeline_data_rewrites_nested_node_params():
-    store = FakeStore({"service_providers.llmprovider": {7: 700}})
-    data = {"nodes": [{"id": "a", "data": {"params": {"llm_provider_id": 7}}}], "edges": []}
-    out = remap_pipeline_data(data, store)
+def test_remap_pipeline_data_strips_node_content_from_old_exports():
+    """Old export files embed node content in pipeline data; imported rows must be
+    layout-only (ADR-0046). The content itself is imported via the pipelines.node rows."""
+    data = {
+        "nodes": [
+            {
+                "id": "a",
+                "type": "pipelineNode",
+                "position": {"x": 1},
+                "data": {"id": "a", "type": "LLMResponseWithPrompt", "params": {"llm_provider_id": 7}},
+            }
+        ],
+        "edges": [],
+        "viewport": {"x": 0},
+    }
+    out = remap_pipeline_data(data, FakeStore({}))
     assert out is not None
-    assert out["nodes"][0]["data"]["params"]["llm_provider_id"] == 700
+    assert out["nodes"] == [{"id": "a", "type": "pipelineNode", "position": {"x": 1}}]
+    assert out["viewport"] == {"x": 0}
     assert data["nodes"][0]["data"]["params"]["llm_provider_id"] == 7  # original untouched
+
+
+def test_remap_pipeline_data_passes_layout_only_data_through():
+    data = {"nodes": [{"id": "a", "type": "pipelineNode"}], "edges": []}
+    assert remap_pipeline_data(data, FakeStore({})) == data
 
 
 def test_unseal_secrets_restores_plaintext():

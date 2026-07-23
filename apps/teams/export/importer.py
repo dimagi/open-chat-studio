@@ -15,6 +15,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_de
 from django.utils.dateparse import parse_datetime
 from field_audit.models import AuditAction, AuditingQuerySet
 
+from apps.pipelines.flow import split_flow_data
 from apps.teams.models import Flag, Membership
 from apps.teams.utils import set_current_team
 from apps.utils.fields import as_int
@@ -121,14 +122,16 @@ def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
 
 
 def remap_pipeline_data(data: dict | None, store: FKTranslationStore) -> dict | None:
+    """Strip node content from imported pipeline data so rows land layout-only (ADR-0046).
+
+    Old export files embed each node's content (incl. params) in the pipeline data; the
+    authoritative copy is the separately-exported ``pipelines.node`` rows, whose params
+    are remapped via ``remap_node_params``. Dropping the blob here means no embedded
+    resource ids are left to remap."""
     if not data or "nodes" not in data:
         return data
-    result = copy.deepcopy(data)
-    for node in result["nodes"]:
-        params = node.get("data", {}).get("params")
-        if isinstance(params, dict):
-            node["data"]["params"] = remap_node_params(params, store)
-    return result
+    layout_data, _ = split_flow_data(copy.deepcopy(data))
+    return layout_data
 
 
 def unseal_secrets(row: dict, secret_fields: list[str], private_key) -> dict:
