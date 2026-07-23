@@ -270,6 +270,34 @@ def _bucket_key(bucket: datetime | None, tz: ZoneInfo):
     return None if bucket is None else _bucket_date(bucket, tz)
 
 
+# Human/AI message-count annotations, shared by the total, bucketed, and grouped message reads so the
+# split is defined in one place.
+_MESSAGE_ANNOTATIONS = {
+    "human": Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
+    "ai": Count("id", filter=Q(message_type=ChatMessageType.AI)),
+}
+
+
+def _message_counts_from_row(row: dict) -> MessageCounts:
+    """Build a :class:`MessageCounts` from a row/aggregate carrying ``human``/``ai`` counts."""
+    return MessageCounts(human=row["human"], ai=row["ai"], total=row["human"] + row["ai"])
+
+
+def _grouped_rows(queryset: QuerySet, *, group_field: str | None, trunc, tz: ZoneInfo, **annotations):
+    """Aggregate ``queryset`` by an optional dimension ``group_field`` and an optional tz time bucket
+    (``trunc``), applying ``annotations``. Yields ``(group_key, bucket_key, row)`` where each key is
+    ``None`` when that axis isn't requested. The single home of the ``.values(...).annotate(...)`` +
+    bucket-date boilerplate, shared by the grouped breakdown and the ungrouped timeseries."""
+    value_fields = [group_field] if group_field else []
+    if trunc is not None:
+        queryset = queryset.annotate(bucket=trunc("created_at", tzinfo=tz))
+        value_fields.append("bucket")
+    for row in queryset.values(*value_fields).annotate(**annotations):
+        group_key = row[group_field] if group_field else None
+        bucket_key = _bucket_date(row["bucket"], tz) if trunc is not None else None
+        yield group_key, bucket_key, row
+
+
 def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
     """``{(group_key, bucket_key): {metric: block}}`` for every (group, bucket) on the page, zero-filled.
     Each metric runs a single query grouped by the dimension (and, at a finer granularity, the time
@@ -281,30 +309,33 @@ def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
     msg_field = _MESSAGE_GROUP_FIELD[query.group_by]
     ses_field = _SESSION_GROUP_FIELD[query.group_by]
 
-    # (metric, row iterator) per requested non-cost metric; built conditionally so a metric's query only
-    # runs when asked for. Cost/tokens share one UsageRecord read and are filled separately below.
+    def by_group(queryset, group_field, **annotations):
+        return _grouped_rows(
+            queryset.filter(**{f"{group_field}__in": keys}),
+            group_field=group_field,
+            trunc=trunc,
+            tz=query.tz,
+            **annotations,
+        )
+
+    # (metric, (group_key, bucket_key, value) iterator) per requested non-cost metric, built
+    # conditionally so a metric's query only runs when asked for. Cost/tokens share one UsageRecord read
+    # and are filled separately below.
     metric_rows = []
     if METRIC_MESSAGES in query.metrics:
-        metric_rows.append((METRIC_MESSAGES, _grouped_message_counts(query, keys, msg_field, trunc)))
+        rows = by_group(_message_queryset(query), msg_field, **_MESSAGE_ANNOTATIONS)
+        metric_rows.append((METRIC_MESSAGES, ((gk, bk, _message_counts_from_row(row)) for gk, bk, row in rows)))
     if METRIC_SESSIONS in query.metrics:
-        metric_rows.append(
-            (METRIC_SESSIONS, _grouped_scalar(_session_queryset(query), keys, ses_field, trunc, query.tz, Count("id")))
-        )
+        rows = by_group(_session_queryset(query), ses_field, n=Count("id"))
+        metric_rows.append((METRIC_SESSIONS, ((gk, bk, row["n"]) for gk, bk, row in rows)))
     if METRIC_PARTICIPANTS in query.metrics:
         # group_by=participant is rejected upstream, so this only runs for chatbot/platform.
-        metric_rows.append(
-            (
-                METRIC_PARTICIPANTS,
-                _grouped_scalar(
-                    _active_participant_queryset(query),
-                    keys,
-                    msg_field,
-                    trunc,
-                    query.tz,
-                    Count("chat__experiment_session__participant", distinct=True),
-                ),
-            )
+        rows = by_group(
+            _active_participant_queryset(query),
+            msg_field,
+            n=Count("chat__experiment_session__participant", distinct=True),
         )
+        metric_rows.append((METRIC_PARTICIPANTS, ((gk, bk, row["n"]) for gk, bk, row in rows)))
     for metric, rows in metric_rows:
         for group_key, bucket_key, value in rows:
             index[(group_key, bucket_key)][metric] = value
@@ -313,39 +344,6 @@ def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
 
     _zero_fill_grouped(query, index)
     return index
-
-
-def _grouped_message_counts(query: UsageQuery, keys: list, group_field: str, trunc):
-    """Yield ``(group_key, bucket_key, MessageCounts)`` for the human/AI split per group (and bucket)."""
-    queryset = _message_queryset(query).filter(**{f"{group_field}__in": keys})
-    value_fields = [group_field]
-    if trunc is not None:
-        queryset = queryset.annotate(bucket=trunc("created_at", tzinfo=query.tz))
-        value_fields.append("bucket")
-    rows = queryset.values(*value_fields).annotate(
-        human=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-        ai=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-    )
-    for row in rows:
-        bucket_key = None if trunc is None else _bucket_date(row["bucket"], query.tz)
-        yield (
-            row[group_field],
-            bucket_key,
-            MessageCounts(human=row["human"], ai=row["ai"], total=row["human"] + row["ai"]),
-        )
-
-
-def _grouped_scalar(queryset: QuerySet, keys: list, group_field: str, trunc, tz: ZoneInfo, aggregate):
-    """Yield ``(group_key, bucket_key, int)`` for a single-integer metric grouped by ``group_field``
-    (and, when ``trunc`` is set, the tz-truncated time bucket), restricted to ``keys``."""
-    queryset = queryset.filter(**{f"{group_field}__in": keys})
-    value_fields = [group_field]
-    if trunc is not None:
-        queryset = queryset.annotate(bucket=trunc("created_at", tzinfo=tz))
-        value_fields.append("bucket")
-    for row in queryset.values(*value_fields).annotate(n=aggregate):
-        bucket_key = None if trunc is None else _bucket_date(row["bucket"], tz)
-        yield row[group_field], bucket_key, row["n"]
 
 
 def _fill_grouped_cost_tokens(query: UsageQuery, keys: list, index: dict) -> None:
@@ -554,13 +552,7 @@ def _message_counts(query: UsageQuery) -> MessageCounts:
     """Human/AI/total message counts for the window. ``total`` is ``human + ai`` (the two surfaced
     categories); system messages are internal and excluded so the parts always sum to the total."""
     # Filtered Count aggregates return 0 for no matches, never None.
-    counts = _message_queryset(query).aggregate(
-        human=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-        ai=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-    )
-    human = counts["human"]
-    ai = counts["ai"]
-    return MessageCounts(human=human, ai=ai, total=human + ai)
+    return _message_counts_from_row(_message_queryset(query).aggregate(**_MESSAGE_ANNOTATIONS))
 
 
 def _message_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
@@ -585,20 +577,11 @@ def _active_participant_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
 
 
 def _message_counts_by_bucket(query: UsageQuery, trunc) -> dict:
-    rows = (
-        _message_queryset(query)
-        .annotate(bucket=trunc("created_at", tzinfo=query.tz))
-        .values("bucket")
-        .annotate(
-            human=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-            ai=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-        )
-    )
     return {
-        _bucket_date(row["bucket"], query.tz): MessageCounts(
-            human=row["human"], ai=row["ai"], total=row["human"] + row["ai"]
+        bucket_key: _message_counts_from_row(row)
+        for _, bucket_key, row in _grouped_rows(
+            _message_queryset(query), group_field=None, trunc=trunc, tz=query.tz, **_MESSAGE_ANNOTATIONS
         )
-        for row in rows
     }
 
 
@@ -618,8 +601,10 @@ def _participant_counts_by_bucket(query: UsageQuery, trunc) -> dict:
 def _scalar_by_bucket(queryset: QuerySet, trunc, tz: ZoneInfo, aggregate) -> dict:
     """Group ``queryset`` into ``tz``-truncated buckets and reduce each to a single integer via
     ``aggregate``, keyed by local calendar date. Shared by the session and participant metrics."""
-    rows = queryset.annotate(bucket=trunc("created_at", tzinfo=tz)).values("bucket").annotate(n=aggregate)
-    return {_bucket_date(row["bucket"], tz): row["n"] for row in rows}
+    return {
+        bucket_key: row["n"]
+        for _, bucket_key, row in _grouped_rows(queryset, group_field=None, trunc=trunc, tz=tz, n=aggregate)
+    }
 
 
 def _iter_bucket_starts(start: datetime, end: datetime, granularity: str, tz: ZoneInfo):
