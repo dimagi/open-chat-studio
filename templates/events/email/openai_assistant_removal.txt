@@ -7,7 +7,7 @@ The following {{ assistant_count }} assistant{% if assistant_count != 1 %}s{% en
 - {{ assistant_name }}
 {% endfor %}
 
-Please migrate these to a pipeline-based chatbot before {{ removal_date }} to avoid disruption.
+Please migrate these to a pipeline-based chatbot before {{ removal_date }} to avoid disruption. See our migration guide: https://docs.openchatstudio.com/how-to/assistants_migration/
 
 If you have any questions, please contact support.
 
