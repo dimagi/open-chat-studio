@@ -359,6 +359,14 @@ const createPipelineManagerStore: StateCreator<
           reject(err);
         }).finally(() => {
         set({isSaving: false});
+        // If edits arrived while this full save was in-flight, flush them now. Autosaves
+        // that fired mid-save deferred via `pendingSave`; without this they would never be
+        // persisted (dirty was just cleared), mirroring _patchPipeline's handling (#3895).
+        const shouldFlush = pendingSave && !get().conflictDetected;
+        pendingSave = false;
+        if (shouldFlush) {
+          get()._flushSave();
+        }
       });
     });
   },
