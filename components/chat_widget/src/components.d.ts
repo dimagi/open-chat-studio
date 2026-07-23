@@ -59,6 +59,10 @@ export namespace Components {
          */
         "embedKey"?: string;
         /**
+          * The widget's build version. Read this to identify which release is deployed on a page, e.g. `await el.getVersion()`. Also mirrored to the `data-widget-version` attribute on the host element for inspection.
+         */
+        "getVersion": () => Promise<string>;
+        /**
           * The text to place in the header.
          */
         "headerText": '';
