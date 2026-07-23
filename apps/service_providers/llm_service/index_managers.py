@@ -247,10 +247,10 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
     generating embedding vectors and chunking text content.
     """
 
-    def __init__(self, api_key: str, embedding_model_name: str, contextualizer_strategy: str | None = None):
+    def __init__(self, api_key: str, embedding_model_name: str, contextualizer=None):
         self._api_key = api_key
         self.embedding_model_name = embedding_model_name
-        self._contextualizer_strategy = contextualizer_strategy
+        self._contextualizer = contextualizer
 
     @abstractmethod
     def get_embedding_vector(self, content: str, *, input_type: EmbeddingInputType) -> Vector:
@@ -277,9 +277,10 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             file = collection_file.file
             embeddings = []
             try:
-                text_chunks = self.chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-                contextualizer = self._get_contextualizer(file)
-                document_text = file.read_content() if contextualizer else ""
+                document_text = file.read_content()
+                text_chunks = self.chunk_file(
+                    file, chunk_size=chunk_size, chunk_overlap=chunk_overlap, text=document_text
+                )
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
                     if not safe_chunk:
@@ -292,8 +293,8 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         )
                         continue
                     context = ""
-                    if contextualizer:
-                        context = contextualizer.get_context(document=document_text, chunk=safe_chunk)
+                    if self._contextualizer:
+                        context = self._contextualizer.get_context(document=document_text, chunk=safe_chunk)
                     embed_input = f"{context}\n\n{safe_chunk}" if context else safe_chunk
                     embedding_vector = self.get_embedding_vector(embed_input, input_type="document")
                     embeddings.append(
@@ -326,23 +327,16 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
-    def _get_contextualizer(self, file: File):
-        """Build a per-file contextualizer for the configured strategy, or None.
-
-        Only the 'static' strategy is wired currently (zero-cost, no external calls).
-        """
-        if self._contextualizer_strategy == "static":
-            from apps.service_providers.llm_service.contextualizer import StaticContextualizer  # noqa: PLC0415
-
-            return StaticContextualizer(file_name=file.name)
-        return None
-
-    def chunk_file(self, file: File, chunk_size: int, chunk_overlap: int) -> list[str]:
+    def chunk_file(
+        self, file: File, chunk_size: int, chunk_overlap: int, text: str | None = None
+    ) -> list[str]:
         """
         Split text content into overlapping chunks for processing.
 
         Args:
-            text: The text content to be chunked.
+            text: Optional pre-read file content. Passed by callers that already
+                have the content in memory (e.g. contextual indexing) to avoid a
+                second read.
             chunk_size: Maximum size of each text chunk.
             chunk_overlap: Number of characters/tokens to overlap between chunks.
 
@@ -356,7 +350,8 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             chunk_overlap=chunk_overlap,
         )
 
-        documents = text_splitter.create_documents([file.read_content()])
+        content = text if text is not None else file.read_content()
+        documents = text_splitter.create_documents([content])
         return [doc.page_content for doc in documents]
 
     def delete_files_from_index(self, files: list[File]):
@@ -402,7 +397,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
         api_key: str,
         embedding_model_name: str,
         openai_api_base: str | None = None,
-        contextualizer_strategy: str | None = None,
+        contextualizer=None,
     ):
         """Build an OpenAI local index manager.
 
@@ -413,7 +408,7 @@ class OpenAILocalIndexManager(LocalIndexManager):
         super().__init__(
             api_key=api_key,
             embedding_model_name=embedding_model_name,
-            contextualizer_strategy=contextualizer_strategy,
+            contextualizer=contextualizer,
         )
         self._openai_api_base = openai_api_base
 

@@ -1,29 +1,33 @@
 import logging
 from abc import ABCMeta, abstractmethod
+from typing import TYPE_CHECKING
 
-from langchain_core.language_models import BaseChatModel
+if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger("ocs.contextualizer")
 
-# Anthropic's contextual retrieval prompt, adapted. The document is supplied
-# once and (with prompt caching) reused across every chunk of the same file.
+# Anthropic's contextual retrieval prompt, adapted. The document is placed in
+# the system prompt so it can be cached across chunks of the same file (prompt
+# caching keys off system-message stability with most providers).
 CONTEXT_SYSTEM_PROMPT = (
     "You situate a chunk of text within the document it came from. "
-    "Give a short, succinct context (a sentence or two) that explains what "
-    "this chunk is about and how it relates to the overall document, so the "
-    "chunk can be found by search. Answer only with the context, nothing else."
+    "Below is the source document. For each chunk the user gives you, "
+    "reply with a short, succinct context (a sentence or two) that "
+    "explains what the chunk is about and how it relates to the "
+    "overall document, so it can be found by search. Answer only with "
+    "the context, nothing else.\n\n"
+    "<document>\n{document}\n</document>"
 )
 
 CONTEXT_USER_PROMPT = (
-    "<document>\n{document}\n</document>\n\n"
-    "Here is the chunk we want to situate within the whole document:\n"
+    "Here is the chunk to situate within the overall document:\n"
     "<chunk>\n{chunk}\n</chunk>\n\n"
-    "Give the short context to situate this chunk within the overall document."
+    "Give the short context to situate this chunk within the document."
 )
 
-# Documents longer than this (measured in characters) are truncated before
-# being sent to the contextualizer, to stay within model context windows.
-# Roughly 100k tokens at ~4 chars/token.
+# Documents longer than this (in characters) are truncated before being sent
+# to the contextualizer. Roughly 100k tokens at ~4 chars/token.
 DEFAULT_MAX_DOCUMENT_CHARS = 400_000
 
 
@@ -43,8 +47,7 @@ class Contextualizer(metaclass=ABCMeta):
 class StaticContextualizer(Contextualizer):
     """Zero-cost contextualizer that builds a header from document structure.
 
-    Used as the fallback when the LLM contextualizer fails, and selectable
-    outright for cost-sensitive deployments. Takes no external calls.
+    Used as the fallback when the LLM contextualizer fails. Takes no external calls.
     """
 
     def __init__(self, *, file_name: str = "", page_number: int | None = None):
@@ -63,14 +66,15 @@ class StaticContextualizer(Contextualizer):
 class LLMContextualizer(Contextualizer):
     """LLM-backed contextualizer.
 
-    Calls the collection's configured chat model with the document and chunk.
-    On any failure it falls back to `fallback` (a StaticContextualizer) so that
-    indexing never fails because contextualization failed.
+    Calls the configured chat model with the document (in the system prompt,
+    for prompt caching across chunks of the same file) and the chunk. On any
+    failure it falls back to `fallback` so that indexing never fails because
+    contextualization failed.
     """
 
     def __init__(
         self,
-        chat_model: BaseChatModel,
+        chat_model: "BaseChatModel",
         *,
         fallback: Contextualizer | None = None,
         max_document_chars: int = DEFAULT_MAX_DOCUMENT_CHARS,
@@ -82,8 +86,8 @@ class LLMContextualizer(Contextualizer):
     def get_context(self, *, document: str, chunk: str) -> str:
         truncated = document[: self._max_document_chars]
         messages = [
-            ("system", CONTEXT_SYSTEM_PROMPT),
-            ("human", CONTEXT_USER_PROMPT.format(document=truncated, chunk=chunk)),
+            ("system", CONTEXT_SYSTEM_PROMPT.format(document=truncated)),
+            ("human", CONTEXT_USER_PROMPT.format(chunk=chunk)),
         ]
         try:
             response = self._chat_model.invoke(messages)

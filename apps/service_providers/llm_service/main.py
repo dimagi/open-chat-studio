@@ -153,7 +153,7 @@ class LlmService(pydantic.BaseModel):
         raise NotImplementedError
 
     def get_local_index_manager(
-        self, embedding_model_name: str, contextualizer_strategy: str | None = None
+        self, embedding_model_name: str, contextualizer=None
     ) -> IndexManager:
         raise NotImplementedError
 
@@ -268,13 +268,13 @@ class OpenAILlmService(OpenAIGenericService):
         return OpenAIRemoteIndexManager(client=self.get_raw_client(), index_id=index_id)
 
     def get_local_index_manager(
-        self, embedding_model_name: str, contextualizer_strategy: str | None = None
+        self, embedding_model_name: str, contextualizer=None
     ) -> IndexManager:
         return OpenAILocalIndexManager(
             api_key=self.openai_api_key,
             embedding_model_name=embedding_model_name,
             openai_api_base=self.openai_api_base,
-            contextualizer_strategy=contextualizer_strategy,
+            contextualizer=contextualizer,
         )
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
@@ -487,12 +487,12 @@ class GoogleLlmService(LlmService):
         # return tools
 
     def get_local_index_manager(
-        self, embedding_model_name: str, contextualizer_strategy: str | None = None
+        self, embedding_model_name: str, contextualizer=None
     ) -> IndexManager:
         return GoogleLocalIndexManager(
             api_key=self.google_api_key,
             embedding_model_name=embedding_model_name,
-            contextualizer_strategy=contextualizer_strategy,
+            contextualizer=contextualizer,
         )
 
 
@@ -506,12 +506,12 @@ class VoyageAILlmService(LlmService):
         raise ServiceProviderConfigError(self._type, "Voyage AI does not support chat completions")
 
     def get_local_index_manager(
-        self, embedding_model_name: str, contextualizer_strategy: str | None = None
+        self, embedding_model_name: str, contextualizer=None
     ) -> IndexManager:
         return VoyageAILocalIndexManager(
             api_key=self.voyage_api_key,
             embedding_model_name=embedding_model_name,
-            contextualizer_strategy=contextualizer_strategy,
+            contextualizer=contextualizer,
         )
 
 

@@ -262,7 +262,7 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     chunk_number = models.PositiveIntegerField()
     text = models.TextField()
-    context = models.TextField(blank=True)
+    context = models.TextField(blank=True, null=True)  # noqa: DJ001
     page_number = models.PositiveIntegerField(blank=True)
     embedding = HalfVectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
     working_version = models.ForeignKey(

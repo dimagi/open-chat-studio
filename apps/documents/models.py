@@ -75,11 +75,6 @@ class CollectionFile(models.Model):
         return FileStatus(self.status)
 
 
-class ContextualizerStrategy(models.TextChoices):
-    STATIC = "static", _("Static (no LLM, zero cost)")
-    LLM = "llm", _("LLM-generated")
-
-
 @audit_fields(
     "name",
     "version_number",
@@ -127,13 +122,17 @@ class Collection(BaseTeamModel, VersionsMixin):
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
     enable_contextual_retrieval = models.BooleanField(
-        default=False,
+        blank=True,
+        null=True,
         help_text="If enabled, a short context header is generated for each chunk and stored for retrieval.",
     )
-    contextualizer_strategy = models.CharField(
-        max_length=16,
-        choices=ContextualizerStrategy.choices,
-        default=ContextualizerStrategy.STATIC,
+    contextualizer_llm_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="+",
+        help_text="The chat model used to generate per-chunk context headers when contextual retrieval is enabled.",
     )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
@@ -337,21 +336,27 @@ class Collection(BaseTeamModel, VersionsMixin):
         else:
             return self.llm_provider.get_local_index_manager(
                 embedding_model_name=self.embedding_provider_model.name,
-                contextualizer_strategy=self._contextualizer_strategy(),
+                contextualizer=self._build_contextualizer(),
             )
 
-    def _contextualizer_strategy(self) -> str | None:
-        """Return the contextualizer strategy string for indexing, or None if disabled.
+    def _build_contextualizer(self):
+        """Build a contextualizer for this collection's indexing pipeline, or None.
 
         Returns None (unchanged indexing behaviour) unless the contextual retrieval
-        feature flag is active and this collection has enable_contextual_retrieval set.
-        The 'llm' strategy currently falls back to 'static' pending a decision on how
-        to resolve the chat model for contextualization (see PR description).
+        feature flag is active for this collection's team, enable_contextual_retrieval
+        is set, and a contextualizer_llm_model is configured. On any failure to build
+        the chat model (e.g. embedding-only providers), falls back to None so indexing
+        continues without contextualization rather than aborting.
         """
+        from apps.service_providers.exceptions import ServiceProviderConfigError  # noqa: PLC0415
+        from apps.service_providers.llm_service.contextualizer import (  # noqa: PLC0415
+            LLMContextualizer,
+            StaticContextualizer,
+        )
         from apps.teams.flags import Flags  # noqa: PLC0415
         from apps.teams.models import Flag  # noqa: PLC0415
 
-        if not self.enable_contextual_retrieval:
+        if not self.enable_contextual_retrieval or not self.contextualizer_llm_model:
             return None
         flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
         if not flag:
@@ -366,7 +371,12 @@ class Collection(BaseTeamModel, VersionsMixin):
             active = flag.is_active_for_team(self.team)
         if not active:
             return None
-        return ContextualizerStrategy.STATIC
+        try:
+            service = self.llm_provider.get_llm_service()
+            chat_model = service.get_chat_model(self.contextualizer_llm_model.name)
+        except (ServiceProviderConfigError, NotImplementedError):
+            return None
+        return LLMContextualizer(chat_model, fallback=StaticContextualizer())
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
