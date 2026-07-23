@@ -19,6 +19,7 @@ from apps.documents.models import (
 from apps.documents.source_loaders.base import SyncResult
 from apps.documents.source_loaders.registry import create_loader
 from apps.documents.utils import bulk_delete_collection_files
+from apps.files.models import File, FilePurpose
 
 _EXTERNAL_ID_MAX_LENGTH = 255
 _EXTERNAL_ID_HASH_LENGTH = 64  # SHA-256 hex digest length
@@ -37,8 +38,6 @@ def _safe_external_id(identifier: str) -> str:
     digest = hashlib.sha256(identifier.encode()).hexdigest()
     return identifier[:_EXTERNAL_ID_PREFIX_LENGTH] + digest
 
-
-from apps.files.models import File, FilePurpose
 
 logger = logging.getLogger("ocs.document_source")
 
@@ -170,7 +169,7 @@ class DocumentSourceManager:
         existing_files = CollectionFile.objects.filter(
             collection=self.collection, document_source=self.document_source
         ).select_related("file")
-        return {file.external_id: file for file in existing_files if file.external_id}
+        return {_safe_external_id(file.external_id): file for file in existing_files if file.external_id}
 
     def _sync_document(
         self, document: Document, identifier: str, loader, existing_files_map: dict, result: SyncResult
