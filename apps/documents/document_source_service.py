@@ -22,6 +22,18 @@ from apps.files.models import File, FilePurpose
 
 logger = logging.getLogger("ocs.document_source")
 
+# Cap the per-file failure detail stored on the sync log to keep the record (and the UI) bounded.
+MAX_FAILURE_DETAILS = 50
+
+
+def _format_failures(failures: list[str]) -> str:
+    """Render per-file failures for the sync log, truncating an unbounded list."""
+    shown = failures[:MAX_FAILURE_DETAILS]
+    lines = [f"{len(failures)} file(s) failed to process:", *shown]
+    if len(failures) > MAX_FAILURE_DETAILS:
+        lines.append(f"...and {len(failures) - MAX_FAILURE_DETAILS} more")
+    return "\n".join(lines)
+
 
 class DocumentSourceManager:
     """Service for managing document source synchronization"""
@@ -57,6 +69,9 @@ class DocumentSourceManager:
             sync_log.files_added = result.files_added
             sync_log.files_updated = result.files_updated
             sync_log.files_removed = result.files_removed
+            sync_log.files_failed = result.files_failed
+            if result.failures:
+                sync_log.error_message = _format_failures(result.failures)
             sync_log.duration_seconds = duration
             sync_log.save()
 
@@ -69,7 +84,8 @@ class DocumentSourceManager:
 
             logger.info(
                 f"Sync completed: {result.files_added} added, "
-                f"{result.files_updated} updated, {result.files_removed} removed"
+                f"{result.files_updated} updated, {result.files_removed} removed, "
+                f"{result.files_failed} failed"
             )
 
             return result
@@ -119,20 +135,32 @@ class DocumentSourceManager:
         files_to_index = []
         for document in documents:
             identifier = loader.get_document_identifier(document)
+            # Mark as seen before processing so a file that fails to update is not treated
+            # as removed from the source (and deleted) on this run.
             seen_identifiers.add(identifier)
 
-            if identifier in existing_files_map:
-                existing_file = existing_files_map[identifier]
-                if loader.should_update_document(document, existing_file):
+            try:
+                if identifier in existing_files_map:
+                    existing_file = existing_files_map[identifier]
+                    if loader.should_update_document(document, existing_file):
+                        with transaction.atomic():
+                            self._update_file(existing_file, document, identifier)
+                        files_to_index.append(existing_file.id)
+                        result.files_updated += 1
+                else:
                     with transaction.atomic():
-                        self._update_file(existing_file, document, identifier)
-                    files_to_index.append(existing_file.id)
-                    result.files_updated += 1
-            else:
-                with transaction.atomic():
-                    new_file = self._create_file(document, identifier)
-                files_to_index.append(new_file.id)
-                result.files_added += 1
+                        new_file = self._create_file(document, identifier)
+                    files_to_index.append(new_file.id)
+                    result.files_added += 1
+            except Exception as exc:
+                # A single bad document must not abort the whole sync: log it, record it, and
+                # carry on so the remaining files are still processed and indexed.
+                logger.exception(
+                    "Failed to process document during sync",
+                    extra={"document_source_id": self.document_source.id, "identifier": identifier},
+                )
+                result.files_failed += 1
+                result.failures.append(f"{identifier}: {exc}")
 
         # Remove files that are no longer in the source
         files_to_remove = [

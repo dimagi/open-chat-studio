@@ -168,6 +168,46 @@ class TestDocumentSourceManager:
         manager._remove_files.assert_called_once()
         manager._index_files.assert_not_called()
 
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_sync_continues_when_a_file_fails(self, create_loader, collection, document_source):
+        """A single document that fails to process is recorded but does not abort the sync."""
+        docs = [
+            Mock(page_content="doc1", metadata={"source": "a.md", "sha": "1", "source_type": "test"}),
+            Mock(page_content="doc2", metadata={"source": "b.md", "sha": "2", "source_type": "test"}),
+            Mock(page_content="doc3", metadata={"source": "c.md", "sha": "3", "source_type": "test"}),
+        ]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+
+        real_create = manager._create_file
+
+        def create_side_effect(document, identifier):
+            if identifier == "b.md":
+                raise RuntimeError("boom")
+            return real_create(document, identifier)
+
+        manager._create_file = Mock(side_effect=create_side_effect)
+
+        result = manager.sync_collection()
+
+        assert result.success
+        assert result.files_added == 2
+        assert result.files_failed == 1
+        assert any("b.md" in failure for failure in result.failures)
+
+        # Only the successful files are persisted and handed to indexing.
+        names = set(CollectionFile.objects.filter(collection=collection).values_list("file__name", flat=True))
+        assert names == {"a.md", "c.md"}
+        manager._index_files.assert_called_once()
+        assert len(manager._index_files.call_args[0][0]) == 2
+
+        log = DocumentSourceSyncLog.objects.filter(document_source=document_source).first()
+        assert log.status == SyncStatus.SUCCESS
+        assert log.files_failed == 1
+        assert log.completed_with_errors is True
+        assert "b.md" in log.error_message
+
     @pytest.mark.parametrize(
         ("source", "expected"),
         [
