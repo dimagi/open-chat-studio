@@ -34,13 +34,16 @@ def test_inspect_component_documents_the_payload_envelope(api_schema):
         "trace_provider",
         "channels",
         "pipeline",
+        "pipeline_valid",
+        "errors",
+        "unwired_handles",
         "events",
     }
 
 
 def test_node_component_declares_reference_keys(api_schema):
     node = api_schema["components"]["schemas"]["InspectNode"]
-    assert {"node_id", "type", "label", "params"} <= set(node["required"])
+    assert {"node_id", "type", "label", "params", "output_handles"} <= set(node["required"])
     assert {
         "llm",
         "voice",
@@ -96,6 +99,12 @@ def test_node_params_fields_carry_descriptions(api_schema):
     # legacy non-router nodes.
     assert described.get("keywords")
     assert described.get("history_type")
+
+
+def test_graph_edge_declares_id(api_schema):
+    """Each graph edge carries its ``id`` — the future edge-delete address for the write API."""
+    edge = api_schema["components"]["schemas"]["InspectGraphEdge"]
+    assert "id" in edge["properties"]
 
 
 @pytest.mark.parametrize(

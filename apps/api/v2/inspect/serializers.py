@@ -35,6 +35,7 @@ from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
+from apps.pipelines.build_state import node_output_handles, normalize_errors, pipeline_build_state
 from apps.pipelines.models import Node, Pipeline
 from apps.utils.fields import as_int
 
@@ -262,6 +263,12 @@ class FlattenedModelProviderSerializer(FlattenedProviderSerializer):
     Expects a :class:`ProviderModelPair`; a missing provider or model renders its fields as null.
     """
 
+    id = serializers.IntegerField(
+        source="model.id",
+        default=None,
+        allow_null=True,
+        help_text="The model's id — the value to write back as the node's model reference.",
+    )
     # ``ProviderModelPair.type`` — provider type with model-type fallback.
     type = serializers.CharField(allow_null=True)
     model = serializers.CharField(source="model.name", default=None, allow_null=True)
@@ -290,6 +297,12 @@ class FlattenedVoiceSerializer(FlattenedProviderSerializer):
     Expects a :class:`VoicePair`.
     """
 
+    id = serializers.IntegerField(
+        source="voice.id",
+        default=None,
+        allow_null=True,
+        help_text="The synthetic voice's id — the value to write back as ``synthetic_voice_id``.",
+    )
     # Unlike the llm/embedding pairs, ``type`` has no fallback to the voice half — a provider-less
     # voice renders ``type: null`` (matches the pre-refactor shape).
     type = serializers.CharField(
@@ -427,6 +440,10 @@ class GraphNodeSerializer(serializers.Serializer):
 
 @extend_schema_serializer(component_name="InspectGraphEdge")
 class GraphEdgeSerializer(serializers.Serializer):
+    id = serializers.CharField(
+        allow_null=True,
+        help_text="The edge's identity — the address a write-API caller uses to delete this edge.",
+    )
     source = serializers.CharField(help_text="``node_id`` the edge leaves from.")
     target = serializers.CharField(help_text="``node_id`` the edge points to.")
     source_handle = serializers.CharField(
@@ -457,6 +474,17 @@ class GraphSerializer(serializers.Serializer):
 
 
 # ── Node (ADR-0025) ──────────────────────────────────────────────────────────────────────────────
+@extend_schema_serializer(component_name="InspectOutputHandle")
+class OutputHandleSerializer(serializers.Serializer):
+    """One output handle a node offers, for wiring edges from it."""
+
+    handle = serializers.CharField(help_text="Handle name to copy verbatim into an edge's ``source_handle``.")
+    label = serializers.CharField(
+        allow_null=True,
+        help_text="The router branch keyword this handle routes; null for a plain node's single output.",
+    )
+
+
 class InspectNodeSerializer(serializers.ModelSerializer):
     """One pipeline node, with the resources it references inlined.
 
@@ -494,6 +522,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     params = serializers.SerializerMethodField(
         help_text="The node's non-resource configuration, verbatim; keys vary by node type."
     )
+    output_handles = serializers.SerializerMethodField()
     llm = serializers.SerializerMethodField()
     voice = serializers.SerializerMethodField()
     custom_actions = serializers.SerializerMethodField()
@@ -511,6 +540,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
             "type",
             "label",
             "params",
+            "output_handles",
             "llm",
             "voice",
             "source_material",
@@ -538,6 +568,12 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         if "max_results" in params:
             params["max_indexed_collection_search_results"] = params.pop("max_results")
         return params
+
+    @extend_schema_field(OutputHandleSerializer(many=True))
+    def get_output_handles(self, node) -> list:
+        # Server-derived (W5): routers get one handle per branch keyword, plain nodes the single
+        # standard output, End none — so a caller can wire edges from any node it reads back.
+        return node_output_handles(node)
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):
@@ -693,6 +729,20 @@ class InspectEventsSerializer(serializers.Serializer):
 
 
 # ── Root (ADR-0024) ──────────────────────────────────────────────────────────────────────────────
+class PipelineBuildErrorsSerializer(serializers.Serializer):
+    """The normalized three-bucket errors report the publish gate rejects on."""
+
+    node = serializers.DictField(
+        child=serializers.DictField(child=serializers.CharField()),
+        help_text="Per-field error messages keyed by ``node_id``.",
+    )
+    edge = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Ids of edges stranded on a handle their source node no longer offers.",
+    )
+    pipeline = serializers.CharField(allow_null=True, help_text="A single graph-level error message, or null.")
+
+
 class ChatbotInspectSerializer(serializers.ModelSerializer):
     """The whole chatbot configuration in one read-only response (ADR-0024).
 
@@ -719,6 +769,14 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     voice = serializers.SerializerMethodField()
     channels = serializers.SerializerMethodField()
     pipeline = InspectPipelineSerializer(allow_null=True, read_only=True)
+    pipeline_valid = serializers.SerializerMethodField(
+        help_text=(
+            "Whether this chatbot's pipeline validates cleanly (all three ``errors`` buckets empty); "
+            "null for a chatbot with no pipeline. Unwired handles never affect it."
+        )
+    )
+    errors = serializers.SerializerMethodField()
+    unwired_handles = serializers.SerializerMethodField()
     events = InspectEventsSerializer(source="*")
 
     class Meta:
@@ -738,6 +796,9 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "trace_provider",
             "channels",
             "pipeline",
+            "pipeline_valid",
+            "errors",
+            "unwired_handles",
             "events",
         ]
 
@@ -749,6 +810,41 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     @extend_schema_field(ChannelSerializer(many=True))
     def get_channels(self, experiment) -> list:
         return ChannelSerializer(get_channels(experiment), many=True).data
+
+    def _build_state(self, experiment) -> dict:
+        # Computed once per response (validate() builds the whole graph) and shared by the three
+        # build-state fields below.
+        if not hasattr(self, "_build_state_cache"):
+            if experiment.pipeline is None:
+                self._build_state_cache = {
+                    "pipeline_valid": None,
+                    "errors": normalize_errors({}),
+                    "unwired_handles": {},
+                }
+            else:
+                self._build_state_cache = pipeline_build_state(experiment.pipeline)
+        return self._build_state_cache
+
+    @extend_schema_field(serializers.BooleanField(allow_null=True))
+    def get_pipeline_valid(self, experiment) -> bool | None:
+        return self._build_state(experiment)["pipeline_valid"]
+
+    @extend_schema_field(PipelineBuildErrorsSerializer())
+    def get_errors(self, experiment) -> dict:
+        return self._build_state(experiment)["errors"]
+
+    @extend_schema_field(
+        serializers.DictField(
+            child=serializers.ListField(child=OutputHandleSerializer()),
+            help_text=(
+                "Advisory 'what still needs wiring' map, keyed by ``node_id``: every output handle "
+                "with no outgoing edge and every implicit ``input`` handle with no incoming edge. "
+                "Never an error and never blocks a publish."
+            ),
+        )
+    )
+    def get_unwired_handles(self, experiment) -> dict:
+        return self._build_state(experiment)["unwired_handles"]
 
 
 # ── Schema extensions ──────────────────────────────────────────────────────────────────────────

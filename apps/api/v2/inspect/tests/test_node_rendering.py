@@ -23,7 +23,7 @@ def _render(node_type, params):
 @pytest.mark.django_db()
 def test_start_node_carries_no_resource_keys():
     data = _render("StartNode", {})
-    assert set(data) == {"node_id", "type", "label", "params"}
+    assert set(data) == {"node_id", "type", "label", "params", "output_handles"}
 
 
 @pytest.mark.django_db()
@@ -57,6 +57,7 @@ def test_voice_not_dropped_when_only_synthetic_voice_field_set():
     data = _render("LLMResponseWithPrompt", {"synthetic_voice_id": voice.id})
 
     assert data["voice"] == {
+        "id": voice.id,
         "provider_id": provider.id,
         "provider_name": provider.name,
         "type": provider.type,
@@ -64,3 +65,25 @@ def test_voice_not_dropped_when_only_synthetic_voice_field_set():
         "language": "English",
         "neural": True,
     }
+
+
+@pytest.mark.django_db()
+def test_plain_node_has_single_output_handle():
+    data = _render("LLMResponseWithPrompt", {"prompt": "hi"})
+    assert data["output_handles"] == [{"handle": "output", "label": None}]
+
+
+@pytest.mark.django_db()
+def test_end_node_has_no_output_handles():
+    data = _render("EndNode", {})
+    assert data["output_handles"] == []
+
+
+@pytest.mark.django_db()
+def test_router_output_handles_regenerate_from_keywords_with_upper_cased_labels():
+    data = _render("StaticRouterNode", {"route_key": "k", "keywords": ["schedule", "reschedule", "cancel"]})
+    assert data["output_handles"] == [
+        {"handle": "output_0", "label": "SCHEDULE"},
+        {"handle": "output_1", "label": "RESCHEDULE"},
+        {"handle": "output_2", "label": "CANCEL"},
+    ]
