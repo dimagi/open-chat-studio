@@ -15,6 +15,20 @@ class Command(IdempotentCommand):
     migration_name = "notify_openai_assistant_removal_2026_07_23"
     disable_audit = True
 
+    def add_arguments(self, parser):
+        super().add_arguments(parser)
+        parser.add_argument(
+            "--team-ids",
+            nargs="+",
+            type=int,
+            default=None,
+            help="Only notify these team IDs (default: all teams with a working assistant)",
+        )
+
+    def handle(self, *args, **options):
+        self.team_ids = options.get("team_ids")
+        super().handle(*args, **options)
+
     def perform_migration(self, dry_run=False):
         teams_context = self._build_teams_context()
         if not teams_context:
@@ -47,7 +61,10 @@ class Command(IdempotentCommand):
         # Only working, non-archived assistants count as "in use" (working_versions_queryset filters both).
         # A list (not a set) so that distinct assistants sharing a name are each counted and listed.
         teams_data = defaultdict(list)
-        for assistant in OpenAiAssistant.objects.working_versions_queryset():
+        assistants = OpenAiAssistant.objects.working_versions_queryset()
+        if self.team_ids:
+            assistants = assistants.filter(team_id__in=self.team_ids)
+        for assistant in assistants:
             teams_data[assistant.team_id].append(assistant.name)
 
         return {
