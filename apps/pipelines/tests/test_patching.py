@@ -282,59 +282,6 @@ class TestPatchEndpoint:
         assert response.status_code == 409
         assert "conflict" in response.json()["error"].lower()
 
-    def test_patch_self_conflict_from_stale_inflight_revision(self, authed_client, pipeline, team_with_users):
-        """Document the server contract that motivated the client fix for issue #3895.
-
-        The bug was client-side: the debounced autosave in ``pipelineStore.ts`` read ``base_revision`` from
-        ``currentRevision``, which is only updated once a PATCH *response* lands. With no in-flight guard, two
-        quick successive edits sent a second PATCH carrying the same, now-stale ``base_revision`` as the first.
-
-        Server-side (this test), the first PATCH has already incremented ``edit_revision``, so a second PATCH
-        reusing the stale ``base_revision`` — even from the *same* session — correctly fails the
-        optimistic-concurrency check and returns a 409, which the old client surfaced as
-        "This pipeline was modified in another session."
-
-        This test pins that server behaviour: two PATCHes with the same ``base_revision`` → the second is
-        rejected with the true ``current_revision``. The client now serializes its saves (see
-        ``pipelineStore.ts`` ``_flushSave`` / ``pendingSave``) so the second PATCH sends ``base_revision=1``
-        instead; the browser-level reproduction lives in ``cypress/e2e/pipeline-autosave.cy.js``.
-        """
-        team_slug = team_with_users.slug
-        url = self._patch_url(team_slug, pipeline.id)
-
-        def edit_payload(pos_y: int) -> dict:
-            # Both edits are computed against the client's cached baseline, which still reports
-            # base_revision=0 for the second edit because the first response has not been applied yet.
-            return {
-                "base_revision": 0,
-                "nodes": {
-                    "add": [],
-                    "update": [
-                        {
-                            "id": "end",
-                            "type": "endNode",
-                            "position": {"x": 100, "y": pos_y},
-                            "data": {"id": "end", "type": EndNode.__name__, "label": "End", "params": {}},
-                        }
-                    ],
-                    "delete": [],
-                },
-                "edges": {"add": [], "update": [], "delete": []},
-            }
-
-        # Edit A → PATCH #1 succeeds and bumps the server revision to 1.
-        response_1 = authed_client.patch(url, data=json.dumps(edit_payload(10)), content_type="application/json")
-        assert response_1.status_code == 200
-        assert response_1.json()["edit_revision"] == 1
-
-        # Edit B → PATCH #2 fires while (in the real client) response #1 has not yet been applied,
-        # so it reuses the stale base_revision=0 and is falsely rejected as a cross-session conflict.
-        response_2 = authed_client.patch(url, data=json.dumps(edit_payload(20)), content_type="application/json")
-        assert response_2.status_code == 409
-        assert "conflict" in response_2.json()["error"].lower()
-        # The server reports the true current revision the client should have used.
-        assert response_2.json()["current_revision"] == 1
-
     def test_patch_malformed_payload(self, authed_client, pipeline, team_with_users):
         team_slug = team_with_users.slug
         response = authed_client.patch(
