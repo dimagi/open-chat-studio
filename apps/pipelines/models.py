@@ -15,7 +15,7 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import PipelineBuildError
-from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, split_flow_data
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
@@ -126,12 +126,19 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    def update_nodes_from_data(self) -> None:
-        """Set the nodes on the pipeline from data coming from the frontend"""
-        nodes = [FlowNode(**node) for node in self.data["nodes"]]
-        # Delete old nodes
+    def update_nodes_from_data(self, node_data: dict[str, dict]) -> None:
+        """Reconcile this pipeline's ``Node`` rows with the node list in ``self.data``.
+
+        ``self.data`` (already persisted) decides graph membership only: rows whose
+        flow_id disappeared from it are deleted, or archived when they have versions.
+        Node content never comes from ``self.data`` — the rows own it (ADR-0046).
+        ``node_data`` maps flow_id to ``{"type", "label", "params"}`` for nodes whose
+        content originates outside the database (UI saves, imports, creation, revert);
+        those rows are created or updated from the mapping. Graph nodes absent from the
+        mapping must already have a row, which is left untouched.
+        """
         current_ids = set(self.node_ids)
-        new_ids = set(node.id for node in nodes)
+        new_ids = {node["id"] for node in self.data["nodes"]}
         to_remove = current_ids - new_ids
 
         pipeline_nodes = Node.objects.annotate(versions_count=models.Count("versions")).filter(
@@ -144,15 +151,21 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        # Set new nodes or update existing ones
-        for node in nodes:
+        missing = new_ids - current_ids - set(node_data)
+        if missing:
+            raise ValueError(f"No node data provided for new node(s): {sorted(missing)}")
+
+        for flow_node in self.data["nodes"]:
+            content = node_data.get(flow_node["id"])
+            if content is None:
+                continue
             created_node, _ = Node.objects.update_or_create(
                 pipeline=self,
-                flow_id=node.id,
+                flow_id=flow_node["id"],
                 defaults={
-                    "type": node.data.type,
-                    "params": node.data.params,
-                    "label": node.data.label,
+                    "type": content["type"],
+                    "params": content.get("params", {}),
+                    "label": content.get("label", ""),
                 },
             )
             created_node.update_from_params()
@@ -195,11 +208,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
     @property
     def data_without_positions(self):
+        """The full flow (node content reconstructed from the Node rows) minus layout positions."""
         if not self.data or "nodes" not in self.data:
             return self.data
         return {
             **self.data,
-            "nodes": [{k: v for k, v in node.items() if k != "position"} for node in self.data["nodes"]],
+            "nodes": [{k: v for k, v in node.items() if k != "position"} for node in self.flow_data["nodes"]],
         }
 
     @cached_property
@@ -239,7 +253,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         pipeline_version.version_number = version_number
         id_mapping = {}
         if is_copy:
-            data, id_mapping = duplicate_pipeline_with_new_ids(self.data)
+            node_types = dict(self.node_set.values_list("flow_id", "type"))
+            data, id_mapping = duplicate_pipeline_with_new_ids(self.data, node_types)
             pipeline_version.data = data
         pipeline_version.save()
         for node in self.node_set.all():
@@ -253,27 +268,27 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def revert_to_version(self, version: "Pipeline") -> None:
         """Reset this working pipeline to the state of ``version``.
 
-        Builds the working pipeline's flow data from ``version.flow_data`` (which carries each
-        node's params straight from the version's node rows), remaps params that reference
-        versioned records back to their working id — the inverse of the rewriting done during
-        publish, see ``apps.pipelines.versioning`` — and rebuilds the nodes via
-        ``update_nodes_from_data``. The versioned record for each param is read from the version
-        node's resource FK column.
+        Builds the full flow from ``version.flow_data`` (which reconstructs each node's
+        content from the version's node rows), remaps params that reference versioned
+        records back to their working id — the inverse of the rewriting done during
+        publish, see ``apps.pipelines.versioning`` — then persists the layout and rebuilds
+        every working node from the version's content via ``update_nodes_from_data``. The
+        versioned record for each param is read from the version node's resource FK column.
         """
         # flow_data's nodes are built from the same node_set, so every flow_id resolves here.
         version_nodes_by_flow_id = {node.flow_id: node for node in version.node_set.all()}
         data = copy.deepcopy(version.flow_data)
         for node in data.get("nodes", []):
-            node_data = node.get("data", {})
-            params = node_data.get("params", {})
+            content = node.get("data", {})
+            params = content.get("params", {})
             version_node = version_nodes_by_flow_id[node["id"]]
-            for spec in get_versioned_param_specs(node_data.get("type")):
+            for spec in get_versioned_param_specs(content.get("type")):
                 spec.revert_referenced_record(version_node, params)
 
-        self.data = data
+        self.data, node_data = split_flow_data(data)
         self.edit_revision += 1
         self.save(update_fields=["data", "edit_revision"])
-        self.update_nodes_from_data()
+        self.update_nodes_from_data(node_data)
 
     @transaction.atomic()
     def archive(self) -> bool:

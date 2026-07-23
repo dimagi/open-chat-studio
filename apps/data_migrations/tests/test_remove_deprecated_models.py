@@ -18,18 +18,8 @@ def _make_pipeline_referencing(llm_provider_model, llm_provider=None):
     if llm_provider is not None:
         params["llm_provider_id"] = str(llm_provider.id)
     pipeline: Pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
-    pipeline.data["nodes"].append(
-        {
-            "id": "1",
-            "data": {
-                "id": "1",
-                "label": "LLM",
-                "type": "LLMResponseWithPrompt",
-                "params": params,
-            },
-        }
-    )
-    pipeline.update_nodes_from_data()
+    pipeline.data["nodes"].append({"id": "1", "type": "pipelineNode"})
+    pipeline.update_nodes_from_data({"1": {"label": "LLM", "type": "LLMResponseWithPrompt", "params": params}})
     pipeline.save()
     return pipeline
 

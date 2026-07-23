@@ -4,6 +4,7 @@ from uuid import uuid4
 from langgraph.graph.state import CompiledStateGraph
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
+from apps.pipelines.flow import split_flow_data
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
@@ -74,8 +75,8 @@ def create_pipeline_model(
     flow_nodes = []
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})
-    pipeline.data = {"edges": edges, "nodes": flow_nodes}
-    pipeline.update_nodes_from_data()
+    pipeline.data, node_data = split_flow_data({"edges": edges, "nodes": flow_nodes})
+    pipeline.update_nodes_from_data(node_data)
     return pipeline
 
 

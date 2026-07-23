@@ -24,7 +24,7 @@ from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
-from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload
+from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload, split_flow_data
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes as pipeline_nodes
@@ -410,10 +410,15 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
         pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
         data = FlowPipelineData.model_validate_json(request.body)
         pipeline.name = data.name
-        pipeline.data = data.data.model_dump()
+        pipeline.data, node_data = split_flow_data(data.data.model_dump())
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
-        pipeline.update_nodes_from_data()
+        try:
+            pipeline.update_nodes_from_data(node_data)
+        except ValueError as e:
+            # A payload node without content for which no row exists — client error
+            transaction.set_rollback(True)
+            return JsonResponse({"error": str(e)}, status=400)
         pipeline.refresh_from_db(fields=["node_set"])
     return JsonResponse(
         {
@@ -450,11 +455,15 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         if patch.name is not None:
             pipeline.name = patch.name
 
-        merged_data = apply_pipeline_patch(pipeline.data, patch)
-        pipeline.data = merged_data
+        pipeline.data, node_data = apply_pipeline_patch(pipeline.data, patch)
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
-        pipeline.update_nodes_from_data()
+        try:
+            pipeline.update_nodes_from_data(node_data)
+        except ValueError as e:
+            # A diff node without content for which no row exists — client error
+            transaction.set_rollback(True)
+            return JsonResponse({"error": str(e)}, status=400)
         pipeline.refresh_from_db(fields=["node_set"])
 
     return JsonResponse(
