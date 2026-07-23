@@ -65,3 +65,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0043](0043-whatsapp-bsuid-participant-identity.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | BSUID participant identity for WhatsApp |
 | [0044](0044-durable-per-channel-widget-auth-policy.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Durable per-channel widget auth policy |
 | [0045](0045-ratchet-widget-auth-level-on-upgrade.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Ratchet widget auth level up on upgrade |
+| [0046](0046-layout-only-pipeline-data.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Node rows are the sole source of pipeline node content |
