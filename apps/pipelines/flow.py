@@ -19,7 +19,9 @@ class FlowNode(pydantic.BaseModel):
     id: str
     type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
     position: dict = Field(default_factory=dict)
-    data: FlowNodeData
+    # Persisted pipeline data is layout-only, so stored nodes have no content. Full nodes
+    # (data populated) appear on the wire and in Pipeline.flow_data output.
+    data: FlowNodeData | None = None
 
 
 class FlowEdge(pydantic.BaseModel):
@@ -34,6 +36,37 @@ class Flow(pydantic.BaseModel):
     nodes: list[FlowNode]
     edges: list[FlowEdge]
     errors: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+#: The only node keys persisted in ``Pipeline.data`` — everything else is node content
+#: owned by the ``Node`` model (see ADR-0046).
+LAYOUT_NODE_KEYS = ("id", "type", "position")
+
+
+def split_flow_data(data: dict) -> tuple[dict, dict[str, dict]]:
+    """Split a full react-flow graph into layout-only data and per-node content.
+
+    Returns ``(layout_data, node_data)`` where ``layout_data`` keeps only
+    ``LAYOUT_NODE_KEYS`` per node (edges and unknown top-level keys pass through) and
+    ``node_data`` maps flow_id to ``{"type", "label", "params"}`` for every node that
+    carried an embedded ``data`` key. Layout-only input yields an empty ``node_data``.
+    The input is not mutated.
+    """
+    if "nodes" not in data:
+        return {**data}, {}
+
+    node_data = {}
+    layout_nodes = []
+    for node in data["nodes"]:
+        content = node.get("data")
+        if content:
+            node_data[node["id"]] = {
+                "type": content["type"],
+                "label": content.get("label", ""),
+                "params": content.get("params", {}),
+            }
+        layout_nodes.append({key: node[key] for key in LAYOUT_NODE_KEYS if key in node})
+    return {**data, "nodes": layout_nodes}, node_data
 
 
 class FlowPipelineData(pydantic.BaseModel):
