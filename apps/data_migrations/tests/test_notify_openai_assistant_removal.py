@@ -1,6 +1,9 @@
+from unittest.mock import patch
+
 import pytest
 from django.core import mail
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 
@@ -49,10 +52,23 @@ class TestNotifyOpenAiAssistantRemovalCommand:
 
     def test_archived_and_versioned_assistants_excluded(self, team_with_users):
         """Archived assistants and published version snapshots do not trigger a notification."""
-        OpenAiAssistantFactory(team=team_with_users, is_archived=True)
-        working = OpenAiAssistantFactory(team=team_with_users)
-        OpenAiAssistantFactory(team=team_with_users, working_version=working)
+        OpenAiAssistantFactory(team=team_with_users, name="Archived Bot", is_archived=True)
+        working = OpenAiAssistantFactory(team=team_with_users, name="Working Bot")
+        OpenAiAssistantFactory(team=team_with_users, name="Versioned Bot", working_version=working)
 
         call_command("notify_openai_assistant_removal", force=True)
 
         assert len(mail.outbox) == 1
+        body = mail.outbox[0].body
+        assert "Working Bot" in body
+        assert "Archived Bot" not in body
+        assert "Versioned Bot" not in body
+
+    @patch("apps.data_migrations.management.commands.notify_openai_assistant_removal.send_bulk_team_admin_emails")
+    def test_failed_delivery_raises(self, mock_send, team_with_users):
+        """A delivery failure raises so run_once does not record the migration as applied."""
+        mock_send.return_value = {"sent": 0, "failed": 1, "no_admins": 0, "errors": ["boom"]}
+        OpenAiAssistantFactory(team=team_with_users)
+
+        with pytest.raises(CommandError):
+            call_command("notify_openai_assistant_removal", force=True)
