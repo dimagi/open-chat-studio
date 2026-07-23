@@ -332,9 +332,11 @@ const createPipelineManagerStore: StateCreator<
       clearTimeout(saveTimeoutId);
     }
     return new Promise<void>((resolve, reject) => {
+      let saveSucceeded = false;
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
         .then((saveResponse: PipelineSaveResponse) => {
           if (saveResponse) {
+            saveSucceeded = true;
             pipeline.data = saveResponse.data as PipelineType["data"];
             set({
               currentPipeline: pipeline,
@@ -362,7 +364,11 @@ const createPipelineManagerStore: StateCreator<
         // If edits arrived while this full save was in-flight, flush them now. Autosaves
         // that fired mid-save deferred via `pendingSave`; without this they would never be
         // persisted (dirty was just cleared), mirroring _patchPipeline's handling (#3895).
-        const shouldFlush = pendingSave && !get().conflictDetected;
+        // Only flush after a *successful* save: the follow-up PATCH is computed against the
+        // `currentRevision` this save just established. After a failed save (e.g. network
+        // timeout) that revision is stale, so flushing would send an out-of-date
+        // base_revision — leave the pending edits for the next autosave instead (#3895).
+        const shouldFlush = saveSucceeded && pendingSave && !get().conflictDetected;
         pendingSave = false;
         if (shouldFlush) {
           get()._flushSave();
