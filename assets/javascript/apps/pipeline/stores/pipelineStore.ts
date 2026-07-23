@@ -378,9 +378,11 @@ const createPipelineManagerStore: StateCreator<
   },
   _patchPipeline: async (diff: PipelineDiffPayload) => {
     set({isSaving: true});
+    let patchSucceeded = false;
     try {
       const response = await apiClient.patchPipeline(get().currentPipelineId!, diff);
       if (response) {
+        patchSucceeded = true;
         // Update local state with merged data from server
         const edges = response.data?.edges as Edge[] | undefined;
         set({
@@ -417,7 +419,11 @@ const createPipelineManagerStore: StateCreator<
       // If edits arrived while this PATCH was in-flight, flush them now — the diff is
       // recomputed against the revision this save just established, so the follow-up
       // PATCH carries an up-to-date base_revision instead of a stale one (#3895).
-      const shouldFlush = pendingSave && !get().conflictDetected;
+      // Only flush after a *successful* patch: on a non-409 failure (e.g. network
+      // timeout) `currentRevision` was never bumped, so flushing would send a stale
+      // base_revision. `dirty` is still set in that case, so the next autosave retries
+      // against a current revision — mirroring savePipeline's handling (#3895).
+      const shouldFlush = patchSucceeded && pendingSave && !get().conflictDetected;
       pendingSave = false;
       if (shouldFlush) {
         get()._flushSave();
