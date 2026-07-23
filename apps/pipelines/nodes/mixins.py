@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
@@ -415,5 +416,24 @@ class StructuredDataSchemaValidatorMixin:
 
         if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
             raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        key_pattern = re.compile(r"^[a-zA-Z0-9_.\-]{1,64}$")
+
+        def collect_invalid_keys(d):
+            invalid = []
+            for key, val in d.items():
+                if not key_pattern.match(key):
+                    invalid.append(key)
+                if isinstance(val, list) and val and isinstance(val[0], dict):
+                    invalid.extend(collect_invalid_keys(val[0]))
+            return invalid
+
+        invalid_keys = collect_invalid_keys(parsed_value)
+        if invalid_keys:
+            raise PydanticCustomError(
+                "invalid_schema",
+                "Schema property keys must match pattern '^[a-zA-Z0-9_.-]{{1,64}}$'. Invalid keys: {keys}",
+                {"keys": ", ".join(repr(k) for k in invalid_keys)},
+            )
 
         return value
