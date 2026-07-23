@@ -83,8 +83,13 @@ class UsageView(APIView):
         pagination envelope augmented with the request's ``period`` and ``group_by``."""
         paginator = PlatformCursorPagination() if query.group_by == GROUP_PLATFORM else CursorPagination()
         # Each group expands to one row per time bucket, so bound groups-per-page by the bucket count to
-        # keep the materialised page (groups × buckets) from ballooning at a fine granularity.
-        paginator.max_page_size = min(paginator.max_page_size, services.grouped_page_size_cap(query))
+        # keep the materialised page (groups × buckets) from ballooning at a fine granularity. Clamp both
+        # the client cutoff (max_page_size) and the default (page_size): DRF only applies max_page_size
+        # when the client sends ?page_size, so a request that omits it would otherwise fall through to the
+        # unclamped project default and defeat the cap.
+        cap = services.grouped_page_size_cap(query)
+        paginator.max_page_size = min(paginator.max_page_size, cap)
+        paginator.page_size = min(paginator.page_size, cap)
         page = paginator.paginate_queryset(services.group_entities(query), request, view=self)
         rows = services.group_rows(query, page)
         response = paginator.get_paginated_response(GroupedUsageRowSerializer(rows, many=True).data)

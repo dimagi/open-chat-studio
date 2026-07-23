@@ -112,6 +112,27 @@ def test_grouped_results_are_cursor_paginated():
 
 
 @pytest.mark.django_db()
+def test_grouped_default_page_is_bounded_by_cap(monkeypatch):
+    """A grouped request that omits ``page_size`` is still clamped to the cap, not the unclamped project
+    default. Regression: only ``max_page_size`` was lowered, which DRF ignores without a ``page_size``
+    query param, so the default page fell through to ``PAGE_SIZE`` and defeated the cap."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    for i in range(3):
+        participant = ParticipantFactory.create(team=team, identifier=f"p{i}@example.com", platform="web")
+        _add_messages(ExperimentSessionFactory.create(team=team, participant=participant, platform="web"), human=1)
+
+    monkeypatch.setattr("apps.api.v2.usage.services.grouped_page_size_cap", lambda query: 2)
+
+    client = ApiTestClient(user, team)
+    # No page_size param: before the fix this returned all 3 (default 100); now bounded to the cap of 2.
+    first = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "participant"}).json()
+
+    assert len(first["results"]) == 2
+    assert first["next"] is not None
+
+
+@pytest.mark.django_db()
 def test_platform_grouping_is_cursor_paginated():
     """Platform has no backing model, so it paginates a distinct-slug queryset ordered by the slug."""
     team = TeamWithUsersFactory.create()
