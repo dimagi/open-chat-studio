@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import time
 from urllib.parse import unquote
@@ -19,6 +20,24 @@ from apps.documents.source_loaders.base import SyncResult
 from apps.documents.source_loaders.registry import create_loader
 from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File, FilePurpose
+
+_EXTERNAL_ID_MAX_LENGTH = 255
+_EXTERNAL_ID_HASH_LENGTH = 64  # SHA-256 hex digest length
+_EXTERNAL_ID_PREFIX_LENGTH = _EXTERNAL_ID_MAX_LENGTH - _EXTERNAL_ID_HASH_LENGTH
+
+
+def _safe_external_id(identifier: str) -> str:
+    """Return identifier truncated to fit in CharField(max_length=255).
+
+    If the identifier is too long, the first 191 characters are kept and a
+    SHA-256 hex digest of the full identifier is appended (191 + 64 = 255),
+    guaranteeing uniqueness without collisions.
+    """
+    if len(identifier) <= _EXTERNAL_ID_MAX_LENGTH:
+        return identifier
+    digest = hashlib.sha256(identifier.encode()).hexdigest()
+    return identifier[:_EXTERNAL_ID_PREFIX_LENGTH] + digest
+
 
 logger = logging.getLogger("ocs.document_source")
 
@@ -130,7 +149,7 @@ class DocumentSourceManager:
         seen_identifiers = set()
         files_to_index = []
         for document in documents:
-            identifier = loader.get_document_identifier(document)
+            identifier = _safe_external_id(loader.get_document_identifier(document))
             # Mark as seen before processing so a file that fails to update is not treated
             # as removed from the source (and deleted) on this run.
             seen_identifiers.add(identifier)
@@ -150,7 +169,7 @@ class DocumentSourceManager:
         existing_files = CollectionFile.objects.filter(
             collection=self.collection, document_source=self.document_source
         ).select_related("file")
-        return {file.external_id: file for file in existing_files if file.external_id}
+        return {_safe_external_id(file.external_id): file for file in existing_files if file.external_id}
 
     def _sync_document(
         self, document: Document, identifier: str, loader, existing_files_map: dict, result: SyncResult
