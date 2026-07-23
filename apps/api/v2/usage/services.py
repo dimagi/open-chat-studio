@@ -10,7 +10,7 @@ and :func:`group_rows`. See ``docs/design/usage-api.md``.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import TypedDict
@@ -122,7 +122,13 @@ class UsageResult:
 @dataclass(frozen=True)
 class UsageQuery:
     """Validated, team-scoped inputs for a single usage request. Bundling them keeps the many
-    aggregation helpers to one parameter and lets the window/filters travel together unchanged."""
+    aggregation helpers to one parameter and lets the window/filters travel together unchanged.
+
+    The ``participant``/``participant_identifier``/``chatbot`` fields are the raw request handles;
+    :func:`resolve_query_filters` turns them into the ``*_ids`` below **once** per request. The
+    queryset builders filter on those FK-id fields (never the handles), so no metric joins the
+    ``experiment``/``participant`` tables and the archived-inclusive id resolution lives in one place.
+    Build a query, then resolve it before running any aggregation."""
 
     team: Team
     metrics: set[str]
@@ -135,6 +141,12 @@ class UsageQuery:
     chatbot: str | None = None
     platform: str | None = None
     group_by: str | None = None
+    # Populated by resolve_query_filters. ``None`` means "no such filter requested"; an empty list means
+    # "requested but matched nobody" (with filter_is_empty set), which the ``__in`` filters turn into an
+    # empty result and the cost path short-circuits to zeros.
+    participant_ids: list[int] | None = None
+    experiment_ids: list[int] | None = None
+    filter_is_empty: bool = False
 
 
 @dataclass(frozen=True)
@@ -223,6 +235,34 @@ _GROUP_SPECS = {
         identity=lambda item: item["platform"],
     ),
 }
+
+
+def resolve_query_filters(query: UsageQuery) -> UsageQuery:
+    """Resolve the participant/chatbot request handles to DB ids **once**, returning a new query that
+    carries them. Every metric then filters on the FK-id columns (``participant_id``/``experiment_id``)
+    instead of joining ``participant``/``experiment`` to match a ``public_id``/``identifier``, and the
+    archived-inclusive resolution (``get_all()``) happens in exactly one place. Call this before running
+    any aggregation; ``filter_is_empty`` marks a requested filter that matched nobody so the reader
+    returns zeros. Idempotent enough to skip when nothing needs resolving."""
+    if not (query.participant or query.participant_identifier or query.chatbot):
+        return query
+    participant_ids = query.participant_ids
+    experiment_ids = query.experiment_ids
+    is_empty = query.filter_is_empty
+    if query.participant or query.participant_identifier:
+        # An identifier can match several participants (one per platform), so this resolves to a list.
+        lookup = {"public_id": query.participant} if query.participant else {"identifier": query.participant_identifier}
+        participant_ids = list(Participant.objects.filter(team=query.team, **lookup).values_list("id", flat=True))
+        is_empty = is_empty or not participant_ids
+    if query.chatbot:
+        # ``get_all()`` so an archived chatbot still resolves to its id (its activity is reached elsewhere
+        # by manager-agnostic relation traversal); each version owns its own ``public_id``, so this is at
+        # most one id, but keep it a list for a uniform ``__in`` filter.
+        experiment_ids = list(
+            Experiment.objects.get_all().filter(team=query.team, public_id=query.chatbot).values_list("id", flat=True)
+        )
+        is_empty = is_empty or not experiment_ids
+    return replace(query, participant_ids=participant_ids, experiment_ids=experiment_ids, filter_is_empty=is_empty)
 
 
 def usage_query(query: UsageQuery) -> UsageResult:
@@ -528,32 +568,18 @@ def _token_counts(query: UsageQuery, cost_filter: _CostFilter) -> TokenCounts:
 
 
 def _cost_filter(query: UsageQuery) -> _CostFilter:
-    """Resolve the participant/chatbot/platform filters to the ``CostFilters`` the reporting read path
-    honours. ``is_empty`` is True when a participant *or* chatbot filter was requested but resolved to
-    no rows, so the caller short-circuits to zeros — ``CostFilters`` treats an empty id list as "no
-    filter", not "match none", so an unmatched id filter would otherwise widen the result to everything.
-    A platform filter needs no id resolution (it is a slug matched directly) and never sets ``is_empty``.
-    """
+    """Build the ``CostFilters`` the reporting read path honours from the query's already-resolved ids
+    (see :func:`resolve_query_filters`). ``is_empty`` carries through ``filter_is_empty`` so the caller
+    short-circuits to zeros — ``CostFilters`` treats an empty id list as "no filter", not "match none",
+    so an unmatched id filter would otherwise widen the result to everything."""
     kwargs: dict = {}
-    is_empty = False
-    if query.participant or query.participant_identifier:
-        # An identifier can match several participants (one per platform), so this returns a list.
-        lookup = {"public_id": query.participant} if query.participant else {"identifier": query.participant_identifier}
-        participant_ids = list(Participant.objects.filter(team=query.team, **lookup).values_list("id", flat=True))
-        kwargs["participant_ids"] = participant_ids
-        is_empty = is_empty or not participant_ids
-    if query.chatbot:
-        # ``get_all()`` so an archived chatbot resolves to its id: the message/session paths reach it by
-        # relation traversal (archived-inclusive), so cost/tokens must too or they would zero out while
-        # the other metrics report real activity for the same ``chatbot`` filter.
-        experiment_ids = list(
-            Experiment.objects.get_all().filter(team=query.team, public_id=query.chatbot).values_list("id", flat=True)
-        )
-        kwargs["experiment_ids"] = experiment_ids
-        is_empty = is_empty or not experiment_ids
+    if query.participant_ids is not None:
+        kwargs["participant_ids"] = query.participant_ids
+    if query.experiment_ids is not None:
+        kwargs["experiment_ids"] = query.experiment_ids
     if query.platform:
         kwargs["platform_names"] = [query.platform]
-    return _CostFilter(filters=reporting.CostFilters(**kwargs), is_empty=is_empty)
+    return _CostFilter(filters=reporting.CostFilters(**kwargs), is_empty=query.filter_is_empty)
 
 
 def _session_queryset(query: UsageQuery) -> QuerySet[ExperimentSession]:
@@ -565,12 +591,11 @@ def _session_queryset(query: UsageQuery) -> QuerySet[ExperimentSession]:
         .exclude(platform=ChannelPlatform.EVALUATIONS)
         .exclude(status=SessionStatus.SETUP)
     )
-    if query.participant:
-        queryset = queryset.filter(participant__public_id=query.participant)
-    if query.participant_identifier:
-        queryset = queryset.filter(participant__identifier=query.participant_identifier)
-    if query.chatbot:
-        queryset = queryset.filter(experiment__public_id=query.chatbot)
+    # Filter on the session's own FK columns (resolved ids), so no join to experiment/participant.
+    if query.participant_ids is not None:
+        queryset = queryset.filter(participant_id__in=query.participant_ids)
+    if query.experiment_ids is not None:
+        queryset = queryset.filter(experiment_id__in=query.experiment_ids)
     if query.platform:
         queryset = queryset.filter(platform=query.platform)
     return queryset
@@ -603,12 +628,12 @@ def _message_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
     ``chat__experiment_session__participant``. Backed by the ``(chat, message_type, created_at)`` index.
     """
     queryset = ChatMessage.objects.filter(chat__team=query.team, created_at__gte=query.start, created_at__lt=query.end)
-    if query.participant:
-        queryset = queryset.filter(chat__experiment_session__participant__public_id=query.participant)
-    if query.participant_identifier:
-        queryset = queryset.filter(chat__experiment_session__participant__identifier=query.participant_identifier)
-    if query.chatbot:
-        queryset = queryset.filter(chat__experiment_session__experiment__public_id=query.chatbot)
+    # Filter on the session's FK-id columns (resolved ids), so the message query joins through the chat
+    # and session it needs anyway but not the experiment/participant tables.
+    if query.participant_ids is not None:
+        queryset = queryset.filter(chat__experiment_session__participant_id__in=query.participant_ids)
+    if query.experiment_ids is not None:
+        queryset = queryset.filter(chat__experiment_session__experiment_id__in=query.experiment_ids)
     if query.platform:
         queryset = queryset.filter(chat__experiment_session__platform=query.platform)
     return queryset

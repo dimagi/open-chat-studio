@@ -11,7 +11,14 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from apps.api.v2.usage.services import MAX_GROUPED_ROWS, UsageQuery, grouped_page_size_cap
+from apps.api.v2.usage.services import (
+    MAX_GROUPED_ROWS,
+    UsageQuery,
+    _message_queryset,
+    _session_queryset,
+    grouped_page_size_cap,
+    resolve_query_filters,
+)
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.models import ServiceKind
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -401,6 +408,31 @@ def test_participants_metric_with_group_by_participant_is_rejected():
 
     assert response.status_code == 400
     assert "redundant" in str(response.json()).lower()
+
+
+@pytest.mark.django_db()
+def test_id_filters_avoid_joining_experiment_and_participant_tables():
+    """chatbot/participant filters resolve to FK ids, so the message/session queries filter on the FK
+    columns and never join the experiment/participant tables."""
+    team = TeamWithUsersFactory.create()
+    chatbot = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(team=team, experiment=chatbot)
+    window = {
+        "metrics": {"messages"},
+        "tz": ZoneInfo("UTC"),
+        "start": datetime.datetime(2000, 1, 1, tzinfo=datetime.UTC),
+        "end": datetime.datetime(2100, 1, 1, tzinfo=datetime.UTC),
+    }
+
+    chatbot_q = resolve_query_filters(UsageQuery(team=team, chatbot=chatbot.public_id, **window))
+    msg_sql = str(_message_queryset(chatbot_q).query).lower()
+    assert "experiments_experimentsession" in msg_sql  # still joins the session it needs
+    assert '"experiments_experiment" on' not in msg_sql  # but not the experiment table
+    assert '"experiments_experiment" on' not in str(_session_queryset(chatbot_q).query).lower()
+
+    participant_q = resolve_query_filters(UsageQuery(team=team, participant=session.participant.public_id, **window))
+    assert '"experiments_participant" on' not in str(_message_queryset(participant_q).query).lower()
+    assert '"experiments_participant" on' not in str(_session_queryset(participant_q).query).lower()
 
 
 @pytest.mark.django_db()

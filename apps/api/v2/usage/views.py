@@ -73,6 +73,8 @@ class UsageView(APIView):
             platform=validated.get("platform"),
             group_by=validated.get("group_by"),
         )
+        # Resolve the participant/chatbot handles to FK ids once, so every metric filters on ids.
+        query = services.resolve_query_filters(query)
         if query.group_by:
             return self._grouped_response(request, query)
         result = usage_query(query)
