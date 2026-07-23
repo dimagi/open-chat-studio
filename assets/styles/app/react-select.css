@@ -1,0 +1,83 @@
+/*
+  react-select is used for several pipeline-builder widgets (see
+  assets/javascript/apps/pipeline/nodes/widgets.tsx). The library ships a
+  hard-coded light palette that ignores the active daisyUI theme, so in dark
+  mode the control and menu rendered white-on-dark. These rules drive
+  react-select from the same daisyUI theme variables the native `select`/`input`
+  controls use, so it follows the light and dark themes automatically.
+
+  NOTE: react-select injects its styles via emotion into an *unlayered* origin,
+  so this file must stay unlayered too (imported without `layer(...)`); the
+  descendant selectors below then win on specificity.
+*/
+.react-select-container .react-select__control {
+  background-color: var(--color-base-100);
+  border-color: color-mix(in oklab, var(--color-base-content) 20%, transparent);
+}
+
+.react-select-container .react-select__control--is-focused {
+  border-color: var(--color-primary);
+  box-shadow: none;
+}
+
+.react-select-container .react-select__control--is-disabled {
+  background-color: var(--color-base-200);
+}
+
+.react-select-container .react-select__single-value,
+.react-select-container .react-select__input-container,
+.react-select-container .react-select__multi-value__label {
+  color: var(--color-base-content);
+}
+
+.react-select-container .react-select__placeholder {
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+}
+
+.react-select-container .react-select__indicator {
+  color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+}
+
+.react-select-container .react-select__indicator-separator {
+  background-color: color-mix(in oklab, var(--color-base-content) 20%, transparent);
+}
+
+.react-select-container .react-select__menu {
+  background-color: var(--color-base-100);
+  color: var(--color-base-content);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 20%, transparent);
+}
+
+.react-select-container .react-select__option {
+  background-color: transparent;
+  color: var(--color-base-content);
+}
+
+.react-select-container .react-select__option--is-focused {
+  background-color: var(--color-base-200);
+}
+
+.react-select-container .react-select__option--is-selected {
+  background-color: var(--color-primary);
+  color: var(--color-primary-content);
+}
+
+.react-select-container .react-select__multi-value {
+  background-color: var(--color-base-200);
+}
+
+/*
+  History-name select sits in a joined row next to the history-type <select>.
+  Match the daisyUI select height (var(--size-field) * 10) and square the shared
+  (left) edge — the type <select> is the join first-item (rounded-left,
+  square-right) — so the two controls align cleanly instead of leaving a
+  short, rounded-corner notch at the seam.
+*/
+.react-select-join .react-select__control {
+  min-height: calc(var(--size-field, 0.25rem) * 10);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  border-start-end-radius: var(--radius-field);
+  border-end-end-radius: var(--radius-field);
+  margin-inline-start: calc(var(--border, 1px) * -1);
+}

@@ -1023,7 +1023,7 @@ export function HistoryTypeWidget(props: WidgetParams) {
                 onChange={reportSelection}
                 isDisabled={props.readOnly}
                 isClearable
-                className="react-select-container nodrag"
+                className="react-select-container react-select-join nodrag"
                 classNamePrefix="react-select"
                 placeholder="Type to search or create..."
               />
