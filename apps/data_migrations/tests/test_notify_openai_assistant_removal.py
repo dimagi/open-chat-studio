@@ -6,6 +6,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 def _team_admin_email(team):
@@ -63,6 +64,17 @@ class TestNotifyOpenAiAssistantRemovalCommand:
         assert "Working Bot" in body
         assert "Archived Bot" not in body
         assert "Versioned Bot" not in body
+
+    def test_team_ids_scopes_notification(self, team_with_users):
+        """--team-ids limits notifications to the given teams, leaving others un-notified."""
+        other_team = TeamWithUsersFactory()
+        OpenAiAssistantFactory(team=team_with_users, name="Included Bot")
+        OpenAiAssistantFactory(team=other_team, name="Excluded Bot")
+
+        call_command("notify_openai_assistant_removal", force=True, team_ids=[team_with_users.id])
+
+        assert len(mail.outbox) == 1
+        assert mail.outbox[0].to == [_team_admin_email(team_with_users)]
 
     @patch("apps.data_migrations.management.commands.notify_openai_assistant_removal.send_bulk_team_admin_emails")
     def test_failed_delivery_raises(self, mock_send, team_with_users):
