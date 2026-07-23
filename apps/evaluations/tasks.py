@@ -11,7 +11,7 @@ from celery import chord, shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.http import QueryDict
 from django.utils import timezone
@@ -61,12 +61,31 @@ def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
     dataset.save(update_fields=["status", "error_message", "job_id"])
 
 
-@shared_task(base=TaskbadgerTask)
+def _pending_evaluator_ids(evaluation_run, message_id, evaluator_ids):
+    """Return the subset of evaluator_ids with no EvaluationResult yet for (run, message).
+
+    Error results ({"error": ...}) count as done, matching the current no-retry behaviour.
+    """
+    already_done = set(
+        EvaluationResult.objects.filter(
+            run=evaluation_run, message_id=message_id, evaluator_id__in=evaluator_ids
+        ).values_list("evaluator_id", flat=True)
+    )
+    return [evaluator_id for evaluator_id in evaluator_ids if evaluator_id not in already_done]
+
+
+@shared_task
 def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     """
-    Run all evaluations over a single message.
-    First runs the message through the bot, then runs the evaluator.
-    ExperimentSessions created in this task are deleted periodically by cleanup_old_evaluation_data
+    Run the outstanding evaluations over a single message, in-process.
+
+    Idempotent by design: broker redelivery and stall re-dispatch deliberately
+    re-run this task, so it first drops evaluators that already have a result for
+    (run, message) and returns before bot generation if none remain. A partially
+    evaluated message re-runs bot generation, so remaining evaluators judge a fresh
+    bot response (rare crash-path artifact). Duplicate inserts that race past the
+    skip check are absorbed by the unique constraint (the other delivery won).
+    ExperimentSessions created here are deleted periodically by cleanup_old_evaluation_data.
     """
     try:
         evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
@@ -82,17 +101,22 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
         except EvaluationMessage.DoesNotExist:
             logger.warning("EvaluationMessage %s no longer exists; skipping in run %s", message_id, evaluation_run_id)
             return
+
+        pending_evaluator_ids = _pending_evaluator_ids(evaluation_run, message_id, evaluator_ids)
+        if not pending_evaluator_ids:
+            return
+
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
         session_id, bot_response = None, ""
         if generation_experiment is not None:
             session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment)
 
-        evaluators_qs = Evaluator.objects.filter(id__in=evaluator_ids).prefetch_related(
+        evaluators_qs = Evaluator.objects.filter(id__in=pending_evaluator_ids).prefetch_related(
             Prefetch("tag_rules", queryset=EvaluatorTagRule.objects.select_related("tag")),
         )
         evaluators = {e.id: e for e in evaluators_qs}
-        for evaluator_id in evaluator_ids:
+        for evaluator_id in pending_evaluator_ids:
             try:
                 evaluator = evaluators[evaluator_id]
             except KeyError:
@@ -101,30 +125,48 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
             try:
                 result = evaluator.run(message, bot_response or "")
                 output = result.model_dump()
-                with transaction.atomic():
-                    evaluation_result = EvaluationResult.objects.create(
-                        message=message,
-                        run=evaluation_run,
-                        evaluator=evaluator,
-                        output=output,
-                        team=evaluation_run.team,
-                        session_id=session_id,
+                try:
+                    with transaction.atomic():
+                        evaluation_result = EvaluationResult.objects.create(
+                            message=message,
+                            run=evaluation_run,
+                            evaluator=evaluator,
+                            output=output,
+                            team=evaluation_run.team,
+                            session_id=session_id,
+                        )
+                        _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
+                except IntegrityError:
+                    logger.info(
+                        "EvaluationResult for run %s message %s evaluator %s already exists; skipping (race)",
+                        evaluation_run_id,
+                        message_id,
+                        evaluator_id,
                     )
-                    _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
+                    continue
                 try:
                     write_scores_from_evaluation_result(evaluation_result)
                 except Exception:
                     logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
             except Exception as e:
                 logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
-                EvaluationResult.objects.create(
-                    message=message,
-                    run=evaluation_run,
-                    evaluator=evaluator,
-                    output={"error": str(e)},
-                    team=evaluation_run.team,
-                    session_id=session_id,
-                )
+                try:
+                    with transaction.atomic():
+                        EvaluationResult.objects.create(
+                            message=message,
+                            run=evaluation_run,
+                            evaluator=evaluator,
+                            output={"error": str(e)},
+                            team=evaluation_run.team,
+                            session_id=session_id,
+                        )
+                except IntegrityError:
+                    logger.info(
+                        "Error EvaluationResult for run %s message %s evaluator %s already exists; skipping (race)",
+                        evaluation_run_id,
+                        message_id,
+                        evaluator_id,
+                    )
 
 
 def _maybe_apply_tag_rules(
