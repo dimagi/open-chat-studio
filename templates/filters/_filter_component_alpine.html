@@ -247,8 +247,7 @@
 
         // Keep only columns that have both a value (f_*) and an operator (op_*)
         const validColumns = Array.from(columns)
-          .filter(columnName => urlParams.has(`f_${columnName}`) && urlParams.has(`op_${columnName}`))
-          .sort();
+          .filter(columnName => urlParams.has(`f_${columnName}`) && urlParams.has(`op_${columnName}`));
 
         const filters = validColumns.map(columnName => {
           const valueParam = urlParams.get(`f_${columnName}`);
