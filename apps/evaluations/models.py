@@ -541,8 +541,17 @@ class EvaluationRun(BaseTeamModel):
         EvaluationMessage,
         blank=True,
         related_name="scoping_runs",
-        help_text="Subset of dataset messages this run evaluated. Empty for FULL/PREVIEW.",
+        help_text=(
+            "The frozen message plan for this run (all dataset ids for FULL, the sample for PREVIEW, "
+            "the explicit list for DELTA)."
+        ),
     )
+    # Coordination state, written only by the beat coordinator under a row lock.
+    evaluator_ids = SanitizedJSONField(default=list)  # evaluator ids frozen at creation
+    in_flight = SanitizedJSONField(default=list)  # message ids of the current wave
+    wave_dispatched_at = models.DateTimeField(null=True, blank=True)
+    stall_count = models.PositiveSmallIntegerField(default=0)
+    taskbadger_task_id = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return f"EvaluationRun ({self.created_at} - {self.finished_at})"
@@ -577,6 +586,14 @@ class EvaluationResult(BaseTeamModel):
     run = models.ForeignKey(EvaluationRun, on_delete=models.CASCADE, related_name="results")
     session = models.ForeignKey(ExperimentSession, on_delete=models.SET_NULL, null=True)
     output = SanitizedJSONField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "message", "evaluator"],
+                name="unique_result_per_run_message_evaluator",
+            ),
+        ]
 
     def __str__(self):
         return f"EvaluatorResult for Evaluator {self.evaluator_id}"
