@@ -115,7 +115,7 @@ class FilterParams:
     @classmethod
     def from_request(cls, request) -> Self:
         query_params = request.GET
-        if not any(key.startswith(("filter_", "f_")) for key in query_params):
+        if not any(key.startswith("f_") for key in query_params):
             return cls.from_request_header(request, "HX-Current-URL")
         return cls(query_params)
 
