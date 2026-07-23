@@ -29,12 +29,6 @@ them: revert builds the mapping from the version's rows; publishing versions and
 never calls `update_nodes_from_data` at all (rows are copied directly). A node id present
 in the graph but absent from both the mapping and the rows is an error.
 
-An idempotent data migration strips the blob from existing rows, skipping (and logging)
-any row whose blob holds content with no matching `Node` row rather than destroying it.
-Read paths tolerate old-format data, so pre-migration rows, restored backups, and old
-import files keep working; import paths extract an embedded blob to build rows, then
-persist layout-only data.
-
 ## Consequences
 
 - One source of truth: version publish/revert, param edits, and scrub commands touch
