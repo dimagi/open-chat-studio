@@ -340,10 +340,22 @@ def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
     bucket_keys = [_bucket_key(bucket, query.tz) for bucket in buckets]
     index = {(key, bucket_key): {} for key in keys for bucket_key in bucket_keys}
 
+    for metric, rows in _grouped_non_cost_metric_rows(query, keys):
+        for group_key, bucket_key, value in rows:
+            index[(group_key, bucket_key)][metric] = value
+    if METRIC_COST in query.metrics or METRIC_TOKENS in query.metrics:
+        _fill_grouped_cost_tokens(query, keys, index)
+
+    _zero_fill_grouped(query, index)
+    return index
+
+
+def _grouped_non_cost_metric_rows(query: UsageQuery, keys: list) -> list:
+    """``(metric, (group_key, bucket_key, value) iterator)`` for each requested non-cost metric, built
+    conditionally so a metric's query only runs when asked for. Cost/tokens share one UsageRecord read
+    and are filled separately by the caller."""
     trunc = None if query.granularity == GRANULARITY_TOTAL else _TRUNC[query.granularity]
     spec = _GROUP_SPECS[query.group_by]
-    msg_field = spec.message_field
-    ses_field = spec.session_field
 
     def by_group(queryset, group_field, **annotations):
         return _grouped_rows(
@@ -354,32 +366,22 @@ def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
             **annotations,
         )
 
-    # (metric, (group_key, bucket_key, value) iterator) per requested non-cost metric, built
-    # conditionally so a metric's query only runs when asked for. Cost/tokens share one UsageRecord read
-    # and are filled separately below.
     metric_rows = []
     if METRIC_MESSAGES in query.metrics:
-        rows = by_group(_message_queryset(query), msg_field, **_MESSAGE_ANNOTATIONS)
+        rows = by_group(_message_queryset(query), spec.message_field, **_MESSAGE_ANNOTATIONS)
         metric_rows.append((METRIC_MESSAGES, ((gk, bk, _message_counts_from_row(row)) for gk, bk, row in rows)))
     if METRIC_SESSIONS in query.metrics:
-        rows = by_group(_session_queryset(query), ses_field, n=Count("id"))
+        rows = by_group(_session_queryset(query), spec.session_field, n=Count("id"))
         metric_rows.append((METRIC_SESSIONS, ((gk, bk, row["n"]) for gk, bk, row in rows)))
     if METRIC_PARTICIPANTS in query.metrics:
         # group_by=participant is rejected upstream, so this only runs for chatbot/platform.
         rows = by_group(
             _active_participant_queryset(query),
-            msg_field,
+            spec.message_field,
             n=Count("chat__experiment_session__participant", distinct=True),
         )
         metric_rows.append((METRIC_PARTICIPANTS, ((gk, bk, row["n"]) for gk, bk, row in rows)))
-    for metric, rows in metric_rows:
-        for group_key, bucket_key, value in rows:
-            index[(group_key, bucket_key)][metric] = value
-    if METRIC_COST in query.metrics or METRIC_TOKENS in query.metrics:
-        _fill_grouped_cost_tokens(query, keys, index)
-
-    _zero_fill_grouped(query, index)
-    return index
+    return metric_rows
 
 
 def _fill_grouped_cost_tokens(query: UsageQuery, keys: list, index: dict) -> None:
