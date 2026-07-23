@@ -97,4 +97,4 @@ class LLMContextualizer(Contextualizer):
                 extra={"error": str(e)},
             )
             return self._fallback.get_context(document=document, chunk=chunk)
-        return (response.content or "").strip()
+        return response.text.strip()

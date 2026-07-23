@@ -27,7 +27,7 @@ class TestStaticContextualizer:
 class TestLLMContextualizer:
     def test_returns_stripped_llm_output(self):
         chat_model = mock.Mock()
-        chat_model.invoke.return_value = mock.Mock(content="  This chunk covers Q2 revenue.  ")
+        chat_model.invoke.return_value = mock.Mock(text="  This chunk covers Q2 revenue.  ")
         contextualizer = LLMContextualizer(chat_model)
 
         context = contextualizer.get_context(document="full doc", chunk="a chunk")
@@ -37,7 +37,7 @@ class TestLLMContextualizer:
 
     def test_document_and_chunk_in_prompt(self):
         chat_model = mock.Mock()
-        chat_model.invoke.return_value = mock.Mock(content="ctx")
+        chat_model.invoke.return_value = mock.Mock(text="ctx")
         contextualizer = LLMContextualizer(chat_model)
 
         contextualizer.get_context(document="UNIQUE_DOC_MARKER", chunk="UNIQUE_CHUNK_MARKER")
@@ -51,7 +51,7 @@ class TestLLMContextualizer:
 
     def test_document_is_truncated(self):
         chat_model = mock.Mock()
-        chat_model.invoke.return_value = mock.Mock(content="ctx")
+        chat_model.invoke.return_value = mock.Mock(text="ctx")
         contextualizer = LLMContextualizer(chat_model, max_document_chars=10)
 
         contextualizer.get_context(document="X" * 5000, chunk="a chunk")
