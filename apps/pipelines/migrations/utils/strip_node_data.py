@@ -1,8 +1,11 @@
 """Strip embedded node content from ``Pipeline.data``, leaving layout only (ADR-0046).
 
-Node content (type, label, params) is owned by the ``Node`` rows; the copy that pre-0029
+Node content (type, label, params) is owned by the ``Node`` rows; the copy that older
 rows embed under ``data.nodes[*].data`` is redundant. Idempotent and safe to rerun:
 already-stripped rows produce no write.
+
+Run via the ``strip_node_data`` management command; a data migration in a follow-up PR
+will reuse these helpers with historical models.
 """
 
 import logging
@@ -58,7 +61,7 @@ def _strip_nodes(pipeline, Node):
 def rebuild_node_data_in_pipelines(Pipeline, Node):
     """Reverse of the strip: rebuild each node's embedded content blob from its Node row.
 
-    Exists so migration 0029 is genuinely reversible — pre-ADR-0046 code requires the
+    Exists so the strip is genuinely reversible — pre-ADR-0046 code requires the
     blob (``FlowNode.data`` was a mandatory field), so a code rollback needs it restored.
     Nodes without a backing row are left untouched. Idempotent.
     """

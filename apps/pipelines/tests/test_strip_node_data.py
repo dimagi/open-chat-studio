@@ -1,4 +1,5 @@
 import pytest
+from django.core.management import call_command
 
 from apps.pipelines.migrations.utils.strip_node_data import (
     rebuild_node_data_in_pipelines,
@@ -109,7 +110,7 @@ class TestStripNodeData:
 
 @pytest.mark.django_db()
 class TestRebuildNodeData:
-    """The reverse migration: rebuild the embedded blobs from the Node rows so that
+    """The reverse of the strip: rebuild the embedded blobs from the Node rows so that
     pre-ADR-0046 code (which requires them) works again after a code rollback."""
 
     def test_rebuilds_blobs_from_rows(self, team):
@@ -151,3 +152,24 @@ class TestRebuildNodeData:
         rebuild_node_data_in_pipelines(Pipeline, Node)
         pipeline.refresh_from_db()
         assert pipeline.data == first_pass
+
+
+@pytest.mark.django_db()
+class TestStripNodeDataCommand:
+    def test_strips_blobs(self, team):
+        pipeline = _create_old_format_pipeline(team)
+
+        call_command("strip_node_data")
+
+        pipeline.refresh_from_db()
+        assert all("data" not in node for node in pipeline.data["nodes"])
+
+    def test_rebuild_flag_restores_blobs(self, team):
+        pipeline = _create_old_format_pipeline(team)
+        call_command("strip_node_data")
+
+        call_command("strip_node_data", "--rebuild")
+
+        pipeline.refresh_from_db()
+        nodes_by_id = {node["id"]: node for node in pipeline.data["nodes"]}
+        assert nodes_by_id["start-1"]["data"]["type"] == "StartNode"
