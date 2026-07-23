@@ -6,6 +6,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 import pytest
+import time_machine
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -244,6 +245,32 @@ def test_group_by_combined_with_granularity_gives_flat_bucket_rows():
         assert "bucket_start" in row
     by_bucket = {row["bucket_start"][:10]: row["messages"]["human"] for row in results}
     assert by_bucket == {"2026-07-01": 1, "2026-07-02": 2}
+
+
+@pytest.mark.django_db()
+def test_grouped_pagination_stable_when_created_at_ties():
+    """Participants created at the same instant must each appear exactly once when paged one at a time —
+    the (-created_at, -pk) tiebreaker gives a stable total order so the boundary can't skip/duplicate."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    with time_machine.travel("2026-05-01T00:00:00+00:00"):  # all participants share a created_at
+        participants = [
+            ParticipantFactory.create(team=team, identifier=f"p{i}@example.com", platform="web") for i in range(5)
+        ]
+    for participant in participants:
+        _add_messages(ExperimentSessionFactory.create(team=team, participant=participant, platform="web"), human=1)
+
+    client = ApiTestClient(user, team)
+    seen: list[str] = []
+    response = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "participant", "page_size": 1}).json()
+    for _ in range(10):  # cap iterations so a pagination bug fails instead of looping forever
+        seen.extend(row["participant"]["identifier"] for row in response["results"])
+        if not response["next"]:
+            break
+        response = client.get(response["next"]).json()
+
+    assert sorted(seen) == [f"p{i}@example.com" for i in range(5)]
+    assert len(seen) == len(set(seen))  # each group exactly once, no boundary skip/duplicate
 
 
 @pytest.mark.django_db()
