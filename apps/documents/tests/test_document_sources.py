@@ -208,6 +208,25 @@ class TestDocumentSourceManager:
         assert log.completed_with_errors is True
         assert "b.md" in log.error_message
 
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_late_failure_preserves_per_file_detail(self, create_loader, collection, document_source):
+        """A failure after per-file errors are recorded must not erase the detail."""
+        create_loader.return_value = MockLoader.for_document_source(collection, document_source)
+        manager = DocumentSourceManager(document_source)
+
+        with (
+            patch.object(manager, "_sync_documents") as mock_sync,
+            patch.object(document_source, "save", side_effect=RuntimeError("db down")),
+        ):
+            mock_sync.return_value = SyncResult(success=True, files_added=1, files_failed=1, failures=["b.md: boom"])
+            result = manager.sync_collection()
+
+        assert result.success is False
+        log = DocumentSourceSyncLog.objects.filter(document_source=document_source).latest("sync_date")
+        assert log.status == SyncStatus.FAILED
+        assert "b.md" in log.error_message
+        assert "db down" in log.error_message
+
     @pytest.mark.parametrize(
         ("source", "expected"),
         [

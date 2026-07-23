@@ -102,7 +102,12 @@ class DocumentSourceManager:
 
             if sync_log:
                 sync_log.status = SyncStatus.FAILED
-                sync_log.error_message = error_msg
+                # Preserve any per-file failure detail already recorded so a late failure
+                # (saving the log or the source timestamp) doesn't erase it.
+                if sync_log.error_message:
+                    sync_log.error_message = f"{sync_log.error_message}\n\nSync error: {error_msg}"
+                else:
+                    sync_log.error_message = error_msg
                 sync_log.duration_seconds = duration
                 sync_log.save()
 
