@@ -358,6 +358,7 @@ def usage_by_group(
     keys: list,
     granularity: str | None = None,
     tz: ZoneInfo | None = None,
+    resolve_currency: bool = True,
     filters: CostFilters | None = None,
 ) -> list[dict]:
     """Cost + token counts in [start, end) grouped by ``group_field`` (``participant_id`` /
@@ -368,13 +369,16 @@ def usage_by_group(
     caller zero-fills groups/buckets absent from the result. Note the per-group rows need not sum to the
     ungrouped window total: records whose ``group_field`` is NULL (e.g. a session-less record under
     platform grouping) or falls outside ``keys`` are excluded from the breakdown.
+
+    ``resolve_currency=False`` skips the extra ``SELECT DISTINCT currency`` scan when the caller only
+    wants token counts; ``currency`` then defaults to ``"USD"`` (unused by a tokens-only caller).
     """
     scoped = (
         _scoped_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end, **{f"{group_field}__in": keys})
         .annotate(key=F(group_field))
     )
-    currency = _single_currency(scoped)
+    currency = _single_currency(scoped) if resolve_currency else "USD"
     group_cols = ["key"]
     if granularity:
         trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)

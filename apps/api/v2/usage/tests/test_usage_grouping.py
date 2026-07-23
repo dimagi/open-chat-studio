@@ -6,6 +6,8 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.api.v2.usage.services import MAX_GROUPED_ROWS, UsageQuery, grouped_page_size_cap
@@ -351,6 +353,27 @@ def test_participants_metric_with_group_by_participant_is_rejected():
 
     assert response.status_code == 400
     assert "redundant" in str(response.json()).lower()
+
+
+@pytest.mark.django_db()
+def test_tokens_only_grouped_skips_currency_scan():
+    """A grouped tokens-only request must not run the extra DISTINCT-currency scan; a cost request does."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    alice = ParticipantFactory.create(team=team, identifier="alice@example.com", platform="web")
+    session = ExperimentSessionFactory.create(team=team, participant=alice, platform="web")
+    _add_messages(session, human=1)
+    UsageRecordFactory.create(team=team, participant=alice, session=session, quantity=100, cost=Decimal("1"))
+    client = ApiTestClient(user, team)
+
+    def currency_scans(metric):
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get(reverse(USAGE_URL), {"metric": metric, "group_by": "participant"})
+        assert response.status_code == 200
+        return sum("distinct" in q["sql"].lower() and "currency" in q["sql"].lower() for q in ctx.captured_queries)
+
+    assert currency_scans("tokens") == 0
+    assert currency_scans("cost") >= 1
 
 
 @pytest.mark.django_db()
