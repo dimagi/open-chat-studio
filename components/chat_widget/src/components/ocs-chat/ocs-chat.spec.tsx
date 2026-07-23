@@ -1,8 +1,31 @@
 import { newSpecPage } from '@stencil/core/testing';
+import { Env } from '@stencil/core';
 import { OcsChat } from './ocs-chat';
 import { TranslationManager } from '../../utils/translations';
 
 describe('ocs-chat', () => {
+  describe('Widget version', () => {
+    it('mirrors the build version to the data-widget-version attribute', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget chatbot-id="test-bot"></open-chat-studio-widget>`,
+      });
+
+      expect(page.root?.getAttribute('data-widget-version')).toBe(Env.version);
+    });
+
+    it('exposes the build version via getVersion() even without a chatbot id', async () => {
+      const page = await newSpecPage({
+        components: [OcsChat],
+        html: `<open-chat-studio-widget></open-chat-studio-widget>`,
+      });
+
+      const component = page.rootInstance as OcsChat;
+      expect(await component.getVersion()).toBe(Env.version);
+      expect(page.root?.getAttribute('data-widget-version')).toBe(Env.version);
+    });
+  });
+
   describe('Welcome Messages Display', () => {
     it('should display welcome messages when provided via translation files', async () => {
       const page = await newSpecPage({

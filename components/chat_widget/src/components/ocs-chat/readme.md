@@ -43,6 +43,21 @@ For more information, see the [Open Chat Studio documentation](https://docs.open
 | `welcomeMessages`            | `welcome-messages`              | Welcome messages to display above starter questions (JSON array of strings)                                                                                                                                                                                                                                        | `string`                                      | `undefined`                        |
 
 
+## Methods
+
+### `getVersion() => Promise<string>`
+
+The widget's build version. Read this to identify which release is deployed
+on a page, e.g. `await el.getVersion()`. Also mirrored to the
+`data-widget-version` attribute on the host element for inspection.
+
+#### Returns
+
+Type: `Promise<string>`
+
+
+
+
 ## CSS Custom Properties
 
 | Name                                           | Description                                                                      |
