@@ -19,9 +19,12 @@ class Migration(migrations.Migration):
             command_options={
                 "force": True,
                 "widget_version": "0.11.0",
+                "changelog_url": "https://docs.openchatstudio.com/chat_widget/changelog/#v0110-2026-07-23",
                 "notes": (
-                    "Maintenance release: removes the deprecated use_session_token request field. "
-                    "Session token behaviour is now fully governed by the channel's auth level — no widget changes required."
+                    "New: disabled mode puts the widget into read-only — history stays visible but the "
+                    "composer, send controls, and starter questions are hidden. "
+                    "New: configurable banner (banner-message, banner-style, banner-position) for "
+                    "always-visible notices, usable on its own or alongside disabled."
                 ),
             },
         ),
