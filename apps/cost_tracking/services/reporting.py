@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from django.db.models import Count, DecimalField, Q, Sum
+from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
 
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord
@@ -339,6 +339,65 @@ def usage_timeseries(
     return [
         {
             "bucket": row["bucket"],
+            "cost": row["cost"],
+            "currency": currency,
+            "prompt": int(row["prompt"]),
+            "completion": int(row["completion"]),
+            "total": int(row["total"]),
+        }
+        for row in rows
+    ]
+
+
+def usage_by_group(
+    team: Team,
+    *,
+    start: datetime,
+    end: datetime,
+    group_field: str,
+    keys: list,
+    granularity: str | None = None,
+    tz: ZoneInfo | None = None,
+    filters: CostFilters | None = None,
+) -> list[dict]:
+    """Cost + token counts in [start, end) grouped by ``group_field`` (``participant_id`` /
+    ``experiment_id`` / ``session__platform``), restricted to ``keys``. One row per group — or per
+    (group, bucket) when ``granularity`` is set, truncated in ``tz``. Each row is
+    ``{'key', ['bucket'], 'cost' (Decimal), 'currency', 'prompt', 'completion', 'total'}``. Shares the
+    scoped-record path with ``cost_total``/``token_counts`` (same team + ``CostFilters`` scoping); the
+    caller zero-fills groups/buckets absent from the result. Note the per-group rows need not sum to the
+    ungrouped window total: records whose ``group_field`` is NULL (e.g. a session-less record under
+    platform grouping) or falls outside ``keys`` are excluded from the breakdown.
+    """
+    scoped = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=start, timestamp__lt=end, **{f"{group_field}__in": keys})
+        .annotate(key=F(group_field))
+    )
+    currency = _single_currency(scoped)
+    group_cols = ["key"]
+    if granularity:
+        trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
+        scoped = scoped.annotate(bucket=trunc("timestamp", tzinfo=tz))
+        group_cols.append("bucket")
+    rows = (
+        scoped.values(*group_cols)
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            prompt=Coalesce(
+                Sum("quantity", filter=Q(service_kind__in=_PROMPT_KINDS)), _ZERO, output_field=_QUANTITY_FIELD
+            ),
+            completion=Coalesce(
+                Sum("quantity", filter=Q(service_kind=ServiceKind.LLM_OUTPUT)), _ZERO, output_field=_QUANTITY_FIELD
+            ),
+            total=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+        )
+        .order_by()
+    )
+    return [
+        {
+            "key": row["key"],
+            "bucket": row.get("bucket"),
             "cost": row["cost"],
             "currency": currency,
             "prompt": int(row["prompt"]),

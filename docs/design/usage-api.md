@@ -144,7 +144,13 @@ Ungrouped, `total` granularity — a single totals object under `results`. With 
 and no `group_by`, `results` is one row per time bucket (each row carries `bucket_start`).
 
 Grouping by participant emits **both** `public_id` and `identifier` per row so clients can map by
-either handle.
+either handle. Chatbot rows carry `{public_id, name}`; platform rows carry the slug directly.
+
+`group_by` combined with a finer `granularity` produces **flat rows**: one row per `(group, bucket)`,
+each carrying the group identity and a `bucket_start`. Pagination is over the groups (the shared
+`CursorPagination`), and each page's groups are expanded to their buckets; the max-window guard bounds
+the bucket count. The group universe is the groups **active in the window** (those with at least one
+message), so idle groups don't produce all-zero rows.
 
 ## Decisions
 
