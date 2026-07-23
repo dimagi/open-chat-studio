@@ -125,62 +125,73 @@ class DocumentSourceManager:
         """
         result = SyncResult(success=True)
         documents = loader.load_documents()
-
-        existing_files = CollectionFile.objects.filter(
-            collection=self.collection, document_source=self.document_source
-        ).select_related("file")
-
-        existing_files_map = {}
-        for file in existing_files:
-            if file.external_id:
-                existing_files_map[file.external_id] = file
+        existing_files_map = self._map_existing_files()
 
         seen_identifiers = set()
-
         files_to_index = []
         for document in documents:
             identifier = loader.get_document_identifier(document)
             # Mark as seen before processing so a file that fails to update is not treated
             # as removed from the source (and deleted) on this run.
             seen_identifiers.add(identifier)
+            file_id = self._sync_document(document, identifier, loader, existing_files_map, result)
+            if file_id is not None:
+                files_to_index.append(file_id)
 
-            try:
-                if identifier in existing_files_map:
-                    existing_file = existing_files_map[identifier]
-                    if loader.should_update_document(document, existing_file):
-                        with transaction.atomic():
-                            self._update_file(existing_file, document, identifier)
-                        files_to_index.append(existing_file.id)
-                        result.files_updated += 1
-                else:
-                    with transaction.atomic():
-                        new_file = self._create_file(document, identifier)
-                    files_to_index.append(new_file.id)
-                    result.files_added += 1
-            except Exception as exc:
-                # A single bad document must not abort the whole sync: log it, record it, and
-                # carry on so the remaining files are still processed and indexed.
-                logger.exception(
-                    "Failed to process document during sync",
-                    extra={"document_source_id": self.document_source.id, "identifier": identifier},
-                )
-                result.files_failed += 1
-                result.failures.append(f"{identifier}: {exc}")
-
-        # Remove files that are no longer in the source
-        files_to_remove = [
-            file for identifier, file in existing_files_map.items() if identifier not in seen_identifiers
-        ]
-
-        if files_to_remove:
-            with transaction.atomic():
-                self._remove_files(files_to_remove)
-            result.files_removed += len(files_to_remove)
+        self._remove_stale_files(existing_files_map, seen_identifiers, result)
 
         if files_to_index:
             self._index_files(files_to_index)
 
         return result
+
+    def _map_existing_files(self) -> dict[str, CollectionFile]:
+        """Map already-synced files by their source identifier."""
+        existing_files = CollectionFile.objects.filter(
+            collection=self.collection, document_source=self.document_source
+        ).select_related("file")
+        return {file.external_id: file for file in existing_files if file.external_id}
+
+    def _sync_document(
+        self, document: Document, identifier: str, loader, existing_files_map: dict, result: SyncResult
+    ) -> int | None:
+        """Create or update a single document, returning the file id to index (or None).
+
+        A single bad document must not abort the whole sync: log it, record it, and
+        carry on so the remaining files are still processed and indexed.
+        """
+        try:
+            if identifier in existing_files_map:
+                existing_file = existing_files_map[identifier]
+                if not loader.should_update_document(document, existing_file):
+                    return None
+                with transaction.atomic():
+                    self._update_file(existing_file, document, identifier)
+                result.files_updated += 1
+                return existing_file.id
+
+            with transaction.atomic():
+                new_file = self._create_file(document, identifier)
+            result.files_added += 1
+            return new_file.id
+        except Exception as exc:
+            logger.exception(
+                "Failed to process document during sync",
+                extra={"document_source_id": self.document_source.id, "identifier": identifier},
+            )
+            result.files_failed += 1
+            result.failures.append(f"{identifier}: {exc}")
+            return None
+
+    def _remove_stale_files(self, existing_files_map: dict, seen_identifiers: set, result: SyncResult) -> None:
+        """Delete files that are no longer present in the source."""
+        files_to_remove = [
+            file for identifier, file in existing_files_map.items() if identifier not in seen_identifiers
+        ]
+        if files_to_remove:
+            with transaction.atomic():
+                self._remove_files(files_to_remove)
+            result.files_removed += len(files_to_remove)
 
     def _create_file(self, document: Document, identifier: str):
         """Create a new file from a document"""
