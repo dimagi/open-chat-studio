@@ -8,7 +8,9 @@
                 title="{{ log.sync_date.isoformat }}">
             {{ log.sync_date|date:"DATETIME_FORMAT" }}
           </time>
-          {% if log.status == "success" %}
+          {% if log.completed_with_errors %}
+            <span class="badge badge-warning badge-sm">Completed with errors</span>
+          {% elif log.status == "success" %}
             <span class="badge badge-success badge-sm">Success</span>
           {% elif log.status == "failed" %}
             <span class="badge badge-error badge-sm">Failed</span>
@@ -20,19 +22,26 @@
           <span class="badge badge-sm badge-success badge-outline">+{{ log.files_added }} Added</span>
           <span class="badge badge-sm badge-info badge-outline">~{{ log.files_updated }} Updated</span>
           <span class="badge badge-sm badge-warning badge-outline">-{{ log.files_removed }} Removed</span>
+          {% if log.files_failed %}
+            <span class="badge badge-sm badge-error badge-outline">
+              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> {{ log.files_failed }} Failed
+            </span>
+          {% endif %}
           {% if log.duration_seconds is not None %}
             <span class="badge badge-sm badge-ghost">{{ log.duration_seconds|floatformat:1 }}s</span>
           {% endif %}
         </div>
         {% if log.error_message %}
           <button class="btn btn-xs btn-error btn-outline w-fit"
-                  onclick="sync_error_modal_{{ log.pk }}.showModal()">View Error</button>
+                  onclick="sync_error_modal_{{ log.pk }}.showModal()">
+            {% if log.status == "failed" %}View Error{% else %}View failed files{% endif %}
+          </button>
           <dialog id="sync_error_modal_{{ log.pk }}" class="modal">
             <div class="modal-box bg-base-100 border border-base-300">
               <form method="dialog">
                 <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
               </form>
-              <h3 class="font-bold text-sm mb-3">Sync Error</h3>
+              <h3 class="font-bold text-sm mb-3">{% if log.status == "failed" %}Sync Error{% else %}Files that failed to process{% endif %}</h3>
               <pre class="text-xs whitespace-pre-wrap bg-base-200 rounded p-3">{{ log.error_message }}</pre>
             </div>
             <form method="dialog" class="modal-backdrop">
