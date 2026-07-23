@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 
 from django.db import models, transaction
@@ -21,6 +22,8 @@ from apps.utils.deletion import (
     get_related_pipelines_queryset,
     get_related_pipelines_queryset_for_list_param,
 )
+
+logger = logging.getLogger("ocs.documents")
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -375,6 +378,11 @@ class Collection(BaseTeamModel, VersionsMixin):
             service = self.llm_provider.get_llm_service()
             chat_model = service.get_chat_model(self.contextualizer_llm_model.name)
         except (ServiceProviderConfigError, NotImplementedError):
+            logger.warning(
+                "Contextual retrieval is enabled but the collection's LLM provider cannot "
+                "provide a chat model; indexing will proceed without contextualization.",
+                extra={"collection_id": self.id, "llm_provider_id": self.llm_provider_id},
+            )
             return None
         return LLMContextualizer(chat_model, fallback=StaticContextualizer())
 
