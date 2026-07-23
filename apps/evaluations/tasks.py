@@ -50,6 +50,14 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
+# --- Beat-coordinated evaluation waves (see docs/superpowers/plans/2026-07-23-deploy-safe-eval-runs.md) ---
+BATCH_SIZE = 3  # messages per batch task
+WAVE_SIZE = 10  # batches per wave; WAVE_SIZE * BATCH_SIZE = messages dispatched per wave
+STALL_TIMEOUT = timedelta(minutes=12)  # no fresh results for this long => wave is stalled
+MAX_STALLS = 3  # consecutive stalls with no progress => run marked FAILED
+BATCH_SOFT_TIME_LIMIT = 240  # seconds; best-effort bound under the 5-min visibility timeout
+TASKBADGER_STALE_TIMEOUT = 300  # seconds; TB alerts if a run's task goes this long without an update
+
 logger = get_task_logger("ocs.evaluations")
 
 
@@ -167,6 +175,29 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
                         message_id,
                         evaluator_id,
                     )
+
+
+@shared_task(acks_late=True, soft_time_limit=BATCH_SOFT_TIME_LIMIT)
+def evaluate_message_batch(evaluation_run_id, message_ids):
+    """Evaluate a small batch of messages in-process, then exit.
+
+    Deliberately dumb: no refill, no completion check, no self-rescheduling — all
+    coordination lives in the beat sweep. acks_late means a worker killed mid-batch
+    has the batch redelivered by Redis after the visibility timeout; the per-message
+    idempotency check resumes where it died.
+    """
+    try:
+        run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
+    except EvaluationRun.DoesNotExist:
+        logger.warning("EvaluationRun %s gone; dropping batch of %s messages", evaluation_run_id, len(message_ids))
+        return
+
+    if run.status != EvaluationRunStatus.PROCESSING:
+        logger.info("EvaluationRun %s no longer processing (%s); dropping batch", evaluation_run_id, run.status)
+        return
+
+    for message_id in message_ids:
+        evaluate_single_message_task(evaluation_run_id, run.evaluator_ids, message_id)
 
 
 def _maybe_apply_tag_rules(

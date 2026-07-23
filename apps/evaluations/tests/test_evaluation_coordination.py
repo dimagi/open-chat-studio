@@ -4,8 +4,8 @@ import pytest
 from django.db import IntegrityError
 
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
-from apps.evaluations.models import EvaluationResult, EvaluationRunType
-from apps.evaluations.tasks import evaluate_single_message_task
+from apps.evaluations.models import EvaluationResult, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.tasks import evaluate_message_batch, evaluate_single_message_task
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -137,3 +137,36 @@ def test_evaluate_single_message_duplicate_insert_is_swallowed(evaluator_run_moc
         evaluate_single_message_task(run.id, [evaluator.id], message.id)
 
     assert EvaluationResult.objects.filter(run=run, message=message, evaluator=evaluator).count() == 1
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.evaluate_single_message_task")
+def test_evaluate_message_batch_runs_each_message(single_mock, coordination_run):
+    run, evaluator, message = coordination_run
+    run.status = EvaluationRunStatus.PROCESSING
+    run.save(update_fields=["status"])
+    message2 = EvaluationMessageFactory.create()
+
+    evaluate_message_batch(run.id, [message.id, message2.id])
+
+    assert single_mock.call_count == 2
+    single_mock.assert_any_call(run.id, run.evaluator_ids, message.id)
+    single_mock.assert_any_call(run.id, run.evaluator_ids, message2.id)
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.evaluate_single_message_task")
+def test_evaluate_message_batch_skips_when_run_not_processing(single_mock, coordination_run):
+    run, evaluator, message = coordination_run  # status defaults to PENDING
+    evaluate_message_batch(run.id, [message.id])
+    single_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.evaluate_single_message_task")
+def test_evaluate_message_batch_skips_deleted_run(single_mock, coordination_run):
+    run, evaluator, message = coordination_run
+    run_id = run.id
+    run.delete()
+    evaluate_message_batch(run_id, [message.id])
+    single_mock.assert_not_called()
