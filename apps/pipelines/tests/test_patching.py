@@ -186,6 +186,24 @@ class TestApplyPipelinePatch:
         layout, _ = apply_pipeline_patch(graph, patch)
         assert len([n for n in layout["nodes"] if n["id"] == "llm-2"]) == 1
 
+    def test_duplicate_add_emits_no_node_content(self):
+        """An add for an id already in the graph is skipped, so its content must not
+        reach the Node rows either — a retried add cannot mutate the existing node."""
+        graph = self._sample_graph()
+        duplicate = make_flow_node("llm-1", LLMResponseWithPrompt.__name__, params={"name": "hijacked"})
+        patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[duplicate]))
+        _, node_data = apply_pipeline_patch(graph, patch)
+        assert node_data == {}
+
+    def test_delete_then_add_same_id_emits_node_content(self):
+        """Deleting an id and re-adding it in the same patch is a genuine replacement,
+        so the add's content must be emitted."""
+        graph = self._sample_graph()
+        replacement = make_flow_node("llm-1", LLMResponseWithPrompt.__name__, params={"name": "replaced"})
+        patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["llm-1"], add=[replacement]))
+        _, node_data = apply_pipeline_patch(graph, patch)
+        assert node_data["llm-1"]["params"] == {"name": "replaced"}
+
     def test_delete_unknown_node(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["nonexistent"]))

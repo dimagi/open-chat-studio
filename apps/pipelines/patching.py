@@ -15,13 +15,15 @@ def apply_pipeline_patch(current_data: dict, patch: PipelineDiffPayload) -> tupl
     (node content stripped, see ADR-0046) and can be assigned to ``Pipeline.data``.
     Node and edge objects not mentioned in the patch are preserved unchanged.
 
-    ``node_data`` carries content only for the patch's add/update nodes, ready for
+    ``node_data`` carries content only for the patch's update nodes and the adds that
+    actually entered the graph (duplicate adds are skipped entirely), ready for
     ``update_nodes_from_data(node_data)`` — which the caller must still invoke after
     saving. Content blobs still embedded in old-format ``current_data`` are stripped,
     never promoted to node content: the Node rows own it.
     """
     # Preserve any keys that Flow.model_dump() may drop (e.g. viewport)
     flow = Flow(**current_data)
+    existing_node_ids = {node.id for node in flow.nodes}
 
     _apply_node_diff(flow, patch.nodes)
     _apply_edge_diff(flow, patch.edges)
@@ -33,9 +35,17 @@ def apply_pipeline_patch(current_data: dict, patch: PipelineDiffPayload) -> tupl
         if key not in merged:
             merged[key] = current_data[key]
     layout_data, _ = split_flow_data(merged)
+    # An add for an id already in the graph is skipped by _apply_node_diff (idempotent
+    # retry), so its content must not overwrite the existing Node row either — unless the
+    # same patch deletes that id first, which makes the add a genuine replacement.
+    deleted_ids = set(patch.nodes.delete)
+    content_nodes = {node.id: node for node in patch.nodes.update}
+    for node in patch.nodes.add:
+        if node.id not in existing_node_ids or node.id in deleted_ids:
+            content_nodes.setdefault(node.id, node)
     node_data = {
         node.id: {"type": node.data.type, "label": node.data.label, "params": node.data.params}
-        for node in [*patch.nodes.add, *patch.nodes.update]
+        for node in content_nodes.values()
         if node.data
     }
     return layout_data, node_data

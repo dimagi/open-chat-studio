@@ -14,7 +14,7 @@ from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.pipelines.exceptions import PipelineBuildError
+from apps.pipelines.exceptions import MissingNodeDataError, PipelineBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, split_flow_data
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.versioning import get_versioned_param_specs
@@ -153,7 +153,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
 
         missing = new_ids - current_ids - set(node_data)
         if missing:
-            raise ValueError(f"No node data provided for new node(s): {sorted(missing)}")
+            raise MissingNodeDataError(missing)
 
         for flow_node in self.data["nodes"]:
             content = node_data.get(flow_node["id"])

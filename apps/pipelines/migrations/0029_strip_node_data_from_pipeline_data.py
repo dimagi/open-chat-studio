@@ -21,6 +21,10 @@ def _rebuild_node_data(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # The batched strip/rebuild is idempotent and rerunnable; committing incrementally
+    # avoids holding row locks on the whole Pipeline table in one transaction.
+    atomic = False
+
     dependencies = [
         ("pipelines", "0028_pipeline_edit_revision"),
     ]

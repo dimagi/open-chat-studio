@@ -24,6 +24,7 @@ from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
+from apps.pipelines.exceptions import MissingNodeDataError
 from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload, split_flow_data
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
@@ -415,10 +416,11 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         try:
             pipeline.update_nodes_from_data(node_data)
-        except ValueError as e:
-            # A payload node without content for which no row exists — client error
+        except MissingNodeDataError as e:
+            # A payload node without content for which no row exists — client error.
+            # The message is built from the client-supplied node ids only.
             transaction.set_rollback(True)
-            return JsonResponse({"error": str(e)}, status=400)
+            return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
         pipeline.refresh_from_db(fields=["node_set"])
     return JsonResponse(
         {
@@ -460,10 +462,11 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         try:
             pipeline.update_nodes_from_data(node_data)
-        except ValueError as e:
-            # A diff node without content for which no row exists — client error
+        except MissingNodeDataError as e:
+            # A diff node without content for which no row exists — client error.
+            # The message is built from the client-supplied node ids only.
             transaction.set_rollback(True)
-            return JsonResponse({"error": str(e)}, status=400)
+            return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
         pipeline.refresh_from_db(fields=["node_set"])
 
     return JsonResponse(
