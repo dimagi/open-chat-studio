@@ -244,12 +244,13 @@ def resolve_query_filters(query: UsageQuery) -> UsageQuery:
     archived-inclusive resolution (``get_all()``) happens in exactly one place. Call this before running
     any aggregation; ``filter_is_empty`` marks a requested filter that matched nobody so the reader
     returns zeros. Idempotent enough to skip when nothing needs resolving."""
-    if not (query.participant or query.participant_identifier or query.chatbot):
+    wants_participant = bool(query.participant or query.participant_identifier)
+    if not (wants_participant or query.chatbot):
         return query
     participant_ids = query.participant_ids
     experiment_ids = query.experiment_ids
     is_empty = query.filter_is_empty
-    if query.participant or query.participant_identifier:
+    if wants_participant:
         # An identifier can match several participants (one per platform), so this resolves to a list.
         lookup = {"public_id": query.participant} if query.participant else {"identifier": query.participant_identifier}
         participant_ids = list(Participant.objects.filter(team=query.team, **lookup).values_list("id", flat=True))
