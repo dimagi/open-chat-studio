@@ -1,0 +1,16 @@
+{% autoescape off %}Hello {{ team.name }} Admin,
+
+OpenAI is retiring their Assistants API, so support for OpenAI Assistants in Open Chat Studio will be removed on {{ removal_date }}. See OpenAI's announcement: https://developers.openai.com/api/docs/deprecations#2025-08-20-assistants-api
+
+The following {{ assistant_count }} assistant{% if assistant_count != 1 %}s{% endif %} in your team will stop working after this date:
+{% for assistant_name in assistant_names %}
+- {{ assistant_name }}
+{% endfor %}
+
+Please migrate these to a pipeline-based chatbot before {{ removal_date }} to avoid disruption.
+
+If you have any questions, please contact support.
+
+Best regards,
+The Open Chat Studio Team
+{% endautoescape %}
