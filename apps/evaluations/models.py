@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import uuid
 from collections import defaultdict
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
@@ -15,6 +16,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
+from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
@@ -491,19 +493,35 @@ class EvaluationConfig(BaseTeamModel):
     ) -> EvaluationRun:
         """Runs the evaluation asynchronously using Celery.
 
-        When `scoped_messages` is provided, the run only evaluates those
-        messages instead of the dataset's full membership.
+        The run's plan is frozen at creation: `scoped_messages` is populated for
+        every run type (all dataset ids for FULL, the PREVIEW sample, or the
+        explicit DELTA list) and `evaluator_ids` snapshots the config's evaluators.
+        The beat coordinator only ever reads this frozen plan, never the live
+        dataset, so a dataset that grows mid-run cannot prevent the run finishing.
+        `job_id` is a uuid used as the progress-publishing key for the run's life.
         """
         generation_experiment = self.get_generation_experiment_version()
-        run = EvaluationRun.objects.create(
-            team=self.team,
-            config=self,
-            generation_experiment=generation_experiment,
-            status=EvaluationRunStatus.PENDING,
-            type=run_type,
-        )
-        if scoped_messages is not None:
-            run.scoped_messages.add(*scoped_messages)
+
+        with transaction.atomic():
+            run = EvaluationRun.objects.create(
+                team=self.team,
+                config=self,
+                generation_experiment=generation_experiment,
+                status=EvaluationRunStatus.PENDING,
+                type=run_type,
+                job_id=str(uuid.uuid4()),
+                evaluator_ids=list(self.evaluators.values_list("id", flat=True)),
+            )
+
+            if run_type == EvaluationRunType.PREVIEW:
+                message_ids = list(self.dataset.messages.values_list("id", flat=True)[:PREVIEW_SAMPLE_SIZE])
+            elif run_type == EvaluationRunType.DELTA:
+                message_ids = [message.id for message in (scoped_messages or [])]
+            else:  # FULL
+                message_ids = list(self.dataset.messages.values_list("id", flat=True))
+
+            if message_ids:
+                run.scoped_messages.add(*message_ids)
 
         from apps.evaluations.tasks import (  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models
             run_evaluation_task,

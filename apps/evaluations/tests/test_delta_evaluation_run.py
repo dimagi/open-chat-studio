@@ -26,12 +26,13 @@ def test_run_with_scoped_messages_persists_scope():
 
 
 @pytest.mark.django_db()
-def test_run_without_scoped_messages_has_empty_scope():
+def test_full_run_freezes_all_dataset_messages():
     config = EvaluationConfigFactory.create()
+    dataset_ids = set(config.dataset.messages.values_list("id", flat=True))
     with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
         run = config.run()
     assert run.type == EvaluationRunType.FULL
-    assert run.scoped_messages.count() == 0
+    assert set(run.scoped_messages.values_list("id", flat=True)) == dataset_ids
     mock_delay.assert_called_once_with(run.id)
 
 
