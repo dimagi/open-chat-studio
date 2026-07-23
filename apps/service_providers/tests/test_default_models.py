@@ -77,8 +77,6 @@ def test_converts_custom_models_to_global_models_pipelines():
     # pipeline is updated to use the custom model
     pipeline.refresh_from_db()
     assert pipeline.node_set.get(type="LLMResponseWithPrompt").params["llm_provider_model_id"] == global_model.id
-    node_data = [node for node in pipeline.data["nodes"] if node["data"]["type"] == "LLMResponseWithPrompt"]
-    assert node_data[0]["data"]["params"]["llm_provider_model_id"] == global_model.id
 
 
 @pytest.mark.django_db()

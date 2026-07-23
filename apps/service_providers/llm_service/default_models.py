@@ -329,8 +329,8 @@ def _replace_custom_model_with_global(custom_model, global_model, LlmProviderMod
         obj.save(update_fields=[field.name])
 
     related_pipeline_nodes = get_related_pipelines_queryset(custom_model, "llm_provider_model_id")
-    for node in related_pipeline_nodes.select_related("pipeline").all():
-        _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", global_model.id)
+    for node in related_pipeline_nodes.all():
+        _update_pipeline_node_param(node, "llm_provider_model_id", global_model.id)
 
     custom_model.delete()
 
@@ -354,14 +354,7 @@ def _get_or_create_custom_model(team_object, key, global_model, existing_custom_
     return custom_model
 
 
-def _update_pipeline_node_param(pipeline, node, param_name, param_value, commit=True):
+def _update_pipeline_node_param(node, param_name, param_value):
+    # Node rows own node params (ADR-0046); pipeline.data holds layout only.
     node.params[param_name] = param_value
-    if commit:
-        node.set_params(node.params)
-
-    data = pipeline.data
-    raw_node = [n for n in data["nodes"] if n["id"] == node.flow_id][0]
-    raw_node["data"]["params"][param_name] = param_value
-    node.pipeline.data = data
-    if commit:
-        node.pipeline.save()
+    node.set_params(node.params)
