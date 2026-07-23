@@ -26,6 +26,38 @@ let saveTimeoutId: NodeJS.Timeout | null = null;
 // completion, recomputing the diff against the freshly-bumped revision.
 let pendingSave = false;
 
+// Shared tail for both save paths' `finally` blocks. Keeping this in one place stops the
+// two paths (`savePipeline` full save and `_patchPipeline` autosave) from drifting apart
+// (see #3895 — the deferred-flush handling was repeatedly fixed in one and not the other).
+//
+// After any save settles, decide what to do with edits the user made while it was
+// in-flight (which `_flushSave` deferred by setting `pendingSave`):
+//   - conflict detected  -> do nothing; autosave is paused until the user resolves it.
+//   - save succeeded      -> flush now, so the deferred edit goes out with the freshly
+//                            bumped `currentRevision` as its `base_revision`.
+//   - save failed         -> reschedule on the normal autosave cadence. `dirty` is still
+//                            set, so the retry recomputes its diff against a current
+//                            revision. Without this the deferred edit would be silently
+//                            dropped with no scheduled retry.
+function settleDeferredSave(
+  store: PipelineManagerStoreType,
+  saveSucceeded: boolean,
+) {
+  const hadPending = pendingSave;
+  pendingSave = false;
+  if (store.conflictDetected) {
+    return;
+  }
+  if (!hadPending) {
+    return;
+  }
+  if (saveSucceeded) {
+    store._flushSave();
+  } else {
+    store.autoSaveCurrentPipline();
+  }
+}
+
 const createPipelineStore: StateCreator<
   PipelineStoreType & PipelineManagerStoreType,
   [],
@@ -361,18 +393,7 @@ const createPipelineManagerStore: StateCreator<
           reject(err);
         }).finally(() => {
         set({isSaving: false});
-        // If edits arrived while this full save was in-flight, flush them now. Autosaves
-        // that fired mid-save deferred via `pendingSave`; without this they would never be
-        // persisted (dirty was just cleared), mirroring _patchPipeline's handling (#3895).
-        // Only flush after a *successful* save: the follow-up PATCH is computed against the
-        // `currentRevision` this save just established. After a failed save (e.g. network
-        // timeout) that revision is stale, so flushing would send an out-of-date
-        // base_revision — leave the pending edits for the next autosave instead (#3895).
-        const shouldFlush = saveSucceeded && pendingSave && !get().conflictDetected;
-        pendingSave = false;
-        if (shouldFlush) {
-          get()._flushSave();
-        }
+        settleDeferredSave(get(), saveSucceeded);
       });
     });
   },
@@ -416,18 +437,7 @@ const createPipelineManagerStore: StateCreator<
       }
     } finally {
       set({isSaving: false});
-      // If edits arrived while this PATCH was in-flight, flush them now — the diff is
-      // recomputed against the revision this save just established, so the follow-up
-      // PATCH carries an up-to-date base_revision instead of a stale one (#3895).
-      // Only flush after a *successful* patch: on a non-409 failure (e.g. network
-      // timeout) `currentRevision` was never bumped, so flushing would send a stale
-      // base_revision. `dirty` is still set in that case, so the next autosave retries
-      // against a current revision — mirroring savePipeline's handling (#3895).
-      const shouldFlush = patchSucceeded && pendingSave && !get().conflictDetected;
-      pendingSave = false;
-      if (shouldFlush) {
-        get()._flushSave();
-      }
+      settleDeferredSave(get(), patchSucceeded);
     }
   },
   nodeHasErrors: (nodeId: string) => {
