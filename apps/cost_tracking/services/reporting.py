@@ -117,6 +117,18 @@ class CostFilters:
     participant_ids: list[int] | None = None
 
 
+@dataclass(frozen=True)
+class GroupBreakdown:
+    """How ``usage_by_group`` slices records into rows, bundled so the function takes one argument
+    instead of four parallel ones: the ``field`` to group by and the ``keys`` to keep, plus an optional
+    tz-aware time bucketing (``granularity``/``tz``) that expands each group into one row per bucket."""
+
+    field: str
+    keys: list
+    granularity: str | None = None
+    tz: ZoneInfo | None = None
+
+
 def _scoped_records(team: Team, filters: CostFilters | None = None):
     """Team-scoped UsageRecords with the dashboard's chatbot / participant /
     platform filters applied (mirrors the cost panel's other charts). Platform
@@ -354,16 +366,13 @@ def usage_by_group(
     *,
     start: datetime,
     end: datetime,
-    group_field: str,
-    keys: list,
-    granularity: str | None = None,
-    tz: ZoneInfo | None = None,
+    breakdown: GroupBreakdown,
     resolve_currency: bool = True,
     filters: CostFilters | None = None,
 ) -> list[dict]:
-    """Cost + token counts in [start, end) grouped by ``group_field`` (``participant_id`` /
-    ``experiment_id`` / ``session__platform``), restricted to ``keys``. One row per group — or per
-    (group, bucket) when ``granularity`` is set, truncated in ``tz``. Each row is
+    """Cost + token counts in [start, end) grouped by ``breakdown.field`` (``participant_id`` /
+    ``experiment_id`` / ``session__platform``), restricted to ``breakdown.keys``. One row per group — or
+    per (group, bucket) when ``breakdown.granularity`` is set, truncated in ``breakdown.tz``. Each row is
     ``{'key', ['bucket'], 'cost' (Decimal), 'currency', 'prompt', 'completion', 'total'}``. Shares the
     scoped-record path with ``cost_total``/``token_counts`` (same team + ``CostFilters`` scoping); the
     caller zero-fills groups/buckets absent from the result. Note the per-group rows need not sum to the
@@ -375,14 +384,14 @@ def usage_by_group(
     """
     scoped = (
         _scoped_records(team, filters)
-        .filter(timestamp__gte=start, timestamp__lt=end, **{f"{group_field}__in": keys})
-        .annotate(key=F(group_field))
+        .filter(timestamp__gte=start, timestamp__lt=end, **{f"{breakdown.field}__in": breakdown.keys})
+        .annotate(key=F(breakdown.field))
     )
     currency = _single_currency(scoped) if resolve_currency else "USD"
     group_cols = ["key"]
-    if granularity:
-        trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
-        scoped = scoped.annotate(bucket=trunc("timestamp", tzinfo=tz))
+    if breakdown.granularity:
+        trunc = _GRANULARITY_TRUNC.get(breakdown.granularity, TruncDate)
+        scoped = scoped.annotate(bucket=trunc("timestamp", tzinfo=breakdown.tz))
         group_cols.append("bucket")
     rows = (
         scoped.values(*group_cols)

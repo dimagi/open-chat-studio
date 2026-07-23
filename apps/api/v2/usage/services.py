@@ -396,10 +396,12 @@ def _fill_grouped_cost_tokens(query: UsageQuery, keys: list, index: dict) -> Non
             query.team,
             start=query.start,
             end=query.end,
-            group_field=_GROUP_SPECS[query.group_by].usage_field,
-            keys=keys,
-            granularity=granularity,
-            tz=query.tz,
+            breakdown=reporting.GroupBreakdown(
+                field=_GROUP_SPECS[query.group_by].usage_field,
+                keys=keys,
+                granularity=granularity,
+                tz=query.tz,
+            ),
             # Currency is only read for the cost block, so a tokens-only request skips the extra scan.
             resolve_currency=METRIC_COST in query.metrics,
             filters=cost_filter.filters,
