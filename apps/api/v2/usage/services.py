@@ -9,6 +9,7 @@ serializer) at ``total``/``daily``/``weekly``/``monthly`` granularity, optionall
 and :func:`group_rows`. See ``docs/design/usage-api.md``.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -58,24 +59,6 @@ GROUP_BY_CHOICES = (GROUP_PARTICIPANT, GROUP_CHATBOT, GROUP_PLATFORM)
 # Ceiling on the rows a single grouped page may materialise (``groups × buckets``); see
 # :func:`grouped_page_size_cap`.
 MAX_GROUPED_ROWS = 10_000
-
-# The relation from each source to the grouped dimension. ``ChatMessage`` reaches the dimension two
-# relations away (via its chat's session); ``ExperimentSession`` and ``UsageRecord`` hold it locally.
-_MESSAGE_GROUP_FIELD = {
-    GROUP_PARTICIPANT: "chat__experiment_session__participant",
-    GROUP_CHATBOT: "chat__experiment_session__experiment",
-    GROUP_PLATFORM: "chat__experiment_session__platform",
-}
-_SESSION_GROUP_FIELD = {
-    GROUP_PARTICIPANT: "participant",
-    GROUP_CHATBOT: "experiment",
-    GROUP_PLATFORM: "platform",
-}
-_USAGE_GROUP_FIELD = {
-    GROUP_PARTICIPANT: "participant_id",
-    GROUP_CHATBOT: "experiment_id",
-    GROUP_PLATFORM: "session__platform",
-}
 
 # DB truncation per bucketed granularity (Django's TruncWeek starts weeks on Monday, matching the
 # Python-side bucket boundaries below).
@@ -164,6 +147,84 @@ class _CostFilter:
     is_empty: bool
 
 
+@dataclass(frozen=True)
+class _GroupSpec:
+    """Everything the grouped path needs for one ``group_by`` dimension, in a single record so adding a
+    dimension is one registry entry and a missing piece is a construction-time error, not a request-time
+    ``KeyError``. The ``*_field`` names are the relation from each source to the dimension: ``ChatMessage``
+    reaches it two relations away (via its chat's session); ``ExperimentSession``/``UsageRecord`` hold it
+    locally."""
+
+    message_field: str
+    session_field: str
+    usage_field: str
+    # A validated UsageQuery -> the paginatable base queryset of groups active in the window.
+    entities: Callable[["UsageQuery"], QuerySet]
+    # A paginated item -> the value joining it to its aggregated metrics (entity id, or platform slug).
+    # A model instance for participant/chatbot, a ``.values`` dict for platform, so params stay untyped.
+    page_key: Callable[..., object]
+    # A paginated item -> the group's identity block for the response row.
+    identity: Callable[..., object]
+
+
+def _participant_entities(query: "UsageQuery") -> QuerySet:
+    return Participant.objects.filter(team=query.team, id__in=_active_group_ids(query))
+
+
+def _chatbot_entities(query: "UsageQuery") -> QuerySet:
+    # ``get_all()`` so archived chatbots active in the window still appear: the message/session paths
+    # reach chatbots by relation traversal (archived-inclusive), so grouping must match them or the
+    # breakdown would silently drop archived activity that the ungrouped totals still count.
+    return Experiment.objects.get_all().filter(team=query.team, id__in=_active_group_ids(query))
+
+
+def _platform_entities(query: "UsageQuery") -> QuerySet:
+    # Platform has no backing model, so return the distinct slugs present, ordered on the ``platform``
+    # alias (which also clears ``ChatMessage``'s default ``created_at`` ordering, keeping ``.distinct()``
+    # one row per slug). ``evaluations`` is excluded to match the session metric's exclusion.
+    return (
+        _message_queryset(query)
+        .exclude(chat__experiment_session__platform__isnull=True)
+        .exclude(chat__experiment_session__platform="")
+        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        .values(platform=F("chat__experiment_session__platform"))
+        .distinct()
+        .order_by("chat__experiment_session__platform")
+    )
+
+
+_GROUP_SPECS = {
+    GROUP_PARTICIPANT: _GroupSpec(
+        message_field="chat__experiment_session__participant",
+        session_field="participant",
+        usage_field="participant_id",
+        entities=_participant_entities,
+        page_key=lambda item: item.id,
+        identity=lambda item: {
+            "public_id": str(item.public_id),
+            "identifier": item.identifier,
+            "platform": item.platform,
+        },
+    ),
+    GROUP_CHATBOT: _GroupSpec(
+        message_field="chat__experiment_session__experiment",
+        session_field="experiment",
+        usage_field="experiment_id",
+        entities=_chatbot_entities,
+        page_key=lambda item: item.id,
+        identity=lambda item: {"public_id": str(item.public_id), "name": item.name},
+    ),
+    GROUP_PLATFORM: _GroupSpec(
+        message_field="chat__experiment_session__platform",
+        session_field="platform",
+        usage_field="session__platform",
+        entities=_platform_entities,
+        page_key=lambda item: item["platform"],
+        identity=lambda item: item["platform"],
+    ),
+}
+
+
 def usage_query(query: UsageQuery) -> UsageResult:
     results = _aggregate(query) if query.granularity == GRANULARITY_TOTAL else _bucketed(query)
     return UsageResult(
@@ -178,31 +239,9 @@ def usage_query(query: UsageQuery) -> UsageResult:
 def group_entities(query: UsageQuery) -> QuerySet:
     """The paginatable base for a grouped request: one entry per group *active in the window* (a group
     with at least one message), so breakdown rows never carry all-zero noise for idle groups. The view
-    cursor-paginates this and passes the page to :func:`group_rows`.
-
-    ``participant``/``chatbot`` return the entity querysets (``Participant``/``Experiment``), ordered by
-    the paginator's ``-created_at``. ``platform`` has no backing model, so it returns the distinct
-    platform slugs present, ordered on the ``platform`` alias (which also clears ``ChatMessage``'s
-    default ``created_at`` ordering, so the ``.distinct()`` stays one row per slug).
-
-    ``chatbot`` resolves through ``Experiment.objects.get_all()`` so archived chatbots that were active
-    in the window still appear — the message/session paths reach chatbots by relation traversal, which
-    is manager-agnostic and includes archived rows, so grouping must match them or the breakdown would
-    silently drop archived activity that the ungrouped totals still count.
-    """
-    if query.group_by == GROUP_PARTICIPANT:
-        return Participant.objects.filter(team=query.team, id__in=_active_group_ids(query))
-    if query.group_by == GROUP_CHATBOT:
-        return Experiment.objects.get_all().filter(team=query.team, id__in=_active_group_ids(query))
-    return (
-        _message_queryset(query)
-        .exclude(chat__experiment_session__platform__isnull=True)
-        .exclude(chat__experiment_session__platform="")
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
-        .values(platform=F("chat__experiment_session__platform"))
-        .distinct()
-        .order_by("chat__experiment_session__platform")
-    )
+    cursor-paginates this and passes the page to :func:`group_rows`. The per-dimension queryset comes
+    from the :class:`_GroupSpec` registry."""
+    return _GROUP_SPECS[query.group_by].entities(query)
 
 
 def group_rows(query: UsageQuery, page: list) -> list[dict]:
@@ -228,23 +267,19 @@ def group_rows(query: UsageQuery, page: list) -> list[dict]:
 
 def _active_group_ids(query: UsageQuery) -> QuerySet:
     """Distinct ids of the ``participant``/``chatbot`` entities with a message in the window."""
-    return _message_queryset(query).values_list(_MESSAGE_GROUP_FIELD[query.group_by], flat=True).distinct()
+    return _message_queryset(query).values_list(_GROUP_SPECS[query.group_by].message_field, flat=True).distinct()
 
 
 def _page_key(group_by: str, item):
     """The value that joins a paginated group to its aggregated metrics — the entity id for
     ``participant``/``chatbot``, the slug for ``platform`` (a ``.values`` dict)."""
-    return item["platform"] if group_by == GROUP_PLATFORM else item.id
+    return _GROUP_SPECS[group_by].page_key(item)
 
 
 def _group_identity(group_by: str, item):
     """The group's identity block for the response row. Participant rows carry both handles a client
     might hold (``public_id`` and ``identifier``); platform is just its slug."""
-    if group_by == GROUP_PARTICIPANT:
-        return {"public_id": str(item.public_id), "identifier": item.identifier, "platform": item.platform}
-    if group_by == GROUP_CHATBOT:
-        return {"public_id": str(item.public_id), "name": item.name}
-    return item["platform"]
+    return _GROUP_SPECS[group_by].identity(item)
 
 
 def _group_buckets(query: UsageQuery) -> list:
@@ -306,8 +341,9 @@ def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
     index = {(key, bucket_key): {} for key in keys for bucket_key in bucket_keys}
 
     trunc = None if query.granularity == GRANULARITY_TOTAL else _TRUNC[query.granularity]
-    msg_field = _MESSAGE_GROUP_FIELD[query.group_by]
-    ses_field = _SESSION_GROUP_FIELD[query.group_by]
+    spec = _GROUP_SPECS[query.group_by]
+    msg_field = spec.message_field
+    ses_field = spec.session_field
 
     def by_group(queryset, group_field, **annotations):
         return _grouped_rows(
@@ -358,7 +394,7 @@ def _fill_grouped_cost_tokens(query: UsageQuery, keys: list, index: dict) -> Non
             query.team,
             start=query.start,
             end=query.end,
-            group_field=_USAGE_GROUP_FIELD[query.group_by],
+            group_field=_GROUP_SPECS[query.group_by].usage_field,
             keys=keys,
             granularity=granularity,
             tz=query.tz,
