@@ -283,21 +283,21 @@ class TestPatchEndpoint:
         assert "conflict" in response.json()["error"].lower()
 
     def test_patch_self_conflict_from_stale_inflight_revision(self, authed_client, pipeline, team_with_users):
-        """Reproduce the false-conflict race from issue #3895.
+        """Document the server contract that motivated the client fix for issue #3895.
 
-        The debounced autosave in ``pipelineStore.ts`` reads ``base_revision`` from ``currentRevision``,
-        which is only updated once a PATCH *response* lands (``pipelineStore.ts`` ``_patchPipeline`` success
-        handler). There is no in-flight guard on the debounce, so when a user makes two quick successive
-        edits, the second PATCH departs *before* the first response arrives and therefore carries the same,
-        now-stale ``base_revision`` as the first.
+        The bug was client-side: the debounced autosave in ``pipelineStore.ts`` read ``base_revision`` from
+        ``currentRevision``, which is only updated once a PATCH *response* lands. With no in-flight guard, two
+        quick successive edits sent a second PATCH carrying the same, now-stale ``base_revision`` as the first.
 
-        Server-side, the first PATCH has already incremented ``edit_revision``, so the second PATCH — even
-        though it originates from the *same* session — fails the optimistic-concurrency check and returns a
-        409, which the client surfaces as "This pipeline was modified in another session."
+        Server-side (this test), the first PATCH has already incremented ``edit_revision``, so a second PATCH
+        reusing the stale ``base_revision`` — even from the *same* session — correctly fails the
+        optimistic-concurrency check and returns a 409, which the old client surfaced as
+        "This pipeline was modified in another session."
 
-        This test emits that exact request sequence (two PATCHes with the same ``base_revision``) and asserts
-        the second is rejected, demonstrating the self-conflict. A correct client would serialize its saves
-        and send ``base_revision=1`` on the second PATCH.
+        This test pins that server behaviour: two PATCHes with the same ``base_revision`` → the second is
+        rejected with the true ``current_revision``. The client now serializes its saves (see
+        ``pipelineStore.ts`` ``_flushSave`` / ``pendingSave``) so the second PATCH sends ``base_revision=1``
+        instead; the browser-level reproduction lives in ``cypress/e2e/pipeline-autosave.cy.js``.
         """
         team_slug = team_with_users.slug
         url = self._patch_url(team_slug, pipeline.id)

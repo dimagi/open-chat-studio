@@ -18,6 +18,13 @@ import {apiClient} from "../api/api";
 import {PipelineDiffPayload, PipelineType, PipelineSaveResponse} from "../types/pipeline";
 import {computePipelineDiff} from "../diffPipeline";
 let saveTimeoutId: NodeJS.Timeout | null = null;
+// Serialization guard for autosave (see issue #3895). While a PATCH is in-flight
+// its response has not yet bumped `currentRevision`, so firing a second PATCH would
+// reuse the now-stale `base_revision` and be falsely rejected by the server's
+// optimistic-concurrency check as a cross-session conflict. Instead, any edit made
+// while a save is in-flight sets this flag; the in-flight save flushes it on
+// completion, recomputing the diff against the freshly-bumped revision.
+let pendingSave = false;
 
 const createPipelineStore: StateCreator<
   PipelineStoreType & PipelineManagerStoreType,
@@ -285,28 +292,39 @@ const createPipelineManagerStore: StateCreator<
 
     // Set up a new timeout.
     saveTimeoutId = setTimeout(() => {
-      if (!get().currentPipeline || get().conflictDetected) {
-        return;
-      }
-
-      // Compute diff from the latest state right before sending, not from captured params
-      const oldNodes = get().currentPipeline!.data?.nodes || [];
-      const oldEdges = get().currentPipeline!.data?.edges || [];
-
-      const diff = computePipelineDiff(
-        oldNodes as Node[],
-        get().nodes,
-        oldEdges as Edge[],
-        get().edges,
-        get().currentRevision,
-      );
-
-      if (!diff) {
-        return;
-      }
-
-      get()._patchPipeline(diff);
+      get()._flushSave();
     }, 1000);
+  },
+  _flushSave: () => {
+    if (!get().currentPipeline || get().conflictDetected) {
+      return;
+    }
+
+    // Serialize saves: if a PATCH is already in-flight, defer this one. The in-flight
+    // save will flush the pending edits on completion, once `currentRevision` reflects
+    // the server's bumped revision. This prevents the self-conflict described in #3895.
+    if (get().isSaving) {
+      pendingSave = true;
+      return;
+    }
+
+    // Compute diff from the latest state right before sending, not from captured params
+    const oldNodes = get().currentPipeline!.data?.nodes || [];
+    const oldEdges = get().currentPipeline!.data?.edges || [];
+
+    const diff = computePipelineDiff(
+      oldNodes as Node[],
+      get().nodes,
+      oldEdges as Edge[],
+      get().edges,
+      get().currentRevision,
+    );
+
+    if (!diff) {
+      return;
+    }
+
+    get()._patchPipeline(diff);
   },
   savePipeline: (pipeline: PipelineType) => {
     set({isSaving: true, conflictDetected: false});
@@ -382,6 +400,14 @@ const createPipelineManagerStore: StateCreator<
       }
     } finally {
       set({isSaving: false});
+      // If edits arrived while this PATCH was in-flight, flush them now — the diff is
+      // recomputed against the revision this save just established, so the follow-up
+      // PATCH carries an up-to-date base_revision instead of a stale one (#3895).
+      const shouldFlush = pendingSave && !get().conflictDetected;
+      pendingSave = false;
+      if (shouldFlush) {
+        get()._flushSave();
+      }
     }
   },
   nodeHasErrors: (nodeId: string) => {
