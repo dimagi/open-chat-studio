@@ -16,6 +16,9 @@ from rest_framework import serializers
 from apps.api.v2.usage.services import (
     GRANULARITY_CHOICES,
     GRANULARITY_TOTAL,
+    GROUP_BY_CHOICES,
+    GROUP_PARTICIPANT,
+    METRIC_PARTICIPANTS,
     PERIOD_CHOICES,
     PERIOD_CURRENT_MONTH,
     SUPPORTED_METRICS,
@@ -79,6 +82,14 @@ class UsageQuerySerializer(serializers.Serializer):
             "one row per bucket, each carrying 'bucket_start'."
         ),
     )
+    group_by = serializers.ChoiceField(
+        choices=list(GROUP_BY_CHOICES),
+        required=False,
+        help_text=(
+            "Break the results down by this dimension: one row per group, cursor-paginated. Combines "
+            "with 'granularity' to give one row per (group, time bucket)."
+        ),
+    )
     participant = serializers.UUIDField(
         required=False,
         help_text="Restrict to a single participant by their ``public_id``.",
@@ -114,6 +125,11 @@ class UsageQuerySerializer(serializers.Serializer):
         if attrs.get("participant") and attrs.get("participant_identifier"):
             raise serializers.ValidationError(
                 "Provide only one of 'participant' or 'participant_identifier', not both."
+            )
+        if attrs.get("group_by") == GROUP_PARTICIPANT and METRIC_PARTICIPANTS in attrs["metric"]:
+            # A per-participant breakdown makes the distinct-participant count trivially 1 per row.
+            raise serializers.ValidationError(
+                "The 'participants' metric is redundant with group_by=participant; drop one of them."
             )
         tz = attrs["tz"]
         start, end = self._resolve_window(attrs, tz)

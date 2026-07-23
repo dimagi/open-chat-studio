@@ -3,10 +3,13 @@
 This is the single place that turns a validated ``UsageQuery`` into team-scoped aggregates. It
 supports the ``messages``, ``sessions``, ``participants``, ``cost``, and ``tokens`` metrics over an
 explicit ``[start, end)`` window (resolved from ``period`` or ``start``/``end`` by the param
-serializer) at ``total``/``daily``/``weekly``/``monthly`` granularity. Later slices add grouping
-without changing this contract. See ``docs/design/usage-api.md``.
+serializer) at ``total``/``daily``/``weekly``/``monthly`` granularity, optionally broken down by a
+``group_by`` dimension (participant/chatbot/platform). Ungrouped requests go through
+:func:`usage_query`; grouped requests are cursor-paginated by the view over :func:`group_entities`
+and :func:`group_rows`. See ``docs/design/usage-api.md``.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -14,7 +17,7 @@ from typing import TypedDict
 from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, F, Q, QuerySet
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
 from django.utils import timezone
 
@@ -44,6 +47,18 @@ GRANULARITY_DAILY = "daily"
 GRANULARITY_WEEKLY = "weekly"
 GRANULARITY_MONTHLY = "monthly"
 GRANULARITY_CHOICES = (GRANULARITY_TOTAL, GRANULARITY_DAILY, GRANULARITY_WEEKLY, GRANULARITY_MONTHLY)
+
+# Dimensions the results may be broken down by. When set, the response is one row per group (or per
+# (group, bucket) at a finer granularity), cursor-paginated. v2 vocabulary says ``chatbot``, not
+# ``experiment`` (ADR-0023); the underlying model is still ``Experiment``.
+GROUP_PARTICIPANT = "participant"
+GROUP_CHATBOT = "chatbot"
+GROUP_PLATFORM = "platform"
+GROUP_BY_CHOICES = (GROUP_PARTICIPANT, GROUP_CHATBOT, GROUP_PLATFORM)
+
+# Ceiling on the rows a single grouped page may materialise (``groups × buckets``); see
+# :func:`grouped_page_size_cap`.
+MAX_GROUPED_ROWS = 10_000
 
 # DB truncation per bucketed granularity (Django's TruncWeek starts weeks on Monday, matching the
 # Python-side bucket boundaries below).
@@ -76,13 +91,26 @@ class TokenCounts(TypedDict):
     total: int
 
 
+# Zeroed block per metric, for buckets/(group, bucket) cells with no activity. Factories (not shared
+# instances) so each empty slot gets its own object rather than aliasing one. Single source so the
+# grouped and ungrouped zero-fills can't drift apart.
+_EMPTY_METRIC = {
+    METRIC_MESSAGES: lambda: MessageCounts(human=0, ai=0, total=0),
+    METRIC_SESSIONS: lambda: 0,
+    METRIC_PARTICIPANTS: lambda: 0,
+    METRIC_COST: lambda: CostBlock(total=Decimal(0), currency="USD"),
+    METRIC_TOKENS: lambda: TokenCounts(prompt=0, completion=0, total=0),
+}
+
+
 @dataclass(frozen=True)
 class UsageResult:
     """The endpoint response, pre-serialisation.
 
     ``results`` is either a single object mapping each requested metric name to its aggregate block
     (``granularity=total``), or a list of such objects — one per time bucket, each carrying a
-    ``bucket_start`` — when a finer granularity is requested. Grouping arrives in a later slice."""
+    ``bucket_start`` — when a finer granularity is requested. This is the ungrouped response only;
+    grouped requests are paginated by the view and never build a ``UsageResult``."""
 
     period_start: datetime
     period_end: datetime
@@ -112,6 +140,7 @@ class UsageQuery:
     participant_identifier: str | None = None
     chatbot: str | None = None
     platform: str | None = None
+    group_by: str | None = None
     # Populated by resolve_query_filters. ``None`` means "no such filter requested"; an empty list means
     # "requested but matched nobody" (with filter_is_empty set), which the ``__in`` filters turn into an
     # empty result and the cost path short-circuits to zeros.
@@ -128,6 +157,84 @@ class _CostFilter:
 
     filters: reporting.CostFilters
     is_empty: bool
+
+
+@dataclass(frozen=True)
+class _GroupSpec:
+    """Everything the grouped path needs for one ``group_by`` dimension, in a single record so adding a
+    dimension is one registry entry and a missing piece is a construction-time error, not a request-time
+    ``KeyError``. The ``*_field`` names are the relation from each source to the dimension: ``ChatMessage``
+    reaches it two relations away (via its chat's session); ``ExperimentSession``/``UsageRecord`` hold it
+    locally."""
+
+    message_field: str
+    session_field: str
+    usage_field: str
+    # A validated UsageQuery -> the paginatable base queryset of groups active in the window.
+    entities: Callable[["UsageQuery"], QuerySet]
+    # A paginated item -> the value joining it to its aggregated metrics (entity id, or platform slug).
+    # A model instance for participant/chatbot, a ``.values`` dict for platform, so params stay untyped.
+    page_key: Callable[..., object]
+    # A paginated item -> the group's identity block for the response row.
+    identity: Callable[..., object]
+
+
+def _participant_entities(query: "UsageQuery") -> QuerySet:
+    return Participant.objects.filter(team=query.team, id__in=_active_group_ids(query))
+
+
+def _chatbot_entities(query: "UsageQuery") -> QuerySet:
+    # ``get_all()`` so archived chatbots active in the window still appear: the message/session paths
+    # reach chatbots by relation traversal (archived-inclusive), so grouping must match them or the
+    # breakdown would silently drop archived activity that the ungrouped totals still count.
+    return Experiment.objects.get_all().filter(team=query.team, id__in=_active_group_ids(query))
+
+
+def _platform_entities(query: "UsageQuery") -> QuerySet:
+    # Platform has no backing model, so return the distinct slugs present, ordered on the ``platform``
+    # alias (which also clears ``ChatMessage``'s default ``created_at`` ordering, keeping ``.distinct()``
+    # one row per slug). ``evaluations`` is excluded to match the session metric's exclusion.
+    return (
+        _message_queryset(query)
+        .exclude(chat__experiment_session__platform__isnull=True)
+        .exclude(chat__experiment_session__platform="")
+        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        .values(platform=F("chat__experiment_session__platform"))
+        .distinct()
+        .order_by("chat__experiment_session__platform")
+    )
+
+
+_GROUP_SPECS = {
+    GROUP_PARTICIPANT: _GroupSpec(
+        message_field="chat__experiment_session__participant",
+        session_field="participant",
+        usage_field="participant_id",
+        entities=_participant_entities,
+        page_key=lambda item: item.id,
+        identity=lambda item: {
+            "public_id": str(item.public_id),
+            "identifier": item.identifier,
+            "platform": item.platform,
+        },
+    ),
+    GROUP_CHATBOT: _GroupSpec(
+        message_field="chat__experiment_session__experiment",
+        session_field="experiment",
+        usage_field="experiment_id",
+        entities=_chatbot_entities,
+        page_key=lambda item: item.id,
+        identity=lambda item: {"public_id": str(item.public_id), "name": item.name},
+    ),
+    GROUP_PLATFORM: _GroupSpec(
+        message_field="chat__experiment_session__platform",
+        session_field="platform",
+        usage_field="session__platform",
+        entities=_platform_entities,
+        page_key=lambda item: item["platform"],
+        identity=lambda item: item["platform"],
+    ),
+}
 
 
 def resolve_query_filters(query: UsageQuery) -> UsageQuery:
@@ -169,6 +276,196 @@ def usage_query(query: UsageQuery) -> UsageResult:
     )
 
 
+def group_entities(query: UsageQuery) -> QuerySet:
+    """The paginatable base for a grouped request: one entry per group *active in the window* (a group
+    with at least one message), so breakdown rows never carry all-zero noise for idle groups. The view
+    cursor-paginates this and passes the page to :func:`group_rows`. The per-dimension queryset comes
+    from the :class:`_GroupSpec` registry."""
+    return _GROUP_SPECS[query.group_by].entities(query)
+
+
+def group_rows(query: UsageQuery, page: list) -> list[dict]:
+    """Serialisable breakdown rows for one page of :func:`group_entities`. At ``total`` granularity each
+    group yields one row; at a finer granularity each group is expanded to one flat row per time bucket
+    in the window (each carrying ``bucket_start``), so the whole page's rows are ``groups × buckets``.
+    Metrics absent for a (group, bucket) are zero-filled."""
+    keys = [_page_key(query.group_by, item) for item in page]
+    buckets = _group_buckets(query)
+    index = _grouped_metric_index(query, keys, buckets)
+    rows: list[dict] = []
+    for item in page:
+        key = _page_key(query.group_by, item)
+        identity = _group_identity(query.group_by, item)
+        for bucket in buckets:
+            row: dict = {query.group_by: identity}
+            if bucket is not None:
+                row["bucket_start"] = bucket
+            row.update(index[(key, _bucket_key(bucket, query.tz))])
+            rows.append(row)
+    return rows
+
+
+def _active_group_ids(query: UsageQuery) -> QuerySet:
+    """Distinct ids of the ``participant``/``chatbot`` entities with a message in the window."""
+    return _message_queryset(query).values_list(_GROUP_SPECS[query.group_by].message_field, flat=True).distinct()
+
+
+def _page_key(group_by: str, item):
+    """The value that joins a paginated group to its aggregated metrics — the entity id for
+    ``participant``/``chatbot``, the slug for ``platform`` (a ``.values`` dict)."""
+    return _GROUP_SPECS[group_by].page_key(item)
+
+
+def _group_identity(group_by: str, item):
+    """The group's identity block for the response row. Participant rows carry both handles a client
+    might hold (``public_id`` and ``identifier``); platform is just its slug."""
+    return _GROUP_SPECS[group_by].identity(item)
+
+
+def _group_buckets(query: UsageQuery) -> list:
+    """The bucket dimension of the grouped rows: ``[None]`` at ``total`` (one row per group), else the
+    tz-aware bucket-start datetimes covering the window (one row per group per bucket)."""
+    if query.granularity == GRANULARITY_TOTAL:
+        return [None]
+    return list(_iter_bucket_starts(query.start, query.end, query.granularity, query.tz))
+
+
+def grouped_page_size_cap(query: UsageQuery) -> int:
+    """Max groups per page so a grouped page materialises at most :data:`MAX_GROUPED_ROWS` rows. A page
+    expands to ``groups × buckets`` rows, and the window guard bounds buckets but not their product with
+    ``page_size``; this caps that product so a fine granularity over a wide window can't be combined with
+    a large ``page_size`` into a huge single response. Cursor pagination still walks every group."""
+    return max(1, MAX_GROUPED_ROWS // len(_group_buckets(query)))
+
+
+def _bucket_key(bucket: datetime | None, tz: ZoneInfo):
+    """The local calendar date keying a bucket in the metric index; ``None`` at ``total`` granularity.
+    Delegates to :func:`_bucket_date` so the Python-generated bucket starts and the DB truncation results
+    normalise to their local date the same way (they must agree for the index and rows to join)."""
+    return None if bucket is None else _bucket_date(bucket, tz)
+
+
+# Human/AI message-count annotations, shared by the total, bucketed, and grouped message reads so the
+# split is defined in one place.
+_MESSAGE_ANNOTATIONS = {
+    "human": Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
+    "ai": Count("id", filter=Q(message_type=ChatMessageType.AI)),
+}
+
+
+def _message_counts_from_row(row: dict) -> MessageCounts:
+    """Build a :class:`MessageCounts` from a row/aggregate carrying ``human``/``ai`` counts."""
+    return MessageCounts(human=row["human"], ai=row["ai"], total=row["human"] + row["ai"])
+
+
+def _grouped_rows(queryset: QuerySet, *, group_field: str | None, trunc, tz: ZoneInfo, **annotations):
+    """Aggregate ``queryset`` by an optional dimension ``group_field`` and an optional tz time bucket
+    (``trunc``), applying ``annotations``. Yields ``(group_key, bucket_key, row)`` where each key is
+    ``None`` when that axis isn't requested. The single home of the ``.values(...).annotate(...)`` +
+    bucket-date boilerplate, shared by the grouped breakdown and the ungrouped timeseries."""
+    value_fields = [group_field] if group_field else []
+    if trunc is not None:
+        queryset = queryset.annotate(bucket=trunc("created_at", tzinfo=tz))
+        value_fields.append("bucket")
+    for row in queryset.values(*value_fields).annotate(**annotations):
+        group_key = row[group_field] if group_field else None
+        bucket_key = _bucket_date(row["bucket"], tz) if trunc is not None else None
+        yield group_key, bucket_key, row
+
+
+def _grouped_metric_index(query: UsageQuery, keys: list, buckets: list) -> dict:
+    """``{(group_key, bucket_key): {metric: block}}`` for every (group, bucket) on the page, zero-filled.
+    Each metric runs a single query grouped by the dimension (and, at a finer granularity, the time
+    bucket) restricted to ``keys``; results are keyed back onto the page's (group, bucket) cells."""
+    bucket_keys = [_bucket_key(bucket, query.tz) for bucket in buckets]
+    index = {(key, bucket_key): {} for key in keys for bucket_key in bucket_keys}
+
+    for metric, rows in _grouped_non_cost_metric_rows(query, keys):
+        for group_key, bucket_key, value in rows:
+            index[(group_key, bucket_key)][metric] = value
+    if METRIC_COST in query.metrics or METRIC_TOKENS in query.metrics:
+        _fill_grouped_cost_tokens(query, keys, index)
+
+    _zero_fill_grouped(query, index)
+    return index
+
+
+def _grouped_non_cost_metric_rows(query: UsageQuery, keys: list) -> list:
+    """``(metric, (group_key, bucket_key, value) iterator)`` for each requested non-cost metric, built
+    conditionally so a metric's query only runs when asked for. Cost/tokens share one UsageRecord read
+    and are filled separately by the caller."""
+    trunc = None if query.granularity == GRANULARITY_TOTAL else _TRUNC[query.granularity]
+    spec = _GROUP_SPECS[query.group_by]
+
+    def by_group(queryset, group_field, **annotations):
+        return _grouped_rows(
+            queryset.filter(**{f"{group_field}__in": keys}),
+            group_field=group_field,
+            trunc=trunc,
+            tz=query.tz,
+            **annotations,
+        )
+
+    metric_rows = []
+    if METRIC_MESSAGES in query.metrics:
+        rows = by_group(_message_queryset(query), spec.message_field, **_MESSAGE_ANNOTATIONS)
+        metric_rows.append((METRIC_MESSAGES, ((gk, bk, _message_counts_from_row(row)) for gk, bk, row in rows)))
+    if METRIC_SESSIONS in query.metrics:
+        rows = by_group(_session_queryset(query), spec.session_field, n=Count("id"))
+        metric_rows.append((METRIC_SESSIONS, ((gk, bk, row["n"]) for gk, bk, row in rows)))
+    if METRIC_PARTICIPANTS in query.metrics:
+        # group_by=participant is rejected upstream, so this only runs for chatbot/platform.
+        rows = by_group(
+            _active_participant_queryset(query),
+            spec.message_field,
+            n=Count("chat__experiment_session__participant", distinct=True),
+        )
+        metric_rows.append((METRIC_PARTICIPANTS, ((gk, bk, row["n"]) for gk, bk, row in rows)))
+    return metric_rows
+
+
+def _fill_grouped_cost_tokens(query: UsageQuery, keys: list, index: dict) -> None:
+    """Add the ``cost``/``tokens`` blocks to the (group, bucket) cells from one grouped ``UsageRecord``
+    read (via the cost read path) so cost and tokens reconcile with each other and with the totals."""
+    cost_filter = _cost_filter(query)
+    granularity = None if query.granularity == GRANULARITY_TOTAL else query.granularity
+    rows = (
+        []
+        if cost_filter.is_empty
+        else reporting.usage_by_group(
+            query.team,
+            start=query.start,
+            end=query.end,
+            breakdown=reporting.GroupBreakdown(
+                field=_GROUP_SPECS[query.group_by].usage_field,
+                keys=keys,
+                granularity=granularity,
+                tz=query.tz,
+            ),
+            # Currency is only read for the cost block, so a tokens-only request skips the extra scan.
+            resolve_currency=METRIC_COST in query.metrics,
+            filters=cost_filter.filters,
+        )
+    )
+    for row in rows:
+        bucket_key = None if granularity is None else _bucket_date(row["bucket"], query.tz)
+        cell = index.get((row["key"], bucket_key))
+        if cell is None:
+            continue
+        if METRIC_COST in query.metrics:
+            cell[METRIC_COST] = CostBlock(total=row["cost"], currency=row["currency"])
+        if METRIC_TOKENS in query.metrics:
+            cell[METRIC_TOKENS] = TokenCounts(prompt=row["prompt"], completion=row["completion"], total=row["total"])
+
+
+def _zero_fill_grouped(query: UsageQuery, index: dict) -> None:
+    """Give every (group, bucket) cell a zeroed block for each requested metric it is missing, so the
+    response is dense over the page even where a group had no activity in a bucket."""
+    for cell in index.values():
+        for metric in query.metrics:
+            cell.setdefault(metric, _EMPTY_METRIC[metric]())
+
+
 def _aggregate(query: UsageQuery) -> dict:
     """One aggregate block per requested metric over the whole ``[start, end)`` window."""
     results: dict = {}
@@ -196,19 +493,18 @@ def _bucketed(query: UsageQuery) -> list[dict]:
     starts = list(_iter_bucket_starts(query.start, query.end, query.granularity, query.tz))
     rows: list[dict] = [{"bucket_start": bucket} for bucket in starts]
 
-    # (grouped-query fn, empty-bucket value factory) per metric. The factory (not a shared value) so
-    # each empty bucket gets its own object rather than aliasing one instance.
     metric_specs = (
-        (METRIC_MESSAGES, _message_counts_by_bucket, lambda: MessageCounts(human=0, ai=0, total=0)),
-        (METRIC_SESSIONS, _session_counts_by_bucket, lambda: 0),
-        (METRIC_PARTICIPANTS, _participant_counts_by_bucket, lambda: 0),
+        (METRIC_MESSAGES, _message_counts_by_bucket),
+        (METRIC_SESSIONS, _session_counts_by_bucket),
+        (METRIC_PARTICIPANTS, _participant_counts_by_bucket),
     )
-    for metric, counts_by_bucket, empty in metric_specs:
+    for metric, counts_by_bucket in metric_specs:
         if metric not in query.metrics:
             continue
         by_date = counts_by_bucket(query, trunc)
         for row in rows:
-            row[metric] = by_date.get(row["bucket_start"].date(), empty())
+            # _EMPTY_METRIC factory (not a shared value) so each empty bucket gets its own object.
+            row[metric] = by_date.get(row["bucket_start"].date(), _EMPTY_METRIC[metric]())
 
     _fill_cost_tokens_buckets(query, rows)
     return rows
@@ -224,9 +520,9 @@ def _fill_cost_tokens_buckets(query: UsageQuery, rows: list[dict]) -> None:
     for row in rows:
         block = by_date.get(row["bucket_start"].date())
         if METRIC_COST in query.metrics:
-            row[METRIC_COST] = block["cost"] if block else CostBlock(total=Decimal(0), currency="USD")
+            row[METRIC_COST] = block["cost"] if block else _EMPTY_METRIC[METRIC_COST]()
         if METRIC_TOKENS in query.metrics:
-            row[METRIC_TOKENS] = block["tokens"] if block else TokenCounts(prompt=0, completion=0, total=0)
+            row[METRIC_TOKENS] = block["tokens"] if block else _EMPTY_METRIC[METRIC_TOKENS]()
 
 
 def _cost_tokens_by_bucket(query: UsageQuery) -> dict:
@@ -323,13 +619,7 @@ def _message_counts(query: UsageQuery) -> MessageCounts:
     """Human/AI/total message counts for the window. ``total`` is ``human + ai`` (the two surfaced
     categories); system messages are internal and excluded so the parts always sum to the total."""
     # Filtered Count aggregates return 0 for no matches, never None.
-    counts = _message_queryset(query).aggregate(
-        human=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-        ai=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-    )
-    human = counts["human"]
-    ai = counts["ai"]
-    return MessageCounts(human=human, ai=ai, total=human + ai)
+    return _message_counts_from_row(_message_queryset(query).aggregate(**_MESSAGE_ANNOTATIONS))
 
 
 def _message_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
@@ -354,20 +644,11 @@ def _active_participant_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
 
 
 def _message_counts_by_bucket(query: UsageQuery, trunc) -> dict:
-    rows = (
-        _message_queryset(query)
-        .annotate(bucket=trunc("created_at", tzinfo=query.tz))
-        .values("bucket")
-        .annotate(
-            human=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-            ai=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-        )
-    )
     return {
-        _bucket_date(row["bucket"], query.tz): MessageCounts(
-            human=row["human"], ai=row["ai"], total=row["human"] + row["ai"]
+        bucket_key: _message_counts_from_row(row)
+        for _, bucket_key, row in _grouped_rows(
+            _message_queryset(query), group_field=None, trunc=trunc, tz=query.tz, **_MESSAGE_ANNOTATIONS
         )
-        for row in rows
     }
 
 
@@ -387,8 +668,10 @@ def _participant_counts_by_bucket(query: UsageQuery, trunc) -> dict:
 def _scalar_by_bucket(queryset: QuerySet, trunc, tz: ZoneInfo, aggregate) -> dict:
     """Group ``queryset`` into ``tz``-truncated buckets and reduce each to a single integer via
     ``aggregate``, keyed by local calendar date. Shared by the session and participant metrics."""
-    rows = queryset.annotate(bucket=trunc("created_at", tzinfo=tz)).values("bucket").annotate(n=aggregate)
-    return {_bucket_date(row["bucket"], tz): row["n"] for row in rows}
+    return {
+        bucket_key: row["n"]
+        for _, bucket_key, row in _grouped_rows(queryset, group_field=None, trunc=trunc, tz=tz, n=aggregate)
+    }
 
 
 def _iter_bucket_starts(start: datetime, end: datetime, granularity: str, tz: ZoneInfo):

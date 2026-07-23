@@ -220,9 +220,17 @@ paths:
         (human/AI/total counts), ''sessions'' (count), ''participants'' (distinct
         count), ''cost'' (total spend and currency), and ''tokens'' (prompt/completion/total).
         With ''granularity'' finer than ''total'', results are one row per time bucket.
-        Optionally narrowed to a single participant.'
+        With ''group_by'' set, results are cursor-paginated breakdown rows — one per
+        group, or one per (group, bucket) when combined with a finer granularity.
+        Optionally narrowed by participant, chatbot, or platform.'
       summary: Usage
       parameters:
+      - in: query
+        name: chatbot
+        schema:
+          type: string
+          format: uuid
+        description: Restrict to a single chatbot by its ``public_id``.
       - in: query
         name: end
         schema:
@@ -248,6 +256,21 @@ paths:
           * `daily` - daily
           * `weekly` - weekly
           * `monthly` - monthly
+      - in: query
+        name: group_by
+        schema:
+          enum:
+          - participant
+          - chatbot
+          - platform
+          type: string
+          minLength: 1
+        description: |-
+          Break the results down by this dimension: one row per group, cursor-paginated. Combines with 'granularity' to give one row per (group, time bucket).
+
+          * `participant` - participant
+          * `chatbot` - chatbot
+          * `platform` - platform
       - in: query
         name: metric
         schema:
@@ -295,6 +318,35 @@ paths:
           * `current_month` - current_month
           * `previous_month` - previous_month
       - in: query
+        name: platform
+        schema:
+          enum:
+          - telegram
+          - web
+          - whatsapp
+          - facebook
+          - sureadhere
+          - api
+          - slack
+          - commcare_connect
+          - embedded_widget
+          - email
+          type: string
+          minLength: 1
+        description: |-
+          Restrict to a single channel platform by its slug (e.g. 'web', 'whatsapp').
+
+          * `telegram` - telegram
+          * `web` - web
+          * `whatsapp` - whatsapp
+          * `facebook` - facebook
+          * `sureadhere` - sureadhere
+          * `api` - api
+          * `slack` - slack
+          * `commcare_connect` - commcare_connect
+          * `embedded_widget` - embedded_widget
+          * `email` - email
+      - in: query
         name: start
         schema:
           type: string
@@ -321,7 +373,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UsageResponse'
+                $ref: '#/components/schemas/UsageResponseOrGrouped'
           description: ''
 components:
   schemas:
@@ -482,6 +534,19 @@ components:
       - name
       - url
       - versions
+    ChatbotIdentity:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          description: Stable chatbot identifier.
+        name:
+          type: string
+          description: Chatbot name.
+      required:
+      - name
+      - public_id
     ChatbotInspect:
       type: object
       description: |-
@@ -774,6 +839,70 @@ components:
           nullable: true
           description: Use the provider's neural (higher-quality) voice engine, where
             supported.
+    GroupedUsageResponse:
+      type: object
+      description: |-
+        The grouped, cursor-paginated response envelope. Documents the shape the view assembles from the
+        shared ``CursorPagination`` plus the ``period``/``group_by`` context.
+      properties:
+        period:
+          $ref: '#/components/schemas/UsagePeriod'
+        group_by:
+          type: string
+          description: Dimension the rows are grouped by.
+        count:
+          type: integer
+          description: Total number of groups matching the query. Only present on
+            the first page.
+        next:
+          type: string
+          nullable: true
+          description: Cursor URL for the next page, or null.
+        previous:
+          type: string
+          nullable: true
+          description: Cursor URL for the previous page, or null.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupedUsageRow'
+      required:
+      - group_by
+      - next
+      - period
+      - previous
+      - results
+    GroupedUsageRow:
+      type: object
+      description: |-
+        One breakdown row: the group's identity plus a block per requested metric. Exactly one of
+        ``participant``/``chatbot``/``platform`` is present (matching ``group_by``); ``bucket_start`` is
+        present only when a finer granularity expands each group into per-bucket rows.
+      properties:
+        messages:
+          $ref: '#/components/schemas/MessageCounts'
+        sessions:
+          type: integer
+          description: Sessions started in the window, excluding evaluation-harness
+            and never-engaged sessions.
+        participants:
+          type: integer
+          description: Distinct participants active in the window.
+        cost:
+          $ref: '#/components/schemas/Cost'
+        tokens:
+          $ref: '#/components/schemas/Tokens'
+        participant:
+          $ref: '#/components/schemas/ParticipantIdentity'
+        chatbot:
+          $ref: '#/components/schemas/ChatbotIdentity'
+        platform:
+          type: string
+          description: Channel platform slug (platform grouping).
+        bucket_start:
+          type: string
+          format: date-time
+          description: Inclusive start of this bucket, in the request timezone.
     IdentifierTypeEnum:
       enum:
       - email
@@ -1361,6 +1490,23 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    ParticipantIdentity:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          description: Stable participant identifier.
+        identifier:
+          type: string
+          description: Human-readable handle (email/phone/anon id).
+        platform:
+          type: string
+          description: Channel platform the participant belongs to.
+      required:
+      - identifier
+      - platform
+      - public_id
     PlatformEnum:
       enum:
       - telegram
@@ -1703,6 +1849,10 @@ components:
       - group_by
       - period
       - results
+    UsageResponseOrGrouped:
+      oneOf:
+      - $ref: '#/components/schemas/UsageResponse'
+      - $ref: '#/components/schemas/GroupedUsageResponse'
     UsageResults:
       type: object
       description: |-

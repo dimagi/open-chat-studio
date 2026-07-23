@@ -1,16 +1,27 @@
-"""Tests for the ``chatbot``/``platform`` filters and the resolve-to-FK-id path (issue #3852)."""
+"""Tests for ``group_by`` breakdowns, cursor pagination, the ``chatbot``/``platform`` filters, and the
+combo guards (issue #3852)."""
 
 import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from apps.api.v2.usage.services import UsageQuery, _message_queryset, _session_queryset, resolve_query_filters
+from apps.api.v2.usage.services import (
+    MAX_GROUPED_ROWS,
+    UsageQuery,
+    _message_queryset,
+    _session_queryset,
+    grouped_page_size_cap,
+    resolve_query_filters,
+)
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.cost_tracking.models import ServiceKind
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -22,6 +33,128 @@ def _add_messages(session, *, human=0, ai=0, when=None):
     for message_type, count in ((ChatMessageType.HUMAN, human), (ChatMessageType.AI, ai)):
         for _ in range(count):
             ChatMessage.objects.create(chat=session.chat, message_type=message_type, content="x", **kwargs)
+
+
+@pytest.mark.django_db()
+def test_group_by_participant_one_row_each_with_both_handles():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    alice = ParticipantFactory.create(team=team, identifier="alice@example.com", platform="web")
+    bob = ParticipantFactory.create(team=team, identifier="bob@example.com", platform="web")
+    _add_messages(ExperimentSessionFactory.create(team=team, participant=alice, platform="web"), human=3, ai=2)
+    _add_messages(ExperimentSessionFactory.create(team=team, participant=bob, platform="web"), human=1)
+    # An idle participant (no messages) is excluded from the breakdown.
+    ParticipantFactory.create(team=team, identifier="idle@example.com", platform="web")
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "participant"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["group_by"] == "participant"
+    assert data["count"] == 2
+    by_identifier = {row["participant"]["identifier"]: row for row in data["results"]}
+    assert set(by_identifier) == {"alice@example.com", "bob@example.com"}
+    assert by_identifier["alice@example.com"]["participant"]["public_id"] == str(alice.public_id)
+    assert by_identifier["alice@example.com"]["messages"] == {"human": 3, "ai": 2, "total": 5}
+    assert by_identifier["bob@example.com"]["messages"] == {"human": 1, "ai": 0, "total": 1}
+
+
+@pytest.mark.django_db()
+def test_group_by_chatbot_rows_carry_public_id_and_name():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    support = ExperimentFactory.create(team=team, name="Support")
+    sales = ExperimentFactory.create(team=team, name="Sales")
+    _add_messages(ExperimentSessionFactory.create(team=team, experiment=support), human=4)
+    _add_messages(ExperimentSessionFactory.create(team=team, experiment=sales), human=2)
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "chatbot"})
+
+    assert response.status_code == 200
+    data = response.json()
+    by_name = {row["chatbot"]["name"]: row for row in data["results"]}
+    assert set(by_name) == {"Support", "Sales"}
+    assert by_name["Support"]["chatbot"]["public_id"] == str(support.public_id)
+    assert by_name["Support"]["messages"]["human"] == 4
+
+
+@pytest.mark.django_db()
+def test_group_by_platform_rows_are_slugs():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    _add_messages(ExperimentSessionFactory.create(team=team, platform="web"), human=5)
+    _add_messages(ExperimentSessionFactory.create(team=team, platform="whatsapp"), human=3)
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "platform"})
+
+    assert response.status_code == 200
+    data = response.json()
+    by_platform = {row["platform"]: row["messages"]["human"] for row in data["results"]}
+    assert by_platform == {"web": 5, "whatsapp": 3}
+
+
+@pytest.mark.django_db()
+def test_grouped_results_are_cursor_paginated():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    for i in range(3):
+        participant = ParticipantFactory.create(team=team, identifier=f"p{i}@example.com", platform="web")
+        _add_messages(ExperimentSessionFactory.create(team=team, participant=participant, platform="web"), human=1)
+
+    client = ApiTestClient(user, team)
+    first = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "participant", "page_size": 2}).json()
+
+    assert first["count"] == 3  # total only on the first page
+    assert len(first["results"]) == 2
+    assert first["next"] is not None
+
+    second = client.get(first["next"]).json()
+    assert len(second["results"]) == 1
+    seen = {row["participant"]["identifier"] for row in first["results"] + second["results"]}
+    assert seen == {"p0@example.com", "p1@example.com", "p2@example.com"}
+
+
+@pytest.mark.django_db()
+def test_grouped_default_page_is_bounded_by_cap(monkeypatch):
+    """A grouped request that omits ``page_size`` is still clamped to the cap, not the unclamped project
+    default. Regression: only ``max_page_size`` was lowered, which DRF ignores without a ``page_size``
+    query param, so the default page fell through to ``PAGE_SIZE`` and defeated the cap."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    for i in range(3):
+        participant = ParticipantFactory.create(team=team, identifier=f"p{i}@example.com", platform="web")
+        _add_messages(ExperimentSessionFactory.create(team=team, participant=participant, platform="web"), human=1)
+
+    monkeypatch.setattr("apps.api.v2.usage.services.grouped_page_size_cap", lambda query: 2)
+
+    client = ApiTestClient(user, team)
+    # No page_size param: before the fix this returned all 3 (default 100); now bounded to the cap of 2.
+    first = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "participant"}).json()
+
+    assert len(first["results"]) == 2
+    assert first["next"] is not None
+
+
+@pytest.mark.django_db()
+def test_platform_grouping_is_cursor_paginated():
+    """Platform has no backing model, so it paginates a distinct-slug queryset ordered by the slug."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    for platform in ("web", "whatsapp", "telegram"):
+        _add_messages(ExperimentSessionFactory.create(team=team, platform=platform), human=1)
+
+    client = ApiTestClient(user, team)
+    first = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "platform", "page_size": 2}).json()
+
+    assert first["count"] == 3
+    assert len(first["results"]) == 2
+    assert first["next"] is not None
+    second = client.get(first["next"]).json()
+    seen = {row["platform"] for row in first["results"] + second["results"]}
+    assert seen == {"web", "whatsapp", "telegram"}
 
 
 @pytest.mark.django_db()
@@ -73,6 +206,75 @@ def test_platform_filter_narrows_all_metrics():
 
 
 @pytest.mark.django_db()
+def test_grouped_cost_and_tokens_per_group():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    alice = ParticipantFactory.create(team=team, identifier="alice@example.com", platform="web")
+    session = ExperimentSessionFactory.create(team=team, participant=alice, platform="web")
+    _add_messages(session, human=1)
+    UsageRecordFactory.create(
+        team=team,
+        participant=alice,
+        session=session,
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=1000,
+        cost=Decimal("1"),
+    )
+    UsageRecordFactory.create(
+        team=team,
+        participant=alice,
+        session=session,
+        service_kind=ServiceKind.LLM_OUTPUT,
+        quantity=400,
+        cost=Decimal("2"),
+    )
+
+    client = ApiTestClient(user, team)
+    response = client.get(
+        reverse(USAGE_URL),
+        {"metric": ["cost", "tokens"], "group_by": "participant"},
+    )
+
+    assert response.status_code == 200
+    row = response.json()["results"][0]
+    assert row["participant"]["identifier"] == "alice@example.com"
+    assert row["cost"]["total"] == "3.00000000"
+    assert row["tokens"] == {"prompt": 1000, "completion": 400, "total": 1400}
+
+
+@pytest.mark.django_db()
+def test_group_by_combined_with_granularity_gives_flat_bucket_rows():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    chatbot = ExperimentFactory.create(team=team, name="Daily")
+    session = ExperimentSessionFactory.create(team=team, experiment=chatbot)
+    _add_messages(session, human=1, when=datetime.datetime(2026, 7, 1, 12, tzinfo=datetime.UTC))
+    _add_messages(session, human=2, when=datetime.datetime(2026, 7, 2, 12, tzinfo=datetime.UTC))
+
+    client = ApiTestClient(user, team)
+    response = client.get(
+        reverse(USAGE_URL),
+        {
+            "metric": "messages",
+            "group_by": "chatbot",
+            "granularity": "daily",
+            "start": "2026-07-01",
+            "end": "2026-07-03",
+        },
+    )
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    # one chatbot × two daily buckets = two flat rows, each carrying its bucket_start.
+    assert len(results) == 2
+    for row in results:
+        assert row["chatbot"]["name"] == "Daily"
+        assert "bucket_start" in row
+    by_bucket = {row["bucket_start"][:10]: row["messages"]["human"] for row in results}
+    assert by_bucket == {"2026-07-01": 1, "2026-07-02": 2}
+
+
+@pytest.mark.django_db()
 def test_chatbot_filter_includes_archived_chatbot():
     """An archived chatbot's messages AND cost must both report — the message path reaches archived
     experiments by relation, so cost/tokens must resolve them too (not zero out asymmetrically)."""
@@ -98,6 +300,40 @@ def test_chatbot_filter_includes_archived_chatbot():
 
 
 @pytest.mark.django_db()
+def test_group_by_chatbot_includes_archived_chatbot():
+    """A chatbot archived after it was active in the window must still appear as a breakdown row, or the
+    grouped rows silently fail to sum to the ungrouped totals (which count archived activity)."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    chatbot = ExperimentFactory.create(team=team, name="Archived")
+    _add_messages(ExperimentSessionFactory.create(team=team, experiment=chatbot), human=3)
+    chatbot.is_archived = True
+    chatbot.save(update_fields=["is_archived"])
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "chatbot"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 1
+    assert data["results"][0]["chatbot"]["name"] == "Archived"
+    assert data["results"][0]["messages"]["human"] == 3
+
+
+def test_grouped_page_size_cap_shrinks_with_bucket_count():
+    """The groups-per-page cap tightens as the bucket count grows, bounding groups × buckets rows."""
+    base = {
+        "team": None,
+        "metrics": {"messages"},
+        "tz": ZoneInfo("UTC"),
+        "start": datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC),
+        "end": datetime.datetime(2026, 4, 11, tzinfo=datetime.UTC),  # 100 days
+    }
+    assert grouped_page_size_cap(UsageQuery(**base, granularity="total")) == MAX_GROUPED_ROWS
+    assert grouped_page_size_cap(UsageQuery(**base, granularity="daily")) == MAX_GROUPED_ROWS // 100
+
+
+@pytest.mark.django_db()
 def test_platform_evaluations_filter_is_rejected():
     """`evaluations` is not a real usage platform (its sessions are excluded), so filtering by it is 400."""
     team = TeamWithUsersFactory.create()
@@ -107,6 +343,44 @@ def test_platform_evaluations_filter_is_rejected():
     response = client.get(reverse(USAGE_URL), {"metric": "messages", "platform": "evaluations"})
 
     assert response.status_code == 400
+
+
+@pytest.mark.django_db()
+def test_participants_metric_grouped_by_chatbot_counts_distinct():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    chatbot = ExperimentFactory.create(team=team, name="Shared")
+    alice = ParticipantFactory.create(team=team, identifier="alice@example.com", platform="web")
+    bob = ParticipantFactory.create(team=team, identifier="bob@example.com", platform="web")
+    # Two participants, two sessions each on the same chatbot → distinct count is 2, not 4.
+    for participant in (alice, alice, bob):
+        _add_messages(
+            ExperimentSessionFactory.create(team=team, experiment=chatbot, participant=participant, platform="web"),
+            human=1,
+        )
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse(USAGE_URL), {"metric": "participants", "group_by": "chatbot"})
+
+    assert response.status_code == 200
+    row = response.json()["results"][0]
+    assert row["chatbot"]["name"] == "Shared"
+    assert row["participants"] == 2
+
+
+@pytest.mark.django_db()
+def test_participants_metric_with_group_by_participant_is_rejected():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    client = ApiTestClient(user, team)
+
+    response = client.get(
+        reverse(USAGE_URL),
+        {"metric": "participants", "group_by": "participant"},
+    )
+
+    assert response.status_code == 400
+    assert "redundant" in str(response.json()).lower()
 
 
 @pytest.mark.django_db()
@@ -132,6 +406,43 @@ def test_id_filters_avoid_joining_experiment_and_participant_tables():
     participant_q = resolve_query_filters(UsageQuery(team=team, participant=session.participant.public_id, **window))
     assert '"experiments_participant" on' not in str(_message_queryset(participant_q).query).lower()
     assert '"experiments_participant" on' not in str(_session_queryset(participant_q).query).lower()
+
+
+@pytest.mark.django_db()
+def test_tokens_only_grouped_skips_currency_scan():
+    """A grouped tokens-only request must not run the extra DISTINCT-currency scan; a cost request does."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    alice = ParticipantFactory.create(team=team, identifier="alice@example.com", platform="web")
+    session = ExperimentSessionFactory.create(team=team, participant=alice, platform="web")
+    _add_messages(session, human=1)
+    UsageRecordFactory.create(team=team, participant=alice, session=session, quantity=100, cost=Decimal("1"))
+    client = ApiTestClient(user, team)
+
+    def currency_scans(metric):
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get(reverse(USAGE_URL), {"metric": metric, "group_by": "participant"})
+        assert response.status_code == 200
+        return sum("distinct" in q["sql"].lower() and "currency" in q["sql"].lower() for q in ctx.captured_queries)
+
+    assert currency_scans("tokens") == 0
+    assert currency_scans("cost") >= 1
+
+
+@pytest.mark.django_db()
+def test_grouped_team_isolation():
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    other_team = TeamWithUsersFactory.create()
+    _add_messages(ExperimentSessionFactory.create(team=other_team), human=5)
+
+    client = ApiTestClient(user, team)
+    response = client.get(reverse(USAGE_URL), {"metric": "messages", "group_by": "participant"})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 0
+    assert data["results"] == []
 
 
 @pytest.mark.django_db()
