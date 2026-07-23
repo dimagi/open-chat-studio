@@ -37,6 +37,7 @@
       <select class="select select-sm select-bordered w-28 shrink-0" x-model="row.operator">
         <option value="eq">equals</option>
         <option value="in">in</option>
+        <option value="contains">contains</option>
       </select>
       <input type="text" class="input input-sm input-bordered flex-1 min-w-0"
              :placeholder="row.operator === 'in' ? 'comma-separated values' : 'value'"
