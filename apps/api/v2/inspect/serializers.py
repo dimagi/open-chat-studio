@@ -734,7 +734,10 @@ class PipelineBuildErrorsSerializer(serializers.Serializer):
 
     node = serializers.DictField(
         child=serializers.DictField(child=serializers.CharField()),
-        help_text="Per-field error messages keyed by ``node_id``.",
+        help_text=(
+            "Per-field error messages keyed by ``node_id``. Node-level errors that aren't about a "
+            "single field (e.g. 'End node is not reachable') appear under the ``root`` key."
+        ),
     )
     edge = serializers.ListField(
         child=serializers.CharField(),
@@ -812,18 +815,17 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
         return ChannelSerializer(get_channels(experiment), many=True).data
 
     def _build_state(self, experiment) -> dict:
-        # Computed once per response (validate() builds the whole graph) and shared by the three
-        # build-state fields below.
-        if not hasattr(self, "_build_state_cache"):
+        # Computed once per instance (validate() builds the whole graph) and shared by the three
+        # build-state fields below. Keyed by pk because DRF reuses one serializer instance across
+        # items under many=True.
+        cached = getattr(self, "_build_state_cache", None)
+        if cached is None or cached[0] != experiment.pk:
             if experiment.pipeline is None:
-                self._build_state_cache = {
-                    "pipeline_valid": None,
-                    "errors": normalize_errors({}),
-                    "unwired_handles": {},
-                }
+                state = {"pipeline_valid": None, "errors": normalize_errors({}), "unwired_handles": {}}
             else:
-                self._build_state_cache = pipeline_build_state(experiment.pipeline)
-        return self._build_state_cache
+                state = pipeline_build_state(experiment.pipeline)
+            self._build_state_cache = (experiment.pk, state)
+        return self._build_state_cache[1]
 
     @extend_schema_field(serializers.BooleanField(allow_null=True))
     def get_pipeline_valid(self, experiment) -> bool | None:

@@ -104,6 +104,32 @@ def test_invalid_router_still_reports_handles():
     ]
 
 
+@pytest.mark.django_db()
+def test_router_with_dangling_provider_model_still_reports_handles():
+    # A stale llm_provider_model_id makes the LLM mixin's before-validator raise
+    # PipelineNodeBuildError (not a pydantic error); handle derivation must fall back, not crash.
+    node = Node(
+        flow_id="router-1",
+        type="RouterNode",
+        params={
+            "name": "router",
+            "prompt": "route",
+            "keywords": ["a", "b"],
+            "llm_provider_id": 999999,
+            "llm_provider_model_id": 999999,
+        },
+    )
+    assert node_output_handles(node) == [
+        {"handle": "output_0", "label": "A"},
+        {"handle": "output_1", "label": "B"},
+    ]
+
+
+def test_unknown_node_type_has_no_output_handles():
+    node = Node(flow_id="ghost-1", type="GhostNode", params={"name": "ghost"})
+    assert node_output_handles(node) == []
+
+
 def test_boolean_node_handles_are_static():
     node = Node(flow_id="bool-1", type="BooleanNode", params={"name": "bool", "input_equals": "hi"})
     assert node_output_handles(node) == [
@@ -183,6 +209,45 @@ def test_missing_required_param_reports_node_error():
     assert "llm_provider_id" in state["errors"]["node"]["llm-1"]
     assert state["errors"]["edge"] == []
     assert state["errors"]["pipeline"] is None
+
+
+@pytest.mark.django_db()
+def test_dangling_provider_model_reference_reports_node_error_instead_of_raising():
+    """A node whose params reference a deleted LlmProviderModel raises PipelineNodeBuildError from
+    inside pydantic validation; the build state must fold it into errors.node, not 500."""
+    start, end = start_node(), end_node()
+    llm = {
+        "id": "llm-1",
+        "type": "LLMResponseWithPrompt",
+        "params": {
+            "name": "llm-1",
+            "prompt": "hi",
+            "llm_provider_id": 999999,
+            "llm_provider_model_id": 999999,
+        },
+    }
+    edges = [
+        {"id": "e1", "source": start["id"], "target": "llm-1"},
+        {"id": "e2", "source": "llm-1", "target": end["id"]},
+    ]
+    pipeline = create_pipeline_model([start, llm, end], edges)
+
+    state = pipeline_build_state(pipeline)
+
+    assert state["pipeline_valid"] is False
+    assert "does not exist" in state["errors"]["node"]["llm-1"]["root"]
+
+
+@pytest.mark.django_db()
+def test_unknown_node_type_reports_node_error_instead_of_raising():
+    start, end = start_node(), end_node()
+    ghost = {"id": "ghost-1", "type": "GhostNode", "params": {"name": "ghost"}}
+    pipeline = create_pipeline_model([start, ghost, end], edges=[])
+
+    state = pipeline_build_state(pipeline)
+
+    assert state["pipeline_valid"] is False
+    assert "GhostNode" in state["errors"]["node"]["ghost-1"]["root"]
 
 
 @pytest.mark.django_db()

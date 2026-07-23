@@ -17,7 +17,8 @@ never blocks anything.
 
 import pydantic
 
-from apps.pipelines.const import STANDARD_OUTPUT_NAME
+from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
+from apps.pipelines.exceptions import PipelineNodeBuildError
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import PipelineRouterNode
 from apps.pipelines.nodes.nodes import EndNode, StartNode
@@ -51,6 +52,9 @@ def unwired_handles(pipeline) -> dict:
     output are excluded (they have none).
     """
     edges = (pipeline.data or {}).get("edges", [])
+    # Wiredness is judged purely from the stored edges: an edge pointing at a handle its source no
+    # longer offers still marks that (source, handle) pair "wired" here — the stranded edge itself
+    # is the errors.edge bucket's concern (and, like validation, only surfaces for reachable nodes).
     wired_outputs = {(edge.get("source"), edge.get("sourceHandle") or STANDARD_OUTPUT_NAME) for edge in edges}
     wired_inputs = {edge.get("target") for edge in edges}
 
@@ -58,7 +62,7 @@ def unwired_handles(pipeline) -> dict:
     for node in pipeline.node_set.all():
         dangling = []
         if node.type != StartNode.__name__ and node.flow_id not in wired_inputs:
-            dangling.append({"handle": "input", "label": None})
+            dangling.append({"handle": STANDARD_INPUT_NAME, "label": None})
         for handle in node_output_handles(node):
             if (node.flow_id, handle["handle"]) not in wired_outputs:
                 dangling.append(handle)
@@ -76,7 +80,10 @@ def node_output_handles(node) -> list[dict]:
     """
     if node.type == EndNode.__name__:
         return []
-    node_class = getattr(pipeline_nodes, node.type)
+    node_class = getattr(pipeline_nodes, node.type, None)
+    if node_class is None:
+        # A node whose class was removed: validation reports it; we can't know its handles.
+        return []
     if issubclass(node_class, PipelineRouterNode):
         output_map = _router_output_map(node_class, node)
         return [{"handle": handle, "label": label} for handle, label in output_map.items()]
@@ -86,15 +93,17 @@ def node_output_handles(node) -> list[dict]:
 def _router_output_map(node_class, node) -> dict:
     """A router's handle -> branch-label map, tolerant of invalid params.
 
-    Prefer full validation so field normalization (keyword upper-casing) applies. An
-    incrementally-built router can be invalid in ways unrelated to its branches (e.g. a missing
-    required field), and must still report its handles, so fall back to an unvalidated instance
-    with the keywords upper-cased to match ``RouterMixin.ensure_keywords_are_uppercase``.
+    Prefer full validation so every field normalization applies — a router type whose
+    ``get_output_map()`` depends on validated/derived fields stays correct at the cost of one
+    redundant validation per read. An incrementally-built router can be invalid in ways unrelated
+    to its branches (a missing required field, a broken resource reference raising
+    ``PipelineNodeBuildError``), and must still report its handles, so fall back to an unvalidated
+    instance with the keywords upper-cased to match ``RouterMixin.ensure_keywords_are_uppercase``.
     """
     params = node.params or {}
     try:
         instance = node_class.model_validate({**params, "node_id": node.flow_id, "django_node": node})
-    except pydantic.ValidationError:
+    except (pydantic.ValidationError, PipelineNodeBuildError):
         fallback = dict(params)
         if isinstance(fallback.get("keywords"), list):
             fallback["keywords"] = [str(keyword).upper() for keyword in fallback["keywords"]]
