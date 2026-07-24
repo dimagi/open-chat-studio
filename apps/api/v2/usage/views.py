@@ -24,8 +24,9 @@ class PlatformCursorPagination(CursorPagination):
 
 
 class UsageView(APIView):
-    # A comment, not a docstring: drf-spectacular would publish a docstring as the operation
-    # description, and the per-operation description below is the client-facing one.
+    # A comment, not a docstring: drf-spectacular falls back to the view/class docstring for the
+    # operation description, so a docstring here would duplicate the per-operation description below
+    # (which is the client-facing one and takes precedence).
     # Team-scoped usage inspection. Returns message counts, session counts, distinct participant
     # counts, cost, and token counts over a time window, optionally bucketed, grouped by a dimension,
     # and narrowed by participant/chatbot/platform.

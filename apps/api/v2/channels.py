@@ -98,6 +98,7 @@ class TriggerBotMessageView(APIView):
     )
     @transaction.atomic
     def post(self, request):
-        # Not a docstring: the client-facing description lives in @extend_schema above, which
-        # drf-spectacular would otherwise override with this docstring.
+        # Not a docstring: the client-facing description lives in @extend_schema above. That
+        # description takes precedence over a method docstring, so a docstring here would be dead
+        # duplication that could silently drift out of sync with the published one.
         return handle_trigger_bot_message(request, TriggerBotMessageResponse)
