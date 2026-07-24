@@ -546,7 +546,9 @@ def provider_keys_api(request):
     report can attribute provider-side cost (keyed by the provider's redacted
     key) back to the owning team. Never returns the raw secret.
     """
-    return JsonResponse({"providers": list(get_provider_key_fingerprints())})
+    return JsonResponse(
+        {"providers": list(get_provider_key_fingerprints()), "metadata_fields": get_team_metadata_fields()}
+    )
 
 
 @is_superuser
