@@ -133,6 +133,13 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
             try:
                 result = evaluator.run(message, bot_response or "")
                 output = result.model_dump()
+                # Tag application deliberately shares the guarded atomic block so the
+                # result and its tags commit together. Today _maybe_apply_tag_rules
+                # cannot raise IntegrityError (its tag writes use bulk_create with
+                # ignore_conflicts=True and an AppliedTag unique key that includes the
+                # brand-new result row). If a future tag write could raise it, this
+                # except would misreport a fresh-result loss as a duplicate-race skip,
+                # so the guard would need narrowing to the create() alone.
                 try:
                     with transaction.atomic():
                         evaluation_result = EvaluationResult.objects.create(
@@ -187,7 +194,7 @@ def evaluate_message_batch(evaluation_run_id, message_ids):
     idempotency check resumes where it died.
     """
     try:
-        run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
+        run = EvaluationRun.objects.get(id=evaluation_run_id)
     except EvaluationRun.DoesNotExist:
         logger.warning("EvaluationRun %s gone; dropping batch of %s messages", evaluation_run_id, len(message_ids))
         return
