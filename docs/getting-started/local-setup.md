@@ -59,13 +59,16 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
 
         ### Build the front-end resources
 
-        To build JavaScript and CSS files, first install npm packages:
+        This project uses [pnpm](https://pnpm.io/) (provided via corepack, which ships with Node.js).
+        Enable it once with `corepack enable`.
+
+        To build JavaScript and CSS files, first install pnpm packages:
 
         ```bash
-        inv npm --install
+        inv pnpm --install
         # or
-        npm install
-        npm run dev
+        pnpm install
+        pnpm run dev
         ```
 
         **Note**
