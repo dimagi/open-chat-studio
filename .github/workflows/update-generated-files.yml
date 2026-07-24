@@ -1,8 +1,10 @@
-# This workflow automatically updates generated files when relevant code changes:
+# This workflow automatically fixes and regenerates files when Python code changes:
+# - Ruff safe fixes and formatting
 # - API schema (api-schemas/v1.yml) when API-related code changes
 # - Django migrations when model files change
-# Both are generated using Django management commands and committed back to the PR branch if changes are detected.
-# This ensures generated files stay in sync with code changes and prevents CI failures.
+# Ruff runs first so any regenerated files are already formatted. All changes are
+# committed back to the PR branch in a single commit if anything changed. This keeps
+# generated files in sync with code and prevents avoidable CI failures.
 
 name: Update Generated Files
 permissions:
@@ -11,15 +13,7 @@ permissions:
 on:
   pull_request:
     paths:
-      - 'apps/api/**'
-      - 'apps/**/models.py'
-      - 'apps/**/models/**.py'
-      - 'apps/**/serializers.py'
-      - 'apps/**/views.py'
-      - 'apps/**/views/**.py'
-      - 'apps/**/urls.py'
-      - 'config/urls.py'
-      - 'config/settings.py'
+      - '**.py'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -74,6 +68,11 @@ jobs:
           uv venv
           uv sync --locked --dev
 
+      - name: Apply ruff fixes
+        run: |
+          uv run ruff check --fix .
+          uv run ruff format .
+
       - name: Generate API Schema
         env:
           DJANGO_DATABASE_USER: postgres
@@ -91,7 +90,7 @@ jobs:
       - name: Check for changes
         id: verify-changed-files
         run: |
-          git add api-schemas/ apps/
+          git add -A
           if git diff --cached --exit-code; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -103,5 +102,5 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git commit -m "Update API schema and missing migrations"
+          git commit -m "Apply ruff fixes and update generated files"
           git push
