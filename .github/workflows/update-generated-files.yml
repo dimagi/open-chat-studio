@@ -1,8 +1,10 @@
-# This workflow automatically updates generated files when relevant code changes:
+# This workflow automatically fixes and regenerates files when Python code changes:
+# - Ruff safe fixes and formatting
 # - API schema (api-schemas/v1.yml) when API-related code changes
 # - Django migrations when model files change
-# Both are generated using Django management commands and committed back to the PR branch if changes are detected.
-# This ensures generated files stay in sync with code changes and prevents CI failures.
+# Ruff runs first so any regenerated files are already formatted. All changes are
+# committed back to the PR branch in a single commit if anything changed. This keeps
+# generated files in sync with code and prevents avoidable CI failures.
 
 name: Update Generated Files
 permissions:
@@ -11,15 +13,7 @@ permissions:
 on:
   pull_request:
     paths:
-      - 'apps/api/**'
-      - 'apps/**/models.py'
-      - 'apps/**/models/**.py'
-      - 'apps/**/serializers.py'
-      - 'apps/**/views.py'
-      - 'apps/**/views/**.py'
-      - 'apps/**/urls.py'
-      - 'config/urls.py'
-      - 'config/settings.py'
+      - '**.py'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -55,9 +49,17 @@ jobs:
         ports:
           - 6379:6379
     steps:
+      # Push with a GitHub App token (not GITHUB_TOKEN) so the commit re-triggers CI.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OCS_AGENT_APP_ID }}
+          private-key: ${{ secrets.OCS_AGENT_PRIVATE_KEY }}
+
       - uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ github.head_ref }}
 
       - name: Set up Python
@@ -73,6 +75,14 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
+
+      - name: Apply ruff fixes
+        # --exit-zero: apply every available fix but never fail the step on
+        # leftover unfixable violations, so schema/migration generation and the
+        # commit still run. The code-style job in lint_and_test.yml is the lint gate.
+        run: |
+          uv run ruff check --fix --exit-zero .
+          uv run ruff format .
 
       - name: Generate API Schema
         env:
@@ -91,7 +101,7 @@ jobs:
       - name: Check for changes
         id: verify-changed-files
         run: |
-          git add api-schemas/ apps/
+          git add -A
           if git diff --cached --exit-code; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -103,5 +113,5 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git commit -m "Update API schema and missing migrations"
+          git commit -m "Apply ruff fixes and update generated files"
           git push
