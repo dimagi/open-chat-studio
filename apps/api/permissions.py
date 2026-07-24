@@ -9,12 +9,13 @@ from django.http import HttpResponse
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication
-from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions
+from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
 from apps.api.session_tokens import session_token_expired, validate_session_token
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
+from apps.oauth.permissions import is_client_credentials_request
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
@@ -151,6 +152,19 @@ class SessionAccessPermission(BasePermission):
         return user.is_authenticated and session.participant and session.participant.user_id == user.id
 
 
+class IsAuthenticatedOrMachineToken(IsAuthenticated):
+    """IsAuthenticated that also admits client-credentials (machine) OAuth tokens.
+
+    Machine tokens have no user, so IsAuthenticated would reject them. For those, authorization is
+    delegated to the OAuth scope classes (which are always paired with this on protected views).
+    """
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            return True
+        return super().has_permission(request, view)
+
+
 class ReadOnlyAPIKeyPermission(BasePermission):
     """
     Allows only safe methods (GET, HEAD, OPTIONS) for read-only API keys.
@@ -159,6 +173,11 @@ class ReadOnlyAPIKeyPermission(BasePermission):
     def has_permission(self, request, view):
         if not hasattr(request, "auth") or request.auth is None:
             return False
+
+        if is_client_credentials_request(request):
+            # Machine token: no user and not an API key; authorization is delegated to the OAuth
+            # scope classes.
+            return True
 
         if not request.user or not request.user.is_authenticated:
             return False
@@ -186,6 +205,13 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
         "PATCH": ["%(app_label)s.change_%(model_name)s"],
         "DELETE": ["%(app_label)s.delete_%(model_name)s"],
     }
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            # Machine token: no user, so no membership-derived model permissions. Authorization is
+            # delegated to the OAuth scope classes.
+            return True
+        return super().has_permission(request, view)
 
 
 def verify_hmac(view_func):

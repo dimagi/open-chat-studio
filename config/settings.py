@@ -438,7 +438,7 @@ REST_FRAMEWORK = {
         "apps.api.permissions.BearerTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "apps.api.permissions.IsAuthenticatedOrMachineToken",
         "apps.api.permissions.ReadOnlyAPIKeyPermission",
         "apps.oauth.permissions.TokenHasOAuthScope",
     ],
