@@ -16,6 +16,7 @@ from pydantic_core.core_schema import FieldValidationInfo
 from apps.annotations.models import TagCategories
 from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
+    PipelineNodeRunError,
 )
 from apps.pipelines.models import (
     PipelineChatHistoryModes,
@@ -119,9 +120,13 @@ class LLMResponseMixin(BaseModel):
         try:
             return self.repo.get_llm_service(self.llm_provider_id)
         except RepositoryLookupError:
+            # Missing provider is a configuration problem the team can fix; surfaced as a build
+            # error so the channel pipeline replies with a canned message without reporting to Sentry.
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
-            raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
+            # A configured provider that fails to initialise (e.g. credentials that won't decrypt) is an
+            # operational failure that may be systemic -- raise a run error so it still reaches Sentry.
+            raise PipelineNodeRunError("There was an issue configuring the LLM service provider") from e
 
     def get_chat_model(self):
         model_name = self.repo.get_llm_provider_model(self.llm_provider_model_id).name
