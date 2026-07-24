@@ -184,9 +184,7 @@ ensure_pnpm() {
 
     error "pnpm is required for this project. Corepack ships with Node.js; ensure Node 24+ is installed and run 'corepack enable'."
     [ "$CHECK_ONLY" != true ] && exit 1
-    # In --check mode, report the problem but keep going (matches the other check_* functions).
-    # A bare `return 1` here is not exempt from `set -e` and would abort the whole --check run.
-    return 0
+    return 1
 }
 
 # Check Node.js and npm
