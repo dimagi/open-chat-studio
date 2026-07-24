@@ -38,7 +38,7 @@ def test_coordination_fields_default_empty():
     run = EvaluationRunFactory.create()
     assert run.in_flight == []
     assert run.evaluator_ids == []
-    assert run.wave_dispatched_at is None
+    assert run.batch_dispatched_at is None
     assert run.taskbadger_task_id == ""
     assert run.stall_count == 0
 
@@ -213,7 +213,7 @@ def _complete_messages(run, evaluators, messages):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_pending_dispatches_first_wave(delay_mock, _publish):
+def test_sweep_pending_dispatches_first_batch(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
 
     coordinate_evaluation_runs()
@@ -221,7 +221,7 @@ def test_sweep_pending_dispatches_first_wave(delay_mock, _publish):
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
     assert set(run.in_flight) == {m.id for m in messages}
-    assert run.wave_dispatched_at is not None
+    assert run.batch_dispatched_at is not None
     # 5 messages, BATCH_SIZE=3 => 2 batches
     assert delay_mock.call_count == 2
 
@@ -229,8 +229,8 @@ def test_sweep_pending_dispatches_first_wave(delay_mock, _publish):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_wave_size_capped(delay_mock, _publish):
-    # 40 messages, wave caps at WAVE_SIZE*BATCH_SIZE = 30 => 10 batches
+def test_sweep_dispatch_size_capped(delay_mock, _publish):
+    # 40 messages, dispatch caps at BATCHES_PER_TICK*BATCH_SIZE = 30 => 10 batches
     run, evaluators, messages = _make_run(message_count=40, status=EvaluationRunStatus.PENDING)
 
     coordinate_evaluation_runs()
@@ -243,13 +243,13 @@ def test_sweep_wave_size_capped(delay_mock, _publish):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_dispatches_next_wave_when_current_done(delay_mock, _publish):
+def test_sweep_dispatches_next_batch_when_current_done(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=40, status=EvaluationRunStatus.PROCESSING)
-    wave1 = messages[:30]
-    run.in_flight = [m.id for m in wave1]
-    run.wave_dispatched_at = timezone.now()
-    run.save(update_fields=["in_flight", "wave_dispatched_at"])
-    _complete_messages(run, evaluators, wave1)
+    batch1 = messages[:30]
+    run.in_flight = [m.id for m in batch1]
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    _complete_messages(run, evaluators, batch1)
 
     coordinate_evaluation_runs()
 
@@ -264,8 +264,8 @@ def test_sweep_dispatches_next_wave_when_current_done(delay_mock, _publish):
 def test_sweep_completes_when_nothing_remains(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
-    run.wave_dispatched_at = timezone.now()
-    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
     _complete_messages(run, evaluators, messages)
 
     coordinate_evaluation_runs()
@@ -293,12 +293,12 @@ def test_sweep_empty_plan_completes_immediately(delay_mock, _publish):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_fresh_wave_in_progress_is_noop(delay_mock, _publish):
+def test_sweep_fresh_batch_in_progress_is_noop(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
-    run.wave_dispatched_at = timezone.now()
-    run.save(update_fields=["in_flight", "wave_dispatched_at"])
-    # no results yet, wave just dispatched => not done, not stalled
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    # no results yet, batch just dispatched => not done, not stalled
 
     coordinate_evaluation_runs()
 
@@ -313,8 +313,8 @@ def test_sweep_fresh_wave_in_progress_is_noop(delay_mock, _publish):
 def test_sweep_stalled_redispatches_unfinished(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
-    run.wave_dispatched_at = timezone.now() - timedelta(hours=1)  # older than STALL_TIMEOUT
-    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    run.batch_dispatched_at = timezone.now() - timedelta(hours=1)  # older than STALL_TIMEOUT
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
     # Land the completed results an hour ago so the newest-result staleness signal is old too
     # (created_at is auto_now_add, so we must travel to backdate it).
     with time_machine.travel(timezone.now() - timedelta(hours=1)):
@@ -331,14 +331,14 @@ def test_sweep_stalled_redispatches_unfinished(delay_mock, _publish):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_old_wave_with_fresh_results_is_not_stalled(delay_mock, _publish):
-    """The newest-result arm of the staleness floor: an old wave_dispatched_at alone
+def test_sweep_old_batch_with_fresh_results_is_not_stalled(delay_mock, _publish):
+    """The newest-result arm of the staleness floor: an old batch_dispatched_at alone
     must not trigger a re-dispatch while fresh results are still landing."""
     run, evaluators, messages = _make_run(evaluator_count=2, message_count=3, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
-    run.wave_dispatched_at = timezone.now() - timedelta(hours=1)  # well past STALL_TIMEOUT
-    run.save(update_fields=["in_flight", "wave_dispatched_at"])
-    # Results from only one of the two evaluators: the wave is not done, but the rows
+    run.batch_dispatched_at = timezone.now() - timedelta(hours=1)  # well past STALL_TIMEOUT
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    # Results from only one of the two evaluators: the batch is not done, but the rows
     # carry created_at = now (auto_now_add), so the newest-result signal is fresh.
     _complete_messages(run, [evaluators[0]], messages)
 
@@ -360,8 +360,8 @@ def test_sweep_counts_partially_evaluated_message_as_remaining(delay_mock, _publ
     run, evaluators, messages = _make_run(evaluator_count=2, message_count=2, status=EvaluationRunStatus.PROCESSING)
     fully_done, partial = messages
     run.in_flight = [m.id for m in messages]
-    run.wave_dispatched_at = timezone.now()
-    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
     _complete_messages(run, evaluators, [fully_done])  # both evaluators done
     _complete_messages(run, [evaluators[0]], [partial])  # only one of the two
 
@@ -369,7 +369,7 @@ def test_sweep_counts_partially_evaluated_message_as_remaining(delay_mock, _publ
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING  # not COMPLETED
-    delay_mock.assert_not_called()  # fresh wave still in progress => no-op tick
+    delay_mock.assert_not_called()  # fresh batch still in progress => no-op tick
 
 
 @pytest.mark.django_db()
@@ -378,9 +378,9 @@ def test_sweep_counts_partially_evaluated_message_as_remaining(delay_mock, _publ
 def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
-    run.wave_dispatched_at = timezone.now() - timedelta(hours=1)
+    run.batch_dispatched_at = timezone.now() - timedelta(hours=1)
     run.stall_count = 2  # already stalled twice with no progress
-    run.save(update_fields=["in_flight", "wave_dispatched_at", "stall_count"])
+    run.save(update_fields=["in_flight", "batch_dispatched_at", "stall_count"])
     # no results at all => no progress
 
     coordinate_evaluation_runs()
@@ -394,7 +394,7 @@ def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_run_evaluation_task_fast_path_dispatches_wave_one(delay_mock, _publish):
+def test_run_evaluation_task_fast_path_dispatches_batch_one(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
 
     run_evaluation_task(run.id)
@@ -408,7 +408,7 @@ def test_run_evaluation_task_fast_path_dispatches_wave_one(delay_mock, _publish)
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.models.Evaluator.run")
 def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _publish):
-    """A run larger than one wave completes across several ticks, with no duplicate results.
+    """A run larger than one batch completes across several ticks, with no duplicate results.
 
     Each tick dispatches batches into `dispatched`; we drain them by calling the real
     evaluate_message_batch (which runs evaluate_single_message_task in-process), then

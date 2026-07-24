@@ -7,6 +7,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.urls import reverse
@@ -565,9 +566,9 @@ class EvaluationRun(BaseTeamModel):
         ),
     )
     # Coordination state, written only by the beat coordinator under a row lock.
-    evaluator_ids = SanitizedJSONField(default=list)  # evaluator ids frozen at creation
-    in_flight = SanitizedJSONField(default=list)  # message ids of the current wave
-    wave_dispatched_at = models.DateTimeField(null=True, blank=True)
+    evaluator_ids = ArrayField(models.IntegerField(), default=list)  # evaluator ids frozen at creation
+    in_flight = ArrayField(models.IntegerField(), default=list)  # message ids of the current batch
+    batch_dispatched_at = models.DateTimeField(null=True, blank=True)
     stall_count = models.PositiveSmallIntegerField(default=0)
     taskbadger_task_id = models.CharField(max_length=255, blank=True)
 

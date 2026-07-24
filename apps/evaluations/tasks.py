@@ -50,10 +50,10 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
-# --- Beat-coordinated evaluation waves (see docs/superpowers/plans/2026-07-23-deploy-safe-eval-runs.md) ---
+# --- Beat-coordinated evaluation batches (see docs/adr/0046-deploy-safe-evaluation-runs.md) ---
 BATCH_SIZE = 3  # messages per batch task
-WAVE_SIZE = 10  # batches per wave; WAVE_SIZE * BATCH_SIZE = messages dispatched per wave
-STALL_TIMEOUT = timedelta(minutes=12)  # no fresh results for this long => wave is stalled
+BATCHES_PER_TICK = 10  # batch tasks dispatched per tick; BATCHES_PER_TICK * BATCH_SIZE = messages per tick
+STALL_TIMEOUT = timedelta(minutes=12)  # no fresh results for this long => the dispatched batch is stalled
 MAX_STALLS = 3  # consecutive stalls with no progress => run marked FAILED
 BATCH_SOFT_TIME_LIMIT = 240  # seconds; best-effort bound under the 5-min visibility timeout
 TASKBADGER_STALE_TIMEOUT = 300  # seconds; TB alerts if a run's task goes this long without an update
@@ -80,6 +80,66 @@ def _pending_evaluator_ids(evaluation_run, message_id, evaluator_ids):
         ).values_list("evaluator_id", flat=True)
     )
     return [evaluator_id for evaluator_id in evaluator_ids if evaluator_id not in already_done]
+
+
+def _create_evaluation_result(evaluation_run, evaluator, message, output, session_id, *, apply_tags):
+    """Create one EvaluationResult idempotently; absorb a duplicate-race insert.
+
+    Returns the created result, or None when a concurrent delivery already wrote the
+    row (the unique constraint rejects the second insert — the other delivery won).
+
+    Tag application deliberately shares the guarded atomic block so the result and its
+    tags commit together. Today _maybe_apply_tag_rules cannot raise IntegrityError (its
+    tag writes use bulk_create with ignore_conflicts=True and an AppliedTag unique key
+    that includes the brand-new result row). If a future tag write could raise it, this
+    guard would misreport a fresh-result loss as a duplicate-race skip and would need
+    narrowing to the create() alone.
+    """
+    try:
+        with transaction.atomic():
+            evaluation_result = EvaluationResult.objects.create(
+                message=message,
+                run=evaluation_run,
+                evaluator=evaluator,
+                output=output,
+                team=evaluation_run.team,
+                session_id=session_id,
+            )
+            if apply_tags:
+                _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
+    except IntegrityError:
+        logger.info(
+            "EvaluationResult for run %s message %s evaluator %s already exists; skipping (race)",
+            evaluation_run.id,
+            message.id,
+            evaluator.id,
+        )
+        return None
+    return evaluation_result
+
+
+def _run_evaluator_on_message(evaluation_run, evaluator, message, bot_response, session_id):
+    """Run a single evaluator over a single message and persist the outcome.
+
+    On evaluator failure an error result is stored (matching the no-retry behaviour);
+    on success the result is written and its Score rows are derived.
+    """
+    try:
+        output = evaluator.run(message, bot_response or "").model_dump()
+    except Exception as e:
+        logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
+        _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
+        return
+
+    evaluation_result = _create_evaluation_result(
+        evaluation_run, evaluator, message, output, session_id, apply_tags=True
+    )
+    if evaluation_result is None:
+        return
+    try:
+        write_scores_from_evaluation_result(evaluation_result)
+    except Exception:
+        logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
 
 
 @shared_task
@@ -125,63 +185,11 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
         )
         evaluators = {e.id: e for e in evaluators_qs}
         for evaluator_id in pending_evaluator_ids:
-            try:
-                evaluator = evaluators[evaluator_id]
-            except KeyError:
+            evaluator = evaluators.get(evaluator_id)
+            if evaluator is None:
                 logger.warning(f"Evaluator {evaluator_id} not found, skipping")
                 continue
-            try:
-                result = evaluator.run(message, bot_response or "")
-                output = result.model_dump()
-                # Tag application deliberately shares the guarded atomic block so the
-                # result and its tags commit together. Today _maybe_apply_tag_rules
-                # cannot raise IntegrityError (its tag writes use bulk_create with
-                # ignore_conflicts=True and an AppliedTag unique key that includes the
-                # brand-new result row). If a future tag write could raise it, this
-                # except would misreport a fresh-result loss as a duplicate-race skip,
-                # so the guard would need narrowing to the create() alone.
-                try:
-                    with transaction.atomic():
-                        evaluation_result = EvaluationResult.objects.create(
-                            message=message,
-                            run=evaluation_run,
-                            evaluator=evaluator,
-                            output=output,
-                            team=evaluation_run.team,
-                            session_id=session_id,
-                        )
-                        _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
-                except IntegrityError:
-                    logger.info(
-                        "EvaluationResult for run %s message %s evaluator %s already exists; skipping (race)",
-                        evaluation_run_id,
-                        message_id,
-                        evaluator_id,
-                    )
-                    continue
-                try:
-                    write_scores_from_evaluation_result(evaluation_result)
-                except Exception:
-                    logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
-            except Exception as e:
-                logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
-                try:
-                    with transaction.atomic():
-                        EvaluationResult.objects.create(
-                            message=message,
-                            run=evaluation_run,
-                            evaluator=evaluator,
-                            output={"error": str(e)},
-                            team=evaluation_run.team,
-                            session_id=session_id,
-                        )
-                except IntegrityError:
-                    logger.info(
-                        "Error EvaluationResult for run %s message %s evaluator %s already exists; skipping (race)",
-                        evaluation_run_id,
-                        message_id,
-                        evaluator_id,
-                    )
+            _run_evaluator_on_message(evaluation_run, evaluator, message, bot_response, session_id)
 
 
 @shared_task(acks_late=True, soft_time_limit=BATCH_SOFT_TIME_LIMIT)
@@ -237,31 +245,31 @@ def _done_message_ids(run, plan_ids, evaluator_ids) -> set[int]:
 
 
 def _is_stalled(run) -> bool:
-    """True if no fresh results have landed for the current wave within STALL_TIMEOUT.
+    """True if no fresh results have landed for the current batch within STALL_TIMEOUT.
 
-    The wave_dispatched_at floor stops a freshly dispatched wave (zero results yet)
+    The batch_dispatched_at floor stops a freshly dispatched batch (zero results yet)
     from looking stalled.
     """
     newest = EvaluationResult.objects.filter(run=run).aggregate(m=Max("created_at"))["m"]
-    reference = max([ts for ts in (newest, run.wave_dispatched_at) if ts is not None], default=None)
+    reference = max([ts for ts in (newest, run.batch_dispatched_at) if ts is not None], default=None)
     if reference is None:
         return False
     return timezone.now() - reference > STALL_TIMEOUT
 
 
-def _dispatch_new_wave(run, ordered_remaining) -> list[list[int]]:
-    """Pick the next wave, persist coordination state, return the batches to dispatch."""
-    wave = ordered_remaining[: WAVE_SIZE * BATCH_SIZE]
-    run.in_flight = wave
-    run.wave_dispatched_at = timezone.now()
-    run.stall_count = 0  # reaching here means progress (first wave, or previous wave done)
+def _dispatch_new_batch(run, ordered_remaining) -> list[list[int]]:
+    """Pick the next batch of work, persist coordination state, return the batch tasks to dispatch."""
+    dispatched = ordered_remaining[: BATCHES_PER_TICK * BATCH_SIZE]
+    run.in_flight = dispatched
+    run.batch_dispatched_at = timezone.now()
+    run.stall_count = 0  # reaching here means progress (first batch, or previous batch done)
     run.status = EvaluationRunStatus.PROCESSING
-    run.save(update_fields=["in_flight", "wave_dispatched_at", "stall_count", "status"])
-    return _chunk(wave, BATCH_SIZE)
+    run.save(update_fields=["in_flight", "batch_dispatched_at", "stall_count", "status"])
+    return _chunk(dispatched, BATCH_SIZE)
 
 
 def _redispatch_unfinished(run, remaining) -> tuple[list[list[int]], bool]:
-    """Re-dispatch only the unfinished messages of the current wave.
+    """Re-dispatch only the unfinished messages of the current batch.
 
     Returns (batches, failed). `failed` is True when the run has stalled MAX_STALLS
     times without any progress and has been marked FAILED.
@@ -285,8 +293,8 @@ def _redispatch_unfinished(run, remaining) -> tuple[list[list[int]], bool]:
         return [], True
 
     run.in_flight = unfinished
-    run.wave_dispatched_at = timezone.now()  # reset the clock to avoid a hot re-dispatch loop
-    run.save(update_fields=["in_flight", "wave_dispatched_at", "stall_count"])
+    run.batch_dispatched_at = timezone.now()  # reset the clock to avoid a hot re-dispatch loop
+    run.save(update_fields=["in_flight", "batch_dispatched_at", "stall_count"])
     return _chunk(unfinished, BATCH_SIZE), False
 
 
@@ -322,17 +330,17 @@ def _coordinate_locked_run(run) -> _TickResult:
         return _TickResult(batches=[], done=total, total=total, terminal="success")
 
     in_flight = set(run.in_flight or [])
-    wave_done = not (in_flight & remaining)
+    batch_done = not (in_flight & remaining)
 
-    if run.status == EvaluationRunStatus.PENDING or wave_done:
-        batches = _dispatch_new_wave(run, sorted(remaining))
+    if run.status == EvaluationRunStatus.PENDING or batch_done:
+        batches = _dispatch_new_batch(run, sorted(remaining))
         return _TickResult(batches=batches, done=done, total=total, terminal=None)
 
     if _is_stalled(run):
         batches, failed = _redispatch_unfinished(run, remaining)
         return _TickResult(batches=batches, done=done, total=total, terminal="error" if failed else None)
 
-    # wave in progress with fresh results — the common case — costs nothing.
+    # dispatched batch in progress with fresh results — the common case — costs nothing.
     return _TickResult(batches=[], done=done, total=total, terminal=None)
 
 
@@ -542,7 +550,7 @@ def _create_message_history(chat, history: list[dict]):
 @shared_task
 def run_evaluation_task(evaluation_run_id):
     """Fast-path kick for a freshly created run: run one coordination tick immediately
-    so the first wave dispatches without waiting for the next beat. The beat sweep's
+    so the first batch dispatches without waiting for the next beat. The beat sweep's
     PENDING branch is the backstop if this dispatcher is lost.
     """
     try:
