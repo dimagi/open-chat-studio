@@ -179,6 +179,16 @@ class DocumentSourceManager:
         A single bad document must not abort the whole sync: log it, record it, and
         carry on so the remaining files are still processed and indexed.
         """
+        if not document.page_content.strip():
+            msg = "Skipping document with empty content (file may be a scanned/image-based document with no extractable text)"
+            logger.warning(
+                msg,
+                extra={"document_source_id": self.document_source.id, "identifier": identifier},
+            )
+            result.files_failed += 1
+            result.failures.append(f"{identifier}: {msg}")
+            return None
+
         try:
             if identifier in existing_files_map:
                 existing_file = existing_files_map[identifier]

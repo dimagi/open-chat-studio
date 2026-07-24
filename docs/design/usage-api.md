@@ -144,7 +144,123 @@ Ungrouped, `total` granularity — a single totals object under `results`. With 
 and no `group_by`, `results` is one row per time bucket (each row carries `bucket_start`).
 
 Grouping by participant emits **both** `public_id` and `identifier` per row so clients can map by
-either handle.
+either handle. Chatbot rows carry `{public_id, name}`; platform rows carry the slug directly.
+
+`group_by` combined with a finer `granularity` produces **flat rows**: one row per `(group, bucket)`,
+each carrying the group identity and a `bucket_start`. Pagination is over the groups (the shared
+`CursorPagination`), and each page's groups are expanded to their buckets; the max-window guard bounds
+the bucket count. The group universe is the groups **active in the window** (those with at least one
+message), so idle groups don't produce all-zero rows.
+
+## Examples
+
+All requests authenticate with an API key in the `X-api-key` header and are scoped to that key's
+team. The examples use `https://www.openchatstudio.com` as the host.
+
+### Original ask — a participant's messages this month
+
+The brief in one call: how many messages a given participant sent this calendar month.
+
+```bash
+curl -H "X-api-key: $OCS_API_KEY" \
+  "https://www.openchatstudio.com/api/v2/usage/?metric=messages&period=current_month&participant=3fa85f64-5717-4562-b3fc-2c963f66afa6"
+```
+
+Ungrouped at `total` granularity, so `results` is a single object and `group_by` is null:
+
+```json
+{
+  "period": {"start": "2026-07-01T00:00:00+00:00", "end": "2026-08-01T00:00:00+00:00", "timezone": "UTC"},
+  "granularity": "total",
+  "group_by": null,
+  "results": {"messages": {"human": 42, "ai": 40, "total": 82}}
+}
+```
+
+Swap `participant=<public_id>` for `participant_identifier=user@example.com` to filter by the handle
+you already know instead of the UUID.
+
+### Cost + tokens over an explicit window
+
+Metrics are additive, so ask for both in one round-trip. An explicit `start`/`end` window replaces
+`period`; both are required, and the range includes `start` but excludes `end`.
+
+```bash
+curl -H "X-api-key: $OCS_API_KEY" \
+  "https://www.openchatstudio.com/api/v2/usage/?metric=cost&metric=tokens&start=2026-07-01&end=2026-08-01"
+```
+
+```json
+{
+  "period": {"start": "2026-07-01T00:00:00+00:00", "end": "2026-08-01T00:00:00+00:00", "timezone": "UTC"},
+  "granularity": "total",
+  "group_by": null,
+  "results": {
+    "cost": {"total": "1.23450000", "currency": "USD"},
+    "tokens": {"prompt": 120000, "completion": 45000, "total": 178000}
+  }
+}
+```
+
+`prompt` and `completion` need not sum to `total`: cache-write tokens land in `total` only.
+
+### Grouped breakdown with cursor pagination
+
+`group_by` returns one row per group active in the window, cursor-paginated. `count` appears on the
+first page only; follow `next` until it's null.
+
+```bash
+curl -H "X-api-key: $OCS_API_KEY" \
+  "https://www.openchatstudio.com/api/v2/usage/?metric=messages&metric=cost&group_by=participant&period=current_month"
+```
+
+```json
+{
+  "period": {"start": "2026-07-01T00:00:00+00:00", "end": "2026-08-01T00:00:00+00:00", "timezone": "UTC"},
+  "group_by": "participant",
+  "count": 128,
+  "next": "https://www.openchatstudio.com/api/v2/usage/?cursor=cD0yMDI2LTA3LTE1",
+  "previous": null,
+  "results": [
+    {
+      "participant": {"public_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "identifier": "user@example.com", "platform": "web"},
+      "messages": {"human": 42, "ai": 40, "total": 82},
+      "cost": {"total": "0.01234000", "currency": "USD"}
+    }
+  ]
+}
+```
+
+Group identity varies by dimension: `group_by=chatbot` rows carry `{public_id, name}`;
+`group_by=platform` rows carry the slug string directly.
+
+### Timeseries — one row per time bucket
+
+A finer `granularity` returns `results` as an array, one row per bucket, each with a `bucket_start`.
+Empty buckets are zero-filled across the whole window.
+
+```bash
+curl -H "X-api-key: $OCS_API_KEY" \
+  "https://www.openchatstudio.com/api/v2/usage/?metric=messages&granularity=daily&start=2026-07-01&end=2026-07-04"
+```
+
+```json
+{
+  "period": {"start": "2026-07-01T00:00:00+00:00", "end": "2026-07-04T00:00:00+00:00", "timezone": "UTC"},
+  "granularity": "daily",
+  "group_by": null,
+  "results": [
+    {"bucket_start": "2026-07-01T00:00:00+00:00", "messages": {"human": 3, "ai": 3, "total": 6}},
+    {"bucket_start": "2026-07-02T00:00:00+00:00", "messages": {"human": 0, "ai": 0, "total": 0}},
+    {"bucket_start": "2026-07-03T00:00:00+00:00", "messages": {"human": 5, "ai": 5, "total": 10}}
+  ]
+}
+```
+
+Windows exceeding **366 buckets** for the requested granularity are rejected with a 400 — use a
+coarser granularity or a smaller window. Pass `tz=America/New_York` to compute bucket and calendar
+boundaries in a non-UTC timezone (echoed back in `period.timezone`). `group_by` and `granularity`
+combine into flat `(group, bucket)` rows.
 
 ## Decisions
 

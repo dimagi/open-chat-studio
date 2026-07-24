@@ -11,6 +11,8 @@ export type PipelineManagerStoreType = {
   updatePipelineName: (name: string) => void;
   savePipeline: (pipelne: PipelineType) => Promise<void>;
   autoSaveCurrentPipline: () => void;
+  // Internal: flush a debounced save, serializing against any in-flight PATCH
+  _flushSave: () => void;
   // Internal PATCH helper
   _patchPipeline: (diff: PipelineDiffPayload) => Promise<void>;
   // Conflict handling

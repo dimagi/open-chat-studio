@@ -51,6 +51,45 @@ class UsageBucketResultSerializer(UsageResultsSerializer):
     bucket_start = serializers.DateTimeField(help_text="Inclusive start of this bucket, in the request timezone.")
 
 
+class ParticipantIdentitySerializer(serializers.Serializer):
+    public_id = serializers.UUIDField(help_text="Stable participant identifier.")
+    identifier = serializers.CharField(help_text="Human-readable handle (email/phone/anon id).")
+    platform = serializers.CharField(help_text="Channel platform the participant belongs to.")
+
+
+class ChatbotIdentitySerializer(serializers.Serializer):
+    public_id = serializers.UUIDField(help_text="Stable chatbot identifier.")
+    name = serializers.CharField(help_text="Chatbot name.")
+
+
+class GroupedUsageRowSerializer(UsageResultsSerializer):
+    """One breakdown row: the group's identity plus a block per requested metric. Exactly one of
+    ``participant``/``chatbot``/``platform`` is present (matching ``group_by``); ``bucket_start`` is
+    present only when a finer granularity expands each group into per-bucket rows."""
+
+    participant = ParticipantIdentitySerializer(required=False)
+    chatbot = ChatbotIdentitySerializer(required=False)
+    platform = serializers.CharField(required=False, help_text="Channel platform slug (platform grouping).")
+    bucket_start = serializers.DateTimeField(
+        required=False, help_text="Inclusive start of this bucket, in the request timezone."
+    )
+
+
+class GroupedUsageResponseSerializer(serializers.Serializer):
+    """The grouped, cursor-paginated response envelope. Documents the shape the view assembles from the
+    shared ``CursorPagination`` plus the ``period``/``group_by`` context."""
+
+    period = UsagePeriodSerializer(source="*")
+    group_by = serializers.CharField(help_text="Dimension the rows are grouped by.")
+    count = serializers.IntegerField(
+        help_text="Total number of groups matching the query. Only present on the first page.",
+        required=False,
+    )
+    next = serializers.CharField(help_text="Cursor URL for the next page, or null.", allow_null=True)
+    previous = serializers.CharField(help_text="Cursor URL for the previous page, or null.", allow_null=True)
+    results = GroupedUsageRowSerializer(many=True)
+
+
 class UsageResponseSerializer(serializers.Serializer):
     period = UsagePeriodSerializer(source="*")
     granularity = serializers.CharField(help_text="Time-bucketing applied to the results.")
@@ -67,7 +106,8 @@ class UsageResponseSerializer(serializers.Serializer):
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_group_by(self, obj) -> None:
-        # Grouping arrives in a later slice; this slice is always ungrouped.
+        # This serializer renders the ungrouped response only; grouped requests use
+        # GroupedUsageResponseSerializer, so group_by is always null here.
         return None
 
     @extend_schema_field(
