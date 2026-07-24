@@ -12,7 +12,8 @@ from django.urls import reverse
 
 from apps.chat.models import ChatMessage
 from apps.experiments.models import Participant
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.events import ScheduledMessageFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -123,6 +124,40 @@ def test_machine_token_deletes_participant_schedule(session):
     }
     response = client.post(reverse("api:participant-data"), data=payload, format="json")
     assert response.status_code == 200, response.content
+
+
+@pytest.mark.django_db()
+def test_machine_token_cannot_cancel_another_teams_schedule(session):
+    """Schedule cancellation is scoped to the caller's participant+experiment (no cross-tenant IDOR)."""
+    victim_team = TeamWithUsersFactory.create()
+    victim_experiment = ExperimentFactory.create(team=victim_team)
+    victim_participant = ParticipantFactory.create(team=victim_team, identifier="victim", platform="api")
+    victim_schedule = ScheduledMessageFactory.create(
+        team=victim_team,
+        experiment=victim_experiment,
+        participant=victim_participant,
+        external_id="vics1",
+        custom_schedule_params={"time_period": "days", "frequency": 1, "repetitions": 1},
+    )
+
+    # Attacker's token is pinned to its own team and references its own experiment, but supplies the
+    # victim's schedule external_id.
+    client = _machine_client(session.team, scopes=["participants:write", "participants:read"])
+    payload = {
+        "identifier": "attacker",
+        "platform": "api",
+        "data": [
+            {
+                "experiment": str(session.experiment.public_id),
+                "schedules": [{"id": "vics1", "delete": True}],
+            }
+        ],
+    }
+    response = client.post(reverse("api:participant-data"), data=payload, format="json")
+
+    assert response.status_code == 200, response.content
+    victim_schedule.refresh_from_db()
+    assert victim_schedule.cancelled_at is None
 
 
 @pytest.mark.django_db()

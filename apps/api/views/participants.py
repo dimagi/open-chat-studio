@@ -344,9 +344,11 @@ def _create_update_schedules(request, experiment, participant, schedule_data):
     if delete_ids:
         # Machine (client-credentials) tokens have no user to attribute the cancellation to.
         cancelled_by = request.user if request.user.is_authenticated else None
-        ScheduledMessage.objects.filter(external_id__in=delete_ids).update(
-            cancelled_at=timezone.now(), cancelled_by=cancelled_by
-        )
+        # Scope to this participant + experiment (as the update path above does) so a caller cannot
+        # cancel another team's scheduled messages by supplying their external_id.
+        ScheduledMessage.objects.filter(
+            external_id__in=delete_ids, participant=participant, experiment=experiment
+        ).update(cancelled_at=timezone.now(), cancelled_by=cancelled_by)
     if updated:
         ScheduledMessage.objects.bulk_update(updated, fields=["next_trigger_date", "custom_schedule_params"])
     if new:
