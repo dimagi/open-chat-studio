@@ -105,8 +105,8 @@ class Command(IdempotentCommand):
             # Update pipeline node references (stored as JSON params, not DB FKs)
             related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
             new_value = replacement_model.id if replacement_model else None
-            for node in related_pipeline_nodes.select_related("pipeline").all():
-                _update_pipeline_node_param(node.pipeline, node, "llm_provider_model_id", new_value)
+            for node in related_pipeline_nodes.all():
+                _update_pipeline_node_param(node, "llm_provider_model_id", new_value)
 
             # Delete the model (bypass custom delete to avoid related-object pre-checks)
             super(LlmProviderModel, db_model).delete()

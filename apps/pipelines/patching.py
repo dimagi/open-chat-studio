@@ -5,20 +5,26 @@ Never touches the database directly — the caller (the PATCH view) is responsib
 for persisting the merged graph and calling update_nodes_from_data().
 """
 
-from apps.pipelines.flow import EdgeDiff, Flow, NodeDiff, PipelineDiffPayload
+from apps.pipelines.flow import EdgeDiff, Flow, NodeDiff, PipelineDiffPayload, split_flow_data
 
 
-def apply_pipeline_patch(current_data: dict, patch: PipelineDiffPayload) -> dict:
-    """Apply a semantic graph diff to ``current_data`` and return the complete merged graph.
+def apply_pipeline_patch(current_data: dict, patch: PipelineDiffPayload) -> tuple[dict, dict[str, dict]]:
+    """Apply a semantic graph diff to ``current_data`` and return ``(layout_data, node_data)``.
 
-    The returned dict is a valid ``Pipeline.data`` value and can be assigned directly.
+    ``layout_data`` is the complete merged graph in the persisted layout-only format
+    (node content stripped, see ADR-0046) and can be assigned to ``Pipeline.data``.
     Node and edge objects not mentioned in the patch are preserved unchanged.
 
-    Important: the caller must still call ``update_nodes_from_data()`` after saving
-    the merged graph to synchronise the database Node rows.
+    ``node_data`` carries content only for the patch's update nodes and the adds that
+    actually entered the graph (duplicate adds are skipped entirely), ready for
+    ``update_nodes_from_data(node_data)`` — which the caller must still invoke after
+    saving. Each entry also carries the node's position so the save shadow-writes it
+    onto the row's position columns. Content blobs still embedded in old-format
+    ``current_data`` are stripped, never promoted to node content: the Node rows own it.
     """
     # Preserve any keys that Flow.model_dump() may drop (e.g. viewport)
     flow = Flow(**current_data)
+    existing_node_ids = {node.id for node in flow.nodes}
 
     _apply_node_diff(flow, patch.nodes)
     _apply_edge_diff(flow, patch.edges)
@@ -29,7 +35,26 @@ def apply_pipeline_patch(current_data: dict, patch: PipelineDiffPayload) -> dict
     for key in current_data:
         if key not in merged:
             merged[key] = current_data[key]
-    return merged
+    layout_data, _ = split_flow_data(merged)
+    # An add for an id already in the graph is skipped by _apply_node_diff (idempotent
+    # retry), so its content must not overwrite the existing Node row either — unless the
+    # same patch deletes that id first, which makes the add a genuine replacement.
+    deleted_ids = set(patch.nodes.delete)
+    content_nodes = {node.id: node for node in patch.nodes.update}
+    for node in patch.nodes.add:
+        if node.id not in existing_node_ids or node.id in deleted_ids:
+            content_nodes.setdefault(node.id, node)
+    node_data = {
+        node.id: {
+            "type": node.data.type,
+            "label": node.data.label,
+            "params": node.data.params,
+            "position": node.position,
+        }
+        for node in content_nodes.values()
+        if node.data
+    }
+    return layout_data, node_data
 
 
 def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:

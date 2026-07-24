@@ -1,3 +1,11 @@
+class MissingNodeDataError(ValueError):
+    """A saved graph contains node ids with no provided content and no existing Node row."""
+
+    def __init__(self, node_ids):
+        self.node_ids = sorted(node_ids)
+        super().__init__(f"No node data provided for new node(s): {self.node_ids}")
+
+
 class PipelineBuildError(Exception):
     """Exception to raise for errors detected at build time."""
 

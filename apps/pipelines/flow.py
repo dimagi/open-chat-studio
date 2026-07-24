@@ -19,7 +19,9 @@ class FlowNode(pydantic.BaseModel):
     id: str
     type: Literal["pipelineNode", "startNode", "endNode"] = "pipelineNode"
     position: dict = Field(default_factory=dict)
-    data: FlowNodeData
+    # Persisted pipeline data is layout-only, so stored nodes have no content. Full nodes
+    # (data populated) appear on the wire and in Pipeline.flow_data output.
+    data: FlowNodeData | None = None
 
 
 class FlowEdge(pydantic.BaseModel):
@@ -34,6 +36,53 @@ class Flow(pydantic.BaseModel):
     nodes: list[FlowNode]
     edges: list[FlowEdge]
     errors: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+#: The only node keys persisted in ``Pipeline.data`` — everything else is node content
+#: owned by the ``Node`` model (see ADR-0046).
+LAYOUT_NODE_KEYS = ("id", "type", "position")
+
+
+def split_flow_data(data: dict) -> tuple[dict, dict[str, dict]]:
+    """Split a full react-flow graph into layout-only data and per-node content.
+
+    Returns ``(layout_data, node_data)`` where ``layout_data`` keeps only
+    ``LAYOUT_NODE_KEYS`` per node (edges and unknown top-level keys pass through) and
+    ``node_data`` maps flow_id to ``{"type", "label", "params", "position"}`` for every
+    node that carried an embedded ``data`` key. ``position`` lets the save shadow-write
+    the layout onto the ``Node`` position columns; the layout in ``Pipeline.data`` stays
+    authoritative until a follow-up PR switches reads over. Layout-only input yields an
+    empty ``node_data``. The input is not mutated.
+    """
+    if "nodes" not in data:
+        return {**data}, {}
+
+    node_data = {}
+    layout_nodes = []
+    for node in data["nodes"]:
+        content = node.get("data")
+        if content:
+            node_data[node["id"]] = {
+                "type": content["type"],
+                "label": content.get("label", ""),
+                "params": content.get("params", {}),
+                "position": node.get("position"),
+            }
+        layout_nodes.append({key: node[key] for key in LAYOUT_NODE_KEYS if key in node})
+    return {**data, "nodes": layout_nodes}, node_data
+
+
+def node_position_fields(position) -> dict:
+    """Map a react-flow position onto the ``Node`` position column values.
+
+    Returns ``{"position_x", "position_y"}``, or ``{}`` when the position is missing or
+    malformed (raw import files bypass wire validation) so the caller skips the write.
+    """
+    x = position.get("x") if isinstance(position, dict) else None
+    y = position.get("y") if isinstance(position, dict) else None
+    if isinstance(x, int | float) and isinstance(y, int | float):
+        return {"position_x": x, "position_y": y}
+    return {}
 
 
 class FlowPipelineData(pydantic.BaseModel):

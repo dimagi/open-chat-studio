@@ -3,7 +3,6 @@ create or update the row locally, restore its timestamps, and record the FK tran
 plain functions plus a thin loop so the transforms can be unit-tested without a database."""
 
 import contextlib
-import copy
 import functools
 from collections.abc import Callable, Iterable
 
@@ -117,17 +116,6 @@ def remap_node_params(params: dict, store: FKTranslationStore) -> dict:
             result[key] = [store.get_target(label, as_int(v)) or v for v in value]
         else:
             result[key] = store.get_target(label, as_int(value)) or value
-    return result
-
-
-def remap_pipeline_data(data: dict | None, store: FKTranslationStore) -> dict | None:
-    if not data or "nodes" not in data:
-        return data
-    result = copy.deepcopy(data)
-    for node in result["nodes"]:
-        params = node.get("data", {}).get("params")
-        if isinstance(params, dict):
-            node["data"]["params"] = remap_node_params(params, store)
     return result
 
 
@@ -423,10 +411,9 @@ class Importer:
             field_values[field.name] = row[field.name]
 
     def _remap_embedded_resource_ids(self, model_label: str, field_values: dict) -> None:
-        """Rewrite the source resource ids buried in a pipeline's graph or a node's params in place."""
-        if model_label == "pipelines.pipeline" and "data" in field_values:
-            field_values["data"] = remap_pipeline_data(field_values["data"], self.store)
-        elif model_label == "pipelines.node" and "params" in field_values:
+        """Rewrite the source resource ids buried in a node's params in place. Pipeline data is
+        layout-only (ADR-0046) and carries no resource ids, so it imports as-is."""
+        if model_label == "pipelines.node" and "params" in field_values:
             field_values["params"] = remap_node_params(field_values["params"], self.store)
 
     def _build_m2m_values(self, model: type[models.Model], row: dict, named: set) -> dict:
