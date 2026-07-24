@@ -26,17 +26,12 @@
 <script>
     function createDatasetWithFilters(linkElement, experimentId) {
       const params = new URLSearchParams(window.location.search);
-      let filterIndex = 0;
-      while (params.has(`filter_${filterIndex}_column`)) {
-        filterIndex++;
-      }
 
-      params.set(`filter_${filterIndex}_column`, 'experiment');
-      params.set(`filter_${filterIndex}_operator`, 'any of');
-      params.set(`filter_${filterIndex}_value`, JSON.stringify([experimentId]));
+      params.set('f_experiment', experimentId);
+      params.set('op_experiment', 'any of');
 
       const newUrl = linkElement.href + '?' + params.toString();
-      
+
       linkElement.href = newUrl;
     }
 </script>

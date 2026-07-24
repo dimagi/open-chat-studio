@@ -1084,7 +1084,7 @@ class DatasetAutoPopulationRuleForm(forms.ModelForm):
             raise forms.ValidationError(f"Invalid filter query: {e}") from e
         if not params.filters:
             raise forms.ValidationError("Filter query is malformed: no complete column/operator/value triples found.")
-        return raw
+        return params.to_query()
 
     def clean_source_experiment(self):
         experiment = self.cleaned_data.get("source_experiment")

@@ -203,20 +203,58 @@
           }
         }
       },
-      loadFiltersFromQueryString(queryString) {
-        const urlParams = new URLSearchParams(queryString);
-        const filters = [];
-        let maxIndex = -1;
-        for (const [key, value] of urlParams.entries()) {
-          const match = key.match(/filter_(\d+)_column/);
-          if (match) {
-            const index = parseInt(match[1]);
-            if (index > maxIndex) maxIndex = index;
+      parseCSVTildeValue(csvString) {
+        // Parse tilde-separated values, respecting quoted strings
+        const values = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < csvString.length; i++) {
+          const char = csvString[i];
+
+          if (char === '"') {
+            if (inQuotes && csvString[i + 1] === '"') {
+              // Escaped quote ("")
+              current += '"';
+              i++;
+            } else {
+              // Start/end quoted section
+              inQuotes = !inQuotes;
+            }
+          } else if (char === '~' && !inQuotes) {
+            values.push(current);
+            current = '';
+          } else {
+            current += char;
           }
         }
-        for (let i = 0; i <= maxIndex; i++) {
-          filters.push({
-            column: '',
+
+        values.push(current);
+
+        return values;
+      },
+
+      loadFiltersFromQueryString(queryString) {
+        const urlParams = new URLSearchParams(queryString);
+        const columns = new Set();
+
+        // Detect columns using the new format (f_* parameters)
+        for (const [key] of urlParams.entries()) {
+          if (key.startsWith('f_')) {
+            columns.add(key.substring(2));
+          }
+        }
+
+        // Keep only columns that have both a value (f_*) and an operator (op_*)
+        const validColumns = Array.from(columns)
+          .filter(columnName => urlParams.has(`f_${columnName}`) && urlParams.has(`op_${columnName}`));
+
+        const filters = validColumns.map(columnName => {
+          const valueParam = urlParams.get(`f_${columnName}`);
+          const operatorParam = urlParams.get(`op_${columnName}`);
+
+          const filter = {
+            column: columnName,
             operator: '',
             value: '',
             selectedValues: [],
@@ -224,51 +262,40 @@
             showOptions: false,
             searchQuery: '',
             filteredOptions: []
-          });
-        }
-        for (let i = 0; i <= maxIndex; i++) {
-          const columnParam = urlParams.get(`filter_${i}_column`);
-          const operatorParam = urlParams.get(`filter_${i}_operator`);
-          const valueParam = urlParams.get(`filter_${i}_value`);
+          };
 
-          if (columnParam && operatorParam) {
-            const filter = filters[i];
-            filter.column = columnParam;
-
-            if (this.filterData.columns[columnParam]) {
-              filter.availableOperators = this.filterData.columns[columnParam].operators;
-              filter.operator = operatorParam;
-              if (operatorParam === 'range' && valueParam) {
-                filter.options = this.filterData.columns[columnParam].options || this.dateRangeOptions;
-                const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
-                if (matchedOption) {
-                  filter.value = matchedOption.value.toString();
-                } else {
-                  filter.value = valueParam;
-                }
-              }
-              else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
-                try {
-                  const parsedValues = JSON.parse(valueParam);
-                  if (this.isObjectChoiceFilter(filter)) {
-                    filter.selectedValues = parsedValues.filter(id => {
-                      return this.filterData.columns[filter.column].options.findIndex(exp => String(exp.id) === String(id)) >= 0;
-                    });
-                  } else {
-                    filter.selectedValues = parsedValues;
-                  }
-                  if (this.filterData.columns[columnParam].options) {
-                    filter.filteredOptions = [...this.filterData.columns[columnParam].options];
-                  }
-                } catch (e) {
-                  console.error('Error parsing filter value from URL:', e);
-                }
-              } else if (valueParam) {
-                filter.value = valueParam;
-              }
-            }
+          const columnConfig = this.filterData.columns[columnName];
+          if (!columnConfig) {
+            return filter;
           }
-        }
+
+          filter.availableOperators = columnConfig.operators;
+          filter.operator = operatorParam;
+
+          if (operatorParam === 'range' && valueParam) {
+            filter.options = columnConfig.options || this.dateRangeOptions;
+            const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
+            filter.value = matchedOption ? matchedOption.value.toString() : valueParam;
+          } else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
+            // Parse CSV with tilde separator
+            const parsedValues = this.parseCSVTildeValue(valueParam);
+            if (this.isObjectChoiceFilter(filter)) {
+              filter.selectedValues = parsedValues.filter(id =>
+                columnConfig.options.findIndex(exp => String(exp.id) === String(id)) >= 0
+              );
+            } else {
+              filter.selectedValues = parsedValues;
+            }
+            if (columnConfig.options) {
+              filter.filteredOptions = [...columnConfig.options];
+            }
+          } else if (valueParam) {
+            filter.value = valueParam;
+          }
+
+          return filter;
+        });
+
         this.filterData.filters = this.getActiveFilters(filters);
         this.filterData.showFilters = false;
         if (this.filterData.filters.length === 0) {
@@ -279,18 +306,29 @@
         this.syncChatbotVersionsField(this.filterData.filters);
       },
 
+      serializeCSVTildeValues(values) {
+        // Serialize values for tilde-separated format, quoting values containing ~ or "
+        return values.map(v => {
+          const str = String(v);
+          if (str.includes('~') || str.includes('"')) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        }).join('~');
+      },
+
       updateUrlWithFilters() {
         let activeFilters = this.getActiveFilters(this.filterData.filters);
         const params = new URLSearchParams(window.location.search);
+
+        // Remove old format new parameters
         [...params.keys()].forEach(key => {
-          if (key.startsWith('filter_')) {
+          if (key.startsWith('f_') || key.startsWith('op_')) {
             params.delete(key);
           }
         });
-        activeFilters.forEach((filter, i) => {
-          params.set(`filter_${i}_column`, filter.column);
-          params.set(`filter_${i}_operator`, filter.operator);
 
+        activeFilters.forEach((filter) => {
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
               let valuesToSerialize = filter.selectedValues;
@@ -300,11 +338,12 @@
                   return option ? option.id : label;
                 });
               }
-              params.set(`filter_${i}_value`, JSON.stringify(valuesToSerialize));
+              params.set(`f_${filter.column}`, this.serializeCSVTildeValues(valuesToSerialize));
             }
           } else {
-            params.set(`filter_${i}_value`, filter.value);
+            params.set(`f_${filter.column}`, filter.value);
           }
+          params.set(`op_${filter.column}`, filter.operator);
         });
 
         const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
@@ -316,10 +355,7 @@
 
         let filterParams = {};
         let activeFilters = this.getActiveFilters(this.filterData.filters);
-        activeFilters.forEach((filter, i) => {
-          filterParams[`filter_${i}_column`] = filter.column;
-          filterParams[`filter_${i}_operator`] = filter.operator;
-
+        activeFilters.forEach((filter) => {
           if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
             if (filter.selectedValues && filter.selectedValues.length > 0) {
               let valuesToSend = filter.selectedValues;
@@ -329,11 +365,12 @@
                   return option ? option.id : label;
                 });
               }
-              filterParams[`filter_${i}_value`] = JSON.stringify(valuesToSend);
+              filterParams[`f_${filter.column}`] = this.serializeCSVTildeValues(valuesToSend);
             }
           } else {
-            filterParams[`filter_${i}_value`] = filter.value;
+            filterParams[`f_${filter.column}`] = filter.value;
           }
+          filterParams[`op_${filter.column}`] = filter.operator;
         });
 
         this.syncChatbotVersionsField(activeFilters);
@@ -451,14 +488,17 @@
       setLabelFromURL() {
         const url = new URL(window.location.href);
         const params = url.searchParams;
-        const matchedIndex = this.getDateRangeFilterIndex(params);
-        if (matchedIndex !== null) {
-          const filterValue = params.get(`filter_${matchedIndex}_value`);
-          const found = this.dateRangeOptions.find(opt => opt.value === filterValue);
+        const dateRangeColumn = '{{ df_date_range_column_name }}';
+
+        // Check new format
+        if (params.has(`f_${dateRangeColumn}`) && params.has(`op_${dateRangeColumn}`)) {
+          const filterValue = params.get(`f_${dateRangeColumn}`);
+          const found = this.dateRangeOptions.find(opt => opt.value === filterValue || opt.label === filterValue);
           this.selectedLabel = found?.label || '';
-        } else {
-          this.selectedLabel = '';
+          return;
         }
+
+        this.selectedLabel = '';
       },
 
       selectOption(option) {
@@ -497,18 +537,6 @@
         if (!filter || filter.column !== 'tags') return false;
         const allTags = this.filterData.columns['tags'].options || [];
         return allTags.length > 0 && filter.selectedValues.length === allTags.length;
-      },
-
-      getDateRangeFilterIndex(params) {
-        for (const [key, val] of params.entries()) {
-          if (key.includes('_column') && val === '{{ df_date_range_column_name }}') {
-            const match = key.match(/filter_(\d+)_column/);
-            if (match) {
-              return match[1];
-            }
-          }
-        }
-        return null;
       },
 
       syncDateRangeDropdown(value) {

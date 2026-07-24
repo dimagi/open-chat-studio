@@ -133,9 +133,8 @@ class TestExperimentSessionFilters:
     def test_message_tags_any_of_returns_no_duplicates(self, session_with_many_message_tags):
         session, _ = session_with_many_message_tags
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["important", "urgent"]),
+            "f_tags": "important~urgent",
+            "op_tags": Operators.ANY_OF,
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -146,9 +145,8 @@ class TestExperimentSessionFilters:
     def test_message_tags_all_of_returns_no_duplicates(self, session_with_many_message_tags):
         session, _ = session_with_many_message_tags
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ALL_OF,
-            "filter_0_value": json.dumps(["important", "urgent"]),
+            "f_tags": "important~urgent",
+            "op_tags": Operators.ALL_OF,
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -166,9 +164,8 @@ class TestExperimentSessionFilters:
         other = ExperimentSessionFactory.create(experiment=session.experiment)
 
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.EXCLUDES,
-            "filter_0_value": json.dumps(["nonexistent"]),
+            "f_tags": "nonexistent",
+            "op_tags": Operators.EXCLUDES,
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -198,9 +195,8 @@ class TestExperimentSessionFilters:
         target_date = (timezone.now().date() + timedelta(days=value_offset_days)).isoformat()
 
         params = {
-            "filter_0_column": "message_date",
-            "filter_0_operator": operator,
-            "filter_0_value": target_date,
+            "f_message_date": target_date,
+            "op_message_date": operator,
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -215,9 +211,8 @@ class TestExperimentSessionFilters:
         """The relative ``range`` operator must not multiply rows either."""
         session, _ = session_with_many_message_tags
         params = {
-            "filter_0_column": "message_date",
-            "filter_0_operator": Operators.RANGE,
-            "filter_0_value": "1d",
+            "f_message_date": "1d",
+            "op_message_date": Operators.RANGE,
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -259,7 +254,7 @@ class TestExperimentSessionFilters:
 
         # Test ON first message
         sessions_queryset = session1.experiment.sessions.all()
-        params = {"filter_0_column": "first_message", "filter_0_operator": Operators.ON, "filter_0_value": "2025-01-01"}
+        params = {"f_first_message": "2025-01-01", "op_first_message": Operators.ON}
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
@@ -267,9 +262,8 @@ class TestExperimentSessionFilters:
 
         # Test BEFORE last message
         params = {
-            "filter_0_column": "last_message",
-            "filter_0_operator": Operators.BEFORE,
-            "filter_0_value": "2025-01-02",
+            "f_last_message": "2025-01-02",
+            "op_last_message": Operators.BEFORE,
         }
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)))
@@ -278,9 +272,8 @@ class TestExperimentSessionFilters:
 
         # Test AFTER first message
         params = {
-            "filter_0_column": "first_message",
-            "filter_0_operator": Operators.AFTER,
-            "filter_0_value": "2025-01-01",
+            "f_first_message": "2025-01-01",
+            "op_first_message": Operators.AFTER,
         }
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(sessions_queryset, FilterParams(_get_querydict(params)))
@@ -294,22 +287,21 @@ class TestExperimentSessionFilters:
         # Test ANY_OF with one tag
         session_queryset = sessions[0].experiment.sessions.all()
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["important"]),
+            "f_tags": "important",
+            "op_tags": Operators.ANY_OF,
         }
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 2
 
         # Test ANY_OF with multiple tags
-        params["filter_0_value"] = json.dumps(["important", "follow-up"])
+        params["f_tags"] = "important~follow-up"
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 2
 
         # Test ALL_OF with multiple tags
-        params["filter_0_operator"] = Operators.ALL_OF
+        params["op_tags"] = Operators.ALL_OF
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
@@ -323,9 +315,8 @@ class TestExperimentSessionFilters:
         """
         sessions, _ = sessions_with_tags
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["important"]),
+            "f_tags": "important",
+            "op_tags": Operators.ANY_OF,
         }
         qs = ExperimentSessionFilter().apply(
             sessions[0].experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -350,9 +341,8 @@ class TestExperimentSessionFilters:
         other.chat.add_tag(other_tag, team=other.team, added_by=None)
 
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["shared"]),
+            "f_tags": "shared",
+            "op_tags": Operators.ANY_OF,
         }
         filtered = ExperimentSessionFilter().apply(
             session.experiment.sessions.all(), FilterParams(_get_querydict(params))
@@ -367,9 +357,8 @@ class TestExperimentSessionFilters:
         # Test ANY_OF with one version
         session_queryset = sessions[0].experiment.sessions.all()
         params = {
-            "filter_0_column": "versions",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["v1"]),
+            "f_versions": "v1",
+            "op_versions": Operators.ANY_OF,
         }
 
         session_filter = ExperimentSessionFilter()
@@ -377,8 +366,8 @@ class TestExperimentSessionFilters:
         assert filtered.count() == 2
 
         # Test ALL_OF with both versions
-        params["filter_0_operator"] = Operators.ALL_OF
-        params["filter_0_value"] = json.dumps(["v1", "v2"])
+        params["op_versions"] = Operators.ALL_OF
+        params["f_versions"] = "v1~v2"
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert filtered.count() == 1
@@ -394,12 +383,10 @@ class TestExperimentSessionFilters:
 
         session_queryset = sessions[0].experiment.sessions.all()
         params = {
-            "filter_0_column": "participant",
-            "filter_0_operator": Operators.CONTAINS,
-            "filter_0_value": "user1",
-            "filter_1_column": "tags",
-            "filter_1_operator": Operators.ANY_OF,
-            "filter_1_value": json.dumps(["important"]),
+            "f_participant": "user1",
+            "op_participant": Operators.CONTAINS,
+            "f_tags": "important",
+            "op_tags": Operators.ANY_OF,
         }
 
         session_filter = ExperimentSessionFilter()
@@ -410,7 +397,7 @@ class TestExperimentSessionFilters:
     def test_empty_filters(self, base_session):
         """Test behavior with empty or invalid filters"""
         # Empty filter values should be ignored
-        params = {"filter_0_column": "participant", "filter_0_operator": Operators.EQUALS, "filter_0_value": ""}
+        params = {"f_participant": "", "op_participant": Operators.EQUALS}
 
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(
@@ -419,8 +406,8 @@ class TestExperimentSessionFilters:
         assert filtered.count() == base_session.experiment.sessions.count()
 
         # Invalid filter column should be ignored
-        params["filter_0_column"] = "invalid_column"
-        params["filter_0_value"] = "test"
+        params["f_invalid_column"] = "test"
+        params["op_invalid_column"] = Operators.EQUALS
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(
             base_session.experiment.sessions.all(), FilterParams(_get_querydict(params)), None
@@ -434,32 +421,31 @@ class TestExperimentSessionFilters:
         # Test ANY_OF with one tag
         session_queryset = sessions[0].experiment.sessions.all()
         params = {
-            "filter_0_column": "tags",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps(["important"]),
+            "f_tags": "important",
+            "op_tags": Operators.ANY_OF,
         }
 
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert set(filtered) == set(sessions), f"Expected both sessions with 'important', got {filtered}"
 
-        params["filter_0_value"] = json.dumps(["follow-up"])
+        params["f_tags"] = "follow-up"
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert set(filtered) == {sessions[1]}, f"Expected session2 with 'follow-up', got {filtered}"
 
-        params["filter_0_value"] = json.dumps(["important", "follow-up"])
+        params["f_tags"] = "important~follow-up"
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert set(filtered) == set(sessions), f"Expected both sessions with either tag, got {filtered}"
 
-        params["filter_0_operator"] = Operators.ALL_OF
+        params["op_tags"] = Operators.ALL_OF
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert list(filtered) == [sessions[1]], f"Expected only session2 with both tags, got {list(filtered)}"
 
-        params["filter_0_operator"] = Operators.EXCLUDES
-        params["filter_0_value"] = json.dumps(["important"])
+        params["op_tags"] = Operators.EXCLUDES
+        params["f_tags"] = "important"
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert list(filtered) == [], f"Expected no sessions to exclude 'important', got {list(filtered)}"
@@ -472,17 +458,16 @@ class TestExperimentSessionFilters:
         session_queryset = sessions[0].experiment.sessions.all()
 
         params = {
-            "filter_0_column": "state",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps([SessionStatus.ACTIVE.value]),
+            "f_state": SessionStatus.ACTIVE.value,
+            "op_state": Operators.ANY_OF,
         }
 
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.status == SessionStatus.ACTIVE for s in filtered)
 
-        params["filter_0_operator"] = Operators.EXCLUDES
-        params["filter_0_value"] = json.dumps([SessionStatus.ACTIVE.value])
+        params["op_state"] = Operators.EXCLUDES
+        params["f_state"] = SessionStatus.ACTIVE.value
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.status != SessionStatus.ACTIVE for s in filtered)
@@ -498,16 +483,15 @@ class TestExperimentSessionFilters:
         session_to_update.participant.save()
 
         params = {
-            "filter_0_column": "remote_id",
-            "filter_0_operator": Operators.ANY_OF,
-            "filter_0_value": json.dumps([test_id]),
+            "f_remote_id": test_id,
+            "op_remote_id": Operators.ANY_OF,
         }
 
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.participant.remote_id == test_id for s in filtered)
 
-        params["filter_0_operator"] = Operators.EXCLUDES
+        params["op_remote_id"] = Operators.EXCLUDES
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert all(s.participant.remote_id != test_id for s in filtered)
@@ -519,28 +503,27 @@ class TestExperimentSessionFilters:
         target_external_id = str(target.external_id)
 
         params = {
-            "filter_0_column": "session_id",
-            "filter_0_operator": Operators.EQUALS,
-            "filter_0_value": target_external_id,
+            "f_session_id": target_external_id,
+            "op_session_id": Operators.EQUALS,
         }
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert list(filtered) == [target]
 
-        params["filter_0_operator"] = Operators.EQUALS
-        params["filter_0_value"] = target_external_id.upper()
+        params["op_session_id"] = Operators.EQUALS
+        params["f_session_id"] = target_external_id.upper()
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert list(filtered) == [target], "EQUALS should be case-insensitive"
 
-        params["filter_0_operator"] = Operators.STARTS_WITH
-        params["filter_0_value"] = target_external_id[:8]
+        params["op_session_id"] = Operators.STARTS_WITH
+        params["f_session_id"] = target_external_id[:8]
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert target in filtered
 
-        params["filter_0_operator"] = Operators.DOES_NOT_CONTAIN
-        params["filter_0_value"] = target_external_id
+        params["op_session_id"] = Operators.DOES_NOT_CONTAIN
+        params["f_session_id"] = target_external_id
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(session_queryset, FilterParams(_get_querydict(params)))
         assert target not in filtered
@@ -590,9 +573,8 @@ class TestParticipantFilter:
 
         params = _get_querydict(
             {
-                "filter_0_column": "participant",
-                "filter_0_operator": operator,
-                "filter_0_value": value,
+                "f_participant": value,
+                "op_participant": operator,
             }
         )
 

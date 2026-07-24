@@ -38,9 +38,8 @@ class TestTraceFilter:
     def _create_filter_and_apply(self, queryset, column, operator, value, timezone="UTC"):
         """Helper method to create a filter and apply it"""
         params = {
-            "filter_0_column": column,
-            "filter_0_operator": operator,
-            "filter_0_value": value,
+            f"f_{column}": value,
+            f"op_{column}": operator,
         }
         query_params = QueryDict("", mutable=True)
         query_params.update(params)
