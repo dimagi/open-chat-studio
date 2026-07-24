@@ -82,7 +82,7 @@ jobs:
             exit 0
           fi
 
-          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
 
           # Fetch issue details
           ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json title,body)
@@ -90,13 +90,14 @@ jobs:
           ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
 
           DELIMITER="ghadelim_$(openssl rand -hex 8)"
-          echo "issue_title<<$DELIMITER" >> $GITHUB_OUTPUT
-          echo "$ISSUE_TITLE" >> $GITHUB_OUTPUT
-          echo "$DELIMITER" >> $GITHUB_OUTPUT
-
-          echo "issue_body<<$DELIMITER" >> $GITHUB_OUTPUT
-          echo "$ISSUE_BODY" >> $GITHUB_OUTPUT
-          echo "$DELIMITER" >> $GITHUB_OUTPUT
+          {
+            echo "issue_title<<$DELIMITER"
+            echo "$ISSUE_TITLE"
+            echo "$DELIMITER"
+            echo "issue_body<<$DELIMITER"
+            echo "$ISSUE_BODY"
+            echo "$DELIMITER"
+          } >> "$GITHUB_OUTPUT"
 
   # ── Scheduled / manual: implement the next task on the found issue ──
   scheduled:
@@ -155,7 +156,7 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - uses: pnpm/action-setup@v4
 
@@ -173,7 +174,7 @@ jobs:
         run: |
           BRANCH_NAME="claude/${{ needs.find-work.outputs.issue_number }}-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude Code
         id: claude
@@ -269,7 +270,7 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - uses: pnpm/action-setup@v4
 

@@ -41,9 +41,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER="${{ inputs.pr_number || github.event.pull_request.number }}"
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           REF=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefName --jq '.headRefName')
-          echo "ref=$REF" >> $GITHUB_OUTPUT
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -65,7 +65,7 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - uses: pnpm/action-setup@v4
 
