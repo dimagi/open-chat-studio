@@ -5,6 +5,7 @@ from apps.admin.provider_keys import mask_secret
 from apps.service_providers.models import LlmProviderTypes
 from apps.users.models import CustomUser
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.team import TeamFactory
 
 OPENAI_KEY = "sk-abcdefghijklJrYA"
 ANTHROPIC_KEY = "sk-ant-api03-cLVxxxxxxxxxxlAAA"
@@ -57,12 +58,38 @@ def test_masks_keys_and_never_leaks_secret(superuser_client):
     assert by_type["openai"]["masked_key"] == "sk-...JrYA"
     assert by_type["openai"]["organization"] == "org-x"
     assert by_type["anthropic"]["masked_key"] == "sk-ant-api03-cLV...lAAA"
-    # Every record carries the team so the report can attribute cost.
-    assert all(p["team_id"] and p["team_name"] for p in providers)
+    # Every record carries the team so the report can attribute cost, plus the
+    # team slug + metadata so a zero-usage team is still labelled in the report.
+    assert all(p["team_id"] and p["team_name"] and p["team_slug"] for p in providers)
+    assert all("metadata" in p for p in providers)
+    assert "metadata_fields" in response.json()
 
     body = response.content.decode()
     assert OPENAI_KEY not in body
     assert ANTHROPIC_KEY not in body
+
+
+@pytest.mark.django_db()
+def test_exposes_team_slug_and_filtered_metadata(superuser_client, settings):
+    # A team can own a key but have no usage in a reporting window, so the key
+    # registry must carry its label metadata (only the configured fields).
+    settings.TEAM_METADATA_FIELDS = [
+        {"key": "team_owner", "label": "Team Owner"},
+        {"key": "region", "label": "Region"},
+    ]
+    team = TeamFactory(name="Alpha", metadata={"team_owner": "Jia", "internal_only": "hidden"})
+    LlmProviderFactory(team=team, type=str(LlmProviderTypes.openai), config={"openai_api_key": OPENAI_KEY})
+
+    payload = superuser_client.get(reverse("ocs_admin:provider_keys_api")).json()
+
+    assert payload["metadata_fields"] == [
+        {"key": "team_owner", "label": "Team Owner", "type": "text"},
+        {"key": "region", "label": "Region", "type": "text"},
+    ]
+    record = payload["providers"][0]
+    assert record["team_slug"] == team.slug
+    # Only configured fields are exposed; unconfigured keys stay hidden, missing ones blank.
+    assert record["metadata"] == {"team_owner": "Jia", "region": ""}
 
 
 @pytest.mark.django_db()
