@@ -1,9 +1,9 @@
 from drf_spectacular.utils import OpenApiExample, PolymorphicProxySerializer, extend_schema
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
+from apps.api.permissions import IsAuthenticatedOrMachineToken
 from apps.api.v2.usage import services
 from apps.api.v2.usage.param_serializers import UsageQuerySerializer
 from apps.api.v2.usage.permissions import CanViewUsage
@@ -32,7 +32,7 @@ class UsageView(APIView):
     # and narrowed by participant/chatbot/platform.
     # See docs/design/usage-api.md.
 
-    permission_classes = [IsAuthenticated, CanViewUsage, TokenHasOAuthResourceScope]
+    permission_classes = [IsAuthenticatedOrMachineToken, CanViewUsage, TokenHasOAuthResourceScope]
     required_scopes = ["usage"]
 
     @extend_schema(

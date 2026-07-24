@@ -438,7 +438,7 @@ REST_FRAMEWORK = {
         "apps.api.permissions.BearerTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "apps.api.permissions.IsAuthenticatedOrMachineToken",
         "apps.api.permissions.ReadOnlyAPIKeyPermission",
         "apps.oauth.permissions.TokenHasOAuthScope",
     ],
@@ -1034,6 +1034,20 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
             "profile": "User Profile",
         }
     )
+# Scopes a client-credentials (machine) application may be granted. Deliberately explicit: new
+# scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile) are excluded because a
+# machine token has no user. Enforced at token issuance by APIScopedValidator.validate_scopes.
+OAUTH_CLIENT_CREDENTIALS_SCOPES = [
+    "chatbots:read",
+    "chatbots:interact",
+    "sessions:read",
+    "sessions:write",
+    "files:read",
+    "participants:read",
+    "participants:write",
+    "usage:read",
+]
+
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"

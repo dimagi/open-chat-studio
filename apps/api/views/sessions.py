@@ -195,7 +195,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     @action(detail=True, methods=["post"])
     def end_experiment_session(self, request, id):
         try:
-            session = ExperimentSession.objects.get(external_id=id)
+            session = ExperimentSession.objects.get(external_id=id, team=request.team)
         except ExperimentSession.DoesNotExist:
             return Response({"error": "Session not found:{id}"}, status=status.HTTP_404_NOT_FOUND)
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_VIA_API)
@@ -208,7 +208,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             return Response({"error": "Missing 'state' in request"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            session = ExperimentSession.objects.get(external_id=id)
+            session = ExperimentSession.objects.get(external_id=id, team=request.team)
         except ExperimentSession.DoesNotExist:
             return Response({"error": f"Session not found: {id}"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -273,6 +273,8 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             return Response({"error": f"Session not found: {id}"}, status=status.HTTP_404_NOT_FOUND)
 
         if request.method == "POST":
+            # Machine (client-credentials) tokens have no user to attribute the tag to.
+            acting_user = request.user if request.user.is_authenticated else None
             # Add tags - create if they don't exist
             for tag_name in tag_names:
                 tag, _ = Tag.objects.get_or_create(
@@ -280,9 +282,9 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
                     team=request.team,
                     is_system_tag=False,
                     category="",
-                    defaults={"created_by": request.user},
+                    defaults={"created_by": acting_user},
                 )
-                session.chat.add_tag(tag, request.team, added_by=request.user)
+                session.chat.add_tag(tag, request.team, added_by=acting_user)
         elif request.method == "DELETE":
             # Remove tags (only user tags, not system tags)
             tags_to_remove = Tag.objects.filter(name__in=tag_names, team=request.team, is_system_tag=False)
