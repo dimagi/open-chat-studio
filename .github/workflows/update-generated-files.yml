@@ -57,7 +57,7 @@ jobs:
           app-id: ${{ vars.OCS_AGENT_APP_ID }}
           private-key: ${{ secrets.OCS_AGENT_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           token: ${{ steps.app-token.outputs.token }}
           ref: ${{ github.head_ref }}
