@@ -302,6 +302,13 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         )
                     )
                 collection_file.status = FileStatus.COMPLETED
+            except FileNotFoundError as e:
+                logger.warning(
+                    "Failed to index file: file not found in storage. The file record exists in the database "
+                    "but the corresponding object is missing from storage. The file may need to be re-uploaded.",
+                    extra={"file_id": file.id, "file_name": file.name, "error": str(e)},
+                )
+                collection_file.status = FileStatus.FAILED
             except Exception as e:
                 logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
                 collection_file.status = FileStatus.FAILED
