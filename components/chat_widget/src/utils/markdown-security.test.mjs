@@ -35,7 +35,7 @@ const { window } = new JSDOM('');
 const DOMPurify = createDOMPurify(window);
 
 function sanitizeMarkdown(content) {
-  const html = marked.parse(content);
+  const html = marked.parse(content, { async: false });
   return DOMPurify.sanitize(html, SANITIZE_CONFIG);
 }
 
