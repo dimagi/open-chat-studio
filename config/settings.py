@@ -596,6 +596,10 @@ SCHEDULED_TASKS = {
         "task": "apps.evaluations.auto_population.auto_populate_eval_datasets",
         "schedule": timedelta(minutes=5),
     },
+    "evaluations.tasks.coordinate_evaluation_runs": {
+        "task": "apps.evaluations.tasks.coordinate_evaluation_runs",
+        "schedule": 30,
+    },
 }
 
 CACHES = {
@@ -704,6 +708,9 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
                     # ignore these since they execute often and fire other tasks that we already track
                     "apps.events.tasks.enqueue_static_triggers",
                     "apps.events.tasks.enqueue_timed_out_events",
+                    # evaluation coordination manages one Taskbadger task per run itself
+                    "apps.evaluations.tasks.coordinate_evaluation_runs",
+                    "apps.evaluations.tasks.evaluate_message_batch",
                 ],
                 record_task_args=True,
             )

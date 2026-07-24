@@ -3452,6 +3452,29 @@ components:
           maxLength: 255
         error_message:
           type: string
+        evaluator_ids:
+          type: array
+          items:
+            type: integer
+            maximum: 2147483647
+            minimum: -2147483648
+        in_flight:
+          type: array
+          items:
+            type: integer
+            maximum: 2147483647
+            minimum: -2147483648
+        batch_dispatched_at:
+          type: string
+          format: date-time
+          nullable: true
+        stall_count:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        taskbadger_task_id:
+          type: string
+          maxLength: 255
         config:
           type: integer
         generation_experiment:
@@ -3466,7 +3489,8 @@ components:
           type: array
           items:
             type: integer
-          description: Subset of dataset messages this run evaluated. Empty for FULL/PREVIEW.
+          description: The frozen message plan for this run (all dataset ids for FULL,
+            the sample for PREVIEW, the explicit list for DELTA).
       required:
       - config
       - created_at
