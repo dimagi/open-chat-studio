@@ -4,11 +4,12 @@ import time
 from urllib.parse import unquote
 
 from django.core.files.base import ContentFile
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.utils import timezone
 from langchain_core.documents import Document
 
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
+from apps.documents.exceptions import DocumentSourceDeleted
 from apps.documents.models import (
     CollectionFile,
     DocumentSource,
@@ -72,9 +73,13 @@ class DocumentSourceManager:
         sync_log = None
 
         try:
+            self._ensure_source_exists()
+
             # Create sync log
-            sync_log = DocumentSourceSyncLog.objects.create(
-                document_source=self.document_source, status=SyncStatus.IN_PROGRESS
+            sync_log = self._save_or_abort(
+                lambda: DocumentSourceSyncLog.objects.create(
+                    document_source=self.document_source, status=SyncStatus.IN_PROGRESS
+                )
             )
 
             loader = create_loader(self.collection, self.document_source)
@@ -92,11 +97,14 @@ class DocumentSourceManager:
             if result.failures:
                 sync_log.error_message = _format_failures(result.failures)
             sync_log.duration_seconds = duration
-            sync_log.save()
 
-            # Update document source last sync time
-            self.document_source.last_sync = timezone.now()
-            self.document_source.save(update_fields=["last_sync"])
+            def _persist_success():
+                sync_log.save()
+                # Update document source last sync time
+                self.document_source.last_sync = timezone.now()
+                self.document_source.save(update_fields=["last_sync"])
+
+            self._save_or_abort(_persist_success)
 
             result.duration_seconds = duration
             result.success = True
@@ -108,6 +116,15 @@ class DocumentSourceManager:
             )
 
             return result
+
+        except DocumentSourceDeleted:
+            # The source was deleted mid-sync: abort the whole task rather than crash on a
+            # dangling foreign key. Any partial work is irrelevant now that the source is gone.
+            logger.warning(
+                "DocumentSource was deleted during sync; aborting.",
+                extra={"document_source_id": self.document_source.id},
+            )
+            raise
 
         except Exception as e:
             duration = time.time() - start_time
@@ -128,9 +145,35 @@ class DocumentSourceManager:
                 else:
                     sync_log.error_message = error_msg
                 sync_log.duration_seconds = duration
-                sync_log.save()
+                # If this save fails because the source was deleted, _save_or_abort raises
+                # DocumentSourceDeleted, which propagates to abort the task.
+                self._save_or_abort(sync_log.save)
 
             return SyncResult(success=False, error_message=error_msg, duration_seconds=duration)
+
+    def _ensure_source_exists(self) -> None:
+        """Abort the sync if the DocumentSource has been deleted (or archived) mid-run.
+
+        Raises:
+            DocumentSourceDeleted: if the source row is no longer visible.
+        """
+        if not DocumentSource.objects.filter(id=self.document_source.id).exists():
+            raise DocumentSourceDeleted(self.document_source.id)
+
+    def _save_or_abort(self, save_callable):
+        """Run a DB write, converting a dangling-foreign-key failure into an abort.
+
+        A save can fail if the source is deleted in the narrow window between an existence
+        check and the write itself. When that happens the write raises a ``DatabaseError``
+        (an ``IntegrityError`` for a bad insert, or "did not affect any rows" for a forced
+        update); we re-check existence and, if the source is gone, raise
+        ``DocumentSourceDeleted`` to abort. A genuine, unrelated DB error is re-raised.
+        """
+        try:
+            return save_callable()
+        except DatabaseError:
+            self._ensure_source_exists()
+            raise
 
     def _sync_documents(self, loader) -> SyncResult:
         """
@@ -149,6 +192,9 @@ class DocumentSourceManager:
         seen_identifiers = set()
         files_to_index = []
         for document in documents:
+            # Abort promptly if the source was deleted mid-sync, rather than recording a
+            # per-file failure for every remaining document against a dangling foreign key.
+            self._ensure_source_exists()
             identifier = _safe_external_id(loader.get_document_identifier(document))
             # Mark as seen before processing so a file that fails to update is not treated
             # as removed from the source (and deleted) on this run.
@@ -180,7 +226,10 @@ class DocumentSourceManager:
         carry on so the remaining files are still processed and indexed.
         """
         if not document.page_content.strip():
-            msg = "Skipping document with empty content (file may be a scanned/image-based document with no extractable text)"
+            msg = (
+                "Skipping document with empty content "
+                "(file may be a scanned/image-based document with no extractable text)"
+            )
             logger.warning(
                 msg,
                 extra={"document_source_id": self.document_source.id, "identifier": identifier},
