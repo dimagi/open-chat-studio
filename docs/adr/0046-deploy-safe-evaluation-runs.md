@@ -15,7 +15,7 @@ Evaluation dispatch used a Celery chord: `run_evaluation_task` split the dataset
 We will replace chord dispatch with a stateless beat coordinator that derives all run state from the database each tick.
 
 - **Frozen plan at creation.** `EvaluationConfig.run()` snapshots the message plan into `scoped_messages` and the evaluator ids into a new `evaluator_ids` field for *every* run type — FULL = all current dataset ids, PREVIEW = the sample, DELTA = the explicit list ([ADR-0020](0020-delta-evaluation-runs-scoped-to-appended-messages.md)). This extends `scoped_messages`, previously populated only for DELTA, to all types. The coordinator reads only this frozen plan, never the live dataset, so mid-run auto-population cannot change or stall what a run evaluates.
-- **Beat coordinator.** `coordinate_evaluation_runs` (every 30s) drives each non-terminal run under `select_for_update(skip_locked=True)` so overlapping sweeps partition runs. Each tick recomputes remaining work from `EvaluationResult` rows, then dispatches the next batch (≤ `BATCHES_PER_TICK`×`BATCH_SIZE` messages), re-dispatches a stalled batch's unfinished messages, or completes the run.
+- **Beat coordinator.** `coordinate_evaluation_runs` drives each non-terminal run under `select_for_update(skip_locked=True)` so overlapping sweeps partition runs. Each tick recomputes remaining work from `EvaluationResult` rows, then dispatches the next batch (≤ `BATCHES_PER_TICK`×`BATCH_SIZE` messages), re-dispatches a stalled batch's unfinished messages, or completes the run.
 - **Dumb batch tasks.** `evaluate_message_batch` (`acks_late=True`) evaluates a few messages in-process and exits — no callbacks, no self-rescheduling. Redis redelivers a SIGKILLed batch after the visibility timeout.
 - **Idempotent and duplicate-proof.** `evaluate_single_message_task` skips evaluators already recorded for a `(run, message)`; a `unique_result_per_run_message_evaluator` constraint plus `IntegrityError` handling makes duplicate rows impossible when a redelivery races a re-dispatch.
 - **Completion from the DB.** A run is complete when every planned `(message, evaluator)` pair has a result; 3 consecutive no-progress stalls flip it to `FAILED`, clearing the edit blockage without DB surgery.
@@ -28,7 +28,7 @@ We will replace chord dispatch with a stateless beat coordinator that derives al
 - `scoped_messages` is now non-empty for FULL/PREVIEW, revising ADR-0020's "empty for FULL/PREVIEW"; `run_evaluation_task` no longer branches on type (message selection moved to `EvaluationConfig.run`).
 - Coordination fields (`in_flight`, `batch_dispatched_at`, `stall_count`, `evaluator_ids`, `taskbadger_task_id`) are written only by the coordinator under the row lock and saved before any `.delay()`, so a crash under-dispatches (repaired by the stall branch) rather than acting on state that was never persisted.
 - Deploy gate: the unique constraint fails to apply if duplicate results already exist, so duplicates must be cleaned first; runs left in-flight by the old code complete on their partial results on the first post-deploy tick.
-- Progress granularity and completion latency gain a ~30s floor, replacing near-instant chord callbacks — acceptable for a background job.
+- Progress granularity and completion latency gain a floor of one beat interval, replacing near-instant chord callbacks — acceptable for a background job.
 
 ## Alternatives considered
 
