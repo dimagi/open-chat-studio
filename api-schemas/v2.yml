@@ -542,20 +542,44 @@ components:
           - $ref: '#/components/schemas/InspectPipeline'
           readOnly: true
           nullable: true
+        pipeline_valid:
+          type: boolean
+          nullable: true
+          readOnly: true
+          description: Whether this chatbot's pipeline validates cleanly (all three
+            ``errors`` buckets empty); null for a chatbot with no pipeline. Unwired
+            handles never affect it.
+        errors:
+          allOf:
+          - $ref: '#/components/schemas/PipelineBuildErrors'
+          readOnly: true
+        unwired_handles:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/InspectOutputHandle'
+          description: 'Advisory ''what still needs wiring'' map, keyed by ``node_id``:
+            every output handle with no outgoing edge and every implicit ``input``
+            handle with no incoming edge. Never an error and never blocks a publish.'
+          readOnly: true
         events:
           $ref: '#/components/schemas/InspectEvents'
       required:
       - channels
       - consent_form
+      - errors
       - events
       - id
       - is_published_version
       - is_unreleased
       - name
       - pipeline
+      - pipeline_valid
       - settings
       - team_slug
       - trace_provider
+      - unwired_handles
       - version_description
       - voice
     ChatbotVersion:
@@ -707,6 +731,11 @@ components:
         provider_name:
           type: string
           nullable: true
+        id:
+          type: integer
+          nullable: true
+          description: The model's id — the value to write back as the node's model
+            reference.
         type:
           type: string
           nullable: true
@@ -736,6 +765,11 @@ components:
         provider_name:
           type: string
           nullable: true
+        id:
+          type: integer
+          nullable: true
+          description: The model's id — the value to write back as the node's model
+            reference.
         type:
           type: string
           nullable: true
@@ -757,6 +791,10 @@ components:
         provider_name:
           type: string
           nullable: true
+        id:
+          type: integer
+          nullable: true
+          description: The synthetic voice's id — the value to write back as ``synthetic_voice_id``.
         type:
           type: string
           nullable: true
@@ -882,6 +920,11 @@ components:
     InspectGraphEdge:
       type: object
       properties:
+        id:
+          type: string
+          nullable: true
+          description: The edge's identity — the address a write-API caller uses to
+            delete this edge.
         source:
           type: string
           description: '``node_id`` the edge leaves from.'
@@ -900,6 +943,7 @@ components:
           description: Input handle on the target node; currently always null (nodes
             have one implicit input).
       required:
+      - id
       - source
       - source_handle
       - target
@@ -938,6 +982,11 @@ components:
           readOnly: true
           description: The node's non-resource configuration, verbatim; keys vary
             by node type.
+        output_handles:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectOutputHandle'
+          readOnly: true
         llm:
           allOf:
           - $ref: '#/components/schemas/FlattenedLlm'
@@ -976,6 +1025,7 @@ components:
       required:
       - label
       - node_id
+      - output_handles
       - params
       - type
     InspectNodeParams:
@@ -991,6 +1041,21 @@ components:
       - $ref: '#/components/schemas/AssistantNodeParams'
       - $ref: '#/components/schemas/ExtractStructuredDataParams'
       - $ref: '#/components/schemas/ExtractParticipantDataParams'
+    InspectOutputHandle:
+      type: object
+      description: One output handle a node offers, for wiring edges from it.
+      properties:
+        handle:
+          type: string
+          description: Handle name to copy verbatim into an edge's ``source_handle``.
+        label:
+          type: string
+          nullable: true
+          description: The router branch keyword this handle routes; null for a plain
+            node's single output.
+      required:
+      - handle
+      - label
     InspectPipeline:
       type: object
       properties:
@@ -1361,6 +1426,34 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    PipelineBuildErrors:
+      type: object
+      description: The normalized three-bucket errors report the publish gate rejects
+        on.
+      properties:
+        node:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+          description: Per-field error messages keyed by ``node_id``. Node-level errors
+            that aren't about a single field (e.g. 'End node is not reachable') appear
+            under the ``root`` key.
+        edge:
+          type: array
+          items:
+            type: string
+          description: Ids of edges stranded on a handle their source node no longer
+            offers.
+        pipeline:
+          type: string
+          nullable: true
+          description: A single graph-level error message, or null.
+      required:
+      - edge
+      - node
+      - pipeline
     PlatformEnum:
       enum:
       - telegram

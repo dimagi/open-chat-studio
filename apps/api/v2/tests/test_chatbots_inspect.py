@@ -13,6 +13,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment
 from apps.files.models import File
+from apps.pipelines.tests.utils import create_pipeline_model, end_node, start_node
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -169,6 +170,7 @@ def _node(payload, label):
 
 def _expected_llm(bot):
     return {
+        "id": bot.model.id,
         "provider_id": bot.provider.id,
         "provider_name": "Prod OpenAI",
         "type": "openai",
@@ -222,6 +224,7 @@ def test_acceptance_3_rag_collection_files(inspect_bot):
             "id": inspect_bot.collection.id,
             "name": "Policy index",
             "embedding": {
+                "id": inspect_bot.collection.embedding_provider_model_id,
                 "provider_id": inspect_bot.collection.llm_provider_id,
                 "provider_name": inspect_bot.collection.llm_provider.name,
                 "type": inspect_bot.collection.llm_provider.type,
@@ -386,6 +389,76 @@ def test_unknown_version_404(inspect_bot):
     assert _client(inspect_bot.experiment).get(f"{url}?version=999").status_code == 404
 
 
+# ── Top-level build state (pipeline_valid / errors / unwired_handles) ────────────────────────────
+def _build_state_bot(**kwargs):
+    """A bot with a valid, fully wired start -> end pipeline.
+
+    ``PipelineFactory``'s default data seeds start/end nodes without a ``name`` param, which
+    ``Pipeline.validate()`` flags, so build the pipeline through the same helper the pipeline
+    validation tests use (it names every node).
+    """
+    team = TeamWithUsersFactory.create()
+    if "pipeline" not in kwargs:
+        pipeline = PipelineFactory.create(team=team)
+        create_pipeline_model([start_node(), end_node()], pipeline=pipeline)
+        pipeline.save()  # create_pipeline_model mutates pipeline.data without persisting it
+        kwargs["pipeline"] = pipeline
+    return ExperimentFactory.create(team=team, **kwargs)
+
+
+@pytest.mark.django_db()
+def test_build_state_valid_and_fully_wired():
+    experiment = _build_state_bot()  # default pipeline: start -> end, fully wired
+    payload = _client(experiment).get(_inspect_url(experiment)).json()
+    assert payload["pipeline_valid"] is True
+    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": None}
+    assert payload["unwired_handles"] == {}
+
+
+@pytest.mark.django_db()
+def test_build_state_reports_node_errors_and_unwired_handles_together():
+    """An off-graph node missing a required param: the param error lands in errors.node, while its
+    dangling input/output land in the advisory unwired_handles map."""
+    experiment = _build_state_bot()
+    _make_node(
+        pipeline=experiment.pipeline,
+        flow_id="island-1",
+        type="LLMResponseWithPrompt",
+        label="Island",
+        params={"name": "Island", "prompt": "hi"},
+    )
+
+    payload = _client(experiment).get(_inspect_url(experiment)).json()
+
+    assert payload["pipeline_valid"] is False
+    assert "llm_provider_id" in payload["errors"]["node"]["island-1"]
+    assert payload["unwired_handles"] == {
+        "island-1": [{"handle": "input", "label": None}, {"handle": "output", "label": None}]
+    }
+
+
+@pytest.mark.django_db()
+def test_build_state_present_on_version_reads():
+    experiment = _build_state_bot()
+    version = experiment.create_new_version()
+    url = _inspect_url(experiment)
+
+    payload = _client(experiment).get(f"{url}?version={version.version_number}").json()
+
+    assert payload["pipeline_valid"] is True
+    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": None}
+    assert payload["unwired_handles"] == {}
+
+
+@pytest.mark.django_db()
+def test_build_state_null_valid_for_chatbot_without_pipeline():
+    experiment = _build_state_bot(pipeline=None)
+    payload = _client(experiment).get(_inspect_url(experiment)).json()
+    assert payload["pipeline_valid"] is None
+    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": None}
+    assert payload["unwired_handles"] == {}
+
+
 # ── Full response body ───────────────────────────────────────────────────────────────────────────
 def _full_bot():
     """A fully populated bot whose response has no null fields, so every serializer runs.
@@ -459,6 +532,7 @@ def _full_bot():
                         "label": "Answer",
                         # the react FE persists ids as strings
                         "params": {
+                            "name": "Answer",
                             "llm_provider_id": str(llm_provider.id),
                             "llm_provider_model_id": str(llm_model.id),
                             "source_material_id": str(source.id),
@@ -466,7 +540,9 @@ def _full_bot():
                             "collection_index_ids": [str(index_collection.id)],
                             "custom_actions": [f"{action.id}:weather_get", f"{action.id}:pollen_get"],
                             "synthetic_voice_id": str(synthetic_voice.id),
-                            "prompt": "Answer the user",
+                            # source_material_id is set, so the prompt must reference the variable
+                            # or node validation flags it.
+                            "prompt": "Answer the user using {source_material} and {media}",
                         },
                     },
                 },
@@ -476,7 +552,7 @@ def _full_bot():
                         "id": "assist",
                         "type": "AssistantNode",
                         "label": "Assistant",
-                        "params": {"assistant_id": str(assistant.id), "citations_enabled": True},
+                        "params": {"name": "Assistant", "assistant_id": str(assistant.id), "citations_enabled": True},
                     },
                 },
             ],
@@ -584,6 +660,7 @@ def test_full_response_body():
             "identifier_type": "email",
         },
         "voice": {
+            "id": bot.synthetic_voice.id,
             "provider_id": bot.voice_provider.id,
             "provider_name": "ElevenLabs Prod",
             "type": bot.voice_provider.type,
@@ -614,15 +691,25 @@ def test_full_response_body():
                     {"node_id": "llm", "type": "LLMResponseWithPrompt", "label": "Answer"},
                     {"node_id": "assist", "type": "AssistantNode", "label": "Assistant"},
                 ],
-                "edges": [{"source": "llm", "target": "assist", "source_handle": "output", "target_handle": "input"}],
+                "edges": [
+                    {
+                        "id": "e1",
+                        "source": "llm",
+                        "target": "assist",
+                        "source_handle": "output",
+                        "target_handle": "input",
+                    }
+                ],
             },
             "nodes": [
                 {
                     "node_id": "llm",
                     "type": "LLMResponseWithPrompt",
                     "label": "Answer",
-                    "params": {"prompt": "Answer the user"},
+                    "params": {"prompt": "Answer the user using {source_material} and {media}"},
+                    "output_handles": [{"handle": "output", "label": None}],
                     "llm": {
+                        "id": bot.llm_model.id,
                         "provider_id": bot.llm_provider.id,
                         "provider_name": "Prod OpenAI",
                         "type": "openai",
@@ -655,6 +742,7 @@ def test_full_response_body():
                             "id": bot.index_collection.id,
                             "name": "Policy index",
                             "embedding": {
+                                "id": bot.index_collection.embedding_provider_model_id,
                                 "provider_id": bot.llm_provider.id,
                                 "provider_name": "Prod OpenAI",
                                 "type": "openai",
@@ -688,6 +776,7 @@ def test_full_response_body():
                         }
                     ],
                     "voice": {
+                        "id": bot.synthetic_voice.id,
                         "provider_id": bot.voice_provider.id,
                         "provider_name": "ElevenLabs Prod",
                         "type": bot.voice_provider.type,
@@ -701,6 +790,7 @@ def test_full_response_body():
                     "type": "AssistantNode",
                     "label": "Assistant",
                     "params": {"citations_enabled": True},
+                    "output_handles": [{"handle": "output", "label": None}],
                     "assistant": {
                         "id": bot.assistant.id,
                         "name": "Helper",
@@ -713,6 +803,14 @@ def test_full_response_body():
                     },
                 },
             ],
+        },
+        # The pipeline has no Start/End nodes, so it is reported invalid (a graph-level error), and
+        # the unwired sides of its two nodes land in the advisory map. Neither blocked the read.
+        "pipeline_valid": False,
+        "errors": {"node": {}, "edge": [], "pipeline": "There should be exactly 1 Start node"},
+        "unwired_handles": {
+            "llm": [{"handle": "input", "label": None}],
+            "assist": [{"handle": "output", "label": None}],
         },
         "events": {
             "static_triggers": [
@@ -831,8 +929,11 @@ def _adversarial_bot():
 # Empirically derived. The SAME number must hold for every version mode, because resolve_inspect_version
 # resolves AND prefetches the target with a fixed prefetch set — including each node's resource FK/M2M
 # relations (inspect_node_queryset) — so node fan-out adds no queries. Resolution costs one query in
-# every mode, so folding it into the measured block keeps the count constant.
-EXPECTED_RENDER_QUERIES = 13
+# every mode, so folding it into the measured block keeps the count constant. The top-level build-state
+# fields run Pipeline.validate(), whose LLM-node validators each look the provider model up through
+# ORMRepository (not the prefetched relation) — the same cost the builder pays on save; that adds a
+# fixed number of queries for this bot's two LLM-bearing nodes.
+EXPECTED_RENDER_QUERIES = 17
 
 
 @pytest.mark.django_db()

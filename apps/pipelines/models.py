@@ -14,7 +14,7 @@ from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.pipelines.exceptions import PipelineBuildError
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.flow import Flow, FlowNode, FlowNodeData
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.versioning import get_versioned_param_specs
@@ -160,18 +160,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def validate(self, full=True) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
         from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415 - circular: graph.py imports models
-        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
         errors = defaultdict(dict)
         nodes = self.node_set.all()
         for node in nodes:
-            node_class = getattr(pipeline_nodes, node.type)
-            try:
-                node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
-            except pydantic.ValidationError as e:
-                for error in e.errors():
-                    field = error["loc"][0] if error["loc"] else error["ctx"]["field"]
-                    errors[node.flow_id][field] = error["msg"]
+            if node_errors := self._node_validation_errors(node):
+                errors[node.flow_id].update(node_errors)
 
         name_to_flow_id = defaultdict(list)
         for node in nodes:
@@ -191,6 +185,25 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             except PipelineBuildError as e:
                 return e.to_json()
 
+        return {}
+
+    @staticmethod
+    def _node_validation_errors(node) -> dict:
+        """Field -> message errors for one node's params; non-field failures land under "root"."""
+        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
+
+        node_class = getattr(pipeline_nodes, node.type, None)
+        if node_class is None:
+            # A node whose class has since been removed must be reported, not crash validation.
+            return {"root": f"Unknown node type: {node.type}"}
+        try:
+            node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
+        except pydantic.ValidationError as e:
+            return {(error["loc"][0] if error["loc"] else error["ctx"]["field"]): error["msg"] for error in e.errors()}
+        except PipelineNodeBuildError as e:
+            # Raised from inside a validator for a broken resource reference (e.g. a deleted
+            # provider model); pydantic doesn't wrap it, so fold it into the report here.
+            return {"root": str(e)}
         return {}
 
     @property

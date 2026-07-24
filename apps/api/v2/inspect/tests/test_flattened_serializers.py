@@ -34,6 +34,7 @@ def test_flattened_llm_full_pair():
     provider = LlmProviderFactory.create(team=team, name="Prod OpenAI", type="openai")
     model = LlmProviderModelFactory.create(team=team, name="gpt-4o", max_token_limit=128000, deprecated=False)
     assert FlattenedLlmSerializer(ProviderModelPair(provider, model)).data == {
+        "id": model.id,
         "provider_id": provider.id,
         "provider_name": "Prod OpenAI",
         "type": "openai",
@@ -47,6 +48,7 @@ def test_flattened_llm_full_pair():
 def test_flattened_llm_model_only_falls_back_to_model_type():
     model = LlmProviderModelFactory.create(name="gpt-4o")
     data = FlattenedLlmSerializer(ProviderModelPair(None, model)).data
+    assert data["id"] == model.id
     assert data["provider_id"] is None
     assert data["provider_name"] is None
     assert data["type"] == model.type
@@ -57,6 +59,7 @@ def test_flattened_llm_model_only_falls_back_to_model_type():
 def test_flattened_llm_provider_only_emits_null_model_fields():
     provider = LlmProviderFactory.create(type="openai")
     data = FlattenedLlmSerializer(ProviderModelPair(provider, None)).data
+    assert data["id"] is None
     assert data["type"] == "openai"
     assert data["model"] is None
     assert data["max_token_limit"] is None
@@ -68,6 +71,7 @@ def test_flattened_voice():
     provider = VoiceProviderFactory.create(name="ElevenLabs", type="elevenlabs")
     voice = SyntheticVoiceFactory.create(name="Rachel", language="English", neural=True, voice_provider=provider)
     assert FlattenedVoiceSerializer(VoicePair(provider, voice)).data == {
+        "id": voice.id,
         "provider_id": provider.id,
         "provider_name": "ElevenLabs",
         "type": "elevenlabs",
@@ -83,6 +87,7 @@ def test_flattened_embedding():
     provider = LlmProviderFactory.create(team=team, name="Prod OpenAI", type="openai")
     model = EmbeddingProviderModelFactory.create(team=team, name="text-embedding-3-small")
     assert FlattenedModelProviderSerializer(ProviderModelPair(provider, model)).data == {
+        "id": model.id,
         "provider_id": provider.id,
         "provider_name": "Prod OpenAI",
         "type": "openai",
@@ -94,6 +99,7 @@ def test_flattened_embedding():
 def test_flattened_embedding_model_only_falls_back_to_model_type():
     model = EmbeddingProviderModelFactory.create(name="text-embedding-3-small")
     data = FlattenedModelProviderSerializer(ProviderModelPair(None, model)).data
+    assert data["id"] == model.id
     assert data["provider_id"] is None
     assert data["type"] == model.type
     assert data["model"] == "text-embedding-3-small"
@@ -103,6 +109,7 @@ def test_flattened_embedding_model_only_falls_back_to_model_type():
 def test_flattened_voice_provider_only_emits_null_voice_fields():
     provider = VoiceProviderFactory.create(type="elevenlabs")
     data = FlattenedVoiceSerializer(VoicePair(provider, None)).data
+    assert data["id"] is None
     assert data["type"] == provider.type
     assert data["voice_name"] is None
     assert data["neural"] is None

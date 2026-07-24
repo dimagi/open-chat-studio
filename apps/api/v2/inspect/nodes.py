@@ -40,12 +40,13 @@ def node_render_order(node) -> int:
 def graph_digest(node_list, pipeline_data: dict | None) -> dict:
     """Build a lightweight view of the pipeline's shape.
 
-    Returns just the nodes (each as ``{flow_id, type, label}``) and the edges between them, with
-    canvas positions removed and the edge handle keys renamed to snake_case.
+    Returns just the nodes (each as ``{flow_id, type, label}``) and the edges between them — each
+    with its ``id`` — with canvas positions removed and the edge handle keys renamed to snake_case.
     """
     nodes = [{"flow_id": node.flow_id, "type": node.type, "label": node.label} for node in node_list]
     edges = [
         {
+            "id": edge.get("id"),
             "source": edge.get("source"),
             "target": edge.get("target"),
             "source_handle": edge.get("sourceHandle"),

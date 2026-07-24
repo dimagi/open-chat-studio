@@ -94,12 +94,28 @@ class PipelineGraph(pydantic.BaseModel):
     @cached_property
     def conditional_edge_map(self) -> dict[str, dict[str, str]]:
         conditional_edge_map = defaultdict(dict)
+        stranded_edges = []
+        # The build only wires reachable nodes, so stranded-edge detection matches that scope: an
+        # unreachable router's stranded edge is the advisory unwired map's concern, not a build error.
+        reachable_ids = {node.id for node in self._get_reachable_nodes(self.start_node)}
         for edge in self.conditional_edges:
+            if edge.source not in reachable_ids:
+                continue
             source_node = self.nodes_by_id[edge.source].pipeline_node_instance
             output_map = source_node.get_output_map()
+            # An edge can be left pointing at a handle the source no longer offers (e.g. a router
+            # keyword was removed); report those as stranded rather than raising a KeyError.
+            if edge.sourceHandle not in output_map:
+                stranded_edges.append(edge)
+                continue
             # this creates a map of the form:
             # {source_node: {'source_handle_1': value_to_follow_edge_1, 'source_handle_2': value_to_follow_edge_2}}
             conditional_edge_map[edge.source][output_map[edge.sourceHandle]] = edge.target
+        if stranded_edges:
+            raise PipelineBuildError(
+                "One or more edges reference a router output that no longer exists",
+                edge_ids=[edge.id for edge in stranded_edges],
+            )
         return conditional_edge_map
 
     @cached_property
