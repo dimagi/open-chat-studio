@@ -25,6 +25,9 @@ dump.rdb
 .python-version
 .coverage
 venv
+.venv/
+.ruff_cache/
+.pytest_cache/
 .claude/worktrees
 
 # uncomment these lines after setting up the front-end build pipeline in dev and production
