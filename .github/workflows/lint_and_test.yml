@@ -63,7 +63,7 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -109,7 +109,7 @@ jobs:
   build-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - name: Use Node.js
         uses: actions/setup-node@v6
@@ -127,7 +127,7 @@ jobs:
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -166,7 +166,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
       - id: py_files
@@ -222,7 +222,7 @@ jobs:
   check-uv-lock:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -259,7 +259,7 @@ jobs:
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
