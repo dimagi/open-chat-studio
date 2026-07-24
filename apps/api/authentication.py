@@ -67,8 +67,8 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
             chatbot_id = request.data.get("chatbot_id")
             try:
                 uuid.UUID(str(chatbot_id))
-            except (ValueError, AttributeError):
-                raise ParseError("chatbot_id must be a valid UUID")
+            except (ValueError, AttributeError) as err:
+                raise ParseError("chatbot_id must be a valid UUID") from err
             return chatbot_id
 
         if session_id := request.parser_context["kwargs"].get("session_id"):
