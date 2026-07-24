@@ -1,7 +1,9 @@
 from collections.abc import Iterator
+from datetime import timedelta
 
 from django.db import models, transaction
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from django_pydantic_field import SchemaField
@@ -376,6 +378,13 @@ class DocumentSourceManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
+# A sync lock (``sync_task_id`` + ``sync_started_at``) older than this is treated as stale
+# and may be reclaimed. This guards against a worker dying (SIGKILL/OOM/deploy restart)
+# mid-sync and leaving a lock set forever, which would otherwise exclude the source from
+# both scheduled and manual syncs with no way to recover.
+SYNC_LOCK_TIMEOUT = timedelta(hours=2)
+
+
 @audit_fields(
     "collection",
     "source_type",
@@ -399,6 +408,9 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
     sync_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the sync task, if present."
     )
+    sync_started_at = models.DateTimeField(
+        null=True, blank=True, help_text="When the current sync task acquired its lock."
+    )
     auth_provider = models.ForeignKey("service_providers.AuthProvider", on_delete=models.PROTECT, blank=True, null=True)
     working_version = models.ForeignKey(
         "self",
@@ -417,6 +429,19 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
     @property
     def source_type_enum(self):
         return SourceType(self.source_type)
+
+    @property
+    def is_sync_in_progress(self) -> bool:
+        """Whether a sync lock is currently held and still fresh.
+
+        A lock held past ``SYNC_LOCK_TIMEOUT`` — or one with no recorded start time (e.g. a
+        row locked by a previous release before ``sync_started_at`` existed) — is considered
+        stale (its owning task is presumed dead) and reported as not in progress so it can be
+        reclaimed rather than blocking the source forever.
+        """
+        if not self.sync_task_id or self.sync_started_at is None:
+            return False
+        return timezone.now() - self.sync_started_at <= SYNC_LOCK_TIMEOUT
 
     @property
     def source_config(self):

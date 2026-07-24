@@ -12,7 +12,7 @@ from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.text import slugify
 from field_audit.models import AuditAction
@@ -23,6 +23,7 @@ from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.document_source_service import sync_document_source
 from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
 from apps.documents.models import (
+    SYNC_LOCK_TIMEOUT,
     Collection,
     CollectionFile,
     DocumentSource,
@@ -171,13 +172,32 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
         index_collection_files_task(collection_file_ids=file_ids_to_index)
 
 
-@shared_task(ignore_result=True)
-def sync_document_source_task(document_source_id: int):
+@shared_task(bind=True, ignore_result=True)
+def sync_document_source_task(self, document_source_id: int):
     """Sync a specific document source"""
-    try:
-        document_source = DocumentSource.objects.select_related("collection").get(id=document_source_id)
-    except DocumentSource.DoesNotExist:
-        return
+    task_id = self.request.id
+    # Guard against concurrent syncs for the same document source. Atomically check-and-set
+    # the lock under a row lock. A lock held past SYNC_LOCK_TIMEOUT is treated as stale (its
+    # owning task died without releasing it) and is reclaimed rather than blocking forever.
+    with transaction.atomic():
+        try:
+            locked = DocumentSource.objects.select_related("collection").select_for_update().get(id=document_source_id)
+        except DocumentSource.DoesNotExist:
+            return
+
+        if locked.sync_task_id and locked.sync_task_id != task_id and locked.is_sync_in_progress:
+            logger.warning(
+                "Skipping sync: document source %s is already being synced by task %s",
+                document_source_id,
+                locked.sync_task_id,
+            )
+            return
+
+        locked.sync_task_id = task_id
+        locked.sync_started_at = timezone.now()
+        locked.save(update_fields=["sync_task_id", "sync_started_at"])
+
+    document_source = locked
 
     try:
         result = sync_document_source(document_source)
@@ -197,19 +217,33 @@ def sync_document_source_task(document_source_id: int):
                 "document_source": document_source_id,
             },
         )
-
-    document_source.sync_task_id = ""
-    document_source.save(update_fields=["sync_task_id"])
+    finally:
+        # Always release the lock, but only if we still own it, so that a task which
+        # reclaimed our stale lock is not clobbered. Runs in a finally so a raised
+        # exception can't leave the source locked. sync_task_id is not an audited field,
+        # so the queryset write is explicitly marked IGNORE.
+        DocumentSource.objects.filter(id=document_source_id, sync_task_id=task_id).update(
+            sync_task_id="", sync_started_at=None, audit_action=AuditAction.IGNORE
+        )
 
 
 @shared_task(ignore_result=True)
 def sync_all_document_sources_task():
     """Sync all document sources that have auto_sync_enabled=True"""
-    auto_sources = DocumentSource.objects.filter(
-        auto_sync_enabled=True,
-        collection__is_index=True,  # Only sync indexed collections
-        collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0031)
-    ).values_list("id", flat=True)
+    stale_cutoff = timezone.now() - SYNC_LOCK_TIMEOUT
+    auto_sources = (
+        DocumentSource.objects.filter(
+            auto_sync_enabled=True,
+            collection__is_index=True,  # Only sync indexed collections
+            collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0031)
+        )
+        # Skip only sources with a *fresh* sync lock (the DB mirror of
+        # DocumentSource.is_sync_in_progress). A stale lock — held past SYNC_LOCK_TIMEOUT or
+        # with no recorded start time — stays eligible so the dispatched task can reclaim it
+        # and self-heal, instead of the source being excluded from auto-sync forever.
+        .exclude(~Q(sync_task_id="") & Q(sync_started_at__gte=stale_cutoff))
+        .values_list("id", flat=True)
+    )
 
     sync_document_source_task.map(auto_sources).delay()
 
