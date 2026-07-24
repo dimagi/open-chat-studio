@@ -356,6 +356,46 @@ def test_run_evaluation_task_fast_path_dispatches_wave_one(delay_mock, _publish)
 
 
 @pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.models.Evaluator.run")
+def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _publish):
+    """A run larger than one wave completes across several ticks, with no duplicate results.
+
+    Each tick dispatches batches into `dispatched`; we drain them by calling the real
+    evaluate_message_batch (which runs evaluate_single_message_task in-process), then
+    tick again, until the run completes.
+    """
+    evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"score": 1}}))
+    run, evaluators, messages = _make_run(evaluator_count=1, message_count=35, status=EvaluationRunStatus.PENDING)
+
+    dispatched: list[list[int]] = []
+
+    def capture(run_id, batch):
+        dispatched.append(batch)
+
+    for _ in range(10):  # safety bound
+        run.refresh_from_db()
+        if run.status == EvaluationRunStatus.COMPLETED:
+            break
+        with patch("apps.evaluations.tasks.evaluate_message_batch.delay", side_effect=capture):
+            coordinate_evaluation_runs()
+        # a "worker" drains everything dispatched this tick
+        pending, dispatched = dispatched, []
+        for batch in pending:
+            evaluate_message_batch(run.id, batch)
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    # every message evaluated exactly once by the single evaluator
+    assert EvaluationResult.objects.filter(run=run).count() == 35
+    # no duplicates
+    seen = set()
+    for message_id, evaluator_id in EvaluationResult.objects.filter(run=run).values_list("message_id", "evaluator_id"):
+        assert (message_id, evaluator_id) not in seen
+        seen.add((message_id, evaluator_id))
+
+
+@pytest.mark.django_db()
 def test_result_home_sets_celery_job_id_while_processing(client):
     view_perm = Permission.objects.get(
         content_type=ContentType.objects.get_for_model(EvaluationRun),
