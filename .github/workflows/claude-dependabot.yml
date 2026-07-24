@@ -67,13 +67,16 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
+      - uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24.x
+          cache: 'pnpm'
 
       - name: Install Node dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run Claude Dependabot Analysis
         id: claude_review
@@ -82,13 +85,13 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           allowed_bots: "dependabot[bot]"
           claude_args: |
-            --allowedTools "Bash(npm:*),Bash(uv:*),Bash(git:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Edit,WebFetch,WebSearch"
+            --allowedTools "Bash(pnpm:*),Bash(uv:*),Bash(git:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Edit,WebFetch,WebSearch"
           prompt: |
             You are reviewing PR #${{ steps.pr.outputs.pr_number }}.
 
             You are Claude, an AI assistant specialized in reviewing Dependabot dependency update PRs
             for the Open Chat Studio project (a Django + React application using uv for Python
-            dependencies and npm for JavaScript dependencies).
+            dependencies and pnpm for JavaScript dependencies).
 
             Your primary tasks are:
             1. **Analyze the dependency changes** in this Dependabot PR
@@ -101,7 +104,7 @@ jobs:
             1. **Identify Changed Dependencies**:
                - Use `gh pr diff` to see what dependencies were updated
                - Parse pyproject.toml / uv.lock for Python changes
-               - Parse package.json / package-lock.json for JS/TS changes
+               - Parse package.json / pnpm-lock.yaml for JS/TS changes
                - List all package versions: old → new
 
             2. **Changelog Research**:

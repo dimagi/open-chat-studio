@@ -4,6 +4,7 @@ static/js
 static_root
 node_modules
 npm-debug.log
+pnpm-debug.log
 .env
 .direnv
 .pytest_cache

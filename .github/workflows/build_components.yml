@@ -20,10 +20,13 @@ jobs:
         node-version: [24.x]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+          cache-dependency-path: components/chat_widget/pnpm-lock.yaml
       - name: Disable AppArmor
         # Ubuntu >= 23 has AppArmor enabled by default, which breaks Puppeteer.
         # See https://github.com/puppeteer/puppeteer/issues/12818 "No usable sandbox!"
@@ -33,14 +36,14 @@ jobs:
         run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
         shell: bash
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
         working-directory: ./components/chat_widget
       - name: Test
-        run: npm run test
+        run: pnpm run test
         working-directory: ./components/chat_widget
       - name: Test security
-        run: npm run test:security
+        run: pnpm run test:security
         working-directory: ./components/chat_widget
       - name: Build
-        run: npm run build
+        run: pnpm run build
         working-directory: ./components/chat_widget
