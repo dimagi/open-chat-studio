@@ -77,8 +77,11 @@ jobs:
           uv sync --locked --dev
 
       - name: Apply ruff fixes
+        # --exit-zero: apply every available fix but never fail the step on
+        # leftover unfixable violations, so schema/migration generation and the
+        # commit still run. The code-style job in lint_and_test.yml is the lint gate.
         run: |
-          uv run ruff check --fix .
+          uv run ruff check --fix --exit-zero .
           uv run ruff format .
 
       - name: Generate API Schema
