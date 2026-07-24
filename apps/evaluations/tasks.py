@@ -316,8 +316,6 @@ def _coordinate_locked_run(run) -> _TickResult:
     total = len(plan_ids)
     evaluator_ids = run.evaluator_ids or []
 
-    _ensure_taskbadger_task(run, total)
-
     if total == 0 or not evaluator_ids:
         _finalize_complete(run)
         return _TickResult(batches=[], done=0, total=total, terminal="success")
@@ -345,7 +343,12 @@ def _coordinate_locked_run(run) -> _TickResult:
 
 
 def _drive_run(run_id) -> None:
-    """Coordinate a single run under a row lock, then dispatch + publish after commit."""
+    """Coordinate a single run under a row lock, then dispatch + publish after commit.
+
+    Taskbadger task creation and progress publishing both run AFTER the transaction
+    commits, so the blocking Taskbadger HTTP call never holds the row lock and a
+    rolled-back tick can't strand an orphaned remote task keyed to a discarded id.
+    """
     with transaction.atomic():
         run = (
             EvaluationRun.objects.select_for_update(skip_locked=True)
@@ -360,6 +363,7 @@ def _drive_run(run_id) -> None:
     with current_team(run.team):
         for batch in result.batches:
             evaluate_message_batch.delay(run.id, batch)
+        _ensure_taskbadger_task(run, result.total)
         _publish_tick(run, result)
 
 
@@ -407,7 +411,12 @@ def _publish_progress(job_id, current, total, *, stop=False) -> None:
 
 
 def _ensure_taskbadger_task(run, total) -> None:
-    """Create the run's single Taskbadger task on the first tick (row lock => exactly once)."""
+    """Create the run's Taskbadger task once, after the tick's transaction has committed.
+
+    Called outside the coordination lock so the blocking HTTP request never stalls
+    other runs in the sweep. The taskbadger_task_id check keeps it effectively
+    once-per-run; a rare duplicate under overlapping sweeps is harmless for monitoring.
+    """
     if run.taskbadger_task_id:
         return
     task = taskbadger.create_task_safe(
