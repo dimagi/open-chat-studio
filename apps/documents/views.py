@@ -1,4 +1,5 @@
 import logging
+import uuid
 from functools import cached_property
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from django.db.models import Case, CharField, Count, Func, IntegerField, OuterRe
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
@@ -255,9 +257,7 @@ class BaseDocumentSourceView(LoginAndTeamRequiredMixin, PermissionRequiredMixin)
 
     def form_valid(self, form):
         self.object = form.save()
-        task = sync_document_source_task.delay(self.object.id)
-        self.object.sync_task_id = task.task_id
-        self.object.save(update_fields=["sync_task_id"])
+        _queue_document_source_sync(self.object)
         return HttpResponseClientRedirect(self.get_success_url())
 
 
@@ -302,6 +302,22 @@ def delete_document_source(request, team_slug: str, collection_id: int, pk: int)
     return HttpResponse()
 
 
+def _queue_document_source_sync(document_source: DocumentSource) -> None:
+    """Claim the sync lock and dispatch the sync task with a matching id.
+
+    The lock is set *before* the task is dispatched (using a pre-generated task id) so the
+    task never races to clear a lock that the view writes afterwards — the view is the sole
+    writer that acquires the lock here, and the task is the sole releaser. ``sync_started_at``
+    is recorded so a lock left behind by a task that never ran (or died) can later be
+    reclaimed as stale rather than blocking the source forever.
+    """
+    task_id = str(uuid.uuid4())
+    document_source.sync_task_id = task_id
+    document_source.sync_started_at = timezone.now()
+    document_source.save(update_fields=["sync_task_id", "sync_started_at"])
+    sync_document_source_task.apply_async(args=[document_source.id], task_id=task_id)
+
+
 @require_POST
 @login_and_team_required
 @permission_required("documents.change_collection")
@@ -309,13 +325,11 @@ def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
     """Trigger manual sync of a document source"""
     document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team=request.team)
 
-    if document_source.sync_task_id:
+    if document_source.is_sync_in_progress:
         messages.warning(request, "This document source is already syncing.")
         return HttpResponse()
 
-    task = sync_document_source_task.delay(document_source.id)
-    document_source.sync_task_id = task.task_id
-    document_source.save(update_fields=["sync_task_id"])
+    _queue_document_source_sync(document_source)
     messages.success(request, "Document source sync has been queued. This may take a few minutes.")
     return render(
         request,

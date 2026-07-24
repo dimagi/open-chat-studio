@@ -10,8 +10,9 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
+from apps.documents.document_source_service import SyncResult
 from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
-from apps.documents.models import CollectionFile, FileStatus
+from apps.documents.models import SYNC_LOCK_TIMEOUT, CollectionFile, DocumentSource, FileStatus
 from apps.documents.tasks import (
     async_create_collection_version,
     create_collection_zip_task,
@@ -19,6 +20,7 @@ from apps.documents.tasks import (
     index_collection_files_task,
     migrate_vector_stores,
     sync_all_document_sources_task,
+    sync_document_source_task,
 )
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
@@ -466,6 +468,147 @@ def test_auto_sync_excludes_versioned_collections(mock_sync_task):
 
     dispatched_ids = set(mock_sync_task.map.call_args.args[0])
     assert dispatched_ids == {working_source.id}
+
+
+# ---------------------------------------------------------------------------
+# sync_document_source_task concurrency lock
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source")
+def test_sync_task_sets_and_clears_lock(sync_mock):
+    """On a normal run the task claims the lock under its own id, then releases it."""
+    sync_mock.return_value = SyncResult(success=True)
+    source = DocumentSourceFactory.create()
+
+    sync_document_source_task.apply(args=[source.id], task_id="task-a")
+
+    sync_mock.assert_called_once()
+    source.refresh_from_db()
+    assert source.sync_task_id == ""
+    assert source.sync_started_at is None
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source")
+def test_sync_task_skips_when_locked_by_another_running_task(sync_mock):
+    """A fresh lock held by a different task short-circuits the sync without clobbering it.
+
+    Regression: concurrent syncs of the same source raised
+    ``DatabaseError: Save with update_fields did not affect any rows`` when one task deleted
+    CollectionFile rows the other was updating.
+    """
+    source = DocumentSourceFactory.create(sync_task_id="other-task", sync_started_at=timezone.now())
+
+    sync_document_source_task.apply(args=[source.id], task_id="task-a")
+
+    sync_mock.assert_not_called()
+    source.refresh_from_db()
+    assert source.sync_task_id == "other-task"
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source")
+def test_sync_task_reclaims_stale_lock(sync_mock):
+    """A lock older than SYNC_LOCK_TIMEOUT (dead worker) is reclaimed rather than blocking forever."""
+    sync_mock.return_value = SyncResult(success=True)
+    stale = timezone.now() - SYNC_LOCK_TIMEOUT - timedelta(minutes=1)
+    source = DocumentSourceFactory.create(sync_task_id="dead-task", sync_started_at=stale)
+
+    sync_document_source_task.apply(args=[source.id], task_id="task-a")
+
+    sync_mock.assert_called_once()
+    source.refresh_from_db()
+    assert source.sync_task_id == ""
+    assert source.sync_started_at is None
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source")
+def test_sync_task_releases_lock_on_exception(sync_mock):
+    """The lock is released in a finally, even when the sync raises, so it never sticks."""
+    sync_mock.side_effect = RuntimeError("boom")
+    source = DocumentSourceFactory.create()
+
+    sync_document_source_task.apply(args=[source.id], task_id="task-a")
+
+    source.refresh_from_db()
+    assert source.sync_task_id == ""
+    assert source.sync_started_at is None
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source")
+def test_sync_task_only_clears_lock_it_still_owns(sync_mock):
+    """Completion clears the lock only if it still belongs to this task.
+
+    Simulates another task reclaiming the (stale) lock while this one runs; the finishing
+    task must not clear the usurper's lock.
+    """
+
+    def take_over(document_source):
+        usurper = DocumentSource.objects.get(id=document_source.id)
+        usurper.sync_task_id = "usurper-task"
+        usurper.save(update_fields=["sync_task_id"])
+        return SyncResult(success=True)
+
+    sync_mock.side_effect = take_over
+    source = DocumentSourceFactory.create()
+
+    sync_document_source_task.apply(args=[source.id], task_id="task-a")
+
+    source.refresh_from_db()
+    assert source.sync_task_id == "usurper-task"
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source")
+def test_sync_task_reclaims_lock_without_start_time(sync_mock):
+    """A lock with no recorded start time (e.g. left by pre-sync_started_at code) is reclaimable."""
+    sync_mock.return_value = SyncResult(success=True)
+    source = DocumentSourceFactory.create(sync_task_id="legacy-task", sync_started_at=None)
+    assert source.is_sync_in_progress is False
+
+    sync_document_source_task.apply(args=[source.id], task_id="task-a")
+
+    sync_mock.assert_called_once()
+    source.refresh_from_db()
+    assert source.sync_task_id == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source_task")
+def test_auto_sync_skips_fresh_lock_but_includes_stale(mock_sync_task):
+    """Scheduler skips sources with a fresh lock but re-dispatches stale-locked ones so they self-heal."""
+    index = CollectionFactory.create(is_index=True)
+    unlocked = DocumentSourceFactory.create(collection=index, source_type="github", auto_sync_enabled=True)
+    DocumentSourceFactory.create(
+        collection=index,
+        source_type="github",
+        auto_sync_enabled=True,
+        sync_task_id="running",
+        sync_started_at=timezone.now(),
+    )
+    stale = DocumentSourceFactory.create(
+        collection=index,
+        source_type="github",
+        auto_sync_enabled=True,
+        sync_task_id="dead",
+        sync_started_at=timezone.now() - SYNC_LOCK_TIMEOUT - timedelta(minutes=1),
+    )
+    no_start_time = DocumentSourceFactory.create(
+        collection=index,
+        source_type="github",
+        auto_sync_enabled=True,
+        sync_task_id="legacy",
+        sync_started_at=None,
+    )
+
+    sync_all_document_sources_task()
+
+    dispatched_ids = set(mock_sync_task.map.call_args.args[0])
+    assert dispatched_ids == {unlocked.id, stale.id, no_start_time.id}
 
 
 @pytest.mark.django_db()
