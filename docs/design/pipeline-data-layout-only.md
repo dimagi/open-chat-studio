@@ -191,6 +191,27 @@ historical `migrate_start_end_nodes` utils never see new-format data):
   reverse rebuilds each node's blob from its `Node` row (the rows own the content and
   are untouched by the forward migration); nodes without a backing row pass through.
 
+## Node position columns (phase 1 of the layout move)
+
+A follow-up decision (issue #3907) moves layout onto the `Node` rows so `data.nodes`
+can eventually disappear. This lands in two phases; the current code implements only
+phase 1:
+
+- `Node` gains nullable `position_x`/`position_y` float columns (react-flow positions
+  stored verbatim; copied by `create_new_version` like any other field).
+- **Shadow-writes only:** every save path routes positions through `node_data`
+  (`split_flow_data` and `apply_pipeline_patch` include a `position` per entry) and
+  `update_nodes_from_data` mirrors them onto the columns via `node_position_fields`
+  (unusable positions from raw import files are skipped, not written). Nothing reads
+  the columns yet — `data.nodes` stays authoritative for layout.
+- The `strip_node_data` command also backfills the columns from the blob positions
+  (overwriting, since the blob is authoritative) so pipelines that are never saved
+  again still get populated.
+- **Phase 2 (separate PR, after the command has run in prod):** switch layout reads to
+  the rows, drop `nodes` from `Pipeline.data`, and record the decision in a new ADR
+  extending ADR-0046. Rerun the command right before the switch to heal any writer
+  that bypassed the shadow-write (e.g. revert restoring old layout data).
+
 ## Backward compatibility
 
 - **Frontend:** wire format unchanged in both directions. GET still returns full nodes
