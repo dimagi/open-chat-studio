@@ -178,20 +178,40 @@ class MessageProcessingPipeline:
         7. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
-        unexpected_exception = None
+        try:
+            unexpected_exception = self._run_core_stages(ctx)
+        except EarlyAbort:
+            # Silent halt -- skip terminal stages entirely. The pipeline
+            # has decided it cannot or should not respond to this message.
+            return ctx
 
+        # Terminal stages always run -- regardless of early exit or error
+        for stage in self.terminal_stages:
+            stage(ctx)
+
+        # Re-raise unexpected exceptions after terminal stages complete
+        if unexpected_exception is not None:
+            raise unexpected_exception
+
+        return ctx
+
+    def _run_core_stages(self, ctx: MessageProcessingContext) -> Exception | None:
+        """Run the core stages, applying the pipeline's exception policy.
+
+        Returns the unexpected exception to re-raise after terminal stages (or None).
+        Propagates ``EarlyAbort`` (silent halt) and passthrough exceptions to the caller.
+        """
         try:
             for stage in self.core_stages:
                 stage(ctx)
         except EarlyExitResponse as e:
             ctx.early_exit_response = e.response
         except EarlyAbort:
-            # Silent halt -- skip terminal stages entirely. The pipeline
-            # has decided it cannot or should not respond to this message.
-            return ctx
+            # Silent halt -- propagate so process() skips terminal stages entirely.
+            raise
         except self.passthrough_exceptions:
-            # Passthrough exceptions (e.g. GenerationCancelled) propagate
-            # immediately -- no error message generation, no terminal stages.
+            # Passthrough exceptions (e.g. GenerationCancelled) propagate immediately --
+            # no error message generation, no terminal stages.
             raise
         except (PipelineBuildError, PipelineNodeBuildError) as e:
             # The pipeline is misconfigured (e.g. a deprecated model). Reply
@@ -204,19 +224,10 @@ class MessageProcessingPipeline:
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))
         except Exception as e:
-            unexpected_exception = e
             ctx.early_exit_response = self._generate_error_message(ctx, e)
             ctx.processing_errors.append(str(e))
-
-        # Terminal stages always run -- regardless of early exit or error
-        for stage in self.terminal_stages:
-            stage(ctx)
-
-        # Re-raise unexpected exceptions after terminal stages complete
-        if unexpected_exception is not None:
-            raise unexpected_exception
-
-        return ctx
+            return e
+        return None
 
     def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:
         """Generate a user-facing error message using EventBot.
