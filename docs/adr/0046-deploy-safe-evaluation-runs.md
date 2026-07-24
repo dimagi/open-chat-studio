@@ -8,7 +8,7 @@
 
 ## Context
 
-Evaluation dispatch used a Celery chord: `run_evaluation_task` split the dataset with `.chunks()`, fanned them out, and a `mark_evaluation_complete` callback fired when all chunks finished. Chord state lives only in Redis and is unrecoverable once lost. A deploy (SIGTERM → SIGKILL) mid-run dropped a chunk's remaining messages: the callback never fired, the run stayed `PROCESSING` forever, and that blocked dataset/evaluator/config edits via `InFlightRunsError` with no recovery path. Auto-population ([ADR-0019](0019-poll-source-experiments-to-auto-populate-eval-datasets.md)) also grows datasets every ~5 min, so a `FULL` run that reads the live dataset at completion time races rows appended after it started.
+Evaluation dispatch used a Celery chord: `run_evaluation_task` split the dataset with `.chunks()`, fanned them out, and a `mark_evaluation_complete` callback fired when all chunks finished. Chord state lives only in Redis and is unrecoverable once lost. A deploy (SIGTERM → SIGKILL) mid-run dropped a chunk's remaining messages: the callback never fired, the run stayed `PROCESSING` forever, and that blocked dataset/evaluator/config edits via `InFlightRunsError` with no recovery path. Auto-population ([ADR-0019](0019-poll-source-experiments-to-auto-populate-eval-datasets.md)) compounds this: it grows datasets every ~5 min, while the old task snapshotted `dataset.messages.all()` into an in-memory list only at dispatch. A `FULL` run's scope therefore lived solely in that transient list and the chord, so a crashed run could not be recovered by re-reading the dataset — it has since grown.
 
 ## Decision
 
