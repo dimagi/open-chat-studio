@@ -156,6 +156,8 @@ declare global {
     }
 }
 declare namespace LocalJSX {
+    type OneOf<K extends string, PropT, AttrT = PropT> = { [P in K]: PropT } & { [P in `attr:${K}` | `prop:${K}`]?: never } | { [P in `attr:${K}`]: AttrT } & { [P in K | `prop:${K}`]?: never } | { [P in `prop:${K}`]: PropT } & { [P in K | `attr:${K}`]?: never };
+
     interface OpenChatStudioWidget {
         /**
           * Allow the user to attach files to their messages.
@@ -289,15 +291,49 @@ declare namespace LocalJSX {
          */
         "welcomeMessages"?: string;
     }
+
+    interface OpenChatStudioWidgetAttributes {
+        "chatbotId": string;
+        "apiBaseUrl": string;
+        "buttonText": string;
+        "iconUrl": string;
+        "embedKey": string;
+        "buttonShape": 'round' | 'square';
+        "showButton": boolean;
+        "mode": 'standard' | 'kiosk';
+        "headerText": '';
+        "newChatConfirmationMessage": string;
+        "visible": boolean;
+        "position": 'left' | 'center' | 'right';
+        "welcomeMessages": string;
+        "starterQuestions": string;
+        "userId": string;
+        "userName": string;
+        "persistentSession": boolean;
+        "persistentSessionExpire": number;
+        "allowFullScreen": boolean;
+        "allowAttachments": boolean;
+        "disabled": boolean;
+        "bannerMessage": string;
+        "bannerStyle": 'default' | 'info' | 'warning' | 'error';
+        "bannerPosition": 'top' | 'bottom';
+        "typingIndicatorText": string;
+        "language": string;
+        "translationsUrl": string;
+        "versionNumber": number;
+        "sessionId": string;
+        "sessionToken": string;
+    }
+
     interface IntrinsicElements {
-        "open-chat-studio-widget": OpenChatStudioWidget;
+        "open-chat-studio-widget": Omit<OpenChatStudioWidget, keyof OpenChatStudioWidgetAttributes> & { [K in keyof OpenChatStudioWidget & keyof OpenChatStudioWidgetAttributes]?: OpenChatStudioWidget[K] } & { [K in keyof OpenChatStudioWidget & keyof OpenChatStudioWidgetAttributes as `attr:${K}`]?: OpenChatStudioWidgetAttributes[K] } & { [K in keyof OpenChatStudioWidget & keyof OpenChatStudioWidgetAttributes as `prop:${K}`]?: OpenChatStudioWidget[K] } & OneOf<"chatbotId", OpenChatStudioWidget["chatbotId"], OpenChatStudioWidgetAttributes["chatbotId"]>;
     }
 }
 export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
-            "open-chat-studio-widget": LocalJSX.OpenChatStudioWidget & JSXBase.HTMLAttributes<HTMLOpenChatStudioWidgetElement>;
+            "open-chat-studio-widget": LocalJSX.IntrinsicElements["open-chat-studio-widget"] & JSXBase.HTMLAttributes<HTMLOpenChatStudioWidgetElement>;
         }
     }
 }
