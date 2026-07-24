@@ -1,8 +1,8 @@
 from drf_spectacular.utils import extend_schema
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.api.permissions import IsAuthenticatedOrMachineToken
 from apps.api.v2.usage.param_serializers import UsageQuerySerializer
 from apps.api.v2.usage.permissions import CanViewUsage
 from apps.api.v2.usage.serializers import UsageResponseSerializer
@@ -18,7 +18,7 @@ class UsageView(APIView):
     # single participant.
     # See docs/design/usage-api.md.
 
-    permission_classes = [IsAuthenticated, CanViewUsage, TokenHasOAuthResourceScope]
+    permission_classes = [IsAuthenticatedOrMachineToken, CanViewUsage, TokenHasOAuthResourceScope]
     required_scopes = ["usage"]
 
     @extend_schema(

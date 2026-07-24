@@ -5,9 +5,13 @@ tests exercise the acceptance criteria: read endpoints resolve request.team from
 team isolation holds, and user-only surfaces (/me) are refused.
 """
 
+from unittest.mock import patch
+
 import pytest
 from django.urls import reverse
 
+from apps.chat.models import ChatMessage
+from apps.experiments.models import Participant
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
@@ -119,3 +123,43 @@ def test_machine_token_deletes_participant_schedule(session):
     }
     response = client.post(reverse("api:participant-data"), data=payload, format="json")
     assert response.status_code == 200, response.content
+
+
+@pytest.mark.django_db()
+def test_machine_token_reads_usage(session):
+    """usage:read works for a machine token (no user-permission gate)."""
+    client = _machine_client(session.team, scopes=["usage:read"])
+    response = client.get(reverse("api:v2:usage"), {"metric": "sessions", "period": "current_month"})
+    assert response.status_code == 200, response.content
+
+
+@pytest.mark.django_db()
+@patch("apps.api.openai.handle_api_message")
+def test_machine_token_chat_completion_uses_user_field_as_participant(mock_handle, session):
+    """chatbots:interact: the OpenAI `user` field identifies the (user-less) participant."""
+    mock_handle.return_value = ChatMessage(content="ok")
+    client = _machine_client(session.team, scopes=["chatbots:interact"])
+    url = reverse("api:openai-chat-completions", kwargs={"experiment_id": session.experiment.public_id})
+
+    response = client.post(
+        url,
+        data={"messages": [{"role": "user", "content": "hi"}], "user": "machine-participant"},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    participant = Participant.objects.get(identifier="machine-participant", team=session.team)
+    assert participant.user is None
+    # The messaging layer receives None, never the AnonymousUser.
+    assert mock_handle.call_args[0][0] is None
+
+
+@pytest.mark.django_db()
+def test_machine_token_chat_completion_requires_user_field(session):
+    """Without an authenticated user and no `user` field, there is no participant identifier."""
+    client = _machine_client(session.team, scopes=["chatbots:interact"])
+    url = reverse("api:openai-chat-completions", kwargs={"experiment_id": session.experiment.public_id})
+
+    response = client.post(url, data={"messages": [{"role": "user", "content": "hi"}]}, format="json")
+
+    assert response.status_code == 400, response.content
