@@ -171,13 +171,29 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
         index_collection_files_task(collection_file_ids=file_ids_to_index)
 
 
-@shared_task(ignore_result=True)
-def sync_document_source_task(document_source_id: int):
+@shared_task(bind=True, ignore_result=True)
+def sync_document_source_task(self, document_source_id: int):
     """Sync a specific document source"""
-    try:
-        document_source = DocumentSource.objects.select_related("collection").get(id=document_source_id)
-    except DocumentSource.DoesNotExist:
-        return
+    # Guard against concurrent syncs for the same document source.
+    # Use select_for_update to atomically check-and-set sync_task_id.
+    with transaction.atomic():
+        try:
+            locked = DocumentSource.objects.select_related("collection").select_for_update().get(
+                id=document_source_id
+            )
+        except DocumentSource.DoesNotExist:
+            return
+        if locked.sync_task_id and locked.sync_task_id != self.request.id:
+            logger.warning(
+                "Skipping sync: document source %s is already being synced by task %s",
+                document_source_id,
+                locked.sync_task_id,
+            )
+            return
+        locked.sync_task_id = self.request.id
+        locked.save(update_fields=["sync_task_id"])
+
+    document_source = locked
 
     try:
         result = sync_document_source(document_source)
@@ -198,8 +214,9 @@ def sync_document_source_task(document_source_id: int):
             },
         )
 
-    document_source.sync_task_id = ""
-    document_source.save(update_fields=["sync_task_id"])
+    # Only clear sync_task_id if it still belongs to this task, to avoid
+    # overwriting a sync_task_id set by a legitimately concurrent task.
+    DocumentSource.objects.filter(id=document_source_id, sync_task_id=self.request.id).update(sync_task_id="")
 
 
 @shared_task(ignore_result=True)
@@ -209,6 +226,7 @@ def sync_all_document_sources_task():
         auto_sync_enabled=True,
         collection__is_index=True,  # Only sync indexed collections
         collection__working_version__isnull=True,  # Only working collections, never snapshots (ADR-0031)
+        sync_task_id="",  # Skip sources already being synced
     ).values_list("id", flat=True)
 
     sync_document_source_task.map(auto_sources).delay()
