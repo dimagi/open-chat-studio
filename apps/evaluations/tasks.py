@@ -69,7 +69,7 @@ def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
     dataset.save(update_fields=["status", "error_message", "job_id"])
 
 
-def _pending_evaluator_ids(evaluation_run, message_id, evaluator_ids):
+def _pending_evaluator_ids(evaluation_run: EvaluationRun, message_id: int, evaluator_ids: list[int]) -> list[int]:
     """Return the subset of evaluator_ids with no EvaluationResult yet for (run, message).
 
     Error results ({"error": ...}) count as done, matching the current no-retry behaviour.
@@ -82,7 +82,15 @@ def _pending_evaluator_ids(evaluation_run, message_id, evaluator_ids):
     return [evaluator_id for evaluator_id in evaluator_ids if evaluator_id not in already_done]
 
 
-def _create_evaluation_result(evaluation_run, evaluator, message, output, session_id, *, apply_tags):
+def _create_evaluation_result(
+    evaluation_run: EvaluationRun,
+    evaluator: Evaluator,
+    message: EvaluationMessage,
+    output: dict,
+    session_id: int | None,
+    *,
+    apply_tags: bool,
+) -> EvaluationResult | None:
     """Create one EvaluationResult idempotently; absorb a duplicate-race insert.
 
     Returns the created result, or None when a concurrent delivery already wrote the
@@ -118,7 +126,13 @@ def _create_evaluation_result(evaluation_run, evaluator, message, output, sessio
     return evaluation_result
 
 
-def _run_evaluator_on_message(evaluation_run, evaluator, message, bot_response, session_id):
+def _run_evaluator_on_message(
+    evaluation_run: EvaluationRun,
+    evaluator: Evaluator,
+    message: EvaluationMessage,
+    bot_response: str | None,
+    session_id: int | None,
+) -> None:
     """Run a single evaluator over a single message and persist the outcome.
 
     On evaluator failure an error result is stored (matching the no-retry behaviour);
