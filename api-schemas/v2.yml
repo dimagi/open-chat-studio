@@ -214,15 +214,27 @@ paths:
   /api/v2/usage/:
     get:
       operationId: usage
-      description: 'Return team-scoped usage data for a time window. The window is
-        either a calendar ''period'' (current/previous month) or an explicit half-open
-        ''start''/''end''. Each requested metric gets its own block: ''messages''
-        (human/AI/total counts), ''sessions'' (count), ''participants'' (distinct
-        count), ''cost'' (total spend and currency), and ''tokens'' (prompt/completion/total).
-        With ''granularity'' finer than ''total'', results are one row per time bucket.
-        With ''group_by'' set, results are cursor-paginated breakdown rows — one per
-        group, or one per (group, bucket) when combined with a finer granularity.
-        Optionally narrowed by participant, chatbot, or platform.'
+      description: |-
+        Return team-scoped usage data for a time window.
+
+        Each `metric` you request gets its own block in the response:
+
+        - **`messages`** — human / AI / total message counts
+        - **`sessions`** — session count
+        - **`participants`** — distinct active-participant count
+        - **`cost`** — total spend and currency
+        - **`tokens`** — prompt / completion / total token counts
+
+        **Time window.** Either a calendar `period` (current / previous month) or an explicit `start` / `end` range — `start` is included and `end` is excluded.
+
+        **Shape of `results`.**
+
+        - With `granularity` finer than `total`, `results` is one row per time bucket.
+        - With `group_by` set, `results` is cursor-paginated breakdown rows — one per group, or one per (group, bucket) when combined with a finer granularity.
+
+        Optionally narrowed by `participant`, `chatbot`, or `platform`.
+
+        > **Tip:** The **Response samples** panel has worked examples for the common cases — pick one from the **Example** dropdown (single participant, cost + tokens, grouped breakdowns, and daily timeseries).
       summary: Usage
       parameters:
       - in: query
@@ -374,6 +386,103 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UsageResponseOrGrouped'
+              examples:
+                MessagesForParticipant:
+                  value:
+                    period:
+                      start: '2026-07-01T00:00:00+00:00'
+                      end: '2026-08-01T00:00:00+00:00'
+                      timezone: UTC
+                    granularity: total
+                    group_by: null
+                    results:
+                      messages:
+                        human: 42
+                        ai: 40
+                        total: 82
+                  summary: A participant's message count for the current month
+                  description: '`?metric=messages&period=current_month&participant=<public_id>`
+                    — the original ask. Ungrouped at ''total'' granularity, so ''results''
+                    is a single object and ''group_by'' is null.'
+                CostAndTokens:
+                  value:
+                    period:
+                      start: '2026-07-01T00:00:00+00:00'
+                      end: '2026-08-01T00:00:00+00:00'
+                      timezone: UTC
+                    granularity: total
+                    group_by: null
+                    results:
+                      cost:
+                        total: '1.23450000'
+                        currency: USD
+                      tokens:
+                        prompt: 120000
+                        completion: 45000
+                        total: 178000
+                  summary: Combined cost and token usage for a window
+                  description: '`?metric=cost&metric=tokens&start=2026-07-01&end=2026-08-01`
+                    — additive metrics resolve in one call. ''prompt'' and ''completion''
+                    need not sum to ''total'' (cache-write tokens are in the total
+                    only).'
+                GroupedByParticipant:
+                  value:
+                    period:
+                      start: '2026-07-01T00:00:00+00:00'
+                      end: '2026-08-01T00:00:00+00:00'
+                      timezone: UTC
+                    group_by: participant
+                    count: 128
+                    next: https://example.com/api/v2/usage/?cursor=cD0yMDI2LTA3LTE1
+                    previous: null
+                    results:
+                    - participant:
+                        public_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                        identifier: '+15551234567'
+                        platform: whatsapp
+                      messages:
+                        human: 42
+                        ai: 40
+                        total: 82
+                      cost:
+                        total: '0.01234000'
+                        currency: USD
+                  summary: Per-participant breakdown, cursor-paginated
+                  description: '`?metric=messages&metric=cost&group_by=participant&period=current_month`
+                    — one row per participant active in the window. Follow ''next''
+                    for the next page; ''count'' appears on the first page only. Chatbot
+                    grouping carries `{public_id, name}`; platform grouping carries
+                    the slug string.'
+                DailyTimeseries:
+                  value:
+                    period:
+                      start: '2026-07-01T00:00:00+00:00'
+                      end: '2026-07-04T00:00:00+00:00'
+                      timezone: UTC
+                    granularity: daily
+                    group_by: null
+                    results:
+                    - bucket_start: '2026-07-01T00:00:00+00:00'
+                      messages:
+                        human: 3
+                        ai: 3
+                        total: 6
+                    - bucket_start: '2026-07-02T00:00:00+00:00'
+                      messages:
+                        human: 0
+                        ai: 0
+                        total: 0
+                    - bucket_start: '2026-07-03T00:00:00+00:00'
+                      messages:
+                        human: 5
+                        ai: 5
+                        total: 10
+                  summary: Daily message counts over a window
+                  description: '`?metric=messages&granularity=daily&start=2026-07-01&end=2026-07-04`
+                    — ''results'' is one row per bucket, each with a ''bucket_start''.
+                    Empty buckets are zero-filled across the whole window. Windows
+                    exceeding 366 buckets for the given granularity are rejected with
+                    a 400.'
           description: ''
 components:
   schemas:
