@@ -84,10 +84,17 @@ class TestTeamDetail:
         response = client.get(reverse("ocs_admin:team_detail", args=[team.slug]))
         assert response.status_code == 302
 
-    def test_renders_stats_and_metadata_form(self, staff_client, settings):
+    def test_direct_get_redirects_to_manage_page(self, staff_client):
+        """A non-HTMX GET is a shareable link into the manage page, not a bare panel."""
+        team = TeamFactory.create()
+        response = staff_client.get(reverse("ocs_admin:team_detail", args=[team.slug]))
+        assert response.status_code == 302
+        assert response.url == f"{reverse('ocs_admin:team_metadata')}?team={team.slug}"
+
+    def test_htmx_get_renders_stats_and_metadata_form(self, staff_client, settings):
         settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
         team = TeamFactory.create(name="Acme", metadata={"team_owner": "Jane Doe"})
-        response = staff_client.get(reverse("ocs_admin:team_detail", args=[team.slug]))
+        response = staff_client.get(reverse("ocs_admin:team_detail", args=[team.slug]), headers={"HX-Request": "true"})
         assert response.status_code == 200
         content = response.content.decode()
         assert "Acme" in content
@@ -100,10 +107,40 @@ class TestTeamDetail:
         response = staff_client.post(
             reverse("ocs_admin:team_detail", args=[team.slug]),
             {"team_owner": "New Owner"},
+            headers={"HX-Request": "true"},
         )
-        assert response.status_code == 302
+        assert response.status_code == 200
+        assert "New Owner" in response.content.decode()
         team.refresh_from_db()
         assert team.metadata["team_owner"] == "New Owner"
+
+
+@pytest.mark.django_db()
+class TestTeamMetadataPage:
+    def test_blocks_non_staff(self, client):
+        client.force_login(CustomUser.objects.create(username="member-meta@acme.com"))
+        response = client.get(reverse("ocs_admin:team_metadata"))
+        assert response.status_code == 302
+
+    def test_renders_import_export_and_search(self, staff_client):
+        response = staff_client.get(reverse("ocs_admin:team_metadata"))
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert reverse("ocs_admin:export_team_metadata") in content
+        assert reverse("ocs_admin:teams_api") in content
+        assert 'id="team-detail-panel"' in content
+
+    def test_preselected_team_loads_panel(self, staff_client):
+        team = TeamFactory.create()
+        response = staff_client.get(reverse("ocs_admin:team_metadata"), {"team": team.slug})
+        assert response.status_code == 200
+        assert response.context["initial_team"] == team
+        assert reverse("ocs_admin:team_detail", args=[team.slug]) in response.content.decode()
+
+    def test_unknown_team_leaves_panel_empty(self, staff_client):
+        response = staff_client.get(reverse("ocs_admin:team_metadata"), {"team": "does-not-exist"})
+        assert response.status_code == 200
+        assert response.context["initial_team"] is None
 
 
 @pytest.mark.django_db()
