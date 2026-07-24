@@ -41,7 +41,15 @@ class APIScopedValidator(OAuth2Validator):
     def _create_access_token(self, expires, request, token, source_refresh_token=None):
         """This will be hit whenever an access token is created, including during refresh."""
         access_token = super()._create_access_token(expires, request, token, source_refresh_token)
-        access_token.team = getattr(request, "team", None) or source_refresh_token.team
+        # Authorization-code: team comes from the request (set in validate_code) or the source refresh
+        # token on refresh. Client-credentials has neither, so fall back to the team pinned on the
+        # Application (request.client).
+        team = getattr(request, "team", None)
+        if not team and source_refresh_token:
+            team = source_refresh_token.team
+        if not team:
+            team = getattr(request.client, "team", None)
+        access_token.team = team
         access_token.save()
         return access_token
 
@@ -56,12 +64,16 @@ class APIScopedValidator(OAuth2Validator):
         # `sub` is the user's email, so we also assert whether that email has been verified. This lets
         # downstream consumers that federate against OCS decide whether to trust the asserted email
         # (e.g. for cross-provider account linking) instead of assuming it has been verified.
-        claims = {
-            "sub": request.user.email,
-            "name": request.user.get_full_name(),
-            "is_active": request.user.is_active,
-            "email_verified": user_has_confirmed_email_address(request.user, request.user.email),
-        }
+        # Client-credentials tokens have no user, so the user-derived claims are omitted.
+        user = getattr(request, "user", None)
+        claims = {}
+        if user and user.is_authenticated:
+            claims = {
+                "sub": user.email,
+                "name": user.get_full_name(),
+                "is_active": user.is_active,
+                "email_verified": user_has_confirmed_email_address(user, user.email),
+            }
         if team := getattr(request, "team", None):
             claims["team"] = team.slug
         else:

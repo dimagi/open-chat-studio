@@ -78,3 +78,18 @@ class SuperuserMembership:
 
     def is_team_admin(self):
         return self.user.is_superuser
+
+
+class SyntheticTeamMembership:
+    """Dummy membership for a machine (client-credentials) token pinned to a team.
+
+    There is no user and no ``Membership`` row; access is granted by the token's pinned team alone.
+    Machine identities are never team admins.
+    """
+
+    def __init__(self, team: Team):
+        self.user = None
+        self.team = team
+
+    def is_team_admin(self):
+        return False
