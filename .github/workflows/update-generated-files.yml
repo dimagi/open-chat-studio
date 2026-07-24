@@ -49,9 +49,17 @@ jobs:
         ports:
           - 6379:6379
     steps:
+      # Push with a GitHub App token (not GITHUB_TOKEN) so the commit re-triggers CI.
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OCS_AGENT_APP_ID }}
+          private-key: ${{ secrets.OCS_AGENT_PRIVATE_KEY }}
+
       - uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ github.head_ref }}
 
       - name: Set up Python
