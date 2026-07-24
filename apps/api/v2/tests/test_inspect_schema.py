@@ -102,7 +102,7 @@ def test_node_params_fields_carry_descriptions(api_schema):
 
 
 def test_graph_edge_declares_id(api_schema):
-    """Each graph edge carries its ``id`` — the future edge-delete address for the write API."""
+    """Each graph edge exposes its ``id``."""
     edge = api_schema["components"]["schemas"]["InspectGraphEdge"]
     assert "id" in edge["properties"]
 
