@@ -1,4 +1,4 @@
-from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema
+from drf_spectacular.utils import OpenApiExample, PolymorphicProxySerializer, extend_schema
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,8 +24,9 @@ class PlatformCursorPagination(CursorPagination):
 
 
 class UsageView(APIView):
-    # A comment, not a docstring: drf-spectacular would publish a docstring as the operation
-    # description, and the per-operation description below is the client-facing one.
+    # A comment, not a docstring: drf-spectacular falls back to the view/class docstring for the
+    # operation description, so a docstring here would duplicate the per-operation description below
+    # (which is the client-facing one and takes precedence).
     # Team-scoped usage inspection. Returns message counts, session counts, distinct participant
     # counts, cost, and token counts over a time window, optionally bucketed, grouped by a dimension,
     # and narrowed by participant/chatbot/platform.
@@ -38,14 +39,23 @@ class UsageView(APIView):
         operation_id="usage",
         summary="Usage",
         description=(
-            "Return team-scoped usage data for a time window. The window is either a calendar 'period' "
-            "(current/previous month) or an explicit half-open 'start'/'end'. Each requested metric "
-            "gets its own block: 'messages' (human/AI/total counts), 'sessions' (count), 'participants' "
-            "(distinct count), 'cost' (total spend and currency), and 'tokens' (prompt/completion/total). "
-            "With 'granularity' finer than 'total', results are one row per time bucket. With 'group_by' "
-            "set, results are cursor-paginated breakdown rows — one per group, or one per (group, bucket) "
-            "when combined with a finer granularity. Optionally narrowed by participant, chatbot, or "
-            "platform."
+            "Return team-scoped usage data for a time window.\n\n"
+            "Each `metric` you request gets its own block in the response:\n\n"
+            "- **`messages`** — human / AI / total message counts\n"
+            "- **`sessions`** — session count\n"
+            "- **`participants`** — distinct active-participant count\n"
+            "- **`cost`** — total spend and currency\n"
+            "- **`tokens`** — prompt / completion / total token counts\n\n"
+            "**Time window.** Either a calendar `period` (current / previous month) or an explicit "
+            "`start` / `end` range — `start` is included and `end` is excluded.\n\n"
+            "**Shape of `results`.**\n\n"
+            "- With `granularity` finer than `total`, `results` is one row per time bucket.\n"
+            "- With `group_by` set, `results` is cursor-paginated breakdown rows — one per group, or one "
+            "per (group, bucket) when combined with a finer granularity.\n\n"
+            "Optionally narrowed by `participant`, `chatbot`, or `platform`.\n\n"
+            "> **Tip:** The **Response samples** panel has worked examples for the common cases — pick "
+            "one from the **Example** dropdown (single participant, cost + tokens, grouped breakdowns, "
+            "and daily timeseries)."
         ),
         tags=["Usage"],
         # Query parameters are derived from the request serializer so the docs can't drift from validation.
@@ -55,6 +65,111 @@ class UsageView(APIView):
             serializers=[UsageResponseSerializer, GroupedUsageResponseSerializer],
             resource_type_field_name=None,
         ),
+        examples=[
+            OpenApiExample(
+                name="MessagesForParticipant",
+                summary="A participant's message count for the current month",
+                description=(
+                    "`?metric=messages&period=current_month&participant=<public_id>` — the original ask. "
+                    "Ungrouped at 'total' granularity, so 'results' is a single object and 'group_by' is null."
+                ),
+                value={
+                    "period": {
+                        "start": "2026-07-01T00:00:00+00:00",
+                        "end": "2026-08-01T00:00:00+00:00",
+                        "timezone": "UTC",
+                    },
+                    "granularity": "total",
+                    "group_by": None,
+                    "results": {"messages": {"human": 42, "ai": 40, "total": 82}},
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
+            OpenApiExample(
+                name="CostAndTokens",
+                summary="Combined cost and token usage for a window",
+                description=(
+                    "`?metric=cost&metric=tokens&start=2026-07-01&end=2026-08-01` — additive metrics resolve in "
+                    "one call. 'prompt' and 'completion' need not sum to 'total' (cache-write tokens are in the "
+                    "total only)."
+                ),
+                value={
+                    "period": {
+                        "start": "2026-07-01T00:00:00+00:00",
+                        "end": "2026-08-01T00:00:00+00:00",
+                        "timezone": "UTC",
+                    },
+                    "granularity": "total",
+                    "group_by": None,
+                    "results": {
+                        "cost": {"total": "1.23450000", "currency": "USD"},
+                        "tokens": {"prompt": 120000, "completion": 45000, "total": 178000},
+                    },
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
+            OpenApiExample(
+                name="GroupedByParticipant",
+                summary="Per-participant breakdown, cursor-paginated",
+                description=(
+                    "`?metric=messages&metric=cost&group_by=participant&period=current_month` — one row per "
+                    "participant active in the window. Follow 'next' for the next page; 'count' appears on the "
+                    "first page only. Chatbot grouping carries `{public_id, name}`; platform grouping carries the "
+                    "slug string."
+                ),
+                value={
+                    "period": {
+                        "start": "2026-07-01T00:00:00+00:00",
+                        "end": "2026-08-01T00:00:00+00:00",
+                        "timezone": "UTC",
+                    },
+                    "group_by": "participant",
+                    "count": 128,
+                    "next": "https://example.com/api/v2/usage/?cursor=cD0yMDI2LTA3LTE1",
+                    "previous": None,
+                    "results": [
+                        {
+                            "participant": {
+                                "public_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                                "identifier": "+15551234567",
+                                "platform": "whatsapp",
+                            },
+                            "messages": {"human": 42, "ai": 40, "total": 82},
+                            "cost": {"total": "0.01234000", "currency": "USD"},
+                        }
+                    ],
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
+            OpenApiExample(
+                name="DailyTimeseries",
+                summary="Daily message counts over a window",
+                description=(
+                    "`?metric=messages&granularity=daily&start=2026-07-01&end=2026-07-04` — 'results' is one row "
+                    "per bucket, each with a 'bucket_start'. Empty buckets are zero-filled across the whole window. "
+                    "Windows exceeding 366 buckets for the given granularity are rejected with a 400."
+                ),
+                value={
+                    "period": {
+                        "start": "2026-07-01T00:00:00+00:00",
+                        "end": "2026-07-04T00:00:00+00:00",
+                        "timezone": "UTC",
+                    },
+                    "granularity": "daily",
+                    "group_by": None,
+                    "results": [
+                        {"bucket_start": "2026-07-01T00:00:00+00:00", "messages": {"human": 3, "ai": 3, "total": 6}},
+                        {"bucket_start": "2026-07-02T00:00:00+00:00", "messages": {"human": 0, "ai": 0, "total": 0}},
+                        {"bucket_start": "2026-07-03T00:00:00+00:00", "messages": {"human": 5, "ai": 5, "total": 10}},
+                    ],
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
+        ],
     )
     def get(self, request):
         params = UsageQuerySerializer(data=request.query_params)
