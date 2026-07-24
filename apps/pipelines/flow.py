@@ -33,32 +33,45 @@ class FlowEdge(pydantic.BaseModel):
 
 
 class Flow(pydantic.BaseModel):
-    nodes: list[FlowNode]
+    # Stored ``Pipeline.data`` is layout-only and carries no ``nodes`` (ADR-0047), so nodes
+    # default to empty; full nodes still arrive on the wire and are rebuilt for reads.
+    nodes: list[FlowNode] = Field(default_factory=list)
     edges: list[FlowEdge]
     errors: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
-#: The only node keys persisted in ``Pipeline.data`` — everything else is node content
-#: owned by the ``Node`` model (see ADR-0046).
-LAYOUT_NODE_KEYS = ("id", "type", "position")
+#: React-flow node types. ``Node.type`` (the pipeline node class name) maps onto one of
+#: these for the editor; the reserved start/end classes get their own types.
+REACT_FLOW_START_TYPE = "startNode"
+REACT_FLOW_END_TYPE = "endNode"
+REACT_FLOW_NODE_TYPE = "pipelineNode"
 
 
-def split_flow_data(data: dict) -> tuple[dict, dict[str, dict]]:
+def react_flow_node_type(node_type: str) -> str:
+    """Map a ``Node.type`` (pipeline node class name) onto its react-flow node type."""
+    if node_type == "StartNode":
+        return REACT_FLOW_START_TYPE
+    if node_type == "EndNode":
+        return REACT_FLOW_END_TYPE
+    return REACT_FLOW_NODE_TYPE
+
+
+def split_flow_data(data: dict) -> tuple[dict, dict[str, dict | None]]:
     """Split a full react-flow graph into layout-only data and per-node content.
 
-    Returns ``(layout_data, node_data)`` where ``layout_data`` keeps only
-    ``LAYOUT_NODE_KEYS`` per node (edges and unknown top-level keys pass through) and
-    ``node_data`` maps flow_id to ``{"type", "label", "params", "position"}`` for every
-    node that carried an embedded ``data`` key. ``position`` lets the save shadow-write
-    the layout onto the ``Node`` position columns; the layout in ``Pipeline.data`` stays
-    authoritative until a follow-up PR switches reads over. Layout-only input yields an
-    empty ``node_data``. The input is not mutated.
+    Returns ``(layout_data, node_data)`` where ``layout_data`` drops the ``nodes`` key
+    entirely (edges, viewport and unknown top-level keys pass through) — ``Pipeline.data``
+    holds no node information beyond edges (ADR-0047). ``node_data`` is the complete graph
+    membership: it has an entry for *every* node in the input. Nodes carrying an embedded
+    ``data`` key map to ``{"type", "label", "params", "position"}`` (content and layout are
+    owned by the ``Node`` rows); nodes without one map to ``None`` (membership only — the
+    row must already exist, otherwise ``update_nodes_from_data`` raises). The input is not
+    mutated.
     """
     if "nodes" not in data:
         return {**data}, {}
 
-    node_data = {}
-    layout_nodes = []
+    node_data: dict[str, dict | None] = {}
     for node in data["nodes"]:
         content = node.get("data")
         if content:
@@ -68,8 +81,9 @@ def split_flow_data(data: dict) -> tuple[dict, dict[str, dict]]:
                 "params": content.get("params", {}),
                 "position": node.get("position"),
             }
-        layout_nodes.append({key: node[key] for key in LAYOUT_NODE_KEYS if key in node})
-    return {**data, "nodes": layout_nodes}, node_data
+        else:
+            node_data[node["id"]] = None
+    return {key: value for key, value in data.items() if key != "nodes"}, node_data
 
 
 def node_position_fields(position) -> dict:

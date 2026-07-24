@@ -15,7 +15,14 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import MissingNodeDataError, PipelineBuildError
-from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, node_position_fields, split_flow_data
+from apps.pipelines.flow import (
+    Flow,
+    FlowNode,
+    FlowNodeData,
+    node_position_fields,
+    react_flow_node_type,
+    split_flow_data,
+)
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
@@ -126,22 +133,24 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    def update_nodes_from_data(self, node_data: dict[str, dict]) -> None:
-        """Reconcile this pipeline's ``Node`` rows with the node list in ``self.data``.
+    def update_nodes_from_data(self, node_data: dict[str, dict | None]) -> None:
+        """Reconcile this pipeline's ``Node`` rows against ``node_data``.
 
-        ``self.data`` (already persisted) decides graph membership only: rows whose
-        flow_id disappeared from it are deleted, or archived when they have versions.
-        Node content never comes from ``self.data`` — the rows own it (ADR-0046).
-        ``node_data`` maps flow_id to ``{"type", "label", "params", "position"}`` for
-        nodes whose content originates outside the database (UI saves, imports,
-        creation, revert); those rows are created or updated from the mapping. Graph
-        nodes absent from the mapping must already have a row, which is left untouched.
+        ``node_data`` is the complete graph membership: its keys are every node id in the
+        graph (``self.data`` no longer lists nodes — ADR-0047). Rows whose flow_id is absent
+        from the mapping are deleted, or archived when they have versions.
 
-        ``position`` is shadow-written to the row's position columns; ``self.data``
-        stays authoritative for layout until a follow-up PR switches reads over.
+        Each entry's value is either content — ``{"type", "label", "params", "position"}``
+        for nodes whose content originates outside the database (UI saves, imports, creation,
+        revert), used to create or update the row — or ``None`` (membership only), which
+        leaves an existing row untouched and requires that a row already exists. A ``None``
+        entry with no backing row is an error (the graph references content nobody supplied).
+
+        ``position`` is written to the row's position columns, which are the authoritative
+        source of layout for reads (``flow_data``).
         """
         current_ids = set(self.node_ids)
-        new_ids = {node["id"] for node in self.data["nodes"]}
+        new_ids = set(node_data)
         to_remove = current_ids - new_ids
 
         pipeline_nodes = Node.objects.annotate(versions_count=models.Count("versions")).filter(
@@ -154,17 +163,16 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        missing = new_ids - current_ids - set(node_data)
+        missing = {flow_id for flow_id, content in node_data.items() if content is None} - current_ids
         if missing:
             raise MissingNodeDataError(missing)
 
-        for flow_node in self.data["nodes"]:
-            content = node_data.get(flow_node["id"])
+        for flow_id, content in node_data.items():
             if content is None:
                 continue
             created_node, _ = Node.objects.update_or_create(
                 pipeline=self,
-                flow_id=flow_node["id"],
+                flow_id=flow_id,
                 defaults={
                     "type": content["type"],
                     "params": content.get("params", {}),
@@ -213,25 +221,28 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @property
     def data_without_positions(self):
         """The full flow (node content reconstructed from the Node rows) minus layout positions."""
-        if not self.data or "nodes" not in self.data:
+        if not self.data:
             return self.data
         return {
-            **self.data,
+            **{key: value for key, value in self.data.items() if key != "nodes"},
             "nodes": [{k: v for k, v in node.items() if k != "position"} for node in self.flow_data["nodes"]],
         }
 
     @cached_property
     def flow_data(self) -> dict:
-        flow = Flow(**self.data)
-        flow_nodes_by_id = {node.id: node for node in flow.nodes}
-        nodes = []
+        """The full react-flow graph, rebuilt from the ``Node`` rows.
 
+        ``self.data`` supplies only edges (and viewport when present); each node's content,
+        layout position and react-flow type come from its ``Node`` row (ADR-0047).
+        """
+        flow = Flow(**self.data)
+        nodes = []
         for node in self.node_set.all():
             nodes.append(
                 FlowNode(
                     id=node.flow_id,
-                    position=flow_nodes_by_id[node.flow_id].position,
-                    type=flow_nodes_by_id[node.flow_id].type,
+                    position=node.position or {},
+                    type=react_flow_node_type(node.type),
                     data=FlowNodeData(
                         id=node.flow_id,
                         type=node.type,

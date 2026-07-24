@@ -9,8 +9,8 @@ from apps.pipelines.models import Node, Pipeline
 
 class Command(BaseCommand):
     help = (
-        "Strip embedded node content from Pipeline.data, leaving layout only (ADR-0046), "
-        "and backfill each node's position onto the Node row's position columns. "
+        "Drop the nodes key from Pipeline.data, leaving edges (and viewport) only (ADR-0047), "
+        "after backfilling each node's position onto the Node row's position columns. "
         "Idempotent and safe to rerun; pipelines whose blobs have no backing Node row are "
         "skipped and logged."
     )
@@ -19,7 +19,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--rebuild",
             action="store_true",
-            help="Reverse: rebuild the embedded node blobs from the Node rows (needed by pre-ADR-0046 code).",
+            help="Reverse: rebuild the nodes list (with embedded blobs) from the Node rows for rollback.",
         )
 
     def handle(self, *args, **options):

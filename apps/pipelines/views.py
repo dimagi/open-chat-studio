@@ -390,7 +390,7 @@ def pipeline_data(request, team_slug: str, pk: int):
         pipeline = Pipeline.objects.get(pk=pk)
     except Pipeline.DoesNotExist:
         pipeline = Pipeline.objects.create(
-            id=pk, team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
+            id=pk, team=request.team, data={"edges": [], "viewport": {}}, name="New Pipeline"
         )
     return JsonResponse(
         {
@@ -457,7 +457,10 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         if patch.name is not None:
             pipeline.name = patch.name
 
-        pipeline.data, node_data = apply_pipeline_patch(pipeline.data, patch)
+        # The patch engine works off the full current graph: nodes rebuilt from the rows
+        # (Pipeline.data no longer lists them, ADR-0047) plus stored top-level keys (viewport).
+        current_flow = {**pipeline.data, **pipeline.flow_data}
+        pipeline.data, node_data = apply_pipeline_patch(current_flow, patch)
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         try:
@@ -468,6 +471,8 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
             transaction.set_rollback(True)
             return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
         pipeline.refresh_from_db(fields=["node_set"])
+        # flow_data was cached above off the pre-patch rows; drop it so the response rebuilds.
+        pipeline.__dict__.pop("flow_data", None)
 
     return JsonResponse(
         {
