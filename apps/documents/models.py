@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 
 from django.db import models, transaction
@@ -21,6 +22,8 @@ from apps.utils.deletion import (
     get_related_pipelines_queryset,
     get_related_pipelines_queryset_for_list_param,
 )
+
+logger = logging.getLogger("ocs.documents")
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -121,6 +124,19 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
+    enable_contextual_retrieval = models.BooleanField(
+        blank=True,
+        null=True,
+        help_text="If enabled, a short context header is generated for each chunk and stored for retrieval.",
+    )
+    contextualizer_llm_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="+",
+        help_text="The chat model used to generate per-chunk context headers when contextual retrieval is enabled.",
+    )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
@@ -321,7 +337,54 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_index and self.is_remote_index:
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
         else:
-            return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
+            return self.llm_provider.get_local_index_manager(
+                embedding_model_name=self.embedding_provider_model.name,
+                contextualizer=self._build_contextualizer(),
+            )
+
+    def _build_contextualizer(self):
+        """Build a contextualizer for this collection's indexing pipeline, or None.
+
+        Returns None (unchanged indexing behaviour) unless the contextual retrieval
+        feature flag is active for this collection's team, enable_contextual_retrieval
+        is set, and a contextualizer_llm_model is configured. On any failure to build
+        the chat model (e.g. embedding-only providers), falls back to None so indexing
+        continues without contextualization rather than aborting.
+        """
+        from apps.service_providers.exceptions import ServiceProviderConfigError  # noqa: PLC0415
+        from apps.service_providers.llm_service.contextualizer import (  # noqa: PLC0415
+            LLMContextualizer,
+            StaticContextualizer,
+        )
+        from apps.teams.flags import Flags  # noqa: PLC0415
+        from apps.teams.models import Flag  # noqa: PLC0415
+
+        if not self.enable_contextual_retrieval or not self.contextualizer_llm_model:
+            return None
+        flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
+        if not flag:
+            return None
+        # Mirror Waffle's Flag.is_active precedence outside a request context:
+        # explicit everyone True/False overrides, otherwise check team membership.
+        if flag.everyone is True:
+            active = True
+        elif flag.everyone is False:
+            active = False
+        else:
+            active = flag.is_active_for_team(self.team)
+        if not active:
+            return None
+        try:
+            service = self.llm_provider.get_llm_service()
+            chat_model = service.get_chat_model(self.contextualizer_llm_model.name)
+        except (ServiceProviderConfigError, NotImplementedError):
+            logger.warning(
+                "Contextual retrieval is enabled but the collection's LLM provider cannot "
+                "provide a chat model; indexing will proceed without contextualization.",
+                extra={"collection_id": self.id, "llm_provider_id": self.llm_provider_id},
+            )
+            return None
+        return LLMContextualizer(chat_model, fallback=StaticContextualizer())
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""

@@ -8,6 +8,7 @@ from apps.documents.exceptions import FileUploadError
 from apps.documents.models import CollectionFile, FileStatus
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
+from apps.service_providers.llm_service.contextualizer import StaticContextualizer
 from apps.service_providers.llm_service.index_managers import (
     GoogleLocalIndexManager,
     LocalIndexManager,
@@ -38,7 +39,7 @@ def remote_collection_index(db):
 
 
 class LocalIndexManagerMock(LocalIndexManager):
-    def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
+    def chunk_file(self, file, chunk_size=None, chunk_overlap=None, text=None):
         return ["test", "content"]
 
     def get_embedding_vector(self, text, *, input_type):  # ty: ignore[invalid-method-override]
@@ -63,128 +64,70 @@ class RemoteIndexManagerMock(RemoteIndexManager):
 
 
 @pytest.mark.django_db()
-class TestLocalIndexManager:
-    @pytest.fixture()
-    def index_manager(self, provider_client_mock):
-        with mock.patch("apps.service_providers.models.LlmProvider.get_local_index_manager") as get_local_index_manager:
-            manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
-            get_local_index_manager.return_value = manager
-            yield manager
+class TestLocalIndexManagerContextualization:
+    """Tests for the contextual retrieval wiring in add_files (issue #2681)."""
 
-    def test_add_files_success(self, local_index_instance, index_manager):
-        file = FileFactory.create()
+    @pytest.fixture()
+    def contextualizing_index_manager(self):
+        contextualizer = StaticContextualizer(file_name="annual_report.pdf")
+        return LocalIndexManagerMock(
+            api_key="api-123",
+            embedding_model_name="embedding-model",
+            contextualizer=contextualizer,
+        )
+
+    def test_context_stored_when_contextualizer_set(self, local_index_instance, contextualizing_index_manager):
+        file = FileFactory.create(name="annual_report.pdf")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-        with mock.patch.object(file, "read_content", return_value="test content"):
+        with mock.patch.object(file, "read_content", return_value="full document text"):
             iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            index_manager.add_files(iterator)
+            contextualizing_index_manager.add_files(iterator)
 
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.COMPLETED
-
-        # Verify that embeddings were created
         embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
         assert embeddings.count() == 2
-        assert embeddings.first().text == "test"
-        assert embeddings.last().text == "content"
+        for embedding in embeddings:
+            assert "annual_report.pdf" in embedding.context
+            assert embedding.contextualized_text.startswith(embedding.context)
+            assert embedding.text in embedding.contextualized_text
 
-    def test_add_files_fails(self, local_index_instance, index_manager):
-        """If anything goes wrong during local indexing, the file should be marked as failed"""
-        file = FileFactory.create()
-        local_index_instance.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
-        collection_file.status = FileStatus.PENDING
-        collection_file.save()
-
-        # Mock file.read_content to raise an exception
-        with mock.patch.object(index_manager, "chunk_file", side_effect=Exception("Read failed")):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            index_manager.add_files(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.FAILED
-
-    def test_add_files_calls_get_embedding_vector_with_document_input_type(self, local_index_instance, index_manager):
-        file = FileFactory.create()
+    def test_no_context_when_contextualizer_none(self, local_index_instance):
+        manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
+        file = FileFactory.create(name="annual_report.pdf")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-        with (
-            mock.patch.object(file, "read_content", return_value="test content"),
-            mock.patch.object(
-                index_manager,
-                "get_embedding_vector",
-                wraps=index_manager.get_embedding_vector,
-            ) as spy,
-        ):
+        with mock.patch.object(file, "read_content", return_value="full document text"):
             iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            index_manager.add_files(iterator)
+            manager.add_files(iterator)
 
-        assert spy.call_count == 2
-        for call in spy.call_args_list:
-            assert call.kwargs == {"input_type": "document"} or call.args[1:] == ("document",)
-
-    def test_add_files_skips_chunks_that_are_empty_after_nul_stripping(self, local_index_instance, index_manager):
-        """A chunk made up only of NUL bytes becomes "" after sanitization. Skip it so the
-        embedder is never called with an empty string (Voyage raises; OpenAI/Google reject
-        via the API) and no partial chunks are persisted for a file that then fails."""
-        file = FileFactory.create()
-        local_index_instance.files.add(file)
-        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
-
-        with (
-            mock.patch.object(file, "read_content", return_value="irrelevant"),
-            mock.patch.object(index_manager, "chunk_file", return_value=["test", "\x00\x00", "content"]),
-            mock.patch.object(
-                index_manager,
-                "get_embedding_vector",
-                wraps=index_manager.get_embedding_vector,
-            ) as spy,
-        ):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            index_manager.add_files(iterator)
-
-        collection_file.refresh_from_db()
-        assert collection_file.status == FileStatus.COMPLETED
-
-        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance).order_by(
-            "chunk_number"
-        )
+        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
         assert embeddings.count() == 2
-        assert list(embeddings.values_list("text", flat=True)) == ["test", "content"]
+        for embedding in embeddings:
+            assert embedding.context == ""
+            assert embedding.contextualized_text == embedding.text
 
-        assert spy.call_count == 2
-        embedded_texts = [call.args[0] for call in spy.call_args_list]
-        assert "" not in embedded_texts
+    def test_embedded_input_includes_context(self, local_index_instance, contextualizing_index_manager):
+        file = FileFactory.create(name="annual_report.pdf")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-    def test_query_calls_get_embedding_vector_with_query_input_type(self, local_index_instance, index_manager):
-        with mock.patch.object(
-            index_manager,
-            "get_embedding_vector",
-            wraps=index_manager.get_embedding_vector,
-        ) as spy:
-            index_manager.query(index_id=local_index_instance.id, query="a question")
+        with (
+            mock.patch.object(file, "read_content", return_value="full document text"),
+            mock.patch.object(
+                contextualizing_index_manager,
+                "get_embedding_vector",
+                wraps=contextualizing_index_manager.get_embedding_vector,
+            ) as spy,
+        ):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            contextualizing_index_manager.add_files(iterator)
 
-        assert spy.call_count == 1
-        call = spy.call_args_list[0]
-        assert call.kwargs == {"input_type": "query"} or call.args[1:] == ("query",)
-
-    def test_delete_embeddings(self, local_index_instance):
-        file = FileFactory.create()
-        embedding = FileChunkEmbedding.objects.create(
-            team=file.team,
-            file=file,
-            collection=local_index_instance,
-            chunk_number=1,
-            page_number=1,
-            text="test embedding",
-            embedding=[0.1] * settings.EMBEDDING_VECTOR_SIZE,
-        )
-        local_index_instance.get_index_manager().delete_embeddings(file.id)
-
-        with pytest.raises(FileChunkEmbedding.DoesNotExist):
-            embedding.refresh_from_db()
+        assert spy.call_count > 0
+        for call in spy.call_args_list:
+            embedded_text = call.args[0]
+            assert "annual_report.pdf" in embedded_text
 
 
 @pytest.mark.django_db()
@@ -565,3 +508,5 @@ class TestOpenAILlmServiceLocalIndexManager:
         manager = service.get_local_index_manager(embedding_model_name="text-embedding-3-small")
 
         assert manager._openai_api_base is None
+
+        

@@ -262,6 +262,7 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     chunk_number = models.PositiveIntegerField()
     text = models.TextField()
+    context = models.TextField(blank=True, null=True)  # noqa: DJ001
     page_number = models.PositiveIntegerField(blank=True)
     embedding = HalfVectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
     working_version = models.ForeignKey(
@@ -274,3 +275,15 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     is_archived = models.BooleanField(default=False)
 
     objects = FileChunkEmbeddingObjectManager()
+
+    @property
+    def contextualized_text(self) -> str:
+        """Return the chunk text prefixed with its context header when present.
+
+        This is the text used for embedding and lexical indexing. Chunks
+        indexed before contextual retrieval was enabled have no context and
+        fall back to the raw chunk text, preserving existing behaviour.
+        """
+        if self.context:
+            return f"{self.context}\n\n{self.text}"
+        return self.text
