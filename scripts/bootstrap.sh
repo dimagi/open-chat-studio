@@ -163,6 +163,30 @@ install_uv() {
     fi
 }
 
+# Ensure pnpm is available via Corepack (pnpm is pinned in package.json's packageManager field).
+# Enables Corepack when needed and fails clearly if pnpm cannot be made available.
+ensure_pnpm() {
+    if command_exists pnpm; then
+        info "pnpm is available ($(pnpm --version))"
+        return 0
+    fi
+
+    if command_exists corepack; then
+        info "pnpm not found; enabling it via 'corepack enable'..."
+        if corepack enable && command_exists pnpm; then
+            info "pnpm is now available ($(pnpm --version))"
+            return 0
+        fi
+        error "'corepack enable' did not make pnpm available."
+    else
+        error "Neither pnpm nor Corepack is available."
+    fi
+
+    error "pnpm is required for this project. Corepack ships with Node.js; ensure Node 24+ is installed and run 'corepack enable'."
+    [ "$CHECK_ONLY" != true ] && exit 1
+    return 1
+}
+
 # Check Node.js and npm
 check_node() {
     step "Checking Node.js installation..."
@@ -188,15 +212,8 @@ check_node() {
         [ "$CHECK_ONLY" != true ] && exit 1
     fi
 
-    # pnpm is the package manager for this project, provided via corepack (bundled with Node).
-    if command_exists corepack; then
-        corepack enable >/dev/null 2>&1 || true
-    fi
-    if command_exists pnpm; then
-        info "pnpm is installed ($(pnpm --version))"
-    else
-        warn "pnpm not found. Enable it with 'corepack enable' (corepack ships with Node.js 24)."
-    fi
+    # pnpm is the package manager for this project, provided via Corepack (bundled with Node).
+    ensure_pnpm
 }
 
 # Check Python version
@@ -275,8 +292,8 @@ install_python_deps() {
 install_node_deps() {
     step "Installing Node.js dependencies..."
     if confirm "Install/update Node.js dependencies with 'pnpm install'?" "y"; then
+        ensure_pnpm
         info "Running: pnpm install --frozen-lockfile"
-        corepack enable >/dev/null 2>&1 || true
         pnpm install --frozen-lockfile
         info "Node.js dependencies installed successfully"
     else

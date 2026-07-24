@@ -1,5 +1,6 @@
 import platform
 import re
+import shutil
 import sys
 import textwrap
 import time
@@ -259,6 +260,21 @@ def ruff(c: Context, no_fix=False, unsafe_fixes=False, paths=""):
     c.run(f"ruff format {target_paths}", echo=True, pty=True)
 
 
+def _ensure_pnpm(c: Context):
+    """Ensure pnpm is available via Corepack (pinned in package.json), failing clearly if it cannot be."""
+    if shutil.which("pnpm"):
+        return
+    if shutil.which("corepack"):
+        cprint("pnpm not found; enabling it via 'corepack enable'...", "yellow")
+        if c.run("corepack enable", echo=True, warn=True).ok and shutil.which("pnpm"):
+            return
+    raise Exit(
+        "pnpm is required but unavailable. Corepack ships with Node.js; "
+        "ensure Node 24+ is installed and run 'corepack enable'.",
+        -1,
+    )
+
+
 @task(
     aliases=["npm"],
     help={
@@ -268,6 +284,7 @@ def ruff(c: Context, no_fix=False, unsafe_fixes=False, paths=""):
 )
 def pnpm(c: Context, watch=False, install=False):
     """Build frontend assets with webpack. Use --watch for development."""
+    _ensure_pnpm(c)
     if install:
         c.run("pnpm install", echo=True)
     cmd = "dev-watch" if watch else "dev"

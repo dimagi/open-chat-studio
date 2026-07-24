@@ -3032,6 +3032,11 @@ components:
           type: string
           description: System ID of the sync task, if present.
           maxLength: 40
+        sync_started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the current sync task acquired its lock.
         is_archived:
           type: boolean
         collection:
