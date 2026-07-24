@@ -15,7 +15,7 @@ from pydantic import ValidationError as PydanticValidationError
 from apps.annotations.models import TagCategories
 from apps.channels.datamodels import Attachment
 from apps.experiments.models import AgentTools
-from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError, PipelineNodeRunError
 from apps.pipelines.nodes.base import Intents, PipelineState, merge_dict_values_as_lists
 from apps.pipelines.nodes.context import NodeContext, PipelineAccessor
 from apps.pipelines.nodes.nodes import (
@@ -44,6 +44,7 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.runnables import ChainOutput
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.experiment import (
@@ -167,6 +168,24 @@ class TestLLMResponse:
             ][-1]
             == "123"
         )
+
+    @pytest.mark.django_db()
+    @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    def test_provider_config_error_raises_run_error(self, get_llm_service, provider, provider_model, pipeline):
+        """A configured provider that fails to initialise is an operational failure, not a build error.
+
+        It must surface as a PipelineNodeRunError so it still reaches Sentry, rather than being swallowed
+        with a canned reply like the deprecated-model / missing-provider configuration errors.
+        """
+        get_llm_service.side_effect = ServiceProviderConfigError("openai", "credentials could not be decrypted")
+        nodes = [
+            start_node(),
+            llm_response_node(str(provider.id), str(provider_model.id)),
+            end_node(),
+        ]
+        config = {"configurable": {"repo": ORMRepository()}}
+        with pytest.raises(PipelineNodeRunError):
+            create_runnable(pipeline, nodes).invoke(PipelineState(messages=["hi"]), config=config)
 
     @pytest.mark.django_db()
     @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
