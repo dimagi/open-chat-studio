@@ -3,15 +3,20 @@ from unittest.mock import Mock, patch
 
 import pytest
 import time_machine
+from celery_progress.backend import PROGRESS_STATE
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
+from taskbadger import StatusEnum
 
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import (
+    _mark_run_failed,
+    _publish_tick,
+    _TickResult,
     coordinate_evaluation_runs,
     evaluate_message_batch,
     evaluate_single_message_task,
@@ -326,6 +331,50 @@ def test_sweep_stalled_redispatches_unfinished(delay_mock, _publish):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_old_wave_with_fresh_results_is_not_stalled(delay_mock, _publish):
+    """The newest-result arm of the staleness floor: an old wave_dispatched_at alone
+    must not trigger a re-dispatch while fresh results are still landing."""
+    run, evaluators, messages = _make_run(evaluator_count=2, message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.wave_dispatched_at = timezone.now() - timedelta(hours=1)  # well past STALL_TIMEOUT
+    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    # Results from only one of the two evaluators: the wave is not done, but the rows
+    # carry created_at = now (auto_now_add), so the newest-result signal is fresh.
+    _complete_messages(run, [evaluators[0]], messages)
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.PROCESSING
+    assert set(run.in_flight) == {m.id for m in messages}  # unchanged, no re-dispatch
+    assert run.stall_count == 0
+    delay_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_counts_partially_evaluated_message_as_remaining(delay_mock, _publish):
+    """A message with a result from only one of two evaluators is still remaining;
+    if a single result were enough the tick below would complete the run."""
+    run, evaluators, messages = _make_run(evaluator_count=2, message_count=2, status=EvaluationRunStatus.PROCESSING)
+    fully_done, partial = messages
+    run.in_flight = [m.id for m in messages]
+    run.wave_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    _complete_messages(run, evaluators, [fully_done])  # both evaluators done
+    _complete_messages(run, [evaluators[0]], [partial])  # only one of the two
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.PROCESSING  # not COMPLETED
+    delay_mock.assert_not_called()  # fresh wave still in progress => no-op tick
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
 def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
@@ -393,6 +442,80 @@ def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _pu
     for message_id, evaluator_id in EvaluationResult.objects.filter(run=run).values_list("message_id", "evaluator_id"):
         assert (message_id, evaluator_id) not in seen
         seen.add((message_id, evaluator_id))
+
+
+@pytest.mark.django_db()
+def test_publish_tick_writes_progress_to_result_backend():
+    run = EvaluationRunFactory.create(job_id="job-123")  # taskbadger_task_id is empty
+
+    with (
+        patch("apps.evaluations.tasks.current_app") as app_mock,
+        patch("apps.evaluations.tasks.taskbadger.update_task_safe") as taskbadger_mock,
+    ):
+        _publish_tick(run, _TickResult(batches=[], done=3, total=5, terminal=None))
+
+    app_mock.backend.store_result.assert_called_once_with(
+        "job-123",
+        {"pending": False, "current": 3, "total": 5, "percent": 60.0, "description": "3 of 5 evaluated"},
+        PROGRESS_STATE,
+    )
+    taskbadger_mock.assert_not_called()  # no taskbadger task registered for the run
+
+
+@pytest.mark.django_db()
+def test_publish_tick_updates_taskbadger_when_task_id_set():
+    run = EvaluationRunFactory.create(job_id="job-123", taskbadger_task_id="tb-1")
+
+    with (
+        patch("apps.evaluations.tasks.current_app"),
+        patch("apps.evaluations.tasks.taskbadger.update_task_safe") as taskbadger_mock,
+    ):
+        _publish_tick(run, _TickResult(batches=[], done=3, total=5, terminal=None))
+
+    taskbadger_mock.assert_called_once_with("tb-1", value=3, value_max=5)
+
+
+@pytest.mark.django_db()
+def test_publish_tick_terminal_success_publishes_stop_state():
+    run = EvaluationRunFactory.create(job_id="job-123", taskbadger_task_id="tb-1")
+
+    with (
+        patch("apps.evaluations.tasks.current_app") as app_mock,
+        patch("apps.evaluations.tasks.taskbadger.update_task_safe") as taskbadger_mock,
+    ):
+        _publish_tick(run, _TickResult(batches=[], done=5, total=5, terminal="success"))
+
+    # "SUCCESS" makes the celery_progress poller stop and reload the page.
+    app_mock.backend.store_result.assert_called_once_with(
+        "job-123",
+        {"pending": False, "current": 5, "total": 5, "percent": 100.0, "description": "5 of 5 evaluated"},
+        "SUCCESS",
+    )
+    taskbadger_mock.assert_called_once_with("tb-1", value=5, value_max=5, status=StatusEnum.SUCCESS)
+
+
+@pytest.mark.django_db()
+def test_mark_run_failed_sets_status_and_publishes_stop_state():
+    run = EvaluationRunFactory.create(
+        job_id="job-123", taskbadger_task_id="tb-1", status=EvaluationRunStatus.PROCESSING
+    )
+
+    with (
+        patch("apps.evaluations.tasks.current_app") as app_mock,
+        patch("apps.evaluations.tasks.taskbadger.update_task_safe") as taskbadger_mock,
+    ):
+        _mark_run_failed(run.id, "boom")
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.FAILED
+    assert run.error_message == "boom"
+    # The stop publish uses "SUCCESS" so the poller reloads; the page then shows FAILED.
+    app_mock.backend.store_result.assert_called_once_with(
+        "job-123",
+        {"pending": False, "current": 0, "total": 0, "percent": 100.0, "description": "0 of 0 evaluated"},
+        "SUCCESS",
+    )
+    taskbadger_mock.assert_called_once_with("tb-1", value=0, value_max=0, status=StatusEnum.ERROR)
 
 
 @pytest.mark.django_db()
