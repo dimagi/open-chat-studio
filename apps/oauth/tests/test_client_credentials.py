@@ -68,3 +68,25 @@ def test_additional_claims_omit_user_for_machine_token(client_credentials_app, t
 
     assert "sub" not in claims
     assert claims["team"] == team.slug
+
+
+@pytest.mark.django_db()
+def test_validate_scopes_restricts_client_credentials_to_allow_list(settings):
+    """A client-credentials app can only be granted scopes on the allow-list."""
+    settings.OAUTH_CLIENT_CREDENTIALS_SCOPES = ["sessions:read"]
+    validator = APIScopedValidator()
+    client = OAuth2Application(authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS)
+
+    # sessions:read and chatbots:read are both available scopes, but only sessions:read is allow-listed.
+    assert validator.validate_scopes("cid", ["sessions:read"], client, None) is True
+    assert validator.validate_scopes("cid", ["chatbots:read"], client, None) is False
+
+
+@pytest.mark.django_db()
+def test_validate_scopes_does_not_restrict_authorization_code(settings):
+    """The allow-list applies only to client-credentials; authorization-code is unaffected."""
+    settings.OAUTH_CLIENT_CREDENTIALS_SCOPES = ["sessions:read"]
+    validator = APIScopedValidator()
+    client = OAuth2Application(authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE)
+
+    assert validator.validate_scopes("cid", ["chatbots:read"], client, None) is True

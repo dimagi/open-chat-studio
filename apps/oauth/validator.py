@@ -1,9 +1,10 @@
+from django.conf import settings
 from oauth2_provider.oauth2_validators import OAuth2Validator
 
 from apps.teams.utils import get_current_team, get_slug_for_team
 from apps.users.helpers import user_has_confirmed_email_address
 
-from .models import OAuth2Grant
+from .models import OAuth2Application, OAuth2Grant
 
 
 class APIScopedValidator(OAuth2Validator):
@@ -20,6 +21,17 @@ class APIScopedValidator(OAuth2Validator):
 
     oidc_claim_scope = OAuth2Validator.oidc_claim_scope
     oidc_claim_scope.update({"is_active": "openid", "team": "openid", "email_verified": "openid"})
+
+    def validate_scopes(self, client_id, scopes, client, request, *args, **kwargs):
+        is_valid = super().validate_scopes(client_id, scopes, client, request, *args, **kwargs)
+        if not is_valid:
+            return False
+
+        # Client-credentials (machine) tokens are restricted to an explicit allow-list, so they can
+        # never be granted scopes that only make sense for a user (e.g. openid/profile).
+        if client and client.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS:
+            return set(scopes).issubset(settings.OAUTH_CLIENT_CREDENTIALS_SCOPES)
+        return True
 
     def _create_authorization_code(self, request, code, expires=None):
         grant = super()._create_authorization_code(request, code, expires)
