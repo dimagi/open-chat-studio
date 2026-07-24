@@ -1,0 +1,116 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags i18n %}
+
+{% block breadcrumbs %}
+  <div class="text-sm breadcrumbs" aria-label="breadcrumbs">
+    <ul>
+      <li><a href="{% url 'ocs_admin:home' %}">{% translate "Admin" %}</a></li>
+      <li class="pg-breadcrumb-active" aria-current="page">{% translate "Manage Team Metadata" %}</li>
+    </ul>
+  </div>
+{% endblock breadcrumbs %}
+
+{% block app %}
+  {% translate "Find any team..." as team_search_placeholder %}
+  <section class="app-card">
+    <div class="mb-4">
+      <h1 class="pg-title">{% translate "Manage Team Metadata" %}</h1>
+    </div>
+
+    <div class="grid gap-8 md:grid-cols-2 mb-6">
+      <div>
+        <div class="pg-subtitle mb-2">{% translate "Import" %}</div>
+        <p class="text-sm text-gray-500 mb-3">
+          {% translate "Upload a CSV in the team-metadata export format. Teams are matched by the 'Slug' column; only columns matching a configured field are written, so other metadata is left untouched." %}
+        </p>
+        {% if metadata_fields %}
+          <p class="text-sm mb-3">
+            {% translate "Recognised columns:" %}
+            <span class="font-mono">Slug{% for field in metadata_fields %}, {{ field.label }}{% endfor %}</span>
+          </p>
+        {% else %}
+          <div class="alert alert-warning mb-3">{% translate "No metadata fields are configured." %}</div>
+        {% endif %}
+        <form method="post" enctype="multipart/form-data" class="flex flex-col gap-3">
+          {% csrf_token %}
+          {% render_form_fields import_form %}
+          <div>
+            <button type="submit" class="btn btn-primary">{% translate "Import" %}</button>
+          </div>
+        </form>
+        {% if result is not None %}
+          <div class="alert alert-success mt-3">
+            {% blocktranslate count count=result.updated|length %}{{ count }} team updated.{% plural %}{{ count }} teams updated.{% endblocktranslate %}
+          </div>
+          {% if result.errors %}
+            <div class="alert alert-error mt-2">
+              <ul class="list-disc list-inside">
+                {% for error in result.errors %}
+                  <li>{{ error }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="pg-subtitle mb-2">{% translate "Export" %}</div>
+        <p class="text-sm text-gray-500 mb-3">{% translate "Download all team metadata as a CSV." %}</p>
+        <a href="{% url 'ocs_admin:export_team_metadata' %}" class="btn">
+          <i class="fa-solid fa-download"></i>
+          {% translate "Team Metadata CSV" %}
+        </a>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="pg-subtitle mb-2">{% translate "Find a team" %}</div>
+    <div
+      class="w-72 team-search mb-4"
+      x-data
+      x-init="
+        const teamSelect = new TomSelect($refs.teamSearch, {
+          valueField: 'slug',
+          labelField: 'text',
+          searchField: 'text',
+          maxItems: 1,
+          placeholder: '{{ team_search_placeholder|escapejs }}',
+          load: (query, callback) => {
+            if (!query.length) { callback(); return; }
+            fetch(`{% url 'ocs_admin:teams_api' %}?q=${encodeURIComponent(query)}`)
+              .then(r => r.ok ? r.json() : Promise.reject())
+              .then(callback)
+              .catch(() => callback());
+          },
+          render: { option: (data, escape) => `<div>${escape(data.text)}</div>` },
+          onChange: (slug) => {
+            if (!slug) { return; }
+            const url = '{% url 'ocs_admin:team_detail' '__slug__' %}'.replace('__slug__', slug);
+            htmx.ajax('GET', url, { target: '#team-detail-panel', swap: 'innerHTML' });
+            history.replaceState(null, '', '{% url 'ocs_admin:team_metadata' %}?team=' + slug);
+          }
+        });
+        {% if initial_team %}
+          // Reflect the preselected team without re-triggering the load (the panel below auto-loads).
+          teamSelect.addOption({ slug: '{{ initial_team.slug|escapejs }}', text: '{{ initial_team.name|escapejs }}' });
+          teamSelect.addItem('{{ initial_team.slug|escapejs }}', true);
+        {% endif %}
+      "
+    >
+      <select x-ref="teamSearch"></select>
+    </div>
+
+    {% if initial_team %}
+      <div id="team-detail-panel"
+           hx-get="{% url 'ocs_admin:team_detail' initial_team.slug %}"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        {% include "admin/sections/_loading.html" %}
+      </div>
+    {% else %}
+      <div id="team-detail-panel"></div>
+    {% endif %}
+  </section>
+{% endblock app %}

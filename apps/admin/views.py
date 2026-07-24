@@ -238,17 +238,9 @@ def section_top_teams(request):
     return _render_section(request, "admin/sections/top_teams.html", "top_teams", get_top_teams)
 
 
-@is_staff
-def team_detail(request, slug):
-    """Per-team admin page: resource counts plus an editable metadata form."""
-    team = get_object_or_404(Team, slug=slug)
-    form = TeamMetadataForm(request.POST or None, team=team)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        return redirect("ocs_admin:team_detail", slug=team.slug)
-
+def _team_stat_tiles(team):
     stats = get_team_stats(team)
-    stat_tiles = [
+    return [
         (label, stats[key])
         for key, label in [
             ("chatbots", "Chatbots"),
@@ -263,14 +255,61 @@ def team_detail(request, slug):
             ("evaluation_datasets", "Eval Datasets"),
         ]
     ]
+
+
+@is_staff
+def team_detail(request, slug):
+    """HTMX panel for a single team: resource counts plus an editable metadata form.
+
+    Rendered inline on the Manage Team Metadata page. Any direct (non-HTMX) request
+    redirects there with the team preselected so the URL stays shareable and never
+    surfaces the bare panel fragment without page chrome.
+    """
+    team = get_object_or_404(Team, slug=slug)
+
+    form = TeamMetadataForm(request.POST or None, team=team)
+    saved = False
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        saved = True
+        form = TeamMetadataForm(team=team)  # re-bind unbound so the panel reflects saved values
+
+    if not request.htmx:
+        return redirect(f"{reverse('ocs_admin:team_metadata')}?team={team.slug}")
+
     return TemplateResponse(
         request,
-        "admin/team_detail.html",
+        "admin/_team_detail_panel.html",
+        context={
+            "team": team,
+            "stat_tiles": _team_stat_tiles(team),
+            "form": form,
+            "saved": saved,
+        },
+    )
+
+
+@is_staff
+def team_metadata(request):
+    """Manage-team-metadata page: import/export CSV plus a team search that loads a
+    per-team detail/metadata panel inline via HTMX."""
+    import_form = TeamMetadataImportForm(request.POST or None, request.FILES or None)
+    result = None
+    if request.method == "POST" and import_form.is_valid():
+        result = import_team_metadata_from_csv(import_form.cleaned_data["file"])
+
+    slug = request.GET.get("team")
+    initial_team = Team.objects.filter(slug=slug).first() if slug else None
+
+    return TemplateResponse(
+        request,
+        "admin/team_metadata.html",
         context={
             "active_tab": "admin",
-            "team": team,
-            "stat_tiles": stat_tiles,
-            "form": form,
+            "import_form": import_form,
+            "result": result,
+            "metadata_fields": get_team_metadata_fields(),
+            "initial_team": initial_team,
         },
     )
 
@@ -362,24 +401,6 @@ def export_team_metadata(request):
     response = HttpResponse(team_metadata_to_csv(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="team_metadata.csv"'
     return response
-
-
-@is_staff
-def import_team_metadata(request):
-    form = TeamMetadataImportForm(request.POST or None, request.FILES or None)
-    result = None
-    if request.method == "POST" and form.is_valid():
-        result = import_team_metadata_from_csv(form.cleaned_data["file"])
-    return TemplateResponse(
-        request,
-        "admin/import_team_metadata.html",
-        context={
-            "active_tab": "admin",
-            "form": form,
-            "result": result,
-            "metadata_fields": get_team_metadata_fields(),
-        },
-    )
 
 
 def _get_date_param(request, param_name, default):
