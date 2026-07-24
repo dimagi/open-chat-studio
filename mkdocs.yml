@@ -121,6 +121,7 @@ nav:
       - 0043 BSUID participant identity for WhatsApp: adr/0043-whatsapp-bsuid-participant-identity.md
       - 0044 Durable per-channel widget auth policy: adr/0044-durable-per-channel-widget-auth-policy.md
       - 0045 Ratchet widget auth level up on upgrade: adr/0045-ratchet-widget-auth-level-on-upgrade.md
+      - 0046 Deploy-safe evaluation runs: adr/0046-deploy-safe-evaluation-runs.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
