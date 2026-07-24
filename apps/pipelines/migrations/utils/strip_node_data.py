@@ -1,8 +1,10 @@
-"""Strip embedded node content from ``Pipeline.data``, leaving layout only (ADR-0046).
+"""Strip embedded node content from ``Pipeline.data`` and backfill row positions (ADR-0046).
 
 Node content (type, label, params) is owned by the ``Node`` rows; the copy that older
-rows embed under ``data.nodes[*].data`` is redundant. Idempotent and safe to rerun:
-already-stripped rows produce no write.
+rows embed under ``data.nodes[*].data`` is redundant. Each node's position is also
+copied onto the row's position columns — the blob stays authoritative for layout until
+a follow-up PR switches reads to the columns, so this backfill mirrors, never moves.
+Idempotent and safe to rerun: already-synced rows produce no write.
 
 Run via the ``strip_node_data`` management command; a data migration in a follow-up PR
 will reuse these helpers with historical models.
@@ -19,6 +21,7 @@ BATCH_SIZE = 500
 def strip_node_data_from_pipelines(Pipeline, Node):
     pending = []
     for pipeline in Pipeline._base_manager.exclude(data__isnull=True).iterator(chunk_size=BATCH_SIZE):
+        _backfill_positions(pipeline, Node)
         stripped_nodes = _strip_nodes(pipeline, Node)
         if stripped_nodes is None:
             continue
@@ -30,6 +33,37 @@ def strip_node_data_from_pipelines(Pipeline, Node):
 
     if pending:
         Pipeline._base_manager.bulk_update(pending, ["data"])
+
+
+def _backfill_positions(pipeline, Node):
+    """Copy each blob node's position onto its row's position columns.
+
+    The blob is authoritative, so a differing row value is overwritten. Blob nodes
+    without a usable ``{"x", "y"}`` position or without a backing row are skipped.
+    """
+    nodes = (pipeline.data or {}).get("nodes") or []
+    if not nodes:
+        return
+    rows = {}
+    # "-is_archived" puts archived rows first so a non-archived row wins on flow_id collision
+    for row in Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"):
+        rows[row.flow_id] = row
+    rows_to_update = []
+    for node in nodes:
+        row = rows.get(node.get("id"))
+        position = node.get("position")
+        if row is None or not isinstance(position, dict):
+            continue
+        x, y = position.get("x"), position.get("y")
+        if not isinstance(x, int | float) or not isinstance(y, int | float):
+            continue
+        if (row.position_x, row.position_y) == (x, y):
+            continue
+        row.position_x = x
+        row.position_y = y
+        rows_to_update.append(row)
+    if rows_to_update:
+        Node._base_manager.bulk_update(rows_to_update, ["position_x", "position_y"])
 
 
 def _strip_nodes(pipeline, Node):

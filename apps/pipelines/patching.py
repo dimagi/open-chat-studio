@@ -18,8 +18,9 @@ def apply_pipeline_patch(current_data: dict, patch: PipelineDiffPayload) -> tupl
     ``node_data`` carries content only for the patch's update nodes and the adds that
     actually entered the graph (duplicate adds are skipped entirely), ready for
     ``update_nodes_from_data(node_data)`` — which the caller must still invoke after
-    saving. Content blobs still embedded in old-format ``current_data`` are stripped,
-    never promoted to node content: the Node rows own it.
+    saving. Each entry also carries the node's position so the save shadow-writes it
+    onto the row's position columns. Content blobs still embedded in old-format
+    ``current_data`` are stripped, never promoted to node content: the Node rows own it.
     """
     # Preserve any keys that Flow.model_dump() may drop (e.g. viewport)
     flow = Flow(**current_data)
@@ -44,7 +45,12 @@ def apply_pipeline_patch(current_data: dict, patch: PipelineDiffPayload) -> tupl
         if node.id not in existing_node_ids or node.id in deleted_ids:
             content_nodes.setdefault(node.id, node)
     node_data = {
-        node.id: {"type": node.data.type, "label": node.data.label, "params": node.data.params}
+        node.id: {
+            "type": node.data.type,
+            "label": node.data.label,
+            "params": node.data.params,
+            "position": node.position,
+        }
         for node in content_nodes.values()
         if node.data
     }

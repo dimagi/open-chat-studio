@@ -395,6 +395,31 @@ class TestPatchEndpoint:
         assert updated_node_in_db.params.get("name") == "the-end"
         assert updated_node_in_db.label == "Updated end"
 
+    def test_patch_shadow_writes_position_to_the_row(self, authed_client, pipeline, team_with_users):
+        """Pipeline.data stays authoritative for layout, but saves mirror each patched
+        node's position onto the row's position columns for the upcoming read switch."""
+        team_slug = team_with_users.slug
+        node_id = pipeline.node_set.get(type=EndNode.__name__).flow_id
+        updated_node = {
+            "id": node_id,
+            "type": "endNode",
+            "position": {"x": 123.5, "y": 45},
+            "data": {"id": node_id, "type": EndNode.__name__, "label": "", "params": {"name": "end"}},
+        }
+        patch_data = {
+            "base_revision": 0,
+            "nodes": {"add": [], "update": [updated_node], "delete": []},
+            "edges": {"add": [], "update": [], "delete": []},
+        }
+        response = authed_client.patch(
+            self._patch_url(team_slug, pipeline.id),
+            data=json.dumps(patch_data),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        row = pipeline.node_set.get(flow_id=node_id)
+        assert row.position == {"x": 123.5, "y": 45}
+
     def test_patch_add_node_without_content_is_a_client_error(self, authed_client, pipeline, team_with_users):
         """FlowNode.data is optional at the wire level; an added node without it (and
         without an existing row) is the client's mistake, not a server error."""

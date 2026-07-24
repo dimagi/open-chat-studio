@@ -4474,6 +4474,14 @@ components:
           type: string
           maxLength: 128
         params: {}
+        position_x:
+          type: number
+          format: double
+          nullable: true
+        position_y:
+          type: number
+          format: double
+          nullable: true
         is_archived:
           type: boolean
         working_version:

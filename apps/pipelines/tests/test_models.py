@@ -468,6 +468,41 @@ class TestUpdateNodesFromData:
         assert node.label == "Template"
         assert node.params["template_string"] == "{{ input }}"
 
+    def test_position_is_shadow_written_to_the_row(self):
+        """A mapping entry's position lands on the row's position columns (floats kept
+        verbatim); the layout in ``Pipeline.data`` stays authoritative for reads for now."""
+        pipeline = PipelineFactory.create()
+        pipeline.data = {"edges": [], "nodes": [{"id": "n1", "type": "startNode", "position": {"x": 10.7, "y": -3.2}}]}
+        pipeline.update_nodes_from_data(
+            {"n1": {"type": "StartNode", "params": {"name": "start"}, "position": {"x": 10.7, "y": -3.2}}}
+        )
+
+        node = Node.objects.get(pipeline=pipeline, flow_id="n1")
+        assert node.position_x == 10.7
+        assert node.position_y == -3.2
+        assert node.position == {"x": 10.7, "y": -3.2}
+
+    @pytest.mark.parametrize(
+        "position",
+        [
+            pytest.param(None, id="absent"),
+            pytest.param({"x": "abc", "y": 2}, id="non-numeric"),
+            pytest.param({"x": 1}, id="missing-axis"),
+            pytest.param({}, id="empty"),
+        ],
+    )
+    def test_unusable_position_is_not_written(self, position):
+        """Raw import files bypass wire validation; a bad position must not crash the
+        save or write garbage — the row keeps its previous position columns."""
+        pipeline = PipelineFactory.create()
+        pipeline.data = {"edges": [], "nodes": [{"id": "n1", "type": "startNode"}]}
+        pipeline.update_nodes_from_data(
+            {"n1": {"type": "StartNode", "params": {"name": "start"}, "position": position}}
+        )
+
+        node = Node.objects.get(pipeline=pipeline, flow_id="n1")
+        assert node.position is None
+
     def test_nodes_absent_from_the_mapping_are_left_untouched(self):
         """PATCH saves only carry changed nodes; existing rows keep their content."""
         start, template, end = start_node(), render_template_node(), end_node()

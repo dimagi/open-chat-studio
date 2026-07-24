@@ -1,6 +1,6 @@
 import pytest
 
-from apps.pipelines.flow import FlowNode, split_flow_data
+from apps.pipelines.flow import FlowNode, node_position_fields, split_flow_data
 
 
 def _full_flow_data():
@@ -39,15 +39,21 @@ class TestSplitFlowData:
             {"id": "llm-1", "type": "pipelineNode", "position": {"x": 300, "y": 0}},
         ]
 
-    def test_extracts_node_content_by_flow_id(self):
+    def test_extracts_node_content_and_position_by_flow_id(self):
         _, node_data = split_flow_data(_full_flow_data())
 
         assert node_data == {
-            "start-1": {"type": "StartNode", "label": "", "params": {"name": "start"}},
+            "start-1": {
+                "type": "StartNode",
+                "label": "",
+                "params": {"name": "start"},
+                "position": {"x": 100, "y": 200},
+            },
             "llm-1": {
                 "type": "LLMResponseWithPrompt",
                 "label": "LLM",
                 "params": {"name": "llm-1", "prompt": "Be helpful"},
+                "position": {"x": 300, "y": 0},
             },
         }
 
@@ -94,13 +100,31 @@ class TestSplitFlowData:
         }
         _, node_data = split_flow_data(data)
 
-        assert node_data == {"n1": {"type": "StartNode", "label": "", "params": {}}}
+        assert node_data == {"n1": {"type": "StartNode", "label": "", "params": {}, "position": None}}
 
     def test_data_without_nodes_key_passes_through(self):
         layout, node_data = split_flow_data({"edges": []})
 
         assert layout == {"edges": []}
         assert node_data == {}
+
+
+class TestNodePositionFields:
+    def test_maps_position_to_column_values(self):
+        assert node_position_fields({"x": 10.7, "y": -3.2}) == {"position_x": 10.7, "position_y": -3.2}
+
+    @pytest.mark.parametrize(
+        "position",
+        [
+            pytest.param(None, id="absent"),
+            pytest.param("garbage", id="not-a-dict"),
+            pytest.param({"x": "abc", "y": 2}, id="non-numeric"),
+            pytest.param({"x": 1}, id="missing-axis"),
+            pytest.param({}, id="empty"),
+        ],
+    )
+    def test_unusable_position_yields_no_fields(self, position):
+        assert node_position_fields(position) == {}
 
 
 class TestFlowNodeParsing:

@@ -109,6 +109,65 @@ class TestStripNodeData:
 
 
 @pytest.mark.django_db()
+class TestBackfillPositions:
+    """The strip also mirrors each blob node's position onto the row's position columns,
+    so the follow-up PR can switch layout reads to the rows."""
+
+    def test_copies_blob_positions_onto_rows(self, team):
+        pipeline = _create_old_format_pipeline(team)
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
+        assert pipeline.node_set.get(flow_id="end-1").position == {"x": 100, "y": 0}
+
+    def test_backfills_already_stripped_pipelines(self, team):
+        """Layout-only data has nothing to strip but its rows may still lack positions."""
+        pipeline = _create_old_format_pipeline(team)
+        pipeline.data = {
+            **pipeline.data,
+            "nodes": [{key: node[key] for key in ("id", "type", "position")} for node in pipeline.data["nodes"]],
+        }
+        pipeline.save(update_fields=["data"])
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
+
+    def test_overwrites_differing_row_position(self, team):
+        """The blob is authoritative for layout until reads switch to the columns."""
+        pipeline = _create_old_format_pipeline(team)
+        pipeline.node_set.filter(flow_id="start-1").update(position_x=999, position_y=999)
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
+
+    def test_skips_unusable_positions(self, team):
+        pipeline = _create_old_format_pipeline(team)
+        data = pipeline.data
+        data["nodes"][0]["position"] = {"x": "abc", "y": 2}
+        data["nodes"][1].pop("position")
+        pipeline.data = data
+        pipeline.save(update_fields=["data"])
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        assert pipeline.node_set.get(flow_id="start-1").position is None
+        assert pipeline.node_set.get(flow_id="end-1").position is None
+
+    def test_non_archived_row_wins_flow_id_collision(self, team):
+        pipeline = _create_old_format_pipeline(team)
+        archived = Node.objects.create(pipeline=pipeline, flow_id="start-1", type="StartNode", is_archived=True)
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        archived.refresh_from_db()
+        assert archived.position is None
+        assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
+
+
+@pytest.mark.django_db()
 class TestRebuildNodeData:
     """The reverse of the strip: rebuild the embedded blobs from the Node rows so that
     pre-ADR-0046 code (which requires them) works again after a code rollback."""

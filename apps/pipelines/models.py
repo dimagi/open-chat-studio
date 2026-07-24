@@ -15,7 +15,7 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import MissingNodeDataError, PipelineBuildError
-from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, split_flow_data
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, node_position_fields, split_flow_data
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
@@ -132,10 +132,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         ``self.data`` (already persisted) decides graph membership only: rows whose
         flow_id disappeared from it are deleted, or archived when they have versions.
         Node content never comes from ``self.data`` — the rows own it (ADR-0046).
-        ``node_data`` maps flow_id to ``{"type", "label", "params"}`` for nodes whose
-        content originates outside the database (UI saves, imports, creation, revert);
-        those rows are created or updated from the mapping. Graph nodes absent from the
-        mapping must already have a row, which is left untouched.
+        ``node_data`` maps flow_id to ``{"type", "label", "params", "position"}`` for
+        nodes whose content originates outside the database (UI saves, imports,
+        creation, revert); those rows are created or updated from the mapping. Graph
+        nodes absent from the mapping must already have a row, which is left untouched.
+
+        ``position`` is shadow-written to the row's position columns; ``self.data``
+        stays authoritative for layout until a follow-up PR switches reads over.
         """
         current_ids = set(self.node_ids)
         new_ids = {node["id"] for node in self.data["nodes"]}
@@ -166,6 +169,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                     "type": content["type"],
                     "params": content.get("params", {}),
                     "label": content.get("label", ""),
+                    **node_position_fields(content.get("position")),
                 },
             )
             created_node.update_from_params()
@@ -361,6 +365,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
+    # Layout position on the editor canvas, shadow-written from ``Pipeline.data`` — the
+    # blob stays authoritative until a follow-up PR switches reads to these columns.
+    # Null until the row is saved or the strip_node_data command backfills it.
+    position_x = models.FloatField(null=True, blank=True)
+    position_y = models.FloatField(null=True, blank=True)
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -425,6 +434,13 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     @property
     def name(self):
         return self.params.get("name", None)
+
+    @property
+    def position(self) -> dict | None:
+        """The react-flow position, or None when the row has not been backfilled yet."""
+        if self.position_x is None or self.position_y is None:
+            return None
+        return {"x": self.position_x, "y": self.position_y}
 
     def has_parameter(self, param_name: str) -> bool:
         """True if this node's type declares ``param_name`` as a param. Unknown types have none."""

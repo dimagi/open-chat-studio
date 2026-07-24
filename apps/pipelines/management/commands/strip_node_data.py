@@ -9,7 +9,8 @@ from apps.pipelines.models import Node, Pipeline
 
 class Command(BaseCommand):
     help = (
-        "Strip embedded node content from Pipeline.data, leaving layout only (ADR-0046). "
+        "Strip embedded node content from Pipeline.data, leaving layout only (ADR-0046), "
+        "and backfill each node's position onto the Node row's position columns. "
         "Idempotent and safe to rerun; pipelines whose blobs have no backing Node row are "
         "skipped and logged."
     )
