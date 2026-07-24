@@ -1,11 +1,19 @@
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+import time_machine
 from django.db import IntegrityError
+from django.utils import timezone
 
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.models import EvaluationResult, EvaluationRunStatus, EvaluationRunType
-from apps.evaluations.tasks import evaluate_message_batch, evaluate_single_message_task
+from apps.evaluations.tasks import (
+    coordinate_evaluation_runs,
+    evaluate_message_batch,
+    evaluate_single_message_task,
+    run_evaluation_task,
+)
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -170,3 +178,174 @@ def test_evaluate_message_batch_skips_deleted_run(single_mock, coordination_run)
     run.delete()
     evaluate_message_batch(run_id, [message.id])
     single_mock.assert_not_called()
+
+
+def _make_run(evaluator_count=1, message_count=5, status=EvaluationRunStatus.PENDING):
+    """Build a run with a frozen plan of `message_count` messages and `evaluator_count` evaluators."""
+    team = TeamWithUsersFactory.create()
+    config = EvaluationConfigFactory.create(team=team)
+    evaluators = [EvaluatorFactory.create(team=team) for _ in range(evaluator_count)]
+    config.evaluators.set(evaluators)
+    messages = [EvaluationMessageFactory.create() for _ in range(message_count)]
+    config.dataset.messages.add(*messages)
+    run = EvaluationRunFactory.create(config=config, team=team, status=status, evaluator_ids=[e.id for e in evaluators])
+    run.scoped_messages.add(*messages)
+    return run, evaluators, messages
+
+
+def _complete_messages(run, evaluators, messages):
+    for message in messages:
+        for evaluator in evaluators:
+            EvaluationResultFactory.create(
+                team=run.team, run=run, evaluator=evaluator, message=message, output={"result": {"ok": 1}}
+            )
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_pending_dispatches_first_wave(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.PROCESSING
+    assert set(run.in_flight) == {m.id for m in messages}
+    assert run.wave_dispatched_at is not None
+    # 5 messages, BATCH_SIZE=3 => 2 batches
+    assert delay_mock.call_count == 2
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_wave_size_capped(delay_mock, _publish):
+    # 40 messages, wave caps at WAVE_SIZE*BATCH_SIZE = 30 => 10 batches
+    run, evaluators, messages = _make_run(message_count=40, status=EvaluationRunStatus.PENDING)
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert len(run.in_flight) == 30
+    assert delay_mock.call_count == 10
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_dispatches_next_wave_when_current_done(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=40, status=EvaluationRunStatus.PROCESSING)
+    wave1 = messages[:30]
+    run.in_flight = [m.id for m in wave1]
+    run.wave_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    _complete_messages(run, evaluators, wave1)
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert set(run.in_flight) == {m.id for m in messages[30:]}  # remaining 10
+    assert delay_mock.call_count == 4  # 10 messages => ceil(10/3)=4 batches
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_completes_when_nothing_remains(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.wave_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    _complete_messages(run, evaluators, messages)
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    assert run.finished_at is not None
+    delay_mock.assert_not_called()
+    assert run.aggregates.exists()  # compute_aggregates_for_run ran
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_empty_plan_completes_immediately(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=0, status=EvaluationRunStatus.PENDING)
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    delay_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_fresh_wave_in_progress_is_noop(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.wave_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    # no results yet, wave just dispatched => not done, not stalled
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.PROCESSING
+    delay_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_stalled_redispatches_unfinished(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.wave_dispatched_at = timezone.now() - timedelta(hours=1)  # older than STALL_TIMEOUT
+    run.save(update_fields=["in_flight", "wave_dispatched_at"])
+    # Land the completed results an hour ago so the newest-result staleness signal is old too
+    # (created_at is auto_now_add, so we must travel to backdate it).
+    with time_machine.travel(timezone.now() - timedelta(hours=1)):
+        _complete_messages(run, evaluators, messages[:2])  # 2 done, 3 unfinished
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert set(run.in_flight) == {m.id for m in messages[2:]}
+    assert delay_mock.call_count == 1  # 3 unfinished => 1 batch
+    assert run.stall_count == 1  # progress was made (2 completed) => reset to 1
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.wave_dispatched_at = timezone.now() - timedelta(hours=1)
+    run.stall_count = 2  # already stalled twice with no progress
+    run.save(update_fields=["in_flight", "wave_dispatched_at", "stall_count"])
+    # no results at all => no progress
+
+    coordinate_evaluation_runs()
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.FAILED
+    assert run.error_message
+    delay_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_run_evaluation_task_fast_path_dispatches_wave_one(delay_mock, _publish):
+    run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
+
+    run_evaluation_task(run.id)
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.PROCESSING
+    assert delay_mock.call_count == 2  # 5 messages => 2 batches
