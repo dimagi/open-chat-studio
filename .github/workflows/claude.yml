@@ -161,7 +161,7 @@ jobs:
       - uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24.x
           cache: 'pnpm'
@@ -275,7 +275,7 @@ jobs:
       - uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24.x
           cache: 'pnpm'
