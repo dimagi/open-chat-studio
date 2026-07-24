@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
@@ -405,6 +406,22 @@ class ExtractStructuredDataNodeMixin:
         return dict_to_json_schema(data)
 
 
+# Anthropic requires tool property keys to match this pattern. Mirror it here so we can surface a friendly
+# validation error instead of a 500 from a rejected API call.
+_SCHEMA_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9_.\-]{1,64}$")
+
+
+def _collect_invalid_schema_keys(schema: dict) -> list[str]:
+    """Recursively collect property keys that violate Anthropic's naming rules, mirroring ``dict_to_json_schema``."""
+    invalid = []
+    for key, val in schema.items():
+        if not _SCHEMA_KEY_PATTERN.match(key):
+            invalid.append(key)
+        if isinstance(val, list) and val and isinstance(val[0], dict):
+            invalid.extend(_collect_invalid_schema_keys(val[0]))
+    return invalid
+
+
 class StructuredDataSchemaValidatorMixin:
     @field_validator("data_schema")
     def validate_data_schema(cls, value):
@@ -415,5 +432,14 @@ class StructuredDataSchemaValidatorMixin:
 
         if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
             raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        invalid_keys = _collect_invalid_schema_keys(parsed_value)
+        if invalid_keys:
+            raise PydanticCustomError(
+                "invalid_schema",
+                "Schema property names can only contain letters, numbers, underscores, dots and hyphens, "
+                "and must be between 1 and 64 characters long. Invalid names: {keys}",
+                {"keys": ", ".join(repr(k) for k in invalid_keys)},
+            )
 
         return value
