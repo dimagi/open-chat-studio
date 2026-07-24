@@ -187,6 +187,16 @@ check_node() {
         error "npm is not installed. Please install npm before running this script."
         [ "$CHECK_ONLY" != true ] && exit 1
     fi
+
+    # pnpm is the package manager for this project, provided via corepack (bundled with Node).
+    if command_exists corepack; then
+        corepack enable >/dev/null 2>&1 || true
+    fi
+    if command_exists pnpm; then
+        info "pnpm is installed ($(pnpm --version))"
+    else
+        warn "pnpm not found. Enable it with 'corepack enable' (corepack ships with Node.js 24)."
+    fi
 }
 
 # Check Python version
@@ -264,9 +274,10 @@ install_python_deps() {
 # Install Node.js dependencies
 install_node_deps() {
     step "Installing Node.js dependencies..."
-    if confirm "Install/update Node.js dependencies with 'npm install'?" "y"; then
-        info "Running: npm install"
-        npm ci
+    if confirm "Install/update Node.js dependencies with 'pnpm install'?" "y"; then
+        info "Running: pnpm install --frozen-lockfile"
+        corepack enable >/dev/null 2>&1 || true
+        pnpm install --frozen-lockfile
         info "Node.js dependencies installed successfully"
     else
         warn "Skipped Node.js dependencies installation"
@@ -309,7 +320,7 @@ check_node_deps() {
         if [ -d "node_modules" ]; then
             info "node_modules directory exists"
         else
-            warn "node_modules not found. Run 'npm install' to install dependencies"
+            warn "node_modules not found. Run 'pnpm install' to install dependencies"
         fi
     else
         warn "package.json not found"
@@ -376,7 +387,7 @@ print_next_steps() {
     echo ""
 
     echo "  5. Build frontend assets:"
-    echo "     npm run dev"
+    echo "     pnpm run dev"
     echo ""
 
     echo "See CLAUDE.md for more development commands and information."

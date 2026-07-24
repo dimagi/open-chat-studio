@@ -117,11 +117,11 @@ def setup_dev_env(c: Context, step=False):
     cprint(f"\nChecking node version (>{MIN_NODE_VERSION} required)", "green")
     if not _check_node_version(c):
         cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
-        cprint("\nSkipping front end build. Run 'inv npm --install' once you have upgraded node.", "yellow")
+        cprint("\nSkipping front end build. Run 'inv pnpm --install' once you have upgraded node.", "yellow")
     else:
-        cprint("\nInstalling npm packages and building front end resources", "green")
+        cprint("\nInstalling pnpm packages and building front end resources", "green")
         if not step or _confirm("\tOK?", _exit=False):
-            npm(c, install=True)
+            pnpm(c, install=True)
 
     _run_with_confirm(c, "Create superuser", "python manage.py createsuperuser", step)
 
@@ -260,17 +260,18 @@ def ruff(c: Context, no_fix=False, unsafe_fixes=False, paths=""):
 
 
 @task(
+    aliases=["npm"],
     help={
-        "watch": "Build assets and watch for changes (npm run dev-watch)",
-        "install": "Install npm packages before building",
-    }
+        "watch": "Build assets and watch for changes (pnpm run dev-watch)",
+        "install": "Install pnpm packages before building",
+    },
 )
-def npm(c: Context, watch=False, install=False):
+def pnpm(c: Context, watch=False, install=False):
     """Build frontend assets with webpack. Use --watch for development."""
     if install:
-        c.run("npm install", echo=True)
+        c.run("pnpm install", echo=True)
     cmd = "dev-watch" if watch else "dev"
-    c.run(f"npm run {cmd}", echo=True, pty=True)
+    c.run(f"pnpm run {cmd}", echo=True, pty=True)
 
 
 @task(help={"port": "Port to serve docs on (default: 8001)"})

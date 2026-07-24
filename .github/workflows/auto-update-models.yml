@@ -195,13 +195,16 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
+      - uses: pnpm/action-setup@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24.x
+          cache: 'pnpm'
 
       - name: Install Node dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Configure git author
         run: |
@@ -341,7 +344,7 @@ jobs:
             Branch: ${{ steps.branch.outputs.branch_name }} (already created and
             checked out).
           claude_args: |
-            --allowedTools "Bash(uv run:*),Bash(uv sync:*),Bash(python manage.py:*),Bash(npm run lint:*),Bash(ls:*),Bash(cat:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh label:*),Read,Write,Edit,Glob,Grep,WebFetch"
+            --allowedTools "Bash(uv run:*),Bash(uv sync:*),Bash(python manage.py:*),Bash(pnpm run lint:*),Bash(ls:*),Bash(cat:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh label:*),Read,Write,Edit,Glob,Grep,WebFetch"
 
       - name: Append decision report to step summary
         if: always()

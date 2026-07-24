@@ -82,7 +82,7 @@ jobs:
             exit 0
           fi
 
-          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          echo "issue_number=$ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
 
           # Fetch issue details
           ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json title,body)
@@ -90,13 +90,14 @@ jobs:
           ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
 
           DELIMITER="ghadelim_$(openssl rand -hex 8)"
-          echo "issue_title<<$DELIMITER" >> $GITHUB_OUTPUT
-          echo "$ISSUE_TITLE" >> $GITHUB_OUTPUT
-          echo "$DELIMITER" >> $GITHUB_OUTPUT
-
-          echo "issue_body<<$DELIMITER" >> $GITHUB_OUTPUT
-          echo "$ISSUE_BODY" >> $GITHUB_OUTPUT
-          echo "$DELIMITER" >> $GITHUB_OUTPUT
+          {
+            echo "issue_title<<$DELIMITER"
+            echo "$ISSUE_TITLE"
+            echo "$DELIMITER"
+            echo "issue_body<<$DELIMITER"
+            echo "$ISSUE_BODY"
+            echo "$DELIMITER"
+          } >> "$GITHUB_OUTPUT"
 
   # ── Scheduled / manual: implement the next task on the found issue ──
   scheduled:
@@ -155,22 +156,25 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24.x
+          cache: 'pnpm'
 
       - name: Install Node dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Create branch
         id: branch
         run: |
           BRANCH_NAME="claude/${{ needs.find-work.outputs.issue_number }}-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude Code
         id: claude
@@ -192,7 +196,7 @@ jobs:
             3. Run lint, type checks, and tests, fix any issues:
                - Python lint: ruff check --fix && ruff format
                - Python type check: uv run ty check apps/
-               - JS/TS lint: npm run lint
+               - JS/TS lint: pnpm run lint
                - Python test: pytest path/to/file.py -v
             4. Push the changes you've made to GitHub and create a PR with the 'claude' label.
             5. After completing the task, update the issue using gh issue edit to:
@@ -202,7 +206,7 @@ jobs:
             7. Add a comment to the issue summarizing what you did
 
             If all tasks are complete or blocked, comment on the issue explaining the status.
-          claude_args: '--allowedTools "Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ty check:*),Bash(uv run ty:*),Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(pytest:*),Bash(uv run --no-project zensical build:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git rm:*),Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh api:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(ls:*),Bash(grep:*),Bash(sort:*),Bash(tail:*),Grep,Glob,Read,Write,Edit"'
+          claude_args: '--allowedTools "Bash(pnpm run lint:*),Bash(pnpm run type-check:*),Bash(pnpm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ty check:*),Bash(uv run ty:*),Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(pytest:*),Bash(uv run --no-project zensical build:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git rm:*),Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh api:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(ls:*),Bash(grep:*),Bash(sort:*),Bash(tail:*),Grep,Glob,Read,Write,Edit"'
 
   # ── Event-driven: respond to @claude mentions, issue label ──
   claude:
@@ -266,15 +270,18 @@ jobs:
         run: |
           uv venv
           uv sync --locked --dev
-          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - uses: pnpm/action-setup@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24.x
+          cache: 'pnpm'
 
       - name: Install Node dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Run Claude Code
         id: claude
@@ -283,4 +290,4 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           branch_prefix: "claude/"
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(npm run lint:*),Bash(npm run type-check:*),Bash(npm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ty check:*),Bash(uv run ty:*),Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(git branch:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Read,Write,Edit"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(pnpm run lint:*),Bash(pnpm run type-check:*),Bash(pnpm run build:*),Bash(ruff check:*),Bash(ruff format:*),Bash(ty check:*),Bash(uv run ty:*),Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(pytest:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git switch:*),Bash(git status:*),Bash(git diff:*),Bash(git branch:*),Bash(gh pr create:*),Bash(gh pr edit:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Read,Write,Edit"
