@@ -21,7 +21,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.document_source_service import sync_document_source
-from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
+from apps.documents.exceptions import DocumentSourceDeleted, ZipCreationError, ZipIntegrityError
 from apps.documents.models import (
     SYNC_LOCK_TIMEOUT,
     Collection,
@@ -210,6 +210,16 @@ def sync_document_source_task(self, document_source_id: int):
             )
         else:
             logger.error(f"Document source sync failed for {document_source}: {result.error_message}")
+    except DocumentSourceDeleted:
+        # The source was deleted mid-sync: abort the whole task rather than crash on a
+        # dangling foreign key. The finally block's queryset update matches zero rows
+        # (the row is gone) and is a safe no-op.
+        logger.warning(
+            "DocumentSource was deleted during sync; aborting sync task.",
+            extra={
+                "document_source": document_source_id,
+            },
+        )
     except Exception:
         logger.exception(
             "Unexpected error syncing document source",
