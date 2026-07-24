@@ -3,11 +3,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 import time_machine
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
-from apps.evaluations.models import EvaluationResult, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import (
     coordinate_evaluation_runs,
     evaluate_message_batch,
@@ -21,7 +24,8 @@ from apps.utils.factories.evaluations import (
     EvaluationRunFactory,
     EvaluatorFactory,
 )
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
+from apps.utils.factories.user import GroupFactory
 
 
 @pytest.mark.django_db()
@@ -349,3 +353,28 @@ def test_run_evaluation_task_fast_path_dispatches_wave_one(delay_mock, _publish)
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
     assert delay_mock.call_count == 2  # 5 messages => 2 batches
+
+
+@pytest.mark.django_db()
+def test_result_home_sets_celery_job_id_while_processing(client):
+    view_perm = Permission.objects.get(
+        content_type=ContentType.objects.get_for_model(EvaluationRun),
+        codename="view_evaluationrun",
+    )
+    view_group = GroupFactory.create(name="evaluations-view-only")
+    view_group.permissions.add(view_perm)
+    membership = MembershipFactory.create(groups=[view_group])
+    team = membership.team
+    user = membership.user
+    config = EvaluationConfigFactory.create(team=team)
+    run = EvaluationRunFactory.create(
+        config=config, team=team, status=EvaluationRunStatus.PROCESSING, job_id="progress-key-123"
+    )
+    client.force_login(user)
+
+    url = reverse("evaluations:evaluation_results_home", args=[team.slug, config.id, run.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context["celery_job_id"] == "progress-key-123"
+    assert "group_job_id" not in response.context

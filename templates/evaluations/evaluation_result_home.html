@@ -3,10 +3,8 @@
 
 {% block page_head %}
   {{ block.super }}
-  {% if group_job_id %}
+  {% if celery_job_id %}
     <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-  {% elif evaluation_run.status == "pending" or evaluation_run.status == "processing" %}
-     <meta http-equiv="refresh" content="2" />
   {% endif %}
 {% endblock page_head %}
 
@@ -106,7 +104,7 @@
       </div>
     </div>
 
-    {% if group_job_id %}
+    {% if celery_job_id %}
       {% include "evaluations/components/progress.html" %}
     {% elif evaluation_run.status == "completed" %}
       {% if aggregates %}
