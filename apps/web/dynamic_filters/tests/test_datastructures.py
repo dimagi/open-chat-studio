@@ -2,6 +2,7 @@ import json
 
 import pytest
 from django.http import QueryDict
+from django.test import RequestFactory
 
 from apps.web.dynamic_filters.datastructures import (
     ColumnFilterData,
@@ -27,6 +28,21 @@ def test_normalize_list_value_parses_wire_format(raw_value, expected):
 
 
 @pytest.mark.parametrize(
+    "malformed_value",
+    [
+        pytest.param('"tag~a', id="unbalanced-leading-quote"),
+        pytest.param('a~"b', id="unbalanced-trailing-quote"),
+        pytest.param('"', id="lone-quote"),
+    ],
+)
+def test_normalize_list_value_handles_malformed_input(malformed_value):
+    """Hand-crafted/malformed wire values must parse best-effort without raising."""
+    column_filter = ColumnFilterData(column="tags", operator="any of", value=malformed_value)
+    # Result is a JSON list (deterministic best-effort), never an exception.
+    assert isinstance(json.loads(column_filter.value), list)
+
+
+@pytest.mark.parametrize(
     "values",
     [
         pytest.param(["tag1", "tag2"], id="plain"),
@@ -42,6 +58,16 @@ def test_serialize_normalize_round_trip(values):
     assert json.loads(column_filter.value) == values
 
 
+def test_single_json_string_value_is_not_unwrapped():
+    """A single selected value that is itself a valid JSON-list string must stay one value.
+
+    Regression: the old single-element unwrap turned ``["[1, 2]"]`` into ``[1, 2]``, silently
+    splitting one legitimate value into two.
+    """
+    column_filter = ColumnFilterData(column="tags", operator="any of", value=json.dumps(["[1, 2]"]))
+    assert json.loads(column_filter.value) == ["[1, 2]"]
+
+
 def test_to_query_round_trips_special_characters():
     """Python -> query string -> Python must preserve values containing ~ and quotes."""
     values = ["tag~2", 'fo"o']
@@ -55,3 +81,43 @@ def test_to_query_round_trips_special_characters():
 
     reparsed = FilterParams(QueryDict(query_string))
     assert json.loads(reparsed.get("tags").value) == values
+
+
+def test_from_request_translates_legacy_url_params():
+    """Bookmarked/legacy filter_<n>_* URLs must still filter (read shim), not silently drop."""
+    request = RequestFactory().get(
+        "/",
+        data={
+            "filter_0_column": "experiment",
+            "filter_0_operator": "any of",
+            "filter_0_value": "tag1~tag2",
+        },
+    )
+
+    params = FilterParams.from_request(request)
+
+    column_filter = params.get("experiment")
+    assert column_filter is not None
+    assert column_filter.operator == "any of"
+    assert json.loads(column_filter.value) == ["tag1", "tag2"]
+
+
+def test_from_request_header_translates_legacy_url_params():
+    """The HX-Current-URL fallback path must translate legacy params too."""
+    legacy_url = "http://testserver/sessions/?filter_0_column=experiment&filter_0_operator=any+of&filter_0_value=5"
+    request = RequestFactory().get("/", HTTP_HX_CURRENT_URL=legacy_url)
+
+    params = FilterParams.from_request(request)
+
+    column_filter = params.get("experiment")
+    assert column_filter is not None
+    assert json.loads(column_filter.value) == ["5"]
+
+
+def test_from_request_leaves_new_format_untouched():
+    """New-format URLs must pass through unchanged."""
+    request = RequestFactory().get("/", data={"f_experiment": "5", "op_experiment": "any of"})
+
+    params = FilterParams.from_request(request)
+
+    assert json.loads(params.get("experiment").value) == ["5"]

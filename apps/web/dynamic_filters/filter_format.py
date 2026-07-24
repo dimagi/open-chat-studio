@@ -9,7 +9,7 @@ from .datastructures import serialize_csv_tilde_values
 _LEGACY_FILTER_KEY = re.compile(r"filter_(\d+)_(column|operator|value)")
 
 
-def _is_legacy_filter_data(keys) -> bool:
+def is_legacy_filter_data(keys) -> bool:
     """Positively detect the legacy ``filter_<n>_column`` format.
 
     A query string is only "legacy" if it actually contains a legacy column key.
@@ -29,7 +29,7 @@ def convert_saved_filter_data(filter_data):
     """
     if isinstance(filter_data, str):
         query_params = QueryDict(filter_data)
-        if not _is_legacy_filter_data(query_params):
+        if not is_legacy_filter_data(query_params):
             return filter_data
         legacy_filter_data = {key: values[0] if len(values) == 1 else values for key, values in query_params.lists()}
         converted = convert_saved_filter_data(legacy_filter_data)
@@ -38,7 +38,7 @@ def convert_saved_filter_data(filter_data):
     if not isinstance(filter_data, dict):
         return filter_data
 
-    if not _is_legacy_filter_data(filter_data):
+    if not is_legacy_filter_data(filter_data):
         return filter_data
 
     legacy_filters = []

@@ -12,6 +12,13 @@ _LIST_OPERATORS = frozenset({"any of", "all of", "excludes"})
 
 
 def _parse_csv_tilde_values(value: str) -> list[str]:
+    """Parse the tilde-delimited CSV wire format into a list of values.
+
+    Inverse of :func:`serialize_csv_tilde_values`. Input is expected to originate from that
+    serializer, so well-formed round-trips are exact. Hand-crafted or malformed input (e.g. an
+    unbalanced quote) is parsed best-effort and never raises — if the CSV reader chokes, the raw
+    string is returned as a single value rather than propagating an error.
+    """
     if not isinstance(value, str):
         return []
 
@@ -20,6 +27,8 @@ def _parse_csv_tilde_values(value: str) -> list[str]:
         row = next(reader)
     except StopIteration:
         return []
+    except csv.Error:
+        return [value]
     return row
 
 
@@ -48,13 +57,8 @@ def _try_parse_json_string_list(value: str) -> list[object] | None:
 
 
 def _coerce_list_filter_values(value: str) -> list[object] | None:
-    parsed = _try_parse_json_string_list(value)
-    if parsed is not None:
-        if len(parsed) == 1:
-            if inner := _try_parse_json_string_list(parsed[0]):
-                return inner
-        return parsed
-    return None
+    """Return ``value`` parsed as a JSON list, or None if it is not a JSON-list string."""
+    return _try_parse_json_string_list(value)
 
 
 class ColumnFilterData(BaseModel):
@@ -86,14 +90,37 @@ class ColumnFilterData(BaseModel):
         return bool(self.column and self.operator and self.value)
 
 
+def _translate_legacy_query_params(query_params: QueryDict) -> QueryDict:
+    """Translate legacy ``filter_<n>_*`` query params into the new f_/op_ format.
+
+    Keeps bookmarked or externally-generated legacy URLs working on read; params that are
+    already in the new format (or contain no filters) are returned unchanged. Imported
+    locally to avoid a circular import with filter_format, which imports
+    serialize_csv_tilde_values from this module.
+    """
+    # Local import avoids a circular import: filter_format imports from this module.
+    from .filter_format import convert_saved_filter_data, is_legacy_filter_data  # noqa: PLC0415
+
+    if is_legacy_filter_data(query_params):
+        return QueryDict(convert_saved_filter_data(query_params.urlencode()))
+    return query_params
+
+
 class FilterParams:
-    """A container for filter parameters extracted from a request's query parameters."""
+    """A container for filter parameters extracted from a request's query parameters.
+
+    The ``f_`` and ``op_`` query-string prefixes are RESERVED for dynamic filters: every
+    param starting with ``f_`` is treated as a filter column (``f_<column>`` holds the value,
+    ``op_<column>`` holds the operator). Do not introduce unrelated query params with these
+    prefixes on any page that renders a filterable table, or they will be misread as filters.
+    """
 
     def __init__(self, query_params: QueryDict | None = None, column_filters: list[ColumnFilterData] | None = None):
         self.filters: dict[str, ColumnFilterData] = {}
 
         if query_params:
-            # Process new format filters (f_* and op_* parameters)
+            # Process new format filters (f_* and op_* parameters). The f_/op_ prefixes are
+            # reserved — any query param beginning with f_ is interpreted as a filter column.
             filter_keys = [k for k in query_params if k.startswith("f_")]
 
             for key in filter_keys[: settings.MAX_FILTER_PARAMS]:
@@ -114,7 +141,7 @@ class FilterParams:
 
     @classmethod
     def from_request(cls, request) -> Self:
-        query_params = request.GET
+        query_params = _translate_legacy_query_params(request.GET)
         if not any(key.startswith("f_") for key in query_params):
             return cls.from_request_header(request, "HX-Current-URL")
         return cls(query_params)
@@ -123,7 +150,7 @@ class FilterParams:
     def from_request_header(cls, request, header: str):
         if header_value := request.headers.get(header):
             parsed_url = urlparse(header_value)
-            return cls(QueryDict(parsed_url.query))
+            return cls(_translate_legacy_query_params(QueryDict(parsed_url.query)))
         return cls()
 
     def get(self, column: str) -> ColumnFilterData | None:
