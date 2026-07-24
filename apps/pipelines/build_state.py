@@ -60,15 +60,20 @@ def unwired_handles(pipeline) -> dict:
 
     unwired = {}
     for node in pipeline.node_set.all():
-        dangling = []
-        if node.type != StartNode.__name__ and node.flow_id not in wired_inputs:
-            dangling.append({"handle": STANDARD_INPUT_NAME, "label": None})
-        for handle in node_output_handles(node):
-            if (node.flow_id, handle["handle"]) not in wired_outputs:
-                dangling.append(handle)
-        if dangling:
+        if dangling := _dangling_handles(node, wired_inputs, wired_outputs):
             unwired[node.flow_id] = dangling
     return unwired
+
+
+def _dangling_handles(node, wired_inputs: set, wired_outputs: set) -> list[dict]:
+    """One node's unwired handles: the implicit input plus any output with no edge."""
+    dangling = []
+    if node.type != StartNode.__name__ and node.flow_id not in wired_inputs:
+        dangling.append({"handle": STANDARD_INPUT_NAME, "label": None})
+    for handle in node_output_handles(node):
+        if (node.flow_id, handle["handle"]) not in wired_outputs:
+            dangling.append(handle)
+    return dangling
 
 
 def node_output_handles(node) -> list[dict]:
