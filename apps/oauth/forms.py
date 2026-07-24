@@ -65,6 +65,10 @@ class RegisterApplicationForm(forms.ModelForm):
         elif grant_type == OAuth2Application.GRANT_AUTHORIZATION_CODE:
             if not cleaned_data.get("redirect_uris"):
                 self.add_error("redirect_uris", "Redirect URIs are required for authorization-code applications.")
+            # Keep the team=None invariant for authorization-code apps (see OAuth2Application.team):
+            # validator._create_access_token falls back to request.client.team when the grant-derived
+            # team is unset, so a stray team here could leak into issued tokens.
+            cleaned_data["team"] = None
         return cleaned_data
 
     def save(self, commit=True):

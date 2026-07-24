@@ -57,6 +57,22 @@ def test_authorization_code_requires_redirect_uris_not_team(user_with_team):
 
 
 @pytest.mark.django_db()
+def test_authorization_code_clears_team(user_with_team):
+    """A team submitted for an authorization-code app is discarded (team is authorization-code-only)."""
+    user, team = user_with_team
+    form = RegisterApplicationForm(
+        data=_form_data(
+            authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
+            redirect_uris="https://example.com/callback",
+            team=team.id,
+        ),
+        user=user,
+    )
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["team"] is None
+
+
+@pytest.mark.django_db()
 def test_authorization_code_without_redirect_uris_is_invalid(user_with_team):
     user, _team = user_with_team
     form = RegisterApplicationForm(
