@@ -273,6 +273,34 @@ def test_stranded_router_edge_lands_in_edge_bucket_without_raising():
 
 
 @pytest.mark.django_db()
+def test_stranded_edge_on_unreachable_router_does_not_block_the_build():
+    """A stranded conditional edge only blocks the build when its router is reachable — an
+    off-graph island's stranded edge stays the advisory unwired map's concern."""
+    start, end = start_node(), end_node()
+    router = state_key_router_node("k", ["A", "B"], name="main-router")
+    island_router = state_key_router_node("k2", ["A"], name="island-router")
+    island_target = passthrough_node(name="island-target")
+    edges = [
+        {"id": "e-start-router", "source": start["id"], "target": router["id"]},
+        {"id": "e-router-end-0", "source": router["id"], "target": end["id"], "sourceHandle": "output_0"},
+        {"id": "e-router-end-1", "source": router["id"], "target": end["id"], "sourceHandle": "output_1"},
+        # output_1 does not exist on the island router (it only has one keyword) — stranded.
+        {
+            "id": "e-island-stranded",
+            "source": island_router["id"],
+            "target": island_target["id"],
+            "sourceHandle": "output_1",
+        },
+    ]
+    pipeline = create_pipeline_model([start, router, end, island_router, island_target], edges)
+
+    state = pipeline_build_state(pipeline)
+
+    assert state["errors"]["edge"] == []
+    assert state["pipeline_valid"] is True
+
+
+@pytest.mark.django_db()
 def test_unreachable_end_is_an_error_but_still_reports_unwired_map():
     # The build raises this one with the End node's id, so it normalizes into the node bucket under
     # the "root" sentinel rather than the pipeline bucket.
