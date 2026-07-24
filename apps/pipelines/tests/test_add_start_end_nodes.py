@@ -359,9 +359,9 @@ def test_pipeline_creation_without_llm(team):
     pipeline = Pipeline.create_default(team=team)
 
     assert pipeline.name == "New Pipeline 1"
-    assert "nodes" in pipeline.data
+    assert "nodes" not in pipeline.data
     assert "edges" in pipeline.data
-    assert len(pipeline.data["nodes"]) == 2
+    assert pipeline.node_set.count() == 2
     assert len(pipeline.data["edges"]) == 0
     node_types = list(pipeline.node_set.values_list("type", flat=True))
     assert "StartNode" in node_types
@@ -379,9 +379,9 @@ def test_pipeline_creation_with_llm(team):
         llm_provider_model=mock_llm_model,
     )
 
-    assert "nodes" in pipeline.data
+    assert "nodes" not in pipeline.data
     assert "edges" in pipeline.data
-    assert len(pipeline.data["nodes"]) == 3
+    assert pipeline.node_set.count() == 3
     params = pipeline.node_set.get(type="LLMResponseWithPrompt").params
     assert params["llm_provider_id"] == mock_llm_provider.id
     assert params["llm_provider_model_id"] == mock_llm_model.id

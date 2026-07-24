@@ -133,23 +133,19 @@ class TestNodeResourceFKSync:
         provider = LlmProviderFactory.create()
         model = LlmProviderModelFactory.create()
         pipeline = PipelineFactory.create()
-        pipeline.data["nodes"].append({"id": "llm1", "type": "pipelineNode"})
-        pipeline.save()
-        pipeline.update_nodes_from_data(
-            {
-                "llm1": {
-                    "type": "LLMResponseWithPrompt",
-                    "label": "LLM",
-                    "params": {
-                        "name": "llm1",
-                        "llm_provider_id": provider.id,
-                        "llm_provider_model_id": model.id,
-                        "prompt": "helpful",
-                        "history_type": "global",
-                    },
-                }
-            }
-        )
+        node_data = {node.flow_id: None for node in pipeline.node_set.all()}
+        node_data["llm1"] = {
+            "type": "LLMResponseWithPrompt",
+            "label": "LLM",
+            "params": {
+                "name": "llm1",
+                "llm_provider_id": provider.id,
+                "llm_provider_model_id": model.id,
+                "prompt": "helpful",
+                "history_type": "global",
+            },
+        }
+        pipeline.update_nodes_from_data(node_data)
         node = pipeline.node_set.get(flow_id="llm1")
         assert node.llm_provider_id == provider.id
         assert node.llm_provider_model_id == model.id

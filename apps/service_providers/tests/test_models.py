@@ -25,21 +25,17 @@ def assistant():
 @pytest.fixture()
 def pipeline(llm_provider, llm_provider_model):
     pipeline = PipelineFactory.create()
-    pipeline.data["nodes"].append({"id": "1", "type": "pipelineNode"})
-    pipeline.update_nodes_from_data(
-        {
-            "1": {
-                "label": "LLM",
-                "type": "LLMResponseWithPrompt",
-                "params": {
-                    "llm_provider_id": str(llm_provider.id),
-                    "llm_provider_model_id": str(llm_provider_model.id),
-                    "prompt": "You are a helpful assistant",
-                },
-            }
-        }
-    )
-    pipeline.save()
+    node_data = {node.flow_id: None for node in pipeline.node_set.all()}
+    node_data["1"] = {
+        "label": "LLM",
+        "type": "LLMResponseWithPrompt",
+        "params": {
+            "llm_provider_id": str(llm_provider.id),
+            "llm_provider_model_id": str(llm_provider_model.id),
+            "prompt": "You are a helpful assistant",
+        },
+    }
+    pipeline.update_nodes_from_data(node_data)
     return pipeline
 
 

@@ -44,16 +44,13 @@ def _create_old_format_pipeline(team, with_rows=True):
 
 @pytest.mark.django_db()
 class TestStripNodeData:
-    def test_strips_blobs_and_preserves_layout(self, team):
+    def test_drops_nodes_key_and_preserves_edges(self, team):
         pipeline = _create_old_format_pipeline(team)
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
         pipeline.refresh_from_db()
-        assert pipeline.data["nodes"] == [
-            {"id": "start-1", "type": "startNode", "position": {"x": 0, "y": 0}},
-            {"id": "end-1", "type": "endNode", "position": {"x": 100, "y": 0}},
-        ]
+        assert "nodes" not in pipeline.data
         assert pipeline.data["edges"] == _old_format_data()["edges"]
         assert pipeline.data["viewport"] == _old_format_data()["viewport"]
         # rows untouched
@@ -88,14 +85,23 @@ class TestStripNodeData:
         strip_node_data_from_pipelines(Pipeline, Node)
 
         pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
+
+    def test_drops_content_less_nodes_without_rows(self, team):
+        """A layout-only node with no backing row (no content blob to lose) is not an
+        orphan; its nodes key is dropped like any other."""
+        pipeline = Pipeline.objects.create(team=team, name="ghost", data={"nodes": [{"id": "a"}], "edges": []})
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        pipeline.refresh_from_db()
+        assert pipeline.data == {"edges": []}
 
     @pytest.mark.parametrize(
         "data",
         [
             pytest.param({}, id="empty-data"),
             pytest.param({"edges": []}, id="no-nodes-key"),
-            pytest.param({"nodes": [{"id": "a"}], "edges": []}, id="node-without-position-or-type"),
             pytest.param({"nodes": [{"data": {"type": "StartNode"}}], "edges": []}, id="blob-node-without-id"),
         ],
     )
@@ -221,7 +227,7 @@ class TestStripNodeDataCommand:
         call_command("strip_node_data")
 
         pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
 
     def test_rebuild_flag_restores_blobs(self, team):
         pipeline = _create_old_format_pipeline(team)

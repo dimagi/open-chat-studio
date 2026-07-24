@@ -113,17 +113,16 @@ class TestApplyPipelinePatch:
         graph = self._sample_graph()
         new_node = make_flow_node("llm-2", LLMResponseWithPrompt.__name__)
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[new_node]))
-        layout, node_data = apply_pipeline_patch(graph, patch)
-        assert len(layout["nodes"]) == 4
-        node_ids = {n["id"] for n in layout["nodes"]}
-        assert "llm-2" in node_ids
-        assert node_data["llm-2"]["type"] == LLMResponseWithPrompt.__name__
+        _, node_data = apply_pipeline_patch(graph, patch)
+        # node_data is the complete membership; the added node carries content
+        assert set(node_data) == {"start", "llm-1", "end", "llm-2"}
+        assert node_data["llm-2"]["type"] == LLMResponseWithPrompt.__name__  # ty: ignore[not-subscriptable]
 
     def test_delete_node_removes_connected_edges(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["llm-1"]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout["nodes"]) == 2
+        layout, node_data = apply_pipeline_patch(graph, patch)
+        assert set(node_data) == {"start", "end"}
         assert len(layout["edges"]) == 0  # both edges connected to llm-1 are removed
 
     def test_update_node_params(self):
@@ -133,16 +132,15 @@ class TestApplyPipelinePatch:
         )
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
         _, node_data = apply_pipeline_patch(graph, patch)
-        assert node_data["llm-1"]["params"]["prompt"] == "You are a helpful assistant."
+        assert node_data["llm-1"]["params"]["prompt"] == "You are a helpful assistant."  # ty: ignore[not-subscriptable]
 
     def test_update_node_position(self):
         graph = self._sample_graph()
         updated = make_flow_node("llm-1", LLMResponseWithPrompt.__name__)
         updated.position = {"x": 999, "y": 888}
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        updated_result = next(n for n in layout["nodes"] if n["id"] == "llm-1")
-        assert updated_result["position"] == {"x": 999, "y": 888}
+        _, node_data = apply_pipeline_patch(graph, patch)
+        assert node_data["llm-1"]["position"] == {"x": 999, "y": 888}  # ty: ignore[not-subscriptable]
 
     def test_add_edge(self):
         graph = self._sample_graph()
@@ -158,13 +156,14 @@ class TestApplyPipelinePatch:
         assert len(layout["edges"]) == 1
         assert layout["edges"][0]["id"] == "e2"
 
-    def test_unmodified_nodes_preserved(self):
+    def test_unmodified_nodes_stay_in_membership_without_content(self):
         graph = self._sample_graph()
         new_node = make_flow_node("llm-2", LLMResponseWithPrompt.__name__)
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[new_node]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        start = next(n for n in layout["nodes"] if n["id"] == "start")
-        assert start["type"] == "startNode"
+        _, node_data = apply_pipeline_patch(graph, patch)
+        # unchanged nodes are membership-only (None); their rows are left untouched
+        assert node_data["start"] is None
+        assert node_data["end"] is None
 
     def test_viewport_preserved(self):
         graph = self._sample_graph()
@@ -175,16 +174,17 @@ class TestApplyPipelinePatch:
     def test_no_op_patch(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0)
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout["nodes"]) == len(graph["nodes"])
+        layout, node_data = apply_pipeline_patch(graph, patch)
+        assert set(node_data) == {node["id"] for node in graph["nodes"]}
         assert len(layout["edges"]) == len(graph["edges"])
 
     def test_duplicate_add_is_idempotent(self):
         graph = self._sample_graph()
         new_node = make_flow_node("llm-2", LLMResponseWithPrompt.__name__)
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[new_node, new_node]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert len([n for n in layout["nodes"] if n["id"] == "llm-2"]) == 1
+        _, node_data = apply_pipeline_patch(graph, patch)
+        assert set(node_data) == {"start", "llm-1", "end", "llm-2"}
+        assert node_data["llm-2"] is not None
 
     def test_duplicate_add_emits_no_node_content(self):
         """An add for an id already in the graph is skipped, so its content must not
@@ -193,7 +193,7 @@ class TestApplyPipelinePatch:
         duplicate = make_flow_node("llm-1", LLMResponseWithPrompt.__name__, params={"name": "hijacked"})
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[duplicate]))
         _, node_data = apply_pipeline_patch(graph, patch)
-        assert node_data == {}
+        assert all(content is None for content in node_data.values())
 
     def test_delete_then_add_same_id_emits_node_content(self):
         """Deleting an id and re-adding it in the same patch is a genuine replacement,
@@ -202,13 +202,13 @@ class TestApplyPipelinePatch:
         replacement = make_flow_node("llm-1", LLMResponseWithPrompt.__name__, params={"name": "replaced"})
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["llm-1"], add=[replacement]))
         _, node_data = apply_pipeline_patch(graph, patch)
-        assert node_data["llm-1"]["params"] == {"name": "replaced"}
+        assert node_data["llm-1"]["params"] == {"name": "replaced"}  # ty: ignore[not-subscriptable]
 
     def test_delete_unknown_node(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["nonexistent"]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout["nodes"]) == 3  # unchanged
+        _, node_data = apply_pipeline_patch(graph, patch)
+        assert set(node_data) == {"start", "llm-1", "end"}  # unchanged
 
     def test_delete_unknown_edge(self):
         graph = self._sample_graph()
@@ -216,22 +216,21 @@ class TestApplyPipelinePatch:
         layout, _ = apply_pipeline_patch(graph, patch)
         assert len(layout["edges"]) == 2  # unchanged
 
-    def test_layout_contains_no_node_content(self):
-        """Old-format stored graphs (blobs embedded) come out layout-only."""
+    def test_layout_contains_no_nodes(self):
+        """Old-format stored graphs (blobs embedded) come out with no nodes key at all."""
         graph = self._sample_graph()
         new_node = make_flow_node("llm-2", LLMResponseWithPrompt.__name__)
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[new_node]))
         layout, _ = apply_pipeline_patch(graph, patch)
-        assert all("data" not in n for n in layout["nodes"])
+        assert "nodes" not in layout
 
-    def test_node_data_covers_only_patched_nodes(self):
-        """Stale blobs of unchanged nodes in old-format stored data must not become
-        node content updates — only the patch's add/update nodes carry content."""
+    def test_node_data_carries_content_only_for_patched_nodes(self):
+        """Only the patch's add/update nodes carry content; the rest are membership-only."""
         graph = self._sample_graph()
         updated = make_flow_node("llm-1", LLMResponseWithPrompt.__name__)
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
         _, node_data = apply_pipeline_patch(graph, patch)
-        assert set(node_data) == {"llm-1"}
+        assert {flow_id for flow_id, content in node_data.items() if content is not None} == {"llm-1"}
 
     def test_name_update(self):
         self._sample_graph()
@@ -356,9 +355,9 @@ class TestPatchEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["edit_revision"] == 1
-        # The end node was deleted from data
+        # The end node was removed from the graph
         pipeline.refresh_from_db()
-        assert all(n["id"] != end_node_id for n in pipeline.data.get("nodes", []))
+        assert not pipeline.node_set.filter(flow_id=end_node_id).exists()
 
     def test_patch_updates_node_params(self, authed_client, pipeline, team_with_users):
         team_slug = team_with_users.slug
@@ -461,10 +460,43 @@ class TestPatchEndpoint:
         )
         assert response.status_code == 200
         pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
         # the response still serves full nodes, reconstructed from the rows
         response_nodes = {n["id"]: n for n in response.json()["data"]["nodes"]}
         assert response_nodes["llm-new"]["data"]["label"] == "New LLM"
+
+    def test_patch_preserves_stored_viewport(self, authed_client, pipeline, team_with_users):
+        """flow_data drops viewport, so the PATCH engine merges it back from the stored
+        data; a patch touching only a node must leave the viewport intact."""
+        team_slug = team_with_users.slug
+        pipeline.data = {**pipeline.data, "viewport": {"x": 12, "y": 34, "zoom": 2}}
+        pipeline.save(update_fields=["data"])
+        node_id = pipeline.node_set.get(type=EndNode.__name__).flow_id
+        patch_data = {
+            "base_revision": 0,
+            "nodes": {
+                "add": [],
+                "update": [
+                    {
+                        "id": node_id,
+                        "type": "endNode",
+                        "position": {"x": 1, "y": 2},
+                        "data": {"id": node_id, "type": EndNode.__name__, "label": "", "params": {"name": "end"}},
+                    }
+                ],
+                "delete": [],
+            },
+            "edges": {"add": [], "update": [], "delete": []},
+        }
+        response = authed_client.patch(
+            self._patch_url(team_slug, pipeline.id),
+            data=json.dumps(patch_data),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        pipeline.refresh_from_db()
+        assert pipeline.data["viewport"] == {"x": 12, "y": 34, "zoom": 2}
+        assert "nodes" not in pipeline.data
 
     def test_patch_does_not_rewrite_rows_from_stale_stored_blob(self, authed_client, pipeline, team_with_users):
         """Pre-migration rows still embed node content in pipeline.data. Out-of-band row
@@ -599,7 +631,7 @@ class TestPostEndpointBackwardCompatibility:
         )
         assert response.status_code == 200
         pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
         assert pipeline.node_set.get(flow_id="start").params == {"name": "start"}
         # the response still serves full nodes, reconstructed from the rows
         response_nodes = {n["id"]: n for n in response.json()["data"]["nodes"]}

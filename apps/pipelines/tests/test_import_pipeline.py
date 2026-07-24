@@ -37,6 +37,6 @@ def test_import_pipeline_from_old_format_file(tmp_path):
     call_command("import_pipeline", team.slug, "Imported", str(file_path))
 
     pipeline = Pipeline.objects.get(team=team, name="Imported")
-    assert all("data" not in node for node in pipeline.data["nodes"])
+    assert "nodes" not in pipeline.data
     names = {node.params["name"] for node in pipeline.node_set.all()}
     assert names == {"start", "end"}

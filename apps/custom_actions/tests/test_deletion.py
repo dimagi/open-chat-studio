@@ -96,12 +96,8 @@ def test_delete_view_blocks_when_referenced_by_pipeline(team_with_users, authed_
 def _strip_custom_actions_from_working_pipeline(working_pipeline):
     """Simulate a user removing the CustomAction from the working pipeline while versioned
     pipelines still reference it. This mirrors the real-world path where the user edits the
-    working pipeline (which saves clean) but published versions retain the snapshotted ref."""
-    for flow_node in working_pipeline.data.get("nodes", []):
-        params = (flow_node.get("data") or {}).get("params") or {}
-        if "custom_actions" in params:
-            params["custom_actions"] = []
-    working_pipeline.save(update_fields=["data"])
+    working pipeline (which saves clean) but published versions retain the snapshotted ref.
+    Node content lives on the rows (ADR-0047), so the edit only touches them."""
     for node in working_pipeline.node_set.filter(type=LLMResponseWithPrompt.__name__):
         node.params["custom_actions"] = []
         node.save(update_fields=["params"])

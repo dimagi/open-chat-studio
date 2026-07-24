@@ -441,16 +441,10 @@ class TestPipeline:
 @pytest.mark.django_db()
 class TestUpdateNodesFromData:
     def test_node_content_comes_from_the_mapping_not_from_data(self):
-        """Layout-only data plus a node_data mapping creates rows with the mapped content."""
+        """The node_data mapping is the sole source of membership and content; ``Pipeline.data``
+        carries no node information (ADR-0047)."""
         pipeline = PipelineFactory.create()
-        pipeline.data = {
-            "edges": [],
-            "nodes": [
-                {"id": "start", "type": "startNode", "position": {"x": 0, "y": 0}},
-                {"id": "template-1", "type": "pipelineNode", "position": {"x": 10, "y": 0}},
-                {"id": "end", "type": "endNode", "position": {"x": 20, "y": 0}},
-            ],
-        }
+        pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
             {
                 "start": {"type": "StartNode", "label": "", "params": {"name": "start"}},
@@ -468,11 +462,11 @@ class TestUpdateNodesFromData:
         assert node.label == "Template"
         assert node.params["template_string"] == "{{ input }}"
 
-    def test_position_is_shadow_written_to_the_row(self):
+    def test_position_is_written_to_the_row(self):
         """A mapping entry's position lands on the row's position columns (floats kept
-        verbatim); the layout in ``Pipeline.data`` stays authoritative for reads for now."""
+        verbatim); the columns are the authoritative layout source for reads (ADR-0047)."""
         pipeline = PipelineFactory.create()
-        pipeline.data = {"edges": [], "nodes": [{"id": "n1", "type": "startNode", "position": {"x": 10.7, "y": -3.2}}]}
+        pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
             {"n1": {"type": "StartNode", "params": {"name": "start"}, "position": {"x": 10.7, "y": -3.2}}}
         )
@@ -495,7 +489,7 @@ class TestUpdateNodesFromData:
         """Raw import files bypass wire validation; a bad position must not crash the
         save or write garbage — the row keeps its previous position columns."""
         pipeline = PipelineFactory.create()
-        pipeline.data = {"edges": [], "nodes": [{"id": "n1", "type": "startNode"}]}
+        pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
             {"n1": {"type": "StartNode", "params": {"name": "start"}, "position": position}}
         )
@@ -503,26 +497,27 @@ class TestUpdateNodesFromData:
         node = Node.objects.get(pipeline=pipeline, flow_id="n1")
         assert node.position is None
 
-    def test_nodes_absent_from_the_mapping_are_left_untouched(self):
-        """PATCH saves only carry changed nodes; existing rows keep their content."""
+    def test_membership_only_entries_leave_rows_untouched(self):
+        """PATCH saves carry content only for changed nodes; the rest are membership-only
+        (None) and their rows keep their content."""
         start, template, end = start_node(), render_template_node(), end_node()
         pipeline = create_pipeline_model([start, template, end])
         row = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
         original_params = row.params
 
-        pipeline.update_nodes_from_data({})
+        pipeline.update_nodes_from_data({node["id"]: None for node in (start, template, end)})
 
         row.refresh_from_db()
         assert row.params == original_params
         assert Node.objects.filter(pipeline=pipeline).count() == 3
 
     def test_unknown_node_without_mapping_entry_raises(self):
-        """A graph node with neither a mapping entry nor an existing row is an error."""
-        pipeline = PipelineFactory.create()
-        pipeline.data["nodes"].append({"id": "ghost", "type": "pipelineNode"})
+        """A membership-only entry (None) with no existing row is an error."""
+        start, end = start_node(), end_node()
+        pipeline = create_pipeline_model([start, end])
 
         with pytest.raises(ValueError, match="ghost"):
-            pipeline.update_nodes_from_data({})
+            pipeline.update_nodes_from_data({start["id"]: None, end["id"]: None, "ghost": None})
 
     def test_re_adding_archived_node_flow_id_creates_fresh_working_node(self):
         """Removing a node that has versions archives it; revert re-introduces the same
@@ -579,7 +574,7 @@ class TestLayoutOnlyData:
     def test_create_default_stores_layout_only_data(self):
         pipeline = Pipeline.create_default(TeamFactory())
 
-        assert all(set(node) <= {"id", "type", "position"} for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
         names = {node.params["name"] for node in pipeline.node_set.all()}
         assert names == {"start", "end"}
 
@@ -589,16 +584,93 @@ class TestLayoutOnlyData:
 
         copy = pipeline.create_new_version(is_copy=True)
 
-        assert all(set(node) <= {"id", "type", "position"} for node in copy.data["nodes"])
+        assert "nodes" not in copy.data
         copied_template = copy.node_set.get(type="RenderTemplate")
         assert copied_template.flow_id.startswith("RenderTemplate-")
         assert copied_template.flow_id != template["id"]
         assert copied_template.params["template_string"] == template["params"]["template_string"]
-        # edges follow the remapped ids
-        data_node_ids = {node["id"] for node in copy.data["nodes"]}
+        # edges follow the remapped ids, which come from the copied rows
+        copied_flow_ids = set(copy.node_set.values_list("flow_id", flat=True))
         for edge in copy.data["edges"]:
-            assert edge["source"] in data_node_ids
-            assert edge["target"] in data_node_ids
+            assert edge["source"] in copied_flow_ids
+            assert edge["target"] in copied_flow_ids
+
+    def test_copy_of_old_format_pipeline_is_layout_only(self):
+        """Copying a not-yet-migrated pipeline (data still embeds blobs) must still yield
+        layout-only data — a residual blob would keep the old ids, which no longer match
+        the remapped rows, and strip_node_data could never heal it."""
+        start, template, end = start_node(), render_template_node(), end_node()
+        pipeline = create_pipeline_model([start, template, end])
+        # Simulate old-format stored data whose blob ids match the current rows.
+        pipeline.data = {
+            "edges": pipeline.data["edges"],
+            "nodes": [{"id": node["id"], "type": "pipelineNode", "data": node} for node in (start, template, end)],
+        }
+        pipeline.save(update_fields=["data"])
+
+        copy = pipeline.create_new_version(is_copy=True)
+
+        assert "nodes" not in copy.data
+        copied_flow_ids = set(copy.node_set.values_list("flow_id", flat=True))
+        for edge in copy.data["edges"]:
+            assert edge["source"] in copied_flow_ids
+            assert edge["target"] in copied_flow_ids
+
+    def test_flow_data_ignores_stale_embedded_blob(self):
+        """Old-format stored data still embeds node content; flow_data must ignore it and
+        rebuild from the rows (the authoritative source)."""
+        start, template, end = start_node(), render_template_node(), end_node()
+        pipeline = create_pipeline_model([start, template, end])
+        row = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
+        row.set_params({**row.params, "template_string": "row wins"})
+        # Re-embed a stale blob under the layout, as a pre-migration row would carry.
+        pipeline.data = {
+            "edges": pipeline.data["edges"],
+            "nodes": [
+                {
+                    "id": template["id"],
+                    "data": {
+                        "id": template["id"],
+                        "type": "RenderTemplate",
+                        "params": {"template_string": "STALE BLOB"},
+                    },
+                },
+            ],
+        }
+        pipeline.save(update_fields=["data"])
+
+        nodes_by_id = {node["id"]: node for node in pipeline.flow_data["nodes"]}
+        assert nodes_by_id[template["id"]]["data"]["params"]["template_string"] == "row wins"
+
+    def test_flow_data_rebuilds_nodes_from_rows(self):
+        """flow_data reconstructs each node from its row: content, react-flow type derived
+        from Node.type, and position from the row's columns (ADR-0047)."""
+        start, template, end = start_node(), render_template_node(), end_node()
+        pipeline = create_pipeline_model([start, template, end])
+        template_row = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
+        template_row.position_x = 42.5
+        template_row.position_y = -7.0
+        template_row.save(update_fields=["position_x", "position_y"])
+
+        nodes_by_id = {node["id"]: node for node in pipeline.flow_data["nodes"]}
+
+        assert nodes_by_id[start["id"]]["type"] == "startNode"
+        assert nodes_by_id[end["id"]]["type"] == "endNode"
+        template_node = nodes_by_id[template["id"]]
+        assert template_node["type"] == "pipelineNode"
+        assert template_node["position"] == {"x": 42.5, "y": -7.0}
+        assert template_node["data"]["type"] == "RenderTemplate"
+        assert template_node["data"]["params"]["template_string"] == template["params"]["template_string"]
+
+    def test_flow_data_uses_empty_position_when_row_not_backfilled(self):
+        start, end = start_node(), end_node()
+        pipeline = create_pipeline_model([start, end])
+        # create_pipeline_model does not carry positions, so the rows stay unpositioned
+        assert pipeline.node_set.get(flow_id=start["id"]).position is None
+
+        nodes_by_id = {node["id"]: node for node in pipeline.flow_data["nodes"]}
+
+        assert nodes_by_id[start["id"]]["position"] == {}
 
     def test_data_without_positions_serves_node_content_from_rows(self):
         start, template, end = start_node(), render_template_node(), end_node()
@@ -683,7 +755,7 @@ class TestPipelineRevert:
 
         pipeline.revert_to_version(version)
 
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
         working_template = pipeline.node_set.get(type="RenderTemplate")
         version_template = version.node_set.get(type="RenderTemplate")
         assert working_template.params == version_template.params
