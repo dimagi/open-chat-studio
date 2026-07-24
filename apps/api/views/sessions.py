@@ -195,7 +195,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
     @action(detail=True, methods=["post"])
     def end_experiment_session(self, request, id):
         try:
-            session = ExperimentSession.objects.get(external_id=id)
+            session = ExperimentSession.objects.get(external_id=id, team=request.team)
         except ExperimentSession.DoesNotExist:
             return Response({"error": "Session not found:{id}"}, status=status.HTTP_404_NOT_FOUND)
         session.end(trigger_type=StaticTriggerType.CONVERSATION_ENDED_VIA_API)
@@ -208,7 +208,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             return Response({"error": "Missing 'state' in request"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            session = ExperimentSession.objects.get(external_id=id)
+            session = ExperimentSession.objects.get(external_id=id, team=request.team)
         except ExperimentSession.DoesNotExist:
             return Response({"error": f"Session not found: {id}"}, status=status.HTTP_404_NOT_FOUND)
 

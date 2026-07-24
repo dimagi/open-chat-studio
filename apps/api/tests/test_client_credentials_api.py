@@ -110,6 +110,28 @@ def test_machine_token_adds_session_tag(session):
 
 
 @pytest.mark.django_db()
+def test_machine_token_cannot_end_another_teams_session(session):
+    """A sessions:write token cannot end a session belonging to a different team."""
+    victim_session = ExperimentSessionFactory.create(experiment=ExperimentFactory.create())
+    client = _machine_client(session.team, scopes=["sessions:write", "sessions:read"])
+    response = client.post(f"/api/sessions/{victim_session.external_id}/end_experiment_session/")
+    assert response.status_code == 404, response.content
+
+
+@pytest.mark.django_db()
+def test_machine_token_cannot_update_another_teams_session(session):
+    """A sessions:write token cannot update the state of a session belonging to a different team."""
+    victim_session = ExperimentSessionFactory.create(experiment=ExperimentFactory.create())
+    client = _machine_client(session.team, scopes=["sessions:write", "sessions:read"])
+    response = client.patch(
+        f"/api/sessions/{victim_session.external_id}/update_state/",
+        data={"state": {"foo": "bar"}},
+        format="json",
+    )
+    assert response.status_code == 404, response.content
+
+
+@pytest.mark.django_db()
 def test_machine_token_deletes_participant_schedule(session):
     client = _machine_client(session.team, scopes=["participants:write", "participants:read"])
     payload = {
