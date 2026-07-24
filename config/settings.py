@@ -33,6 +33,11 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
 
+# Shared bearer token for the cross-team provider usage/key reporting admin
+# endpoints, so headless consumers (e.g. a reporting script) can call them
+# without a superuser browser session. Unset disables token auth.
+PROVIDER_REPORTING_API_TOKEN = env("PROVIDER_REPORTING_API_TOKEN", default=None)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules
@@ -514,6 +519,10 @@ SPECTACULAR_SETTINGS = {
             "name": "Participants",
             "description": "Manage participants, their data, and their schedules.",
         },
+        {
+            "name": "Usage",
+            "description": "Inspect team usage and activity data (message counts, and more).",
+        },
     ],
 }
 
@@ -574,6 +583,10 @@ SCHEDULED_TASKS = {
     "custom_actions.tasks.check_all_custom_actions_health": {
         "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
         "schedule": crontab(minute="5"),
+    },
+    "channels.tasks.ratchet_widget_auth_levels": {
+        "task": "apps.channels.tasks.ratchet_widget_auth_levels",
+        "schedule": crontab(minute="0", hour="2"),
     },
     "ocs_notifications.tasks.cleanup_old_notification_events": {
         "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",
@@ -644,6 +657,8 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import ignore_logger
 
+    from config.sentry import get_event_scrubber
+
     ignore_logger("ocs.request")
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
     # so Django correctly rejects them with a 400. These are pure noise in Sentry.
@@ -654,6 +669,9 @@ if SENTRY_DSN:
         send_default_pii=True,  # include user details in events
         attach_stacktrace=True,  # include stack trace in all events
         environment=env("SENTRY_ENVIRONMENT", default="development"),
+        # `attach_stacktrace=True` sends stack-frame locals with every event; the scrubber redacts
+        # secrets (e.g. the CommCare Connect encryption key) from them. See config/sentry.py.
+        event_scrubber=get_event_scrubber(),
         integrations=[
             DjangoIntegration(),
             CeleryIntegration(),
@@ -1000,6 +1018,7 @@ OAUTH2_PROVIDER = {
         "files:read": "Download file content",
         "participants:read": "Read Participant Data",
         "participants:write": "Update Participant Data",
+        "usage:read": "Read usage and activity data",
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
@@ -1027,7 +1046,7 @@ RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_c
 # Restricted HTTP client settings (used by RestrictedHttpClient in the Python sandbox)
 RESTRICTED_HTTP_MAX_REQUESTS = 10
 RESTRICTED_HTTP_DEFAULT_TIMEOUT = 5  # seconds
-RESTRICTED_HTTP_MAX_TIMEOUT = 30  # seconds
+RESTRICTED_HTTP_MAX_TIMEOUT = 60  # seconds
 MB = 1_048_576  # 1 MB
 RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 5 * MB
 RESTRICTED_HTTP_MAX_REQUEST_BYTES = MB

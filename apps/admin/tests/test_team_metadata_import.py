@@ -9,6 +9,7 @@ from apps.users.models import CustomUser
 from apps.utils.factories.team import TeamFactory
 
 METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+TIER_FIELDS = [{"key": "tier", "label": "Tier", "type": "select", "options": ["Free", "Paid"]}]
 
 
 def _csv(content: str):
@@ -62,6 +63,54 @@ class TestImportTeamMetadataFromCsv:
 
         assert result.updated == []
         assert "no columns matching" in result.errors[0]
+
+    @pytest.mark.parametrize(
+        ("fields", "csv_content", "expected_error"),
+        [
+            pytest.param(
+                TIER_FIELDS,
+                "Slug,Tier\nteam-a,Enterprise\n",
+                "not a valid option for 'Tier'",
+                id="select-value-outside-options",
+            ),
+            pytest.param(
+                [{"key": "contact", "label": "Contact", "type": "email"}],
+                "Slug,Contact\nteam-a,not-an-email\n",
+                "not a valid email for 'Contact'",
+                id="invalid-email",
+            ),
+        ],
+    )
+    def test_invalid_value_is_rejected(self, settings, fields, csv_content, expected_error):
+        settings.TEAM_METADATA_FIELDS = fields
+        team = TeamFactory.create(slug="team-a", metadata={})
+
+        result = import_team_metadata_from_csv(_csv(csv_content))
+
+        assert result.updated == []
+        assert expected_error in result.errors[0]
+        team.refresh_from_db()
+        assert team.metadata == {}
+
+    def test_valid_select_value_is_accepted(self, settings):
+        settings.TEAM_METADATA_FIELDS = TIER_FIELDS
+        team = TeamFactory.create(slug="team-a", metadata={})
+
+        result = import_team_metadata_from_csv(_csv("Slug,Tier\nteam-a,Paid\n"))
+
+        assert result.updated == ["team-a"]
+        team.refresh_from_db()
+        assert team.metadata == {"tier": "Paid"}
+
+    def test_blank_value_clears_without_validation(self, settings):
+        settings.TEAM_METADATA_FIELDS = TIER_FIELDS
+        team = TeamFactory.create(slug="team-a", metadata={"tier": "Paid"})
+
+        result = import_team_metadata_from_csv(_csv("Slug,Tier\nteam-a,\n"))
+
+        assert result.updated == ["team-a"]
+        team.refresh_from_db()
+        assert team.metadata == {"tier": ""}
 
 
 @pytest.mark.django_db()

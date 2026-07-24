@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import Cookies from "js-cookie";
-import { PipelineType } from "../types/pipeline";
+import { PipelineSaveResponse, PipelineType } from "../types/pipeline";
 import { SimplePipelineMessageResponse, TestMessageTaskResponse } from "../types/testMessage";
 
 type AiHelpResponse = {
@@ -22,7 +22,7 @@ class ApiClient {
   public async updatePipeline(
     pipelineId: number,
     updatedPipeline: PipelineType,
-  ): Promise<PipelineType> {
+  ): Promise<PipelineSaveResponse> {
     const client = this.createClient();
     try {
       const response = await client.post(
@@ -36,6 +36,39 @@ class ApiClient {
       return response.data;
     } catch (error) {
       console.error(error);
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        const err = new Error("Conflict: pipeline was modified by another session.") as Error & {status: number; currentRevision: number};
+        err.status = 409;
+        err.currentRevision = error.response.data.current_revision;
+        throw err;
+      }
+      throw error;
+    }
+  }
+
+  public async patchPipeline(
+    pipelineId: number,
+    diff: Record<string, unknown>,
+  ): Promise<PipelineSaveResponse> {
+    const client = this.createClient();
+    try {
+      const response = await client.patch(
+        `/pipelines/data/${pipelineId}/`,
+        diff,
+      );
+
+      if (response?.status !== 200) {
+        throw new Error(`HTTP error! status: ${response?.status}`);
+      }
+      return response.data;
+    } catch (error) {
+      console.error(error);
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        const err = new Error("Conflict: pipeline was modified by another session.") as Error & {status: number; currentRevision: number};
+        err.status = 409;
+        err.currentRevision = error.response.data.current_revision;
+        throw err;
+      }
       throw error;
     }
   }

@@ -3,10 +3,13 @@ import uuid
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from django.db import OperationalError  # noqa: F811 - used at runtime in task decorator
+from django.utils import timezone
+from field_audit.models import AuditAction
 from taskbadger.celery import Task as TaskbadgerTask
 from telebot import types
 from twilio.request_validator import RequestValidator
 
+from apps.channels import widget_versions
 from apps.channels.api_channel import ApiChannel
 from apps.channels.clients.connect_client import CommCareConnectClient, Message
 from apps.channels.connect_channel import CommCareConnectChannel
@@ -27,6 +30,7 @@ from apps.channels.whatsapp_channel import WhatsappChannel
 from apps.chat.models import ChatMessage
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
+from apps.ocs_notifications.notifications import widget_auth_level_upgrade_notification
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.utils import set_current_team
 from apps.utils.taskbadger import update_taskbadger_data
@@ -45,6 +49,10 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     if update.my_chat_member:
         # This is a chat member update that we don't care about.
         # See https://core.telegram.org/bots/api-changelog#march-9-2021
+        return
+
+    if update.edited_message:
+        # Edited messages don't need to be processed.
         return
 
     message = TelegramMessage.parse(update)
@@ -277,3 +285,76 @@ def handle_email_message(self, email_data: dict, channel_id: int | None = None, 
     )
     update_taskbadger_data(self, channel, message)
     channel.new_user_message(message)
+
+
+@shared_task(ignore_result=True)
+def ratchet_widget_auth_levels():
+    """Raise required_auth_level for embedded-widget channels whose widget has upgraded.
+
+    Two-phase per channel: on first detection the team is notified (with the minimum
+    widget version the new level needs) and the pending level is recorded; once the
+    grace period elapses the level is applied. Monotonic — never lowers a level, so a
+    spoofed or stale version header can only tighten auth, never relax it.
+    """
+    now = timezone.now()
+    channels = (
+        ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False)
+        .select_related("experiment", "team")
+        .order_by("team_id")
+    )
+
+    notify_by_team: dict[int, dict] = {}
+    for channel in channels:
+        target = widget_versions.level_for_version(channel.widget_version)
+
+        if channel.auth_level_notified_at is None:
+            # No bump pending yet. Start one only if the widget now implies a higher level.
+            if target <= channel.required_auth_level:
+                continue
+            # Defer recording the pending state until the team notification succeeds (below),
+            # so a swallowed notification failure never silently starts the grace clock.
+            team_data = notify_by_team.setdefault(
+                channel.team_id, {"team": channel.team, "chatbots": {}, "min_level": target, "pending": []}
+            )
+            team_data["chatbots"][channel.experiment.name] = channel.experiment.get_absolute_url()
+            team_data["min_level"] = max(team_data["min_level"], target)
+            team_data["pending"].append((channel.pk, target))
+        elif target < channel.pending_auth_level:
+            # The widget dropped back below the *pending* level before the grace period
+            # elapsed; abandon the raise (ADR-0045). Comparing against the pending level
+            # (not the current floor) also covers grandfathered NONE channels, where an
+            # intermediate downgrade stays above the floor but below the pending level.
+            _clear_pending_auth_level(channel)
+        elif now - channel.auth_level_notified_at >= ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE:
+            channel.required_auth_level = channel.pending_auth_level
+            channel.pending_auth_level = None
+            channel.auth_level_notified_at = None
+            # save() routes through the audited manager so the level change is recorded;
+            # update_fields keeps concurrent widget_version telemetry writes from being clobbered.
+            channel.save(update_fields=["required_auth_level", "pending_auth_level", "auth_level_notified_at"])
+
+    effective_date = now + ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE
+    for data in notify_by_team.values():
+        notified = widget_auth_level_upgrade_notification(
+            team=data["team"],
+            affected_chatbots=data["chatbots"],
+            min_version=widget_versions.min_version_for_level(data["min_level"]),
+            effective_date=effective_date,
+            docs_url=widget_versions.widget_docs_url(),
+        )
+        if not notified:
+            # Notification creation failed (and was swallowed); leave these channels
+            # untouched so the next run retries rather than ratcheting them unannounced.
+            continue
+        for pk, target in data["pending"]:
+            # Pending state is workflow bookkeeping, not an audited field change (like the
+            # widget_version telemetry writes); bypass auditing so it creates no empty events.
+            ExperimentChannel.objects.filter(pk=pk).update(
+                pending_auth_level=target, auth_level_notified_at=now, audit_action=AuditAction.IGNORE
+            )
+
+
+def _clear_pending_auth_level(channel: ExperimentChannel) -> None:
+    ExperimentChannel.objects.filter(pk=channel.pk).update(
+        pending_auth_level=None, auth_level_notified_at=None, audit_action=AuditAction.IGNORE
+    )

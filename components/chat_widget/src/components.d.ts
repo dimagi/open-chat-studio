@@ -23,6 +23,20 @@ export namespace Components {
          */
         "apiBaseUrl"?: string;
         /**
+          * Optional banner message shown whenever it is set. The banner is always visible (not dismissable) and does not block normal widget usage.
+         */
+        "bannerMessage"?: string;
+        /**
+          * Where the banner is positioned relative to the chat area: `top` or `bottom`.
+          * @default 'top'
+         */
+        "bannerPosition": 'top' | 'bottom';
+        /**
+          * Visual style of the banner. One of `default`, `info`, `warning` or `error`.
+          * @default 'default'
+         */
+        "bannerStyle": 'default' | 'info' | 'warning' | 'error';
+        /**
           * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
           * @default 'square'
          */
@@ -36,9 +50,18 @@ export namespace Components {
          */
         "chatbotId": string;
         /**
+          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable and the message input and send controls remain visible but disabled, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
+          * @default false
+         */
+        "disabled": boolean;
+        /**
           * Authentication key for embedded channels
          */
         "embedKey"?: string;
+        /**
+          * The widget's build version. Read this to identify which release is deployed on a page, e.g. `await el.getVersion()`. Also mirrored to the `data-widget-version` attribute on the host element for inspection.
+         */
+        "getVersion": () => Promise<string>;
         /**
           * The text to place in the header.
          */
@@ -150,6 +173,20 @@ declare namespace LocalJSX {
          */
         "apiBaseUrl"?: string;
         /**
+          * Optional banner message shown whenever it is set. The banner is always visible (not dismissable) and does not block normal widget usage.
+         */
+        "bannerMessage"?: string;
+        /**
+          * Where the banner is positioned relative to the chat area: `top` or `bottom`.
+          * @default 'top'
+         */
+        "bannerPosition"?: 'top' | 'bottom';
+        /**
+          * Visual style of the banner. One of `default`, `info`, `warning` or `error`.
+          * @default 'default'
+         */
+        "bannerStyle"?: 'default' | 'info' | 'warning' | 'error';
+        /**
           * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
           * @default 'square'
          */
@@ -162,6 +199,11 @@ declare namespace LocalJSX {
           * The ID of the chatbot to connect to.
          */
         "chatbotId": string;
+        /**
+          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable and the message input and send controls remain visible but disabled, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
+          * @default false
+         */
+        "disabled"?: boolean;
         /**
           * Authentication key for embedded channels
          */

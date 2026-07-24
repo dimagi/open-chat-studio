@@ -63,6 +63,33 @@ def test_staff_can_save_metadata(team, staff_member, settings):
 
 
 @pytest.mark.django_db()
+def test_email_field_rejects_invalid_address(team, staff_member, settings):
+    settings.TEAM_METADATA_FIELDS = [{"key": "contact", "label": "Contact", "type": "email"}]
+    client = Client()
+    client.force_login(staff_member)
+    response = client.post(_url(team), {"contact": "not-an-email"})
+    assert response.status_code == 200  # redisplays the form with errors
+    team.refresh_from_db()
+    assert team.metadata == {}
+
+
+@pytest.mark.django_db()
+def test_select_field_rejects_value_outside_options(team, staff_member, settings):
+    settings.TEAM_METADATA_FIELDS = [{"key": "tier", "label": "Tier", "type": "select", "options": ["Free", "Paid"]}]
+    client = Client()
+    client.force_login(staff_member)
+
+    response = client.post(_url(team), {"tier": "Enterprise"})
+    assert response.status_code == 200  # invalid choice redisplays the form
+    team.refresh_from_db()
+    assert team.metadata == {}
+
+    client.post(_url(team), {"tier": "Paid"}, follow=True)
+    team.refresh_from_db()
+    assert team.metadata == {"tier": "Paid"}
+
+
+@pytest.mark.django_db()
 def test_save_preserves_unconfigured_metadata(team, staff_member, settings):
     """Editing the configured fields must not drop metadata keys that aren't in settings."""
     settings.TEAM_METADATA_FIELDS = METADATA_FIELDS

@@ -3780,6 +3780,28 @@ components:
           type: string
           format: date-time
           nullable: true
+        required_auth_level:
+          allOf:
+          - $ref: '#/components/schemas/RequiredAuthLevelEnum'
+          description: |-
+            Minimum authentication an embedded widget must provide. New widgets (0.9.0+) send a session token; only downgrade this for a channel you know is running an older widget.
+
+            * `0` - None (pre-0.5.1 legacy)
+            * `1` - Embed key only (0.5.1 – 0.8.x)
+            * `2` - Session token required (0.9.0+)
+          minimum: 0
+          maximum: 32767
+        pending_auth_level:
+          nullable: true
+          minimum: 0
+          maximum: 32767
+          oneOf:
+          - $ref: '#/components/schemas/PendingAuthLevelEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        auth_level_notified_at:
+          type: string
+          format: date-time
+          nullable: true
         experiment:
           type: integer
           nullable: true
@@ -4321,10 +4343,12 @@ components:
     Manifest:
       type: object
       description: 'The sync manifest: the call order and per-model config, plus a
-        checksum of the applied schema.'
+        checksum of the export schema.'
       properties:
         schema_checksum:
           type: string
+          description: SHA-256 of this server's export OpenAPI schema; clients compare
+            it against their own to detect an incompatible export surface.
         entries:
           type: array
           items:
@@ -4552,6 +4576,9 @@ components:
       - cursor
       - has_more
       - results
+    NullEnum:
+      enum:
+      - null
     ParticipantDataDetail:
       type: object
       properties:
@@ -4658,6 +4685,16 @@ components:
       - cursor
       - has_more
       - results
+    PendingAuthLevelEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      type: integer
+      description: |-
+        * `0` - None (pre-0.5.1 legacy)
+        * `1` - Embed key only (0.5.1 – 0.8.x)
+        * `2` - Session token required (0.9.0+)
     PipelineChatHistoryDetail:
       type: object
       properties:
@@ -4790,6 +4827,10 @@ components:
           maxLength: 128
         data: {}
         version_number:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        edit_revision:
           type: integer
           maximum: 2147483647
           minimum: 0
@@ -4936,6 +4977,16 @@ components:
         * `evaluation_dataset` - Evaluation Dataset
         * `data_export` - Data Export
         * `message_media` - Message Media
+    RequiredAuthLevelEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      type: integer
+      description: |-
+        * `0` - None (pre-0.5.1 legacy)
+        * `1` - Embed key only (0.5.1 – 0.8.x)
+        * `2` - Session token required (0.9.0+)
     ScheduledMessageDetail:
       type: object
       properties:

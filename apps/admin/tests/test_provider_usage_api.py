@@ -5,7 +5,6 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.teams.models import Flag
 from apps.trace.models import Trace, TraceStatus
 from apps.users.models import CustomUser
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -31,13 +30,6 @@ def _trace(team, tokens):
     return trace
 
 
-def _enable_cost_tracking(team):
-    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
-    flag.everyone = None
-    flag.save()
-    flag.teams.add(team)
-
-
 @pytest.mark.django_db()
 def test_non_superuser_blocked(client):
     client.force_login(CustomUser.objects.create(username="staff@acme.com", is_staff=True))
@@ -49,6 +41,22 @@ def test_non_superuser_blocked(client):
 def test_invalid_range_returns_400(superuser_client):
     response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), INVALID_RANGE)
     assert response.status_code == 400
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("configured_token", "auth_header", "expected_status"),
+    [
+        pytest.param("s3cret-token", "Bearer s3cret-token", 200, id="valid-token-grants-access"),
+        pytest.param("s3cret-token", "Bearer wrong", 302, id="invalid-token-falls-back-to-session"),
+        pytest.param(None, "Bearer anything", 302, id="token-ignored-when-unset"),
+        pytest.param("s3cret-token", "Bearer nön-ascii", 302, id="non-ascii-header-rejected"),
+    ],
+)
+def test_reporting_token_auth(client, settings, configured_token, auth_header, expected_status):
+    settings.PROVIDER_REPORTING_API_TOKEN = configured_token
+    response = client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE, HTTP_AUTHORIZATION=auth_header)
+    assert response.status_code == expected_status
 
 
 @pytest.mark.django_db()
@@ -64,7 +72,6 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
     UsageRecordFactory(
         team=team_a, provider_type="anthropic", model_name="claude", quantity=200, cost=Decimal("0.75"), at=WHEN
     )
-    _enable_cost_tracking(team_a)
 
     response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
 
@@ -74,7 +81,7 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
     alpha = teams["Alpha"]
     assert alpha["run_count"] == 2
     assert alpha["total_tokens"] == 800
-    assert alpha["cost_tracking_enabled"] is True
+    assert alpha["team_slug"] == team_a.slug
     assert Decimal(alpha["total_cost"]["USD"]) == Decimal("2.00")
     models = {m["model_name"]: m for m in alpha["models"]}
     assert Decimal(models["gpt-4o"]["cost"]) == Decimal("1.25")
@@ -82,9 +89,28 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
 
     bravo = teams["Bravo"]
     assert bravo["run_count"] == 1
-    assert bravo["cost_tracking_enabled"] is False
     assert bravo["models"] == []
     assert bravo["total_cost"] == {}
+
+
+@pytest.mark.django_db()
+def test_includes_team_metadata(superuser_client, settings):
+    settings.TEAM_METADATA_FIELDS = [
+        {"key": "team_owner", "label": "Team Owner"},
+        {"key": "region", "label": "Region"},
+    ]
+    team = TeamFactory(name="Alpha", metadata={"team_owner": "Jia", "internal_only": "hidden"})
+    _trace(team, 100)
+
+    payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
+
+    assert payload["metadata_fields"] == [
+        {"key": "team_owner", "label": "Team Owner", "type": "text"},
+        {"key": "region", "label": "Region", "type": "text"},
+    ]
+    alpha = {t["team_name"]: t for t in payload["teams"]}["Alpha"]
+    # Only configured fields are exposed; unconfigured keys stay hidden, missing ones blank.
+    assert alpha["metadata"] == {"team_owner": "Jia", "region": ""}
 
 
 @pytest.mark.django_db()
@@ -93,7 +119,6 @@ def test_total_cost_keeps_currencies_separate(superuser_client):
     _trace(team, 100)
     UsageRecordFactory(team=team, model_name="gpt-4o", cost=Decimal("1.25"), currency="USD", at=WHEN)
     UsageRecordFactory(team=team, model_name="claude", cost=Decimal("0.90"), currency="EUR", at=WHEN)
-    _enable_cost_tracking(team)
 
     response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
 

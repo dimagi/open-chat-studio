@@ -7,10 +7,11 @@ from apps.utils.admin import ReadonlyAdminMixin
 
 @admin.register(ExperimentChannel)
 class ExperimentChannelAdmin(ReadonlyAdminMixin, admin.ModelAdmin):
-    list_display = ("name", "team", "platform", "deleted", "external_id", "messaging_provider")
+    list_display = ("name", "team", "platform", "required_auth_level", "deleted", "external_id", "messaging_provider")
     search_fields = ("name", "external_id")
     list_filter = (
         "platform",
+        "required_auth_level",
         "created_at",
         "updated_at",
     )

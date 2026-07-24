@@ -72,6 +72,7 @@ nav:
     - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
+    - Package map: architecture/package-map.md
     - Decisions:
       - Index: adr/index.md
       - 0000 Record architecture decisions: adr/0000-record-architecture-decisions.md
@@ -118,6 +119,8 @@ nav:
       - 0041 Fail-closed session-token enforcement rollout: adr/0041-fail-closed-session-token-enforcement-rollout.md
       - 0042 Settings-driven internal team metadata in a JSON field: adr/0042-settings-driven-internal-team-metadata.md
       - 0043 BSUID participant identity for WhatsApp: adr/0043-whatsapp-bsuid-participant-identity.md
+      - 0044 Durable per-channel widget auth policy: adr/0044-durable-per-channel-widget-auth-policy.md
+      - 0045 Ratchet widget auth level up on upgrade: adr/0045-ratchet-widget-auth-level-on-upgrade.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md

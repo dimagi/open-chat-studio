@@ -28,6 +28,7 @@ from apps.evaluations.dataset_clone import (
     mark_dataset_pending,
     resolve_add_sessions_external_ids,
 )
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import (
     EvaluationDatasetEditForm,
     EvaluationDatasetForm,
@@ -161,8 +162,10 @@ class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     def delete(self, request, team_slug: str, pk: int):
         """Handle AJAX delete requests."""
         dataset = get_object_or_404(EvaluationDataset, team=request.team, pk=pk)
-        dataset.delete()
-
+        try:
+            dataset.delete()
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         return HttpResponse(status=200)
 
 
@@ -521,7 +524,10 @@ def _get_message_form_data(request) -> dict:
 def delete_message(request, team_slug, message_id):
     """Delete a message from the dataset"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team=request.team)
-    message.delete()
+    try:
+        message.delete()
+    except InFlightRunsError as e:
+        return HttpResponse(", ".join(e.messages), status=409)
     return HttpResponse("", status=200)
 
 

@@ -1,0 +1,96 @@
+from django.db import transaction
+from drf_spectacular.utils import OpenApiExample, extend_schema
+from rest_framework.views import APIView
+
+from apps.api.serializers import TriggerBotMessageRequest
+from apps.api.v2.serializers import TriggerBotMessageResponse
+from apps.api.views.channels import handle_trigger_bot_message
+
+
+class TriggerBotMessageView(APIView):
+    required_scopes = ("chatbots:interact",)
+
+    @extend_schema(
+        operation_id="trigger_bot_message",
+        summary="Trigger the bot to send a message to the user, or deliver a message directly",
+        tags=["Channels"],
+        request=TriggerBotMessageRequest(),
+        responses={
+            200: TriggerBotMessageResponse,
+            400: {"description": "Bad Request"},
+            404: {"description": "Not Found"},
+        },
+        examples=[
+            OpenApiExample(
+                name="GenerateBotMessageAndSend",
+                summary="Generates a bot message and sends it to the user (auto-creates participant if needed).",
+                value={
+                    "identifier": "+15556793",
+                    "experiment": "123e4567-e89b-12d3-a456-426614174000",
+                    "platform": "whatsapp",
+                    "prompt_text": "Tell the user to do something",
+                    "session_data": {"key": "value"},
+                    "participant_data": {"key": "value"},
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                name="SendMessageDirectly",
+                summary="Send a pre-written message directly to the participant, bypassing the bot/LLM.",
+                value={
+                    "identifier": "+15556793",
+                    "experiment": "123e4567-e89b-12d3-a456-426614174000",
+                    "platform": "whatsapp",
+                    "message_text": "Your appointment is confirmed for tomorrow at 10am.",
+                    "session_data": {"key": "value"},
+                    "participant_data": {"key": "value"},
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                name="MessageTriggered",
+                summary="The session the message will be delivered on, including its channel details.",
+                value={
+                    "session_id": "123e4567-e89b-12d3-a456-426614174000",
+                    "url": "https://example.com/api/sessions/123e4567-e89b-12d3-a456-426614174000/",
+                    "team": {"name": "My Team", "slug": "my-team"},
+                    "channel": {"platform": "whatsapp", "data": {}},
+                },
+                response_only=True,
+                status_codes=[200],
+            ),
+            OpenApiExample(
+                name="ChannelNotConfigured",
+                summary="Experiment cannot send messages on the specified channel",
+                value={"detail": "Experiment cannot send messages on the whatsapp channel. Create the channel first."},
+                response_only=True,
+                status_codes=[400],
+            ),
+            OpenApiExample(
+                name="ConsentNotGiven",
+                summary="User has not given consent",
+                value={"detail": "User has not given consent"},
+                response_only=True,
+                status_codes=[400],
+            ),
+            OpenApiExample(
+                name="ExperimentNotFound",
+                summary="No experiment with the given ID exists in the team",
+                value={"detail": "No Experiment matches the given query."},
+                response_only=True,
+                status_codes=[404],
+            ),
+        ],
+    )
+    @transaction.atomic
+    def post(self, request):
+        """
+        Trigger the bot to send a message to the user, or deliver a message directly.
+
+        Provide either ``prompt_text`` (routes through the LLM/bot pipeline) or ``message_text``
+        (sends the exact text to the participant without any LLM processing). Exactly one is required.
+
+        The response ``channel`` is an object of ``{platform, data}``; for CommCare Connect, ``data``
+        carries the ``external_channel_id`` of the session's Connect channel.
+        """
+        return handle_trigger_bot_message(request, TriggerBotMessageResponse)

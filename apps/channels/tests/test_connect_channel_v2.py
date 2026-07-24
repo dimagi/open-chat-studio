@@ -51,7 +51,7 @@ def _make_participant_data(experiment, consent=True):
 def _encrypt_user_message(encryption_key, channel_id, text="Hello bot"):
     """Build an encrypted NewMessagePayload as CommCare Connect would send it."""
     client = CommCareConnectClient()
-    ciphertext, tag, nonce = client._encrypt_message(key=encryption_key, message=text)
+    ciphertext, tag, nonce = client._encrypt_message(encryption_key=encryption_key, message=text)
     message = Message(timestamp=1000, message_id=str(uuid4()), ciphertext=ciphertext, tag=tag, nonce=nonce)
     return NewMessagePayload(channel_id=channel_id, messages=[message])
 

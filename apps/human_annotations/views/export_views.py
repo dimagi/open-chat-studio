@@ -63,15 +63,21 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
             return str(item.message.chat.experiment_session.external_id)
         return ""
 
-    def _build_flagged_row(self, item):
+    def _group_annotations_by_item(self, annotations):
+        by_item = {}
+        for ann in annotations:
+            by_item.setdefault(ann.item_id, []).append(ann)
+        return by_item
+
+    def _item_metadata(self, item_annotations, flagged_item_ids):
+        """Per-item facts shared by both export formats: authoritative annotator, timestamp, flag state."""
+        item = item_annotations[0].item
+        authoritative = next((a for a in item_annotations if a.is_authoritative), None)
         return {
-            "item_id": item.pk,
-            "item_type": item.item_type,
-            "session_id": self._get_session_external_id(item),
-            "annotated_at": "",
-            "flagged": True,
-            "is_authoritative": False,
-            "flags": item.flags,
+            "item": item,
+            "authoritative_email": authoritative.reviewer.email if authoritative else "",
+            "annotated_at": max(a.created_at for a in item_annotations).isoformat(),
+            "is_flagged": item.pk in flagged_item_ids,
         }
 
     def _pivot_annotations(self, annotations, flagged_items, schema_fields):
@@ -82,10 +88,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         """
         flagged_items = list(flagged_items)
         flagged_item_ids = {item.pk for item in flagged_items}
-
-        by_item = {}
-        for ann in annotations:
-            by_item.setdefault(ann.item_id, []).append(ann)
+        by_item = self._group_annotations_by_item(annotations)
 
         annotator_emails = sorted({ann.reviewer.email for ann in annotations})
 
@@ -101,9 +104,8 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         ] + annotator_emails
 
         rows = []
-        for item_id, item_annotations in by_item.items():
-            is_flagged = item_id in flagged_item_ids
-            rows.extend(self._pivot_item_rows(item_annotations, schema_fields, annotator_emails, is_flagged))
+        for item_annotations in by_item.values():
+            rows.extend(self._pivot_item_rows(item_annotations, schema_fields, annotator_emails, flagged_item_ids))
         for item in flagged_items:
             if item.pk in by_item:
                 continue
@@ -111,22 +113,20 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
 
         return fieldnames, rows
 
-    def _pivot_item_rows(self, item_annotations, schema_fields, annotator_emails, is_flagged):
-        """Build one export row per schema field for a single item's annotations."""
-        item = item_annotations[0].item
-        authoritative = next((a for a in item_annotations if a.is_authoritative), None)
-        authoritative_email = authoritative.reviewer.email if authoritative else ""
-        annotated_at = max(a.created_at for a in item_annotations).isoformat()
+    def _pivot_item_rows(self, item_annotations, schema_fields, annotator_emails, flagged_item_ids):
+        """Build one CSV row per schema field for a single item's annotations."""
+        meta = self._item_metadata(item_annotations, flagged_item_ids)
+        item = meta["item"]
         data_by_email = {ann.reviewer.email: ann.data for ann in item_annotations}
 
         base = {
             "item_id": item.pk,
             "item_type": item.item_type,
             "session_id": self._get_session_external_id(item),
-            "flagged": is_flagged,
+            "flagged": meta["is_flagged"],
             "flags": json.dumps(item.flags),
-            "authoritative_annotator": authoritative_email,
-            "annotated_at": annotated_at,
+            "authoritative_annotator": meta["authoritative_email"],
+            "annotated_at": meta["annotated_at"],
         }
         rows = []
         for field in schema_fields:
@@ -167,27 +167,49 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         return response
 
     def _export_jsonl(self, queue, annotations, flagged_items):
-        lines = []
-        for ann in annotations:
-            record = {
-                "item_id": ann.item_id,
-                "item_type": ann.item.item_type,
-                "session_id": self._get_session_external_id(ann.item),
-                "annotated_at": ann.created_at.isoformat(),
-                "flagged": False,
-                "is_authoritative": ann.is_authoritative,
-                "flags": ann.item.flags,
-                "annotation": ann.data,
-            }
-            lines.append(json.dumps(record))
+        schema_fields = list(queue.schema.keys())
+        flagged_items = list(flagged_items)
+        flagged_item_ids = {item.pk for item in flagged_items}
+        by_item = self._group_annotations_by_item(annotations)
 
-        for item in flagged_items:
-            record = self._build_flagged_row(item)
-            # Flagged items have no annotation data; emit an empty dict so every record has the same shape.
-            record["annotation"] = {}
-            lines.append(json.dumps(record))
+        lines = [
+            json.dumps(self._jsonl_item_record(item_annotations, schema_fields, flagged_item_ids))
+            for item_annotations in by_item.values()
+        ]
+        lines.extend(json.dumps(self._jsonl_flagged_record(item)) for item in flagged_items if item.pk not in by_item)
 
         content = "\n".join(lines)
         response = HttpResponse(content, content_type="application/jsonl")
         response["Content-Disposition"] = f'attachment; filename="{_safe_filename(queue.name)}_annotations.jsonl"'
         return response
+
+    def _jsonl_item_record(self, item_annotations, schema_fields, flagged_item_ids):
+        """One JSONL record per item: item-level facts once, per-field values keyed by annotator email."""
+        meta = self._item_metadata(item_annotations, flagged_item_ids)
+        item = meta["item"]
+        annotators = sorted(item_annotations, key=lambda a: a.reviewer.email)
+        return {
+            "item_id": item.pk,
+            "item_type": item.item_type,
+            "session_id": self._get_session_external_id(item),
+            "flagged": meta["is_flagged"],
+            "flags": item.flags,
+            "authoritative_annotator": meta["authoritative_email"],
+            "annotated_at": meta["annotated_at"],
+            "fields": {
+                field: {ann.reviewer.email: ann.data.get(field) for ann in annotators} for field in schema_fields
+            },
+        }
+
+    def _jsonl_flagged_record(self, item):
+        """A flagged item with no annotations: item-level facts with empty fields."""
+        return {
+            "item_id": item.pk,
+            "item_type": item.item_type,
+            "session_id": self._get_session_external_id(item),
+            "flagged": True,
+            "flags": item.flags,
+            "authoritative_annotator": "",
+            "annotated_at": "",
+            "fields": {},
+        }

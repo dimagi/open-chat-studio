@@ -1,7 +1,10 @@
+import functools
+import hmac
 import logging
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ValidationError
@@ -33,6 +36,7 @@ from apps.admin.queries import (
     get_period_totals,
     get_platform_breakdown,
     get_team_activity_summary,
+    get_team_stats,
     get_top_experiments,
     get_top_teams,
     get_whatsapp_message_stats,
@@ -44,10 +48,9 @@ from apps.admin.queries import (
     whatsapp_message_stats_to_csv,
 )
 from apps.admin.serializers import StatsSerializer
-from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Participant
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.teams.flags import get_all_flag_info
+from apps.teams.forms import TeamMetadataForm
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Flag, Team
 
@@ -57,6 +60,34 @@ User = get_user_model()
 
 is_staff = user_passes_test(lambda u: u.is_staff, login_url="/404")
 is_superuser = user_passes_test(lambda u: u.is_superuser, login_url="/404")
+
+
+def _has_valid_reporting_token(request):
+    """True if the request carries the configured provider-reporting bearer token."""
+    token = settings.PROVIDER_REPORTING_API_TOKEN
+    if not token:
+        return False
+    prefix = "Bearer "
+    header = request.headers.get("Authorization", "")
+    if not header.startswith(prefix):
+        return False
+    return hmac.compare_digest(header.removeprefix(prefix).encode("utf-8"), token.encode("utf-8"))
+
+
+def superuser_or_reporting_token(view_func):
+    """Allow a valid reporting token, else fall back to the superuser-session check.
+
+    Lets headless consumers authenticate with the shared token while the browser
+    admin UI keeps working via the session (same 302-to-/404 for everyone else).
+    """
+
+    @functools.wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if _has_valid_reporting_token(request):
+            return view_func(request, *args, **kwargs)
+        return is_superuser(view_func)(request, *args, **kwargs)
+
+    return _wrapped
 
 
 @is_staff
@@ -194,12 +225,7 @@ def section_charts(request):
         context={
             "chart_data": {
                 "message_data": usage_data.data,
-                "participant_data": {
-                    "data": participant_data.data,
-                    "start_value": Participant.objects.filter(created_at__lt=start_timestamp)
-                    .exclude(platform=ChannelPlatform.EVALUATIONS)
-                    .count(),
-                },
+                "participant_data": participant_data.data,
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
@@ -210,6 +236,43 @@ def section_charts(request):
 @is_staff
 def section_top_teams(request):
     return _render_section(request, "admin/sections/top_teams.html", "top_teams", get_top_teams)
+
+
+@is_staff
+def team_detail(request, slug):
+    """Per-team admin page: resource counts plus an editable metadata form."""
+    team = get_object_or_404(Team, slug=slug)
+    form = TeamMetadataForm(request.POST or None, team=team)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        return redirect("ocs_admin:team_detail", slug=team.slug)
+
+    stats = get_team_stats(team)
+    stat_tiles = [
+        (label, stats[key])
+        for key, label in [
+            ("chatbots", "Chatbots"),
+            ("participants", "Participants"),
+            ("sessions", "Sessions"),
+            ("messages", "Messages"),
+            ("members", "Members"),
+            ("pending_invitations", "Pending Invites"),
+            ("collections", "Collections"),
+            ("evaluation_configs", "Eval Configs"),
+            ("evaluation_runs", "Eval Runs"),
+            ("evaluation_datasets", "Eval Datasets"),
+        ]
+    ]
+    return TemplateResponse(
+        request,
+        "admin/team_detail.html",
+        context={
+            "active_tab": "admin",
+            "team": team,
+            "stat_tiles": stat_tiles,
+            "form": form,
+        },
+    )
 
 
 @is_staff
@@ -424,7 +487,9 @@ def flag_history(request, flag_name):
     )
 
 
-@is_superuser
+# Staff-level: team names/slugs are already visible to staff via the dashboard's
+# top-teams table and the team_detail page, which drive this search endpoint.
+@is_staff
 def teams_api(request):
     query = request.GET.get("q", "").strip()
 
@@ -439,7 +504,7 @@ def teams_api(request):
 
     teams = teams.order_by("name")[:20]  # Limit to 20 results
 
-    data = [{"value": team.id, "text": team.name} for team in teams]
+    data = [{"value": team.id, "text": team.name, "slug": team.slug} for team in teams]
     return JsonResponse(data, safe=False)
 
 
@@ -462,7 +527,7 @@ def users_api(request):
     return JsonResponse(data, safe=False)
 
 
-@is_superuser
+@superuser_or_reporting_token
 def provider_usage_api(request):
     """Cross-team LLM usage over a date range: per-team token totals merged with
     per-model cost detail where cost tracking is enabled. Requires `range_type`,
@@ -475,7 +540,7 @@ def provider_usage_api(request):
     return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
 
 
-@is_superuser
+@superuser_or_reporting_token
 def provider_keys_api(request):
     """Masked API-key fingerprint → team mapping across all LLM providers, so a
     report can attribute provider-side cost (keyed by the provider's redacted
