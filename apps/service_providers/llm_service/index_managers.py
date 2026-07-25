@@ -12,7 +12,7 @@ from pgvector.django import CosineDistance
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
-from apps.documents.models import CollectionFile, FileStatus
+from apps.documents.models import CollectionFile, FileStatus, chunk_from_indexed_file
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
@@ -364,6 +364,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         return (
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", embedding_vector))
             .filter(collection_id=index_id)
+            .filter(chunk_from_indexed_file())
             .order_by("distance")
             .select_related("file")
             .only("text", "file__name")[:top_k]
