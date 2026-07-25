@@ -305,6 +305,10 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             except Exception as e:
                 logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
                 collection_file.status = FileStatus.FAILED
+                # A partial index leaves nothing behind: the chunks written before the provider
+                # failed are not a usable representation of the file and must not reach retrieval.
+                FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+                embeddings = []
             try:
                 collection_file.save(update_fields=["status"])
             except DatabaseError:

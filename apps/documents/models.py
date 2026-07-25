@@ -256,9 +256,20 @@ class Collection(BaseTeamModel, VersionsMixin):
                     index_collection_files(collection_files)
             else:
                 # Create versions of file chunk embeddings and add them to the new collection
+                unindexed_file_ids = set(
+                    CollectionFile.objects.filter(collection=self, status__in=UNINDEXED_FILE_STATUSES).values_list(
+                        "file_id", flat=True
+                    )
+                )
                 for embedding in self.filechunkembedding_set.iterator(chunk_size=50):
                     # Skip embeddings for files that are no longer in the collection
                     if embedding.file_id not in file_versions:
+                        continue
+
+                    # A version's CollectionFile rows carry a blank status, so anything copied
+                    # here is trusted forever. Chunks belonging to a file that never finished
+                    # indexing must not be laundered into the version that way.
+                    if embedding.file_id in unindexed_file_ids:
                         continue
 
                     embedding_version = embedding.create_new_version(save=False)
