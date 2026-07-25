@@ -29,20 +29,26 @@ CHUNKS = ["alpha chunk", "beta chunk", "gamma chunk"]
 
 
 class LocalIndexManagerMock(LocalIndexManager):
+    """A local index manager that chunks and embeds without calling a provider."""
+
     def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
+        """Return a fixed set of chunks, so tests control exactly how many embeddings are attempted."""
         return CHUNKS
 
     def get_embedding_vector(self, text, *, input_type):  # ty: ignore[invalid-method-override]
+        """Return a constant vector. Distance is irrelevant here; presence in the results is what matters."""
         return [0.1] * settings.EMBEDDING_VECTOR_SIZE
 
 
 @pytest.fixture()
 def collection(db):
+    """A local (not remote) indexed collection whose team has a member, for the view tests."""
     return CollectionFactory.create(team=TeamWithUsersFactory.create(), is_index=True, is_remote_index=False)
 
 
 @pytest.fixture()
 def index_manager():
+    """Patch the provider lookup so the collection resolves to the mock manager."""
     with mock.patch("apps.service_providers.models.LlmProvider.get_local_index_manager") as get_manager:
         manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
         get_manager.return_value = manager
@@ -95,6 +101,8 @@ def _seed_orphans_from_a_pre_fix_failure(collection, texts, status=FileStatus.FA
 
 @pytest.mark.django_db()
 class TestFailedFileRetrieval:
+    """A file failing to index now, where the write-side cleanup should leave nothing behind."""
+
     def test_partial_failure_cleans_up_persisted_chunks(self, collection, index_manager):
         """A file that fails partway must not leave half its chunks in the database."""
         file, collection_file = _index_file_failing_on_last_chunk(collection, index_manager)

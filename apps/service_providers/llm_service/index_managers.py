@@ -272,6 +272,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ):
+        """Chunk and embed each file, marking its CollectionFile COMPLETED or FAILED.
+
+        Files are independent: one failing does not stop the rest. A file that fails leaves
+        no embeddings behind, since a partial index is not a usable representation of it.
+        """
         for collection_file in collection_files:
             file = collection_file.file
             embeddings = []

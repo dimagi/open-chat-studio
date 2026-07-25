@@ -691,6 +691,7 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
 @login_and_team_required
 @permission_required("documents.change_collection", raise_exception=True)
 def retry_failed_uploads(request, team_slug: str, pk: int):
+    """Re-index every failed file in a collection, discarding what the failed attempt left behind."""
     queryset = CollectionFile.objects.filter(collection_id=pk, status=FileStatus.FAILED)
     collection_file_ids = list(queryset.values_list("id", flat=True))
     failed_file_ids = list(queryset.values_list("file_id", flat=True))
