@@ -92,6 +92,27 @@ class TestOCSTracer:
         assert trace.status == "error"
         assert trace.error == error_message
 
+    def test_span_marked_as_error_without_raising_is_recorded(self, experiment):
+        """A span whose context is marked as error (without raising) fails the trace.
+
+        Stages that catch a failure and recover (e.g. a swallowed delivery
+        error) mark their span via ``mark_span_as_error`` rather than raising.
+        The trace must still reflect the failure.
+        """
+        tracer = OCSTracer(experiment, experiment.team_id)
+        session = ExperimentSessionFactory.create()
+
+        trace_context = TraceContext(id=uuid4(), name="test_trace")
+        span_context = TraceContext(id=uuid4(), name="ResponseSendingStage")
+
+        with tracer.trace(trace_context=trace_context, session=session):
+            with tracer.span(span_context=span_context, inputs={}):
+                span_context.mark_span_as_error("delivery failed")
+
+        trace = Trace.objects.get(trace_id=trace_context.id)
+        assert trace.status == "error"
+        assert "delivery failed" in trace.error
+
 
 class TestOCSCallbackHandler:
     def test_on_llm_error_records_error(self):

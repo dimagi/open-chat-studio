@@ -1,9 +1,10 @@
 import factory
 import factory.django
 
-from apps.human_annotations.models import AnnotationItem, AnnotationQueue
+from apps.human_annotations.models import Annotation, AnnotationItem, AnnotationQueue, AnnotationQueueAggregate
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.user import UserFactory
 
 
 class AnnotationQueueFactory(factory.django.DjangoModelFactory):
@@ -34,3 +35,20 @@ class AnnotationItemFactory(factory.django.DjangoModelFactory):
         team=factory.SelfAttribute("..team"),
         chat__team=factory.SelfAttribute("..team"),
     )
+
+
+class AnnotationFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Annotation
+
+    team = factory.SubFactory(TeamFactory)
+    item = factory.SubFactory(AnnotationItemFactory, team=factory.SelfAttribute("..team"))
+    reviewer = factory.SubFactory(UserFactory)
+
+
+class AnnotationQueueAggregateFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AnnotationQueueAggregate
+
+    team = factory.SubFactory(TeamFactory)
+    queue = factory.SubFactory(AnnotationQueueFactory, team=factory.SelfAttribute("..team"))

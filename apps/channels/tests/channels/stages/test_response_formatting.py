@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from apps.channels.channels_v2.stages.core import ResponseFormattingStage
+from apps.channels.stages.core import ResponseFormattingStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
 from apps.chat.exceptions import AudioSynthesizeException
@@ -114,7 +114,7 @@ class TestResponseFormattingStage:
         assert ctx.voice_audio is None
         assert ctx.formatted_message is not None
 
-    @patch("apps.channels.channels_v2.stages.core.audio_synthesis_failure_notification")
+    @patch("apps.channels.stages.core.audio_synthesis_failure_notification")
     def test_voice_synthesis_failure_fallback(self, mock_notification):
         bot_response = MagicMock()
         bot_response.content = "Hello user"

@@ -136,6 +136,22 @@ def test_span_marks_level_error_when_exception_propagates(patched_tracer, mock_l
     assert span_context.error is not None
 
 
+def test_span_marks_level_error_when_marked_without_raising(patched_tracer, mock_langfuse_client, mock_session):
+    """A span marked as errored (without raising) must still surface as ERROR in Langfuse.
+
+    Stages that catch a failure and recover mark their span via
+    ``mark_span_as_error`` rather than propagating an exception.
+    """
+    trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")
+    span_context = TraceContext(id=mock.sentinel.span_id, name="recovered-span")
+
+    with patched_tracer.trace(trace_context=trace_context, session=mock_session):
+        with patched_tracer.span(span_context=span_context, inputs={}):
+            span_context.mark_span_as_error("delivery failed")
+
+    mock_langfuse_client._test_span.update.assert_any_call(level="ERROR", status_message=mock.ANY)
+
+
 def test_trace_marks_level_error_when_exception_propagates(patched_tracer, mock_langfuse_client, mock_session):
     """Same guarantee at the trace level: a propagating exception must mark the trace as ERROR."""
     trace_context = TraceContext(id=mock.sentinel.trace_id, name="test-trace")

@@ -31,6 +31,8 @@ def connect_channel_error_details(error: Exception, identifier: str) -> tuple[in
             identifier,
             status_code,
             error.response.text,
+            # Attach the exception for 400s so Sentry records the full error, not just a log message.
+            exc_info=error if status_code == 400 else None,
         )
         if status_code == 404:
             return 404, "Failed to create channel: Participant not found in CommCare Connect"

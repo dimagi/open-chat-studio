@@ -69,6 +69,17 @@ tags_response_serializer = inline_serializer(
                 location=OpenApiParameter.QUERY,
                 description="Experiment versions (comma separated) to filter sessions by",
             ),
+            OpenApiParameter(
+                name="ordering",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=["created_at", "-created_at"],
+                description=(
+                    "Which field to use when ordering the results. Available fields: `created_at`. "
+                    "Prefix a field with `-` for descending order (e.g. `-created_at`), or omit the "
+                    "prefix for ascending order (e.g. `created_at`). Defaults to `-created_at`."
+                ),
+            ),
         ],
     ),
     retrieve=extend_schema(
@@ -161,7 +172,7 @@ class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
             try:
                 serializers.UUIDField().run_validation(experiment_id)
             except serializers.ValidationError:
-                raise serializers.ValidationError({"experiment": [f'"{experiment_id}" is not a valid UUID.']})
+                raise serializers.ValidationError({"experiment": [f'"{experiment_id}" is not a valid UUID.']}) from None
             queryset = queryset.filter(experiment__public_id=experiment_id)
         if versions_param := self.request.query_params.get("versions"):
             version_list = versions_param.split(",")

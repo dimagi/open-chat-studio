@@ -3,9 +3,9 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from apps.evaluations.models import EvaluationConfig, EvaluationRun
-from apps.utils.factories.evaluations import EvaluationConfigFactory
-from apps.utils.factories.team import MembershipFactory
+from apps.evaluations.models import EvaluationConfig, EvaluationRun, EvaluationRunStatus
+from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationRunFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import GroupFactory
 
 
@@ -52,6 +52,93 @@ def test_delete_evaluation_redirect_param_zero_does_not_redirect(client, team_wi
     assert response.status_code == 200
     assert "HX-Redirect" not in response.headers
     assert not EvaluationConfig.objects.filter(id=evaluation.id).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(EvaluationRunStatus.PENDING, id="pending"),
+        pytest.param(EvaluationRunStatus.PROCESSING, id="processing"),
+    ],
+)
+def test_delete_config_blocked_while_run_in_flight(status, client, team_with_users):
+    user = team_with_users.members.first()
+    evaluation = EvaluationConfigFactory.create(team=team_with_users)
+    EvaluationRunFactory.create(team=team_with_users, config=evaluation, status=status)
+
+    client.force_login(user)
+    url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
+    response = client.delete(url)
+
+    assert response.status_code == 409
+    assert EvaluationConfig.objects.filter(id=evaluation.id).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(EvaluationRunStatus.COMPLETED, id="completed"),
+        pytest.param(EvaluationRunStatus.FAILED, id="failed"),
+    ],
+)
+def test_delete_config_allowed_when_runs_terminal(status, client, team_with_users):
+    user = team_with_users.members.first()
+    evaluation = EvaluationConfigFactory.create(team=team_with_users)
+    EvaluationRunFactory.create(team=team_with_users, config=evaluation, status=status)
+
+    client.force_login(user)
+    url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
+    response = client.delete(url)
+
+    assert response.status_code == 200
+    assert not EvaluationConfig.objects.filter(id=evaluation.id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_config_blocked_with_one_in_flight_among_terminal(client, team_with_users):
+    user = team_with_users.members.first()
+    evaluation = EvaluationConfigFactory.create(team=team_with_users)
+    EvaluationRunFactory.create(team=team_with_users, config=evaluation, status=EvaluationRunStatus.COMPLETED)
+    EvaluationRunFactory.create(team=team_with_users, config=evaluation, status=EvaluationRunStatus.PROCESSING)
+
+    client.force_login(user)
+    url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
+    response = client.delete(url)
+
+    assert response.status_code == 409
+    assert EvaluationConfig.objects.filter(id=evaluation.id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_config_blocked_redirect_path_has_no_hx_redirect(client, team_with_users):
+    """A blocked detail-page delete (?redirect=1) returns 409 and must not leak HX-Redirect."""
+    user = team_with_users.members.first()
+    evaluation = EvaluationConfigFactory.create(team=team_with_users)
+    EvaluationRunFactory.create(team=team_with_users, config=evaluation, status=EvaluationRunStatus.PROCESSING)
+
+    client.force_login(user)
+    url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
+    response = client.delete(f"{url}?redirect=1")
+
+    assert response.status_code == 409
+    assert "HX-Redirect" not in response.headers
+    assert EvaluationConfig.objects.filter(id=evaluation.id).exists()
+
+
+@pytest.mark.django_db()
+def test_delete_evaluation_for_other_team_returns_404(client, team_with_users):
+    user = team_with_users.members.first()
+    other_team = TeamFactory.create()
+    evaluation = EvaluationConfigFactory.create(team=other_team)
+
+    client.force_login(user)
+    url = reverse("evaluations:delete", args=[team_with_users.slug, evaluation.id])
+    response = client.delete(url)
+
+    assert response.status_code == 404
+    assert EvaluationConfig.objects.filter(id=evaluation.id).exists()
 
 
 @pytest.mark.django_db()

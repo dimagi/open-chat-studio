@@ -572,6 +572,18 @@ document.addEventListener("htmx:afterSettle", (e) => {
       createPromptEditor(el);
     });
   }
+
+  // Reinitialize diff views (e.g. the version-details and revert-confirmation modals)
+  const newDiffViews = e.detail.target.querySelectorAll('.diff-view');
+  if (newDiffViews.length) {
+    Array.from(newDiffViews).forEach(el => {
+      createDiffView(
+        el.getAttribute('data-diff-a'),
+        el.getAttribute('data-diff-b'),
+        el
+      );
+    });
+  }
 });
 
 /**

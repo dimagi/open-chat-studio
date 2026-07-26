@@ -10,6 +10,25 @@ from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_afte
 
 logger = logging.getLogger("ocs.channels.connect")
 
+# Connect returns this in a 400 body when a message with the same message_id was already
+# received. Because we reuse the message_id across retries, this happens when a prior attempt
+# timed out client-side but actually arrived — the message is delivered, so it's not an error.
+MESSAGE_ID_ALREADY_EXISTS = "MESSAGE_ID_ALREADY_EXISTS"
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    """Raise on HTTP errors, attaching the response body so it surfaces in logs and Sentry.
+
+    ``httpx.HTTPStatusError`` only stringifies the status line, so the CommCare Connect error
+    body (e.g. ``{"errors": "no_user_consent"}``) would otherwise be lost. The note preserves the
+    exception type and grouping while making the reason visible.
+    """
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        e.add_note(f"Response body: {response.text}")
+        raise
+
 
 class Message(TypedDict):
     timestamp: str
@@ -52,12 +71,15 @@ class CommCareConnectClient:
         if channel_name:
             data["channel_name"] = channel_name
         response = self.client.post(url, json=data)
-        response.raise_for_status()
+        _raise_for_status(response)
         return response.json()
 
-    def decrypt_messages(self, key: bytes, messages: list[Message]) -> list[str]:
+    def decrypt_messages(self, encryption_key: bytes, messages: list[Message]) -> list[str]:
         """
         Decrypts the `MessagePayload` list using the provided key and verifies the message authenticity
+
+        The key argument is named ``encryption_key`` so Sentry's ``EventScrubber`` denylist scrubs it
+        from captured stack-frame locals; see ``SENTRY_DSN`` setup in ``config/settings.py``.
 
         Raises:
             ValueError if the message authenticity cannot be trusted
@@ -65,14 +87,14 @@ class CommCareConnectClient:
         decrypted_messages = []
         for message in messages:
             message_text = self._decrypt_message(
-                key, ciphertext=message["ciphertext"], tag=message["tag"], nonce=message["nonce"]
+                encryption_key, ciphertext=message["ciphertext"], tag=message["tag"], nonce=message["nonce"]
             )
             decrypted_messages.append(message_text)
 
         return decrypted_messages
 
     def send_message_to_user(self, channel_id: str, message: str, encryption_key: bytes):
-        ciphertext, tag, nonce = self._encrypt_message(key=encryption_key, message=message)
+        ciphertext, tag, nonce = self._encrypt_message(encryption_key=encryption_key, message=message)
 
         payload = {
             "channel": channel_id,
@@ -95,19 +117,31 @@ class CommCareConnectClient:
     def _send_fcm(self, payload: dict) -> None:
         url = f"{self._base_url}/messaging/send_fcm/"
         response = self.client.post(url, json=payload)
-        response.raise_for_status()
+        if response.status_code == 400 and self._is_message_already_exists(response):
+            logger.info("Message %s already delivered to Connect; treating as success", payload.get("message_id"))
+            return
+        _raise_for_status(response)
 
-    def _encrypt_message(self, key: bytes, message: str) -> tuple[str, str, str]:
-        cipher = AES.new(key, AES.MODE_GCM)
+    @staticmethod
+    def _is_message_already_exists(response: httpx.Response) -> bool:
+        try:
+            return response.json().get("errors") == MESSAGE_ID_ALREADY_EXISTS
+        except (ValueError, AttributeError):
+            # ValueError covers both a non-JSON body and an undecodable one (UnicodeDecodeError);
+            # AttributeError covers valid JSON that isn't an object. All mean "not the dedupe error".
+            return False
+
+    def _encrypt_message(self, encryption_key: bytes, message: str) -> tuple[str, str, str]:
+        cipher = AES.new(encryption_key, AES.MODE_GCM)
         ciphertext_bytes, tag_bytes = cipher.encrypt_and_digest(message.encode())
         ciphertext = base64.b64encode(ciphertext_bytes).decode()
         tag = base64.b64encode(tag_bytes).decode()
         nonce = base64.b64encode(cipher.nonce).decode()
         return ciphertext, tag, nonce
 
-    def _decrypt_message(self, key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
+    def _decrypt_message(self, encryption_key: bytes, ciphertext: str, tag: str, nonce: str) -> str:
         ciphertext_bytes = base64.b64decode(ciphertext)
         tag_bytes = base64.b64decode(tag)
         nonce_bytes = base64.b64decode(nonce)
-        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce_bytes)
+        cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce_bytes)
         return cipher.decrypt_and_verify(ciphertext_bytes, tag_bytes).decode()

@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from unittest.mock import Mock, patch
 
@@ -363,6 +364,44 @@ def test_chatbot_sessions_table_view(team_with_users):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize("flag_active", [True, False])
+def test_continue_chat_action_respects_widget_flag(flag_active, client, team_with_users):
+    """With ``flag_chat_widget`` active the Continue Chat action opens the embedded widget;
+    otherwise it links to the full-page chat UI."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team)
+    session = ExperimentSessionFactory.create(
+        team=team,
+        experiment=experiment,
+        participant__team=team,
+        participant__user=user,
+        status=SessionStatus.ACTIVE,
+    )
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    with override_flag("flag_chat_widget", active=flag_active):
+        response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+
+    chat_url = reverse(
+        "chatbots:chatbot_chat_session",
+        args=[team.slug, experiment.id, session.get_experiment_version_number(), session.id],
+    )
+    if flag_active:
+        assert "ocsContinueSessionChat(this)" in content
+        assert f'data-session-id="{session.external_id}"' in content
+        token = re.search(r'data-session-token="([^"]+)"', content).group(1)
+        assert validate_session_token(token, session.external_id)
+        assert chat_url not in content
+    else:
+        assert "ocsContinueSessionChat" not in content
+        assert chat_url in content
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize("fire_end_event", [True, False])
 @patch("apps.events.tasks.enqueue_static_triggers")
 def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, client, team_with_users):
@@ -401,7 +440,7 @@ def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(("fire_end_event", "prompt"), [(True, "Start with this"), (False, ""), (False, None)])
 @patch("apps.events.tasks.enqueue_static_triggers")
-@patch("apps.channels.channels_v2.channel_base.ChannelBase.start_new_session")
+@patch("apps.channels.channel_base.ChannelBase.start_new_session")
 @patch("apps.chatbots.views.send_bot_message.delay")
 def test_new_chatbot_session_view(
     task_mock, mock_start_new_session, enqueue_static_triggers_task, fire_end_event, prompt, client, team_with_users
@@ -691,7 +730,7 @@ def test_session_table_session_query_uses_limit(team_with_users):
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+@patch("apps.experiments.services.enqueue_static_triggers", Mock())
 def test_start_chatbot_session_public_embed_returns_deprecation_headers(client):
     """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
     chatbot = ExperimentFactory.create()
@@ -724,7 +763,7 @@ def test_chatbot_chat_ui_includes_valid_session_token():
 
 
 @pytest.mark.django_db()
-@patch("apps.chat.channels.enqueue_static_triggers", Mock())
+@patch("apps.experiments.services.enqueue_static_triggers", Mock())
 def test_start_authed_web_session_with_default_version_chats_with_published_version(client, team_with_users):
     """The chatbots table chat button posts version 0 so sessions run against the published version."""
     user = team_with_users.members.first()

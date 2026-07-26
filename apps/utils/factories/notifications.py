@@ -1,7 +1,13 @@
 import factory
 import factory.django
 
-from apps.ocs_notifications.models import EventType, EventUser, LevelChoices, NotificationEvent
+from apps.ocs_notifications.models import (
+    EventType,
+    EventUser,
+    LevelChoices,
+    NotificationEvent,
+    UserNotificationPreferences,
+)
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
 
@@ -40,3 +46,11 @@ class EventUserFactory(factory.django.DjangoModelFactory):
     read = False
     read_at = None
     muted_until = None
+
+
+class UserNotificationPreferencesFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = UserNotificationPreferences
+
+    team = factory.SubFactory(TeamFactory)
+    user = factory.SubFactory(UserFactory)

@@ -24,6 +24,7 @@ class CollectionFileFactory(factory.django.DjangoModelFactory):
 
     file = factory.SubFactory("apps.utils.factories.files.FileFactory", team=factory.SelfAttribute("..collection.team"))
     collection = factory.SubFactory(CollectionFactory)
+    metadata = {"chunking_strategy": {"chunk_size": 400, "chunk_overlap": 200}}
 
 
 class DocumentSourceFactory(factory.django.DjangoModelFactory):

@@ -1,0 +1,20 @@
+{% if use_widget %}
+  <button class="btn btn-sm join-item {{ button_style|default_if_none:"btn-ghost" }}"
+          {% if disabled %}disabled="disabled"{% endif %}
+          {% if title %}title="{{ title }}"{% endif %}
+          type="button"
+          data-chatbot-id="{{ chatbot_id }}"
+          data-session-id="{{ session_external_id }}"
+          data-session-token="{{ session_token }}"
+          data-version-number="{{ version_number }}"
+          data-allow-attachments="{{ allow_attachments|yesno:"true,false" }}"
+          onclick="ocsContinueSessionChat(this)"
+  >
+    {{ label }}
+    {% if icon_class %}
+      <i class="{{ icon_class }}"></i>
+    {% endif %}
+  </button>
+{% else %}
+  {% include "generic/action.html" %}
+{% endif %}

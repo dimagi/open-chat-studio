@@ -3,14 +3,20 @@
     {% include "documents/partials/document_source_header.html" %}
   </div>
 {% endif %}
-{% if document_source and document_source.sync_task_id %}
-  <div hx-get="{% url "documents:document_source_files_list" request.team.slug collection.id document_source.id %}"
-       hx-trigger="every 5s"
-       hx-swap="outerHTML"
-  >
-    <span class="loading loading-spinner"></span>
-  </div>
-{% else %}
+<div
+    {% if document_source and document_source.sync_task_id %}
+      hx-get="{% url "documents:document_source_files_list" request.team.slug collection.id document_source.id %}"
+      hx-trigger="every 5s"
+      hx-swap="outerHTML"
+      hx-include="#search-input"
+    {% endif %}
+>
+  {% if document_source and document_source.sync_task_id %}
+    <div class="flex items-center gap-2 mb-3 text-sm text-base-content/70" role="status" aria-live="polite">
+      <span class="loading loading-spinner loading-sm"></span>
+      <span>Syncing… {{ collection_files.paginator.count }} file{{ collection_files.paginator.count|pluralize }} synced so far</span>
+    </div>
+  {% endif %}
   <div id="{% if document_source %}document-source-files-wrapper-{{ document_source.id }}{% else %}collection-files-wrapper{% endif %}">
     <div class="grid grid-cols-1 gap-4">
       {% for collection_file in collection_files %}
@@ -125,4 +131,4 @@
         </div>
       </div>
   </div>
-{% endif %}
+</div>

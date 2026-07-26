@@ -15,6 +15,8 @@ def _chip_chatbot_url_factory(_, request, record, __):
 
 
 def _chip_session_url_factory(_, request, record, __):
+    if record.session is None:
+        return "#"
     return reverse(
         "chatbots:chatbot_session_view",
         args=[get_slug_for_team(record.team_id), record.experiment.public_id, record.session.external_id],
@@ -46,6 +48,7 @@ class TraceTable(tables.Table):
             chip_action(
                 label_factory=lambda record, _: record.participant.identifier,
                 url_factory=_chip_session_url_factory,
+                display_condition=lambda request, record: record.session is not None,
             ),
         ],
         align="left",

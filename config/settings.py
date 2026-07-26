@@ -33,6 +33,11 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
 
+# Shared bearer token for the cross-team provider usage/key reporting admin
+# endpoints, so headless consumers (e.g. a reporting script) can call them
+# without a superuser browser session. Unset disables token auth.
+PROVIDER_REPORTING_API_TOKEN = env("PROVIDER_REPORTING_API_TOKEN", default=None)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=True)
 IS_TESTING = "pytest" in sys.modules
@@ -401,7 +406,7 @@ if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_S3_REGION
 
     # use private storage by default
-    STORAGES["default"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["default"] = {
         "BACKEND": "apps.web.storage_backends.PrivateMediaStorage",
         "OPTIONS": {
             "bucket_name": env("AWS_PRIVATE_STORAGE_BUCKET_NAME"),
@@ -474,15 +479,40 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Open Chat Studio",
     "DESCRIPTION": "Build, deploy and monitor chatbots.",
-    "VERSION": "1",
+    # Left blank so info.version is just the API version (e.g. "v1"/"v2"); drf-spectacular would
+    # otherwise prefix it as "<VERSION> (<api_version>)".
+    "VERSION": "",
     "SERVE_INCLUDE_SCHEMA": False,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.api.schema.prune_unused_tags",
+        "apps.api.schema.set_export_description",
+        "apps.api.schema.set_example_urls",
+    ],
+    "PREPROCESSING_HOOKS": [
+        "apps.api.schema.exclude_legacy_participants_path",
+    ],
+    # Give the ExperimentSession ``status`` enum a stable name; otherwise it collides with other
+    # "status" fields and drf-spectacular falls back to a hashed name ("Status490Enum").
+    "ENUM_NAME_OVERRIDES": {
+        "ChatbotSessionStatusEnum": "apps.experiments.models.SessionStatus",
+    },
     "SWAGGER_UI_SETTINGS": {
         "displayOperationId": True,
     },
+    "EXTERNAL_DOCS": {"url": "https://docs.openchatstudio.com/api/", "description": "API Guides"},
     "TAGS": [
         {
             "name": "Channels",
             "description": "Trigger bot messages or deliver messages directly to users on a channel.",
+        },
+        {
+            "name": "Chatbots",
+            "description": "List, retrieve and inspect chatbots (v2; formerly 'experiments').",
+        },
+        {
+            "name": "Me",
+            "description": "Information about the authenticated user and the team the token is scoped to.",
         },
         {
             "name": "Chat",
@@ -509,6 +539,10 @@ SPECTACULAR_SETTINGS = {
         {
             "name": "Participants",
             "description": "Manage participants, their data, and their schedules.",
+        },
+        {
+            "name": "Usage",
+            "description": "Inspect team usage and activity data (message counts, and more).",
         },
     ],
 }
@@ -570,6 +604,10 @@ SCHEDULED_TASKS = {
     "custom_actions.tasks.check_all_custom_actions_health": {
         "task": "apps.custom_actions.tasks.check_all_custom_actions_health",
         "schedule": crontab(minute="5"),
+    },
+    "channels.tasks.ratchet_widget_auth_levels": {
+        "task": "apps.channels.tasks.ratchet_widget_auth_levels",
+        "schedule": crontab(minute="0", hour="2"),
     },
     "ocs_notifications.tasks.cleanup_old_notification_events": {
         "task": "apps.ocs_notifications.tasks.cleanup_old_notification_events",
@@ -640,6 +678,8 @@ if SENTRY_DSN:
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import ignore_logger
 
+    from config.sentry import get_event_scrubber
+
     ignore_logger("ocs.request")
     # Scanners/bots hit the server by raw IP or ELB/EC2 DNS name, none of which are in ALLOWED_HOSTS,
     # so Django correctly rejects them with a 400. These are pure noise in Sentry.
@@ -650,6 +690,9 @@ if SENTRY_DSN:
         send_default_pii=True,  # include user details in events
         attach_stacktrace=True,  # include stack trace in all events
         environment=env("SENTRY_ENVIRONMENT", default="development"),
+        # `attach_stacktrace=True` sends stack-frame locals with every event; the scrubber redacts
+        # secrets (e.g. the CommCare Connect encryption key) from them. See config/sentry.py.
+        event_scrubber=get_event_scrubber(),
         integrations=[
             DjangoIntegration(),
             CeleryIntegration(),
@@ -783,7 +826,6 @@ DOCUMENTATION_LINKS = {
     # Try to make these keys grep-able so that usages are easy to find
     "consent": "/concepts/consent/",
     "chat_widget": "/chat_widget/",
-    "survey": "https://dimagi.atlassian.net/wiki/spaces/OCS/pages/2144305308/Surveys",
     "experiment": "/concepts/experiment/",
     "pipelines": "/concepts/pipelines/",
     "concepts.prompt_variables": "/concepts/prompt_variables/",
@@ -799,6 +841,7 @@ DOCUMENTATION_LINKS = {
     "node_update_participant_data": "/concepts/pipelines/nodes/#update-participant-data-node",
     "chatbots": "/concepts/chatbots/",
     "collections": "/concepts/collections/",
+    "deploy_channels": "/how-to/deploy_to_different_channels/",
     "migrate_from_assistant": "/how-to/assistants_migration/",
     "events": "/concepts/events/",
     "evals": "/concepts/evaluations/",
@@ -876,6 +919,12 @@ COMMCARE_CONNECT_SERVER_ID = env("COMMCARE_CONNECT_SERVER_ID", default="")
 COMMCARE_CONNECT_ENABLED = COMMCARE_CONNECT_SERVER_SECRET and COMMCARE_CONNECT_SERVER_ID
 COMMCARE_CONNECT_SERVER_URL = env("COMMCARE_CONNECT_SERVER_URL", default="https://connectid.dimagi.com")
 COMMCARE_CONNECT_GET_CONNECT_ID_URL = f"{COMMCARE_CONNECT_SERVER_URL}/o/userinfo/"
+
+### Internal team metadata
+# Staff-only, instance-configurable free-text metadata fields shown on a team's internal
+# metadata page and included in admin exports.
+# Format: list of {"key": <slug>, "label": <display label>}
+TEAM_METADATA_FIELDS = env.json("TEAM_METADATA_FIELDS", default=[{"key": "team_owner", "label": "Team Owner"}])
 
 ### System Agent
 # Models for use by the system agent. Separate multiple models (for fallback) using the ',' character.
@@ -990,6 +1039,7 @@ OAUTH2_PROVIDER = {
         "files:read": "Download file content",
         "participants:read": "Read Participant Data",
         "participants:write": "Update Participant Data",
+        "usage:read": "Read usage and activity data",
     },
 }
 if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, default=""):
@@ -1017,7 +1067,7 @@ RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_c
 # Restricted HTTP client settings (used by RestrictedHttpClient in the Python sandbox)
 RESTRICTED_HTTP_MAX_REQUESTS = 10
 RESTRICTED_HTTP_DEFAULT_TIMEOUT = 5  # seconds
-RESTRICTED_HTTP_MAX_TIMEOUT = 30  # seconds
+RESTRICTED_HTTP_MAX_TIMEOUT = 60  # seconds
 MB = 1_048_576  # 1 MB
 RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 5 * MB
 RESTRICTED_HTTP_MAX_REQUEST_BYTES = MB

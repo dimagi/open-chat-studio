@@ -78,6 +78,20 @@
     * @prop --error-text-color: Error text color (#ef4444)
     * @prop --success-text-color: Success text color (#10b981)
     *
+    * @prop --banner-font-size: Banner font size (--chat-window-font-size-sm)
+    * @prop --banner-default-bg-color: Default banner background color (#f3f4f6)
+    * @prop --banner-default-text-color: Default banner text color (#374151)
+    * @prop --banner-default-border-color: Default banner border color (#d1d5db)
+    * @prop --banner-info-bg-color: Info banner background color (#eff6ff)
+    * @prop --banner-info-text-color: Info banner text color (#1e40af)
+    * @prop --banner-info-border-color: Info banner border color (#bfdbfe)
+    * @prop --banner-warning-bg-color: Warning banner background color (#fefce8)
+    * @prop --banner-warning-text-color: Warning banner text color (#854d0e)
+    * @prop --banner-warning-border-color: Warning banner border color (#fde68a)
+    * @prop --banner-error-bg-color: Error banner background color (#fef2f2)
+    * @prop --banner-error-text-color: Error banner text color (#991b1b)
+    * @prop --banner-error-border-color: Error banner border color (#fecaca)
+    *
     * @prop --code-bg-user-color: Code background in user messages (--message-user-bg-color + 20% white)
     * @prop --code-text-user-color: Code text color in user messages (--message-user-text-color)
     * @prop --code-border-user-color: Code border in user messages (--message-user-bg-color + 20% black)
@@ -205,6 +219,21 @@
     /* Error variables */
     --error-text-color: #ef4444;
     --success-text-color: #10b981; /* Complementary green to existing blue palette */
+
+    /* Banner variables */
+    --banner-font-size: var(--chat-window-font-size-sm);
+    --banner-default-bg-color: #f3f4f6;
+    --banner-default-text-color: #374151;
+    --banner-default-border-color: #d1d5db;
+    --banner-info-bg-color: #eff6ff;
+    --banner-info-text-color: #1e40af;
+    --banner-info-border-color: #bfdbfe;
+    --banner-warning-bg-color: #fefce8;
+    --banner-warning-text-color: #854d0e;
+    --banner-warning-border-color: #fde68a;
+    --banner-error-bg-color: #fef2f2;
+    --banner-error-text-color: #991b1b;
+    --banner-error-border-color: #fecaca;
 
     /* Markdown code variables */
     --code-bg-user-color: color-mix(in srgb, var(--message-user-bg-color) 80%, white 20%);
@@ -461,6 +490,45 @@
   .chat-content {
     /* Chat content area */
     @apply flex flex-col flex-grow overflow-hidden;
+  }
+
+  .chat-banner {
+    /* Always-visible, non-dismissable notice banner */
+    @apply w-full text-center break-words shrink-0;
+    padding: 0.5em 1em;
+    font-size: var(--banner-font-size);
+  }
+
+  .chat-banner-top {
+    border-bottom: 1px solid;
+  }
+
+  .chat-banner-bottom {
+    border-top: 1px solid;
+  }
+
+  .chat-banner-default {
+    background-color: var(--banner-default-bg-color);
+    color: var(--banner-default-text-color);
+    border-color: var(--banner-default-border-color);
+  }
+
+  .chat-banner-info {
+    background-color: var(--banner-info-bg-color);
+    color: var(--banner-info-text-color);
+    border-color: var(--banner-info-border-color);
+  }
+
+  .chat-banner-warning {
+    background-color: var(--banner-warning-bg-color);
+    color: var(--banner-warning-text-color);
+    border-color: var(--banner-warning-border-color);
+  }
+
+  .chat-banner-error {
+    background-color: var(--banner-error-bg-color);
+    color: var(--banner-error-text-color);
+    border-color: var(--banner-error-border-color);
   }
 
   .loading-container {

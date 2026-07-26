@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from apps.channels.channels_v2.stages.core import SessionActivationStage
+from apps.channels.stages.core import SessionActivationStage
 from apps.channels.tests.channels.conftest import make_context
 from apps.experiments.models import SessionStatus
 

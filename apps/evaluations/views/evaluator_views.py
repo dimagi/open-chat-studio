@@ -5,14 +5,15 @@ from functools import lru_cache
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
 from django.http import HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
+from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import Tag
 from apps.custom_actions.schema_utils import resolve_references
 from apps.evaluations import evaluators
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import Evaluator
 from apps.evaluations.tables import EvaluatorTable
@@ -175,16 +176,16 @@ class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Evaluato
         return reverse("evaluations:evaluator_home", args=[self.request.team.slug])
 
 
-class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
+class DeleteEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluator"
-    model = Evaluator
 
-    def get_queryset(self):
-        return Evaluator.objects.filter(team=self.request.team)
-
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        self.object.delete()
+    def delete(self, request, team_slug: str, pk: int):
+        """Delete the evaluator, returning 409 if a related run is still in progress."""
+        evaluator = get_object_or_404(Evaluator, team=request.team, pk=pk)
+        try:
+            evaluator.delete()
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         return HttpResponse(status=200)
 
 

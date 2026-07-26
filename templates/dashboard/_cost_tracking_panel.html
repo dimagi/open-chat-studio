@@ -1,0 +1,86 @@
+{% load cost_tracking i18n %}
+{% comment %}
+  Cost-tracking dashboard panel. Rendered only when `cost_tracking_enabled`
+  is set (DashboardView gates this on the team-scoped Waffle flag).
+{% endcomment %}
+<div class="card bg-base-100 shadow-xl mb-8" data-testid="cost-tracking-panel">
+  <div class="card-body">
+    <div class="card-title flex items-center gap-1">
+      <span>{% translate "Cost Tracking" %}</span>
+
+      {% blocktranslate asvar cost_tracking_info %}
+        Costs are estimated from recorded token usage times the configured price for each model. "Exact" figures use token counts reported by the provider; "Estimated" figures fall back to token estimates when usage data is missing. Pricing can be incomplete or out of date, so treat these numbers as a guide to relative spend, not an authoritative bill.
+      {% endblocktranslate %}
+      {% include "generic/help.html" with help_content=cost_tracking_info %}
+    </div>
+
+    {% if cost_summary.total_cost or cost_summary.unknown_call_count or cost_summary.unpriced_call_count %}
+      {# 3-col split only when there's estimated spend to break out; otherwise the headline stands alone. #}
+      <div class="grid grid-cols-1 gap-6 mt-4 {% if cost_summary.estimated_cost > 0 %}md:grid-cols-3{% endif %}">
+        <div>
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "LLM spend" %}</div>
+          <div class="text-3xl font-bold text-gray-900 dark:text-gray-100">${{ cost_summary.total_cost|cost_display }}</div>
+          {% if cost_summary.delta_pct is not None %}
+            <div class="text-sm {% if cost_summary.delta_pct > 0 %}text-red-600{% elif cost_summary.delta_pct < 0 %}text-green-600{% else %}text-gray-500{% endif %}">
+              {% if cost_summary.delta_pct > 0 %}+{% endif %}{{ cost_summary.delta_pct|floatformat:1 }}%
+              <span class="text-gray-500">{% translate "vs prior period" %}</span>
+            </div>
+          {% endif %}
+        </div>
+        {% if cost_summary.estimated_cost > 0 %}
+          <div>
+            <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Exact" %}</div>
+            <div class="text-xl font-semibold text-gray-900 dark:text-gray-100">${{ cost_summary.exact_cost|cost_display }}</div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Estimated" %}</div>
+            <div class="text-xl font-semibold text-gray-900 dark:text-gray-100">${{ cost_summary.estimated_cost|cost_display }}</div>
+          </div>
+        {% endif %}
+      </div>
+
+      {# Coverage warnings: each count expands to the models responsible so the numbers are actionable. #}
+      {% if cost_summary.unknown_call_count or cost_summary.unpriced_call_count %}
+        <div class="mt-4 space-y-2">
+          {% if cost_summary.unknown_call_count %}
+            <details class="text-xs text-yellow-800 dark:text-yellow-500">
+              <summary class="cursor-pointer">
+                {% blocktranslate count counter=cost_summary.unknown_call_count %}{{ counter }} call with no usage data{% plural %}{{ counter }} calls with no usage data{% endblocktranslate %}
+              </summary>
+              <ul class="mt-1 ml-4 list-disc">
+                {% for gap in cost_coverage_gaps.unknown %}
+                  <li>{{ gap.provider_type }} / {{ gap.model_name }} ({{ gap.call_count }})</li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+          {% if cost_summary.unpriced_call_count %}
+            <details class="text-xs text-yellow-800 dark:text-yellow-500">
+              <summary class="cursor-pointer">
+                {% blocktranslate count counter=cost_summary.unpriced_call_count %}{{ counter }} call missing pricing{% plural %}{{ counter }} calls missing pricing{% endblocktranslate %}
+              </summary>
+              <ul class="mt-1 ml-4 list-disc">
+                {% for gap in cost_coverage_gaps.unpriced %}
+                  <li>{{ gap.provider_type }} / {{ gap.model_name }} ({{ gap.call_count }})</li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if cost_summary.total_cost %}
+        <div class="mt-6">
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">{% translate "Daily spend" %}</div>
+          <div class="h-64">
+            <canvas id="costTimeseriesChart"></canvas>
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+        {% translate "No chatbot usage in this period. Cost data will appear here once your chatbots run." %}
+      </div>
+    {% endif %}
+  </div>
+</div>

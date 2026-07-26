@@ -11,7 +11,7 @@ from apps.pipelines.nodes.base import PipelineState
 def test_save_outputs_saves_ai_message():
     session = mock.Mock()
     bot = PipelineBot(session, mock.Mock(), None)
-    bot._save_message_to_history = mock.Mock()  # ty: ignore[invalid-assignment]
+    bot._save_message_to_history = mock.Mock()
     bot._save_outputs(
         input_state=PipelineState(messages=["hi"]),
         output=PipelineState(messages=["Hello"]),

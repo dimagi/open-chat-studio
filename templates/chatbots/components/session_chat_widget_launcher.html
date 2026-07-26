@@ -1,0 +1,64 @@
+{% load waffle_tags %}
+{% flag "flag_chat_widget" %}
+  <script>
+    (function () {
+      const apiBaseUrl = "{{ request.scheme }}://{{ request.get_host }}";
+      const userId = "{{ request.user.email|escapejs }}";
+      const userName = "{{ request.user.get_full_name|escapejs }}";
+      const widgetStyles = {
+        published: {
+          '--header-bg-color': 'oklch(0.982 0.018 155.826)',
+          '--header-bg-hover-color': 'oklch(0.76 0.177 163.223)',
+          '--header-text-color': 'oklch(0.527 0.154 150.069)',
+        },
+        working: {
+          '--header-bg-color': 'oklch(0.987 0.026 102.212)',
+          '--header-bg-hover-color': 'oklch(0.82 0.189 84.429)',
+          '--header-text-color': 'oklch(0.476 0.114 61.907)',
+        },
+      };
+
+      // Apply the version-specific header text and colour theme to a widget element. Shared by the
+      // new-chat launcher (openChatWidget) and the continue-session launcher below.
+      window.ocsApplyWidgetVersionTheme = function (widget, versionNumber) {
+        const isPublished = versionNumber === 0;
+        widget.setAttribute('header-text', isPublished ? 'Published Version' : `Working Version (v${versionNumber})`);
+        const styles = isPublished ? widgetStyles.published : widgetStyles.working;
+        for (const [prop, value] of Object.entries(styles)) {
+          widget.style.setProperty(prop, value);
+        }
+      };
+
+      // Open an existing session in a fresh, session-bound widget. A new element is mounted each
+      // time because the widget binds to its session during load and does not re-bind on prop changes.
+      window.ocsContinueSessionChat = function (button) {
+        const existing = document.getElementById('continue-chat-widget');
+        if (existing) {
+          existing.remove();
+        }
+
+        const widget = document.createElement('open-chat-studio-widget');
+        widget.id = 'continue-chat-widget';
+        widget.setAttribute('chatbot-id', button.dataset.chatbotId);
+        widget.setAttribute('session-id', button.dataset.sessionId);
+        widget.setAttribute('session-token', button.dataset.sessionToken);
+        widget.setAttribute('api-base-url', apiBaseUrl);
+        widget.setAttribute('show-button', 'false');
+        widget.setAttribute('visible', 'true');
+        widget.setAttribute('position', 'right');
+        widget.setAttribute('persistent-session', 'false');
+        if (button.dataset.allowAttachments === 'true') {
+          widget.setAttribute('allow-attachments', 'true');
+        }
+        if (userId) {
+          widget.setAttribute('user-id', userId);
+        }
+        if (userName) {
+          widget.setAttribute('user-name', userName);
+        }
+        ocsApplyWidgetVersionTheme(widget, parseInt(button.dataset.versionNumber, 10));
+        document.body.appendChild(widget);
+      };
+    })();
+  </script>
+{% endflag %}

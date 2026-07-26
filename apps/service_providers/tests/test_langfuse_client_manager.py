@@ -99,12 +99,12 @@ def test_prune_stale_clients(client_manager, config, langfuse_mock):
     # Arrange
     other_config = {"public_key": "other_key", "secret_key": "other_secret"}
     first_client = client_manager.get(config)
-
-    time.sleep(0.4)
     client_manager.get(other_config)  # Get second client
     assert len(client_manager.key_timestamps) == 2
 
-    time.sleep(0.1)  # Sleep longer than the stale timeout
+    # Backdate the first client so only it is past the stale timeout
+    client_manager.key_timestamps[config["public_key"]] -= client_manager.stale_timeout + 1
+
     client_manager._prune_stale()
 
     assert len(client_manager.key_timestamps) == 1

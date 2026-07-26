@@ -23,6 +23,20 @@ export namespace Components {
          */
         "apiBaseUrl"?: string;
         /**
+          * Optional banner message shown whenever it is set. The banner is always visible (not dismissable) and does not block normal widget usage.
+         */
+        "bannerMessage"?: string;
+        /**
+          * Where the banner is positioned relative to the chat area: `top` or `bottom`.
+          * @default 'top'
+         */
+        "bannerPosition": 'top' | 'bottom';
+        /**
+          * Visual style of the banner. One of `default`, `info`, `warning` or `error`.
+          * @default 'default'
+         */
+        "bannerStyle": 'default' | 'info' | 'warning' | 'error';
+        /**
           * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
           * @default 'square'
          */
@@ -36,9 +50,18 @@ export namespace Components {
          */
         "chatbotId": string;
         /**
+          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable and the message input and send controls remain visible but disabled, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
+          * @default false
+         */
+        "disabled": boolean;
+        /**
           * Authentication key for embedded channels
          */
         "embedKey"?: string;
+        /**
+          * The widget's build version. Read this to identify which release is deployed on a page, e.g. `await el.getVersion()`. Also mirrored to the `data-widget-version` attribute on the host element for inspection.
+         */
+        "getVersion": () => Promise<string>;
         /**
           * The text to place in the header.
          */
@@ -133,6 +156,8 @@ declare global {
     }
 }
 declare namespace LocalJSX {
+    type OneOf<K extends string, PropT, AttrT = PropT> = { [P in K]: PropT } & { [P in `attr:${K}` | `prop:${K}`]?: never } | { [P in `attr:${K}`]: AttrT } & { [P in K | `prop:${K}`]?: never } | { [P in `prop:${K}`]: PropT } & { [P in K | `attr:${K}`]?: never };
+
     interface OpenChatStudioWidget {
         /**
           * Allow the user to attach files to their messages.
@@ -150,6 +175,20 @@ declare namespace LocalJSX {
          */
         "apiBaseUrl"?: string;
         /**
+          * Optional banner message shown whenever it is set. The banner is always visible (not dismissable) and does not block normal widget usage.
+         */
+        "bannerMessage"?: string;
+        /**
+          * Where the banner is positioned relative to the chat area: `top` or `bottom`.
+          * @default 'top'
+         */
+        "bannerPosition"?: 'top' | 'bottom';
+        /**
+          * Visual style of the banner. One of `default`, `info`, `warning` or `error`.
+          * @default 'default'
+         */
+        "bannerStyle"?: 'default' | 'info' | 'warning' | 'error';
+        /**
           * The shape of the chat button. 'round' makes it circular, 'square' keeps it rectangular.
           * @default 'square'
          */
@@ -162,6 +201,11 @@ declare namespace LocalJSX {
           * The ID of the chatbot to connect to.
          */
         "chatbotId": string;
+        /**
+          * Render the widget in a read-only state. When `true`, the chat history stays visible and scrollable and the message input and send controls remain visible but disabled, and message sending is blocked at the source. Useful for maintenance windows, expired sessions, scheduled downtime or post-session review.
+          * @default false
+         */
+        "disabled"?: boolean;
         /**
           * Authentication key for embedded channels
          */
@@ -247,15 +291,49 @@ declare namespace LocalJSX {
          */
         "welcomeMessages"?: string;
     }
+
+    interface OpenChatStudioWidgetAttributes {
+        "chatbotId": string;
+        "apiBaseUrl": string;
+        "buttonText": string;
+        "iconUrl": string;
+        "embedKey": string;
+        "buttonShape": 'round' | 'square';
+        "showButton": boolean;
+        "mode": 'standard' | 'kiosk';
+        "headerText": '';
+        "newChatConfirmationMessage": string;
+        "visible": boolean;
+        "position": 'left' | 'center' | 'right';
+        "welcomeMessages": string;
+        "starterQuestions": string;
+        "userId": string;
+        "userName": string;
+        "persistentSession": boolean;
+        "persistentSessionExpire": number;
+        "allowFullScreen": boolean;
+        "allowAttachments": boolean;
+        "disabled": boolean;
+        "bannerMessage": string;
+        "bannerStyle": 'default' | 'info' | 'warning' | 'error';
+        "bannerPosition": 'top' | 'bottom';
+        "typingIndicatorText": string;
+        "language": string;
+        "translationsUrl": string;
+        "versionNumber": number;
+        "sessionId": string;
+        "sessionToken": string;
+    }
+
     interface IntrinsicElements {
-        "open-chat-studio-widget": OpenChatStudioWidget;
+        "open-chat-studio-widget": Omit<OpenChatStudioWidget, keyof OpenChatStudioWidgetAttributes> & { [K in keyof OpenChatStudioWidget & keyof OpenChatStudioWidgetAttributes]?: OpenChatStudioWidget[K] } & { [K in keyof OpenChatStudioWidget & keyof OpenChatStudioWidgetAttributes as `attr:${K}`]?: OpenChatStudioWidgetAttributes[K] } & { [K in keyof OpenChatStudioWidget & keyof OpenChatStudioWidgetAttributes as `prop:${K}`]?: OpenChatStudioWidget[K] } & OneOf<"chatbotId", OpenChatStudioWidget["chatbotId"], OpenChatStudioWidgetAttributes["chatbotId"]>;
     }
 }
 export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
-            "open-chat-studio-widget": LocalJSX.OpenChatStudioWidget & JSXBase.HTMLAttributes<HTMLOpenChatStudioWidgetElement>;
+            "open-chat-studio-widget": LocalJSX.IntrinsicElements["open-chat-studio-widget"] & JSXBase.HTMLAttributes<HTMLOpenChatStudioWidgetElement>;
         }
     }
 }

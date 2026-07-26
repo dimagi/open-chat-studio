@@ -840,7 +840,6 @@ describe('ocs-chat session tokens', () => {
 
     const startCall = (global.fetch as jest.Mock).mock.calls.find(call => call[0].includes('/api/chat/start/'));
     expect(startCall).toBeDefined();
-    expect(JSON.parse(startCall[1].body)).toEqual(expect.objectContaining({ use_session_token: true }));
     expect(setSessionTokenSpy).toHaveBeenCalledWith('tok-1');
     expect(window.localStorage.setItem).toHaveBeenCalledWith('ocs-chat-token-test-bot', 'tok-1');
   });
@@ -901,6 +900,23 @@ describe('ocs-chat session tokens', () => {
     expect(page.rootInstance['currentSessionToken']).toBeUndefined();
     const systemMessage = page.rootInstance.messages.find((m: any) => m.role === 'system');
     expect(systemMessage).toBeDefined();
+  });
+
+  it('dispatches ocs:session:started when a new session is created', async () => {
+    // beforeEach configures mockStartSession to return session_id: 'test-session-id'
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+
+    const dispatched: CustomEvent[] = [];
+    page.root!.addEventListener('ocs:session:started', (e: Event) => dispatched.push(e as CustomEvent));
+
+    await page.rootInstance.sendMessage('hello');
+    await page.waitForChanges();
+
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0].detail).toEqual({ sessionId: 'test-session-id' });
   });
 
   it('on a bound 403 it surfaces an error and stays bound', async () => {

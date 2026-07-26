@@ -14,7 +14,11 @@ export default tseslint.config(
     "languageOptions": {
       "globals": {
         ...globals.browser,
-      }
+        htmx: "readonly",
+      },
+      parserOptions: {
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
   },
 );

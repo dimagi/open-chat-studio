@@ -32,9 +32,15 @@ RUN --mount=type=cache,target=/root/.cache \
       --group prod \
       --compile-bytecode
 
-FROM node:24 AS build-node
-RUN nodejs -v && npm -v
+FROM node:24-slim AS build-node
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && node -v && corepack pnpm -v
 WORKDIR /code
+
+# Install node dependencies first so this layer stays cached until the
+# lockfile changes (template/asset edits no longer bust it).
+COPY package.json pnpm-lock.yaml /code/
+RUN corepack pnpm install --frozen-lockfile
 
 # keep in sync with tailwind.config.js
 COPY *.json *.js .babelrc /code/
@@ -42,8 +48,7 @@ COPY config/settings.py /code/config/settings.py
 COPY templates /code/templates/
 COPY assets /code/assets/
 
-RUN npm install
-RUN npm run build
+RUN corepack pnpm run build
 
 FROM python:3.13-slim-bullseye
 ENV PYTHONUNBUFFERED=1

@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
 from django.views.decorators.http import require_http_methods, require_POST
-from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
+from django.views.generic import CreateView, TemplateView, UpdateView
 from django_htmx.http import reswap, retarget
 from django_tables2 import LazyPaginator, SingleTableView
 
@@ -28,6 +28,7 @@ from apps.evaluations.dataset_clone import (
     mark_dataset_pending,
     resolve_add_sessions_external_ids,
 )
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import (
     EvaluationDatasetEditForm,
     EvaluationDatasetForm,
@@ -155,18 +156,16 @@ class EditDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView
         return reverse("evaluations:dataset_edit", args=[self.request.team.slug, self.object.pk])
 
 
-class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DeleteView):
+class DeleteDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "evaluations.delete_evaluationdataset"
-    model = EvaluationDataset
 
-    def get_queryset(self):
-        return EvaluationDataset.objects.filter(team=self.request.team)
-
-    def delete(self, request, *args, **kwargs):
+    def delete(self, request, team_slug: str, pk: int):
         """Handle AJAX delete requests."""
-        self.object = self.get_object()
-        self.object.delete()
-
+        dataset = get_object_or_404(EvaluationDataset, team=request.team, pk=pk)
+        try:
+            dataset.delete()
+        except InFlightRunsError as e:
+            return HttpResponse(", ".join(e.messages), status=409)
         return HttpResponse(status=200)
 
 
@@ -525,7 +524,10 @@ def _get_message_form_data(request) -> dict:
 def delete_message(request, team_slug, message_id):
     """Delete a message from the dataset"""
     message = get_object_or_404(EvaluationMessage, id=message_id, evaluationdataset__team=request.team)
-    message.delete()
+    try:
+        message.delete()
+    except InFlightRunsError as e:
+        return HttpResponse(", ".join(e.messages), status=409)
     return HttpResponse("", status=200)
 
 

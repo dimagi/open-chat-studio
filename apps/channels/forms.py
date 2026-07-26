@@ -569,6 +569,14 @@ class CommCareConnectChannelForm(ExtraFormBase):
         max_length=100,
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.channel:
+            self.warning_message = (
+                "Changing the bot name updates the name shown to new participants on CommCare Connect. "
+                "Participants who have already connected may continue to see the previous name."
+            )
+
 
 class WidgetParams(forms.Widget):
     template_name = "channels/widgets/widget_params.html"
@@ -590,6 +598,9 @@ class WidgetParams(forms.Widget):
             context["widget"]["version"] = self.channel.widget_version
             context["widget"]["version_updated_at"] = self.channel.widget_version_updated_at
             context["widget"]["version_status"] = self.channel.widget_update_status
+            context["widget"]["min_version"] = self.channel.min_widget_version
+            context["widget"]["pending_min_version"] = self.channel.pending_min_widget_version
+            context["widget"]["pending_effective_at"] = self.channel.pending_auth_level_effective_at
         context["docs_base_url"] = settings.DOCUMENTATION_BASE_URL
         context["docs_links"] = settings.DOCUMENTATION_LINKS
         return context

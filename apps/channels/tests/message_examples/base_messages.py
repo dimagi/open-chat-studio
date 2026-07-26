@@ -1,7 +1,7 @@
 from io import BytesIO
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import BaseMessage, MediaCache
-from apps.chat.channels import MESSAGE_TYPES
 
 
 def text_message(participant_id: str = "123", message_text: str = "Hi") -> BaseMessage:

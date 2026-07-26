@@ -55,6 +55,7 @@ def test_openai_service_uses_responses_api():
     [
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
+        (LlmProviderTypes.minimax, {"openai_api_key": "test"}),
     ],
 )
 def test_generic_openai_service_does_not_use_responses_api(provider_type, config):
@@ -65,6 +66,17 @@ def test_generic_openai_service_does_not_use_responses_api(provider_type, config
     assert service._use_responses_api is False
     llm = service.get_chat_model("some-model")
     assert llm.use_responses_api is False
+
+
+def test_minimax_is_openai_compatible_chat_provider():
+    """MiniMax exposes an OpenAI-compatible chat endpoint, so it is routed through
+    OpenAIGenericService (like Groq/Perplexity) with the MiniMax base URL and must
+    not use the OpenAI-specific Responses API."""
+    assert LlmProviderTypes.minimax.additional_config["openai_api_base"] == "https://api.minimax.io/v1"
+    service = LlmProviderTypes.minimax.get_llm_service({"openai_api_key": "test"})
+    assert isinstance(service, OpenAIGenericService)
+    assert service._type == "minimax"
+    assert service._use_responses_api is False
 
 
 def test_voyage_ai_service():
@@ -78,6 +90,34 @@ def test_voyage_ai_service_returns_local_index_manager():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     manager = service.get_local_index_manager("voyage-4-large")
     assert isinstance(manager, VoyageAILocalIndexManager)
+
+
+@pytest.mark.parametrize(
+    ("provider_type", "config", "expected_slug"),
+    [
+        pytest.param(LlmProviderTypes.openai, {"openai_api_key": "test"}, "openai", id="openai"),
+        pytest.param(
+            LlmProviderTypes.anthropic,
+            {"anthropic_api_key": "test", "anthropic_api_base": "https://api.anthropic.com"},
+            "anthropic",
+            id="anthropic",
+        ),
+        pytest.param(LlmProviderTypes.groq, {"openai_api_key": "test"}, "groq", id="groq"),
+        pytest.param(LlmProviderTypes.perplexity, {"openai_api_key": "test"}, "perplexity", id="perplexity"),
+        pytest.param(LlmProviderTypes.minimax, {"openai_api_key": "test"}, "minimax", id="minimax"),
+    ],
+)
+def test_get_llm_service_sets_provider_type_post_construction(provider_type, config, expected_slug):
+    """Regression: Pydantic v2 silently drops the leading-underscore `_type`
+    from init kwargs, so the factory has to assign it post-construction.
+    Without that, every service ends up with `_type='unknown'` and
+    `metadata['ocs_provider_type']` is wrong - cost tracking misattributes
+    every UsageRecord to the unknown bucket and no PricingRule matches.
+    """
+    service = provider_type.get_llm_service(config)
+    assert service._type == expected_slug
+    chat_model = service.get_chat_model("some-model")
+    assert chat_model.metadata["ocs_provider_type"] == expected_slug
 
 
 def test_anthropic_service_returns_prompt_caching_middleware():

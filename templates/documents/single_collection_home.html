@@ -83,7 +83,7 @@
               hx-trigger="input changed delay:500ms"
             >
           </div>
-          <i class="htmx-indicator fa fa-spinner fa-pulse hidden"></i>
+          <i id="search-spinner" class="htmx-indicator fa fa-spinner fa-pulse"></i>
         </div>
         <div id="collection-actions-wrapper">
           <div class="join">
@@ -158,6 +158,7 @@
            hx-trigger="search-files from:body, load"
            hx-target="#collection-files-container"
            hx-swap="innerHTML"
+           hx-indicator="#search-spinner"
            hx-include="#search-input">
         <span class="loading loading-spinner"></span>
       </div>

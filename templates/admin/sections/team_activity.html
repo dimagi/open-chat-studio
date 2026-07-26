@@ -1,0 +1,28 @@
+{% load i18n %}
+<div class="pg-subtitle flex items-center gap-1">
+  {% translate "Team Activity" %}
+  {% blocktranslate asvar active_help %}A team is considered active if it has at least one chat message in the selected date range.{% endblocktranslate %}
+  {% include "generic/help.html" with help_content=active_help %}
+</div>
+<div class="mb-6">
+  <p class="text-sm">
+    <span class="font-semibold">{{ team_activity.active_count }}</span> active /
+    <span class="font-semibold">{{ team_activity.total_count }}</span> total teams
+  </p>
+  {% if team_activity.inactive_teams %}
+  <details class="mt-2">
+    <summary class="cursor-pointer text-sm opacity-70">
+      {% blocktranslate count count=team_activity.inactive_teams|length %}
+        {{ count }} inactive team
+      {% plural %}
+        {{ count }} inactive teams
+      {% endblocktranslate %}
+    </summary>
+    <ul class="text-sm opacity-60 mt-1 ml-4 list-disc">
+      {% for team in team_activity.inactive_teams %}
+      <li><a href="{% url 'web_team:home' team.slug %}" class="link">{{ team.name }}</a></li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</div>

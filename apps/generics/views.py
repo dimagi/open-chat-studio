@@ -37,7 +37,10 @@ def render_session_details(
             "active_tab": active_tab,
             "annotation_queue_names": annotation_queue_names,
             "details": [
-                (gettext("Participant"), session.get_participant_chip()),
+                (
+                    gettext("Participant"),
+                    session.get_participant_chip(include_link=request.user.has_perm("experiments.view_participant")),
+                ),
                 (gettext("Remote ID"), participant.remote_id if participant and participant.remote_id else "-"),
                 (gettext("Status"), session.get_status_display),
                 (gettext("Started"), session.consent_date or session.created_at),

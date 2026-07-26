@@ -10,6 +10,8 @@ from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
+from apps.cost_tracking.services.recorder import TraceContext as CostTraceContext
+from apps.cost_tracking.services.recorder import record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
@@ -121,6 +123,7 @@ class OCSTracer(Tracer):
 
             self._update_trace_metrics()
             self.trace_record.save()
+            self._record_costs()
 
             session_id = self.session.id if self.session else None
             logger.debug(
@@ -148,6 +151,32 @@ class OCSTracer(Tracer):
         self.trace_record.n_total_tokens = metrics.n_total_tokens
         self.trace_record.n_prompt_tokens = metrics.n_prompt_tokens
         self.trace_record.n_completion_tokens = metrics.n_completion_tokens
+
+    def _record_costs(self) -> None:
+        """Drain the collector's accumulated usage into UsageRecord rows.
+
+        Cost data is recorded for every team; `record_usage_bulk`
+        swallows DB errors internally; the outer `_finalize_trace` try/except
+        catches anything else (e.g. an unexpected helper failure).
+        """
+        if not self.metrics_collector:
+            return
+        if not self.trace_record:
+            return
+
+        events = list(self.metrics_collector.iter_cost_events())
+        if not events:
+            return
+        record_usage_bulk(
+            events,
+            CostTraceContext(
+                team_id=self.team_id,
+                trace_id=self.trace_record.id,
+                experiment_id=self.trace_record.experiment_id,
+                session_id=self.session.id if self.session else None,
+                participant_id=self.trace_record.participant_id,
+            ),
+        )
 
     def _fire_error_notification_if_needed(self) -> None:
         """Fire notification if a span declared one and the trace errored."""
@@ -196,10 +225,13 @@ class OCSTracer(Tracer):
             error_to_record = e
             raise
         finally:
-            if error_to_record:
+            # A span fails either by raising (error_to_record) or by recording
+            # an error on its context without raising (span_context.error), e.g.
+            # a stage that caught a delivery failure and recovered.
+            if error_to_record or span_context.has_error():
                 self.error_detected = True
                 if not self.error_message:
-                    self.error_message = str(error_to_record)
+                    self.error_message = str(error_to_record) if error_to_record else (span_context.error or "")
                 # First erroring span wins — captures innermost span (it exits before outer spans)
                 if not self.error_span_name:
                     self.error_span_name = span_context.name
@@ -215,12 +247,12 @@ class OCSTracer(Tracer):
     def set_output_message_id(self, output_message_id: str) -> None:
         """Set the output message ID for the trace."""
         if self.trace_record:
-            self.trace_record.output_message_id = output_message_id
+            self.trace_record.output_message_id = output_message_id  # ty: ignore[invalid-assignment]
 
     def set_input_message_id(self, input_message_id: str) -> None:
         """Set the input message ID for the trace."""
         if self.trace_record:
-            self.trace_record.input_message_id = input_message_id
+            self.trace_record.input_message_id = input_message_id  # ty: ignore[invalid-assignment]
 
     def set_participant_data_diff(self, diff: list[tuple[str, str | list, Any]]) -> None:
         if self.trace_record:

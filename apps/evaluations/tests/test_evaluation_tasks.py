@@ -11,7 +11,9 @@ from apps.chatbots.version_resolver import VersionSelectionRule
 from apps.evaluations.models import (
     AppliedTag,
     ConditionType,
+    EvaluationMessage,
     EvaluationResult,
+    EvaluationRun,
     EvaluationRunType,
 )
 from apps.evaluations.tasks import (
@@ -19,6 +21,7 @@ from apps.evaluations.tasks import (
     cleanup_old_evaluation_data,
     evaluate_single_message_task,
     run_bot_generation,
+    run_evaluation_task,
 )
 from apps.experiments.models import ExperimentSession, Participant
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
@@ -327,3 +330,42 @@ def test_evaluate_single_message_skips_tagging_for_preview_run(
     assert EvaluationResult.objects.filter(message=evaluation_message, run=run, evaluator=evaluator).exists()
     assert not expected_output.tags.filter(pk=tag.pk).exists()
     assert AppliedTag.objects.count() == 0
+
+
+@pytest.mark.django_db()
+def test_evaluate_single_message_task_skips_deleted_run(evaluation_run, evaluation_message):
+    """Run row deleted before the task executes -> no result written, no exception."""
+    run, evaluator = evaluation_run
+    run_id = run.id
+    run.delete()
+
+    evaluate_single_message_task(run_id, [evaluator.id], evaluation_message.id)
+
+    assert not EvaluationResult.objects.filter(run_id=run_id).exists()
+
+
+@pytest.mark.django_db()
+def test_run_evaluation_task_handles_deleted_run(evaluation_run):
+    """Run deleted before dispatch -> handler does not raise a second DoesNotExist."""
+    run, _ = evaluation_run
+    run_id = run.id
+    run.delete()
+
+    run_evaluation_task(run_id)
+
+    assert not EvaluationRun.objects.filter(id=run_id).exists()
+
+
+@pytest.mark.django_db()
+def test_evaluate_single_message_task_skips_deleted_message(evaluation_run, evaluation_message):
+    """Message deleted out from under a surviving in-flight run -> no result written, no exception.
+
+    Uses a bulk queryset delete to mimic the cascade/race path that bypasses the model guard.
+    """
+    run, evaluator = evaluation_run
+    message_id = evaluation_message.id
+    EvaluationMessage.objects.filter(id=message_id).delete()
+
+    evaluate_single_message_task(run.id, [evaluator.id], message_id)
+
+    assert not EvaluationResult.objects.filter(run=run).exists()

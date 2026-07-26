@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.telegram_channel import TelegramCallbacks
 from apps.channels.datamodels import TelegramMessage
+from apps.channels.telegram_channel import TelegramCallbacks
 
 
 @pytest.fixture()
@@ -52,8 +52,8 @@ class TestGetMessageAudio:
         wav_data = BytesIO(b"wav-bytes")
 
         with (
-            patch("apps.channels.channels_v2.telegram_channel.httpx.get") as mock_get,
-            patch("apps.channels.channels_v2.telegram_channel.audio.convert_audio") as mock_convert,
+            patch("apps.channels.telegram_channel.httpx.get") as mock_get,
+            patch("apps.channels.telegram_channel.audio.convert_audio") as mock_convert,
         ):
             response = MagicMock()
             response.content = b"ogg-bytes"

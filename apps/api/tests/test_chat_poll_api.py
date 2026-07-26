@@ -71,6 +71,8 @@ def mock_session():
     mock_sess.experiment.description = "A test bot"
     mock_sess.experiment.is_public = True
     mock_sess.session_token_required = False
+    # Non-widget session: no per-channel widget auth policy applies.
+    mock_sess.experiment_channel.widget_auth_level = None
     with (
         mock.patch("apps.api.views.chat.get_experiment_session_cached", return_value=mock_sess),
         mock.patch("apps.api.permissions.get_experiment_session_cached", return_value=mock_sess),
@@ -109,10 +111,10 @@ def test_chat_poll_task_response_processing_with_progress(mock_progress, api_cli
 
 @pytest.mark.django_db()
 def test_chat_poll_user_facing_error_returns_400(api_client, mock_session, mock_task_response):
-    """MessageTooLargeError (user_facing_error=True) must return HTTP 400, not 500."""
+    """User-facing errors (user_facing_error=True) must return HTTP 400, not 500."""
     mock_task_response.return_value = {
         "complete": True,
-        "error_msg": "Your message is too large for this model.",
+        "error_msg": "Voice transcription is not available for this chatbot.",
         "user_facing_error": True,
         "message": None,
     }
@@ -123,7 +125,7 @@ def test_chat_poll_user_facing_error_returns_400(api_client, mock_session, mock_
     assert response.status_code == 400
     data = response.json()
     assert data["status"] == "error"
-    assert "too large" in data["error"]
+    assert "transcription" in data["error"]
 
 
 @pytest.mark.django_db()

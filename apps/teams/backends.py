@@ -70,7 +70,6 @@ CONTENT_TYPES = {
         "participantdata",
         "promptbuilderhistory",
         "sourcematerial",
-        "survey",
         "syntheticvoice",
     ],
     "files": ["file", "filechunkembedding"],
@@ -181,6 +180,10 @@ CHAT_VIEWER_PERMS = [
     AppPermSetDef("chat", [VIEW]),
     AppPermSetDef("annotations", [VIEW]),
     ModelPermSetDef("files", "file", [VIEW]),
+    # View-only access to session lists (All Sessions page + per-chatbot session tables) so the
+    # role can reach transcripts. Deliberately scoped to experimentsession only — NOT the whole
+    # experiments app — so a Chat Viewer cannot view or edit experiment/chatbot configuration.
+    ModelPermSetDef("experiments", "experimentsession", [VIEW]),
 ]
 
 GROUPS = [

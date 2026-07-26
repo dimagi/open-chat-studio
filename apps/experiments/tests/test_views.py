@@ -10,7 +10,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils.http import http_date
 
-from apps.chat.channels import WebChannel
+from apps.channels.web_channel import WebChannel
 from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.models import (
     Experiment,
@@ -20,6 +20,7 @@ from apps.experiments.models import (
     VoiceResponseBehaviours,
 )
 from apps.experiments.views.experiment import _verify_user_or_start_session
+from apps.files.models import FilePurpose
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.experiment import (
     ConsentFormFactory,
@@ -115,7 +116,7 @@ def test_get_root_var_returns_correct_root_variable(input_var, expected_output):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.chat.channels.enqueue_static_triggers")
+@mock.patch("apps.experiments.services.enqueue_static_triggers")
 def test_new_participant_created_on_session_start(_trigger_mock, is_user):
     """For each new experiment session, a participant should be created and linked to the session"""
     identifier = "someone@example.com"
@@ -138,7 +139,7 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.chat.channels.enqueue_static_triggers")
+@mock.patch("apps.experiments.services.enqueue_static_triggers")
 def test_participant_reused_within_team(_trigger_mock, is_user):
     """Within a team, the same external chat id (or participant identifier) should result in the participant being
     reused, and not result in a new participant being created
@@ -177,7 +178,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("is_user", [False, True])
-@mock.patch("apps.chat.channels.enqueue_static_triggers")
+@mock.patch("apps.experiments.services.enqueue_static_triggers")
 def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
     """A new participant should be created for each team when a user uses the same identifier"""
     experiment1 = ExperimentFactory.create(team=TeamWithUsersFactory.create())
@@ -221,7 +222,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.chat.channels.enqueue_static_triggers")
+@mock.patch("apps.experiments.services.enqueue_static_triggers")
 def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
     """When a non platform user starts a session, a participant without a user is created. When they then sign up
     and start another session, their participant user should be populated
@@ -257,7 +258,7 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.chat.channels.enqueue_static_triggers")
+@mock.patch("apps.experiments.services.enqueue_static_triggers")
 def test_user_email_used_for_participant_identifier(_trigger_mock, client):
     """With the `capture_identifier` field enabled on the consent record, logged in users' consent form will
     not contain the `identifier` field, so we pass it as initial data to the form. This test simulates a logged
@@ -280,7 +281,7 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
+@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
 def test_start_session_public_embed_returns_deprecation_headers(client):
     """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
     experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
@@ -296,7 +297,7 @@ def test_start_session_public_embed_returns_deprecation_headers(client):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.chat.channels.enqueue_static_triggers")
+@mock.patch("apps.experiments.services.enqueue_static_triggers")
 def test_timezone_saved_in_participant_data(_trigger_mock):
     """A participant's timezone data should be saved in all ParticipantData records"""
     experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
@@ -321,7 +322,7 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("version", [Experiment.DEFAULT_VERSION_NUMBER, 1])
-@mock.patch("apps.chat.channels.enqueue_static_triggers", mock.Mock())
+@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
 @mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
 def test_experiment_session_message_view_creates_files(delay_mock, version, experiment, client):
     task = mock.Mock()
@@ -343,19 +344,59 @@ def test_experiment_session_message_view_creates_files(delay_mock, version, expe
     file_search_file.name = "fs.text"
     code_interpreter_file = BytesIO(b"some content")
     code_interpreter_file.name = "ci.text"
-    data = {"message": "Hi there", "file_search": [file_search_file], "code_interpreter": [code_interpreter_file]}
+    ocs_attachment_file = BytesIO(b"some content")
+    ocs_attachment_file.name = "ocs.text"
+    data = {
+        "message": "Hi there",
+        "file_search": [file_search_file],
+        "code_interpreter": [code_interpreter_file],
+        "ocs_attachments": [ocs_attachment_file],
+    }
     client.post(url, data=data)
-    # Check if tool resources were created with the files
+    # Tool resources are created with the files. Participant uploads are conversation
+    # media regardless of which tool they feed; ASSISTANT is reserved for bot config.
     ci_resource = session.chat.attachments.get(tool_type="code_interpreter")
-    assert ci_resource.files.filter(name="ci.text").exists()
+    ci_file = ci_resource.files.get(name="ci.text")
+    assert ci_file.purpose == FilePurpose.MESSAGE_MEDIA
+
     fs_resource = session.chat.attachments.get(tool_type="file_search")
-    assert fs_resource.files.filter(name="fs.text").exists()
+    fs_file = fs_resource.files.get(name="fs.text")
+    assert fs_file.purpose == FilePurpose.MESSAGE_MEDIA
+
+    ocs_resource = session.chat.attachments.get(tool_type="ocs_attachments")
+    ocs_file = ocs_resource.files.get(name="ocs.text")
+    assert ocs_file.purpose == FilePurpose.MESSAGE_MEDIA
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
+@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
+def test_experiment_session_message_view_missing_message(delay_mock, experiment, client):
+    """A POST without a 'message' field or attachments returns 400 instead of raising."""
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, participant=ParticipantFactory.create(user=experiment.owner)
+    )
+    url = reverse(
+        "experiments:experiment_session_message",
+        kwargs={
+            "team_slug": experiment.team.slug,
+            "experiment_id": experiment.public_id,
+            "session_id": session.external_id,
+            "version_number": Experiment.DEFAULT_VERSION_NUMBER,
+        },
+    )
+    client.force_login(experiment.owner)
+
+    response = client.post(url, data={})
+
+    assert response.status_code == 400
+    delay_mock.assert_not_called()
 
 
 @pytest.mark.django_db()
 class TestPublicSessions:
     @pytest.mark.parametrize("is_user", [False, True])
-    @mock.patch("apps.chat.channels.enqueue_static_triggers")
+    @mock.patch("apps.experiments.services.enqueue_static_triggers")
     def test_start_session_public_with_emtpy_identifier(self, _trigger_mock, is_user, client):
         """Identifiers can be empty if we choose not to capture it. In this case, use the logged in user's email or in
         the case where it's an external user, use a UUID as the identifier"""
@@ -506,7 +547,7 @@ class TestPublicSessions:
 
 @pytest.mark.django_db()
 class TestVerifyPublicChatToken:
-    @override_settings(SECRET_KEY="test_key")
+    @override_settings(SECRET_KEY="test_key_that_is_at_least_32_bytes_long")
     @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
     def test_valid_token_redirects_to_chat(self, record_consent_and_redirect, client):
         record_consent_and_redirect.return_value = HttpResponse()
@@ -516,7 +557,7 @@ class TestVerifyPublicChatToken:
             {
                 "session": str(session.external_id),
             },
-            "test_key",
+            "test_key_that_is_at_least_32_bytes_long",
             algorithm="HS256",
         )
         client.get(

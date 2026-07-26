@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
-from django_tables2 import SingleTableView
+from django_tables2 import RequestConfig, SingleTableView
 
 from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
@@ -37,8 +37,11 @@ IMPORT_PERMISSIONS = [
 ]
 
 
-def single_participant_home_context(team, context: dict, participant_id: int, experiment_id: int | None = None) -> dict:
+def single_participant_home_context(
+    request, context: dict, participant_id: int, experiment_id: int | None = None
+) -> dict:
     """A helper function to build context for a single participant's home view."""
+    team = request.team
     participant = get_object_or_404(Participant, pk=participant_id, team=team)
     context["active_tab"] = "participants"
     context["participant"] = participant
@@ -51,10 +54,9 @@ def single_participant_home_context(team, context: dict, participant_id: int, ex
             .filter(participant=participant)
             .prefetch_related(chat_tagged_items_prefetch())
         )
-        context["session_table"] = ChatbotSessionsTable(
-            sessions,
-            exclude=["participant"],  # remove participant column
-        )
+        table = ChatbotSessionsTable(sessions, exclude=["participant"])
+        # set request (no pagination) so the chatbot chip can permission-gate its link
+        context["session_table"] = RequestConfig(request, paginate=False).configure(table)
         context["selected_experiment_id"] = experiment_id
         data = participant.get_data_for_experiment(experiment_id)
         context["participant_data"] = json.dumps(data, indent=4)
@@ -171,7 +173,7 @@ class SingleParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         participant_id = self.kwargs["participant_id"]
         experiment_id = self.kwargs.get("experiment_id")
         return single_participant_home_context(
-            self.request.team, initial_context, participant_id=participant_id, experiment_id=experiment_id
+            self.request, initial_context, participant_id=participant_id, experiment_id=experiment_id
         )
 
 
@@ -345,7 +347,7 @@ def trigger_bot(request, team_slug: str, participant_id: int):
 
     if not form.is_valid():
         messages.error(request, "Please check the form for errors")
-        context = single_participant_home_context(request.team, {}, participant_id=participant_id)
+        context = single_participant_home_context(request, {}, participant_id=participant_id)
         context["trigger_bot_form"] = form
         return render(request, "participants/single_participant_home.html", context=context)
 

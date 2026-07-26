@@ -45,6 +45,22 @@
         ({{ widget.version_updated_at|date }}) — up to date.
       </div>
     {% endif %}
+    {% if widget.min_version %}
+      <div class="text-sm opacity-70 mt-2">
+        <i class="fa-solid fa-shield-halved me-1"></i>
+        This channel requires widget version {{ widget.min_version }} or newer.
+      </div>
+    {% endif %}
+    {% if widget.pending_min_version %}
+      <div role="alert" class="alert alert-warning mt-3">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span>
+          An upgraded widget was detected. On {{ widget.pending_effective_at|date }} this channel
+          will require widget version {{ widget.pending_min_version }} or newer. Make sure every embed
+          is upgraded before then, or older embeds will stop connecting.
+        </span>
+      </div>
+    {% endif %}
     <h3 class="card-title text-base mt-3">
       <i class="fa-solid fa-code me-1"></i>
       Embed Code

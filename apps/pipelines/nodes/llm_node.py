@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Annotated, cast
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentState
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.tools import BaseTool
 
 from apps.chat.agent.tools import SearchCollectionByIdTool, SearchIndexTool, SearchToolConfig, get_node_tools
@@ -15,7 +14,6 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.pipelines.nodes.base import PipelineNode, PipelineState
 from apps.pipelines.nodes.helpers import get_agent_middleware, get_system_message, prompt_uses_current_datetime
-from apps.pipelines.nodes.history_middleware import MessageSizeValidationMiddleware
 from apps.pipelines.nodes.tool_callbacks import ToolCallbacks
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
 from apps.service_providers.llm_service.main import OpenAIBuiltinTool
@@ -55,7 +53,7 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
         input_message_id=context.input_message_id,
     )
     result = agent.invoke(inputs)
-    final_message = result["messages"][-1]
+    final_message = _get_final_ai_message(result["messages"])
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)
 
@@ -109,8 +107,6 @@ def build_node_agent(
     system_message = get_system_message(prompt_template=node.prompt, prompt_context=prompt_context)
 
     middleware = get_agent_middleware(node, system_message)
-    # MessageSizeValidationMiddleware temporarily disabled — over-counts tool outputs and blocks
-    # legitimate conversations. Re-enable after switching to a tool-aware token check.
 
     return create_agent(
         # TODO: I think this will fail with google builtin tools
@@ -120,15 +116,6 @@ def build_node_agent(
         middleware=middleware,
         state_schema=StateSchema,
     )
-
-
-def _build_size_validation_middleware(node: PipelineNode, system_message) -> MessageSizeValidationMiddleware | None:
-    max_token_limit = node.repo.get_llm_provider_model(node.llm_provider_model_id).max_token_limit
-    if not max_token_limit:
-        return None
-    system_tokens = count_tokens_approximately([system_message])
-    effective_limit = max(max_token_limit - system_tokens, 0)
-    return MessageSizeValidationMiddleware(token_limit=effective_limit)
 
 
 def _process_files(node: PipelineNode, cited_files: set[File], generated_files: set[File]) -> dict:
@@ -242,3 +229,22 @@ def _get_search_tool(node):
             allowed_collection_ids=node.collection_index_ids,
         )
         return search_tool
+
+
+def _get_final_ai_message(messages: list) -> AIMessage:
+    """Return the last AI message with non-empty text content.
+
+    Claude (and some other models) sometimes respond with a non-empty message
+    alongside tool calls, then send further turns that carry only tool calls
+    (a ``tool_use`` block with no text) or an empty content array — signalling
+    completion via the tool flow rather than a follow-up text turn.  Those
+    trailing turns render to empty output, so we walk backwards and return the
+    last message that actually has text.  ``message.text`` handles both plain
+    string content and structured content blocks, ignoring tool-call blocks.
+    """
+    for message in reversed(messages):
+        if isinstance(message, AIMessage) and message.text:
+            return message
+    # Fallback: return the last message as-is (preserves existing behaviour
+    # when no AI message has text, e.g. pure tool-call chains).
+    return messages[-1]

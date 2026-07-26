@@ -103,7 +103,7 @@ holdout cannot block removal indefinitely.
 | Changelog/docs | Entry in the [docs repo](https://github.com/dimagi/open-chat-studio-docs) — see [User Docs](user_docs.md) | Every deprecation, day 0 |
 | In-feature warning | Warning callout on the feature's own templates with removal date + migration link | Used tier, day 0 → removal |
 | Banner | `apps/banners` `Banner` row; scoped location if one exists, else global; set `start_date`/`end_date` | Used tier, day 0 (optionally a second reminder banner for the final 2 weeks) |
-| In-product notification | `apps/ocs_notifications` notification to affected teams — see [Notifications](notifications.md) | Used tier, day 0 |
+| In-product notification | `apps/ocs_notifications` notification to affected teams — see [Notifications](../developer_guides/code_systems/notifications.md) | Used tier, day 0 |
 | Email | One-off shell script / management command emailing admins of affected teams, listing their configs | Used tier, day 0 |
 
 ## Read-only enforcement
@@ -128,7 +128,7 @@ The default data policy is a **two-phase drop**:
 
 **Phase 1 — code removal.** Models and columns are untouched; the feature is
 recoverable by reverting the PR. For versioned models (see
-[Object Versioning](versioning.md) and `docs/agents/django_model_versioning.md`):
+[Object Versioning](../developer_guides/code_systems/versioning.md) and `docs/agents/django_model_versioning.md`):
 
 - Remove the feature's `VersionField` entries from `_get_version_details` so
   the version-diff UI stops showing it.
@@ -142,7 +142,7 @@ recoverable by reverting the PR. For versioned models (see
   (`django-field-audit`) retains the history.
 - Then drop the columns/tables.
 - Audit `on_delete` behaviour before dropping FKs so cascades don't reach
-  version rows unexpectedly. See [Data Migrations](custom_migrations.md).
+  version rows unexpectedly. See [Data Migrations](../developer_guides/custom_migrations.md).
 
 ## HTTP surfaces
 

@@ -1,5 +1,6 @@
 import base64
 import logging
+import re
 from dataclasses import dataclass
 from functools import cached_property
 from io import BytesIO
@@ -9,14 +10,29 @@ import phonenumbers
 from mailparser_reply import EmailReplyParser
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.models import ChannelPlatform
-from apps.chat.channels import MESSAGE_TYPES
 from apps.documents.readers import Document
 from apps.files.models import File
 
 logger = logging.getLogger("ocs.channels")
 
 AttachmentType = Literal["code_interpreter", "file_search", "ocs_attachments"]
+
+
+_BSUID_RE = re.compile(r"^[A-Z]{2}(?:\.ENT)?\.[A-Za-z0-9]{1,128}$")
+
+
+def looks_like_bsuid(value: str) -> bool:
+    """Return True if `value` matches Meta's business-scoped user ID (BSUID) format.
+
+    A BSUID is an ISO 3166 alpha-2 country code (two uppercase letters) followed by a period
+    and up to 128 alphanumeric characters (e.g. US.13491208655302741918). Parent BSUIDs
+    insert ``ENT.`` between the country code and the identifier (e.g. US.ENT.118157992128868).
+
+    See https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids
+    """
+    return bool(_BSUID_RE.match(value))
 
 
 class MediaCache(BaseModel):
@@ -89,6 +105,7 @@ class BaseMessage(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     participant_id: str
+    remote_id: str | None = Field(default=None)
     message_text: str
     content_type: MESSAGE_TYPES | None = Field(default=MESSAGE_TYPES.TEXT)
     attachments: list[Attachment] = Field(default=[])
@@ -150,6 +167,26 @@ class TwilioMessage(BaseMessage):
                 return MESSAGE_TYPES.OTHER
 
     @staticmethod
+    def get_bsuid(message_data: dict) -> str | None:
+        """Return the BSUID from Twilio's `ExternalUserId` field, or None.
+
+        Twilio sends it on every WhatsApp webhook from June 2026 onwards and it is the stable
+        participant identifier. Pre-rollout messages don't carry it, so we return None and the
+        caller falls back to the phone number.
+        """
+        _, _, bsuid = message_data.get("ExternalUserId", "").partition(":")
+        return bsuid or None
+
+    @staticmethod
+    def get_phone_number(message_data: dict) -> str | None:
+        """Return the user's E.164 phone number from `From` for WhatsApp messages, else None."""
+        prefix, _, raw = message_data["From"].partition(":")
+        if prefix != "whatsapp" or looks_like_bsuid(raw):
+            return None
+        # Normalize to E.164 (the DB format); numbers usually arrive in this format already.
+        return phonenumbers.format_number(phonenumbers.parse(raw), phonenumbers.PhoneNumberFormat.E164)
+
+    @staticmethod
     def parse(message_data: dict) -> "TwilioMessage":
         prefix_channel_map = {"messenger": ChannelPlatform.FACEBOOK, "whatsapp": ChannelPlatform.WHATSAPP}
         prefix = message_data["From"].split(":")[0]
@@ -158,19 +195,28 @@ class TwilioMessage(BaseMessage):
         prefix_to_remove = f"{prefix}:"
         platform = prefix_channel_map[prefix]
         to = message_data["To"].removeprefix(prefix_to_remove)
+        from_value = message_data["From"].removeprefix(prefix_to_remove)
+        phone_number = None
+        participant_id = from_value
         if platform == ChannelPlatform.WHATSAPP:
             # Parse the number to E164 format, since this is the format of numbers in the DB
             # Normally they are already in this format, but this is just an extra layer of security
             number_obj = phonenumbers.parse(to)
             to = phonenumbers.format_number(number_obj, phonenumbers.PhoneNumberFormat.E164)
+
+            phone_number = TwilioMessage.get_phone_number(message_data)
+            # The BSUID (ExternalUserId) is the stable identifier; fall back to the phone for
+            # pre-rollout messages that don't carry one.
+            participant_id = TwilioMessage.get_bsuid(message_data) or phone_number
         return TwilioMessage(
-            participant_id=message_data["From"].removeprefix(prefix_to_remove),
+            participant_id=participant_id,
             to=to,
             message_text=message_data["Body"],
             content_type=message_type,
             media_url=message_data.get("MediaUrl0"),
             attachment_mime_type=message_data.get("MediaContentType0"),
             platform=platform,
+            remote_id=phone_number,
         )
 
 
@@ -186,10 +232,27 @@ class SureAdhereMessage(BaseMessage):
         )
 
 
+_NON_CONVERSATIONAL_WA_MESSAGE_TYPES = frozenset({"system", "unsupported", "unknown"})
+
+
+def is_non_conversational_whatsapp_message(message_data: dict) -> bool:
+    """True for Meta/Turn WhatsApp payloads that are not user-authored conversational
+    messages (e.g. type="system" user_changed_number, or "unsupported"/"unknown").
+
+    "system" payloads have a "messages" array but no "contacts" key, so the webhook
+    views use this to skip them before dispatching a task that would KeyError while
+    parsing. "unsupported"/"unknown" payloads are skipped as there is nothing to process.
+    """
+    messages = message_data.get("messages") or []
+    if not messages:
+        return False
+    return messages[0].get("type") in _NON_CONVERSATIONAL_WA_MESSAGE_TYPES
+
+
 class WhatsAppMessage(BaseMessage):
     """Base class for WhatsApp messages (Turn.io and Meta Cloud API)."""
 
-    to_number: str = Field(default="", required=False)  # This field is needed for the WhatsappChannel
+    to_number: str = Field(default="")  # This field is needed for the WhatsappChannel
     media_id: str | None = Field(default=None)
     media_url: str | None = Field(default=None)
     attachment_mime_type: str | None = Field(default=None)
@@ -213,6 +276,22 @@ class WhatsAppMessage(BaseMessage):
                 # OTHER so content_type is never None and downstream support checks behave.
                 return MESSAGE_TYPES.OTHER
 
+    @staticmethod
+    def get_bsuid(message_data: dict) -> str | None:
+        """Return the Meta business-scoped user ID (BSUID), or None.
+
+        Meta Cloud API sends it as `from_user_id` on every post-rollout webhook and it is the
+        stable participant identifier. Turn.io has no BSUID concept and pre-rollout messages
+        don't carry it, so we return None and the caller falls back to the phone number.
+        """
+        return message_data["messages"][0].get("from_user_id")
+
+    @staticmethod
+    def get_phone_number(message_data: dict) -> str | None:
+        """Return the user's phone number (Meta `wa_id`)"""
+        contacts = message_data.get("contacts") or [{}]
+        return contacts[0].get("wa_id")
+
     @classmethod
     def parse(cls, message_data: dict) -> "WhatsAppMessage":
         message = message_data["messages"][0]
@@ -229,8 +308,13 @@ class WhatsAppMessage(BaseMessage):
         attachment_mime_type: str | None = message_type
         if message_type == "document":
             attachment_mime_type = media_payload.get("mime_type") or "application/octet-stream"
+
+        # The BSUID is the stable identifier; fall back to the phone for pre-rollout / Turn.io
+        # messages that don't carry one.
+        phone_number = cls.get_phone_number(message_data)
+        participant_id = cls.get_bsuid(message_data) or phone_number
         return cls(
-            participant_id=message_data["contacts"][0]["wa_id"],
+            participant_id=participant_id,
             message_text=body,
             content_type=message_type,
             media_id=media_payload.get("id"),
@@ -238,6 +322,7 @@ class WhatsAppMessage(BaseMessage):
             attachment_mime_type=attachment_mime_type,
             attachment_filename=media_payload.get("filename") if message_type == "document" else None,
             whatsapp_message_id=message.get("id"),
+            remote_id=phone_number,
         )
 
 

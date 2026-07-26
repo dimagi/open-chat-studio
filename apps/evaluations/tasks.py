@@ -44,7 +44,7 @@ from apps.evaluations.models import (
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.teams.utils import current_team
 from apps.web.dynamic_filters.datastructures import FilterParams
 
@@ -68,12 +68,20 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
     First runs the message through the bot, then runs the evaluator.
     ExperimentSessions created in this task are deleted periodically by cleanup_old_evaluation_data
     """
-    evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
+    try:
+        evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
+    except EvaluationRun.DoesNotExist:
+        logger.warning("EvaluationRun %s no longer exists; skipping message %s", evaluation_run_id, message_id)
+        return
 
     with current_team(evaluation_run.team):
-        message = EvaluationMessage.objects.select_related("session__chat", "expected_output_chat_message").get(
-            id=message_id
-        )
+        try:
+            message = EvaluationMessage.objects.select_related("session__chat", "expected_output_chat_message").get(
+                id=message_id
+            )
+        except EvaluationMessage.DoesNotExist:
+            logger.warning("EvaluationMessage %s no longer exists; skipping in run %s", message_id, evaluation_run_id)
+            return
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
         session_id, bot_response = None, ""
@@ -280,7 +288,10 @@ def run_evaluation_task(evaluation_run_id):
             evaluation_run.save(update_fields=["job_id"])
     except Exception as e:
         logger.exception(f"Error starting evaluation run {evaluation_run_id}: {e}")
-        evaluation_run = EvaluationRun.objects.get(id=evaluation_run_id)
+        evaluation_run = EvaluationRun.objects.filter(id=evaluation_run_id).first()
+        if evaluation_run is None:
+            logger.warning("EvaluationRun %s vanished before it could be marked FAILED", evaluation_run_id)
+            return
         evaluation_run.status = EvaluationRunStatus.FAILED
         evaluation_run.error_message = str(e)
         evaluation_run.job_id = ""
@@ -999,6 +1010,8 @@ def export_evaluation_bulk_results_task(evaluation_config_id, team_id):
                 team=team,
                 content_type="text/csv",
                 file=ContentFile(csv_buffer.getvalue().encode("utf-8"), name=filename),
+                purpose=FilePurpose.DATA_EXPORT,
+                expiry_date=timezone.now() + timedelta(days=7),
             )
 
             return {"file_id": file_obj.id}

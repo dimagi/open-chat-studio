@@ -1,0 +1,13 @@
+{% load i18n %}
+<div class="pg-subtitle">{% translate "Growth Metrics" %}</div>
+<div class="flex flex-wrap gap-4 mb-6">
+  {% for metric in growth_metrics %}
+  <div class="stat bg-base-200 rounded-box flex-1 min-w-[180px]">
+    <div class="stat-title">{{ metric.label }}</div>
+    <div class="stat-value text-2xl">{{ metric.current }}</div>
+    <div class="stat-desc {% if metric.pct_change > 0 %}text-success{% elif metric.pct_change < 0 %}text-error{% endif %}">
+      {% if metric.pct_change > 0 %}+{% endif %}{{ metric.pct_change }}% from previous period ({{ metric.previous }})
+    </div>
+  </div>
+  {% endfor %}
+</div>

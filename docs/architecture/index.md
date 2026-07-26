@@ -40,7 +40,7 @@ Open Chat Studio is built as a Django web application with a modular design. It 
 
 ## Project structure
 
-The project is organized into several Django apps, each responsible for a specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests.
+The project is organized into several Django apps, each responsible for a specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests. See the **[package map](package-map.md)** for what each app does and how dependencies flow between them.
 
 - **Django Templates** - Templates as well as static files are centralized in the `templates` and `assets` folders, respectively. Templates specific to an app should be placed in the `templates/{app_name}` directory.
 

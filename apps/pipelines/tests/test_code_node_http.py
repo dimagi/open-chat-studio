@@ -115,6 +115,42 @@ def main(input, **kwargs):
         request = httpx_mock.get_request()
         assert request.headers.get("x-api-key") == "secret123"
 
+    @patch("apps.service_providers.auth_service.oauth.validate_user_input_url")
+    @patch("apps.utils.restricted_http.validate_user_input_url")
+    def test_oauth_client_credentials_auth_provider(self, mock_validate, mock_token_validate, httpx_mock):
+        """End-to-end: an OAuth provider fetches a token then sends it as a bearer header."""
+        team = TeamFactory.create()
+        AuthProviderFactory.create(
+            name="My OAuth",
+            type="oauth_client_credentials",
+            config={
+                "client_id": "cid",
+                "client_secret": "csecret",
+                "token_url": "https://auth.example.com/token",
+                "scope": "read",
+                "token_endpoint_auth_method": "client_secret_basic",
+            },
+            team=team,
+        )
+        httpx_mock.add_response(
+            url="https://auth.example.com/token",
+            json={"access_token": "tok-xyz", "token_type": "Bearer", "expires_in": 3600},
+        )
+        httpx_mock.add_response(url="https://api.example.com/data", json={"authenticated": True})
+
+        session = MagicMock()
+        session.team = team
+
+        code = """
+def main(input, **kwargs):
+    response = http.get("https://api.example.com/data", auth="My OAuth")
+    return str(response["json"]["authenticated"])
+"""
+        result = _run_code_node(code, experiment_session=session)
+        assert result.update["messages"][-1] == "True"
+        api_request = httpx_mock.get_request(url="https://api.example.com/data")
+        assert api_request.headers.get("authorization") == "Bearer tok-xyz"
+
     @patch("apps.utils.restricted_http.validate_user_input_url")
     def test_auth_provider_not_found_error(self, mock_validate):
         """AuthProvider not found surfaces as a CodeNodeRunError."""

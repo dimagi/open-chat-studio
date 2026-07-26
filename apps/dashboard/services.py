@@ -13,6 +13,7 @@ from django.utils import timezone
 from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 
 from ..trace.models import Trace
@@ -36,6 +37,8 @@ class DashboardService:
         "completion_rate",
         "avg_session_duration",
         "avg_messages_per_session",
+        "cost",
+        "cost_per_session",
     ]
 
     def __init__(self, team):
@@ -301,90 +304,37 @@ class DashboardService:
         return data
 
     def get_bot_performance_summary(
-        self, page: int = 1, page_size: int = 10, order_by: str = "messages", order_dir: str = "desc", **filters
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        order_by: str = "messages",
+        order_dir: str = "desc",
+        include_cost: bool = False,
+        **filters,
     ) -> dict[str, Any]:
-        """Get bot performance summary with rankings, pagination, and ordering"""
+        """Get bot performance summary with rankings, pagination, and ordering.
+
+        When `include_cost` is set (team has the cost-monitoring flag), each row
+        gains `cost` and `cost_per_session` sourced from UsageRecord.
+        """
 
         # Extract pagination/ordering from filters for cache key
         cache_filters = {k: v for k, v in filters.items() if k not in ["page", "page_size", "order_by", "order_dir"]}
-        cache_key = f"bot_performance_{self._cache_key(cache_filters)}"
+        cache_key = f"bot_performance_{'cost_' if include_cost else ''}{self._cache_key(cache_filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
 
         if not cached_data:
-            querysets = self.get_filtered_queryset_base(**cache_filters)
-            # Pre-compute session stats
-            # The alternative for better performance would be to use a raw SQL Query
-            session_stats = (
-                querysets["sessions"]
-                .order_by()
-                .values("experiment_id")
-                .annotate(
-                    participants_count=Count("participant", distinct=True),
-                    sessions_count=Count("id", distinct=True),
-                    messages_count=Count("chat__messages", distinct=True),
-                )
-            )
+            cached_data = self._compute_bot_performance(cache_filters, include_cost)
+            DashboardCache.set_cached_data(self.team, cache_key, cached_data)
 
-            stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
-
-            # Use sessions base (already constrained/deduped) to avoid message join inflation
-            session_durations = (
-                querysets["sessions"]
-                .filter(ended_at__isnull=False)
-                .values("experiment_id")
-                .annotate(
-                    completed_sessions_count=Count("id", distinct=True),
-                    average_session_duration=Avg(
-                        ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField())
-                    ),
-                )
-            )
-            dur_map = {s["experiment_id"]: s for s in session_durations}
-
-            experiments_base = querysets["experiments"]
-
-            performance_data = []
-            for experiment in experiments_base:
-                stats = stats_dict.get(
-                    experiment.id, {"participants_count": 0, "sessions_count": 0, "messages_count": 0}
-                )
-                participants_count = stats["participants_count"]
-                sessions_count = stats["sessions_count"]
-                messages_count = stats["messages_count"]
-                completed_sessions = dur_map.get(experiment.id, {}).get("completed_sessions_count", 0)
-                avg_duration = (
-                    dur_map.get(experiment.id, {}).get("average_session_duration") or timedelta()
-                ).total_seconds() / 60
-                completion_rate = (completed_sessions / sessions_count) if sessions_count else 0
-
-                experiment_url = reverse(
-                    "chatbots:single_chatbot_home",
-                    kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id},
-                )
-                performance_data.append(
-                    {
-                        "experiment_id": experiment.id,
-                        "experiment_name": experiment.name,
-                        "experiment_url": experiment_url,
-                        "participants": participants_count,
-                        "sessions": sessions_count,
-                        "messages": messages_count,
-                        "avg_session_duration": avg_duration,
-                        "completion_rate": completion_rate,
-                        "avg_messages_per_session": messages_count / sessions_count if sessions_count > 0 else 0,
-                    }
-                )
-
-            DashboardCache.set_cached_data(self.team, cache_key, performance_data)
-            cached_data = performance_data
-
-        # Apply ordering
+        # Apply ordering. Cost fields are only sortable when they're present.
         reverse_order = order_dir.lower() == "desc"
-        if order_by in self.VALID_ORDER_FIELDS:
-            cached_data.sort(key=lambda x: x[order_by] or 0, reverse=reverse_order)
-        else:
-            # Default to messages if invalid order_by
-            cached_data.sort(key=lambda x: x["messages"], reverse=True)
+        valid_order_fields = self.VALID_ORDER_FIELDS
+        if not include_cost:
+            valid_order_fields = [f for f in valid_order_fields if f not in ("cost", "cost_per_session")]
+        sort_field = order_by if order_by in valid_order_fields else "messages"
+        # sorted() (not list.sort()) so we never mutate the cached list in place.
+        cached_data = sorted(cached_data, key=lambda x: x.get(sort_field) or 0, reverse=reverse_order)
 
         # Apply pagination
         total_count = len(cached_data)
@@ -403,6 +353,86 @@ class DashboardService:
             "order_by": order_by,
             "order_dir": order_dir,
         }
+
+    def _compute_bot_performance(self, cache_filters: dict, include_cost: bool) -> list[dict[str, Any]]:
+        """Build the (uncached, unordered) per-experiment performance rows."""
+        querysets = self.get_filtered_queryset_base(**cache_filters)
+        # Pre-compute session stats.
+        # The alternative for better performance would be to use a raw SQL Query
+        session_stats = (
+            querysets["sessions"]
+            .order_by()
+            .values("experiment_id")
+            .annotate(
+                participants_count=Count("participant", distinct=True),
+                sessions_count=Count("id", distinct=True),
+                messages_count=Count("chat__messages", distinct=True),
+            )
+        )
+        stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
+
+        # Use sessions base (already constrained/deduped) to avoid message join inflation
+        session_durations = (
+            querysets["sessions"]
+            .filter(ended_at__isnull=False)
+            .values("experiment_id")
+            .annotate(
+                completed_sessions_count=Count("id", distinct=True),
+                average_session_duration=Avg(
+                    ExpressionWrapper(F("ended_at") - F("created_at"), output_field=DurationField())
+                ),
+            )
+        )
+        dur_map = {s["experiment_id"]: s for s in session_durations}
+
+        cost_map = (
+            costs_by_experiment(
+                self.team,
+                start=querysets["start_date"],
+                end=querysets["end_date"],
+                filters=CostFilters(
+                    experiment_ids=cache_filters.get("experiment_ids"),
+                    platform_names=cache_filters.get("platform_names"),
+                    participant_ids=cache_filters.get("participant_ids"),
+                ),
+            )
+            if include_cost
+            else {}
+        )
+
+        return [
+            self._bot_performance_row(experiment, stats_dict, dur_map, cost_map, include_cost)
+            for experiment in querysets["experiments"]
+        ]
+
+    def _bot_performance_row(self, experiment, stats_dict, dur_map, cost_map, include_cost: bool) -> dict[str, Any]:
+        stats = stats_dict.get(experiment.id, {"participants_count": 0, "sessions_count": 0, "messages_count": 0})
+        sessions_count = stats["sessions_count"]
+        messages_count = stats["messages_count"]
+        completed_sessions = dur_map.get(experiment.id, {}).get("completed_sessions_count", 0)
+        avg_duration = (
+            dur_map.get(experiment.id, {}).get("average_session_duration") or timedelta()
+        ).total_seconds() / 60
+
+        row = {
+            "experiment_id": experiment.id,
+            "experiment_name": experiment.name,
+            "experiment_url": reverse(
+                "chatbots:single_chatbot_home",
+                kwargs={"team_slug": self.team.slug, "experiment_id": experiment.id},
+            ),
+            "participants": stats["participants_count"],
+            "sessions": sessions_count,
+            "messages": messages_count,
+            "avg_session_duration": avg_duration,
+            "completion_rate": (completed_sessions / sessions_count) if sessions_count else 0,
+            "avg_messages_per_session": messages_count / sessions_count if sessions_count > 0 else 0,
+        }
+        if include_cost:
+            cost = float(cost_map.get(experiment.id, 0))
+            row["cost"] = cost
+            row["cost_per_session"] = (cost / sessions_count) if sessions_count else None
+        return row
 
     def get_user_engagement_data(self, limit: int = 10, **filters) -> dict[str, Any]:
         """Get user engagement analysis data"""

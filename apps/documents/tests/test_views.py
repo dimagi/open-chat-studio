@@ -1,11 +1,15 @@
+from datetime import timedelta
 from unittest import mock
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 from waffle.testutils import override_flag
 
 from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
 from apps.documents.models import (
+    SYNC_LOCK_TIMEOUT,
     Collection,
     CollectionFile,
     DocumentSourceSyncLog,
@@ -13,8 +17,9 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
-from apps.files.models import File
-from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
+from apps.documents.views import _queue_document_source_sync
+from apps.files.models import File, FilePurpose
+from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -157,6 +162,21 @@ class TestDeleteCollection:
         assert response.status_code == 200
         collection.refresh_from_db()
         assert collection.is_archived
+
+
+@pytest.mark.django_db()
+class TestAddCollectionFiles:
+    def test_uploaded_files_get_collection_purpose(self, client):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(team=team, is_index=False)
+        client.force_login(team.members.first())
+
+        upload = SimpleUploadedFile("notes.txt", b"hello world", content_type="text/plain")
+        url = reverse("documents:add_collection_files", args=[team.slug, collection.id])
+        client.post(url, {"files": [upload], "notes.txt": "a summary"})
+
+        file = File.objects.get(name="notes.txt", team=team)
+        assert file.purpose == FilePurpose.COLLECTION
 
 
 @pytest.mark.django_db()
@@ -384,6 +404,32 @@ class TestDocumentSourceSyncLogs:
         DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=1)
         assert not document_source.has_sync_errors()
 
+    def test_files_list_shows_files_while_syncing(self, team_with_user, collection, document_source, client):
+        """A sync in progress should still surface already-persisted files, not just a spinner."""
+        document_source.sync_task_id = "in-flight"
+        document_source.save(update_fields=["sync_task_id"])
+        for name in ("alpha.pdf", "beta.pdf"):
+            CollectionFileFactory.create(
+                collection=collection,
+                document_source=document_source,
+                file__name=name,
+                file__team=collection.team,
+            )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_files_list",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"alpha.pdf" in response.content
+        assert b"beta.pdf" in response.content
+        assert b"2 files synced so far" in response.content
+        # Still polling for further progress.
+        assert b"every 5s" in response.content
+
 
 @pytest.mark.django_db()
 class TestJSONCollectionSourceCreation:
@@ -560,3 +606,71 @@ class TestCollectionSnapshots:
         response = client.get(url)
 
         assert b"Create snapshot" not in response.content
+
+
+@pytest.mark.django_db()
+class TestQueueDocumentSourceSync:
+    """Guard against clobbering a running sync's lock and spawning a second concurrent sync.
+
+    Regression: ``BaseDocumentSourceView.form_valid`` (and the manual-sync view) queued a new
+    sync unconditionally. Editing a source mid-sync overwrote the running task's
+    ``sync_task_id`` with a new one; the original task then couldn't release its lock and both
+    tasks ran concurrently — the exact race that raised
+    ``DatabaseError: Save with update_fields did not affect any rows``.
+    """
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_queues_when_not_syncing(self, apply_async):
+        source = DocumentSourceFactory.create()
+
+        assert _queue_document_source_sync(source) is True
+
+        apply_async.assert_called_once()
+        dispatched_task_id = apply_async.call_args.kwargs["task_id"]
+        source.refresh_from_db()
+        assert source.sync_task_id == dispatched_task_id
+        assert source.sync_started_at is not None
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_skips_when_sync_in_progress(self, apply_async):
+        source = DocumentSourceFactory.create(sync_task_id="running-task", sync_started_at=timezone.now())
+
+        assert _queue_document_source_sync(source) is False
+
+        apply_async.assert_not_called()
+        source.refresh_from_db()
+        # The running task's lock is left untouched.
+        assert source.sync_task_id == "running-task"
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_reclaims_stale_lock(self, apply_async):
+        """A lock older than SYNC_LOCK_TIMEOUT (dead worker) does not block a fresh sync."""
+        stale = timezone.now() - SYNC_LOCK_TIMEOUT - timedelta(minutes=1)
+        source = DocumentSourceFactory.create(sync_task_id="dead-task", sync_started_at=stale)
+
+        assert _queue_document_source_sync(source) is True
+
+        apply_async.assert_called_once()
+        source.refresh_from_db()
+        assert source.sync_task_id == apply_async.call_args.kwargs["task_id"]
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_manual_sync_view_skips_when_in_progress(self, apply_async, client):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(is_index=True, team=team)
+        source = DocumentSourceFactory.create(
+            collection=collection,
+            team=collection.team,
+            source_type="github",
+            sync_task_id="running-task",
+            sync_started_at=timezone.now(),
+        )
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:sync_document_source", args=[collection.team.slug, collection.id, source.id])
+
+        response = client.post(url)
+
+        assert response.status_code == 200
+        apply_async.assert_not_called()
+        source.refresh_from_db()
+        assert source.sync_task_id == "running-task"

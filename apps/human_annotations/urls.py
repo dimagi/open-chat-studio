@@ -1,7 +1,7 @@
 from django.urls import path
 
 from apps.generics.urls import make_crud_urls
-from apps.human_annotations.views import annotate_views, queue_views
+from apps.human_annotations.views import annotate_views, export_views, queue_views
 
 app_name = "human_annotations"
 
@@ -31,7 +31,7 @@ urlpatterns = [
         queue_views.RemoveSessionFromQueue.as_view(),
         name="queue_remove_item",
     ),
-    path("queue/<int:pk>/export/", queue_views.ExportAnnotations.as_view(), name="queue_export"),
+    path("queue/<int:pk>/export/", export_views.ExportAnnotations.as_view(), name="queue_export"),
     # Session-side add to queue
     path(
         "sessions/<str:session_id>/add-to-queue/",

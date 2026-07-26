@@ -5,6 +5,7 @@ from django.db.models import Q, Subquery
 
 from apps.assistants.models import OpenAiAssistant, ToolResources
 from apps.documents.datamodels import (
+    DEFAULT_UNSUPPORTED_FILE_TYPES,
     ConfluenceSourceConfig,
     DocumentSourceConfig,
     GitHubSourceConfig,
@@ -397,6 +398,15 @@ class CreateCollectionFromAssistantForm(forms.Form):
             raise forms.ValidationError("A collection with this name already exists.")
 
 
+class MetadataFilterWidget(forms.Widget):
+    """Alpine-backed editor for a list of ``{field, operator, value}`` metadata filters.
+
+    The value round-trips as a JSON string via the form's ``JSONField``.
+    """
+
+    template_name = "django/forms/widgets/metadata_filters.html"
+
+
 class JSONCollectionDocumentSourceForm(DocumentSourceForm):
     requires_auth = True
     allowed_auth_types = [AuthProviderType.bearer, AuthProviderType.basic, AuthProviderType.api_key]
@@ -404,6 +414,7 @@ class JSONCollectionDocumentSourceForm(DocumentSourceForm):
         "Optional. The same credentials are sent with the JSON feed request and every attachment download. "
         "Leave blank for public feeds."
     )
+    custom_template = "documents/partials/json_collection_form.html"
 
     json_url = forms.URLField(
         label="JSON Feed URL",
@@ -417,6 +428,27 @@ class JSONCollectionDocumentSourceForm(DocumentSourceForm):
         label="Request Timeout (seconds)",
         help_text="HTTP timeout applied to the JSON fetch and each attachment download",
     )
+    metadata_filters = forms.JSONField(
+        required=False,
+        label="Metadata Filters",
+        help_text="Only index items that satisfy all of these conditions.",
+        widget=MetadataFilterWidget(),
+    )
+    unsupported_file_types = forms.CharField(
+        required=False,
+        initial=", ".join(DEFAULT_UNSUPPORTED_FILE_TYPES),
+        label="Unsupported File Types",
+        help_text="Comma-separated attachment file types to skip without downloading (case-insensitive).",
+        widget=forms.TextInput(attrs={"placeholder": ", ".join(DEFAULT_UNSUPPORTED_FILE_TYPES)}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # `unsupported_file_types` round-trips from the config as a list; render it as a
+        # comma-separated string for the text input.
+        file_types = self.initial.get("unsupported_file_types")
+        if isinstance(file_types, list):
+            self.initial["unsupported_file_types"] = ", ".join(file_types)
 
     def _get_config_from_instance(self, instance):
         return instance.config.json_collection
@@ -440,10 +472,13 @@ class JSONCollectionDocumentSourceForm(DocumentSourceForm):
         if self.errors:
             return cleaned_data
 
+        file_types = [t.strip() for t in (cleaned_data.get("unsupported_file_types") or "").split(",") if t.strip()]
         try:
             json_collection_config = JSONCollectionSourceConfig(
                 json_url=cleaned_data["json_url"],
                 request_timeout=cleaned_data["request_timeout"],
+                metadata_filters=cleaned_data.get("metadata_filters") or [],
+                unsupported_file_types=file_types,
             )
         except pydantic.ValidationError as e:
             raise forms.ValidationError(f"Invalid config: {str(e)}") from None

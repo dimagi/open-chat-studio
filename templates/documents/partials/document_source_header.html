@@ -20,13 +20,15 @@
         hx-disabled-elt="this"
     ><i class="fa-solid fa-pencil"></i></a>
     <a
+        id="delete-document-source-{{ document_source.id }}"
         class="btn btn-ghost btn-sm join-item"
         hx-delete="{% url "documents:delete_document_source" team.slug collection.id document_source.id %}"
         hx-target="#document_source_{{ document_source.id }}"
         hx-swap="outerHTML"
         hx-indicator="#document_source_loading_{{ document_source.id }}"
         hx-disabled-elt="this"
-        hx-confirm="Are you sure you wish to delete this document source and all its data?"
+        hx-trigger="confirmed"
+        onclick="confirmThenTrigger('delete-document-source-{{ document_source.id }}', 'Are you sure you wish to delete this document source and all its data?')"
     ><i class="fa-solid fa-trash"></i></a>
     {% if not document_source.sync_task_id %}
       <a

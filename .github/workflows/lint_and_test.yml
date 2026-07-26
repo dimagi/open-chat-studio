@@ -13,7 +13,6 @@ on:
       - 'cypress/**'
       - 'cypress.config.ts'
       - 'cypress.env.json'
-      - 'Dockerfile'
       - 'docker-compose-dev.yml'
       - 'heroku.yml'
       - 'app.json'
@@ -35,7 +34,6 @@ on:
       - 'cypress/**'
       - 'cypress.config.ts'
       - 'cypress.env.json'
-      - 'Dockerfile'
       - 'docker-compose-dev.yml'
       - 'heroku.yml'
       - 'app.json'
@@ -54,40 +52,98 @@ permissions:
   contents: read
 
 jobs:
+  build-image:
+    # Pre-build the prod container image (tagged by commit SHA) in parallel with
+    # the tests, so the Deploy workflow — which chains off this one — can skip the
+    # build and go straight to migrate + deploy. Only runs on main pushes, so
+    # PR/fork code never receives AWS credentials.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set variables
+        run: |
+          APP_NAME="${{ fromJSON(vars.DEPLOY_APP_NAME)['prod'] }}"
+          echo "ECR_REPOSITORY=$APP_NAME-prod-ecr-repo" >> "$GITHUB_ENV"
+
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v6.2.1
+        with:
+          role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)['prod'] }}:role/github_deploy"
+          role-session-name: GithubBuild
+          aws-region: ${{ fromJSON(vars.DEPLOY_AWS_REGION)['prod'] }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2.1.6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Get image names
+        id: image-name
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "image_latest=$ECR_REGISTRY/$ECR_REPOSITORY:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          tags: |
+            ${{ steps.image-name.outputs.image }}
+            ${{ steps.image-name.outputs.image_latest }}
+          file: Dockerfile
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3
+
   build-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
       - name: Use Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24.x
+          cache: 'pnpm'
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Build front end
-        run: npm run build
+        run: pnpm run build
       - name: Check types
-        run: npm run type-check
+        run: pnpm run type-check
 
   code-style:
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - uses: pnpm/action-setup@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24.x
+          cache: 'pnpm'
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - name: Install dependencies
         run: |
-          npm ci
+          pnpm install --frozen-lockfile
           sudo apt-get install -y ripgrep
           uv venv
           uv sync --locked --dev
@@ -110,9 +166,9 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v7
@@ -130,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
       - id: py_files
@@ -142,7 +198,7 @@ jobs:
           echo "files=$files" >> "$GITHUB_OUTPUT"
       - name: Set up Python
         if: steps.py_files.outputs.files != ''
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v7
@@ -166,9 +222,9 @@ jobs:
   check-uv-lock:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v7
@@ -203,9 +259,9 @@ jobs:
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: astral-sh/setup-uv@v7
@@ -248,7 +304,7 @@ jobs:
 
       - name: Upload results to Codecov
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 

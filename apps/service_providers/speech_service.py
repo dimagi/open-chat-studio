@@ -17,6 +17,7 @@ from apps.channels.audio import convert_audio
 from apps.chat.exceptions import AudioSynthesizeException, AudioTranscriptionException, UserReportableError
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers.intron import INTRON_BASE_URL
+from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL, MINIMAX_BASE_URL
 
 log = logging.getLogger("ocs.speech")
 
@@ -424,3 +425,53 @@ class IntronSpeechService(SpeechService):
         else:
             audio_format = "mp3"
         return resp.content, audio_format
+
+
+class MinimaxSpeechService(SpeechService):
+    _type: ClassVar[str] = SyntheticVoice.MiniMax
+    minimax_api_key: str
+    minimax_group_id: str
+    minimax_model: str = DEFAULT_MINIMAX_TTS_MODEL
+    request_timeout_seconds: float = 30.0
+
+    def _synthesize_voice(self, text: str, synthetic_voice: SyntheticVoice) -> SynthesizedAudio:
+        # MiniMax T2A v2 is synchronous: a single POST returns the audio inline as a
+        # hex-encoded string (no polling), so this mirrors the ElevenLabs direct-return
+        # shape rather than Intron's enqueue/poll flow. The account's GroupId travels
+        # as a query param while the API key is a Bearer header.
+        # https://platform.minimax.io/docs/api-reference/speech-t2a-http
+        voice_id = synthetic_voice.external_id or synthetic_voice.name
+        headers = {
+            "Authorization": f"Bearer {self.minimax_api_key}",
+            "Content-Type": "application/json",
+        }
+        resp = httpx.post(
+            f"{MINIMAX_BASE_URL}/v1/t2a_v2",
+            params={"GroupId": self.minimax_group_id},
+            headers=headers,
+            json={
+                "model": self.minimax_model,
+                "text": text,
+                "voice_setting": {"voice_id": voice_id},
+                "audio_setting": {"format": "mp3"},
+            },
+            timeout=self.request_timeout_seconds,
+        )
+        if resp.status_code != 200:
+            raise AudioSynthesizeException(
+                f"MiniMax T2A request failed: status={resp.status_code} body={resp.text[:200]}"
+            )
+        body = resp.json()
+        # A 200 can still carry an application-level error; the real status lives in base_resp.
+        base_resp = body.get("base_resp") or {}
+        if base_resp.get("status_code") not in (0, None):
+            raise AudioSynthesizeException(
+                f"MiniMax T2A failed: status_code={base_resp.get('status_code')} msg={base_resp.get('status_msg')}"
+            )
+        audio_hex = (body.get("data") or {}).get("audio")
+        if not audio_hex:
+            raise AudioSynthesizeException(f"MiniMax T2A response missing data.audio. Body: {resp.text[:200]}")
+        audio_bytes = bytes.fromhex(audio_hex)
+        audio_segment = AudioSegment.from_file(BytesIO(audio_bytes), format="mp3")
+        duration_seconds = len(audio_segment) / 1000
+        return SynthesizedAudio(audio=BytesIO(audio_bytes), duration=duration_seconds, format="mp3")

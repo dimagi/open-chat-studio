@@ -155,6 +155,20 @@ class ChannelPlatform(models.TextChoices):
         return identifier
 
 
+class WidgetAuthLevel(models.IntegerChoices):
+    """Minimum authentication a chat widget channel requires from the client.
+
+    Only meaningful for EMBEDDED_WIDGET channels. New channels default to the
+    strictest level (SESSION_TOKEN); existing channels are migrated to the level
+    matching the widget version they last reported. See
+    docs/developer_guides/widget_versioning.md and issue #3858.
+    """
+
+    NONE = 0, "None (pre-0.5.1 legacy)"
+    EMBED_KEY = 1, "Embed key only (0.5.1 – 0.8.x)"
+    SESSION_TOKEN = 2, "Session token required (0.9.0+)"
+
+
 class ExperimentChannelObjectManager(AuditingManager):
     def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
         extra_data_filter = Q(extra_data__contains={key: value})
@@ -186,6 +200,9 @@ class ExperimentChannel(BaseTeamModel):
     objects = ExperimentChannelObjectManager()
     RESET_COMMAND = "/reset"
     WIDGET_VERSION_REFRESH_INTERVAL = timedelta(hours=24)
+    # Grace period between notifying a team of a pending required_auth_level increase
+    # and actually applying it (see apps.channels.tasks.ratchet_widget_auth_levels).
+    AUTH_LEVEL_RATCHET_GRACE = timedelta(days=14)
 
     name = models.CharField(max_length=255, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
@@ -204,6 +221,22 @@ class ExperimentChannel(BaseTeamModel):
     # EXPERIMENT_CHANNEL_FIELDS auditing (written from the request path).
     widget_version = models.CharField(max_length=32, null=True, blank=True)  # noqa: DJ001
     widget_version_updated_at = models.DateTimeField(null=True, blank=True)
+    # Durable per-channel auth policy for embedded widgets. New channels default to the
+    # strictest level; the request path enforces it rather than inferring a mode from
+    # per-request heuristics. Only meaningful for EMBEDDED_WIDGET channels.
+    required_auth_level = models.PositiveSmallIntegerField(
+        choices=WidgetAuthLevel.choices,
+        default=WidgetAuthLevel.SESSION_TOKEN,
+        help_text=(
+            "Minimum authentication an embedded widget must provide. New widgets (0.9.0+) send a "
+            "session token; only downgrade this for a channel you know is running an older widget."
+        ),
+    )
+    # Set when a widget upgrade is detected: the level required_auth_level will be raised to
+    # once the team has been notified and the grace period elapses. Workflow state written by
+    # ratchet_widget_auth_levels; not audited (the audited change is required_auth_level itself).
+    pending_auth_level = models.PositiveSmallIntegerField(choices=WidgetAuthLevel.choices, null=True, blank=True)
+    auth_level_notified_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "channels_experimentchannel"
@@ -233,6 +266,42 @@ class ExperimentChannel(BaseTeamModel):
         if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
             return None
         return widget_versions.get_widget_update_status(self.widget_version)
+
+    @property
+    def widget_auth_level(self) -> "WidgetAuthLevel | None":
+        """The required auth level for embedded widget channels, or None for other platforms.
+
+        `required_auth_level` is only meaningful for EMBEDDED_WIDGET channels; every other
+        platform returns None so callers fall back to their non-widget behaviour.
+        """
+        if self.platform_enum != ChannelPlatform.EMBEDDED_WIDGET:
+            return None
+        return WidgetAuthLevel(self.required_auth_level)
+
+    @property
+    def min_widget_version(self) -> str | None:
+        """Minimum widget version required by this channel's current auth level.
+
+        None for non-widget channels or a NONE-level widget channel (no floor).
+        """
+        level = self.widget_auth_level
+        if level is None:
+            return None
+        return widget_versions.min_version_for_level(level)
+
+    @property
+    def pending_min_widget_version(self) -> str | None:
+        """Minimum widget version the pending auth level will require, if a bump is pending."""
+        if self.pending_auth_level is None:
+            return None
+        return widget_versions.min_version_for_level(self.pending_auth_level)
+
+    @property
+    def pending_auth_level_effective_at(self):
+        """When a pending auth-level increase will be applied, or None if none is pending."""
+        if self.auth_level_notified_at is None:
+            return None
+        return self.auth_level_notified_at + self.AUTH_LEVEL_RATCHET_GRACE
 
     def record_widget_version(self, raw_version: str | None) -> None:
         """Persist the version reported by the widget (x-ocs-widget-version header).

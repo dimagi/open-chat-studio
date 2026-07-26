@@ -7,7 +7,7 @@ from mock.mock import patch
 
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.channels import SlackChannel
+from apps.channels.slack_channel import SlackChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.files.models import File
 from apps.service_providers.messaging_service import SlackService
@@ -59,11 +59,16 @@ def test_handle_user_message(bot_process_input, slack_channel, slack_service):
     )
     response = SlackChannel(slack_channel.experiment, slack_channel, session, slack_service).new_user_message(message)
     assert response.content == "Hi"
+    slack_service.client.chat_postMessage.assert_called_once_with(
+        channel="channel_id",
+        text="Hi",
+        thread_ts="thread_ts",
+    )
 
 
 @pytest.mark.django_db()
 @patch("apps.chat.bots.EventBot.get_user_message")
-@patch("apps.chat.channels.SlackChannel.messaging_service")
+@patch("apps.channels.slack_channel.SlackChannel.messaging_service")
 def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
     get_user_message.return_value = "Hi"
     session = SlackChannel.start_new_session(
@@ -80,7 +85,6 @@ def test_ad_hoc_bot_message(messaging_service, get_user_message, slack_channel):
             to="channel_id",
             platform=ChannelPlatform.SLACK,
             thread_ts="thread_ts",
-            last_activity_at=mock.ANY,
         )
     ]
 
@@ -115,8 +119,12 @@ def test_send_message_to_user_with_file(slack_channel, slack_service):
     slack_service.client.files_upload_v2 = Mock()
     file = make_mock_file("document.pdf", "application/pdf", 2 * 1024 * 1024)
 
-    with patch.object(channel, "send_text_to_user") as mock_send_text:
-        channel.send_message_to_user("Here's your file", files=[file])
+    channel.send_message_to_user("Here's your file", files=[file])
 
-        slack_service.client.files_upload_v2.assert_called_once()
-        mock_send_text.assert_called_once_with("Here's your file")
+    slack_service.client.files_upload_v2.assert_called_once()
+    assert slack_service.client.files_upload_v2.call_args.kwargs["channels"] == "channel_id"
+    slack_service.client.chat_postMessage.assert_called_once_with(
+        channel="channel_id",
+        text="Here's your file",
+        thread_ts="thread_ts",
+    )

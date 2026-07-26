@@ -1,3 +1,4 @@
+import dataclasses
 import json
 
 import django_tables2 as tables
@@ -6,7 +7,9 @@ from django.db.models import F
 from django.template.loader import get_template
 from django.urls import reverse
 from django_tables2 import columns
+from waffle import flag_is_active
 
+from apps.api.session_tokens import issue_session_token
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.generics import actions, chips
 from apps.generics.actions import chip_action
@@ -22,6 +25,29 @@ def session_chat_url(url_name, request, record, value):
 
 def _show_chat_button(request, record):
     return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
+
+
+@dataclasses.dataclass
+class ContinueChatAction(actions.Action):
+    """Continue Chat action. When the chat widget flag is active it opens the session in the embedded
+    widget (a floating popup) instead of linking to the full-page chat UI."""
+
+    template: str = "chatbots/components/continue_chat_action.html"
+
+    def get_context(self, request, record, value):
+        ctxt = super().get_context(request, record, value)
+        if flag_is_active(request, "flag_chat_widget"):
+            ctxt.update(
+                {
+                    "use_widget": True,
+                    "chatbot_id": record.experiment.public_id,
+                    "session_external_id": record.external_id,
+                    "session_token": issue_session_token(record),
+                    "version_number": record.get_experiment_version_number(),
+                    "allow_attachments": record.experiment.file_uploads_enabled,
+                }
+            )
+        return ctxt
 
 
 def _name_label_factory(record, _):
@@ -128,7 +154,7 @@ class ChatbotSessionsTable(tables.Table):
 
     actions = actions.ActionsColumn(
         actions=[
-            actions.Action(
+            ContinueChatAction(
                 url_name="chatbots:chatbot_chat_session",
                 url_factory=session_chat_url,
                 icon_class="fa-solid fa-comment",
@@ -149,17 +175,21 @@ class ChatbotSessionsTable(tables.Table):
 
     def render_participant(self, record):
         template = get_template("generic/chip.html")
-        participant = record.participant
-        chip = chips.Chip(
-            label=str(participant), url=participant.get_link_to_experiment_data(experiment=record.experiment)
-        )
+        chip = record.get_participant_chip(include_link=self._user_has_perm("experiments.view_participant"))
         return template.render({"chip": chip})
 
     def render_chatbot(self, record):
         template = get_template("generic/chip.html")
         chatbot = record.experiment
-        chip = chips.Chip(label=str(chatbot), url=chatbot.get_absolute_url())
+        url = chatbot.get_absolute_url() if self._user_has_perm("experiments.view_experiment") else ""
+        chip = chips.Chip(label=str(chatbot), url=url)
         return template.render({"chip": chip})
+
+    def _user_has_perm(self, perm: str) -> bool:
+        # `request` is only set when the table is built via RequestConfig/SingleTableView; guard
+        # against a direct-instantiation caller, denying the link rather than raising AttributeError.
+        request = getattr(self, "request", None)
+        return bool(request and request.user.has_perm(perm))
 
     class Meta:
         model = ExperimentSession

@@ -1,8 +1,10 @@
 # AI-Assisted Development
 
-This project uses an agentic development workflow built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). Other agentic coding tools (Codex, OpenCode, etc.) can follow the same process.
+This project treats AI-assisted development as a team practice, not just a personal shortcut. For the philosophy behind this approach, see the "How We Build" section in `VISION.md`.
 
-Our shared Claude workflows, commands, and configuration are maintained in the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository. Refer to that repository for setup instructions and usage guidance.
+The development workflow is built around Claude Code and plugin skills, though other agentic coding tools can follow the same process. For tool installation and plugin setup, see [AI Tool Setup](../getting-started/ai-setup.md).
+
+The workflow relies on skills from the [Superpowers plugin](../getting-started/ai-setup.md#superpowers-plugin-for-design-before-code-skills), listed in [Key Skills](#key-skills) below.
 
 ## Recommended Workflow
 
@@ -44,15 +46,11 @@ Once the design is approved, create a detailed implementation plan. In Claude Co
 
 ### 4. Execute
 
-Work through the implementation plan. The agentic tool can assist with code generation, test writing, and iterating on failures. Review and steer each step as you go — the tool is a collaborator, not an autopilot.
+Work through the implementation plan. The agentic tool can assist with code generation, test writing, and iterating on failures. Review and steer each step as you go — the tool is a collaborator, not an autopilot. In Claude Code, use the `test-driven-development` skill to write tests before implementation.
 
 ### 5. Code Review and PR
 
 Before opening a PR, run the project's linters, type checkers, and tests. Use code review agents to catch issues early. Then open a PR following the project's [pull request guidelines](../contributing/pull_requests.md).
-
-## Setup
-
-See [AI Tool Setup](../getting-started/ai-setup.md).
 
 ## Key Skills
 

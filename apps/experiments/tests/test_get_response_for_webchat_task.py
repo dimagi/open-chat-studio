@@ -3,8 +3,8 @@ from unittest.mock import patch
 import pytest
 
 from apps.channels.datamodels import Attachment
+from apps.chat.exceptions import UserReportableError
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.pipelines.exceptions import MessageTooLargeError
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
 
@@ -42,11 +42,11 @@ def test_get_response_for_webchat_task(session):
 
 
 @pytest.mark.django_db()
-def test_message_too_large_sets_user_facing_error(session):
-    with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=MessageTooLargeError("too big")):
+def test_user_reportable_error_sets_user_facing_error(session):
+    with patch("apps.experiments.tasks.WebChannel.new_user_message", side_effect=UserReportableError("nope")):
         response = get_response_for_webchat_task(session.id, session.experiment.id, "Hi")
 
-    assert response["error"] == "too big"
+    assert response["error"] == "nope"
     assert response["user_facing_error"] is True
     assert response["response"] is None
 

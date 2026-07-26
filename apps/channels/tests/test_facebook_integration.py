@@ -4,10 +4,10 @@ from unittest.mock import Mock, patch
 import pytest
 from django.test import override_settings
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import TwilioMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_twilio_message
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import Chat, ChatMessage
 from apps.service_providers.speech_service import SynthesizedAudio
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -56,7 +56,7 @@ class TestTwilio:
     @override_settings(WHATSAPP_S3_AUDIO_BUCKET="123")
     @patch("apps.channels.tasks.validate_twillio_request", Mock())
     @patch("apps.service_providers.speech_service.SpeechService.synthesize_voice")
-    @patch("apps.chat.channels.ChannelBase._get_voice_transcript")
+    @patch("apps.channels.stages.core.QueryExtractionStage._transcribe_voice")
     @patch("apps.service_providers.messaging_service.TwilioService.send_voice_message")
     @patch("apps.service_providers.messaging_service.TwilioService.send_text_message")
     @patch("apps.chat.bots.PipelineBot.process_input")
@@ -65,12 +65,12 @@ class TestTwilio:
         bot_process_input,
         send_text_message,
         send_voice_message,
-        get_voice_transcript_mock,
+        transcribe_voice_mock,
         synthesize_voice_mock,
         incoming_message,
         message_type,
     ):
-        """Test that the twilio integration can use the WhatsappChannel implementation"""
+        """Test that the twilio integration can use the FacebookMessengerChannel implementation"""
         synthesize_voice_mock.return_value = SynthesizedAudio(audio=BytesIO(b"123"), duration=10, format="mp3")
         with (
             patch("apps.service_providers.messaging_service.TwilioService.s3_client"),
@@ -79,7 +79,7 @@ class TestTwilio:
             experiment = ExperimentFactory.create(conversational_consent_enabled=True)
             chat = Chat.objects.create(team=experiment.team)
             bot_process_input.return_value = ChatMessage.objects.create(content="Hi", chat=chat)
-            get_voice_transcript_mock.return_value = "Hi"
+            transcribe_voice_mock.return_value = "Hi"
 
             handle_twilio_message(message_data=incoming_message)
 

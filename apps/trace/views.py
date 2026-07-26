@@ -103,7 +103,7 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
             observations = langfuse_trace.observations or []
             context["langfuse_available"] = True
             context["langfuse_error"] = False
-            root_observations = [o for o in observations if not o.parent_observation_id]
+            root_observations = self._sort_by_start_time([o for o in observations if not o.parent_observation_id])
             child_map = self._build_child_map(observations)
             flattened = self._flatten_observations(root_observations, child_map)
             context["flattened_observations"] = flattened
@@ -133,7 +133,11 @@ class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin,
         for obs in observations:
             if obs.parent_observation_id:
                 child_map[obs.parent_observation_id].append(obs)
-        return dict(child_map)
+        return {parent_id: self._sort_by_start_time(children) for parent_id, children in child_map.items()}
+
+    def _sort_by_start_time(self, observations) -> list:
+        """Sort observations chronologically. Observations without a start_time sort last."""
+        return sorted(observations, key=lambda obs: (obs.start_time is None, obs.start_time))
 
     def _flatten_observations(self, root_observations, child_map) -> list:
         """Return depth-first ordered flat list of {"observation": obs, "depth": int} dicts."""

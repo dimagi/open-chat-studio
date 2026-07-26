@@ -208,25 +208,6 @@ def tool_error_notification(team, tool_name: str, error_message: str, session=No
     )
 
 
-@silence_exceptions(logger, log_message="Failed to create survey deprecation notification")
-def survey_deprecation_notification(team) -> None:
-    """Notify a team that the Surveys feature is being removed."""
-    create_notification(
-        title="Surveys are being removed",
-        message=(
-            "The Surveys feature is deprecated and will be removed on 2026-07-10. "
-            "Surveys are now read-only and are no longer connected to chatbots. "
-            "Please export any survey details you need before then."
-        ),
-        level=LevelChoices.WARNING,
-        team=team,
-        slug="survey-feature-deprecated",
-        # view_survey matches the (now read-only) survey views, so everyone who
-        # can still access the feature is notified — not just survey editors.
-        permissions=["experiments.view_survey"],
-    )
-
-
 @silence_exceptions(logger, log_message="Failed to create deprecated model notification")
 def deprecated_model_notification(
     team,
@@ -290,6 +271,68 @@ def deprecated_widget_version_notification(
         permissions=["bot_channels.change_experimentchannel"],
         links={**affected_chatbots, "Upgrade Guide": docs_url},
     )
+
+
+@silence_exceptions(logger, log_message="Failed to create widget version release notification")
+def widget_version_release_notification(
+    team,
+    version: str,
+    notes: str,
+    changelog_url: str,
+    affected_chatbots: dict[str, str],
+) -> None:
+    """Notify a team that a new embedded chat widget version is available."""
+    message = f"Version {version} of the embedded chat widget is now available."
+    if notes:
+        message += f" {notes}"
+    message += " Update the embed snippet on your site to use the latest version."
+    create_notification(
+        title=f"Chat Widget {version} Released",
+        message=message,
+        level=LevelChoices.INFO,
+        team=team,
+        slug="widget-version-release",
+        # Keyed on the version so each release opens its own notification thread.
+        event_data={"version": version},
+        permissions=["bot_channels.change_experimentchannel"],
+        links={**affected_chatbots, "Release Notes": changelog_url},
+    )
+
+
+@silence_exceptions(logger, log_message="Failed to create widget auth level upgrade notification")
+def widget_auth_level_upgrade_notification(
+    team,
+    affected_chatbots: dict[str, str],
+    min_version: str,
+    effective_date: datetime,
+    docs_url: str,
+) -> bool:
+    """Notify a team that their embedded widget's required auth level will be raised.
+
+    Sent when an upgraded widget is detected, ahead of the ratchet applying. Tells the
+    team the minimum widget version every embed must run before the change takes effect.
+
+    Returns True when the notification was created; a swallowed failure returns None so the
+    caller can keep the affected channels retryable rather than starting the grace clock.
+    """
+    message = (
+        f"{len(affected_chatbots)} chatbot(s) on your team now run an upgraded chat widget. "
+        f"On {effective_date:%d %b %Y} the authentication required from these widgets will be raised. "
+        f"Make sure every embed of these chatbots is on widget version {min_version} or newer before "
+        f"then, or older embeds will stop connecting."
+    )
+    create_notification(
+        title="Chat Widget Authentication Upgrade",
+        message=message,
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="widget-auth-level-upgrade",
+        # Keyed on the target minimum version so a later, higher upgrade opens its own thread.
+        event_data={"min_version": min_version},
+        permissions=["bot_channels.change_experimentchannel"],
+        links={**affected_chatbots, "Upgrade Guide": docs_url},
+    )
+    return True
 
 
 @silence_exceptions(logger, log_message="Failed to create deleted model notification")

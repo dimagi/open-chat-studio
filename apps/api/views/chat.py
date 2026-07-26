@@ -25,9 +25,9 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token
-from apps.channels.channels_v2.api_channel import ApiChannel
+from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
-from apps.channels.models import ExperimentChannel
+from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
 from apps.channels.widget_versions import (
     WIDGET_VERSION_HEADER,
@@ -39,7 +39,7 @@ from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
-from apps.files.models import File
+from apps.files.models import File, FilePurpose
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
@@ -154,8 +154,10 @@ def chat_upload_file(request, session_id):
             team=session.team,
             content_size=file.size,
             content_type=File.get_content_type(file),
+            # 24h expiry is an abandoned-upload guard; it is cleared once the file is
+            # attached to a message (see the send handler below).
             expiry_date=expiry_date,
-            purpose="assistant",
+            purpose=FilePurpose.MESSAGE_MEDIA,
             metadata={
                 "session_id": str(session_id),
                 "uploaded_by": uploaded_by,
@@ -175,23 +177,27 @@ def chat_upload_file(request, session_id):
     return Response({"files": uploaded_files}, status=status.HTTP_201_CREATED)
 
 
-def _issue_or_opt_out_session_token(request, session, use_session_token, session_data):
-    """Issue a session token, or opt the session out of token enforcement.
-
-    `use_session_token` is the request preference (True/False/None). A token-aware
-    widget always sends it explicitly (True), so an unset field from widget traffic
-    means a pre-token widget — opt out. Widget traffic is identified by the
-    x-ocs-widget-version header (sent by 0.5.1+) or, for older widgets that send no
-    header, by `session_data.source`. Everything else (direct API consumers) defaults
-    to enforced. Returns the token, or None when opted out.
-    """
-    if use_session_token is None:
-        use_session_token = not is_widget_request(request, session_data)
-    if use_session_token:
-        return issue_session_token(session)
+def _opt_out_session_token(session):
     session.session_token_required = False
     session.save(update_fields=["session_token_required"])
     return None
+
+
+def _issue_or_opt_out_session_token(session, channel):
+    """Issue a session token, or opt the session out of token enforcement.
+
+    Driven solely by the channel's durable `required_auth_level` policy:
+      - SESSION_TOKEN (the default, and every non-widget channel) → issue and enforce
+        a token
+      - EMBED_KEY / NONE → opt out (the embed key, if required, is enforced by the
+        permission classes)
+
+    Returns the token, or None when opted out.
+    """
+    level = channel.widget_auth_level
+    if level is None or level == WidgetAuthLevel.SESSION_TOKEN:
+        return issue_session_token(session)
+    return _opt_out_session_token(session)
 
 
 def _resolve_experiment_channel(request, team, session_data):
@@ -200,8 +206,8 @@ def _resolve_experiment_channel(request, team, session_data):
     Embed-key auth resolves to the widget's own channel; for widget traffic we also
     record the reported version (or a placeholder for pre-0.5.1 widgets that send no
     header). Recording is gated on `is_widget_request` so a non-widget caller using an
-    embed key isn't tagged with a placeholder version. Everything else (direct API
-    consumers) falls back to the team API channel.
+    embed key isn't tagged with a placeholder version. Everything else (authenticated
+    users) falls back to the team API channel.
     """
     if not isinstance(request.auth, ExperimentChannel):
         return ExperimentChannel.objects.get_team_api_channel(team)
@@ -374,7 +380,7 @@ def chat_start_session(request):
         session.state = session_data
         session.save(update_fields=["state"])
 
-    session_token = _issue_or_opt_out_session_token(request, session, data.get("use_session_token"), session_data)
+    session_token = _issue_or_opt_out_session_token(session, experiment_channel)
 
     # Prepare response data
     response_data = {

@@ -1,3 +1,7 @@
+# WhatsApp payloads always carry the user's business-scoped user ID (BSUID) as `from_user_id`.
+BSUID = "US.13491208655302741918"
+
+
 def _vnd(
     *,
     author_name="User",
@@ -55,6 +59,7 @@ def text_message():
                     unread_count=1,
                 ),
                 "from": "27456897512",
+                "from_user_id": BSUID,
                 "id": "ABCDEFGHIJKL_Ags-sF0gx5ts0DDMxw",
                 "text": {"body": "Hi there!"},
                 "timestamp": "1706709716",
@@ -128,6 +133,7 @@ def audio_message():
         "messages": [
             {
                 "from": "27826419977",
+                "from_user_id": BSUID,
                 "id": "wamid.test",
                 "timestamp": "1773300527",
                 "type": "audio",
@@ -147,6 +153,7 @@ def image_message(caption="Look at this!"):
         "messages": [
             {
                 "from": "27456897512",
+                "from_user_id": BSUID,
                 "id": "ABCDimgXYZ",
                 "timestamp": "1706709716",
                 "type": "image",
@@ -168,6 +175,7 @@ def document_message(caption="Here's the report", filename="report.pdf", mime_ty
         "messages": [
             {
                 "from": "27456897512",
+                "from_user_id": BSUID,
                 "id": "ABCDdocXYZ",
                 "timestamp": "1706709716",
                 "type": "document",
@@ -179,6 +187,42 @@ def document_message(caption="Here's the report", filename="report.pdf", mime_ty
                     "sha256": "docghi789",
                     "caption": caption,
                 },
+            }
+        ],
+    }
+
+
+def system_user_changed_number_message():
+    """A non-conversational ``system`` payload (e.g. user_changed_number)
+    that Turn.io forwards from Meta. Note: no top-level ``contacts`` array."""
+    return {
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.sys456",
+                "timestamp": "1706709716",
+                "type": "system",
+                "system": {
+                    "body": "User changed number from 27000000000 to 27456897512",
+                    "new_wa_id": "27456897512",
+                    "type": "user_changed_number",
+                },
+            }
+        ],
+    }
+
+
+def unsupported_message():
+    """A non-conversational ``unsupported`` payload (e.g. unknown message type)
+    that Turn.io forwards from Meta. Note: no top-level ``contacts`` array."""
+    return {
+        "messages": [
+            {
+                "from": "27456897512",
+                "id": "wamid.unsup2",
+                "timestamp": "1706709716",
+                "type": "unsupported",
+                "errors": [{"code": 131051, "title": "Message type is not currently supported."}],
             }
         ],
     }
@@ -200,6 +244,7 @@ def voice_message():
                     unread_count=31,
                 ),
                 "from": "27456897512",
+                "from_user_id": BSUID,
                 "id": "ABGKLKLKLZd_Ags-DSDSdsWQUpsLqg",
                 "timestamp": "1707394065",
                 "type": "voice",

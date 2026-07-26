@@ -1,7 +1,10 @@
+import functools
+import hmac
 import logging
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import ValidationError
@@ -15,28 +18,40 @@ from django.views.decorators.http import require_http_methods
 from django_htmx.http import push_url
 from field_audit.models import AuditEvent
 
-from apps.admin.forms import DateRangeForm, DateRanges, FindProviderByKeyForm, FlagUpdateForm, OcsConfigurationForm
+from apps.admin.forms import (
+    DateRangeForm,
+    DateRanges,
+    FindProviderByKeyForm,
+    FlagUpdateForm,
+    OcsConfigurationForm,
+    TeamMetadataImportForm,
+)
+from apps.admin.imports import import_team_metadata_from_csv
 from apps.admin.models import OcsConfiguration
+from apps.admin.provider_keys import get_provider_key_fingerprints
 from apps.admin.queries import (
+    build_usage_report,
     get_message_stats,
     get_participant_stats,
     get_period_totals,
     get_platform_breakdown,
     get_team_activity_summary,
+    get_team_stats,
     get_top_experiments,
     get_top_teams,
     get_whatsapp_message_stats,
     get_whatsapp_numbers,
+    team_metadata_to_csv,
     top_experiments_to_csv,
     top_teams_to_csv,
     usage_to_csv,
     whatsapp_message_stats_to_csv,
 )
 from apps.admin.serializers import StatsSerializer
-from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Participant
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.teams.flags import get_all_flag_info
+from apps.teams.forms import TeamMetadataForm
+from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Flag, Team
 
 logger = logging.getLogger("ocs.admin")
@@ -45,6 +60,34 @@ User = get_user_model()
 
 is_staff = user_passes_test(lambda u: u.is_staff, login_url="/404")
 is_superuser = user_passes_test(lambda u: u.is_superuser, login_url="/404")
+
+
+def _has_valid_reporting_token(request):
+    """True if the request carries the configured provider-reporting bearer token."""
+    token = settings.PROVIDER_REPORTING_API_TOKEN
+    if not token:
+        return False
+    prefix = "Bearer "
+    header = request.headers.get("Authorization", "")
+    if not header.startswith(prefix):
+        return False
+    return hmac.compare_digest(header.removeprefix(prefix).encode("utf-8"), token.encode("utf-8"))
+
+
+def superuser_or_reporting_token(view_func):
+    """Allow a valid reporting token, else fall back to the superuser-session check.
+
+    Lets headless consumers authenticate with the shared token while the browser
+    admin UI keeps working via the session (same 302-to-/404 for everyone else).
+    """
+
+    @functools.wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if _has_valid_reporting_token(request):
+            return view_func(request, *args, **kwargs)
+        return is_superuser(view_func)(request, *args, **kwargs)
+
+    return _wrapped
 
 
 @is_staff
@@ -93,62 +136,197 @@ def _compute_growth(current, previous):
     return metrics
 
 
+def _validated_range(request):
+    """Return (start, end, start_timestamp, end_timestamp) for the request, or None if invalid.
+
+    Used by the dashboard skeleton and each section endpoint so they share a single
+    interpretation of the date-range form.
+    """
+    form = _get_form(request)
+    if not form.is_valid():
+        return None
+    start, end = form.get_date_range()
+    start_timestamp, end_timestamp = _make_aware_range(start, end)
+    return start, end, start_timestamp, end_timestamp
+
+
 @is_staff
 def usage_chart(request):
+    """Render the dashboard skeleton: export buttons plus placeholders that lazy-load each section.
+
+    This view runs no aggregation queries, so it returns immediately even when the
+    underlying data is expensive. Each section below loads independently, so a slow
+    or failing section can't take down the rest of the dashboard (or the buttons).
+    """
     form = _get_form(request)
     if not form.is_valid():
         return redirect("ocs_admin:home")
 
     start, end = form.get_date_range()
-    start_timestamp, end_timestamp = _make_aware_range(start, end)
-    usage_data = StatsSerializer(get_message_stats(start_timestamp, end_timestamp), many=True)
-    participant_data = StatsSerializer(get_participant_stats(start_timestamp, end_timestamp), many=True)
-    whatsapp_stats = get_whatsapp_message_stats(start_timestamp, end_timestamp)
-
-    period_length = end - start
-    prev_end = start
-    prev_start = prev_end - period_length
-    prev_start_timestamp, prev_end_timestamp = _make_aware_range(prev_start, prev_end)
-
-    current_totals = get_period_totals(start_timestamp, end_timestamp)
-    previous_totals = get_period_totals(prev_start_timestamp, prev_end_timestamp)
-    growth_metrics = _compute_growth(current_totals, previous_totals)
-
-    top_teams = get_top_teams(start_timestamp, end_timestamp)
-    platform_breakdown = get_platform_breakdown(start_timestamp, end_timestamp)
-    team_activity = get_team_activity_summary(start_timestamp, end_timestamp)
-    top_experiments = get_top_experiments(start_timestamp, end_timestamp)
-
     url = reverse("ocs_admin:home")
     query_data = {
         "start": start,
         "end": end,
         "range_type": form.cleaned_data["range_type"],
     }
-    response = TemplateResponse(
+    response = TemplateResponse(request, "admin/usage_chart.html", context={})
+    return push_url(response, f"{url}?{urlencode(query_data)}")
+
+
+def _render_section(request, template, context_key, query_fn):
+    """Validate the date range and render a single-query dashboard section.
+
+    Returns an empty response on an invalid date range so a bad form value can't
+    500 a lazy-loaded fragment.
+    """
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+    _, _, start_timestamp, end_timestamp = date_range
+    return TemplateResponse(request, template, context={context_key: query_fn(start_timestamp, end_timestamp)})
+
+
+@is_staff
+def section_growth(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    _, _, start_timestamp, end_timestamp = date_range
+    # Previous period: an equal-length window ending exactly where the current one begins
+    # (exclusive), so the boundary day isn't counted in both windows.
+    period = end_timestamp - start_timestamp
+    current_totals = get_period_totals(start_timestamp, end_timestamp)
+    previous_totals = get_period_totals(start_timestamp - period, start_timestamp)
+    return TemplateResponse(
         request,
-        "admin/usage_chart.html",
+        "admin/sections/growth.html",
+        context={"growth_metrics": _compute_growth(current_totals, previous_totals)},
+    )
+
+
+@is_staff
+def section_team_activity(request):
+    return _render_section(request, "admin/sections/team_activity.html", "team_activity", get_team_activity_summary)
+
+
+@is_staff
+def section_charts(request):
+    date_range = _validated_range(request)
+    if date_range is None:
+        return HttpResponse("")
+
+    start, end, start_timestamp, end_timestamp = date_range
+    usage_data = StatsSerializer(get_message_stats(start_timestamp, end_timestamp), many=True)
+    participant_data = StatsSerializer(get_participant_stats(start_timestamp, end_timestamp), many=True)
+    return TemplateResponse(
+        request,
+        "admin/sections/charts.html",
         context={
             "chart_data": {
                 "message_data": usage_data.data,
-                "participant_data": {
-                    "data": participant_data.data,
-                    "start_value": Participant.objects.filter(created_at__lt=start_timestamp)
-                    .exclude(platform=ChannelPlatform.EVALUATIONS)
-                    .count(),
-                },
+                "participant_data": participant_data.data,
                 "start": start.isoformat(),
                 "end": end.isoformat(),
             },
-            "whatsapp_stats": whatsapp_stats,
-            "growth_metrics": growth_metrics,
-            "top_teams": top_teams,
-            "platform_breakdown": platform_breakdown,
-            "team_activity": team_activity,
-            "top_experiments": top_experiments,
         },
     )
-    return push_url(response, f"{url}?{urlencode(query_data)}")
+
+
+@is_staff
+def section_top_teams(request):
+    return _render_section(request, "admin/sections/top_teams.html", "top_teams", get_top_teams)
+
+
+def _team_stat_tiles(team):
+    stats = get_team_stats(team)
+    return [
+        (label, stats[key])
+        for key, label in [
+            ("chatbots", "Chatbots"),
+            ("participants", "Participants"),
+            ("sessions", "Sessions"),
+            ("messages", "Messages"),
+            ("members", "Members"),
+            ("pending_invitations", "Pending Invites"),
+            ("collections", "Collections"),
+            ("evaluation_configs", "Eval Configs"),
+            ("evaluation_runs", "Eval Runs"),
+            ("evaluation_datasets", "Eval Datasets"),
+        ]
+    ]
+
+
+@is_staff
+def team_detail(request, slug):
+    """HTMX panel for a single team: resource counts plus an editable metadata form.
+
+    Rendered inline on the Manage Team Metadata page. Any direct (non-HTMX) request
+    redirects there with the team preselected so the URL stays shareable and never
+    surfaces the bare panel fragment without page chrome.
+    """
+    team = get_object_or_404(Team, slug=slug)
+
+    form = TeamMetadataForm(request.POST or None, team=team)
+    saved = False
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        saved = True
+        form = TeamMetadataForm(team=team)  # re-bind unbound so the panel reflects saved values
+
+    if not request.htmx:
+        return redirect(f"{reverse('ocs_admin:team_metadata')}?team={team.slug}")
+
+    return TemplateResponse(
+        request,
+        "admin/_team_detail_panel.html",
+        context={
+            "team": team,
+            "stat_tiles": _team_stat_tiles(team),
+            "form": form,
+            "saved": saved,
+        },
+    )
+
+
+@is_staff
+def team_metadata(request):
+    """Manage-team-metadata page: import/export CSV plus a team search that loads a
+    per-team detail/metadata panel inline via HTMX."""
+    import_form = TeamMetadataImportForm(request.POST or None, request.FILES or None)
+    result = None
+    if request.method == "POST" and import_form.is_valid():
+        result = import_team_metadata_from_csv(import_form.cleaned_data["file"])
+
+    slug = request.GET.get("team")
+    initial_team = Team.objects.filter(slug=slug).first() if slug else None
+
+    return TemplateResponse(
+        request,
+        "admin/team_metadata.html",
+        context={
+            "active_tab": "admin",
+            "import_form": import_form,
+            "result": result,
+            "metadata_fields": get_team_metadata_fields(),
+            "initial_team": initial_team,
+        },
+    )
+
+
+@is_staff
+def section_platform(request):
+    return _render_section(request, "admin/sections/platform.html", "platform_breakdown", get_platform_breakdown)
+
+
+@is_staff
+def section_top_experiments(request):
+    return _render_section(request, "admin/sections/top_experiments.html", "top_experiments", get_top_experiments)
+
+
+@is_staff
+def section_whatsapp(request):
+    return _render_section(request, "admin/sections/whatsapp.html", "whatsapp_stats", get_whatsapp_message_stats)
 
 
 @is_staff
@@ -215,6 +393,13 @@ def export_top_experiments(request):
     response = HttpResponse(top_experiments_to_csv(start_timestamp, end_timestamp), content_type="text/csv")
     export_filename = f"top_experiments_{start.isoformat()}_{end.isoformat()}.csv"
     response["Content-Disposition"] = f'attachment; filename="{export_filename}"'
+    return response
+
+
+@is_staff
+def export_team_metadata(request):
+    response = HttpResponse(team_metadata_to_csv(), content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="team_metadata.csv"'
     return response
 
 
@@ -323,7 +508,9 @@ def flag_history(request, flag_name):
     )
 
 
-@is_superuser
+# Staff-level: team names/slugs are already visible to staff via the dashboard's
+# top-teams table and the team_detail page, which drive this search endpoint.
+@is_staff
 def teams_api(request):
     query = request.GET.get("q", "").strip()
 
@@ -338,7 +525,7 @@ def teams_api(request):
 
     teams = teams.order_by("name")[:20]  # Limit to 20 results
 
-    data = [{"value": team.id, "text": team.name} for team in teams]
+    data = [{"value": team.id, "text": team.name, "slug": team.slug} for team in teams]
     return JsonResponse(data, safe=False)
 
 
@@ -359,6 +546,30 @@ def users_api(request):
 
     data = [{"value": user.id, "text": user.username} for user in users]
     return JsonResponse(data, safe=False)
+
+
+@superuser_or_reporting_token
+def provider_usage_api(request):
+    """Cross-team LLM usage over a date range: per-team token totals merged with
+    per-model cost detail where cost tracking is enabled. Requires `range_type`,
+    `start`, and `end` query params (as the dashboard date-range form).
+    """
+    result = _validated_range(request)
+    if result is None:
+        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
+    _, _, start_timestamp, end_timestamp = result
+    return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
+
+
+@superuser_or_reporting_token
+def provider_keys_api(request):
+    """Masked API-key fingerprint → team mapping across all LLM providers, so a
+    report can attribute provider-side cost (keyed by the provider's redacted
+    key) back to the owning team. Never returns the raw secret.
+    """
+    return JsonResponse(
+        {"providers": list(get_provider_key_fingerprints()), "metadata_fields": get_team_metadata_fields()}
+    )
 
 
 @is_superuser

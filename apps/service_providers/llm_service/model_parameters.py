@@ -56,7 +56,11 @@ class OpenAIVerbosityParameter(TextChoices):
 
 
 class LLMModelParamBase(BaseModel):
-    pass
+    @classmethod
+    def filter_overrides(cls, overrides: dict) -> dict:
+        """Return only the overrides that correspond to declared fields on this model."""
+        known_fields = set(cls.model_fields.keys())
+        return {k: v for k, v in overrides.items() if k in known_fields}
 
 
 class BasicParameters(LLMModelParamBase):
@@ -135,6 +139,16 @@ class GPT52Parameters(LLMModelParamBase):
             widget=Widgets.range, visible_when=VisibleWhen(field="effort", value="none"), default_on_show=1.0
         ),
     )
+
+    @classmethod
+    def filter_overrides(cls, overrides: dict) -> dict:
+        """Drop temperature and top_p overrides unless effort is 'none'."""
+        filtered = super().filter_overrides(overrides)
+        effective_effort = filtered.get("effort", cls.model_fields["effort"].default)
+        if effective_effort != "none":
+            filtered.pop("temperature", None)
+            filtered.pop("top_p", None)
+        return filtered
 
     @field_validator("temperature", mode="before")
     def validate_temperature(cls, value: float, info):

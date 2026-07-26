@@ -42,6 +42,29 @@ def test_edit_participant_data(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_single_participant_home_with_experiment_renders_session_table(client, team_with_users):
+    """Regression: this page builds ChatbotSessionsTable without RequestConfig, so render_chatbot
+    must not assume self.request is set."""
+    participant = ParticipantFactory.create(team=team_with_users)
+    session = ExperimentSessionFactory.create(
+        participant=participant, team=team_with_users, experiment__team=team_with_users
+    )
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+
+    url = reverse(
+        "participants:single-participant-home-with-experiment",
+        kwargs={
+            "team_slug": team_with_users.slug,
+            "participant_id": participant.id,
+            "experiment_id": session.experiment.id,
+        },
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
 @patch("apps.participants.views.trigger_bot_message_task")
 def test_trigger_bot(mock_task, client, team_with_users):
     """Test that a bot can be triggered for a participant"""

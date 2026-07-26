@@ -31,27 +31,7 @@ def profile(request):
     if request.method == "POST":
         form = CustomUserChangeForm(request.POST, instance=request.user)
         if form.is_valid():
-            user = form.save(commit=False)
-            user_before_update = CustomUser.objects.get(pk=user.pk)
-            need_to_confirm_email = (
-                user_before_update.email != user.email
-                and require_email_confirmation()
-                and not user_has_confirmed_email_address(user, user.email)
-            )
-            if need_to_confirm_email:
-                # don't change it but instead send a confirmation email
-                # email will be changed by signal when confirmed
-                new_email = user.email
-                EmailAddress.objects.add_email(request, user, new_email, confirm=True)
-                user.email = user_before_update.email
-                # recreate the form to avoid populating the previous email in the returned page
-                form = CustomUserChangeForm(instance=user)
-            user.save()
-
-            user_language = user.language
-            if user_language and user_language != translation.get_language():
-                translation.activate(user_language)
-            messages.success(request, _("Profile successfully saved."))
+            form = _save_profile_form(request, form)
     else:
         form = CustomUserChangeForm(instance=request.user)
 
@@ -87,6 +67,58 @@ def profile(request):
             "social_accounts": SocialAccount.objects.filter(user=request.user),
         },
     )
+
+
+def _save_profile_form(request, form):
+    """Persist a valid profile form, handling email-change side effects.
+
+    Returns the form to render. When an email confirmation is sent the form is recreated
+    so the (reverted) previous email is shown rather than the unconfirmed one.
+    """
+    user = form.save(commit=False)
+    previous_email = CustomUser.objects.get(pk=user.pk).email
+    email_changed = previous_email != user.email
+    confirmation_sent = email_changed and _send_email_confirmation_if_required(request, user, previous_email)
+    if confirmation_sent:
+        form = CustomUserChangeForm(instance=user)
+    user.save()
+    if email_changed and not confirmation_sent:
+        _sync_primary_email_address(user)
+
+    user_language = user.language
+    if user_language and user_language != translation.get_language():
+        translation.activate(user_language)
+    messages.success(request, _("Profile successfully saved."))
+    return form
+
+
+def _send_email_confirmation_if_required(request, user, previous_email):
+    """Send a confirmation email for a changed address when verification is required.
+
+    When confirmation is needed, the user's email is reverted to ``previous_email`` (it is
+    updated by the ``email_confirmed`` signal once confirmed) and ``True`` is returned.
+    Returns ``False`` when no confirmation is required.
+    """
+    if not (require_email_confirmation() and not user_has_confirmed_email_address(user, user.email)):
+        return False
+    EmailAddress.objects.add_email(request, user, user.email, confirm=True)
+    user.email = previous_email
+    return True
+
+
+def _sync_primary_email_address(user):
+    """Keep allauth's ``EmailAddress`` records in sync after a profile email change.
+
+    Ensures a row exists for the new email (created unverified if absent) and promotes it
+    to primary only when it is already verified, so an unverified address is never made
+    primary. See ``apps/users/signals.py`` for the equivalent behavior when a brand-new
+    email is confirmed.
+    """
+    email_address, _created = EmailAddress.objects.get_or_create(
+        user=user, email__iexact=user.email, defaults={"email": user.email}
+    )
+    if email_address.verified:
+        email_address.set_as_primary()
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)

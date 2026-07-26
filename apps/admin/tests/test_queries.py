@@ -7,22 +7,33 @@ from apps.admin.queries import (
     get_period_totals,
     get_platform_breakdown,
     get_team_activity_summary,
+    get_team_stats,
     get_top_experiments,
     get_top_teams,
     get_usage_data,
     get_whatsapp_message_stats,
     get_whatsapp_number_data,
+    team_metadata_to_csv,
+    top_teams_to_csv,
+    usage_to_csv,
 )
 from apps.admin.views import _compute_growth
 from apps.channels.models import ChannelPlatform
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
+    EvaluationDatasetFactory,
+    EvaluationRunFactory,
+)
 from apps.utils.factories.experiment import (
     ChatMessageFactory,
+    ExperimentFactory,
     ExperimentSessionFactory,
     ParticipantFactory,
 )
-from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.traces import TraceFactory
 
 
@@ -59,6 +70,119 @@ class TestGetTopTeams:
         assert result[0]["participant_count"] == 1
         assert result[1]["team"] == "Team B"
         assert result[1]["msg_count"] == 1
+
+
+@pytest.mark.django_db()
+class TestTeamMetadataExports:
+    def test_top_teams_csv_includes_metadata_columns(self, date_range, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        start, end = date_range
+        team = TeamFactory.create(name="Team A", metadata={"team_owner": "Jane Doe"})
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+
+        csv_output = top_teams_to_csv(start, end)
+        lines = csv_output.strip().splitlines()
+        assert lines[0] == "Team,Messages,Sessions,Participants,Team Owner"
+        assert lines[1].startswith("Team A,")
+        assert lines[1].endswith(",Jane Doe")
+
+    def test_usage_csv_includes_metadata_columns(self, date_range, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        start, end = date_range
+        team = TeamFactory.create(name="Team A", metadata={"team_owner": "Jane Doe"})
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+        TraceFactory.create(
+            team=team,
+            experiment=session.experiment,
+            session=session,
+            participant=session.participant,
+            status=TraceStatus.SUCCESS,
+            n_total_tokens=100,
+        )
+
+        csv_output = usage_to_csv(start, end)
+        lines = csv_output.strip().splitlines()
+        assert lines[0] == "Team,Run Count,Total Tokens,Team Owner"
+        assert lines[1] == "Team A,1,100,Jane Doe"
+
+    def test_team_metadata_csv_lists_all_teams(self, settings):
+        settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
+        TeamFactory.create(name="Team A", slug="team-a", metadata={"team_owner": "Jane Doe"})
+        TeamFactory.create(name="Team B", slug="team-b", metadata={})
+
+        csv_output = team_metadata_to_csv()
+        lines = csv_output.strip().splitlines()
+        assert lines[0] == "Team,Slug,Team Owner"
+        assert "Team A,team-a,Jane Doe" in lines
+        assert "Team B,team-b," in lines
+
+
+@pytest.mark.django_db()
+class TestGetTeamStats:
+    def test_resource_counts_scoped_to_team(self):
+        # No session/channel factories here: those spawn extra experiments, which would
+        # make the chatbot count non-deterministic.
+        team = TeamFactory.create()
+        other = TeamFactory.create()
+
+        ExperimentFactory.create(team=team)
+        ExperimentFactory.create(team=other)  # excluded: different team
+        CollectionFactory.create(team=team)
+        MembershipFactory.create(team=team)
+        EvaluationConfigFactory.create(team=team)
+        EvaluationRunFactory.create(team=team)
+        EvaluationDatasetFactory.create(team=team)
+
+        stats = get_team_stats(team)
+        assert stats["chatbots"] == 1
+        assert stats["collections"] == 1
+        assert stats["members"] == 1
+        assert stats["evaluation_configs"] == 1
+        assert stats["evaluation_runs"] == 1
+        assert stats["evaluation_datasets"] == 1
+
+    def test_activity_counts(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+        ChatMessageFactory.create(chat=session.chat, message_type="ai", content="hello")
+        ParticipantFactory.create(team=team)
+
+        stats = get_team_stats(team)
+        assert stats["messages"] == 2
+        assert stats["sessions"] == 1
+        # The session factory creates a participant; ParticipantFactory adds one more.
+        assert stats["participants"] == 2
+
+    def test_excludes_evaluations_platform(self):
+        team = TeamFactory.create()
+        eval_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.EVALUATIONS)
+        eval_session = ExperimentSessionFactory.create(
+            team=team,
+            experiment=eval_channel.experiment,
+            experiment_channel=eval_channel,
+            platform=ChannelPlatform.EVALUATIONS,
+        )
+        ChatMessageFactory.create(chat=eval_session.chat, message_type="human", content="hi")
+        ParticipantFactory.create(team=team, platform=ChannelPlatform.EVALUATIONS)
+
+        stats = get_team_stats(team)
+        assert stats["messages"] == 0
+        assert stats["sessions"] == 0
+        # The evaluations participant is excluded; only the session's default-platform one counts.
+        assert stats["participants"] == 1
+
+    def test_counts_null_platform_sessions_and_messages(self):
+        # ExperimentSession.platform is nullable; a NULL platform isn't the evaluations
+        # platform, so it must still be counted (a plain exclude would silently drop it).
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, experiment__team=team, platform=None)
+        ChatMessageFactory.create(chat=session.chat, message_type="human", content="hi")
+
+        stats = get_team_stats(team)
+        assert stats["sessions"] == 1
+        assert stats["messages"] == 1
 
 
 @pytest.mark.django_db()
@@ -285,7 +409,7 @@ class TestGetUsageData:
         self._make_trace(session=session_a, tokens=50)
         self._make_trace(session=session_b, tokens=200)
 
-        rows = {team: (run_count, tokens) for team, run_count, tokens in get_usage_data(start, end)}
+        rows = {team: (run_count, tokens) for team, run_count, tokens, _ in get_usage_data(start, end)}
         assert rows["Team A"] == (2, 150)
         assert rows["Team B"] == (1, 200)
 
@@ -324,7 +448,7 @@ class TestGetUsageData:
         self._make_trace(session=eval_session, tokens=99999)
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 100)]
+        assert rows == [("T", 1, 100, {})]
 
     def test_excludes_pending_traces_but_includes_errors(self, date_range):
         start, end = date_range
@@ -335,7 +459,7 @@ class TestGetUsageData:
         self._make_trace(session=session, status=TraceStatus.PENDING, tokens=99999)
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 2, 15)]
+        assert rows == [("T", 2, 15, {})]
 
     def test_handles_null_token_counts(self, date_range):
         start, end = date_range
@@ -350,7 +474,7 @@ class TestGetUsageData:
         )
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 0)]
+        assert rows == [("T", 1, 0, {})]
 
     def test_does_not_merge_teams_sharing_a_display_name(self, date_range):
         # Team.name has no uniqueness constraint, so grouping by name alone would
@@ -384,7 +508,7 @@ class TestGetUsageData:
         Trace.objects.filter(id=in_window.id).update(timestamp=start + timedelta(seconds=1))
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 10)]
+        assert rows == [("T", 1, 10, {})]
 
 
 class TestComputeGrowth:

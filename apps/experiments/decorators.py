@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
-from apps.teams.decorators import TeamAccessDenied
+from apps.teams.decorators import ENFORCES_TEAM_AUTH_ATTR, TeamAccessDenied
 
 MAX_AGE = 180 * 24 * 60 * 60  # 6 months
 
@@ -44,6 +44,9 @@ def experiment_session_view(allowed_states=None):
                 return _redirect_for_state(request, team_slug)
             return view_func(request, team_slug, experiment_id, session_id, **kwargs)
 
+        # Public-chat access is still team-scoped: the view requires request.team and scopes
+        # the experiment/session lookups to it. Mark it so the team-auth guard recognises it.
+        setattr(decorated_view, ENFORCES_TEAM_AUTH_ATTR, True)
         return decorated_view
 
     return decorator

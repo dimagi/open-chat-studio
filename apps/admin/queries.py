@@ -3,15 +3,24 @@ import hashlib
 import io
 from collections import defaultdict
 from datetime import datetime
+from decimal import Decimal
 
-from django.db.models import Count, Q, Sum, Value
+from django.db.models import Count, DecimalField, Q, Sum, Value
 from django.db.models.functions import Coalesce, TruncDate
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
-from apps.experiments.models import ExperimentSession, Participant
+from apps.cost_tracking.models import UsageRecord
+from apps.documents.models import Collection
+from apps.evaluations.models import EvaluationConfig, EvaluationDataset, EvaluationRun
+from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
 from apps.trace.models import Trace, TraceStatus
+
+_ZERO = Decimal(0)
+_COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
+_QUANTITY_FIELD = DecimalField(max_digits=18, decimal_places=4)
 
 
 def get_message_stats(start: datetime, end: datetime):
@@ -39,7 +48,13 @@ def get_participant_stats(start: datetime, end: datetime):
 
 
 def usage_to_csv(start: datetime, end: datetime):
-    return _write_data_to_csv(["Team", "Run Count", "Total Tokens"], get_usage_data(start, end))
+    metadata_fields = get_team_metadata_fields()
+    headers = ["Team", "Run Count", "Total Tokens"] + [field["label"] for field in metadata_fields]
+    rows = (
+        (team_name, run_count, total_tokens, *(metadata.get(field["key"], "") for field in metadata_fields))
+        for team_name, run_count, total_tokens, metadata in get_usage_data(start, end)
+    )
+    return _write_data_to_csv(headers, rows)
 
 
 def get_usage_data(start: datetime, end: datetime):
@@ -53,7 +68,7 @@ def get_usage_data(start: datetime, end: datetime):
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
         .exclude(session__platform=ChannelPlatform.EVALUATIONS)
-        .values("team_id", "team__name")
+        .values("team_id", "team__name", "team__metadata")
         .annotate(
             run_count=Count("id"),
             total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
@@ -61,7 +76,109 @@ def get_usage_data(start: datetime, end: datetime):
         .order_by("-run_count", "team__name")
     )
     for data in usage_data:
-        yield data["team__name"], data["run_count"], data["total_tokens"]
+        yield data["team__name"], data["run_count"], data["total_tokens"], data["team__metadata"] or {}
+
+
+def get_token_usage_by_team(start: datetime, end: datetime):
+    """Per-team run count + total tokens from settled, non-eval traces."""
+    return (
+        Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
+        .exclude(status=TraceStatus.PENDING)
+        .exclude(session__platform=ChannelPlatform.EVALUATIONS)
+        .values("team_id", "team__name", "team__slug")
+        .annotate(
+            run_count=Count("id"),
+            total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
+        )
+        .order_by("-run_count", "team__name")
+    )
+
+
+def get_cost_usage_by_team(start: datetime, end: datetime):
+    """Per (team, provider, model, currency) cost + tokens from UsageRecord."""
+    return (
+        UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
+        .values("team_id", "provider_type", "model_name", "currency")
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+        )
+        .order_by("team_id", "-cost")
+    )
+
+
+def build_usage_report(start: datetime, end: datetime) -> dict:
+    """Cross-team usage: per-team token totals (always populated) merged with
+    per-model cost detail from recorded UsageRecords.
+
+    `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
+    records in more than one currency and summing them would be meaningless.
+
+    Each team carries a `metadata` object with the configured staff-only team
+    metadata fields (`TEAM_METADATA_FIELDS`); their definitions are echoed at the
+    top level as `metadata_fields` so a consumer can build labelled columns.
+    """
+    metadata_fields = get_team_metadata_fields()
+    token_rows = list(get_token_usage_by_team(start, end))
+    cost_rows = list(get_cost_usage_by_team(start, end))
+
+    team_meta = {row["team_id"]: (row["team__name"], row["team__slug"]) for row in token_rows}
+    missing_ids = {row["team_id"] for row in cost_rows} - team_meta.keys()
+    if missing_ids:
+        missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug")
+        team_meta.update({tid: (name, slug) for tid, name, slug in missing})
+
+    # Fetch metadata separately (keyed by PK): grouping the aggregate query by
+    # the JSON `metadata` column would be needlessly expensive, and metadata is
+    # per-team so it never affects the grouping anyway.
+    metadata_by_team = dict(Team.objects.filter(id__in=list(team_meta)).values_list("id", "metadata"))
+
+    teams: dict[int, dict] = {}
+
+    def _entry(team_id: int) -> dict:
+        if team_id not in teams:
+            name, slug = team_meta.get(team_id, (None, None))
+            metadata = metadata_by_team.get(team_id) or {}
+            teams[team_id] = {
+                "team_id": team_id,
+                "team_name": name,
+                "team_slug": slug,
+                "metadata": {field["key"]: metadata.get(field["key"], "") for field in metadata_fields},
+                "run_count": 0,
+                "total_tokens": 0,
+                "total_cost": defaultdict(Decimal),  # currency -> amount
+                "models": [],
+            }
+        return teams[team_id]
+
+    for row in token_rows:
+        entry = _entry(row["team_id"])
+        entry["run_count"] = row["run_count"]
+        entry["total_tokens"] = row["total_tokens"]
+
+    for row in cost_rows:
+        entry = _entry(row["team_id"])
+        entry["total_cost"][row["currency"]] += row["cost"]
+        entry["models"].append(
+            {
+                "provider_type": row["provider_type"],
+                "model_name": row["model_name"],
+                "currency": row["currency"],
+                "tokens": int(row["tokens"] or 0),
+                "cost": str(row["cost"]),
+            }
+        )
+
+    result = sorted(teams.values(), key=lambda t: (-t["run_count"], t["team_name"] or ""))
+    for entry in result:
+        entry["total_cost"] = {currency: str(amount) for currency, amount in entry["total_cost"].items()}
+
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "metadata_fields": metadata_fields,
+        "teams": result,
+    }
 
 
 def get_whatsapp_numbers():
@@ -177,7 +294,7 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
     msg_data = (
         ChatMessage.objects.filter(created_at__gte=start, created_at__lt=end)
         .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
-        .values("chat__team_id", "chat__team__name", "chat__team__slug")
+        .values("chat__team_id", "chat__team__name", "chat__team__slug", "chat__team__metadata")
         .annotate(
             msg_count=Count("id"),
             session_count=Count("chat__experiment_session", distinct=True),
@@ -197,12 +314,44 @@ def get_top_teams(start: datetime, end: datetime, limit: int = 10):
         {
             "team": row["chat__team__name"],
             "team_slug": row["chat__team__slug"],
+            "metadata": row["chat__team__metadata"] or {},
             "msg_count": row["msg_count"],
             "session_count": row["session_count"],
             "participant_count": participant_map.get(row["chat__team_id"], 0),
         }
         for row in msg_data
     ]
+
+
+def get_team_stats(team: Team) -> dict[str, int]:
+    """All-time resource counts for a single team, for the admin team detail page.
+
+    Versioned resources (chatbots, collections) are counted via their working-version
+    querysets so archived version snapshots aren't double-counted. Participants,
+    sessions and messages drop only the evaluations platform; a NULL/unset platform
+    isn't evaluations, so it's still counted (a plain ``.exclude(platform=...)`` would
+    silently drop those rows since ``NOT (NULL = x)`` is NULL).
+    """
+    # ExperimentSession.platform is nullable, so keep NULL rows explicitly.
+    not_evaluations = Q(platform__isnull=True) | ~Q(platform=ChannelPlatform.EVALUATIONS)
+    return {
+        "chatbots": Experiment.objects.working_versions_queryset().filter(team=team).count(),
+        "collections": Collection.objects.working_versions_queryset().filter(team=team).count(),
+        # Participant.platform is non-nullable, so a plain exclude is fine here.
+        "participants": Participant.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS).count(),
+        "sessions": ExperimentSession.objects.filter(team=team).filter(not_evaluations).count(),
+        "messages": ChatMessage.objects.filter(chat__team=team)
+        .filter(
+            Q(chat__experiment_session__platform__isnull=True)
+            | ~Q(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        )
+        .count(),
+        "members": team.membership_set.count(),
+        "pending_invitations": team.pending_invitations().count(),
+        "evaluation_configs": EvaluationConfig.objects.filter(team=team).count(),
+        "evaluation_runs": EvaluationRun.objects.filter(team=team).count(),
+        "evaluation_datasets": EvaluationDataset.objects.filter(team=team).count(),
+    }
 
 
 def get_platform_breakdown(start: datetime, end: datetime):
@@ -304,9 +453,34 @@ def get_top_experiments(start: datetime, end: datetime, limit: int = 10):
 
 
 def top_teams_to_csv(start: datetime, end: datetime):
+    metadata_fields = get_team_metadata_fields()
     data = get_top_teams(start, end)
-    rows = ((d["team"], d["msg_count"], d["session_count"], d["participant_count"]) for d in data)
-    return _write_data_to_csv(["Team", "Messages", "Sessions", "Participants"], rows)
+    headers = ["Team", "Messages", "Sessions", "Participants"] + [field["label"] for field in metadata_fields]
+    rows = (
+        (
+            d["team"],
+            d["msg_count"],
+            d["session_count"],
+            d["participant_count"],
+            *(d["metadata"].get(field["key"], "") for field in metadata_fields),
+        )
+        for d in data
+    )
+    return _write_data_to_csv(headers, rows)
+
+
+def get_all_teams_metadata():
+    metadata_fields = get_team_metadata_fields()
+    teams = Team.objects.order_by("name").values("name", "slug", "metadata")
+    for team in teams:
+        metadata = team["metadata"] or {}
+        yield (team["name"], team["slug"], *(metadata.get(field["key"], "") for field in metadata_fields))
+
+
+def team_metadata_to_csv():
+    metadata_fields = get_team_metadata_fields()
+    headers = ["Team", "Slug"] + [field["label"] for field in metadata_fields]
+    return _write_data_to_csv(headers, get_all_teams_metadata())
 
 
 def top_experiments_to_csv(start: datetime, end: datetime):

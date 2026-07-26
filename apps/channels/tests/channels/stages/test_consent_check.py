@@ -2,10 +2,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.channels.channels_v2.capabilities import PlatformConsentConfig
-from apps.channels.channels_v2.exceptions import EarlyAbort
-from apps.channels.channels_v2.stages.core import ConsentCheckStage
+from apps.channels.capabilities import PlatformConsentConfig
+from apps.channels.exceptions import EarlyAbort
 from apps.channels.models import ChannelPlatform
+from apps.channels.stages.core import ConsentCheckStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.experiments.models import ParticipantData
 from apps.utils.factories.experiment import ParticipantFactory

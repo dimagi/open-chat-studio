@@ -2,12 +2,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.channels.channels_v2.pipeline import (
+from apps.channels.pipeline import (
     EarlyAbort,
     EarlyExitResponse,
     MessageProcessingPipeline,
 )
 from apps.chat.exceptions import ChatException
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 
 from .conftest import make_context
 
@@ -134,7 +135,7 @@ class TestEarlyAbort:
 
 
 class TestUnexpectedException:
-    @patch("apps.channels.channels_v2.pipeline.MessageProcessingPipeline._generate_error_message")
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_unexpected_exception_generates_error_message(self, mock_gen):
         """Unexpected exception triggers _generate_error_message and sets ctx.early_exit_response."""
         mock_gen.return_value = "error msg"
@@ -150,7 +151,7 @@ class TestUnexpectedException:
         mock_gen.assert_called_once_with(ctx, error)
         assert ctx.early_exit_response == "error msg"
 
-    @patch("apps.channels.channels_v2.pipeline.MessageProcessingPipeline._generate_error_message")
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_unexpected_exception_runs_terminal_stages_then_reraises(self, mock_gen):
         """Terminal stages still run after an unexpected exception, then the exception is re-raised."""
         mock_gen.return_value = "error"
@@ -167,7 +168,7 @@ class TestUnexpectedException:
         t1.assert_called_once()
         t2.assert_called_once()
 
-    @patch("apps.channels.channels_v2.pipeline.MessageProcessingPipeline._generate_error_message")
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
     def test_unexpected_exception_appends_to_processing_errors(self, mock_gen):
         """Unexpected exception string is appended to ctx.processing_errors."""
         mock_gen.return_value = "error"
@@ -182,9 +183,39 @@ class TestUnexpectedException:
         assert "something bad" in ctx.processing_errors
 
 
+class TestPipelineBuildError:
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(PipelineBuildError("no nodes"), id="build-error"),
+            pytest.param(PipelineNodeBuildError("deprecated model"), id="node-build-error"),
+        ],
+    )
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_build_error_uses_generic_message_and_does_not_reraise(self, mock_gen, error):
+        """Build errors reply with the generic text and run terminal stages, but are not re-raised.
+
+        The LLM is not used to generate the message -- it may be the thing that is
+        misconfigured -- so _generate_error_message is never called.
+        """
+        s1 = _make_stage(side_effect=error)
+        t1 = _make_stage()
+
+        ctx = make_context()
+        pipeline = _pipeline(core=[s1], terminal=[t1])
+
+        result = pipeline.process(ctx)
+
+        assert result is ctx
+        mock_gen.assert_not_called()
+        assert ctx.early_exit_response == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+        assert str(error) in ctx.processing_errors
+        t1.assert_called_once()
+
+
 class TestErrorMessageGeneration:
-    @patch("apps.channels.channels_v2.pipeline.EventBot")
-    @patch("apps.channels.channels_v2.pipeline.TraceInfo")
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
     def test_chat_exception_uses_specific_prompt(self, mock_trace_info, mock_event_bot_cls):
         """ChatException gets a more specific prompt that includes the error message."""
         mock_bot = MagicMock()
@@ -202,8 +233,8 @@ class TestErrorMessageGeneration:
         assert "bad input format" in prompt_arg
         assert "error message" in prompt_arg
 
-    @patch("apps.channels.channels_v2.pipeline.EventBot")
-    @patch("apps.channels.channels_v2.pipeline.TraceInfo")
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
     def test_generic_exception_uses_generic_prompt(self, mock_trace_info, mock_event_bot_cls):
         """Non-ChatException gets a generic error prompt."""
         mock_bot = MagicMock()
@@ -220,8 +251,8 @@ class TestErrorMessageGeneration:
         prompt_arg = mock_bot.get_user_message.call_args[0][0]
         assert "something went wrong" in prompt_arg
 
-    @patch("apps.channels.channels_v2.pipeline.EventBot")
-    @patch("apps.channels.channels_v2.pipeline.TraceInfo")
+    @patch("apps.channels.pipeline.EventBot")
+    @patch("apps.channels.pipeline.TraceInfo")
     def test_eventbot_failure_uses_default_error_text(self, mock_trace_info, mock_event_bot_cls):
         """When EventBot fails, DEFAULT_ERROR_RESPONSE_TEXT is used."""
         mock_bot = MagicMock()

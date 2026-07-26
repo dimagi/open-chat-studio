@@ -1,5 +1,6 @@
 import dataclasses
 import logging
+from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -18,7 +19,9 @@ from pydantic import ValidationError
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import SyntheticVoice
 from apps.service_providers import auth_service, const, model_audit_fields
+from apps.service_providers.auth_service.oauth import OAuthTokenManager
 from apps.service_providers.intron import build_intron_synthetic_voices
+from apps.service_providers.minimax import build_minimax_synthetic_voices
 from apps.teams.models import BaseTeamModel, Team
 from apps.utils.deletion import get_related_objects, has_related_objects
 
@@ -74,6 +77,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
     groq = "groq", _("Groq"), {"openai_api_base": "https://api.groq.com/openai/v1/"}
     perplexity = "perplexity", _("Perplexity"), {"openai_api_base": "https://api.perplexity.ai/"}
     deepseek = "deepseek", _("DeepSeek"), {"deepseek_api_base": "https://api.deepseek.com/v1/"}
+    minimax = "minimax", _("MiniMax"), {"openai_api_base": "https://api.minimax.io/v1"}
     google = "google", _("Google Gemini")
     google_vertex_ai = "google_vertex_ai", _("Google Vertex AI")
     voyage = "voyage", _("Voyage AI")
@@ -110,7 +114,7 @@ class LlmProviderTypes(LlmProviderType, Enum):
                 return forms.AzureOpenAIConfigForm
             case LlmProviderTypes.anthropic:
                 return forms.AnthropicConfigForm
-            case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
                 return forms.OpenAIGenericConfigForm
             case LlmProviderTypes.deepseek:
                 return forms.DeepSeekConfigForm
@@ -125,28 +129,39 @@ class LlmProviderTypes(LlmProviderType, Enum):
     def get_llm_service(self, config: dict) -> "llm_service.LlmService":
         from . import llm_service  # noqa: PLC0415 - lazy: avoids loading heavy langchain deps at startup
 
-        config = {**config, **self.additional_config, "_type": self.slug}
+        config = {**config, **self.additional_config}
         try:
-            match self:
-                case LlmProviderTypes.openai:
-                    return llm_service.OpenAILlmService(**config)
-                case LlmProviderTypes.azure:
-                    return llm_service.AzureLlmService(**config)
-                case LlmProviderTypes.anthropic:
-                    return llm_service.AnthropicLlmService(**config)
-                case LlmProviderTypes.groq | LlmProviderTypes.perplexity:
-                    return llm_service.OpenAIGenericService(**config)
-                case LlmProviderTypes.deepseek:
-                    return llm_service.DeepSeekLlmService(**config)
-                case LlmProviderTypes.google:
-                    return llm_service.GoogleLlmService(**config)
-                case LlmProviderTypes.google_vertex_ai:
-                    return llm_service.GoogleVertexAILlmService(**config)
-                case LlmProviderTypes.voyage:
-                    return llm_service.VoyageAILlmService(**config)
+            service = self._build_llm_service(llm_service, config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self.slug, str(e)) from e
-        raise ServiceProviderConfigError(self.slug, "No chat model configured")
+        if service is None:
+            raise ServiceProviderConfigError(self.slug, "No chat model configured")
+        # Pydantic v2 silently drops leading-underscore kwargs at init time, so
+        # `_type` must be assigned post-construction. The chat-model metadata
+        # tag in `LlmService._tag_chat_model` depends on this being the OCS
+        # provider slug, not the class default of "unknown".
+        service._type = self.slug
+        return service
+
+    def _build_llm_service(self, llm_service, config: dict) -> "llm_service.LlmService | None":
+        match self:
+            case LlmProviderTypes.openai:
+                return llm_service.OpenAILlmService(**config)
+            case LlmProviderTypes.azure:
+                return llm_service.AzureLlmService(**config)
+            case LlmProviderTypes.anthropic:
+                return llm_service.AnthropicLlmService(**config)
+            case LlmProviderTypes.groq | LlmProviderTypes.perplexity | LlmProviderTypes.minimax:
+                return llm_service.OpenAIGenericService(**config)
+            case LlmProviderTypes.deepseek:
+                return llm_service.DeepSeekLlmService(**config)
+            case LlmProviderTypes.google:
+                return llm_service.GoogleLlmService(**config)
+            case LlmProviderTypes.google_vertex_ai:
+                return llm_service.GoogleVertexAILlmService(**config)
+            case LlmProviderTypes.voyage:
+                return llm_service.VoyageAILlmService(**config)
+        return None
 
 
 @audit_fields(*model_audit_fields.LLM_PROVIDER_FIELDS, audit_special_queryset_writes=True)
@@ -274,6 +289,7 @@ class VoiceProviderType(models.TextChoices):
     openai_voice_engine = "openaivoiceengine", _("OpenAI Voice Engine Text to Speech")
     elevenlabs = "elevenlabs", _("ElevenLabs")
     intron = "intron", _("Intron")
+    minimax = "minimax", _("MiniMax")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -292,6 +308,8 @@ class VoiceProviderType(models.TextChoices):
                 return forms.ElevenLabsVoiceConfigForm
             case VoiceProviderType.intron:
                 return forms.IntronVoiceConfigForm
+            case VoiceProviderType.minimax:
+                return forms.MinimaxVoiceConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_speech_service(self, config: dict) -> "speech_service.SpeechService":
@@ -311,6 +329,8 @@ class VoiceProviderType(models.TextChoices):
                     return speech_service.ElevenLabsSpeechService(**config)
                 case VoiceProviderType.intron:
                     return speech_service.IntronSpeechService(**config)
+                case VoiceProviderType.minimax:
+                    return speech_service.MinimaxSpeechService(**config)
         except ValidationError as e:
             raise ServiceProviderConfigError(self, str(e)) from e
         raise ServiceProviderConfigError(self, "No voice service configured")
@@ -421,15 +441,24 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
                 log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
                 warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")
         elif self.type == VoiceProviderType.intron.value:
-            try:
-                # Nested savepoint: any IntegrityError from the seeding loop rolls back its own
-                # rows without poisoning the outer transaction, so the provider itself still commits.
-                with transaction.atomic(savepoint=True):
-                    build_intron_synthetic_voices(self)
-            except Exception:
-                log.exception("Failed to seed Intron voices for provider %s", self.pk)
-                warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
+            self._seed_builtin_voices(build_intron_synthetic_voices, warnings)
+        elif self.type == VoiceProviderType.minimax.value:
+            self._seed_builtin_voices(build_minimax_synthetic_voices, warnings)
         return warnings
+
+    def _seed_builtin_voices(self, builder: Callable[["VoiceProvider"], None], warnings: list[str]) -> None:
+        """Seed a provider's built-in synthetic voices, collecting any failure as a warning.
+
+        The seeding runs inside a nested savepoint so that an ``IntegrityError`` from the
+        seeding loop rolls back only its own rows without poisoning the outer transaction —
+        the provider itself still commits.
+        """
+        try:
+            with transaction.atomic(savepoint=True):
+                builder(self)
+        except Exception:
+            log.exception("Failed to seed voices for %s provider %s", self.type, self.pk)
+            warnings.append("Provider saved, but voice seeding failed. Please contact an administrator.")
 
     @transaction.atomic()
     def sync_voices(self):
@@ -566,6 +595,7 @@ class AuthProviderType(models.TextChoices):
     api_key = "api_key", _("API Key")
     bearer = "bearer", _("Bearer Auth")
     commcare = "commcare", _("CommCare")
+    oauth_client_credentials = "oauth_client_credentials", _("OAuth (Client Credentials)")
 
     @property
     def form_cls(self) -> type["ProviderTypeConfigForm"]:
@@ -580,6 +610,8 @@ class AuthProviderType(models.TextChoices):
                 return forms.BearerAuthConfigForm
             case AuthProviderType.commcare:
                 return forms.CommCareAuthConfigForm
+            case AuthProviderType.oauth_client_credentials:
+                return forms.OAuthClientCredentialsConfigForm
         raise Exception(f"No config form configured for {self}")
 
     def get_auth_service(self, config: dict) -> auth_service.AuthService:
@@ -605,6 +637,7 @@ class AuthProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=AuthProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    _auth_data = encrypt(models.JSONField(default=dict))
 
     class Meta:
         ordering = ("type", "name")
@@ -617,6 +650,9 @@ class AuthProvider(BaseTeamModel):
         return AuthProviderType(self.type)
 
     def get_auth_service(self) -> auth_service.AuthService:
+        if self.type_enum == AuthProviderType.oauth_client_credentials:
+            token = OAuthTokenManager(self).get_valid_access_token()
+            return auth_service.BearerTokenAuthService(token=token)
         return self.type_enum.get_auth_service(self.config)
 
 

@@ -107,6 +107,7 @@ def _test_voice_provider(team, provider_type: VoiceProviderType, data):
         VoiceProviderType.openai_voice_engine: SyntheticVoice.OpenAIVoiceEngine,
         VoiceProviderType.elevenlabs: SyntheticVoice.ElevenLabs,
         VoiceProviderType.intron: SyntheticVoice.Intron,
+        VoiceProviderType.minimax: SyntheticVoice.MiniMax,
     }[provider_type]
     voice = SyntheticVoice(
         name="test", neural=True, language="English", language_code="en", gender="female", service=service
@@ -673,3 +674,158 @@ def test_intron_synthesize_voice_timeout(team_with_users):
         with pytest.raises(AudioSynthesizeException):
             speech_service.synthesize_voice("Hello", voice)
     assert get.call_count == 2
+
+
+def test_minimax_voice_provider(team_with_users):
+    _test_voice_provider(
+        team_with_users,
+        VoiceProviderType.minimax,
+        data={
+            "minimax_api_key": "test_key",
+            "minimax_group_id": "test_group",
+            "minimax_model": "speech-2.8-hd",
+        },
+    )
+
+
+@pytest.mark.parametrize("config_key", ["minimax_api_key", "minimax_group_id"])
+def test_minimax_voice_provider_error(config_key):
+    """Missing API key or GroupId causes form + pydantic validation failure."""
+    form = VoiceProviderType.minimax.form_cls(
+        team=None,
+        data={
+            "minimax_api_key": "test_key",
+            "minimax_group_id": "test_group",
+            "minimax_model": "speech-2.8-hd",
+        },
+    )
+    assert form.is_valid()
+    form.cleaned_data.pop(config_key)
+    _test_voice_provider_error(VoiceProviderType.minimax, data=form.cleaned_data)
+
+
+@pytest.mark.django_db()
+def test_minimax_synthesize_voice(team_with_users):
+    """_synthesize_voice posts to the T2A endpoint with the GroupId + Bearer auth and returns decoded audio."""
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.minimax,
+        config={
+            "minimax_api_key": "test_key",
+            "minimax_group_id": "test_group",
+            "minimax_model": "speech-2.8-hd",
+        },
+    )
+    voice = SyntheticVoice.objects.create(
+        name="Graceful Lady (English)",
+        external_id="English_Graceful_Lady",
+        neural=True,
+        language="English",
+        language_code="en",
+        gender="female",
+        service=SyntheticVoice.MiniMax,
+        voice_provider=provider,
+    )
+
+    fake_mp3_bytes = b"\xff\xf3fake-audio-bytes"
+    response = mock.Mock(status_code=200)
+    response.json.return_value = {
+        "data": {"audio": fake_mp3_bytes.hex(), "status": 2},
+        "base_resp": {"status_code": 0, "status_msg": "success"},
+    }
+
+    speech_service = provider.get_speech_service()
+    with (
+        mock.patch("apps.service_providers.speech_service.httpx.post", return_value=response) as mock_post,
+        mock.patch("apps.service_providers.speech_service.AudioSegment") as mock_audio,
+    ):
+        mock_segment = mock.Mock()
+        mock_segment.__len__ = mock.Mock(return_value=2500)
+        mock_audio.from_file.return_value = mock_segment
+        result = speech_service._synthesize_voice("Hello world", voice)
+
+    call = mock_post.call_args
+    url = call.args[0] if call.args else call.kwargs["url"]
+    # GroupId travels as a query param (via httpx `params`, URL-encoded);
+    # the API key as a Bearer header.
+    assert url.endswith("/v1/t2a_v2")
+    assert call.kwargs["params"] == {"GroupId": "test_group"}
+    assert call.kwargs["headers"]["Authorization"] == "Bearer test_key"
+    body = call.kwargs["json"]
+    assert body["model"] == "speech-2.8-hd"
+    assert body["text"] == "Hello world"
+    assert body["voice_setting"]["voice_id"] == "English_Graceful_Lady"
+
+    assert result.format == "mp3"
+    assert result.duration == 2.5
+    assert result.audio.getvalue() == fake_mp3_bytes
+
+
+@pytest.mark.django_db()
+def test_minimax_synthesize_voice_api_error(team_with_users):
+    """A non-zero base_resp.status_code is surfaced as an AudioSynthesizeException."""
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.minimax,
+        config={
+            "minimax_api_key": "test_key",
+            "minimax_group_id": "test_group",
+            "minimax_model": "speech-2.8-hd",
+        },
+    )
+    voice = SyntheticVoice.objects.create(
+        name="Graceful Lady (English)",
+        external_id="English_Graceful_Lady",
+        neural=True,
+        language="English",
+        language_code="en",
+        gender="female",
+        service=SyntheticVoice.MiniMax,
+        voice_provider=provider,
+    )
+
+    response = mock.Mock(status_code=200)
+    response.json.return_value = {
+        "data": {},
+        "base_resp": {"status_code": 1004, "status_msg": "authentication failed"},
+    }
+
+    speech_service = provider.get_speech_service()
+    with mock.patch("apps.service_providers.speech_service.httpx.post", return_value=response):
+        with pytest.raises(AudioSynthesizeException):
+            speech_service.synthesize_voice("Hello", voice)
+
+
+@pytest.mark.django_db()
+def test_run_post_save_hook_seeds_minimax_voices(team_with_users):
+    """Creating a MiniMax provider seeds its fixed system-voice catalogue (intron-style static seed)."""
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.minimax,
+        config={"minimax_api_key": "test_key", "minimax_group_id": "test_group"},
+    )
+    warnings = provider.run_post_save_hook()
+    assert warnings == []
+    seeded = SyntheticVoice.objects.filter(service=SyntheticVoice.MiniMax, voice_provider=provider)
+    assert seeded.count() > 0
+    # opaque system-voice ids live in external_id (mirroring ElevenLabs)
+    assert all(v.external_id for v in seeded)
+
+
+@pytest.mark.django_db()
+def test_run_post_save_hook_seeds_minimax_voices_is_idempotent(team_with_users):
+    """Re-running the hook does not duplicate voices: ignore_conflicts dedupes against
+    the unique (external_id, service, voice_provider) constraint."""
+    provider = VoiceProviderFactory(
+        team=team_with_users,
+        type=VoiceProviderType.minimax,
+        config={"minimax_api_key": "test_key", "minimax_group_id": "test_group"},
+    )
+    provider.run_post_save_hook()
+    count_after_first = SyntheticVoice.objects.filter(service=SyntheticVoice.MiniMax, voice_provider=provider).count()
+
+    provider.run_post_save_hook()
+    count_after_second = SyntheticVoice.objects.filter(service=SyntheticVoice.MiniMax, voice_provider=provider).count()
+
+    assert count_after_first > 0
+    assert count_after_second == count_after_first

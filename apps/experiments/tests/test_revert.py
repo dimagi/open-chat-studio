@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from apps.events.models import EventActionType, StaticTriggerType
 from apps.experiments.models import Experiment
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
@@ -13,6 +14,7 @@ from apps.pipelines.tests.utils import (
     start_node,
 )
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory, TimeoutTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, SourceMaterialFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
@@ -106,6 +108,36 @@ def test_revert_is_non_destructive():
     assert experiment.versions.count() == 1
     assert version.is_default_version is True
     assert version.pipeline_id == version_pipeline_id
+
+
+@pytest.mark.django_db()
+@patch("apps.assistants.sync.push_assistant_to_openai", Mock())
+def test_revert_restores_triggers():
+    """Working triggers mirror the target version's after revert; extras are archived."""
+    experiment, *_ = _build_experiment_with_pipeline()
+    kept = StaticTriggerFactory(
+        experiment=experiment,
+        type=StaticTriggerType.CONVERSATION_END,
+        action=EventActionFactory(action_type=EventActionType.LOG, params={"key": "value"}),
+    )
+    TimeoutTriggerFactory(experiment=experiment, delay=60, total_num_triggers=2)
+
+    version = experiment.create_new_version(make_default=True)
+
+    # Diverge the working experiment: add a trigger absent from the version.
+    added = StaticTriggerFactory(experiment=experiment, type=StaticTriggerType.CONVERSATION_START)
+
+    experiment.revert_to_version(version)
+    experiment.refresh_from_db()
+
+    static_types = sorted(t.type for t in experiment.static_triggers.all())
+    assert static_types == [kept.type]
+    assert experiment.timeout_triggers.count() == 1
+    # The trigger that was only on the working experiment is gone (archived).
+    added.refresh_from_db()
+    assert added.is_archived
+    # Restored triggers are working triggers, not versions.
+    assert all(t.working_version_id is None for t in experiment.static_triggers.all())
 
 
 @pytest.mark.django_db()

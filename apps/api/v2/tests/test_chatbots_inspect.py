@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import pytest
 from django.urls import reverse
@@ -836,6 +837,9 @@ EXPECTED_RENDER_QUERIES = 13
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize("version_param", [None, "default", "1"])
+# Publishing now pins the pipeline_start trigger to a version of the embedded pipeline, which
+# versions its assistant node and would otherwise hit the OpenAI API.
+@patch("apps.assistants.sync.push_assistant_to_openai", Mock())
 def test_inspect_render_query_count_constant_across_versions(version_param, django_assert_num_queries):
     """Resolving, fetching and rendering takes the same fixed number of queries for every version
     mode — the working draft, the default, or a specific version number."""

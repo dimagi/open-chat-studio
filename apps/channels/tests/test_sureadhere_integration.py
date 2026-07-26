@@ -2,10 +2,10 @@ from unittest.mock import patch
 
 import pytest
 
+from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import SureAdhereMessage
 from apps.channels.models import ChannelPlatform
 from apps.channels.tasks import handle_sureadhere_message
-from apps.chat.channels import MESSAGE_TYPES
 from apps.chat.models import ChatMessage
 from apps.utils.factories.channels import ExperimentChannelFactory
 
@@ -47,4 +47,9 @@ class TestSureAdhere:
             sureadhere_tenant_id=sureadhere_channel.extra_data["sureadhere_tenant_id"],
             message_data=sureadhere_messages.inbound_message(),
         )
-        send_text_message.assert_called()
+        send_text_message.assert_called_once()
+        kwargs = send_text_message.call_args.kwargs
+        assert kwargs["message"] == "Hi"
+        assert kwargs["from_"] == sureadhere_channel.extra_data["sureadhere_tenant_id"]
+        assert kwargs["to"] == "6225"
+        assert kwargs["platform"] == ChannelPlatform.SUREADHERE

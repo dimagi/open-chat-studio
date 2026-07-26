@@ -23,20 +23,16 @@
             onclick="clearModalAndOpen();">
       View Details
     </button>
-    <form method="post" action="{% url 'chatbots:revert-version' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}" class="inline">
-      {% csrf_token %}
-      <div class="tooltip" data-tip="Revert working version to v{{ record.version_number }}">
-        <button type="button" class="btn btn-sm btn-outline btn-primary"
-                onclick="const form = this.closest('form'); alertify.confirm().setting({
-                  title: 'Confirm',
-                  message: 'Revert the working chatbot to v{{ record.version_number }}? This overwrites the current unpublished changes.',
-                  transition: 'fade',
-                  onok: function() { form.submit(); },
-                }).show();">
-          <i class="fas fa-rotate-left"></i> Revert
-        </button>
-      </div>
-    </form>
+    <div class="tooltip" data-tip="Revert working version to v{{ record.version_number }}">
+      <button type="button" class="btn btn-sm btn-outline btn-primary"
+              hx-get="{% url 'chatbots:revert-version-confirm' team_slug=team.slug experiment_id=record.working_version_id version_number=record.version_number %}"
+              hx-target="#modal-content"
+              hx-trigger="click"
+              hx-swap="innerHTML"
+              onclick="clearModalAndOpen();">
+        <i class="fas fa-rotate-left"></i> Revert
+      </button>
+    </div>
   {% else %}
     {% if record.is_editable %}
       {% include "experiments/create_version_button.html" with experiment=record %}

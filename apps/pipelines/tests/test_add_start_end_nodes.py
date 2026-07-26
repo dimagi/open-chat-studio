@@ -258,9 +258,7 @@ def test_remove_start_end_nodes(team):
     remove_all_start_end_nodes(Node)
     pipeline.refresh_from_db()
 
-    assert pipeline.node_set.all().count() == 2
-    assert pipeline.node_set.all()[0].flow_id == passthrough_1["id"]
-    assert pipeline.node_set.all()[1].flow_id == passthrough_2["id"]
+    assert set(pipeline.node_set.values_list("flow_id", flat=True)) == {passthrough_1["id"], passthrough_2["id"]}
     assert len(pipeline.data["edges"]) == 1
     assert pipeline.data["edges"][0] == {
         "id": "1->2",

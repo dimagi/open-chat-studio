@@ -37,7 +37,12 @@ class PipelineStartForm(forms.Form):
     def __init__(self, *args, **kwargs):
         team_id = kwargs.pop("team_id")
         super().__init__(*args, **kwargs)
-        self.fields["pipeline_id"].queryset = Pipeline.objects.filter(team_id=team_id, working_version_id__isnull=True)
+        # Exclude pipelines already directly linked to an experiment (a chatbot's own pipeline).
+        # Such a pipeline runs as part of the chatbot itself, so starting it from a trigger is
+        # re-entrant/self-referential rather than a meaningful configuration.
+        self.fields["pipeline_id"].queryset = Pipeline.objects.filter(
+            team_id=team_id, working_version_id__isnull=True, experiment__isnull=True
+        )
 
     def clean_pipeline_id(self):
         return self.cleaned_data["pipeline_id"].id

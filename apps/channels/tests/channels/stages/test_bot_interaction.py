@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from apps.channels.channels_v2.stages.core import BotInteractionStage
+from apps.channels.stages.core import BotInteractionStage
 from apps.channels.tests.channels.conftest import StubCallbacks, make_context
 
 
@@ -12,7 +12,7 @@ class TestBotInteractionStage:
         ctx = make_context(user_query=None)
         assert self.stage.should_run(ctx) is False
 
-    @patch("apps.channels.channels_v2.stages.core.get_bot")
+    @patch("apps.channels.stages.core.get_bot")
     def test_calls_submit_input_callback(self, mock_get_bot):
         mock_bot = MagicMock()
         mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
@@ -24,7 +24,7 @@ class TestBotInteractionStage:
 
         assert len(callbacks.submit_input_calls) == 1
 
-    @patch("apps.channels.channels_v2.stages.core.get_bot")
+    @patch("apps.channels.stages.core.get_bot")
     def test_creates_bot_lazily(self, mock_get_bot):
         mock_bot = MagicMock()
         mock_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
@@ -36,7 +36,7 @@ class TestBotInteractionStage:
         mock_get_bot.assert_called_once()
         assert ctx.bot is mock_bot
 
-    @patch("apps.channels.channels_v2.stages.core.get_bot")
+    @patch("apps.channels.stages.core.get_bot")
     def test_reuses_existing_bot(self, mock_get_bot):
         existing_bot = MagicMock()
         existing_bot.process_input.return_value = MagicMock(content="response", get_attached_files=lambda: [])
@@ -47,7 +47,7 @@ class TestBotInteractionStage:
         mock_get_bot.assert_not_called()
         existing_bot.process_input.assert_called_once()
 
-    @patch("apps.channels.channels_v2.stages.core.get_bot")
+    @patch("apps.channels.stages.core.get_bot")
     def test_sets_bot_response_and_files(self, mock_get_bot):
         files = [MagicMock(), MagicMock()]
         mock_bot = MagicMock()

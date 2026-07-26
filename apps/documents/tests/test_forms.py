@@ -3,10 +3,11 @@ from unittest.mock import Mock
 import pytest
 from django.db.models import Q
 
+from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
 from apps.documents.forms import CollectionForm, JSONCollectionDocumentSourceForm
 from apps.documents.models import SourceType
 from apps.service_providers.models import AuthProviderType, LlmProviderTypes
-from apps.utils.factories.documents import CollectionFactory
+from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
     EmbeddingProviderModelFactory,
@@ -214,3 +215,69 @@ class TestJSONCollectionDocumentSourceForm:
         )
         assert form.is_valid(), form.errors
         assert form.cleaned_data["auth_provider"] == provider
+
+    def test_metadata_filter_widget_renders(self, collection):
+        """The custom widget + form template render without error and emit the editor markup."""
+        instance = DocumentSourceFactory.create(
+            collection=collection,
+            source_type=SourceType.JSON_COLLECTION,
+            config=DocumentSourceConfig(
+                json_collection=JSONCollectionSourceConfig(
+                    json_url="https://example.com/feed.json",
+                    metadata_filters=[{"field": "status", "operator": "eq", "value": "published"}],
+                )
+            ),
+        )
+        form = JSONCollectionDocumentSourceForm(collection=collection, instance=instance, initial={})
+        html = str(form["metadata_filters"])
+        assert "metadataFilterEditor" in html
+        assert "published" in html
+
+    def test_metadata_filters_and_file_types_parsed_into_config(self, collection):
+        form = JSONCollectionDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.JSON_COLLECTION,
+                "auto_sync_enabled": False,
+                "json_url": "https://example.com/feed.json",
+                "request_timeout": 30,
+                "metadata_filters": '[{"field": "status", "operator": "eq", "value": "published"}]',
+                "unsupported_file_types": "mp3, MP4 , wav",
+            },
+        )
+        assert form.is_valid(), form.errors
+        config = form.cleaned_data["config"].json_collection
+        assert len(config.metadata_filters) == 1
+        assert config.metadata_filters[0].field == "status"
+        assert config.metadata_filters[0].operator == "eq"
+        assert config.metadata_filters[0].value == "published"
+        assert config.unsupported_file_types == ["mp3", "MP4", "wav"]
+
+    def test_invalid_metadata_filter_operator_rejected(self, collection):
+        form = JSONCollectionDocumentSourceForm(
+            collection=collection,
+            data={
+                "source_type": SourceType.JSON_COLLECTION,
+                "auto_sync_enabled": False,
+                "json_url": "https://example.com/feed.json",
+                "request_timeout": 30,
+                "metadata_filters": '[{"field": "status", "operator": "bogus", "value": "x"}]',
+            },
+        )
+        assert not form.is_valid()
+
+    def test_existing_config_round_trips_to_initial(self, collection):
+        instance = DocumentSourceFactory.create(
+            collection=collection,
+            source_type=SourceType.JSON_COLLECTION,
+            config=DocumentSourceConfig(
+                json_collection=JSONCollectionSourceConfig(
+                    json_url="https://example.com/feed.json",
+                    metadata_filters=[{"field": "status", "operator": "eq", "value": "published"}],
+                    unsupported_file_types=["mp3", "wav"],
+                )
+            ),
+        )
+        form = JSONCollectionDocumentSourceForm(collection=collection, instance=instance, initial={})
+        assert form.initial["unsupported_file_types"] == "mp3, wav"
+        assert form.initial["metadata_filters"] == [{"field": "status", "operator": "eq", "value": "published"}]
