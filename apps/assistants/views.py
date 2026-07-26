@@ -92,7 +92,7 @@ class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
             "title": self.title,
             "button_text": self.button_text,
             "active_tab": "assistants",
-            "form_attrs": {"x-data": "assistant", "enctype": "multipart/form-data"},
+            "form_attrs": {"enctype": "multipart/form-data"},
             "llm_options": get_llm_provider_choices(self.request.team),
         }
 
