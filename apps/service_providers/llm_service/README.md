@@ -1,14 +1,15 @@
 
 
 # LLM Service
-The LLM service layer is designed as a unified abstraction layer that enables OCS to interact with multiple LLM providers (OpenAI, Anthropic, etc.) through a consistent API while handling provider-specific features, authentication, and model parameters 
+The LLM service layer is designed as a unified abstraction layer that enables OCS to interact with multiple LLM providers (OpenAI, Anthropic, etc.) through a consistent API while handling provider-specific features, authentication, and model parameters
 
-For product-level concepts and model configuration guidance, see the user guide on [LLM Concepts](https://docs.openchatstudio.com/concepts/llm/). 
+Refer to the [user guide](https://docs.openchatstudio.com/concepts/team/llm_providers) on product-level features as a background to this design.
 
 ## Design Intention
-- **Extensible:** Easy to add new providers and new LLM functionality as this changes rapidly
+- **Extensible:** Easy to add new providers, [new models](https://developers.openchatstudio.com/developer_guides/managing_models/) and new LLM functionality as this changes rapidly
 - **Unified Model Management:** Centralized handling of configuration, retries, usage tracking, request shaping etc
-- **Capability-Based Feature Support:** Different providers support different features. 
+- **Reuse via OpenAI-API Compatibility:** Groq, Perplexity, DeepSeek and Azure all expose an OpenAI-compatible API, so they're implemented as thin configurations of the same OpenAI SDK/LangChain client rather than needing their own integration.
+- LLM Provider **Capability-Based Feature Support:** Different providers can optionaly support features like: built-in tools, audio transcription, prompt caching, reasoning/thinking parameters, RAG, file citations.
 
 Its design follows the service provider pattern described in [apps/service_providers/README.md](../README.md).
 
@@ -27,8 +28,7 @@ Beyond LangChain's abstraction layer, the module uses official provider SDKs for
 ## Risks
  - Complexity of different providers (configuration parameters, validation rules, rate limiting, retry etc)
  - Rapidly changing LLM APIs and SDKs
- - Inconsistent feature support as not all providers support the same capabilities 
- - LLM model deprecation 
+ - Inconsistent feature support as not all providers support the same capabilities
+ - LLM model deprecation
  - Tricky error handling
  - Runtime incompatibilities when providers change behavior
-
