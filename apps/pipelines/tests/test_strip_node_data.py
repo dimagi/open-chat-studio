@@ -1,11 +1,12 @@
 import pytest
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 
 from apps.pipelines.migrations.utils.strip_node_data import (
     rebuild_node_data_in_pipelines,
     strip_node_data_from_pipelines,
 )
 from apps.pipelines.models import Node, Pipeline
+from apps.utils.factories.team import TeamFactory
 
 
 def _old_format_data():
@@ -112,6 +113,23 @@ class TestStripNodeData:
 
         pipeline.refresh_from_db()
         assert pipeline.data == data
+
+    def test_scopes_to_single_team(self, team):
+        other_team = TeamFactory.create()
+        pipeline = _create_old_format_pipeline(team)
+        other_pipeline = _create_old_format_pipeline(other_team)
+
+        strip_node_data_from_pipelines(Pipeline, Node, team=team)
+
+        pipeline.refresh_from_db()
+        other_pipeline.refresh_from_db()
+        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert all("data" in node for node in other_pipeline.data["nodes"])
+
+    def test_progress_callback_is_optional(self, team):
+        _create_old_format_pipeline(team)
+
+        strip_node_data_from_pipelines(Pipeline, Node)
 
 
 @pytest.mark.django_db()
@@ -238,3 +256,19 @@ class TestStripNodeDataCommand:
         pipeline.refresh_from_db()
         nodes_by_id = {node["id"]: node for node in pipeline.data["nodes"]}
         assert nodes_by_id["start-1"]["data"]["type"] == "StartNode"
+
+    def test_team_option_scopes_to_single_team(self, team):
+        other_team = TeamFactory.create()
+        pipeline = _create_old_format_pipeline(team)
+        other_pipeline = _create_old_format_pipeline(other_team)
+
+        call_command("strip_node_data", "--team", team.slug)
+
+        pipeline.refresh_from_db()
+        other_pipeline.refresh_from_db()
+        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert all("data" in node for node in other_pipeline.data["nodes"])
+
+    def test_team_option_raises_for_unknown_slug(self, team):
+        with pytest.raises(CommandError):
+            call_command("strip_node_data", "--team", "does-not-exist")

@@ -2,6 +2,18 @@ class FileUploadError(Exception):
     pass
 
 
+class DocumentSourceDeleted(Exception):
+    """Raised when a DocumentSource is deleted (or archived) while a sync is in progress.
+
+    A long-running sync fetches the source once at the start; if a user deletes it
+    mid-sync, subsequent writes against the now-dangling foreign key would fail with a
+    database error. Rather than crash or churn through wasted work, the sync detects the
+    deletion, raises this, and the whole task is aborted cleanly.
+    """
+
+    pass
+
+
 class IndexConfigurationException(Exception):
     pass
 

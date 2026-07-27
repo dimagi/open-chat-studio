@@ -11,7 +11,7 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 
 from apps.documents.document_source_service import SyncResult
-from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
+from apps.documents.exceptions import DocumentSourceDeleted, ZipCreationError, ZipIntegrityError
 from apps.documents.models import SYNC_LOCK_TIMEOUT, CollectionFile, DocumentSource, FileStatus
 from apps.documents.tasks import (
     async_create_collection_version,
@@ -609,6 +609,27 @@ def test_auto_sync_skips_fresh_lock_but_includes_stale(mock_sync_task):
 
     dispatched_ids = set(mock_sync_task.map.call_args.args[0])
     assert dispatched_ids == {unlocked.id, stale.id, no_start_time.id}
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source")
+def test_sync_document_source_task_aborts_when_source_deleted(sync_mock):
+    """The sync task aborts cleanly when the source is deleted mid-sync.
+
+    Regression: DocumentSourceDeleted must be swallowed (not crash the task). The lock is
+    still released in the finally via a queryset update, which is a safe no-op if the row
+    is truly gone.
+    """
+    source = DocumentSourceFactory.create(source_type="github", auto_sync_enabled=True)
+    sync_mock.side_effect = DocumentSourceDeleted(source.id)
+
+    # Must not raise despite the source disappearing mid-sync.
+    sync_document_source_task.apply(args=[source.id], task_id="task-a")
+
+    sync_mock.assert_called_once()
+    source.refresh_from_db()
+    assert source.sync_task_id == ""
+    assert source.sync_started_at is None
 
 
 @pytest.mark.django_db()

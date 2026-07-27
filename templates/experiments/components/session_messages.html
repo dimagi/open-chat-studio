@@ -29,10 +29,10 @@
               {% endif %}
               <tr
                 class="{% if highlight_message_id == message.id %}bg-yellow-100 dark:bg-yellow-900/20{% elif message.is_ai_message %}bg-sky-100/40 dark:bg-sky-950/40{% endif %}"
-                x-data='{
-                        tags: {{ message.all_tag_names|to_json }},
+                x-data="{
+                        tags: {{ message.all_tag_names|to_json|force_escape }},
                         get isSelected() { return commentsRow === {{ forloop.counter }} },
-                        }'
+                        }"
                 {% if highlight_message_id == message.id %}
                   id="{{ message.id }}"
                 {% endif %}
