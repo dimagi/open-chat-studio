@@ -4,6 +4,7 @@
     "target": "es2015",
     "jsx": "react-jsx",
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "allowJs": true,
     "noEmit": true,
     "sourceMap": true,
@@ -19,6 +20,6 @@
     "strictNullChecks": true
   },
   "exclude": [
-    "components/**/*",
+    "components/**/*"
   ]
 }

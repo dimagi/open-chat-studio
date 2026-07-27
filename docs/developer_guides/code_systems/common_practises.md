@@ -10,14 +10,11 @@ When displaying objects that inherit from `TaggedModelMixin`, always prefetch ta
 ```python
 from django.db.models import Prefetch
 
-messages_queryset = (
-    ChatMessage.objects.filter(chat=session.chat)
-    .prefetch_related(
-        Prefetch(
-            "tagged_items",
-            queryset=CustomTaggedItem.objects.select_related("tag", "user"),
-            to_attr="prefetched_tagged_items",  # Required attribute name
-        )
+messages_queryset = ChatMessage.objects.filter(chat=session.chat).prefetch_related(
+    Prefetch(
+        "tagged_items",
+        queryset=CustomTaggedItem.objects.select_related("tag", "user"),
+        to_attr="prefetched_tagged_items",  # Required attribute name
     )
 )
 ```

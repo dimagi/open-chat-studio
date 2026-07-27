@@ -70,7 +70,7 @@ class PipelineHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
         }
 
 
-class PipelineTableView(PermissionRequiredMixin, SingleTableView):
+class PipelineTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """Displays a table of event pipelines for the current team."""
 
     permission_required = "pipelines.view_pipeline"
@@ -458,7 +458,7 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
             pipeline.name = patch.name
 
         # The patch engine works off the full current graph: nodes rebuilt from the rows
-        # (Pipeline.data no longer lists them, ADR-0047) plus stored top-level keys (viewport).
+        # (Pipeline.data no longer lists them, ADR-0048) plus stored top-level keys (viewport).
         current_flow = {**pipeline.data, **pipeline.flow_data}
         pipeline.data, node_data = apply_pipeline_patch(current_flow, patch)
         pipeline.edit_revision += 1

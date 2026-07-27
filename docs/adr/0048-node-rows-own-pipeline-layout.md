@@ -1,4 +1,4 @@
-# ADR-0047: Node rows own pipeline layout; `Pipeline.data` is edges only
+# ADR-0048: Node rows own pipeline layout; `Pipeline.data` is edges only
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 

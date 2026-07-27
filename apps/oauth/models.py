@@ -21,7 +21,11 @@ from apps.teams.models import Team
 
 
 class OAuth2Application(AbstractApplication):
-    # Custom application model can be extended here if needed
+    # For client-credentials applications the team is pinned here at registration (there is no
+    # authorizing user to scope the token to). Null for authorization-code applications, where the
+    # team is chosen interactively and threaded via the Grant instead.
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)
+
     objects = ApplicationManager()
 
     def get_absolute_url(self):

@@ -176,7 +176,7 @@ def chatbots_home(request, team_slug: str):
     return home(request, team_slug, "Chatbots", "chatbots:table", actions=actions_)
 
 
-class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class ChatbotExperimentTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     template_name = "table/single_table.html"
     model = Experiment
     table_class = ChatbotTable
@@ -569,7 +569,7 @@ def chatbot_version_operation_status(
     )
 
 
-class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """View for rendering chatbot sessions table with filtering support."""
 
     model = ExperimentSession

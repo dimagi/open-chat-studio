@@ -7,7 +7,7 @@ from apps.pipelines.flow import FlowNode, FlowNodeData, split_flow_data
 def duplicate_pipeline_with_new_ids(pipeline_data, node_types: dict[str, str]):
     """Generate fresh node ids and rewrite the edges of a layout-only graph.
 
-    ``Pipeline.data`` no longer lists nodes (ADR-0047), so membership and the id-to-type
+    ``Pipeline.data`` no longer lists nodes (ADR-0048), so membership and the id-to-type
     mapping come from ``node_types`` (flow_id -> ``Node.type``, built from the rows). Reserved
     start/end nodes get an opaque uuid; other nodes keep human-readable ids
     (``LLMResponseWithPrompt-a1b2c``). The node content itself lives on the rows and is

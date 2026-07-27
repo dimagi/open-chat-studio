@@ -196,7 +196,7 @@ historical `migrate_start_end_nodes` utils never see new-format data):
 A follow-up decision (issue #3907) moved layout onto the `Node` rows so `data.nodes`
 disappears, leaving `Pipeline.data` as `{edges, viewport}`. It landed in two phases;
 **both are now shipped.** The decision for phase 2 is recorded in
-[ADR-0047](../adr/0047-node-rows-own-pipeline-layout.md), which supersedes the "layout in
+[ADR-0048](../adr/0048-node-rows-own-pipeline-layout.md), which supersedes the "layout in
 `Pipeline.data`" parts of the sections above.
 
 **Phase 1 — shadow-write:**
@@ -209,7 +209,7 @@ disappears, leaving `Pipeline.data` as `{edges, viewport}`. It landed in two pha
   import files are skipped, not written). `data.nodes` stayed authoritative for layout.
 - The `strip_node_data` command also backfills the columns from the blob positions.
 
-**Phase 2 — read switch (ADR-0047):**
+**Phase 2 — read switch (ADR-0048):**
 
 - `flow_data` rebuilds nodes from the rows: position from the columns, react-flow `type`
   derived from `Node.type` (`react_flow_node_type`). `Pipeline.data` no longer carries a

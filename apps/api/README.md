@@ -17,9 +17,7 @@ experiment_id = experiments[0]["id"]
 # Start a conversation with the experiment bot
 data = {"message": "Hi there"}
 response = requests.post(
-    f"https://www.openchatstudio.com/channels/api/{experiment_id}/incoming_message",
-    data=data,
-    headers=headers
+    f"https://www.openchatstudio.com/channels/api/{experiment_id}/incoming_message", data=data, headers=headers
 )
 reply_message = response.json()["response"]
 ```
@@ -46,9 +44,7 @@ session_id = response.json()["id"]
 # Update the session with a new message
 data = {"message": "Hi there", "session": session_id}
 response = requests.post(
-    f"https://www.openchatstudio.com/channels/api/{experiment_id}/incoming_message",
-    data=data,
-    headers=headers
+    f"https://www.openchatstudio.com/channels/api/{experiment_id}/incoming_message", data=data, headers=headers
 )
 reply_message = response.json()["response"]
 ```

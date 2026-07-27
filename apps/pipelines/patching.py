@@ -13,7 +13,7 @@ def apply_pipeline_patch(current_flow: dict, patch: PipelineDiffPayload) -> tupl
 
     ``current_flow`` is the full current graph — ``Pipeline.flow_data`` (nodes rebuilt from
     the rows) merged with any stored top-level keys (viewport) — because ``Pipeline.data``
-    no longer lists nodes (ADR-0047).
+    no longer lists nodes (ADR-0048).
 
     ``layout_data`` is the merged graph with the ``nodes`` key dropped (edges, viewport and
     unknown top-level keys preserved) and can be assigned to ``Pipeline.data``.

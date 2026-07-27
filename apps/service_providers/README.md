@@ -4,7 +4,7 @@ This app provides a unified framework for integrating external services (LLMs, v
 
 Much of the app relies on consistent conventions and structure across all provider types. This allows the framework to be generic and reusable.
 
-The source of truth is the code so [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio) 
+The source of truth is the code so [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## Service Provider Models
 
@@ -22,8 +22,6 @@ To differentiate between the subtypes, we use the `type` field on the model (an 
 Here is an example:
 
 ```python
-
-
 class MyProviderType(models.TextChoices):
     type_a = "typeA", _("Type A")
     type_b = "typeB", _("Type B")
@@ -56,6 +54,7 @@ subtype should have its own form class which is used to generate the UI and to v
 ```python
 class MyProviderTypeAConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     """Form for configuring a MyProviderTypeA."""
+
     obfuscate_fields = ["api_key"]
 
     username = forms.CharField()

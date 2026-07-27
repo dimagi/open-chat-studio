@@ -33,7 +33,7 @@ class FlowEdge(pydantic.BaseModel):
 
 
 class Flow(pydantic.BaseModel):
-    # Stored ``Pipeline.data`` is layout-only and carries no ``nodes`` (ADR-0047), so nodes
+    # Stored ``Pipeline.data`` is layout-only and carries no ``nodes`` (ADR-0048), so nodes
     # default to empty; full nodes still arrive on the wire and are rebuilt for reads.
     nodes: list[FlowNode] = Field(default_factory=list)
     edges: list[FlowEdge]
@@ -61,7 +61,7 @@ def split_flow_data(data: dict) -> tuple[dict, dict[str, dict | None]]:
 
     Returns ``(layout_data, node_data)`` where ``layout_data`` drops the ``nodes`` key
     entirely (edges, viewport and unknown top-level keys pass through) — ``Pipeline.data``
-    holds no node information beyond edges (ADR-0047). ``node_data`` is the complete graph
+    holds no node information beyond edges (ADR-0048). ``node_data`` is the complete graph
     membership: it has an entry for *every* node in the input. Nodes carrying an embedded
     ``data`` key map to ``{"type", "label", "params", "position"}`` (content and layout are
     owned by the ``Node`` rows); nodes without one map to ``None`` (membership only — the

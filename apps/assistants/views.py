@@ -68,7 +68,7 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
         }
 
 
-class OpenAiAssistantTableView(PermissionRequiredMixin, SingleTableView):
+class OpenAiAssistantTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     template_name = "table/single_table.html"
     table_class = OpenAiAssistantTable
     permission_required = "assistants.view_openaiassistant"

@@ -287,6 +287,53 @@ class TestExperimentSessionFilters:
         assert filtered.count() == 1
         assert filtered.first() == session2
 
+    def test_two_filters_on_the_same_column_are_both_applied(self):
+        """Regression test: a date range expressed as two filters on one column.
+
+        The UI allows `First Message after X` AND `First Message before Y`. Both must be
+        applied — previously the second silently replaced the first, so sessions outside
+        the range (e.g. January) were still returned.
+        """
+        session_jan = ExperimentSessionFactory.create()
+        session_may = ExperimentSessionFactory.create(experiment=session_jan.experiment)
+        session_jul = ExperimentSessionFactory.create(experiment=session_jan.experiment)
+        for session, first_activity_at in [
+            (session_jan, "2026-01-15"),
+            (session_may, "2026-05-15"),
+            (session_jul, "2026-07-15"),
+        ]:
+            session.first_activity_at = timezone.datetime.fromisoformat(f"{first_activity_at}T10:00:00+00:00")
+            session.save()
+
+        params = {
+            "filter_0_column": "first_message",
+            "filter_0_operator": Operators.AFTER,
+            "filter_0_value": "2026-04-30",
+            "filter_1_column": "first_message",
+            "filter_1_operator": Operators.BEFORE,
+            "filter_1_value": "2026-06-01",
+        }
+        filtered = ExperimentSessionFilter().apply(
+            session_jan.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert list(filtered) == [session_may]
+
+    def test_two_tag_filters_on_the_same_column_are_both_applied(self, sessions_with_tags):
+        """Two `any of` tag filters on the same column combine with AND."""
+        sessions, _ = sessions_with_tags
+        params = {
+            "filter_0_column": "tags",
+            "filter_0_operator": Operators.ANY_OF,
+            "filter_0_value": json.dumps(["important"]),
+            "filter_1_column": "tags",
+            "filter_1_operator": Operators.ANY_OF,
+            "filter_1_value": json.dumps(["follow-up"]),
+        }
+        filtered = ExperimentSessionFilter().apply(
+            sessions[0].experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+        assert list(filtered) == [sessions[1]]
+
     def test_tag_filters(self, sessions_with_tags):
         """Test tag filtering with ANY_OF and ALL_OF operators"""
         sessions, tags = sessions_with_tags

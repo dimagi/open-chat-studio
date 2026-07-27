@@ -8,12 +8,11 @@ from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework.exceptions import APIException, NotFound, ValidationError
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
-from apps.api.permissions import ReadOnlyAPIKeyPermission
+from apps.api.permissions import IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
 from apps.api.tasks import (
     DuplicateConnectChannelError,
@@ -41,7 +40,7 @@ class ParticipantView(APIView):
     """GET: list participants for the team. POST: update/create participant data."""
 
     pagination_class = CursorPagination
-    permission_classes = [IsAuthenticated, ReadOnlyAPIKeyPermission, TokenHasOAuthResourceScope]
+    permission_classes = [IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission, TokenHasOAuthResourceScope]
     # base scope; TokenHasOAuthResourceScope appends :read for safe methods, :write otherwise.
     required_scopes = ("participants",)
 
@@ -343,9 +342,13 @@ def _create_update_schedules(request, experiment, participant, schedule_data):
 
     delete_ids = {data["id"] for data in schedule_data if data.get("delete")}
     if delete_ids:
-        ScheduledMessage.objects.filter(external_id__in=delete_ids).update(
-            cancelled_at=timezone.now(), cancelled_by=request.user
-        )
+        # Machine (client-credentials) tokens have no user to attribute the cancellation to.
+        cancelled_by = request.user if request.user.is_authenticated else None
+        # Scope to this participant + experiment (as the update path above does) so a caller cannot
+        # cancel another team's scheduled messages by supplying their external_id.
+        ScheduledMessage.objects.filter(
+            external_id__in=delete_ids, participant=participant, experiment=experiment
+        ).update(cancelled_at=timezone.now(), cancelled_by=cancelled_by)
     if updated:
         ScheduledMessage.objects.bulk_update(updated, fields=["next_trigger_date", "custom_schedule_params"])
     if new:

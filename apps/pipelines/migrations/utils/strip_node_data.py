@@ -1,4 +1,4 @@
-"""Drop the ``nodes`` key from ``Pipeline.data`` and backfill row positions (ADR-0047).
+"""Drop the ``nodes`` key from ``Pipeline.data`` and backfill row positions (ADR-0048).
 
 Node content (type, label, params) and layout (position) are owned by the ``Node`` rows;
 ``Pipeline.data`` keeps only edges (and viewport). This helper first mirrors each node's

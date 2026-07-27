@@ -137,7 +137,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """Reconcile this pipeline's ``Node`` rows against ``node_data``.
 
         ``node_data`` is the complete graph membership: its keys are every node id in the
-        graph (``self.data`` no longer lists nodes — ADR-0047). Rows whose flow_id is absent
+        graph (``self.data`` no longer lists nodes — ADR-0048). Rows whose flow_id is absent
         from the mapping are deleted, or archived when they have versions.
 
         Each entry's value is either content — ``{"type", "label", "params", "position"}``
@@ -233,7 +233,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """The full react-flow graph, rebuilt from the ``Node`` rows.
 
         ``self.data`` supplies only edges (and viewport when present); each node's content,
-        layout position and react-flow type come from its ``Node`` row (ADR-0047).
+        layout position and react-flow type come from its ``Node`` row (ADR-0048).
         """
         flow = Flow(**self.data)
         nodes = []

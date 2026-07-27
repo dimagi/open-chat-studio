@@ -1,20 +1,20 @@
 import contextlib
 import csv
-import math
 from collections import defaultdict
-from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import timedelta
 from io import StringIO
-from typing import cast
 
-from celery import chord, shared_task
+import taskbadger
+from celery import current_app, shared_task
 from celery.utils.log import get_task_logger
-from celery_progress.backend import ProgressRecorder
+from celery_progress.backend import PROGRESS_STATE, ProgressRecorder
 from django.core.files.base import ContentFile
-from django.db import transaction
-from django.db.models import Prefetch
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Max, Prefetch, QuerySet
 from django.http import QueryDict
 from django.utils import timezone
+from taskbadger import StatusEnum
 from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assessments.score_writers import write_scores_from_evaluation_result
@@ -25,10 +25,10 @@ from apps.evaluations.aggregation import compute_aggregates_for_run
 from apps.evaluations.auto_population import (
     auto_populate_eval_datasets,  # noqa: F401 -- imported so Celery autodiscovery registers the task
 )
-from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.export import build_evaluation_table_data, write_evaluation_csv
 from apps.evaluations.models import (
+    NON_TERMINAL_RUN_STATUSES,
     DatasetCreationStatus,
     EvaluationConfig,
     EvaluationDataset,
@@ -45,15 +45,24 @@ from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
+from apps.teams.models import Team
 from apps.teams.utils import current_team
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
+# --- Beat-coordinated evaluation batches (see docs/adr/0047-deploy-safe-evaluation-runs.md) ---
+BATCH_SIZE = 3  # messages per batch task
+BATCHES_PER_TICK = 10  # batch tasks dispatched per tick; BATCHES_PER_TICK * BATCH_SIZE = messages per tick
+STALL_TIMEOUT = timedelta(minutes=12)  # no fresh results for this long => the dispatched batch is stalled
+MAX_STALLS = 3  # consecutive stalls with no progress => run marked FAILED
+BATCH_SOFT_TIME_LIMIT = 240  # seconds; best-effort bound under the 5-min visibility timeout
+TASKBADGER_STALE_TIMEOUT = 300  # seconds; TB alerts if a run's task goes this long without an update
+
 logger = get_task_logger("ocs.evaluations")
 
 
-def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
+def _save_dataset_error(dataset: EvaluationDataset, error_message: str) -> None:
     """Helper to save dataset error status and clear job_id."""
     dataset.status = DatasetCreationStatus.FAILED
     dataset.error_message = error_message
@@ -61,12 +70,106 @@ def _save_dataset_error(dataset: EvaluationDataset, error_message: str):
     dataset.save(update_fields=["status", "error_message", "job_id"])
 
 
-@shared_task(base=TaskbadgerTask)
-def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
+def _pending_evaluator_ids(evaluation_run: EvaluationRun, message_id: int, evaluator_ids: list[int]) -> list[int]:
+    """Return the subset of evaluator_ids with no EvaluationResult yet for (run, message).
+
+    Error results ({"error": ...}) count as done, matching the current no-retry behaviour.
     """
-    Run all evaluations over a single message.
-    First runs the message through the bot, then runs the evaluator.
-    ExperimentSessions created in this task are deleted periodically by cleanup_old_evaluation_data
+    already_done = set(
+        EvaluationResult.objects.filter(
+            run=evaluation_run, message_id=message_id, evaluator_id__in=evaluator_ids
+        ).values_list("evaluator_id", flat=True)
+    )
+    return [evaluator_id for evaluator_id in evaluator_ids if evaluator_id not in already_done]
+
+
+def _create_evaluation_result(
+    evaluation_run: EvaluationRun,
+    evaluator: Evaluator,
+    message: EvaluationMessage,
+    output: dict,
+    session_id: int | None,
+    *,
+    apply_tags: bool,
+) -> EvaluationResult | None:
+    """Create one EvaluationResult idempotently; absorb a duplicate-race insert.
+
+    Returns the created result, or None when a concurrent delivery already wrote the
+    row (the unique constraint rejects the second insert — the other delivery won).
+
+    Tag application deliberately shares the guarded atomic block so the result and its
+    tags commit together. Today _maybe_apply_tag_rules cannot raise IntegrityError (its
+    tag writes use bulk_create with ignore_conflicts=True and an AppliedTag unique key
+    that includes the brand-new result row). If a future tag write could raise it, this
+    guard would misreport a fresh-result loss as a duplicate-race skip and would need
+    narrowing to the create() alone.
+    """
+    try:
+        with transaction.atomic():
+            evaluation_result = EvaluationResult.objects.create(
+                message=message,
+                run=evaluation_run,
+                evaluator=evaluator,
+                output=output,
+                team=evaluation_run.team,
+                session_id=session_id,
+            )
+            if apply_tags:
+                _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
+    except IntegrityError:
+        logger.info(
+            "EvaluationResult for run %s message %s evaluator %s already exists; skipping (race)",
+            evaluation_run.id,
+            message.id,
+            evaluator.id,
+        )
+        return None
+    return evaluation_result
+
+
+def _run_evaluator_on_message(
+    evaluation_run: EvaluationRun,
+    evaluator: Evaluator,
+    message: EvaluationMessage,
+    bot_response: str | None,
+    session_id: int | None,
+) -> None:
+    """Run a single evaluator over a single message and persist the outcome.
+
+    On evaluator failure an error result is stored (matching the no-retry behaviour);
+    on success the result is written and its Score rows are derived.
+    """
+    try:
+        output = evaluator.run(message, bot_response or "").model_dump()
+    except Exception as e:
+        logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
+        _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
+        return
+
+    evaluation_result = _create_evaluation_result(
+        evaluation_run, evaluator, message, output, session_id, apply_tags=True
+    )
+    if evaluation_result is None:
+        return
+    try:
+        write_scores_from_evaluation_result(evaluation_result)
+    except Exception:
+        logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
+
+
+def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_id: int) -> None:
+    """
+    Run the outstanding evaluations over a single message, in-process.
+
+    Called synchronously by evaluate_message_batch — never dispatched on its own.
+
+    Idempotent by design: batch redelivery and stall re-dispatch deliberately re-run
+    this, so it first drops evaluators that already have a result for (run, message)
+    and returns before bot generation if none remain. A partially evaluated message
+    re-runs bot generation, so remaining evaluators judge a fresh bot response (rare
+    crash-path artifact). Duplicate inserts that race past the skip check are absorbed
+    by the unique constraint (the other delivery won). ExperimentSessions created here
+    are deleted periodically by cleanup_old_evaluation_data.
     """
     try:
         evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
@@ -82,49 +185,300 @@ def evaluate_single_message_task(evaluation_run_id, evaluator_ids, message_id):
         except EvaluationMessage.DoesNotExist:
             logger.warning("EvaluationMessage %s no longer exists; skipping in run %s", message_id, evaluation_run_id)
             return
+
+        pending_evaluator_ids = _pending_evaluator_ids(evaluation_run, message_id, evaluator_ids)
+        if not pending_evaluator_ids:
+            return
+
         # Only run bot generation if an experiment version is configured
         generation_experiment = evaluation_run.generation_experiment
         session_id, bot_response = None, ""
         if generation_experiment is not None:
             session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment)
 
-        evaluators_qs = Evaluator.objects.filter(id__in=evaluator_ids).prefetch_related(
+        evaluators_qs = Evaluator.objects.filter(id__in=pending_evaluator_ids).prefetch_related(
             Prefetch("tag_rules", queryset=EvaluatorTagRule.objects.select_related("tag")),
         )
         evaluators = {e.id: e for e in evaluators_qs}
-        for evaluator_id in evaluator_ids:
-            try:
-                evaluator = evaluators[evaluator_id]
-            except KeyError:
+        for evaluator_id in pending_evaluator_ids:
+            evaluator = evaluators.get(evaluator_id)
+            if evaluator is None:
                 logger.warning(f"Evaluator {evaluator_id} not found, skipping")
                 continue
-            try:
-                result = evaluator.run(message, bot_response or "")
-                output = result.model_dump()
-                with transaction.atomic():
-                    evaluation_result = EvaluationResult.objects.create(
-                        message=message,
-                        run=evaluation_run,
-                        evaluator=evaluator,
-                        output=output,
-                        team=evaluation_run.team,
-                        session_id=session_id,
-                    )
-                    _maybe_apply_tag_rules(evaluation_run, evaluator, evaluation_result, message)
-                try:
-                    write_scores_from_evaluation_result(evaluation_result)
-                except Exception:
-                    logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
-            except Exception as e:
-                logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
-                EvaluationResult.objects.create(
-                    message=message,
-                    run=evaluation_run,
-                    evaluator=evaluator,
-                    output={"error": str(e)},
-                    team=evaluation_run.team,
-                    session_id=session_id,
-                )
+            _run_evaluator_on_message(evaluation_run, evaluator, message, bot_response, session_id)
+
+
+@shared_task(acks_late=True, soft_time_limit=BATCH_SOFT_TIME_LIMIT)
+def evaluate_message_batch(evaluation_run_id: int, message_ids: list[int]) -> None:
+    """Evaluate a small batch of messages in-process, then exit.
+
+    Deliberately dumb: no refill, no completion check, no self-rescheduling — all
+    coordination lives in the beat sweep. acks_late means a worker killed mid-batch
+    has the batch redelivered by Redis after the visibility timeout; the per-message
+    idempotency check resumes where it died.
+    """
+    try:
+        run = EvaluationRun.objects.get(id=evaluation_run_id)
+    except EvaluationRun.DoesNotExist:
+        logger.warning("EvaluationRun %s gone; dropping batch of %s messages", evaluation_run_id, len(message_ids))
+        return
+
+    if run.status != EvaluationRunStatus.PROCESSING:
+        logger.info("EvaluationRun %s no longer processing (%s); dropping batch", evaluation_run_id, run.status)
+        return
+
+    for message_id in message_ids:
+        evaluate_message(evaluation_run_id, run.evaluator_ids, message_id)
+
+
+@dataclass
+class _TickResult:
+    """What a single coordination tick decided; consumed after the transaction commits."""
+
+    batches: list[list[int]]
+    done: int
+    total: int
+    terminal: str | None  # None | "success" | "error"
+
+
+def _chunk(ids: list[int], size: int) -> list[list[int]]:
+    return [ids[i : i + size] for i in range(0, len(ids), size)]
+
+
+def _done_message_ids(run: EvaluationRun, plan_ids: list[int], evaluator_ids: list[int]) -> set[int]:
+    """Message ids in the plan that have a result from every evaluator in the plan."""
+    evaluator_count = len(set(evaluator_ids))
+    if evaluator_count == 0:
+        return set()
+    rows = (
+        EvaluationResult.objects.filter(run=run, message_id__in=plan_ids, evaluator_id__in=evaluator_ids)
+        .values("message_id")
+        .annotate(cnt=Count("evaluator_id", distinct=True))
+        .filter(cnt=evaluator_count)
+        .values_list("message_id", flat=True)
+    )
+    return set(rows)
+
+
+def _is_stalled(run: EvaluationRun) -> bool:
+    """True if no fresh results have landed for the current batch within STALL_TIMEOUT.
+
+    The batch_dispatched_at floor stops a freshly dispatched batch (zero results yet)
+    from looking stalled.
+    """
+    newest = EvaluationResult.objects.filter(run=run).aggregate(m=Max("created_at"))["m"]
+    reference = max([ts for ts in (newest, run.batch_dispatched_at) if ts is not None], default=None)
+    if reference is None:
+        return False
+    return timezone.now() - reference > STALL_TIMEOUT
+
+
+def _dispatch_new_batch(run: EvaluationRun, ordered_remaining: list[int]) -> list[list[int]]:
+    """Pick the next batch of work, persist coordination state, return the batch tasks to dispatch."""
+    dispatched = ordered_remaining[: BATCHES_PER_TICK * BATCH_SIZE]
+    run.in_flight = dispatched  # ty: ignore[invalid-assignment]
+    run.batch_dispatched_at = timezone.now()
+    run.stall_count = 0  # reaching here means progress (first batch, or previous batch done)
+    run.status = EvaluationRunStatus.PROCESSING
+    run.save(update_fields=["in_flight", "batch_dispatched_at", "stall_count", "status"])
+    return _chunk(dispatched, BATCH_SIZE)
+
+
+def _redispatch_unfinished(run: EvaluationRun, remaining: set[int]) -> tuple[list[list[int]], bool]:
+    """Re-dispatch only the unfinished messages of the current batch.
+
+    Returns (batches, failed). `failed` is True when the run has stalled MAX_STALLS
+    times without any progress and has been marked FAILED.
+    """
+    in_flight = run.in_flight or []
+    unfinished = [message_id for message_id in in_flight if message_id in remaining]
+    made_progress = len(unfinished) < len(in_flight)
+
+    if made_progress:
+        run.stall_count = 1
+    else:
+        run.stall_count = (run.stall_count or 0) + 1
+
+    if run.stall_count >= MAX_STALLS and not made_progress:
+        run.status = EvaluationRunStatus.FAILED
+        run.error_message = (
+            f"Evaluation stalled: {len(unfinished)} message(s) made no progress after "
+            f"{MAX_STALLS} re-dispatch attempts."
+        )
+        run.save(update_fields=["status", "error_message", "stall_count"])
+        return [], True
+
+    run.in_flight = unfinished
+    run.batch_dispatched_at = timezone.now()  # reset the clock to avoid a hot re-dispatch loop
+    run.save(update_fields=["in_flight", "batch_dispatched_at", "stall_count"])
+    return _chunk(unfinished, BATCH_SIZE), False
+
+
+def _finalize_complete(run: EvaluationRun) -> None:
+    """Mark the run complete and run the completion side effects (aggregates, tag reversal)."""
+    run.mark_complete()
+    compute_aggregates_for_run(run)
+    reverse_stale_tags(run)
+
+
+def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
+    """Run one coordination tick for a locked, non-terminal run.
+
+    Mutates and saves the run's coordination state (or completes/fails it) and returns
+    the batches to dispatch plus the progress numbers to publish AFTER the surrounding
+    transaction commits. Never dispatches or publishes itself.
+    """
+    plan_ids = list(run.scoped_messages.values_list("id", flat=True))
+    total = len(plan_ids)
+    evaluator_ids = run.evaluator_ids or []
+
+    if total == 0 or not evaluator_ids:
+        _finalize_complete(run)
+        return _TickResult(batches=[], done=0, total=total, terminal="success")
+
+    remaining = set(plan_ids) - _done_message_ids(run, plan_ids, evaluator_ids)
+    done = total - len(remaining)
+
+    if not remaining:
+        _finalize_complete(run)
+        return _TickResult(batches=[], done=total, total=total, terminal="success")
+
+    in_flight = set(run.in_flight or [])
+    batch_done = not (in_flight & remaining)
+
+    if run.status == EvaluationRunStatus.PENDING or batch_done:
+        batches = _dispatch_new_batch(run, sorted(remaining))
+        return _TickResult(batches=batches, done=done, total=total, terminal=None)
+
+    if _is_stalled(run):
+        batches, failed = _redispatch_unfinished(run, remaining)
+        return _TickResult(batches=batches, done=done, total=total, terminal="error" if failed else None)
+
+    # dispatched batch in progress with fresh results — the common case — costs nothing.
+    return _TickResult(batches=[], done=done, total=total, terminal=None)
+
+
+def _drive_run(run_id: int) -> None:
+    """Coordinate a single run under a row lock, then dispatch + publish after commit.
+
+    Taskbadger task creation and progress publishing both run AFTER the transaction
+    commits, so the blocking Taskbadger HTTP call never holds the row lock and a
+    rolled-back tick can't strand an orphaned remote task keyed to a discarded id.
+    """
+    with transaction.atomic():
+        run = (
+            EvaluationRun.objects.select_for_update(skip_locked=True)
+            .filter(id=run_id, status__in=NON_TERMINAL_RUN_STATUSES)
+            .first()
+        )
+        if run is None:
+            return  # locked by another driver, or already terminal/gone
+        with current_team(run.team):
+            result = _coordinate_locked_run(run)
+
+    with current_team(run.team):
+        for batch in result.batches:
+            evaluate_message_batch.delay(run.id, batch)
+        _ensure_taskbadger_task(run, result.total)
+        _publish_tick(run, result)
+
+
+@shared_task
+def coordinate_evaluation_runs() -> None:
+    """Beat task (every 30s): drive every active evaluation run one tick.
+
+    Stateless between ticks — any work lost to a deploy is recomputed and repaired
+    on the next tick. Overlapping sweeps partition runs via select_for_update(skip_locked).
+    """
+    run_ids = list(
+        EvaluationRun.objects.filter(status__in=NON_TERMINAL_RUN_STATUSES)
+        .order_by("created_at")
+        .values_list("id", flat=True)
+    )
+    for run_id in run_ids:
+        try:
+            _drive_run(run_id)
+        except Exception:
+            logger.exception("Coordination tick failed for evaluation run %s", run_id)
+
+
+def _publish_progress(job_id: str, current: int, total: int, *, stop: bool = False) -> None:
+    """Publish run progress to the Celery result backend under `job_id`.
+
+    The frontend polls celery_progress:task_status for this id. `stop=True` writes a
+    SUCCESS state so the poller stops and reloads the page (used on completion and on
+    terminal failure — the reloaded page reveals the real COMPLETED/FAILED status).
+    """
+    if not job_id:
+        return
+    percent = float(round((current / total) * 100, 2)) if total else 100.0
+    meta = {
+        "pending": False,
+        "current": current,
+        "total": total,
+        "percent": percent,
+        "description": f"{current} of {total} evaluated",
+    }
+    state = "SUCCESS" if stop else PROGRESS_STATE
+    try:
+        current_app.backend.store_result(job_id, meta, state)
+    except Exception:
+        logger.exception("Failed to publish evaluation progress for %s", job_id)
+
+
+def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
+    """Create the run's Taskbadger task once, after the tick's transaction has committed.
+
+    Called outside the coordination lock so the blocking HTTP request never stalls
+    other runs in the sweep. The taskbadger_task_id check keeps it effectively
+    once-per-run; a rare duplicate under overlapping sweeps is harmless for monitoring.
+    """
+    if run.taskbadger_task_id:
+        return
+    task = taskbadger.create_task_safe(
+        name=f"Evaluation run {run.id}",
+        status=StatusEnum.PROCESSING,
+        value=0,
+        value_max=total,
+        stale_timeout=TASKBADGER_STALE_TIMEOUT,
+    )
+    if task is not None:
+        run.taskbadger_task_id = task.id
+        run.save(update_fields=["taskbadger_task_id"])
+
+
+def _update_taskbadger(run: EvaluationRun, *, value: int, value_max: int, status: StatusEnum | None = None) -> None:
+    if not run.taskbadger_task_id:
+        return
+    kwargs = {"value": value, "value_max": value_max}
+    if status is not None:
+        kwargs["status"] = status
+    taskbadger.update_task_safe(run.taskbadger_task_id, **kwargs)
+
+
+def _publish_tick(run: EvaluationRun, result: "_TickResult") -> None:
+    """After-commit side effects for one tick: progress publish + Taskbadger update."""
+    if result.terminal == "success":
+        _publish_progress(run.job_id, result.total, result.total, stop=True)
+        _update_taskbadger(run, value=result.total, value_max=result.total, status=StatusEnum.SUCCESS)
+    elif result.terminal == "error":
+        _publish_progress(run.job_id, result.done, result.total, stop=True)
+        _update_taskbadger(run, value=result.done, value_max=result.total, status=StatusEnum.ERROR)
+    else:
+        _publish_progress(run.job_id, result.done, result.total)
+        _update_taskbadger(run, value=result.done, value_max=result.total)
+
+
+def _mark_run_failed(run_id: int, message: str) -> None:
+    run = EvaluationRun.objects.filter(id=run_id).first()
+    if run is None:
+        logger.warning("EvaluationRun %s vanished before it could be marked FAILED", run_id)
+        return
+    run.status = EvaluationRunStatus.FAILED
+    run.error_message = message
+    run.save(update_fields=["status", "error_message"])
+    _publish_progress(run.job_id, 0, 0, stop=True)
+    _update_taskbadger(run, value=0, value_max=0, status=StatusEnum.ERROR)
 
 
 def _maybe_apply_tag_rules(
@@ -141,7 +495,7 @@ def _maybe_apply_tag_rules(
     apply_rules_to_result(evaluation_result, evaluator, message)
 
 
-def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment) -> tuple[int | None, str | None]:
+def run_bot_generation(team: Team, message: EvaluationMessage, experiment: Experiment) -> tuple[int | None, str | None]:
     """
     Run the evaluation message through the bot to generate a response.
     """
@@ -201,7 +555,7 @@ def run_bot_generation(team, message: EvaluationMessage, experiment: Experiment)
         return session.id, None
 
 
-def _create_message_history(chat, history: list[dict]):
+def _create_message_history(chat: Chat, history: list[dict]) -> None:
     # Set explicit timestamps with incremental offsets to ensure proper chronological ordering
     # when messages are retrieved with order_by("created_at")
     base_time = timezone.now() - timedelta(seconds=len(history))
@@ -218,88 +572,21 @@ def _create_message_history(chat, history: list[dict]):
     ChatMessage.objects.bulk_create(history_messages)
 
 
-@shared_task(base=TaskbadgerTask)
-def mark_evaluation_complete(results, evaluation_run_id):
-    """
-    Callback task that marks an evaluation run as complete.
-    This is called when all tasks in a chord have finished.
-
-    Args:
-        results: List of results from the group tasks (unused but required by chord)
-        evaluation_run_id: ID of the evaluation run to mark complete
-    """
-
-    try:
-        evaluation_run = EvaluationRun.objects.get(id=evaluation_run_id)
-        if evaluation_run.status == EvaluationRunStatus.PROCESSING:
-            evaluation_run.mark_complete()
-            compute_aggregates_for_run(evaluation_run)
-            reverse_stale_tags(evaluation_run)
-    except Exception as e:
-        logger.exception(f"Error marking evaluation run {evaluation_run_id} complete: {e}")
-
-
-@shared_task(base=TaskbadgerTask)
-def run_evaluation_task(evaluation_run_id):
-    """
-    Spawns an evaluator task for each message
+@shared_task
+def run_evaluation_task(evaluation_run_id: int) -> None:
+    """Fast-path kick for a freshly created run: run one coordination tick immediately
+    so the first batch dispatches without waiting for the next beat. The beat sweep's
+    PENDING branch is the backstop if this dispatcher is lost.
     """
     try:
-        evaluation_run = (
-            EvaluationRun.objects.select_related("config", "team")
-            .prefetch_related("config__evaluators", "config__dataset__messages")
-            .get(id=evaluation_run_id)
-        )
-
-        evaluation_run.status = EvaluationRunStatus.PROCESSING
-        evaluation_run.save(update_fields=["status"])
-
-        with current_team(evaluation_run.team):
-            config = evaluation_run.config
-            evaluators = list(cast(Iterable[Evaluator], config.evaluators.all()))
-
-            if evaluation_run.type == EvaluationRunType.PREVIEW:
-                messages = list(config.dataset.messages.all()[:PREVIEW_SAMPLE_SIZE])
-            elif evaluation_run.type == EvaluationRunType.DELTA:
-                messages = list(evaluation_run.scoped_messages.all())
-            else:
-                messages = list(config.dataset.messages.all())
-
-            if len(evaluators) == 0 or len(messages) == 0:
-                evaluation_run.job_id = ""
-                evaluation_run.mark_complete(save=False)
-                evaluation_run.save(update_fields=["finished_at", "status", "job_id"])
-                return
-
-            # Create chord with group and callback
-            concurrency_limit = 10
-            chunk_size = math.ceil(len(messages) / concurrency_limit)
-            evaluator_ids = [e.id for e in evaluators]
-            chord_result = chord(
-                evaluate_single_message_task.chunks(
-                    [(evaluation_run_id, evaluator_ids, message.id) for message in messages], chunk_size
-                ).group()
-            )(mark_evaluation_complete.s(evaluation_run_id))
-
-            chord_result.parent.save()
-            job = chord_result.parent
-
-            evaluation_run.job_id = job.id
-            evaluation_run.save(update_fields=["job_id"])
+        _drive_run(evaluation_run_id)
     except Exception as e:
         logger.exception(f"Error starting evaluation run {evaluation_run_id}: {e}")
-        evaluation_run = EvaluationRun.objects.filter(id=evaluation_run_id).first()
-        if evaluation_run is None:
-            logger.warning("EvaluationRun %s vanished before it could be marked FAILED", evaluation_run_id)
-            return
-        evaluation_run.status = EvaluationRunStatus.FAILED
-        evaluation_run.error_message = str(e)
-        evaluation_run.job_id = ""
-        evaluation_run.save(update_fields=["status", "error_message", "job_id"])
+        _mark_run_failed(evaluation_run_id, str(e))
 
 
 @shared_task(base=TaskbadgerTask)
-def cleanup_old_evaluation_data():
+def cleanup_old_evaluation_data() -> None:
     """Delete ExperimentSessions that were created during evaluation runs and
     are older than one week.
 
@@ -322,7 +609,7 @@ def cleanup_old_evaluation_data():
 
 
 @shared_task(base=TaskbadgerTask)
-def cleanup_old_preview_evaluation_runs():
+def cleanup_old_preview_evaluation_runs() -> None:
     """Delete preview evaluation runs older than 1 day"""
     one_day_ago = timezone.now() - timedelta(days=1)
     old_preview_runs = EvaluationRun.objects.filter(type=EvaluationRunType.PREVIEW, created_at__lt=one_day_ago)
@@ -337,7 +624,7 @@ def cleanup_old_preview_evaluation_runs():
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def update_dataset_from_csv_task(self, dataset_id, file_id, team_id):
+def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: int) -> dict:
     """
     Process CSV upload for dataset asynchronously with progress tracking.
 
@@ -380,8 +667,14 @@ def update_dataset_from_csv_task(self, dataset_id, file_id, team_id):
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def create_dataset_from_csv_task(
-    self, dataset_id, file_id, team_id, column_mapping, history_column=None, populate_history=False
-):
+    self,
+    dataset_id: int,
+    file_id: int,
+    team_id: int,
+    column_mapping: dict,
+    history_column: str | None = None,
+    populate_history: bool = False,
+) -> dict:
     """
     Create dataset messages from CSV with column mapping asynchronously.
 
@@ -535,16 +828,16 @@ def create_dataset_from_csv_task(
         csv_file.delete()
 
 
-def _parse_csv_content(csv_content, progress_recorder):
+def _parse_csv_content(csv_content: str, progress_recorder: ProgressRecorder) -> tuple[list[dict], list[str]]:
     """Parse CSV content and return rows and columns."""
     csv_reader = csv.DictReader(StringIO(csv_content))
-    columns = csv_reader.fieldnames or []
+    columns = list(csv_reader.fieldnames or [])
     rows = list(csv_reader)
     progress_recorder.set_progress(5, 100, "Parsing CSV...")
     return rows, columns
 
 
-def _extract_row_data(row):
+def _extract_row_data(row: dict) -> dict:
     """Extract and validate data from a CSV row."""
     input_content = row.get("input_content", "").strip()
     output_content = row.get("output_content", "").strip()
@@ -592,7 +885,7 @@ def _extract_row_data(row):
     }
 
 
-def _update_existing_message(dataset, message_id, row_data, team):
+def _update_existing_message(dataset: EvaluationDataset, message_id: int, row_data: dict, team: Team) -> bool:
     """Update an existing message with new data."""
     message = EvaluationMessage.objects.get(id=message_id, evaluationdataset=dataset, evaluationdataset__team=team)
 
@@ -653,7 +946,7 @@ def _update_existing_message(dataset, message_id, row_data, team):
     return any_content_changed
 
 
-def _create_new_message(dataset, row_data):
+def _create_new_message(dataset: EvaluationDataset, row_data: dict) -> None:
     """Create a new message and add it to the dataset."""
     message = EvaluationMessage.objects.create(
         input=EvaluationMessageContent(content=row_data["input_content"], role="human").model_dump(),
@@ -667,7 +960,9 @@ def _create_new_message(dataset, row_data):
     dataset.messages.add(message)
 
 
-def process_csv_rows(dataset, rows, columns, progress_recorder, team):
+def process_csv_rows(
+    dataset: EvaluationDataset, rows: list[dict], columns: list[str], progress_recorder: ProgressRecorder, team: Team
+) -> dict:
     """Process all CSV rows and return statistics."""
     stats = {"updated_count": 0, "created_count": 0, "error_messages": []}
     total_rows = len(rows)
@@ -706,7 +1001,9 @@ def process_csv_rows(dataset, rows, columns, progress_recorder, team):
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_id, column_mappings=None):
+def upload_evaluation_run_results_task(
+    self, evaluation_run_id: int, csv_data: list[dict], team_id: int, column_mappings: dict | None = None
+) -> dict:
     """
     Process CSV upload for evaluation run results asynchronously with progress tracking.
     csv_data: List of dictionaries representing CSV rows
@@ -716,7 +1013,13 @@ def upload_evaluation_run_results_task(self, evaluation_run_id, csv_data, team_i
     return _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings)
 
 
-def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_data, team_id, column_mappings=None):
+def _upload_evaluation_run_results(
+    progress_recorder: ProgressRecorder,
+    evaluation_run_id: int,
+    csv_data: list[dict],
+    team_id: int,
+    column_mappings: dict | None = None,
+) -> dict:
     if not csv_data:
         return {"success": False, "error": "CSV file is empty"}
 
@@ -743,7 +1046,13 @@ def _upload_evaluation_run_results(progress_recorder, evaluation_run_id, csv_dat
         return {"success": False, "error": str(e)}
 
 
-def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mappings, progress_recorder, team):
+def process_evaluation_results_csv_rows(
+    evaluation_run: EvaluationRun,
+    csv_data: list[dict],
+    column_mappings: dict,
+    progress_recorder: ProgressRecorder,
+    team: Team,
+) -> dict:
     """Process all CSV rows for evaluation results and return statistics."""
     stats = {"updated_count": 0, "created_count": 0, "error_messages": []}
     total_rows = len(csv_data)
@@ -846,8 +1155,14 @@ def process_evaluation_results_csv_rows(evaluation_run, csv_data, column_mapping
 
 @shared_task(bind=True, base=TaskbadgerTask)
 def create_dataset_from_session_messages_task(
-    self, dataset_id, team_id, session_ids, filtered_session_ids, filter_query, timezone
-):
+    self,
+    dataset_id: int,
+    team_id: int,
+    session_ids: list[str],
+    filtered_session_ids: list[str],
+    filter_query: str | None,
+    timezone: str | None,
+) -> dict:
     """
     Clone messages from sessions asynchronously.
 
@@ -913,7 +1228,7 @@ def create_dataset_from_session_messages_task(
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
+def create_dataset_from_sessions_task(self, dataset_id: int, team_id: int, session_ids: list[str]) -> dict:
     """
     Create session-mode evaluation messages from sessions asynchronously.
 
@@ -967,7 +1282,7 @@ def create_dataset_from_sessions_task(self, dataset_id, team_id, session_ids):
         return {"success": False, "error": message}
 
 
-def _get_bulk_results_queryset(config, team):
+def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet[EvaluationResult]:
     """Return the most recent EvaluationResult per (message, evaluator) across all
     completed FULL/DELTA runs for *config*, pushing deduplication into the DB via
     DISTINCT ON so only the latest-run row per pair is fetched."""
@@ -986,7 +1301,7 @@ def _get_bulk_results_queryset(config, team):
 
 
 @shared_task(base=TaskbadgerTask)
-def export_evaluation_bulk_results_task(evaluation_config_id, team_id):
+def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int) -> dict:
     """
     Async export of the most recent evaluation result for each dataset item,
     across all completed evaluation runs for the given config.

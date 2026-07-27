@@ -97,7 +97,7 @@ def _strip_custom_actions_from_working_pipeline(working_pipeline):
     """Simulate a user removing the CustomAction from the working pipeline while versioned
     pipelines still reference it. This mirrors the real-world path where the user edits the
     working pipeline (which saves clean) but published versions retain the snapshotted ref.
-    Node content lives on the rows (ADR-0047), so the edit only touches them."""
+    Node content lives on the rows (ADR-0048), so the edit only touches them."""
     for node in working_pipeline.node_set.filter(type=LLMResponseWithPrompt.__name__):
         node.params["custom_actions"] = []
         node.save(update_fields=["params"])

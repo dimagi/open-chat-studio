@@ -5,7 +5,7 @@ from apps.pipelines.models import Node, Pipeline
 
 class Command(IdempotentCommand):
     help = (
-        "Drop the nodes key from Pipeline.data, leaving edges (and viewport) only (ADR-0047), "
+        "Drop the nodes key from Pipeline.data, leaving edges (and viewport) only (ADR-0048), "
         "after backfilling each node's position onto the Node row's position columns. "
         "Run by migration pipelines.0030_strip_node_data. Idempotent and safe to rerun; "
         "pipelines whose blobs have no backing Node row are skipped and logged."

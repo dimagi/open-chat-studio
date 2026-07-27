@@ -418,7 +418,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = _public_media_url(AWS_S3_CUSTOM_DOMAIN, AWS_PUBLIC_STORAGE_BUCKET_NAME, PUBLIC_MEDIA_LOCATION)
-    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["public"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
@@ -459,7 +459,7 @@ REST_FRAMEWORK = {
         "apps.api.permissions.BearerTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "apps.api.permissions.IsAuthenticatedOrMachineToken",
         "apps.api.permissions.ReadOnlyAPIKeyPermission",
         "apps.oauth.permissions.TokenHasOAuthScope",
     ],
@@ -617,6 +617,10 @@ SCHEDULED_TASKS = {
         "task": "apps.evaluations.auto_population.auto_populate_eval_datasets",
         "schedule": timedelta(minutes=5),
     },
+    "evaluations.tasks.coordinate_evaluation_runs": {
+        "task": "apps.evaluations.tasks.coordinate_evaluation_runs",
+        "schedule": 30,
+    },
 }
 
 CACHES = {
@@ -700,11 +704,13 @@ if SENTRY_DSN:
     )
 
 # Taskbadger setup
+# TASKBADGER_ORG and TASKBADGER_PROJECT are deprecated as of taskbadger 2.3.1 and only need to be
+# passed if still set for backwards compatibility.
 TASKBADGER_ORG = env("TASKBADGER_ORG", default=None)
 TASKBADGER_PROJECT = env("TASKBADGER_PROJECT", default=None)
 TASKBADGER_API_KEY = env("TASKBADGER_API_KEY", default=None)
 
-if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
+if TASKBADGER_API_KEY:
     import taskbadger
     from taskbadger.systems.celery import CelerySystemIntegration
 
@@ -725,6 +731,9 @@ if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
                     # ignore these since they execute often and fire other tasks that we already track
                     "apps.events.tasks.enqueue_static_triggers",
                     "apps.events.tasks.enqueue_timed_out_events",
+                    # evaluation coordination manages one Taskbadger task per run itself
+                    "apps.evaluations.tasks.coordinate_evaluation_runs",
+                    "apps.evaluations.tasks.evaluate_message_batch",
                 ],
                 record_task_args=True,
             )
@@ -1055,6 +1064,20 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
             "profile": "User Profile",
         }
     )
+# Scopes a client-credentials (machine) application may be granted. Deliberately explicit: new
+# scopes are opt-in for machine tokens, and the OIDC scopes (openid/profile) are excluded because a
+# machine token has no user. Enforced at token issuance by APIScopedValidator.validate_scopes.
+OAUTH_CLIENT_CREDENTIALS_SCOPES = [
+    "chatbots:read",
+    "chatbots:interact",
+    "sessions:read",
+    "sessions:write",
+    "files:read",
+    "participants:read",
+    "participants:write",
+    "usage:read",
+]
+
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"
 OAUTH2_PROVIDER_ID_TOKEN_MODEL = "oauth.OAuth2IDToken"

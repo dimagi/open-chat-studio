@@ -180,9 +180,7 @@ from django.http import HttpResponseGone
 
 
 def old_endpoint_removed(request, *args, **kwargs):
-    return HttpResponseGone(
-        "This endpoint was removed on <date>. Use <replacement> instead: <docs link>"
-    )
+    return HttpResponseGone("This endpoint was removed on <date>. Use <replacement> instead: <docs link>")
 ```
 
 Where the replacement is a true drop-in, a permanent redirect

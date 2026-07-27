@@ -88,7 +88,7 @@ class ApplicationHome(LoginRequiredMixin, TemplateView):
         }
 
 
-class ApplicationTableView(LoginRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class ApplicationTableView(LoginRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """List view for all OAuth applications owned by the current user using django-tables2."""
 
     model = OAuth2Application
@@ -112,6 +112,11 @@ class CreateApplication(LoginRequiredMixin, CreateView):
         "button_text": "Register",
     }
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
     def get_initial(self):
         return {
             "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
@@ -134,6 +139,11 @@ class EditApplication(ApplicationOwnerIsUserMixin, UpdateView):
         "title": "Update Application",
         "button_text": "Update",
     }
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
 
     def get_queryset(self):
         return OAuth2Application.objects.filter(user=self.request.user)

@@ -23,7 +23,7 @@ from .tables import TranscriptAnalysisTable
 from .tasks import process_transcript_analysis
 
 
-class TranscriptAnalysisListView(LoginAndTeamRequiredMixin, SingleTableView):
+class TranscriptAnalysisListView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = TranscriptAnalysis
     table_class = TranscriptAnalysisTable
     template_name = "analysis/list.html"

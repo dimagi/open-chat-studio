@@ -3,12 +3,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from apps.evaluations.models import EvaluationConfig, EvaluationRunStatus
-from apps.evaluations.tasks import mark_evaluation_complete
+from apps.evaluations.models import EvaluationConfig, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.tasks import coordinate_evaluation_runs
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
     EvaluationMessageFactory,
+    EvaluationResultFactory,
     EvaluationRunFactory,
     EvaluatorFactory,
 )
@@ -85,32 +86,29 @@ def test_empty_evaluation_config():
 
 
 @pytest.mark.django_db()
-def test_chord_completion_callback(team_with_users):
-    """Test that the chord completion callback correctly marks evaluation as complete"""
-    evaluation_run = EvaluationRunFactory.create(team=team_with_users, status=EvaluationRunStatus.PROCESSING)
-
-    # Call the completion callback
-    mark_evaluation_complete([], evaluation_run.id)
-
-    # Check that the evaluation run was marked as complete
-    evaluation_run.refresh_from_db()
-    assert evaluation_run.status == EvaluationRunStatus.COMPLETED
-    assert evaluation_run.finished_at is not None
-
-
-@pytest.mark.django_db()
-def test_chord_completion_callback_already_complete(team_with_users):
-    """Test that the callback doesn't change already completed runs"""
-    evaluation_run = EvaluationRunFactory.create(
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_sweep_marks_run_complete_when_all_results_present(delay_mock, _publish, team_with_users):
+    config = EvaluationConfigFactory.create(team=team_with_users)
+    evaluator = EvaluatorFactory.create(team=team_with_users)
+    config.evaluators.set([evaluator])
+    message = EvaluationMessageFactory.create()
+    config.dataset.messages.add(message)
+    run = EvaluationRunFactory.create(
+        config=config,
         team=team_with_users,
-        status=EvaluationRunStatus.COMPLETED,  # Already completed
+        type=EvaluationRunType.FULL,
+        status=EvaluationRunStatus.PROCESSING,
+        evaluator_ids=[evaluator.id],
+        in_flight=[message.id],
     )
-    original_finished_at = evaluation_run.finished_at
+    run.scoped_messages.add(message)
+    EvaluationResultFactory.create(
+        team=team_with_users, run=run, evaluator=evaluator, message=message, output={"result": {"ok": 1}}
+    )
 
-    # Call the completion callback
-    mark_evaluation_complete([], evaluation_run.id)
+    coordinate_evaluation_runs()
 
-    # Check that nothing changed
-    evaluation_run.refresh_from_db()
-    assert evaluation_run.status == EvaluationRunStatus.COMPLETED
-    assert evaluation_run.finished_at == original_finished_at
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    assert run.finished_at is not None
