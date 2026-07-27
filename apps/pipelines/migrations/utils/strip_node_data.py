@@ -85,7 +85,7 @@ def _backfill_positions(pipeline, Node, node_rows):
 
 
 def _strip_nodes(pipeline, Node, node_rows):
-    """The pipeline's node list with only layout keys kept, or None when nothing to strip.
+    """The pipeline's data with the ``nodes`` key removed, or None when nothing to strip.
 
     None when there is no ``nodes`` key (already stripped — idempotent), and also None when
     any blob has no backing Node row (drift, a known bad state): the blob is then the only
@@ -113,11 +113,12 @@ def _strip_nodes(pipeline, Node, node_rows):
 
 
 def rebuild_node_data_in_pipelines(Pipeline, Node, team=None):
-    """Reverse of the strip: rebuild each node's embedded content blob from its Node row.
+    """Reverse of the strip: rebuild the full ``nodes`` list from the Node rows.
 
-    Exists so the strip is genuinely reversible — pre-ADR-0046 code requires the
-    blob (``FlowNode.data`` was a mandatory field), so a code rollback needs it restored.
-    Nodes without a backing row are left untouched. Idempotent.
+    ``Pipeline.data`` no longer stores nodes, so a code rollback to a version that reads
+    them needs the react-flow nodes — id, react-flow type, position and embedded content
+    blob — reconstructed from the rows. Pipelines that still carry a ``nodes`` key are left
+    untouched (idempotent); pipelines with no backing rows are skipped.
 
     `team`, if given, scopes the rebuild to that team's pipelines only.
     """
