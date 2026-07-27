@@ -18,8 +18,8 @@ from apps.evaluations.tasks import (
     _publish_tick,
     _TickResult,
     coordinate_evaluation_runs,
+    evaluate_message,
     evaluate_message_batch,
-    evaluate_single_message_task,
     run_evaluation_task,
 )
 from apps.utils.factories.evaluations import (
@@ -114,7 +114,7 @@ def test_evaluate_single_message_skips_already_evaluated(evaluator_run_mock, coo
         team=run.team, run=run, evaluator=evaluator, message=message, output={"result": {"score": 1}}
     )
 
-    evaluate_single_message_task(run.id, [evaluator.id], message.id)
+    evaluate_message(run.id, [evaluator.id], message.id)
 
     evaluator_run_mock.assert_not_called()
     assert EvaluationResult.objects.filter(run=run, message=message, evaluator=evaluator).count() == 1
@@ -131,7 +131,7 @@ def test_evaluate_single_message_only_runs_missing_evaluator(evaluator_run_mock,
     )
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"score": 2}}))
 
-    evaluate_single_message_task(run.id, [evaluator1.id, evaluator2.id], message.id)
+    evaluate_message(run.id, [evaluator1.id, evaluator2.id], message.id)
 
     assert evaluator_run_mock.call_count == 1
     assert EvaluationResult.objects.filter(run=run, message=message, evaluator=evaluator2).exists()
@@ -151,13 +151,13 @@ def test_evaluate_single_message_duplicate_insert_is_swallowed(evaluator_run_moc
     )
     with patch("apps.evaluations.tasks._pending_evaluator_ids", return_value=[evaluator.id]):
         # Should not raise despite the pre-existing row.
-        evaluate_single_message_task(run.id, [evaluator.id], message.id)
+        evaluate_message(run.id, [evaluator.id], message.id)
 
     assert EvaluationResult.objects.filter(run=run, message=message, evaluator=evaluator).count() == 1
 
 
 @pytest.mark.django_db()
-@patch("apps.evaluations.tasks.evaluate_single_message_task")
+@patch("apps.evaluations.tasks.evaluate_message")
 def test_evaluate_message_batch_runs_each_message(single_mock, coordination_run):
     run, evaluator, message = coordination_run
     run.status = EvaluationRunStatus.PROCESSING
@@ -172,7 +172,7 @@ def test_evaluate_message_batch_runs_each_message(single_mock, coordination_run)
 
 
 @pytest.mark.django_db()
-@patch("apps.evaluations.tasks.evaluate_single_message_task")
+@patch("apps.evaluations.tasks.evaluate_message")
 def test_evaluate_message_batch_skips_when_run_not_processing(single_mock, coordination_run):
     run, evaluator, message = coordination_run  # status defaults to PENDING
     evaluate_message_batch(run.id, [message.id])
@@ -180,7 +180,7 @@ def test_evaluate_message_batch_skips_when_run_not_processing(single_mock, coord
 
 
 @pytest.mark.django_db()
-@patch("apps.evaluations.tasks.evaluate_single_message_task")
+@patch("apps.evaluations.tasks.evaluate_message")
 def test_evaluate_message_batch_skips_deleted_run(single_mock, coordination_run):
     run, evaluator, message = coordination_run
     run_id = run.id
@@ -411,7 +411,7 @@ def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _pu
     """A run larger than one batch completes across several ticks, with no duplicate results.
 
     Each tick dispatches batches into `dispatched`; we drain them by calling the real
-    evaluate_message_batch (which runs evaluate_single_message_task in-process), then
+    evaluate_message_batch (which runs evaluate_message in-process), then
     tick again, until the run completes.
     """
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"score": 1}}))

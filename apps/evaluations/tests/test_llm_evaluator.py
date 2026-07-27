@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.field_definitions import ChoiceFieldDefinition, IntFieldDefinition, StringFieldDefinition
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
-from apps.evaluations.tasks import evaluate_single_message_task
+from apps.evaluations.tasks import evaluate_message
 from apps.evaluations.utils import schema_to_pydantic_model
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -109,7 +109,7 @@ def test_running_evaluator(get_llm_service, llm_provider, llm_provider_model):
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
     for message in dataset.messages.all().order_by("created_at"):
-        evaluate_single_message_task(evaluation_run.id, [evaluator.id], message.id)
+        evaluate_message(evaluation_run.id, [evaluator.id], message.id)
 
     evaluation_run.refresh_from_db()
     results = evaluation_run.results.all().order_by("created_at")
@@ -199,7 +199,7 @@ def test_context_variables_in_prompt(get_llm_service, llm_provider, llm_provider
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
     for message in dataset.messages.all():
-        evaluate_single_message_task(evaluation_run.id, [evaluator.id], message.id)
+        evaluate_message(evaluation_run.id, [evaluator.id], message.id)
 
     evaluation_run.refresh_from_db()
     results = evaluation_run.results.all()
@@ -257,7 +257,7 @@ def test_evaluator_with_missing_output(get_llm_service, llm_provider, llm_provid
 
     evaluation_run = EvaluationRun.objects.create(team=evaluation_config.team, config=evaluation_config)
 
-    evaluate_single_message_task(evaluation_run.id, [evaluator.id], evaluation_message.id)
+    evaluate_message(evaluation_run.id, [evaluator.id], evaluation_message.id)
 
     evaluation_run.refresh_from_db()
     results = evaluation_run.results.all()

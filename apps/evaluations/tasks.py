@@ -157,18 +157,19 @@ def _run_evaluator_on_message(
         logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
 
 
-@shared_task
-def evaluate_single_message_task(evaluation_run_id: int, evaluator_ids: list[int], message_id: int) -> None:
+def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_id: int) -> None:
     """
     Run the outstanding evaluations over a single message, in-process.
 
-    Idempotent by design: broker redelivery and stall re-dispatch deliberately
-    re-run this task, so it first drops evaluators that already have a result for
-    (run, message) and returns before bot generation if none remain. A partially
-    evaluated message re-runs bot generation, so remaining evaluators judge a fresh
-    bot response (rare crash-path artifact). Duplicate inserts that race past the
-    skip check are absorbed by the unique constraint (the other delivery won).
-    ExperimentSessions created here are deleted periodically by cleanup_old_evaluation_data.
+    Called synchronously by evaluate_message_batch — never dispatched on its own.
+
+    Idempotent by design: batch redelivery and stall re-dispatch deliberately re-run
+    this, so it first drops evaluators that already have a result for (run, message)
+    and returns before bot generation if none remain. A partially evaluated message
+    re-runs bot generation, so remaining evaluators judge a fresh bot response (rare
+    crash-path artifact). Duplicate inserts that race past the skip check are absorbed
+    by the unique constraint (the other delivery won). ExperimentSessions created here
+    are deleted periodically by cleanup_old_evaluation_data.
     """
     try:
         evaluation_run = EvaluationRun.objects.select_related("team").get(id=evaluation_run_id)
@@ -227,7 +228,7 @@ def evaluate_message_batch(evaluation_run_id: int, message_ids: list[int]) -> No
         return
 
     for message_id in message_ids:
-        evaluate_single_message_task(evaluation_run_id, run.evaluator_ids, message_id)
+        evaluate_message(evaluation_run_id, run.evaluator_ids, message_id)
 
 
 @dataclass
