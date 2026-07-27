@@ -11,7 +11,4 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # llm_model_migration() moved to 0067_add_claude_opus_5
-        # Seed pricing for the Gemini models added in this migration.
-        load_pricing_data(),
     ]
