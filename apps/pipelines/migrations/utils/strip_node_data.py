@@ -18,15 +18,29 @@ LAYOUT_NODE_KEYS = ("id", "type", "position")
 BATCH_SIZE = 500
 
 
-def strip_node_data_from_pipelines(Pipeline, Node):
+def strip_node_data_from_pipelines(Pipeline, Node, team=None, progress_callback=None):
+    """`team`, if given, scopes the strip to that team's pipelines only.
+
+    `progress_callback(processed, total)` is invoked every ``BATCH_SIZE`` pipelines
+    and once more on the final pipeline, if given.
+    """
+    queryset = Pipeline._base_manager.exclude(data__isnull=True)
+    if team is not None:
+        queryset = queryset.filter(team=team)
+    total = queryset.count()
+
     pending = []
-    for pipeline in Pipeline._base_manager.exclude(data__isnull=True).iterator(chunk_size=BATCH_SIZE):
+    processed = 0
+    for pipeline in queryset.iterator(chunk_size=BATCH_SIZE):
         rows = []
         for row in Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"):
             rows.append(row)
 
         _backfill_positions(pipeline, Node, node_rows=rows)
         stripped_nodes = _strip_nodes(pipeline, Node, rows)
+        processed += 1
+        if progress_callback and (processed % BATCH_SIZE == 0 or processed == total):
+            progress_callback(processed, total)
         if stripped_nodes is None:
             continue
         pipeline.data = {**pipeline.data, "nodes": stripped_nodes}
@@ -93,15 +107,21 @@ def _strip_nodes(pipeline, Node, node_rows):
     return [{key: node[key] for key in LAYOUT_NODE_KEYS if key in node} for node in nodes]
 
 
-def rebuild_node_data_in_pipelines(Pipeline, Node):
+def rebuild_node_data_in_pipelines(Pipeline, Node, team=None):
     """Reverse of the strip: rebuild each node's embedded content blob from its Node row.
 
     Exists so the strip is genuinely reversible — pre-ADR-0046 code requires the
     blob (``FlowNode.data`` was a mandatory field), so a code rollback needs it restored.
     Nodes without a backing row are left untouched. Idempotent.
+
+    `team`, if given, scopes the rebuild to that team's pipelines only.
     """
+    queryset = Pipeline._base_manager.exclude(data__isnull=True)
+    if team is not None:
+        queryset = queryset.filter(team=team)
+
     pending = []
-    for pipeline in Pipeline._base_manager.exclude(data__isnull=True).iterator(chunk_size=BATCH_SIZE):
+    for pipeline in queryset.iterator(chunk_size=BATCH_SIZE):
         nodes = (pipeline.data or {}).get("nodes") or []
         if not nodes:
             continue
