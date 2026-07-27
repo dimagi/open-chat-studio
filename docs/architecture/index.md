@@ -31,9 +31,9 @@ Open Chat Studio is built as a Django web application with a modular design. It 
 
 ## Key Concepts
 
-See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for full definitions of Chatbots, Channels, Pipelines, Service Providers, and other product concepts.
+See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for product-facing definitions of Chatbots, Channels, Pipelines, Service Providers, and other concepts.
 
-One naming note for engineers reading the code: **Experiments/Chatbots** - 'Experiment' is the legacy name still used throughout the codebase (the `apps/experiments` app, the `Experiment` model, etc.). The UI and user docs refer to the same concept as a ['Chatbot'](https://docs.openchatstudio.com/concepts/chatbots/).
+For the precise domain language used in code (and by AI coding agents) — e.g. Chatbot vs. Chatbot Version, Working vs. Published Version, Session vs. Participant vs. User, Trace vs. Span — see **[CONTEXT.md](https://github.com/dimagi/open-chat-studio/blob/main/CONTEXT.md)**, the canonical glossary kept up to date as the domain model evolves.
 
 ## Project structure
 
@@ -62,6 +62,8 @@ The architectural patterns underlying these concerns — multi-tenancy, versioni
 - `teams/decorators.py`: Permission decorators
 
 ## Monitoring & Observability
+
+Open Chat Studio relies on a small set of external services to keep production healthy: errors are captured and triaged in Sentry, Celery task execution is tracked in Task Badger, and overall uptime is monitored and communicated via BetterStack's status page.
 
 ### [Sentry](https://sentry.io/)
 
