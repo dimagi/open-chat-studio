@@ -220,8 +220,9 @@ disappears, leaving `Pipeline.data` as `{edges, viewport}`. It landed in two pha
   returns the complete mapping; `duplicate_pipeline_with_new_ids` shrinks to id generation
   and edge rewriting, taking the id→type map from the rows.
 - `strip_node_data` now drops the `nodes` key entirely (after the position backfill);
-  `--rebuild` reconstructs the full `nodes` list from the rows for a code rollback. Rerun
-  the command at deploy to heal any writer that bypassed the shadow-write (e.g. revert).
+  rolling back migration `pipelines.0030` (`migrate pipelines 0029`) reconstructs the full
+  `nodes` list from the rows for a code rollback. Rerun the command at deploy to heal any
+  writer that bypassed the shadow-write (e.g. revert).
 - Deferred: making the position columns non-null once the backfill has run everywhere.
 
 ## Backward compatibility

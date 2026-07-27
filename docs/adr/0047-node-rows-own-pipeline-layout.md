@@ -38,8 +38,8 @@ from `Node.type`.
 - `duplicate_pipeline_with_new_ids` takes the id→type mapping from the rows, generates new
   ids and rewrites edges — it no longer reads a node list from the blob.
 - The `strip_node_data` command drops the `nodes` key (after backfilling positions from any
-  remaining blob); `--rebuild` reconstructs the full `nodes` list from the rows for a code
-  rollback.
+  remaining blob); rolling back migration `pipelines.0030` (`migrate pipelines 0029`)
+  reconstructs the full `nodes` list from the rows for a code rollback.
 
 The wire format is unchanged: the editor still sends and receives full nodes.
 
