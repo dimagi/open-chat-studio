@@ -55,7 +55,7 @@ importers:
         specifier: ^16.1.0
         version: 16.1.1(postcss@8.5.22)
       prettier:
-        specifier: ^3.9.4
+        specifier: ^3.9.6
         version: 3.9.6
       puppeteer:
         specifier: ^24.2.0
