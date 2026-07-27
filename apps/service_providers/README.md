@@ -22,8 +22,6 @@ To differentiate between the subtypes, we use the `type` field on the model (an 
 Here is an example:
 
 ```python
-
-
 class MyProviderType(models.TextChoices):
     type_a = "typeA", _("Type A")
     type_b = "typeB", _("Type B")
@@ -56,6 +54,7 @@ subtype should have its own form class which is used to generate the UI and to v
 ```python
 class MyProviderTypeAConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     """Form for configuring a MyProviderTypeA."""
+
     obfuscate_fields = ["api_key"]
 
     username = forms.CharField()

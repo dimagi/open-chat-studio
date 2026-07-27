@@ -9,8 +9,10 @@ The basic pattern is as follows:
 ```python
 from apps.audit.decorators import audit_fields
 
+
 class MyModelManager(AuditingManager):
     pass
+
 
 @audit_fields("field_a", "field_b", audit_special_queryset_writes=True)
 class MyModel(BaseTeamModel):

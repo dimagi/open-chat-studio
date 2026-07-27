@@ -105,17 +105,17 @@ First, let's create a filter for product categories using the existing filter ty
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, StringColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
+
 class ProductCategoryFilter(ChoiceColumnFilter):
     """Filter products by category name."""
+
     query_param: str = "category"
     column: str = "category__name"  # Database field path
     label: str = "Category"
 
     def prepare(self, team, **kwargs):
-        self.options = [
-            {"id": cat.id, "label": cat.name}
-            for cat in Category.objects.filter(team=team).all()
-        ]
+        self.options = [{"id": cat.id, "label": cat.name} for cat in Category.objects.filter(team=team).all()]
+
 
 p_filter = ProductCategoryFilter()
 
@@ -134,6 +134,7 @@ from typing import ClassVar
 from collections.abc import Sequence
 from apps.web.dynamic_filters.base import MultiColumnFilter
 
+
 class ProductInventoryFilter(MultiColumnFilter):
     """Filter for product inventory using multiple column filters."""
 
@@ -145,13 +146,13 @@ class ProductInventoryFilter(MultiColumnFilter):
         StringColumnFilter(
             label="Category",
             columns=["category__name", "category__description"],  # Searches both fields with OR logic
-            query_param="category_search"
+            query_param="category_search",
         ),
     ]
 
     def prepare_queryset(self, queryset):
         """Prepare the queryset with any necessary annotations or select_related calls."""
-        return queryset.select_related('category')
+        return queryset.select_related("category")
 ```
 
 ### Step 3: Create the Model and Table (for completeness)
@@ -160,9 +161,11 @@ class ProductInventoryFilter(MultiColumnFilter):
 # apps/inventory/models.py
 from django.db import models
 
+
 class Category(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+
 
 class Product(models.Model):
     name = models.CharField(max_length=200)
@@ -178,11 +181,12 @@ class Product(models.Model):
 import django_tables2 as tables
 from .models import Product
 
+
 class ProductTable(tables.Table):
     class Meta:
         model = Product
-        fields = ('name', 'category', 'price', 'stock_quantity', 'created_at', 'updated_at')
-        attrs = {'class': 'table table-striped'}
+        fields = ("name", "category", "price", "stock_quantity", "created_at", "updated_at")
+        attrs = {"class": "table table-striped"}
 ```
 
 ### Step 4: Create the View
@@ -199,8 +203,10 @@ from .models import Product
 from .tables import ProductTable
 from .filters import ProductInventoryFilter
 
+
 class ProductInventoryView(SingleTableView):
     """View for displaying filtered product inventory."""
+
     model = Product
     table_class = ProductTable
     template_name = "inventory/product_list.html"
@@ -227,7 +233,7 @@ class ProductInventoryView(SingleTableView):
             filter_class=ProductInventoryFilter,
             table_url=reverse("inventory:product_table"),  # Your HTMX table URL
             table_container_id="product-table",
-            table_type="your-table-type"
+            table_type="your-table-type",
         )
 
         context.update(filter_context)
