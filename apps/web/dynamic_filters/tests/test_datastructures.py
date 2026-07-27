@@ -1,4 +1,5 @@
 import json
+from urllib.parse import parse_qs
 
 import pytest
 from django.http import QueryDict
@@ -68,6 +69,55 @@ def test_single_json_string_value_is_not_unwrapped():
     assert json.loads(column_filter.value) == ["[1, 2]"]
 
 
+@pytest.mark.parametrize(
+    ("operator", "value", "expected"),
+    [
+        pytest.param("any of", '["a", "b"]', '["a", "b"]', id="json-list-untouched"),
+        pytest.param("any of", "a", '["a"]', id="bare-string-wrapped"),
+        pytest.param("equals", "a", "a", id="non-list-operator-untouched"),
+    ],
+)
+def test_column_filter_data_normalises_list_values(operator, value, expected):
+    assert ColumnFilterData(column="tags", operator=operator, value=value).value == expected
+
+
+def test_multiple_filters_on_the_same_column_are_all_retained():
+    """Two filters on one column (e.g. a date range built from `after` + `before`) must both survive.
+
+    In the f_/op_ format this is expressed with repeated keys.
+    """
+    params = QueryDict(
+        "f_first_message=2026-04-30&op_first_message=after&f_first_message=2026-06-01&op_first_message=before"
+    )
+    filter_params = FilterParams(params)
+
+    assert [(f.operator, f.value) for f in filter_params.get_all("first_message")] == [
+        ("after", "2026-04-30"),
+        ("before", "2026-06-01"),
+    ]
+
+
+def test_get_all_returns_empty_list_for_unknown_column():
+    assert FilterParams().get_all("first_message") == []
+
+
+def test_to_query_round_trips_duplicate_columns():
+    column_filters = [
+        ColumnFilterData(column="first_message", operator="after", value="2026-04-30"),
+        ColumnFilterData(column="first_message", operator="before", value="2026-06-01"),
+        ColumnFilterData(column="participant", operator="equals", value="bob"),
+    ]
+    query = FilterParams(column_filters=column_filters).to_query()
+
+    round_tripped = FilterParams(QueryDict(query))
+    assert [(f.column, f.operator, f.value) for f in round_tripped.filters] == [
+        (f.column, f.operator, f.value) for f in column_filters
+    ]
+    # the duplicate column is preserved as repeated f_/op_ keys — nothing silently dropped
+    assert parse_qs(query)["f_first_message"] == ["2026-04-30", "2026-06-01"]
+    assert parse_qs(query)["op_first_message"] == ["after", "before"]
+
+
 def test_to_query_round_trips_special_characters():
     """Python -> query string -> Python must preserve values containing ~ and quotes."""
     values = ["tag~2", 'fo"o']
@@ -80,7 +130,7 @@ def test_to_query_round_trips_special_characters():
     query_string = params.to_query()
 
     reparsed = FilterParams(QueryDict(query_string))
-    assert json.loads(reparsed.get("tags").value) == values
+    assert json.loads(reparsed.get_all("tags")[0].value) == values
 
 
 def test_from_request_translates_legacy_url_params():
@@ -96,10 +146,10 @@ def test_from_request_translates_legacy_url_params():
 
     params = FilterParams.from_request(request)
 
-    column_filter = params.get("experiment")
-    assert column_filter is not None
-    assert column_filter.operator == "any of"
-    assert json.loads(column_filter.value) == ["tag1", "tag2"]
+    matches = params.get_all("experiment")
+    assert len(matches) == 1
+    assert matches[0].operator == "any of"
+    assert json.loads(matches[0].value) == ["tag1", "tag2"]
 
 
 def test_from_request_header_translates_legacy_url_params():
@@ -109,9 +159,9 @@ def test_from_request_header_translates_legacy_url_params():
 
     params = FilterParams.from_request(request)
 
-    column_filter = params.get("experiment")
-    assert column_filter is not None
-    assert json.loads(column_filter.value) == ["5"]
+    matches = params.get_all("experiment")
+    assert len(matches) == 1
+    assert json.loads(matches[0].value) == ["5"]
 
 
 def test_from_request_leaves_new_format_untouched():
@@ -120,4 +170,4 @@ def test_from_request_leaves_new_format_untouched():
 
     params = FilterParams.from_request(request)
 
-    assert json.loads(params.get("experiment").value) == ["5"]
+    assert json.loads(params.get_all("experiment")[0].value) == ["5"]

@@ -256,12 +256,17 @@ class ExperimentSessionCreateSerializer(serializers.ModelSerializer):
         if experiment.team_id != request.team.id:
             raise NotFound("Experiment not found")
         validated_data["team"] = request.team
-        participant_identifier = validated_data.get("participant", request.user.email)
+        # Machine (client-credentials) tokens have no user, so there is no email to fall back to and
+        # no user to attribute the participant to.
+        acting_user = request.user if request.user.is_authenticated else None
+        participant_identifier = validated_data.get("participant") or (acting_user and acting_user.email)
+        if not participant_identifier:
+            raise serializers.ValidationError({"participant": "This field is required."})
         participant, _created = Participant.objects.get_or_create(
             identifier=participant_identifier,
             team=request.team,
             platform=ChannelPlatform.API,
-            defaults={"user": request.user},
+            defaults={"user": acting_user},
         )
         validated_data["participant"] = participant
         channel = ExperimentChannel.objects.get_team_api_channel(request.team)

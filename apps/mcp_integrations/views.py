@@ -27,7 +27,7 @@ class McpServerHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class McpServerTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class McpServerTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = McpServer
     table_class = McpServerTable
     template_name = "table/single_table.html"

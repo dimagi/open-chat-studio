@@ -40,20 +40,25 @@ def test_filter_params_parse_new_format():
     params = FilterParams(query_dict)
 
     assert len(params.filters) == 2
-    assert params.get("tags").column == "tags"
-    assert params.get("tags").operator == "any of"
-    assert params.get("tags").value == '["tag1", "tag2"]'
+    tags = params.get_all("tags")[0]
+    assert tags.column == "tags"
+    assert tags.operator == "any of"
+    assert tags.value == '["tag1", "tag2"]'
 
-    assert params.get("status").column == "status"
-    assert params.get("status").operator == "equals"
-    assert params.get("status").value == "active"
+    status = params.get_all("status")[0]
+    assert status.column == "status"
+    assert status.operator == "equals"
+    assert status.value == "active"
 
 
 def test_filter_params_to_query():
     """Test generating new format query string."""
-    params = FilterParams()
-    params.filters["tags"] = ColumnFilterData(column="tags", operator="any of", value='["tag1", "tag2"]')
-    params.filters["status"] = ColumnFilterData(column="status", operator="equals", value="active")
+    params = FilterParams(
+        column_filters=[
+            ColumnFilterData(column="tags", operator="any of", value='["tag1", "tag2"]'),
+            ColumnFilterData(column="status", operator="equals", value="active"),
+        ]
+    )
 
     query_string = params.to_query()
 
@@ -67,8 +72,11 @@ def test_filter_params_to_query():
 
 def test_filter_params_to_query_with_special_chars():
     """Test generating query string with values containing special characters."""
-    params = FilterParams()
-    params.filters["tags"] = ColumnFilterData(column="tags", operator="any of", value='["tag~1", "tag2"]')
+    params = FilterParams(
+        column_filters=[
+            ColumnFilterData(column="tags", operator="any of", value='["tag~1", "tag2"]'),
+        ]
+    )
 
     query_string = params.to_query()
 
@@ -80,7 +88,7 @@ def test_filter_params_to_query_with_special_chars():
 
     # Now parse it back and verify it normalizes correctly
     params2 = FilterParams(query_dict)
-    assert params2.get("tags").value == '["tag~1", "tag2"]'
+    assert params2.get_all("tags")[0].value == '["tag~1", "tag2"]'
 
 
 def test_column_filter_data_parses_json_arrays_without_tilde():

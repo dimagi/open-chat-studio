@@ -369,6 +369,7 @@ class TestCopyExperiment:
         assert experiment_copy.pipeline.node_set.count() == 3
         node_ids = {node.type: node.flow_id for node in experiment_copy.pipeline.node_set.all()}
         assert experiment_copy.pipeline.data != pipeline_data
+        # The copy's data is layout-only (ADR-0046); node content lives on the Node rows.
         assert experiment_copy.pipeline.data == {
             "edges": [
                 {
@@ -383,37 +384,19 @@ class TestCopyExperiment:
                 },
             ],
             "nodes": [
-                {
-                    "id": node_ids["StartNode"],
-                    "data": {
-                        "id": node_ids["StartNode"],
-                        "type": "StartNode",
-                    },
-                },
+                {"id": node_ids["StartNode"]},
                 {
                     "id": node_ids["RenderTemplate"],
-                    "data": {
-                        "id": node_ids["RenderTemplate"],
-                        "type": "RenderTemplate",
-                        "params": {
-                            "name": "render template",
-                            "template_string": "{{input}}",
-                        },
-                    },
                     "type": "pipelineNode",
                     "position": {"x": 1086.2033684962435, "y": 91.8445271200375},
                 },
-                {
-                    "id": node_ids["EndNode"],
-                    "data": {
-                        "id": node_ids["EndNode"],
-                        "type": "EndNode",
-                    },
-                },
+                {"id": node_ids["EndNode"]},
             ],
             "errors": {"test": "value"},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
+        copied_render = experiment_copy.pipeline.node_set.get(type="RenderTemplate")
+        assert copied_render.params == {"name": "render template", "template_string": "{{input}}"}
 
 
 class TestExperimentFieldClassification:

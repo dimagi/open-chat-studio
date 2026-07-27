@@ -28,6 +28,6 @@ def migrate_auto_population_filter_query_strings(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("evaluations", "0015_auto_populate_schema")]
+    dependencies = [("evaluations", "0016_evaluationrun_batch_dispatched_at_and_more")]
 
     operations = [migrations.RunPython(migrate_auto_population_filter_query_strings, migrations.RunPython.noop)]

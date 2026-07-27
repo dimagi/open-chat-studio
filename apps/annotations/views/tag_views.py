@@ -119,7 +119,7 @@ class DeleteTag(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
         return [Chip(label=e.name, url=e.get_absolute_url()) for e in evaluators]
 
 
-class TagTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class TagTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     permission_required = "annotations.view_tag"
     model = Tag
     table_class = TagTable

@@ -10,7 +10,7 @@ from django.http import QueryDict
 from apps.utils.factories.evaluations import DatasetAutoPopulationRuleFactory
 from apps.web.dynamic_filters.datastructures import FilterParams
 
-_migration = importlib.import_module("apps.evaluations.migrations.0016_migrate_auto_population_filter_query_strings")
+_migration = importlib.import_module("apps.evaluations.migrations.0017_migrate_auto_population_filter_query_strings")
 migrate_auto_population_filter_query_strings = _migration.migrate_auto_population_filter_query_strings
 
 
@@ -60,7 +60,7 @@ def test_migration_round_trips_separator_in_value():
     query = QueryDict(rule.filter_query_string)
     assert query["f_tags"] == '"tag~2"~a'
     filter_params = FilterParams(query)
-    assert json.loads(filter_params.get("tags").value) == ["tag~2", "a"]
+    assert json.loads(filter_params.get_all("tags")[0].value) == ["tag~2", "a"]
 
 
 @pytest.mark.django_db()

@@ -24,6 +24,7 @@ service = self.repo.get_llm_service(self.llm_provider_id)
 # In a mixin (mixed into node classes)
 messages = self.repo.get_session_messages(session, self.get_history_mode())
 
+
 # In a free function that receives the node
 def _get_search_tool(node: PipelineNode):
     collections = node.repo.get_collections_for_search(node.collection_index_ids)
@@ -61,7 +62,8 @@ def test_my_node():
     repo.participant_schedules = [{"name": "Test"}]  # pre-load data
     node = MyNode(name="test", node_id="123", django_node=None)
     state = PipelineState(
-        messages=["hi"], outputs={},
+        messages=["hi"],
+        outputs={},
         experiment_session=ExperimentSessionFactory.build(),
     )
     config = {"configurable": {"repo": repo}}

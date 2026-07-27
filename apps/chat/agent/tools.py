@@ -23,7 +23,7 @@ from apps.chat.agent import schemas
 from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
-from apps.documents.models import Collection
+from apps.documents.models import Collection, chunk_from_indexed_file
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
@@ -172,6 +172,7 @@ def _perform_collection_search(
     embeddings = list(
         FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
         .filter(collection_id=collection.id)
+        .filter(chunk_from_indexed_file())
         .order_by("distance")
         .select_related("file")
         .only("text", "file__name", "file__metadata")[:max_results]

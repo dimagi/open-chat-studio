@@ -2,7 +2,7 @@ import csv
 import json
 from io import StringIO
 from typing import Self
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.http import QueryDict
@@ -109,35 +109,44 @@ def _translate_legacy_query_params(query_params: QueryDict) -> QueryDict:
 class FilterParams:
     """A container for filter parameters extracted from a request's query parameters.
 
+    Filters are held as a flat, ordered list rather than keyed by column: the UI allows
+    several filters on the same column (e.g. ``First Message after X`` AND
+    ``First Message before Y`` to express a date range), and each one must be applied.
+
     The ``f_`` and ``op_`` query-string prefixes are RESERVED for dynamic filters: every
     param starting with ``f_`` is treated as a filter column (``f_<column>`` holds the value,
-    ``op_<column>`` holds the operator). Do not introduce unrelated query params with these
-    prefixes on any page that renders a filterable table, or they will be misread as filters.
+    ``op_<column>`` the operator). A column may repeat (``f_col=X&f_col=Y``) to express more
+    than one filter on it. Do not introduce unrelated query params with these prefixes on any
+    page that renders a filterable table, or they will be misread as filters.
     """
 
     def __init__(self, query_params: QueryDict | None = None, column_filters: list[ColumnFilterData] | None = None):
-        self.filters: dict[str, ColumnFilterData] = {}
+        self.filters: list[ColumnFilterData] = []
 
         if query_params:
-            # Process new format filters (f_* and op_* parameters). The f_/op_ prefixes are
-            # reserved — any query param beginning with f_ is interpreted as a filter column.
-            filter_keys = [k for k in query_params if k.startswith("f_")]
-
-            for key in filter_keys[: settings.MAX_FILTER_PARAMS]:
+            # New format: f_<column> holds the value(s) and op_<column> the operator. A column
+            # may repeat to express multiple filters on it (e.g. a date range as `after X` AND
+            # `before Y`); each (value, operator) pair becomes one filter. The f_/op_ prefixes
+            # are reserved — any query param beginning with f_ is interpreted as a filter column.
+            for key in query_params:
+                if len(self.filters) >= settings.MAX_FILTER_PARAMS:
+                    break
+                if not key.startswith("f_"):
+                    continue
                 filter_column = key[2:]
-                filter_operator = query_params.get(f"op_{filter_column}")
-                filter_value = query_params.get(key)
-
-                if filter_column and filter_operator and filter_value:
-                    self.filters[filter_column] = ColumnFilterData(
-                        column=filter_column,
-                        operator=filter_operator,
-                        value=filter_value,
-                    )
+                operators = query_params.getlist(f"op_{filter_column}")
+                # strict=False: a malformed URL with mismatched f_/op_ counts degrades to the
+                # shorter list rather than raising.
+                for filter_value, filter_operator in zip(query_params.getlist(key), operators, strict=False):
+                    if filter_column and filter_operator and filter_value:
+                        self.filters.append(
+                            ColumnFilterData(column=filter_column, operator=filter_operator, value=filter_value)
+                        )
+                        if len(self.filters) >= settings.MAX_FILTER_PARAMS:
+                            break
 
         if column_filters:
-            for item in column_filters:
-                self.filters[item.column] = item
+            self.filters.extend(column_filters)
 
     @classmethod
     def from_request(cls, request) -> Self:
@@ -153,17 +162,20 @@ class FilterParams:
             return cls(_translate_legacy_query_params(QueryDict(parsed_url.query)))
         return cls()
 
-    def get(self, column: str) -> ColumnFilterData | None:
-        return self.filters.get(column)
+    def get_all(self, column: str) -> list[ColumnFilterData]:
+        """All filters targeting ``column``, in the order they were supplied."""
+        return [filter_data for filter_data in self.filters if filter_data.column == column]
 
     def to_query(self) -> str:
-        query_data = {}
-        for filter_data in self.filters.values():
+        # Repeated f_/op_ keys let multiple filters on the same column round-trip without
+        # collapsing (a plain dict keyed by column would drop all but the last).
+        query_dict = QueryDict("", mutable=True)
+        for filter_data in self.filters:
             query_value = filter_data.value
             if filter_data.operator in _LIST_OPERATORS:
                 if parsed := _coerce_list_filter_values(query_value):
                     query_value = serialize_csv_tilde_values(parsed)
 
-            query_data[f"f_{filter_data.column}"] = query_value
-            query_data[f"op_{filter_data.column}"] = filter_data.operator
-        return urlencode(query_data)
+            query_dict.appendlist(f"f_{filter_data.column}", query_value)
+            query_dict.appendlist(f"op_{filter_data.column}", filter_data.operator)
+        return query_dict.urlencode()

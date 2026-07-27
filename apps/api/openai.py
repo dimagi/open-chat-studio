@@ -143,6 +143,10 @@ def _chat_completions(request, experiment_id: uuid.UUID, version=None):
         "experiment": experiment_id,
         "messages": messages,
     }
+    # The OpenAI-standard optional `user` field identifies the participant. It's required for machine
+    # (client-credentials) tokens, which have no user to derive a participant identifier from.
+    if participant := request.data.get("user"):
+        converted_data["participant"] = participant
     serializer = ExperimentSessionCreateSerializer(data=converted_data, context={"request": request})
     try:
         serializer.is_valid(raise_exception=True)
@@ -151,8 +155,11 @@ def _chat_completions(request, experiment_id: uuid.UUID, version=None):
 
     session = serializer.save()
     experiment_version = session.experiment.get_version(version) if version is not None else session.experiment_version
+    # Machine (client-credentials) tokens have no user; pass None rather than the AnonymousUser so
+    # the messaging layer treats participant_user as absent instead of assigning a non-user.
+    acting_user = request.user if request.user.is_authenticated else None
     response_message = handle_api_message(
-        request.user,
+        acting_user,
         experiment_version,
         session.experiment_channel,
         last_message.get("content"),

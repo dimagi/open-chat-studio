@@ -68,7 +68,7 @@ def test_convert_saved_filter_data_round_trips_separator_in_value():
 
     # And the new parser reads the exact original list back out.
     filter_params = FilterParams(QueryDict(converted))
-    assert json.loads(filter_params.get("tags").value) == ["tag~2", "a"]
+    assert json.loads(filter_params.get_all("tags")[0].value) == ["tag~2", "a"]
 
 
 def test_convert_saved_filter_data_leaves_new_format_unchanged():

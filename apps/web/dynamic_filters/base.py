@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Literal
 from django.db.models import Q, QuerySet
 from pydantic import BaseModel, Field, computed_field
 
-from .datastructures import FilterParams
+from .datastructures import ColumnFilterData, FilterParams
 
 logger = logging.getLogger("ocs.filters")
 
@@ -162,10 +162,18 @@ class ColumnFilter(BaseModel):
         return query_value
 
     def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
-        column_filter = filter_params.get(self.query_param)
-        if not column_filter:
-            return queryset
+        """Apply every filter targeting this column, combining them with AND.
 
+        A column may appear more than once — the UI expresses a date range as
+        ``after X`` plus ``before Y`` on the same column — so each one narrows the
+        queryset further.
+        """
+        for column_filter in filter_params.get_all(self.query_param):
+            if column_filter:
+                queryset = self._apply_one(queryset, column_filter, timezone)
+        return queryset
+
+    def _apply_one(self, queryset: QuerySet, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         operator = column_filter.operator.replace(" ", "_").lower()
         if method := getattr(self, f"apply_{operator}", None):
             parsed_value = self.parse_query_value(column_filter.value)
