@@ -472,6 +472,42 @@
     ]
   },
   {
+    "provider_type": "google",
+    "model_name": "gemini-3.6-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0015"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0075"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00015"
+      }
+    ]
+  },
+  {
+    "provider_type": "google",
+    "model_name": "gemini-3.5-flash-lite",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0025"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00003"
+      }
+    ]
+  },
+  {
     "provider_type": "google_vertex_ai",
     "model_name": "gemini-2.5-flash",
     "rules": [
@@ -558,6 +594,42 @@
       {
         "service_kind": "llm_cached_input",
         "unit_price": "0.00015"
+      }
+    ]
+  },
+  {
+    "provider_type": "google_vertex_ai",
+    "model_name": "gemini-3.6-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0015"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0075"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00015"
+      }
+    ]
+  },
+  {
+    "provider_type": "google_vertex_ai",
+    "model_name": "gemini-3.5-flash-lite",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.0003"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.0025"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00003"
       }
     ]
   },

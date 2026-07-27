@@ -15,7 +15,7 @@ from apps.documents.models import (
     SyncStatus,
 )
 from apps.files.models import File, FilePurpose
-from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
+from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
@@ -399,6 +399,32 @@ class TestDocumentSourceSyncLogs:
         # Add another successful log (now most recent)
         DocumentSourceSyncLog.objects.create(document_source=document_source, status=SyncStatus.SUCCESS, files_added=1)
         assert not document_source.has_sync_errors()
+
+    def test_files_list_shows_files_while_syncing(self, team_with_user, collection, document_source, client):
+        """A sync in progress should still surface already-persisted files, not just a spinner."""
+        document_source.sync_task_id = "in-flight"
+        document_source.save(update_fields=["sync_task_id"])
+        for name in ("alpha.pdf", "beta.pdf"):
+            CollectionFileFactory.create(
+                collection=collection,
+                document_source=document_source,
+                file__name=name,
+                file__team=collection.team,
+            )
+
+        client.force_login(team_with_user.members.first())
+        url = reverse(
+            "documents:document_source_files_list",
+            args=[team_with_user.slug, collection.id, document_source.id],
+        )
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert b"alpha.pdf" in response.content
+        assert b"beta.pdf" in response.content
+        assert b"2 files synced so far" in response.content
+        # Still polling for further progress.
+        assert b"every 5s" in response.content
 
 
 @pytest.mark.django_db()

@@ -299,6 +299,42 @@ def widget_version_release_notification(
     )
 
 
+@silence_exceptions(logger, log_message="Failed to create widget auth level upgrade notification")
+def widget_auth_level_upgrade_notification(
+    team,
+    affected_chatbots: dict[str, str],
+    min_version: str,
+    effective_date: datetime,
+    docs_url: str,
+) -> bool:
+    """Notify a team that their embedded widget's required auth level will be raised.
+
+    Sent when an upgraded widget is detected, ahead of the ratchet applying. Tells the
+    team the minimum widget version every embed must run before the change takes effect.
+
+    Returns True when the notification was created; a swallowed failure returns None so the
+    caller can keep the affected channels retryable rather than starting the grace clock.
+    """
+    message = (
+        f"{len(affected_chatbots)} chatbot(s) on your team now run an upgraded chat widget. "
+        f"On {effective_date:%d %b %Y} the authentication required from these widgets will be raised. "
+        f"Make sure every embed of these chatbots is on widget version {min_version} or newer before "
+        f"then, or older embeds will stop connecting."
+    )
+    create_notification(
+        title="Chat Widget Authentication Upgrade",
+        message=message,
+        level=LevelChoices.WARNING,
+        team=team,
+        slug="widget-auth-level-upgrade",
+        # Keyed on the target minimum version so a later, higher upgrade opens its own thread.
+        event_data={"min_version": min_version},
+        permissions=["bot_channels.change_experimentchannel"],
+        links={**affected_chatbots, "Upgrade Guide": docs_url},
+    )
+    return True
+
+
 @silence_exceptions(logger, log_message="Failed to create deleted model notification")
 def deleted_model_notification(
     team,

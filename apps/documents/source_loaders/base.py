@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Self, TypeVar
 
 from langchain_core.documents import Document
@@ -16,7 +16,9 @@ class SyncResult:
     files_added: int = 0
     files_updated: int = 0
     files_removed: int = 0
+    files_failed: int = 0
     error_message: str = ""
+    failures: list[str] = field(default_factory=list)
     duration_seconds: float = 0.0
 
     @property

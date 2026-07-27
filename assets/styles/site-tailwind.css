@@ -212,6 +212,40 @@ open-chat-studio-widget {
   @apply  bg-zinc-600 text-gray-100;
 }
 
+/* Admin team-search (single-select) control: use daisyUI theme tokens so it
+   matches the neighbouring select in BOTH light and dark themes. `!` is
+   required because tom-select's default `.ts-wrapper.single .ts-control` rules
+   out-specify the global `.dark .ts-control` override (that override only works
+   for the multi-selects used elsewhere). */
+.team-search .ts-control {
+  /* bg-none + shadow-none override tom-select's default white gradient
+     (background-image) and inset white highlight, which otherwise paint over
+     the theme background-color. */
+  @apply bg-base-100! bg-none! shadow-none! border! border-base-content/20! text-base-content!;
+}
+
+.team-search .ts-control input {
+  @apply text-base-content!;
+}
+
+.team-search .ts-control input::placeholder {
+  @apply text-base-content/60!;
+}
+
+.team-search .ts-dropdown {
+  @apply bg-base-100! border-base-content/20! text-base-content!;
+}
+
+.team-search .ts-dropdown .option {
+  @apply text-base-content!;
+}
+
+.team-search .ts-dropdown .create:hover,
+.team-search .ts-dropdown .option:hover,
+.team-search .ts-dropdown .active {
+  @apply bg-base-200! text-base-content!;
+}
+
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {
   display: none;

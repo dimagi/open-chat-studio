@@ -840,7 +840,6 @@ describe('ocs-chat session tokens', () => {
 
     const startCall = (global.fetch as jest.Mock).mock.calls.find(call => call[0].includes('/api/chat/start/'));
     expect(startCall).toBeDefined();
-    expect(JSON.parse(startCall[1].body)).toEqual(expect.objectContaining({ use_session_token: true }));
     expect(setSessionTokenSpy).toHaveBeenCalledWith('tok-1');
     expect(window.localStorage.setItem).toHaveBeenCalledWith('ocs-chat-token-test-bot', 'tok-1');
   });

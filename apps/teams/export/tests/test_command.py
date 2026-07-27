@@ -154,6 +154,16 @@ def test_schema_checksum_mismatch_aborts(tmp_path, keypair):
         run_sync(FakeClient(manifest, rows), store, keypair[1])
 
 
+def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
+    manifest, rows = _scenario(keypair[0])
+    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
+    store = FKTranslationStore(tmp_path / "t.sqlite")
+
+    run_sync(FakeClient(manifest, rows), store, keypair[1], enforce_schema=False)
+
+    assert Team.objects.filter(slug="imported-team-z").exists()
+
+
 def test_aborts_when_secrets_present_but_no_private_key(tmp_path, keypair):
     """Without the private key the sealed secret fields would be imported as unreadable tokens, so
     the sync must refuse up front rather than silently corrupt provider configs / participant data."""
@@ -163,16 +173,6 @@ def test_aborts_when_secrets_present_but_no_private_key(tmp_path, keypair):
         run_sync(FakeClient(manifest, rows), store, None)
 
     assert not Team.objects.filter(slug="imported-team-z").exists()  # aborted before importing anything
-
-
-def test_skip_schema_check_bypasses_mismatch(tmp_path, keypair):
-    manifest, rows = _scenario(keypair[0])
-    manifest["schema_checksum"] = manifest["schema_checksum"] + "-mismatch"
-    store = FKTranslationStore(tmp_path / "t.sqlite")
-
-    run_sync(FakeClient(manifest, rows), store, keypair[1], enforce_schema=False)
-
-    assert Team.objects.filter(slug="imported-team-z").exists()
 
 
 def test_files_confirmation_is_asked_once_and_remembered(tmp_path, keypair, monkeypatch):

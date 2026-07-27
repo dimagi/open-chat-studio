@@ -1,34 +1,10 @@
-from django import forms
 from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.translation import gettext_lazy as _
 
 from apps.teams.decorators import login_and_team_required
-from apps.teams.metadata import get_team_metadata_fields
-
-
-class TeamMetadataForm(forms.Form):
-    """Form for editing a team's internal (staff-only) metadata."""
-
-    def __init__(self, *args, **kwargs):
-        self.team = kwargs.pop("team")
-        super().__init__(*args, **kwargs)
-
-        metadata = self.team.metadata or {}
-        for field in get_team_metadata_fields():
-            key = field["key"]
-            self.fields[key] = forms.CharField(
-                label=field["label"],
-                required=False,
-                initial=metadata.get(key, ""),
-            )
-
-    def save(self):
-        metadata = dict(self.team.metadata or {})
-        metadata.update(self.cleaned_data)
-        self.team.metadata = metadata
-        self.team.save(update_fields=["metadata"])
+from apps.teams.forms import TeamMetadataForm
 
 
 @login_and_team_required

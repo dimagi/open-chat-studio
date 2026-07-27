@@ -5,7 +5,7 @@ import pytest
 from apps.channels.forms import (
     EmbeddedWidgetChannelForm,
 )
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import match_domain_pattern
 from apps.experiments.exceptions import ChannelAlreadyUtilizedException
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -65,6 +65,30 @@ class TestEmbeddedWidgetChannelForm:
         )
         assert form.is_valid()
         assert form.cleaned_data["allowed_domains"] == expected_domains
+
+    def test_required_auth_level_is_not_user_editable(self):
+        """required_auth_level is a system-managed policy; it must not be exposed on the form."""
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
+        assert "required_auth_level" not in form.fields
+
+    @pytest.mark.django_db()
+    def test_user_cannot_override_required_auth_level_via_form(self):
+        """A submitted required_auth_level is ignored; the channel keeps the model default."""
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            required_auth_level=WidgetAuthLevel.SESSION_TOKEN,
+            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+        )
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com", "required_auth_level": WidgetAuthLevel.NONE.value},
+            channel=channel,
+            experiment=channel.experiment,
+        )
+        assert form.is_valid()
+        assert "required_auth_level" not in form.cleaned_data
+        form.post_save(channel)
+        channel.refresh_from_db()
+        assert channel.required_auth_level == WidgetAuthLevel.SESSION_TOKEN
 
 
 class TestEmbeddedWidgetUtils:

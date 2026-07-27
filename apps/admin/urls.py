@@ -14,6 +14,7 @@ urlpatterns = [
     path("usage/section/team-activity/", views.section_team_activity, name="section_team_activity"),
     path("usage/section/charts/", views.section_charts, name="section_charts"),
     path("usage/section/top-teams/", views.section_top_teams, name="section_top_teams"),
+    path("teams/<slug:slug>/", views.team_detail, name="team_detail"),
     path("usage/section/platform/", views.section_platform, name="section_platform"),
     path("usage/section/top-experiments/", views.section_top_experiments, name="section_top_experiments"),
     path("usage/section/whatsapp/", views.section_whatsapp, name="section_whatsapp"),

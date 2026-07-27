@@ -144,9 +144,12 @@ class ManifestEntrySerializer(serializers.Serializer):
 
 
 class ManifestSerializer(serializers.Serializer):
-    """The sync manifest: the call order and per-model config, plus a checksum of the applied schema."""
+    """The sync manifest: the call order and per-model config, plus a checksum of the export schema."""
 
-    schema_checksum = serializers.CharField()
+    schema_checksum = serializers.CharField(
+        help_text="SHA-256 of this server's export OpenAPI schema; clients compare it against their "
+        "own to detect an incompatible export surface."
+    )
     entries = ManifestEntrySerializer(many=True)
 
 

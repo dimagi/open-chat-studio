@@ -11,6 +11,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.field_definitions import FieldDefinition
 from apps.experiments.models import ExperimentSession
+from apps.utils.fields import sanitize_json_data as fields_sanitize_json_data
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationMessage
@@ -30,18 +31,8 @@ def sanitize_json_data(data: Any) -> Any:
     Returns:
         Sanitized copy of the data
     """
-    if isinstance(data, dict):
-        return {key: sanitize_json_data(value) for key, value in data.items()}
-    elif isinstance(data, list):
-        return [sanitize_json_data(item) for item in data]
-    elif isinstance(data, str):
-        # Remove null bytes and control characters (except common whitespace like \n, \r, \t)
-        # This removes characters in the range \x00-\x1f except \t (0x09), \n (0x0a), \r (0x0d)
-        sanitized = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", data)
-        return sanitized
-    else:
-        # Return primitives (int, float, bool, None) as-is
-        return data
+    # Kept as a backwards-compatible alias; the single implementation lives in apps.utils.fields.
+    return fields_sanitize_json_data(data)
 
 
 def get_evaluator_type_info() -> dict[str, dict[str, str | None]]:

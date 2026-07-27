@@ -60,8 +60,7 @@
         participantChart.destroy();
       }
       messageChart = SiteJS.adminDashboard.barChartWithDates(messageChartCtx, start, end, chartData.message_data, "Chat Messages");
-      let participantData = chartData.participant_data;
-      participantChart = SiteJS.adminDashboard.cumulativeChartWithDates(participantChartCtx, start, end, participantData.data, "Participants", participantData.start_value);
+      participantChart = SiteJS.adminDashboard.barChartWithDates(participantChartCtx, start, end, chartData.participant_data, "New Participants");
     });
   </script>
 {% endblock page_js %}

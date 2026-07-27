@@ -62,6 +62,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         related_name="versions",
     )
     version_number = models.PositiveIntegerField(default=1)
+    edit_revision = models.PositiveIntegerField(default=0)
     is_archived = models.BooleanField(default=False)
 
     objects = PipelineManager()
@@ -270,7 +271,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 spec.revert_referenced_record(version_node, params)
 
         self.data = data
-        self.save(update_fields=["data"])
+        self.edit_revision += 1
+        self.save(update_fields=["data", "edit_revision"])
         self.update_nodes_from_data()
 
     @transaction.atomic()

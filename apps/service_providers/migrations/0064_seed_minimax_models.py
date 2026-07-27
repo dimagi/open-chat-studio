@@ -1,7 +1,5 @@
 from django.db import migrations
 
-from apps.service_providers.migration_utils import llm_model_migration
-
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -14,5 +12,5 @@ class Migration(migrations.Migration):
     operations = [
         # Backfill the new MiniMax default models (MiniMax-M3, MiniMax-M2.7, MiniMax-M2)
         # into existing databases, matching how prior provider/model additions seed.
-        llm_model_migration(),
+        # llm_model_migration() moved to 0066_add_gemini_3_6_flash_models
     ]

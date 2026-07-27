@@ -156,10 +156,10 @@ def test_get_manifest_entry_returns_matching_entry():
     assert manifest.get_manifest_entry("not_a_resource") is None
 
 
-@pytest.mark.django_db()
 def test_schema_checksum_is_reproducible():
     first = manifest.schema_checksum()
     assert isinstance(first, str)
+    manifest.schema_checksum.cache_clear()
     assert first == manifest.schema_checksum()
 
 

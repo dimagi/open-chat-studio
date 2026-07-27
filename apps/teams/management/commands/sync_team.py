@@ -4,6 +4,12 @@
 
 The command is a thin shell: it wires the resource fetcher to the import engine and the local FK
 translation store. Each run makes one pass over the manifest and exits; rerun to pick up new data.
+
+Run this against the latest code on both the source and target servers. Compatibility is verified
+by comparing checksums of the two servers' export OpenAPI schemas -- the exact shape of the data
+being transferred -- rather than their migration history, which is a poor proxy (a squash or rename
+changes the recorded migrations without changing the schema). A mismatch means the servers run
+different export code; deploy the latest code on both, or pass --skip-schema-check to override.
 """
 
 import os
@@ -117,18 +123,19 @@ def _prompt(message: str) -> str:
 
 def check_sync_preconditions(client, private_key, enforce_schema=True, store=None) -> dict:
     """Fetch the source manifest and confirm the sync can actually proceed: the source is reachable,
-    its schema matches, we hold a key for any sealed secrets, and the source team is ready to export
-    (migration mode on, public key set). When a ``store`` is given, also ask the operator to confirm
-    the team's files were moved to this server's storage backend -- that happens outside this command
-    and the sync fails without it. The answer is recorded in the store only once every check passes,
-    so an aborted run asks again while a rerun after a clean preflight doesn't. Returns the manifest.
-    Raises CommandError on any failure, before any rows are imported."""
+    its export schema matches ours, we hold a key for any sealed secrets, and the source team is
+    ready to export (migration mode on, public key set). When a ``store`` is given, also ask the
+    operator to confirm the team's files were moved to this server's storage backend -- that happens
+    outside this command and the sync fails without it. The answer is recorded in the store only once
+    every check passes, so an aborted run asks again while a rerun after a clean preflight doesn't.
+    Returns the manifest. Raises CommandError on any failure, before any rows are imported."""
 
     manifest = client.get_manifest()
     if enforce_schema and manifest.get("schema_checksum") != schema_checksum():
         raise CommandError(
-            "Source and target schema checksums differ; bring both to the same migration state "
-            "before syncing, or pass --skip-schema-check to override."
+            "Source and target export schema checksums differ, so the servers are running different "
+            "export code. Deploy the same (latest) code on both servers before syncing, or pass "
+            "--skip-schema-check to override."
         )
 
     if private_key is None and any(entry.get("secret") for entry in manifest["entries"]):
@@ -301,7 +308,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--skip-schema-check",
             action="store_true",
-            help="Sync even if the source and target schema checksums differ.",
+            help="Sync even if the source and target export schema checksums differ.",
         )
         parser.add_argument(
             "--force-delete",

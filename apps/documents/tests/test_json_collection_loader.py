@@ -297,6 +297,24 @@ class TestMetadataFilters:
                 id="in-scalar-field-match",
             ),
             pytest.param(
+                [{"field": "tags", "operator": "contains", "value": "urgent"}],
+                {"tags": ["urgent", "internal"]},
+                1,
+                id="contains-list-field-match",
+            ),
+            pytest.param(
+                [{"field": "tags", "operator": "contains", "value": "urgent"}],
+                {"tags": ["internal"]},
+                0,
+                id="contains-list-field-no-match",
+            ),
+            pytest.param(
+                [{"field": "tags", "operator": "contains", "value": "urgent"}],
+                {},
+                0,
+                id="contains-missing-field",
+            ),
+            pytest.param(
                 [
                     {"field": "status", "operator": "eq", "value": "published"},
                     {"field": "type", "operator": "in", "value": ["report"]},

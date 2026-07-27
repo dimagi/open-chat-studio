@@ -12,6 +12,50 @@ version policy lives in `apps/channels/widget_versions.py`.
 - The channel button and widget params dialog show upgrade/deprecation badges
   based on `get_widget_update_status()`.
 
+## Per-channel authentication policy
+
+Each embedded-widget channel stores a durable `ExperimentChannel.required_auth_level`
+(`WidgetAuthLevel`) that fixes the minimum authentication the server demands, rather
+than inferring it from per-request heuristics:
+
+| Level | Value | What the server enforces |
+|---|---|---|
+| `NONE` | 0 | Legacy path: embed key optional, `is_public`/allowlist fallback permitted (pre-0.5.1 widgets). |
+| `EMBED_KEY` | 1 | A valid `X-Embed-Key` + allowed-domain check; no session token. The `is_public` fallback is blocked. |
+| `SESSION_TOKEN` | 2 | A valid `X-Embed-Key` **and** `X-Session-Token`. No legacy path reachable. |
+
+- New channels default to `SESSION_TOKEN` (the strictest level).
+- `chat_start_session` consults the resolved channel's level (see
+  `_issue_or_opt_out_session_token`): `SESSION_TOKEN` always issues and enforces a
+  token; `EMBED_KEY`/`NONE` opt the session out of token enforcement.
+- `SessionAccessPermission` enforces the level on every subsequent request.
+- Migration `0029_experimentchannel_required_auth_level` grandfathers existing
+  channels from their last-reported `widget_version`: `unknown`/`< 0.5.1` → `NONE`,
+  `0.5.1–0.8.x` → `EMBED_KEY`, `>= 0.9.0` and never-connected (`null`) → `SESSION_TOKEN`.
+- The level is system-managed, not user-editable: it is set by the model default for new
+  channels and by the grandfathering migration for existing ones. It is visible (read-only)
+  in the Django admin for inspection/support.
+
+### Ratcheting the level up when a widget upgrades
+
+A grandfathered channel keeps recording the version its widget reports
+(`widget_version`), but that never moves `required_auth_level` on its own. The
+`ratchet_widget_auth_levels` Celery task (daily; `apps/channels/tasks.py`) closes that
+gap. For each embedded-widget channel it maps the recorded version to the level it can
+satisfy (`widget_versions.level_for_version`) and, if that is **higher** than the current
+`required_auth_level`, runs a two-phase, notify-then-apply upgrade:
+
+1. **First detection** — record `pending_auth_level` + `auth_level_notified_at` and notify
+   the team (`widget_auth_level_upgrade_notification`) with the minimum widget version
+   every embed must run before the change lands.
+2. **After the grace period** (`ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE`, 14 days) —
+   apply the level via an audited `save()`, then clear the pending state.
+
+The ratchet is **monotonic**: it only ever raises a level, so a stale or spoofed version
+header can only tighten auth, never relax it. If the reported version drops back below the
+pending level before the grace period elapses, the pending bump is dropped. The channel
+details dialog shows the current minimum required version and any pending upgrade.
+
 ## Releasing a new widget version
 
 1. Publish the new version to npm (see `components/chat_widget`).

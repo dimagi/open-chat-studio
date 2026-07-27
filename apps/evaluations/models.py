@@ -15,6 +15,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
+from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
     ConditionType,
@@ -39,6 +40,28 @@ class EvaluationRunStatus(models.TextChoices):
     PROCESSING = "processing", "Processing"
     COMPLETED = "completed", "Completed"
     FAILED = "failed", "Failed"
+
+
+NON_TERMINAL_RUN_STATUSES = (EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING)
+
+
+def raise_if_runs_in_flight(runs: models.QuerySet[EvaluationRun], resource_label: str) -> None:
+    """Raise InFlightRunsError if any run in `runs` is PENDING or PROCESSING.
+
+    `runs` is an EvaluationRun queryset; `resource_label` is the user-facing
+    noun for the object being deleted (e.g. "evaluation", "evaluator", "dataset").
+
+    This only guards instance `Model.delete()` calls. Bulk `QuerySet.delete()`
+    and parent-cascade deletes execute SQL-level deletes that bypass the model
+    override entirely, so this is best-effort UX protection, not a hard invariant;
+    the evaluation tasks are hardened to degrade to a logged no-op if a run or
+    message vanishes out from under them.
+    """
+    if runs.filter(status__in=NON_TERMINAL_RUN_STATUSES).exists():
+        raise InFlightRunsError(
+            f"Cannot delete this {resource_label} while evaluation runs are in progress. "
+            "Wait for the runs to finish, then try again."
+        )
 
 
 class EvaluationRunType(models.TextChoices):
@@ -78,6 +101,11 @@ class Evaluator(BaseTeamModel):
         except KeyError:
             label = self.type
         return f"{self.name} ({label})"
+
+    def delete(self, *args, **kwargs):
+        """Block deletion while any config using this evaluator has an in-flight run."""
+        raise_if_runs_in_flight(EvaluationRun.objects.filter(config__evaluators=self), "evaluator")
+        return super().delete(*args, **kwargs)
 
     @cached_property
     def evaluator(self):
@@ -130,6 +158,18 @@ class EvaluationMessage(BaseModel):
         output_role = self.output.get("role", "(ai)").title()
         output_content = self.output.get("content", "no content")
         return f"{input_role}: {input_content}, {output_role}: {output_content}"
+
+    def delete(self, *args, **kwargs):
+        """Block deletion while an in-flight run references this message, via its dataset or DELTA scoping.
+
+        A PREVIEW/DELTA run that will not actually process this message is over-blocked here; that
+        is the safe direction (never strand a run) and in-flight runs are short-lived.
+        """
+        related_runs = EvaluationRun.objects.filter(
+            models.Q(config__dataset__messages=self) | models.Q(scoped_messages=self)
+        )
+        raise_if_runs_in_flight(related_runs, "message")
+        return super().delete(*args, **kwargs)
 
     @classmethod
     def create_from_sessions(
@@ -239,6 +279,11 @@ class EvaluationDataset(BaseTeamModel):
     def __str__(self):
         mode = EvaluationMode(self.evaluation_mode).label
         return f"{self.name} ({self.messages.count()} {mode}s)"
+
+    def delete(self, *args, **kwargs):
+        """Block deletion while any config using this dataset has an in-flight run."""
+        raise_if_runs_in_flight(EvaluationRun.objects.filter(config__dataset=self), "dataset")
+        return super().delete(*args, **kwargs)
 
     def get_absolute_url(self):
         return reverse("evaluations:dataset_edit", args=[get_slug_for_team(self.team_id), self.id])
@@ -414,6 +459,11 @@ class EvaluationConfig(BaseTeamModel):
 
     def __str__(self):
         return f"EvaluationConfig ({self.name})"
+
+    def delete(self, *args, **kwargs):
+        """Block deletion while any of this config's runs is still in progress."""
+        raise_if_runs_in_flight(EvaluationRun.objects.filter(config=self), "evaluation")
+        return super().delete(*args, **kwargs)
 
     def get_generation_experiment_version(self):
         """Resolve the actual experiment version based on selection type.

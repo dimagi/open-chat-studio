@@ -141,6 +141,63 @@ def _ensure_commcare_connect_ready(channel, identifier, participant_data):
     return None
 
 
+def handle_trigger_bot_message(request, response_serializer_class):
+    """Run the trigger-bot flow shared by all API versions and build the response.
+
+    Validates the request, resolves the experiment/channel, ensures CommCare Connect enrollment and
+    consent where relevant, creates or reuses the session, and dispatches the async bot-message task.
+    The session is then serialised with ``response_serializer_class`` (which differs per API version).
+
+    Returns the final response to hand back from the view: a 200 ``Response`` on success, or an error
+    response (bad channel, failed enrollment, missing consent) to return as-is.
+    """
+    serializer = TriggerBotMessageRequest(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    data = serializer.data
+    platform = data["platform"]
+    identifier = ChannelPlatform(platform).normalize_identifier(data["identifier"])
+    # Propagate the normalized identifier so the async task uses a consistent value
+    data = dict(data)
+    data["identifier"] = identifier
+    experiment = get_object_or_404(Experiment, public_id=data["experiment"], team=request.team)
+
+    channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
+    if not channel:
+        return JsonResponse(
+            {"detail": f"Experiment cannot send messages on the {platform} channel. Create the channel first."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    participant_data = _get_or_create_participant_data(
+        request, identifier, platform, experiment, data.get("participant_data")
+    )
+
+    if platform == ChannelPlatform.COMMCARE_CONNECT:
+        if error := _ensure_commcare_connect_ready(channel, identifier, participant_data):
+            return error
+
+    target_experiment = resolve_published_or_working(experiment)
+    ChannelClass = get_channel_class_for_platform(platform)
+    bot_channel = ChannelClass(experiment=target_experiment, experiment_channel=channel)
+    with current_team(experiment.team):
+        bot_channel.ensure_session_exists_for_participant(identifier, new_session=data["start_new_session"])
+        session = bot_channel.experiment_session
+        assert session is not None
+        if data.get("session_data"):
+            session.state = {**session.state, **data["session_data"]}
+            session.save(update_fields=["state"])
+
+    trigger_bot_message_task.delay_on_commit(
+        str(session.external_id), data.get("prompt_text"), data.get("message_text")
+    )
+
+    response_serializer = response_serializer_class(
+        instance=session, context={"request": request, "participant_data": participant_data}
+    )
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
 class TriggerBotMessageView(APIView):
     required_scopes = ("chatbots:interact",)
 
@@ -203,46 +260,4 @@ class TriggerBotMessageView(APIView):
         Provide either ``prompt_text`` (routes through the LLM/bot pipeline) or ``message_text``
         (sends the exact text to the participant without any LLM processing). Exactly one is required.
         """
-        serializer = TriggerBotMessageRequest(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        data = serializer.data
-        platform = data["platform"]
-        identifier = ChannelPlatform(platform).normalize_identifier(data["identifier"])
-        # Propagate the normalized identifier so the async task uses a consistent value
-        data = dict(data)
-        data["identifier"] = identifier
-        experiment = get_object_or_404(Experiment, public_id=data["experiment"], team=request.team)
-
-        channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
-        if not channel:
-            return JsonResponse(
-                {"detail": f"Experiment cannot send messages on the {platform} channel. Create the channel first."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        participant_data = _get_or_create_participant_data(
-            request, identifier, platform, experiment, data.get("participant_data")
-        )
-
-        if platform == ChannelPlatform.COMMCARE_CONNECT:
-            if error := _ensure_commcare_connect_ready(channel, identifier, participant_data):
-                return error
-
-        target_experiment = resolve_published_or_working(experiment)
-        ChannelClass = get_channel_class_for_platform(platform)
-        bot_channel = ChannelClass(experiment=target_experiment, experiment_channel=channel)
-        with current_team(experiment.team):
-            bot_channel.ensure_session_exists_for_participant(identifier, new_session=data["start_new_session"])
-            session = bot_channel.experiment_session
-            assert session is not None
-            if data.get("session_data"):
-                session.state = {**session.state, **data["session_data"]}
-                session.save(update_fields=["state"])
-
-        trigger_bot_message_task.delay_on_commit(
-            str(session.external_id), data.get("prompt_text"), data.get("message_text")
-        )
-
-        response_serializer = TriggerBotMessageResponse(instance=session, context={"request": request})
-        return Response(response_serializer.data, status=status.HTTP_200_OK)
+        return handle_trigger_bot_message(request, TriggerBotMessageResponse)

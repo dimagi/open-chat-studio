@@ -1,0 +1,43 @@
+{% extends "web/app/app_base.html" %}
+{% load form_tags i18n %}
+
+{% block app %}
+  <section class="app-card">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <a href="{% url 'ocs_admin:home' %}" class="text-sm text-base-content/70 hover:text-base-content mb-1 inline-block">
+          ← {% translate "Back to admin" %}
+        </a>
+        <h1 class="pg-title">{{ team.name }}</h1>
+        <p class="text-sm text-base-content/60 font-mono">{{ team.slug }}</p>
+      </div>
+      <a href="{% url 'web_team:home' team.slug %}" class="btn btn-primary btn-sm">
+        {% translate "Open team dashboard" %}
+      </a>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+      {% for label, value in stat_tiles %}
+        <div class="stats bg-base-200 shadow-sm">
+          <div class="stat">
+            <div class="stat-title text-xs">{{ label }}</div>
+            <div class="stat-value text-2xl">{{ value }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="pg-subtitle mb-2">{% translate "Team Metadata" %}</div>
+    {% if form.fields %}
+      <form method="post" class="flex flex-col gap-3 max-w-2xl">
+        {% csrf_token %}
+        {% render_form_fields form %}
+        <div>
+          <button type="submit" class="btn btn-primary">{% translate "Save metadata" %}</button>
+        </div>
+      </form>
+    {% else %}
+      <div class="alert alert-warning">{% translate "No metadata fields are configured." %}</div>
+    {% endif %}
+  </section>
+{% endblock app %}
