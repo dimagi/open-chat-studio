@@ -275,9 +275,9 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             duration = evaluation_run.finished_at - evaluation_run.created_at
             context["run_duration"] = seconds_to_human(duration.total_seconds())
 
-        # Show progress if running, otherwise show results table
-        if evaluation_run.status in [EvaluationRunStatus.PROCESSING]:
-            context["group_job_id"] = evaluation_run.job_id
+        # Show progress if pending/processing, otherwise show results table
+        if evaluation_run.status in (EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING):
+            context["celery_job_id"] = evaluation_run.job_id
         else:
             table_url = reverse(
                 "evaluations:evaluation_results_table",

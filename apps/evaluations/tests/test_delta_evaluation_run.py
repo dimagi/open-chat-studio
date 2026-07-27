@@ -26,19 +26,23 @@ def test_run_with_scoped_messages_persists_scope():
 
 
 @pytest.mark.django_db()
-def test_run_without_scoped_messages_has_empty_scope():
+def test_full_run_freezes_all_dataset_messages():
     config = EvaluationConfigFactory.create()
+    dataset_ids = set(config.dataset.messages.values_list("id", flat=True))
     with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
         run = config.run()
     assert run.type == EvaluationRunType.FULL
-    assert run.scoped_messages.count() == 0
+    assert set(run.scoped_messages.values_list("id", flat=True)) == dataset_ids
     mock_delay.assert_called_once_with(run.id)
 
 
 @pytest.mark.django_db()
-def test_run_evaluation_task_evaluates_only_scoped_messages_for_delta(monkeypatch):
-    """Delta runs only fan out per scoped message, ignoring other dataset rows."""
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_run_evaluation_task_dispatches_only_scoped_messages_for_delta(delay_mock, _publish):
     config = EvaluationConfigFactory.create()
+    evaluator = EvaluatorFactory.create(team=config.team)
+    config.evaluators.set([evaluator])
     in_scope = EvaluationMessageFactory.create()
     out_of_scope = EvaluationMessageFactory.create()
     config.dataset.messages.add(in_scope, out_of_scope)
@@ -48,36 +52,14 @@ def test_run_evaluation_task_evaluates_only_scoped_messages_for_delta(monkeypatc
         config=config,
         status=EvaluationRunStatus.PENDING,
         type=EvaluationRunType.DELTA,
+        evaluator_ids=[evaluator.id],
     )
     run.scoped_messages.add(in_scope)
 
-    dispatched_message_ids: list[int] = []
-
-    def fake_chunks(chunked_args, _chunk_size):
-        for _evaluation_run_id, _evaluator_ids, message_id in chunked_args:
-            dispatched_message_ids.append(message_id)
-
-        class _Group:
-            def group(self):
-                return self
-
-        return _Group()
-
-    class _ChordResult:
-        parent = type("Parent", (), {"id": "fake", "save": lambda self: None})()
-
-    def fake_chord(_g):
-        def _runner(_callback):
-            return _ChordResult()
-
-        return _runner
-
-    monkeypatch.setattr("apps.evaluations.tasks.evaluate_single_message_task.chunks", fake_chunks)
-    monkeypatch.setattr("apps.evaluations.tasks.chord", fake_chord)
-
     run_evaluation_task(run.id)
 
-    assert dispatched_message_ids == [in_scope.id]
+    dispatched = [message_id for call in delay_mock.call_args_list for message_id in call.args[1]]
+    assert dispatched == [in_scope.id]
 
 
 @pytest.mark.django_db()
