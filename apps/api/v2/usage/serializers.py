@@ -1,8 +1,10 @@
 """Response serializers for ``GET /api/v2/usage/``. Render the plain aggregates from
 ``services.usage_query`` and provide the OpenAPI response schema."""
 
-from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.utils import PolymorphicProxySerializer, extend_schema_field
 from rest_framework import serializers
+
+from apps.api.v2.usage.services import GRANULARITY_TOTAL
 
 
 class MessageCountsSerializer(serializers.Serializer):
@@ -42,14 +44,84 @@ class UsageResultsSerializer(serializers.Serializer):
     tokens = TokensSerializer(required=False)
 
 
+class UsageBucketResultSerializer(UsageResultsSerializer):
+    """A single time bucket: the per-metric blocks plus the bucket's inclusive start (in the request
+    timezone). Emitted when ``granularity`` is finer than ``total``."""
+
+    bucket_start = serializers.DateTimeField(help_text="Inclusive start of this bucket, in the request timezone.")
+
+
+class ParticipantIdentitySerializer(serializers.Serializer):
+    public_id = serializers.UUIDField(help_text="Stable participant identifier.")
+    identifier = serializers.CharField(help_text="Human-readable handle (email/phone/anon id).")
+    platform = serializers.CharField(help_text="Channel platform the participant belongs to.")
+
+
+class ChatbotIdentitySerializer(serializers.Serializer):
+    public_id = serializers.UUIDField(help_text="Stable chatbot identifier.")
+    name = serializers.CharField(help_text="Chatbot name.")
+
+
+class GroupedUsageRowSerializer(UsageResultsSerializer):
+    """One breakdown row: the group's identity plus a block per requested metric. Exactly one of
+    ``participant``/``chatbot``/``platform`` is present (matching ``group_by``); ``bucket_start`` is
+    present only when a finer granularity expands each group into per-bucket rows."""
+
+    participant = ParticipantIdentitySerializer(required=False)
+    chatbot = ChatbotIdentitySerializer(required=False)
+    platform = serializers.CharField(required=False, help_text="Channel platform slug (platform grouping).")
+    bucket_start = serializers.DateTimeField(
+        required=False, help_text="Inclusive start of this bucket, in the request timezone."
+    )
+
+
+class GroupedUsageResponseSerializer(serializers.Serializer):
+    """The grouped, cursor-paginated response envelope. Documents the shape the view assembles from the
+    shared ``CursorPagination`` plus the ``period``/``group_by`` context."""
+
+    period = UsagePeriodSerializer(source="*")
+    group_by = serializers.CharField(help_text="Dimension the rows are grouped by.")
+    count = serializers.IntegerField(
+        help_text="Total number of groups matching the query. Only present on the first page.",
+        required=False,
+    )
+    next = serializers.CharField(help_text="Cursor URL for the next page, or null.", allow_null=True)
+    previous = serializers.CharField(help_text="Cursor URL for the previous page, or null.", allow_null=True)
+    results = GroupedUsageRowSerializer(many=True)
+
+
 class UsageResponseSerializer(serializers.Serializer):
     period = UsagePeriodSerializer(source="*")
+    granularity = serializers.CharField(help_text="Time-bucketing applied to the results.")
     group_by = serializers.SerializerMethodField(
         help_text="Dimension the results are grouped by, or null when ungrouped."
     )
-    results = UsageResultsSerializer()
+    results = serializers.SerializerMethodField(
+        help_text=(
+            "For granularity 'total' (default), a single object with one block per requested metric. "
+            "For 'daily'/'weekly'/'monthly', an array of such objects — one per time bucket, each with "
+            "a 'bucket_start' — covering the whole window (empty buckets are zero-filled)."
+        )
+    )
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_group_by(self, obj) -> None:
-        # Grouping arrives in a later slice; this slice is always ungrouped.
+        # This serializer renders the ungrouped response only; grouped requests use
+        # GroupedUsageResponseSerializer, so group_by is always null here.
         return None
+
+    @extend_schema_field(
+        # ``many=False`` puts the proxy in drf-spectacular's manual mode (issue #692), which is what
+        # lets one branch be an array: ``total`` returns a single ``UsageResults`` object, the bucketed
+        # granularities an array of ``UsageBucketResult`` — so the schema matches ``get_results`` below.
+        PolymorphicProxySerializer(
+            component_name="UsageResultsOrBuckets",
+            serializers=[UsageResultsSerializer, UsageBucketResultSerializer(many=True)],
+            resource_type_field_name=None,
+            many=False,
+        )
+    )
+    def get_results(self, obj):
+        if obj.granularity == GRANULARITY_TOTAL:
+            return UsageResultsSerializer(obj.results).data
+        return UsageBucketResultSerializer(obj.results, many=True).data

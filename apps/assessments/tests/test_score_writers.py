@@ -115,6 +115,31 @@ def test_score_from_field_choice_schema_forces_categorical_for_numeric_choices(s
     assert s.value_string == "1"
 
 
+@pytest.mark.parametrize(
+    ("schema_field", "raw_value"),
+    [
+        pytest.param(None, "posi\x00tive", id="string-value"),
+        pytest.param({"type": "choice", "choices": ["yes", "no"]}, "y\x00es", id="choice-value"),
+    ],
+)
+def test_score_from_field_strips_nul_bytes(session_target, schema_field, raw_value):
+    """PostgreSQL text fields cannot store NUL bytes; they must be stripped from
+    value_string and name before bulk_create, otherwise a DataError is raised."""
+    team, session = session_target
+    s = _score_from_field(
+        team=team,
+        target=session,
+        name="lab\x00el",
+        raw_value=raw_value,
+        source=Score.Source.LLM_JUDGE,
+        automated_result=None,
+        schema_field=schema_field,
+    )
+    assert s.value_string is not None
+    assert "\x00" not in s.value_string
+    assert "\x00" not in s.name
+
+
 def test_score_from_field_unsupported_value_returns_none(session_target, caplog):
     team, session = session_target
     caplog.set_level(logging.WARNING, logger="apps.assessments.score_writers")

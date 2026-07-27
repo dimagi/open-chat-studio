@@ -5,6 +5,11 @@ updates:
     open-pull-requests-limit: 5
     schedule:
       interval: "monthly"
+  - package-ecosystem: "npm"
+    directory: "/components/chat_widget"
+    open-pull-requests-limit: 5
+    schedule:
+      interval: "monthly"
   - package-ecosystem: "uv"
     directory: "/"
     open-pull-requests-limit: 5

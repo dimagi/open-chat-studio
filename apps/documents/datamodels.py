@@ -113,7 +113,7 @@ class MetadataFilter(pydantic.BaseModel):
     """A single condition evaluated against a feed item's raw metadata."""
 
     field: str = pydantic.Field(description="Name of the item metadata field to test")
-    operator: Literal["eq", "in"] = pydantic.Field(default="eq", description="Comparison operator")
+    operator: Literal["eq", "in", "contains"] = pydantic.Field(default="eq", description="Comparison operator")
     value: Any = pydantic.Field(default=None, description="Value to compare the field against")
 
     def matches(self, item: dict[str, Any]) -> bool:
@@ -121,6 +121,11 @@ class MetadataFilter(pydantic.BaseModel):
         item_value = item.get(self.field)
         if self.operator == "eq":
             return item_value == self.value
+        if self.operator == "contains":
+            # "contains": the item's field is a list (or string) that must include `value`.
+            if isinstance(item_value, list | tuple | str):
+                return self.value in item_value
+            return False
         # "in": item matches if the item's value (or any element of a list-valued field)
         # is one of the allowed values.
         allowed = self.value if isinstance(self.value, list) else [self.value]

@@ -24,9 +24,13 @@ BATCH_SIZE = 500
 def strip_node_data_from_pipelines(Pipeline, Node):
     pending = []
     for pipeline in Pipeline._base_manager.exclude(data__isnull=True).iterator(chunk_size=BATCH_SIZE):
-        _backfill_positions(pipeline, Node)
-        stripped_data = _strip_nodes(pipeline, Node)
-        if stripped_data is None:
+        rows = []
+        for row in Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"):
+            rows.append(row)
+
+        _backfill_positions(pipeline, Node, node_rows=rows)
+        stripped_nodes = _strip_nodes(pipeline, Node, rows)
+        if stripped_nodes is None:
             continue
         pipeline.data = stripped_data
         pending.append(pipeline)
@@ -38,7 +42,7 @@ def strip_node_data_from_pipelines(Pipeline, Node):
         Pipeline._base_manager.bulk_update(pending, ["data"])
 
 
-def _backfill_positions(pipeline, Node):
+def _backfill_positions(pipeline, Node, node_rows):
     """Copy each blob node's position onto its row's position columns.
 
     The blob is authoritative, so a differing row value is overwritten. Blob nodes
@@ -47,10 +51,7 @@ def _backfill_positions(pipeline, Node):
     nodes = (pipeline.data or {}).get("nodes") or []
     if not nodes:
         return
-    rows = {}
-    # "-is_archived" puts archived rows first so a non-archived row wins on flow_id collision
-    for row in Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"):
-        rows[row.flow_id] = row
+    rows = {row.flow_id: row for row in node_rows}
     rows_to_update = []
     for node in nodes:
         row = rows.get(node.get("id"))
@@ -69,8 +70,8 @@ def _backfill_positions(pipeline, Node):
         Node._base_manager.bulk_update(rows_to_update, ["position_x", "position_y"])
 
 
-def _strip_nodes(pipeline, Node):
-    """The pipeline's data with the ``nodes`` key removed, or None when nothing to strip.
+def _strip_nodes(pipeline, Node, node_rows):
+    """The pipeline's node list with only layout keys kept, or None when nothing to strip.
 
     None when there is no ``nodes`` key (already stripped — idempotent), and also None when
     any blob has no backing Node row (drift, a known bad state): the blob is then the only
@@ -83,7 +84,7 @@ def _strip_nodes(pipeline, Node):
         return None
     nodes = data.get("nodes") or []
 
-    row_flow_ids = set(Node._base_manager.filter(pipeline_id=pipeline.id).values_list("flow_id", flat=True))
+    row_flow_ids = set([row.flow_id for row in node_rows])
     orphaned = [node.get("id") for node in nodes if "data" in node and node.get("id") not in row_flow_ids]
     if orphaned:
         logger.warning(

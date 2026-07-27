@@ -5,7 +5,7 @@
  * that doesn't support DOMPurify) using Node's built-in test runner with
  * jsdom for a real DOM implementation.
  *
- * Run: npm run test:security
+ * Run: pnpm run test:security
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';

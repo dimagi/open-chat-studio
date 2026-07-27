@@ -45,7 +45,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Set Deploy Env
       # Set the deploy env based on the input from the event or else from the branch
@@ -98,7 +98,7 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v2.1.6
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
 
     - name: Get image names
       id: image-name

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.service_providers.llm_service.runnables import GenerationCancelled
 from apps.service_providers.tracing import TraceInfo
 
@@ -132,7 +133,13 @@ class MessageProcessingPipeline:
     2. EarlyAbort -- silent halt; no message, no terminal stages.
        Used when reporting back to the user would be wrong (e.g. platform
        consent withdrawn).
-    3. Unexpected Exception -- catch-all generates an error message
+    3. Pipeline build error -- the pipeline is misconfigured (e.g. a
+       deprecated model, an unreachable node). This is a user
+       configuration problem, not a bug, so it replies with the generic
+       DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, and is logged as
+       a warning WITHOUT being re-raised (which would report it to Sentry
+       and fail the task with no useful retry).
+    4. Unexpected Exception -- catch-all generates an error message
        via EventBot (preserving ChatException distinction), falls back
        to DEFAULT_ERROR_RESPONSE_TEXT, runs terminal stages, then
        RE-RAISES so the caller knows processing failed.
@@ -161,31 +168,22 @@ class MessageProcessingPipeline:
            handling, no terminal stages, no user-facing response.
         3. If any raises a passthrough exception, re-raise immediately
            without error handling or terminal stages.
-        4. If any raises an unexpected exception, generate an error message
+        4. If any raises a pipeline build error, reply with the generic
+           error text, log a warning, and set ctx.early_exit_response --
+           but do NOT re-raise (misconfiguration is not a bug worth
+           reporting).
+        5. If any raises an unexpected exception, generate an error message
            and set ctx.early_exit_response.
-        5. Run terminal stages unconditionally (they always fire).
-        6. If there was an unexpected exception, re-raise it after terminal
+        6. Run terminal stages unconditionally (they always fire).
+        7. If there was an unexpected exception, re-raise it after terminal
            stages complete.
         """
-        unexpected_exception = None
-
         try:
-            for stage in self.core_stages:
-                stage(ctx)
-        except EarlyExitResponse as e:
-            ctx.early_exit_response = e.response
+            unexpected_exception = self._run_core_stages(ctx)
         except EarlyAbort:
             # Silent halt -- skip terminal stages entirely. The pipeline
             # has decided it cannot or should not respond to this message.
             return ctx
-        except self.passthrough_exceptions:
-            # Passthrough exceptions (e.g. GenerationCancelled) propagate
-            # immediately -- no error message generation, no terminal stages.
-            raise
-        except Exception as e:
-            unexpected_exception = e
-            ctx.early_exit_response = self._generate_error_message(ctx, e)
-            ctx.processing_errors.append(str(e))
 
         # Terminal stages always run -- regardless of early exit or error
         for stage in self.terminal_stages:
@@ -196,6 +194,40 @@ class MessageProcessingPipeline:
             raise unexpected_exception
 
         return ctx
+
+    def _run_core_stages(self, ctx: MessageProcessingContext) -> Exception | None:
+        """Run the core stages, applying the pipeline's exception policy.
+
+        Returns the unexpected exception to re-raise after terminal stages (or None).
+        Propagates ``EarlyAbort`` (silent halt) and passthrough exceptions to the caller.
+        """
+        try:
+            for stage in self.core_stages:
+                stage(ctx)
+        except EarlyExitResponse as e:
+            ctx.early_exit_response = e.response
+        except EarlyAbort:
+            # Silent halt -- propagate so process() skips terminal stages entirely.
+            raise
+        except self.passthrough_exceptions:
+            # Passthrough exceptions (e.g. GenerationCancelled) propagate immediately --
+            # no error message generation, no terminal stages.
+            raise
+        except (PipelineBuildError, PipelineNodeBuildError) as e:
+            # The pipeline is misconfigured (e.g. a deprecated model). Reply
+            # with the generic message and run terminal stages, but do NOT
+            # re-raise: this is a configuration problem, not a bug, and
+            # re-raising would report it to Sentry and fail the task with no
+            # useful retry. Skip LLM-based message generation -- the LLM may be
+            # the thing that is misconfigured, and a canned reply is enough.
+            logger.warning("Pipeline build error (node=%s): %s", getattr(e, "node_id", None), e)
+            ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
+            ctx.processing_errors.append(str(e))
+        except Exception as e:
+            ctx.early_exit_response = self._generate_error_message(ctx, e)
+            ctx.processing_errors.append(str(e))
+            return e
+        return None
 
     def _generate_error_message(self, ctx: MessageProcessingContext, exception: Exception) -> str:
         """Generate a user-facing error message using EventBot.

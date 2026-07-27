@@ -1046,7 +1046,7 @@ RESERVED_SESSION_STATE_KEYS = {"user_input", "outputs", "attachments", "remote_c
 # Restricted HTTP client settings (used by RestrictedHttpClient in the Python sandbox)
 RESTRICTED_HTTP_MAX_REQUESTS = 10
 RESTRICTED_HTTP_DEFAULT_TIMEOUT = 5  # seconds
-RESTRICTED_HTTP_MAX_TIMEOUT = 30  # seconds
+RESTRICTED_HTTP_MAX_TIMEOUT = 60  # seconds
 MB = 1_048_576  # 1 MB
 RESTRICTED_HTTP_MAX_RESPONSE_BYTES = 5 * MB
 RESTRICTED_HTTP_MAX_REQUEST_BYTES = MB

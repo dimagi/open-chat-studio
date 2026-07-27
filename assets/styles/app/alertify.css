@@ -56,56 +56,27 @@
   opacity: 0.6;
 }
 
-@utility alertify-notifier {
-  & .ajs-message {
-    @apply text-center border border-black rounded-sm bg-white;
-  }
-
-  & .ajs-message.ajs-success {
-    @apply text-success-content bg-success;
-  }
-
-  & .ajs-message.ajs-error {
-    @apply text-error-content! bg-error!;
-  }
-
-  & .ajs-message.ajs-warning {
-    @apply text-warning-content bg-warning;
-  }
+/*
+  Notification (toast) styling. Written as plain selectors matching the vendor
+  stylesheet's `.alertify-notifier .ajs-message.*` specificity so these win
+  (our stylesheet loads after the vendor one). These cannot be `@utility`
+  declarations: the `ajs-*` classes are injected at runtime and never appear in
+  scanned source, so Tailwind would purge them. The daisyUI semantic
+  `*-content` colors are designed to contrast with their matching background in
+  both themes, so dark mode resolves automatically.
+*/
+.alertify-notifier .ajs-message {
+  @apply text-center border border-base-300 rounded-sm bg-base-100 text-base-content;
 }
 
-@utility ajs-message {
-  .alertify-notifier & {
-    @apply text-center border border-black rounded-sm bg-white;
-  }
-
-  .alertify-notifier &.ajs-success {
-    @apply text-success-content bg-success;
-  }
-
-  .alertify-notifier &.ajs-error {
-    @apply text-error-content! bg-error!;
-  }
-
-  .alertify-notifier &.ajs-warning {
-    @apply text-warning-content bg-warning;
-  }
+.alertify-notifier .ajs-message.ajs-success {
+  @apply text-success-content bg-success;
 }
 
-@utility ajs-success {
-  .alertify-notifier &.ajs-message {
-    @apply text-success-content bg-success;
-  }
+.alertify-notifier .ajs-message.ajs-error {
+  @apply text-error-content bg-error;
 }
 
-@utility ajs-error {
-  .alertify-notifier &.ajs-message {
-    @apply text-error-content! bg-error!;
-  }
-}
-
-@utility ajs-warning {
-  .alertify-notifier &.ajs-message {
-    @apply text-warning-content bg-warning;
-  }
+.alertify-notifier .ajs-message.ajs-warning {
+  @apply text-warning-content bg-warning;
 }

@@ -27,10 +27,6 @@
     <i class="fa-solid fa-download"></i>
     Top Experiments
   </a>
-  <a class="btn" href="{% url "ocs_admin:export_team_metadata" %}">
-    <i class="fa-solid fa-download"></i>
-    Team Metadata
-  </a>
 </div>
 
 <div hx-get="{% url 'ocs_admin:section_growth' %}{% querystring %}" hx-trigger="load" hx-swap="innerHTML">

@@ -18,6 +18,45 @@ import {apiClient} from "../api/api";
 import {PipelineDiffPayload, PipelineType, PipelineSaveResponse} from "../types/pipeline";
 import {computePipelineDiff} from "../diffPipeline";
 let saveTimeoutId: NodeJS.Timeout | null = null;
+// Serialization guard for autosave (see issue #3895). While a PATCH is in-flight
+// its response has not yet bumped `currentRevision`, so firing a second PATCH would
+// reuse the now-stale `base_revision` and be falsely rejected by the server's
+// optimistic-concurrency check as a cross-session conflict. Instead, any edit made
+// while a save is in-flight sets this flag; the in-flight save flushes it on
+// completion, recomputing the diff against the freshly-bumped revision.
+let pendingSave = false;
+
+// Shared tail for both save paths' `finally` blocks. Keeping this in one place stops the
+// two paths (`savePipeline` full save and `_patchPipeline` autosave) from drifting apart
+// (see #3895 — the deferred-flush handling was repeatedly fixed in one and not the other).
+//
+// After any save settles, decide what to do with edits the user made while it was
+// in-flight (which `_flushSave` deferred by setting `pendingSave`):
+//   - conflict detected  -> do nothing; autosave is paused until the user resolves it.
+//   - save succeeded      -> flush now, so the deferred edit goes out with the freshly
+//                            bumped `currentRevision` as its `base_revision`.
+//   - save failed         -> reschedule on the normal autosave cadence. `dirty` is still
+//                            set, so the retry recomputes its diff against a current
+//                            revision. Without this the deferred edit would be silently
+//                            dropped with no scheduled retry.
+function settleDeferredSave(
+  store: PipelineManagerStoreType,
+  saveSucceeded: boolean,
+) {
+  const hadPending = pendingSave;
+  pendingSave = false;
+  if (store.conflictDetected) {
+    return;
+  }
+  if (!hadPending) {
+    return;
+  }
+  if (saveSucceeded) {
+    store._flushSave();
+  } else {
+    store.autoSaveCurrentPipline();
+  }
+}
 
 const createPipelineStore: StateCreator<
   PipelineStoreType & PipelineManagerStoreType,
@@ -285,28 +324,39 @@ const createPipelineManagerStore: StateCreator<
 
     // Set up a new timeout.
     saveTimeoutId = setTimeout(() => {
-      if (!get().currentPipeline || get().conflictDetected) {
-        return;
-      }
-
-      // Compute diff from the latest state right before sending, not from captured params
-      const oldNodes = get().currentPipeline!.data?.nodes || [];
-      const oldEdges = get().currentPipeline!.data?.edges || [];
-
-      const diff = computePipelineDiff(
-        oldNodes as Node[],
-        get().nodes,
-        oldEdges as Edge[],
-        get().edges,
-        get().currentRevision,
-      );
-
-      if (!diff) {
-        return;
-      }
-
-      get()._patchPipeline(diff);
+      get()._flushSave();
     }, 1000);
+  },
+  _flushSave: () => {
+    if (!get().currentPipeline || get().conflictDetected) {
+      return;
+    }
+
+    // Serialize saves: if a PATCH is already in-flight, defer this one. The in-flight
+    // save will flush the pending edits on completion, once `currentRevision` reflects
+    // the server's bumped revision. This prevents the self-conflict described in #3895.
+    if (get().isSaving) {
+      pendingSave = true;
+      return;
+    }
+
+    // Compute diff from the latest state right before sending, not from captured params
+    const oldNodes = get().currentPipeline!.data?.nodes || [];
+    const oldEdges = get().currentPipeline!.data?.edges || [];
+
+    const diff = computePipelineDiff(
+      oldNodes as Node[],
+      get().nodes,
+      oldEdges as Edge[],
+      get().edges,
+      get().currentRevision,
+    );
+
+    if (!diff) {
+      return;
+    }
+
+    get()._patchPipeline(diff);
   },
   savePipeline: (pipeline: PipelineType) => {
     set({isSaving: true, conflictDetected: false});
@@ -314,9 +364,11 @@ const createPipelineManagerStore: StateCreator<
       clearTimeout(saveTimeoutId);
     }
     return new Promise<void>((resolve, reject) => {
+      let saveSucceeded = false;
       apiClient.updatePipeline(get().currentPipelineId!, pipeline)
         .then((saveResponse: PipelineSaveResponse) => {
           if (saveResponse) {
+            saveSucceeded = true;
             pipeline.data = saveResponse.data as PipelineType["data"];
             set({
               currentPipeline: pipeline,
@@ -341,14 +393,17 @@ const createPipelineManagerStore: StateCreator<
           reject(err);
         }).finally(() => {
         set({isSaving: false});
+        settleDeferredSave(get(), saveSucceeded);
       });
     });
   },
   _patchPipeline: async (diff: PipelineDiffPayload) => {
     set({isSaving: true});
+    let patchSucceeded = false;
     try {
       const response = await apiClient.patchPipeline(get().currentPipelineId!, diff);
       if (response) {
+        patchSucceeded = true;
         // Update local state with merged data from server
         const edges = response.data?.edges as Edge[] | undefined;
         set({
@@ -382,6 +437,7 @@ const createPipelineManagerStore: StateCreator<
       }
     } finally {
       set({isSaving: false});
+      settleDeferredSave(get(), patchSucceeded);
     }
   },
   nodeHasErrors: (nodeId: string) => {

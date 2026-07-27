@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.db import connection
@@ -17,6 +18,7 @@ from apps.cost_tracking.services.reporting import (
     coverage_gaps,
     session_usage,
     token_counts,
+    usage_timeseries,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -323,6 +325,50 @@ class TestCostTimeseries:
         _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
 
         assert cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW) == []
+
+
+@pytest.mark.django_db()
+class TestUsageTimeseries:
+    """Per-bucket cost + tokens for the usage API (tz-aware, Decimal cost)."""
+
+    def test_buckets_carry_cost_and_split_tokens(self):
+        team = TeamFactory.create()
+        day = datetime(2026, 6, 10, 8, tzinfo=UTC)
+        _usage(team, cost="0.10", when=day, service_kind=ServiceKind.LLM_INPUT, quantity=100)
+        _usage(team, cost="0.05", when=day, service_kind=ServiceKind.LLM_OUTPUT, quantity=40)
+        _usage(team, cost="0.20", when=day + timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=200)
+
+        series = usage_timeseries(
+            team,
+            start=datetime(2026, 6, 10, tzinfo=UTC),
+            end=datetime(2026, 6, 13, tzinfo=UTC),
+            granularity="daily",
+            tz=ZoneInfo("UTC"),
+        )
+
+        # Only non-empty buckets are returned; the usage service zero-fills the rest.
+        assert [(row["cost"], row["prompt"], row["completion"], row["total"]) for row in series] == [
+            (Decimal("0.15000000"), 100, 40, 140),
+            (Decimal("0.20000000"), 200, 0, 200),
+        ]
+        assert all(row["currency"] == "USD" for row in series)
+
+    def test_bucket_boundary_honours_tz(self):
+        """A record at 23:30 UTC on 10 June is 11 June in Auckland (UTC+12), so the tz decides the bucket."""
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=datetime(2026, 6, 10, 23, 30, tzinfo=UTC), quantity=10)
+
+        series = usage_timeseries(
+            team,
+            start=datetime(2026, 6, 9, tzinfo=UTC),
+            end=datetime(2026, 6, 13, tzinfo=UTC),
+            granularity="daily",
+            tz=ZoneInfo("Pacific/Auckland"),
+        )
+
+        # Daily TruncDate returns the local calendar date.
+        assert len(series) == 1
+        assert series[0]["bucket"] == datetime(2026, 6, 11).date()
 
 
 @pytest.mark.django_db()
