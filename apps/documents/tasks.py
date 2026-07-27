@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import uuid
 import zipfile
 from datetime import timedelta
 from io import BytesIO
@@ -175,7 +176,7 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 @shared_task(bind=True, ignore_result=True)
 def sync_document_source_task(self, document_source_id: int):
     """Sync a specific document source"""
-    task_id = self.request.id
+    task_id = self.request.id or str(uuid.uuid4())
     # Guard against concurrent syncs for the same document source. Atomically check-and-set
     # the lock under a row lock. A lock held past SYNC_LOCK_TIMEOUT is treated as stale (its
     # owning task died without releasing it) and is reclaimed rather than blocking forever.
