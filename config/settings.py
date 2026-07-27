@@ -418,7 +418,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = _public_media_url(AWS_S3_CUSTOM_DOMAIN, AWS_PUBLIC_STORAGE_BUCKET_NAME, PUBLIC_MEDIA_LOCATION)
-    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["public"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
@@ -704,11 +704,13 @@ if SENTRY_DSN:
     )
 
 # Taskbadger setup
+# TASKBADGER_ORG and TASKBADGER_PROJECT are deprecated as of taskbadger 2.3.1 and only need to be
+# passed if still set for backwards compatibility.
 TASKBADGER_ORG = env("TASKBADGER_ORG", default=None)
 TASKBADGER_PROJECT = env("TASKBADGER_PROJECT", default=None)
 TASKBADGER_API_KEY = env("TASKBADGER_API_KEY", default=None)
 
-if TASKBADGER_ORG and TASKBADGER_PROJECT and TASKBADGER_API_KEY:
+if TASKBADGER_API_KEY:
     import taskbadger
     from taskbadger.systems.celery import CelerySystemIntegration
 
