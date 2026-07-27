@@ -44,43 +44,22 @@ class Contextualizer(metaclass=ABCMeta):
         """Return a short context string for the chunk, or "" if none could be produced."""
 
 
-class StaticContextualizer(Contextualizer):
-    """Zero-cost contextualizer that builds a header from document structure.
-
-    Used as the fallback when the LLM contextualizer fails. Takes no external calls.
-    """
-
-    def __init__(self, *, file_name: str = "", page_number: int | None = None):
-        self._file_name = file_name
-        self._page_number = page_number
-
-    def get_context(self, *, document: str, chunk: str) -> str:
-        parts = []
-        if self._file_name:
-            parts.append(f"Source document: {self._file_name}.")
-        if self._page_number:
-            parts.append(f"Page {self._page_number}.")
-        return " ".join(parts)
-
-
 class LLMContextualizer(Contextualizer):
     """LLM-backed contextualizer.
 
     Calls the configured chat model with the document (in the system prompt,
     for prompt caching across chunks of the same file) and the chunk. On any
-    failure it falls back to `fallback` so that indexing never fails because
-    contextualization failed.
+    failure it returns an empty string so that indexing continues without a
+    context header rather than failing.
     """
 
     def __init__(
         self,
         chat_model: "BaseChatModel",
         *,
-        fallback: Contextualizer | None = None,
         max_document_chars: int = DEFAULT_MAX_DOCUMENT_CHARS,
     ):
         self._chat_model = chat_model
-        self._fallback = fallback or StaticContextualizer()
         self._max_document_chars = max_document_chars
 
     def get_context(self, *, document: str, chunk: str) -> str:
@@ -93,8 +72,8 @@ class LLMContextualizer(Contextualizer):
             response = self._chat_model.invoke(messages)
         except Exception as e:
             logger.warning(
-                "LLM contextualization failed; falling back to static context",
+                "LLM contextualization failed; indexing this chunk without a context header",
                 extra={"error": str(e)},
             )
-            return self._fallback.get_context(document=document, chunk=chunk)
+            return ""
         return response.text.strip()

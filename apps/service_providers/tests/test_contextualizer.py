@@ -1,27 +1,6 @@
 from unittest import mock
 
-from apps.service_providers.llm_service.contextualizer import (
-    LLMContextualizer,
-    StaticContextualizer,
-)
-
-
-class TestStaticContextualizer:
-    def test_uses_file_name_and_page(self):
-        contextualizer = StaticContextualizer(file_name="report.pdf", page_number=3)
-        context = contextualizer.get_context(document="full doc", chunk="a chunk")
-        assert "report.pdf" in context
-        assert "Page 3" in context
-
-    def test_empty_when_no_metadata(self):
-        contextualizer = StaticContextualizer()
-        assert contextualizer.get_context(document="full doc", chunk="a chunk") == ""
-
-    def test_ignores_page_zero(self):
-        contextualizer = StaticContextualizer(file_name="report.pdf", page_number=0)
-        context = contextualizer.get_context(document="d", chunk="c")
-        assert "report.pdf" in context
-        assert "Page" not in context
+from apps.service_providers.llm_service.contextualizer import LLMContextualizer
 
 
 class TestLLMContextualizer:
@@ -60,17 +39,7 @@ class TestLLMContextualizer:
         system_message = sent_messages[0][1]
         assert system_message.count("X") == 10
 
-    def test_falls_back_to_static_on_llm_error(self):
-        chat_model = mock.Mock()
-        chat_model.invoke.side_effect = RuntimeError("provider down")
-        fallback = StaticContextualizer(file_name="report.pdf")
-        contextualizer = LLMContextualizer(chat_model, fallback=fallback)
-
-        context = contextualizer.get_context(document="full doc", chunk="a chunk")
-
-        assert "report.pdf" in context
-
-    def test_fallback_can_be_empty(self):
+    def test_returns_empty_string_on_llm_error(self):
         chat_model = mock.Mock()
         chat_model.invoke.side_effect = RuntimeError("provider down")
         contextualizer = LLMContextualizer(chat_model)

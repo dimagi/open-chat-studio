@@ -137,6 +137,14 @@ class Collection(BaseTeamModel, VersionsMixin):
         related_name="+",
         help_text="The chat model used to generate per-chunk context headers when contextual retrieval is enabled.",
     )
+    contextualizer_llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="+",
+        help_text="The LLM provider used with contextualizer_llm_model to generate context headers.",
+    )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
@@ -345,21 +353,35 @@ class Collection(BaseTeamModel, VersionsMixin):
     def _build_contextualizer(self):
         """Build a contextualizer for this collection's indexing pipeline, or None.
 
-        Returns None (unchanged indexing behaviour) unless the contextual retrieval
-        feature flag is active for this collection's team, enable_contextual_retrieval
-        is set, and a contextualizer_llm_model is configured. On any failure to build
-        the chat model (e.g. embedding-only providers), falls back to None so indexing
-        continues without contextualization rather than aborting.
+        Returns None (unchanged indexing behaviour) unless contextual retrieval is
+        enabled, the feature flag is active for this collection's team, and a
+        compatible contextualizer provider+model pair is configured. On any failure
+        it returns None (and logs) so indexing continues without contextualization
+        rather than aborting.
         """
         from apps.service_providers.exceptions import ServiceProviderConfigError  # noqa: PLC0415
-        from apps.service_providers.llm_service.contextualizer import (  # noqa: PLC0415
-            LLMContextualizer,
-            StaticContextualizer,
-        )
+        from apps.service_providers.llm_service.contextualizer import LLMContextualizer  # noqa: PLC0415
         from apps.teams.flags import Flags  # noqa: PLC0415
         from apps.teams.models import Flag  # noqa: PLC0415
 
         if not self.enable_contextual_retrieval or not self.contextualizer_llm_model:
+            return None
+        if not self.contextualizer_llm_provider:
+            logger.warning(
+                "Contextual retrieval is enabled but no contextualizer_llm_provider is set; "
+                "skipping contextualization.",
+                extra={"collection_id": self.id},
+            )
+            return None
+        if self.contextualizer_llm_provider.type != self.contextualizer_llm_model.type:
+            logger.warning(
+                "Contextualizer provider and model types do not match; skipping contextualization.",
+                extra={
+                    "collection_id": self.id,
+                    "provider_type": self.contextualizer_llm_provider.type,
+                    "model_type": self.contextualizer_llm_model.type,
+                },
+            )
             return None
         flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
         if not flag:
@@ -375,16 +397,15 @@ class Collection(BaseTeamModel, VersionsMixin):
         if not active:
             return None
         try:
-            service = self.llm_provider.get_llm_service()
+            service = self.contextualizer_llm_provider.get_llm_service()
             chat_model = service.get_chat_model(self.contextualizer_llm_model.name)
         except (ServiceProviderConfigError, NotImplementedError):
             logger.warning(
-                "Contextual retrieval is enabled but the collection's LLM provider cannot "
-                "provide a chat model; indexing will proceed without contextualization.",
-                extra={"collection_id": self.id, "llm_provider_id": self.llm_provider_id},
+                "Failed to build the contextualizer chat model; skipping contextualization.",
+                extra={"collection_id": self.id},
             )
             return None
-        return LLMContextualizer(chat_model, fallback=StaticContextualizer())
+        return LLMContextualizer(chat_model)
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""

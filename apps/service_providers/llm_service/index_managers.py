@@ -278,9 +278,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             embeddings = []
             try:
                 document_text = file.read_content()
-                text_chunks = self.chunk_file(
-                    file, chunk_size=chunk_size, chunk_overlap=chunk_overlap, text=document_text
-                )
+                text_chunks = self.chunk_file(document_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
                     if not safe_chunk:
@@ -327,9 +325,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
-    def chunk_file(
-        self, file: File, chunk_size: int, chunk_overlap: int, text: str | None = None
-    ) -> list[str]:
+    def chunk_file(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
         """
         Split text content into overlapping chunks for processing.
 
@@ -350,8 +346,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             chunk_overlap=chunk_overlap,
         )
 
-        content = text if text is not None else file.read_content()
-        documents = text_splitter.create_documents([content])
+        documents = text_splitter.create_documents([text])
         return [doc.page_content for doc in documents]
 
     def delete_files_from_index(self, files: list[File]):
