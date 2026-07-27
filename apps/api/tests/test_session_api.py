@@ -7,7 +7,7 @@ from rest_framework.fields import DateTimeField
 
 from apps.annotations.models import Tag, TagCategories
 from apps.chat.models import ChatAttachment
-from apps.experiments.models import ExperimentSession, Team
+from apps.experiments.models import ExperimentSession
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
@@ -438,12 +438,9 @@ def test_create_session_new_participant(experiment):
 @pytest.mark.django_db()
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_end_experiment_session_success(auth_method, client, session):
-    team = Team.objects.create(name="Test Team")
-    session.team = team
-    session.save()
     url = f"/api/sessions/{session.external_id}/end_experiment_session/"
-    user = session.experiment.team.members.first()
-    client = ApiTestClient(user, session.experiment.team, auth_method=auth_method)
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team, auth_method=auth_method)
     response = client.post(url)
     assert response.status_code == status.HTTP_200_OK
     session.refresh_from_db()
@@ -453,12 +450,9 @@ def test_end_experiment_session_success(auth_method, client, session):
 @pytest.mark.django_db()
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_update_experiment_session_state_success(auth_method, session):
-    team = Team.objects.create(name="Test Team")
-    session.team = team
-    session.save()
     url = f"/api/sessions/{session.external_id}/update_state/"
-    user = session.experiment.team.members.first()
-    client = ApiTestClient(user, session.experiment.team, auth_method=auth_method)
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team, auth_method=auth_method)
     new_state = {"some": "new_state", "updated": True}
 
     response = client.patch(url, data={"state": new_state}, format="json")
