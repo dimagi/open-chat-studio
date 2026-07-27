@@ -1,4 +1,4 @@
-# ADR-0046: Deploy-safe evaluation runs via a beat coordinator over a frozen plan
+# ADR-0047: Deploy-safe evaluation runs via a beat coordinator over a frozen plan
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 

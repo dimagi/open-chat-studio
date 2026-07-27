@@ -51,7 +51,7 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
 
-# --- Beat-coordinated evaluation batches (see docs/adr/0046-deploy-safe-evaluation-runs.md) ---
+# --- Beat-coordinated evaluation batches (see docs/adr/0047-deploy-safe-evaluation-runs.md) ---
 BATCH_SIZE = 3  # messages per batch task
 BATCHES_PER_TICK = 10  # batch tasks dispatched per tick; BATCHES_PER_TICK * BATCH_SIZE = messages per tick
 STALL_TIMEOUT = timedelta(minutes=12)  # no fresh results for this long => the dispatched batch is stalled
