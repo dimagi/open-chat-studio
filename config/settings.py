@@ -418,7 +418,7 @@ if USE_S3_STORAGE:
     AWS_PUBLIC_STORAGE_BUCKET_NAME = env("AWS_PUBLIC_STORAGE_BUCKET_NAME")
     PUBLIC_MEDIA_LOCATION = "media"
     MEDIA_URL = _public_media_url(AWS_S3_CUSTOM_DOMAIN, AWS_PUBLIC_STORAGE_BUCKET_NAME, PUBLIC_MEDIA_LOCATION)
-    STORAGES["public"] = {  # ty: ignore[invalid-assignment]
+    STORAGES["public"] = {
         "BACKEND": "apps.web.storage_backends.PublicMediaStorage",
         "OPTIONS": {
             "bucket_name": AWS_PUBLIC_STORAGE_BUCKET_NAME,
