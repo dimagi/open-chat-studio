@@ -41,13 +41,15 @@ The `{i}` represents the filter index (0 to `MAX_FILTER_PARAMS-1`), allowing mul
 ### FilterParams and ColumnFilterData
 The `FilterParams` class extracts filter parameters from request query parameters and organizes them into `ColumnFilterData` objects. Each `ColumnFilterData` contains the column name, operator, and value for a single filter.
 
+The same column may appear more than once — a date range is expressed as `after X` plus `before Y` on the same column — so `FilterParams` keeps a flat, ordered list of filters rather than one entry per column. Use `FilterParams.get_all(column)` to retrieve every filter for a column.
+
 ### Column Filter
 The `ColumnFilter` class acts as a bridge between query parameters and ORM filters. Each filter defines a `query_param` attribute that corresponds to the column name in the query parameters. When a request contains `filter_{i}_column` matching this `query_param`, the filter processes the associated operator and value to generate the appropriate database query.
 
 The `ColumnFilter.apply()` method:
-1. Retrieves the `ColumnFilterData` for its `query_param` from `FilterParams`
-2. Converts the operator to a method name (e.g., "starts with" → `apply_starts_with`)
-3. Calls the appropriate `apply_*` method with the parsed value
+1. Retrieves every `ColumnFilterData` for its `query_param` from `FilterParams`
+2. For each one, converts the operator to a method name (e.g., "starts with" → `apply_starts_with`)
+3. Calls the appropriate `apply_*` method with the parsed value, narrowing the queryset further each time (filters on the same column combine with AND)
 
 ### Available Filter Types
 

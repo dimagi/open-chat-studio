@@ -33,10 +33,15 @@ class ColumnFilterData(BaseModel):
 
 
 class FilterParams:
-    """A container for filter parameters extracted from a request's query parameters."""
+    """A container for filter parameters extracted from a request's query parameters.
+
+    Filters are held as a flat, ordered list rather than keyed by column: the UI allows
+    several filters on the same column (e.g. ``First Message after X`` AND
+    ``First Message before Y`` to express a date range), and each one must be applied.
+    """
 
     def __init__(self, query_params: QueryDict | None = None, column_filters: list[ColumnFilterData] | None = None):
-        self.filters: dict[str, ColumnFilterData] = {}
+        self.filters: list[ColumnFilterData] = []
 
         if query_params:
             for i in range(settings.MAX_FILTER_PARAMS):
@@ -44,13 +49,12 @@ class FilterParams:
                 filter_operator = query_params.get(f"filter_{i}_operator")
                 filter_value = query_params.get(f"filter_{i}_value")
                 if filter_column and filter_operator and filter_value:
-                    self.filters[filter_column] = ColumnFilterData(
-                        column=filter_column, operator=filter_operator, value=filter_value
+                    self.filters.append(
+                        ColumnFilterData(column=filter_column, operator=filter_operator, value=filter_value)
                     )
 
         if column_filters:
-            for item in column_filters:
-                self.filters[item.column] = item
+            self.filters.extend(column_filters)
 
     @classmethod
     def from_request(cls, request) -> Self:
@@ -66,12 +70,13 @@ class FilterParams:
             return cls(QueryDict(parsed_url.query))
         return cls()
 
-    def get(self, column: str) -> ColumnFilterData | None:
-        return self.filters.get(column)
+    def get_all(self, column: str) -> list[ColumnFilterData]:
+        """All filters targeting ``column``, in the order they were supplied."""
+        return [filter_data for filter_data in self.filters if filter_data.column == column]
 
     def to_query(self) -> str:
         query_data = {}
-        for i, filter_data in enumerate(self.filters.values()):
+        for i, filter_data in enumerate(self.filters):
             query_data.update(
                 {
                     f"filter_{i}_column": filter_data.column,
