@@ -73,3 +73,12 @@ repos:
         pass_filenames: false
         always_run: true
         fail_fast: true
+      - id: atomic-exception-handling
+        name: database exceptions must not be caught inside transaction.atomic()
+        # Stdlib-only AST check, so it needs no virtualenv of its own. The repo-wide
+        # gate lives in scripts/test_check_atomic_exception_handling.py; this hook is
+        # the fast signal on the files a commit or PR actually touches.
+        entry: python3 scripts/check_atomic_exception_handling.py apps --files
+        language: system
+        files: ^apps/.*\.py$
+        exclude: /migrations/

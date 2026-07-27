@@ -126,7 +126,8 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         self.object = form.save()
         resource_formsets.save(self.request, self.object)
         try:
-            push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
+            with transaction.atomic():
+                push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing assistant to OpenAI: {e}")
             return self.form_invalid(form)
@@ -149,7 +150,8 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         if "file_search" in self.object.builtin_tools:
             ToolResources.objects.get_or_create(assistant=self.object, tool_type="file_search")
         try:
-            push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
+            with transaction.atomic():
+                push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
             form.add_error(None, str(e))

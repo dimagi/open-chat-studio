@@ -68,6 +68,7 @@ Tests and typecheck are necessary but not sufficient. For any change with a runt
 * For regressions: add a failing test that reproduces the bug, then fix to green
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
+* Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 
 ## Ask first
 Confirm with a human before these — they are hard to reverse or change a shared contract:
