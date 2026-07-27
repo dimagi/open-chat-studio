@@ -88,7 +88,7 @@ from apps.utils.decorators import sunset
 from apps.web.waf import WafRule, waf_allow
 
 
-class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = Experiment
     table_class = ExperimentVersionsTable
     template_name = "experiments/experiment_version_table.html"

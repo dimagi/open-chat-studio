@@ -409,7 +409,7 @@ class PipelineRouterNode(BasePipelineNode):
     def get_output_map(self) -> dict[str, str]:
         raise NotImplementedError()
 
-    def get_output_tags(self, selected_route, is_default_keyword) -> list[str]:
+    def get_output_tags(self, selected_route, is_default_keyword) -> list[tuple[str, str]]:
         raise NotImplementedError()
 
     def _process_conditional(self, context: NodeContext):

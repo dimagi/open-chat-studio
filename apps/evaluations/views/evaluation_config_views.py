@@ -65,7 +65,7 @@ class EvaluationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templat
         }
 
 
-class EvaluationTableView(PermissionRequiredMixin, SingleTableView):
+class EvaluationTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     permission_required = "evaluations.view_evaluationconfig"
     model = EvaluationConfig
     table_class = EvaluationConfigTable
@@ -233,7 +233,7 @@ class EvaluationTrendsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         }
 
 
-class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):
+class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     permission_required = "evaluations.view_evaluationrun"
     model = EvaluationRun
     table_class = EvaluationRunTable
@@ -296,7 +296,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         return context
 
 
-class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):
+class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_results_table.html"
     table_pagination = {"per_page": 10}
