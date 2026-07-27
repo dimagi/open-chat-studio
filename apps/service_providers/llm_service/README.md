@@ -8,7 +8,8 @@ Refer to the [user guide](https://docs.openchatstudio.com/concepts/team/llm_prov
 - **Extensible:** Easy to add new providers, [new models](https://developers.openchatstudio.com/developer_guides/managing_models/) and new LLM functionality as this changes rapidly
 - **Unified Model Management:** Centralized handling of configuration, retries, usage tracking, request shaping etc
 - **Reuse via OpenAI-API Compatibility:** OpenAI, Groq, Perplexity, DeepSeek, MiniMax and Azure all expose an OpenAI-compatible API, so they're implemented as thin configurations of the same OpenAI SDK/LangChain client rather than needing their own integration.
-- LLM Provider **Capability-Based Feature Support:** Different providers can optionaly support features like: built-in tools, audio transcription, prompt caching, reasoning/thinking parameters, RAG, file citations.
+- LLM Provider **Capability-Based Feature Support:** Different providers can optionally support features like built-in tools, audio transcription, prompt caching, reasoning/thinking parameters, RAG, file citations, and history.
+- **Model lifecycle management:** Because models are frequently added and deprecated, the process for doing so needs to be easy and must not impact users.
 
 Its design follows the service provider pattern described in [apps/service_providers/README.md](../README.md).
 
