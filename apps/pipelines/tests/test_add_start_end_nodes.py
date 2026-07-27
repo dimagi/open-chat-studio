@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.pipelines.flow import split_flow_data
 from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
     add_missing_start_end_nodes,
     remove_all_start_end_nodes,
@@ -15,7 +16,7 @@ from apps.pipelines.tests.utils import end_node, passthrough_node, start_node
 @pytest.mark.django_db()
 def test_empty_pipeline_gets_start_end_nodes(team):
     pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
 
     add_missing_start_end_nodes(pipeline, Node)
 
@@ -44,7 +45,7 @@ def test_recursive_pipeline_has_start_end_nodes(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
     pipeline.save()
     pipeline.refresh_from_db()
 
@@ -75,7 +76,7 @@ def test_dangling_edge_has_start_end_nodes(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
     pipeline.save()
     pipeline.refresh_from_db()
 
@@ -173,7 +174,7 @@ def test_compliant_pipeline_not_modified(team):
             "edges": [],
         },
     )
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
     add_missing_start_end_nodes(pipeline, Node)
 
     assert pipeline.node_set.all().count() == 3
@@ -203,7 +204,7 @@ def test_pipeline_gets_start_end_nodes_with_edges(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
 
     add_missing_start_end_nodes(pipeline, Node)
 
@@ -253,7 +254,7 @@ def test_remove_start_end_nodes(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
 
     remove_all_start_end_nodes(Node)
     pipeline.refresh_from_db()
@@ -313,7 +314,7 @@ def test_remove_nodes(version_before_removing_node, team):
             ],
         },
     )
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
 
     if version_before_removing_node:
         pipeline.create_new_version()
@@ -343,7 +344,7 @@ def test_remove_nodes(version_before_removing_node, team):
         ],
     }
     pipeline.save()
-    pipeline.update_nodes_from_data()
+    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
 
     if version_before_removing_node:
         node = Node.objects.get_all().get(flow_id=passthrough_2["id"], working_version_id=None)
@@ -362,7 +363,7 @@ def test_pipeline_creation_without_llm(team):
     assert "edges" in pipeline.data
     assert len(pipeline.data["nodes"]) == 2
     assert len(pipeline.data["edges"]) == 0
-    node_types = [node["data"]["type"] for node in pipeline.data["nodes"]]
+    node_types = list(pipeline.node_set.values_list("type", flat=True))
     assert "StartNode" in node_types
     assert "EndNode" in node_types
 
@@ -381,8 +382,7 @@ def test_pipeline_creation_with_llm(team):
     assert "nodes" in pipeline.data
     assert "edges" in pipeline.data
     assert len(pipeline.data["nodes"]) == 3
-    llm_node = next(node for node in pipeline.data["nodes"] if node["data"]["type"] == "LLMResponseWithPrompt")
-    params = llm_node["data"]["params"]
+    params = pipeline.node_set.get(type="LLMResponseWithPrompt").params
     assert params["llm_provider_id"] == mock_llm_provider.id
     assert params["llm_provider_model_id"] == mock_llm_model.id
     assert params["llm_temperature"] == 0.7

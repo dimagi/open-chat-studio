@@ -29,7 +29,7 @@ class SourceMaterialHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Tem
         }
 
 
-class SourceMaterialTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class SourceMaterialTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = SourceMaterial
     table_class = SourceMaterialTable
     template_name = "table/single_table.html"

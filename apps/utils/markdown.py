@@ -22,31 +22,31 @@ class LinkProcessorMixin:
         return _update_href(el), start, end
 
 
-class OcsLinkInlineProcessor(LinkProcessorMixin, LinkInlineProcessor):
+class OcsLinkInlineProcessor(LinkProcessorMixin, LinkInlineProcessor):  # ty: ignore[invalid-method-override]
     pass
 
 
-class OcsReferenceInlineProcessor(LinkProcessorMixin, ReferenceInlineProcessor):
+class OcsReferenceInlineProcessor(LinkProcessorMixin, ReferenceInlineProcessor):  # ty: ignore[invalid-method-override]
     pass
 
 
-class OcsShortReferenceInlineProcessor(LinkProcessorMixin, ShortReferenceInlineProcessor):
+class OcsShortReferenceInlineProcessor(LinkProcessorMixin, ShortReferenceInlineProcessor):  # ty: ignore[invalid-method-override]
     pass
 
 
-class FileShortReferenceInlineProcessor(LinkProcessorMixin, ShortReferenceInlineProcessor):
+class FileShortReferenceInlineProcessor(LinkProcessorMixin, ShortReferenceInlineProcessor):  # ty: ignore[invalid-method-override]
     pass
 
 
-class OcsImageInlineProcessor(LinkProcessorMixin, ImageInlineProcessor):
+class OcsImageInlineProcessor(LinkProcessorMixin, ImageInlineProcessor):  # ty: ignore[invalid-method-override]
     pass
 
 
-class OcsImageReferenceInlineProcessor(LinkProcessorMixin, ImageReferenceInlineProcessor):
+class OcsImageReferenceInlineProcessor(LinkProcessorMixin, ImageReferenceInlineProcessor):  # ty: ignore[invalid-method-override]
     pass
 
 
-class OcsShortImageReferenceInlineProcessor(LinkProcessorMixin, ShortImageReferenceInlineProcessor):
+class OcsShortImageReferenceInlineProcessor(LinkProcessorMixin, ShortImageReferenceInlineProcessor):  # ty: ignore[invalid-method-override]
     pass
 
 

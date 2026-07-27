@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from datetime import timedelta
 
 from django.db import models, transaction
+from django.db.models.expressions import Combinable
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -35,6 +36,11 @@ class FileStatus(models.TextChoices):
     IN_PROGRESS = ("in_progress", _("In Progress"))
     COMPLETED = "completed", _("Completed")
     FAILED = "failed", _("Failed")
+
+
+# Statuses whose chunks cannot be trusted: either indexing never finished, or it is about to
+# start again. In every case any chunks currently stored for the file are stale or partial.
+UNINDEXED_FILE_STATUSES = [FileStatus.PENDING, FileStatus.IN_PROGRESS, FileStatus.FAILED]
 
 
 class CollectionFileQuerySet(models.QuerySet):
@@ -75,6 +81,23 @@ class CollectionFile(models.Model):
     @property
     def status_enum(self):
         return FileStatus(self.status)
+
+
+def chunk_from_indexed_file() -> Combinable:
+    """Filter expression dropping `FileChunkEmbedding` rows whose file has not indexed cleanly.
+
+    Excludes `UNINDEXED_FILE_STATUSES` rather than requiring COMPLETED because
+    `create_new_version` adds files via `files.add(...)`, leaving `status` blank, so requiring
+    COMPLETED would return no chunks at all for published collections. Correlates on collection
+    as well as file, since a file can fail in one collection while indexing cleanly in another.
+    """
+    return ~models.Exists(
+        CollectionFile.objects.filter(
+            file_id=models.OuterRef("file_id"),
+            collection_id=models.OuterRef("collection_id"),
+            status__in=UNINDEXED_FILE_STATUSES,
+        )
+    )
 
 
 @audit_fields(
@@ -232,8 +255,12 @@ class Collection(BaseTeamModel, VersionsMixin):
                 if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
                     index_collection_files(collection_files)
             else:
-                # Create versions of file chunk embeddings and add them to the new collection
-                for embedding in self.filechunkembedding_set.iterator(chunk_size=50):
+                # Create versions of file chunk embeddings and add them to the new collection.
+                # A version's CollectionFile rows carry a blank status, so anything copied here is
+                # trusted forever: chunks of a file that never indexed cleanly must not be laundered
+                # into the version that way.
+                embeddings = self.filechunkembedding_set.filter(chunk_from_indexed_file())
+                for embedding in embeddings.iterator(chunk_size=50):
                     # Skip embeddings for files that are no longer in the collection
                     if embedding.file_id not in file_versions:
                         continue

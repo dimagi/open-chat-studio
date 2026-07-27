@@ -545,7 +545,7 @@ def download_collection_files(request, team_slug: str, pk: int):
     return render(request, "documents/partials/download_progress.html", context)
 
 
-class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = Collection
     table_class = CollectionsTable
     template_name = "table/single_table.html"
@@ -691,8 +691,17 @@ class DeleteCollection(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View)
 @login_and_team_required
 @permission_required("documents.change_collection", raise_exception=True)
 def retry_failed_uploads(request, team_slug: str, pk: int):
+    """Re-index every failed file in a collection, discarding what the failed attempt left behind."""
     queryset = CollectionFile.objects.filter(collection_id=pk, status=FileStatus.FAILED)
     collection_file_ids = list(queryset.values_list("id", flat=True))
+    failed_file_ids = list(queryset.values_list("file_id", flat=True))
+
+    # A file that failed partway through leaves the chunks it managed to embed behind, so
+    # discard them before re-indexing or the retry stacks fresh chunks on top of stale ones.
+    # Scoped to failed files deliberately: `FileChunkEmbedding.working_version` cascades, so
+    # deleting a healthy file's chunks would take a published version's copies with it.
+    FileChunkEmbedding.objects.filter(collection_id=pk, file_id__in=failed_file_ids).delete()
+
     queryset.update(status=FileStatus.PENDING)
     tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)

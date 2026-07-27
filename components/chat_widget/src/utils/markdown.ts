@@ -4,7 +4,6 @@ import DOMPurify from 'dompurify';
 marked.setOptions({
   breaks: true,
   gfm: true,
-  smartypants: true,
 });
 
 /**
@@ -85,7 +84,7 @@ export function renderMarkdownSync(content: string): string {
   }
 
   try {
-    const html = marked.parse(content);
+    const html = marked.parse(content, { async: false });
     const sanitized = DOMPurify.sanitize(html, SANITIZE_CONFIG);
 
     return postProcessMarkdownHTML(sanitized);

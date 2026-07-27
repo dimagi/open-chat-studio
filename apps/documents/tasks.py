@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import uuid
 import zipfile
 from datetime import timedelta
 from io import BytesIO
@@ -21,7 +22,7 @@ from taskbadger.celery import Task as TaskbadgerTask
 from apps.assistants.models import OpenAiAssistant
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.document_source_service import sync_document_source
-from apps.documents.exceptions import ZipCreationError, ZipIntegrityError
+from apps.documents.exceptions import DocumentSourceDeleted, ZipCreationError, ZipIntegrityError
 from apps.documents.models import (
     SYNC_LOCK_TIMEOUT,
     Collection,
@@ -175,7 +176,7 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
 @shared_task(bind=True, ignore_result=True)
 def sync_document_source_task(self, document_source_id: int):
     """Sync a specific document source"""
-    task_id = self.request.id
+    task_id = self.request.id or str(uuid.uuid4())
     # Guard against concurrent syncs for the same document source. Atomically check-and-set
     # the lock under a row lock. A lock held past SYNC_LOCK_TIMEOUT is treated as stale (its
     # owning task died without releasing it) and is reclaimed rather than blocking forever.
@@ -210,6 +211,16 @@ def sync_document_source_task(self, document_source_id: int):
             )
         else:
             logger.error(f"Document source sync failed for {document_source}: {result.error_message}")
+    except DocumentSourceDeleted:
+        # The source was deleted mid-sync: abort the whole task rather than crash on a
+        # dangling foreign key. The finally block's queryset update matches zero rows
+        # (the row is gone) and is a safe no-op.
+        logger.warning(
+            "DocumentSource was deleted during sync; aborting sync task.",
+            extra={
+                "document_source": document_source_id,
+            },
+        )
     except Exception:
         logger.exception(
             "Unexpected error syncing document source",

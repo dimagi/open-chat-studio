@@ -61,7 +61,7 @@ class AnnotationQueueHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
         return ctx
 
 
-class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class AnnotationQueueTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = AnnotationQueue
     table_class = AnnotationQueueTable
     template_name = "table/single_table.html"
@@ -179,7 +179,7 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         return context
 
 
-class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class AnnotationQueueItemsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = AnnotationItem
     table_class = AnnotationItemTable
     template_name = "table/single_table.html"
@@ -224,7 +224,7 @@ def _get_available_sessions_queryset(request, queue_pk, filter_params=None):
     return queryset
 
 
-class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class AnnotationQueueSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """Filterable, paginated session table for selecting sessions to add to a queue."""
 
     model = ExperimentSession

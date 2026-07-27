@@ -90,7 +90,7 @@ class ServiceProviderUsagesView(
         )
 
 
-class ServiceProviderTableView(
+class ServiceProviderTableView(  # ty: ignore[invalid-method-override]
     LoginAndTeamRequiredMixin, SingleTableView, ServiceProviderMixin, PermissionRequiredMixin
 ):
     template_name = "table/single_table.html"

@@ -27,7 +27,7 @@ class ConsentFormHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templa
         }
 
 
-class ConsentFormTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class ConsentFormTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = ConsentForm
     table_class = ConsentFormTable
     template_name = "table/single_table.html"
