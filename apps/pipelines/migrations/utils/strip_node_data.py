@@ -40,11 +40,11 @@ def strip_node_data_from_pipelines(Pipeline, Node, team=None, progress_callback=
             rows.append(row)
 
         _backfill_positions(pipeline, Node, node_rows=rows)
-        stripped_nodes = _strip_nodes(pipeline, Node, rows)
+        stripped_data = _strip_nodes(pipeline, Node, rows)
         processed += 1
         if progress_callback and (processed % BATCH_SIZE == 0 or processed == total):
             progress_callback(processed, total)
-        if stripped_nodes is None:
+        if stripped_data is None:
             continue
         pipeline.data = stripped_data
         pending.append(pipeline)
@@ -127,8 +127,8 @@ def rebuild_node_data_in_pipelines(Pipeline, Node, team=None):
 
     pending = []
     for pipeline in queryset.iterator(chunk_size=BATCH_SIZE):
-        nodes = (pipeline.data or {}).get("nodes") or []
-        if not nodes:
+        data = pipeline.data or {}
+        if data.get("nodes"):
             continue
         rows = list(Node._base_manager.filter(pipeline_id=pipeline.id, is_archived=False))
         if not rows:

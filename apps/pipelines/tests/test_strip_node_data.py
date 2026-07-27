@@ -123,7 +123,7 @@ class TestStripNodeData:
 
         pipeline.refresh_from_db()
         other_pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
         assert all("data" in node for node in other_pipeline.data["nodes"])
 
     def test_progress_callback_is_optional(self, team):
@@ -266,7 +266,7 @@ class TestStripNodeDataCommand:
 
         pipeline.refresh_from_db()
         other_pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
         assert all("data" in node for node in other_pipeline.data["nodes"])
 
     def test_team_option_raises_for_unknown_slug(self, team):
