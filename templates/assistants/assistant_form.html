@@ -34,6 +34,7 @@
 {% endblock pre_form %}
 
 {% block form %}
+<div x-data="assistant">
   {{ form.non_field_errors }}
   {% render_form_fields form "name" "instructions" "include_file_info" %}
   {% render_form_fields form "llm_provider" "llm_provider_model" "temperature" "top_p" %}
@@ -59,6 +60,7 @@
       {% include "files/partials/file_formset.html" with form_title="File Search Files" prefix="file_search" %}
     </div>
   {% endif %}
+</div>
 {% endblock form %}
 
 {% block post_form %}
