@@ -23,8 +23,11 @@ Open Chat Studio is built as a Django web application with a modular design. It 
 - **Backend**: Python 3.13+, Django, Django REST Framework, Celery
 - **Database**: PostgreSQL (with pgvector)
 - **Cache/Message Broker**: Redis
-- **Frontend**: HTML, CSS ([Tailwind](http://tailwindcss.com/) + [DaisyUI](https://daisyui.com/)), [htmx](https://htmx.org/), [AlpineJS](https://alpinejs.dev/), [ReactJS](https://react.dev/) with [React Flow](https://reactflow.dev/) (for specific components)
-- **External LLM Services**: OpenAI, Azure, etc. with [full list in user documents](https://docs.openchatstudio.com/concepts/team/llm_providers/)
+- **LLM Abstraction**: [LangChain](https://python.langchain.com/) provides common chat model interfaces, message structures, and callback hooks that let a single `LlmService` layer work across providers
+- **Frontend**: TypeScript, [ReactJS](https://react.dev/) (with [React Flow](https://reactflow.dev/) for pipeline building) and [htmx](https://htmx.org/)/[AlpineJS](https://alpinejs.dev/) in Django templates, bundled with Webpack, styled with [Tailwind](http://tailwindcss.com/) + [DaisyUI](https://daisyui.com/)
+- **Chat Widget**: Standalone [StencilJS](https://stenciljs.com/) web component (`components/chat_widget`) embeddable in third-party sites
+- **External LLM Services**: OpenAI, Anthropic, Groq, Gemini, Azure, and more — see the [full list](https://docs.openchatstudio.com/concepts/team/llm_providers/)
+- **Deployment**: Docker, Heroku
 
 ## Key Concepts
 
