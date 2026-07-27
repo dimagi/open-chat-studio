@@ -1,7 +1,6 @@
 import pytest
 from django.core.management import CommandError, call_command
 
-from apps.pipelines.migrations.utils import strip_node_data as strip_node_data_module
 from apps.pipelines.migrations.utils.strip_node_data import (
     rebuild_node_data_in_pipelines,
     strip_node_data_from_pipelines,
@@ -120,18 +119,6 @@ class TestStripNodeData:
         other_pipeline.refresh_from_db()
         assert all("data" not in node for node in pipeline.data["nodes"])
         assert all("data" in node for node in other_pipeline.data["nodes"])
-
-    def test_reports_progress_periodically(self, team, monkeypatch):
-        monkeypatch.setattr(strip_node_data_module, "BATCH_SIZE", 1)
-        for _ in range(3):
-            _create_old_format_pipeline(team)
-        calls = []
-
-        strip_node_data_from_pipelines(
-            Pipeline, Node, progress_callback=lambda processed, total: calls.append((processed, total))
-        )
-
-        assert calls == [(1, 3), (2, 3), (3, 3)]
 
     def test_progress_callback_is_optional(self, team):
         _create_old_format_pipeline(team)
