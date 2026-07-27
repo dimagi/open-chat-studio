@@ -88,7 +88,7 @@ class ApplicationHome(LoginRequiredMixin, TemplateView):
         }
 
 
-class ApplicationTableView(LoginRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class ApplicationTableView(LoginRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """List view for all OAuth applications owned by the current user using django-tables2."""
 
     model = OAuth2Application

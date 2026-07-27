@@ -11,6 +11,7 @@ Create a command that inherits from `IdempotentCommand`:
 ```python
 from apps.data_migrations.management.commands.base import IdempotentCommand
 
+
 class Command(IdempotentCommand):
     help = "Migrate user data to new format"
     migration_name = "migrate_user_data_v1_2024_11_21"
@@ -45,6 +46,7 @@ Use `RunDataMigration` to run your management command within a Django migration:
 ```python
 from django.db import migrations
 from apps.data_migrations.utils.migrations import RunDataMigration
+
 
 class Migration(migrations.Migration):
     dependencies = [("myapp", "0001_initial")]
@@ -101,6 +103,7 @@ When adding new fields that require data backfilling, use a two or three-phase d
    from apps.data_migrations.management.commands.base import IdempotentCommand
    from apps.users.models import User
 
+
    class Command(IdempotentCommand):
        help = "Backfill normalized names for existing users"
        migration_name = "backfill_normalized_names_2024_12_15"
@@ -144,6 +147,7 @@ When adding new fields that require data backfilling, use a two or three-phase d
    from django.db import migrations
    from apps.data_migrations.utils.migrations import RunDataMigration
 
+
    class Migration(migrations.Migration):
        dependencies = [("users", "0XXX_previous_migration")]
 
@@ -180,6 +184,7 @@ When adding new fields that require data backfilling, use a two or three-phase d
    ```python
    # migrations/0XXX_alter_user_normalized_name.py
    from django.db import migrations
+
 
    class Migration(migrations.Migration):
        dependencies = [("users", "0XXX_previous_migration")]
@@ -219,6 +224,7 @@ For small datasets or non-critical fields, you can combine all three phases:
 # migrations/0XXX_add_normalized_name.py
 from django.db import migrations
 from apps.data_migrations.utils.migrations import RunDataMigration
+
 
 class Migration(migrations.Migration):
     dependencies = [("users", "0XXX_previous_migration")]

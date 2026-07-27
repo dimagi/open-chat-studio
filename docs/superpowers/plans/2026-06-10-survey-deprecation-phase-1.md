@@ -286,8 +286,7 @@ class Migration(migrations.Migration):
             sql=[
                 "UPDATE experiments_experiment SET pre_survey_id = NULL, post_survey_id = NULL "
                 "WHERE pre_survey_id IS NOT NULL OR post_survey_id IS NOT NULL;",
-                "UPDATE experiments_experimentsession SET status = 'active' "
-                "WHERE status = 'pending-pre-survey';",
+                "UPDATE experiments_experimentsession SET status = 'active' WHERE status = 'pending-pre-survey';",
             ],
             reverse_sql=migrations.RunSQL.noop,
         ),
@@ -494,8 +493,7 @@ from apps.generics.help import render_help_with_link
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 SURVEY_DEPRECATION_MESSAGE = (
-    "Surveys are deprecated and will be removed on 2026-07-10. "
-    "New surveys can no longer be created."
+    "Surveys are deprecated and will be removed on 2026-07-10. New surveys can no longer be created."
 )
 
 
@@ -698,9 +696,7 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="List affected teams without notifying.")
 
     def handle(self, *args, **options):
-        team_ids = (
-            Survey.objects.filter(is_version=False).values_list("team_id", flat=True).distinct()
-        )
+        team_ids = Survey.objects.filter(is_version=False).values_list("team_id", flat=True).distinct()
         teams = Team.objects.filter(id__in=list(team_ids))
         self.stdout.write(f"{teams.count()} team(s) with surveys.")
         if options["dry_run"]:

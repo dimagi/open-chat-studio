@@ -545,7 +545,7 @@ def download_collection_files(request, team_slug: str, pk: int):
     return render(request, "documents/partials/download_progress.html", context)
 
 
-class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class CollectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = Collection
     table_class = CollectionsTable
     template_name = "table/single_table.html"

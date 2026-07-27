@@ -29,11 +29,13 @@ Use the `@waf_allow` decorator to mark views that need WAF rule exceptions.
 ```python
 from apps.web.waf import waf_allow, WafRule
 
+
 # Function-based view
 @waf_allow(WafRule.SizeRestrictions_BODY)
 def upload_file(request):
     # Handle large file uploads
     pass
+
 
 # Class-based view
 @waf_allow(WafRule.NoUserAgent_HEADER)

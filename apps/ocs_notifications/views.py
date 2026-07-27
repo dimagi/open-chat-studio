@@ -85,7 +85,7 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
         return context
 
 
-class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):
+class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = EventUser
     table_class = UserNotificationTable
     template_name = "table/single_table.html"
@@ -255,7 +255,7 @@ class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
         return context
 
 
-class NotificationEventTableView(LoginAndTeamRequiredMixin, SingleTableView):
+class NotificationEventTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = NotificationEvent
     table_class = NotificationEventTable
     template_name = "table/single_table.html"

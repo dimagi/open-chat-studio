@@ -40,7 +40,7 @@ class CustomActionHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class CustomActionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class CustomActionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = CustomAction
     table_class = CustomActionTable
     template_name = "table/single_table.html"
