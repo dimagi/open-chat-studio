@@ -39,9 +39,12 @@ For the precise domain language used in code (and by AI coding agents) — e.g. 
 
 The project is organized into several Django apps, each responsible for specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests. See the **[package map](package-map.md)** for what each app does and how dependencies flow between them.
 
-- **Django Templates** - Templates as well as static files are centralized in the `templates` and `assets` folders, respectively. Templates specific to an app should be placed in the `templates/{app_name}` directory.
+Not everything lives under `apps/` — for example, the chat widget (`components/chat_widget`) is a standalone StencilJS component with its own build. For the full, up-to-date inventory of key files and folders (settings, webpack config, package management, shared test fixtures/factories, etc.), see **[AGENTS.md → Key Paths](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#key-paths)**.
 
-- **Static Files** - The `assets` folder contains JavaScript and CSS. The `assets/styles` folder contains Tailwind CSS configurations, while the `assets/javascript` folder contains JavaScript modules. These files are processed and bundled using Webpack to create the final static assets served to users. Other static assets like images are placed directly in the `static/` folder.
+A couple of conventions worth knowing:
+
+- **Django Templates** - Centralized in `templates/`; templates specific to an app go in `templates/{app_name}`.
+- **Static Files** - Frontend source (TypeScript, JavaScript, CSS) lives in `assets/` (`assets/styles` for Tailwind config, `assets/javascript` for JS/TS modules) and is bundled with Webpack into the static assets served to users. Other static assets, like images, go directly in `static/`.
 
 ## Cross-Cutting Concerns
 
