@@ -39,28 +39,7 @@ def apply_pipeline_patch(current_flow: dict, patch: PipelineDiffPayload) -> tupl
             merged[key] = current_flow[key]
     layout_data, _ = split_flow_data(merged)
 
-    # An add for an id already in the graph is skipped by _apply_node_diff (idempotent
-    # retry), so its content must not overwrite the existing Node row either — unless the
-    # same patch deletes that id first, which makes the add a genuine replacement.
-    deleted_ids = set(patch.nodes.delete)
-    content_nodes = {node.id: node for node in patch.nodes.update}
-    for node in patch.nodes.add:
-        if node.id not in existing_node_ids or node.id in deleted_ids:
-            content_nodes.setdefault(node.id, node)
-
-    node_data: dict[str, dict | None] = {}
-    for node in flow.nodes:
-        source = content_nodes.get(node.id)
-        if source is not None and source.data is not None:
-            node_data[node.id] = {
-                "type": source.data.type,
-                "label": source.data.label,
-                "params": source.data.params,
-                "position": source.position,
-            }
-        else:
-            node_data[node.id] = None
-    return layout_data, node_data
+    return layout_data, _collect_node_data(flow, patch, existing_node_ids)
 
 
 def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
@@ -104,3 +83,32 @@ def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:
             edge_map[added.id] = added
 
     flow.edges = list(edge_map.values())
+
+
+def _collect_node_data(flow: Flow, patch: PipelineDiffPayload, existing_node_ids: set[str]) -> dict[str, dict | None]:
+    """Complete membership mapping for the merged graph: content where the patch carries it,
+    ``None`` (membership only) everywhere else.
+
+    An add for an id already in the graph is skipped by _apply_node_diff (idempotent
+    retry), so its content must not overwrite the existing Node row either — unless the
+    same patch deletes that id first, which makes the add a genuine replacement.
+    """
+    deleted_ids = set(patch.nodes.delete)
+    content_nodes = {node.id: node for node in patch.nodes.update}
+    for node in patch.nodes.add:
+        if node.id not in existing_node_ids or node.id in deleted_ids:
+            content_nodes.setdefault(node.id, node)
+
+    node_data: dict[str, dict | None] = {}
+    for node in flow.nodes:
+        source = content_nodes.get(node.id)
+        if source is not None and source.data is not None:
+            node_data[node.id] = {
+                "type": source.data.type,
+                "label": source.data.label,
+                "params": source.data.params,
+                "position": source.position,
+            }
+        else:
+            node_data[node.id] = None
+    return node_data
