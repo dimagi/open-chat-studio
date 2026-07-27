@@ -3,6 +3,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from apps.pipelines.flow import split_flow_data
 from apps.pipelines.models import Pipeline
 from apps.teams.models import Team
 
@@ -34,10 +35,11 @@ class Command(BaseCommand):
         except Team.DoesNotExist:
             raise CommandError(f"Team with slug {team_slug} does not exist.") from None
 
+        layout_data, node_data = split_flow_data(data)
         new_pipeline = Pipeline.objects.create(
             team=team,
-            data=data,
+            data=layout_data,
             name=name,
         )
-        new_pipeline.update_nodes_from_data()
+        new_pipeline.update_nodes_from_data(node_data)
         self.stdout.write(self.style.SUCCESS(f"Pipeline '{name}' created successfully: {new_pipeline.pk}"))
