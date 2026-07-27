@@ -45,9 +45,9 @@ The project is organized into several Django apps, each responsible for specific
 
 ## Cross-Cutting Concerns
 
-### Background Tasks
+The architectural patterns underlying these concerns — multi-tenancy, versioning, async tasks, API design, LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. The key files below are useful pointers when working in these areas.
 
-Open Chat Studio uses Celery for asynchronous task processing, which is critical for handling LLM interactions, scheduled messages, and other background operations.
+### Background Tasks
 
 **Key Files**:
 
@@ -56,22 +56,10 @@ Open Chat Studio uses Celery for asynchronous task processing, which is critical
 
 ### Authentication and Authorization
 
-The system uses Django's authentication system along with custom middleware and decorators to ensure proper access control.
-
 **Key Files**:
 
 - `teams/middleware.py`: Team-based access control
 - `teams/decorators.py`: Permission decorators
-
-### Frontend Framework
-
-The frontend uses a combination of Django templates, Tailwind CSS, and JavaScript to create a responsive and interactive user interface.
-
-**Key Files**:
-
-- `templates/`: HTML templates
-- `assets/styles/`: CSS and Tailwind configurations
-- `assets/javascript/`: JavaScript modules
 
 ## Monitoring & Observability
 
