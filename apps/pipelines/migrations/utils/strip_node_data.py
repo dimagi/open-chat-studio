@@ -8,8 +8,9 @@ at deploy also heals any writer that bypassed the phase-1 shadow-write (e.g. rev
 restoring old layout data). Idempotent and safe to rerun: rows already positioned produce
 no write, and data already without a ``nodes`` key is skipped.
 
-Run via the ``strip_node_data`` management command; a data migration in a follow-up PR
-will reuse these helpers with historical models.
+``strip_node_data_from_pipelines`` is run by the ``strip_node_data`` management command,
+which migration ``pipelines.0030_strip_node_data`` invokes; that migration's reverse calls
+``rebuild_node_data_in_pipelines`` with historical models.
 """
 
 import logging
@@ -21,15 +22,11 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 500
 
 
-def strip_node_data_from_pipelines(Pipeline, Node, team=None, progress_callback=None):
-    """`team`, if given, scopes the strip to that team's pipelines only.
-
-    `progress_callback(processed, total)` is invoked every ``BATCH_SIZE`` pipelines
+def strip_node_data_from_pipelines(Pipeline, Node, progress_callback=None):
+    """`progress_callback(processed, total)` is invoked every ``BATCH_SIZE`` pipelines
     and once more on the final pipeline, if given.
     """
     queryset = Pipeline._base_manager.exclude(data__isnull=True)
-    if team is not None:
-        queryset = queryset.filter(team=team)
     total = queryset.count()
 
     pending = []
@@ -112,19 +109,15 @@ def _strip_nodes(pipeline, Node, node_rows):
     return {key: value for key, value in data.items() if key != "nodes"}
 
 
-def rebuild_node_data_in_pipelines(Pipeline, Node, team=None):
+def rebuild_node_data_in_pipelines(Pipeline, Node):
     """Reverse of the strip: rebuild the full ``nodes`` list from the Node rows.
 
     ``Pipeline.data`` no longer stores nodes, so a code rollback to a version that reads
     them needs the react-flow nodes — id, react-flow type, position and embedded content
     blob — reconstructed from the rows. Pipelines that still carry a ``nodes`` key are left
     untouched (idempotent); pipelines with no backing rows are skipped.
-
-    `team`, if given, scopes the rebuild to that team's pipelines only.
     """
     queryset = Pipeline._base_manager.exclude(data__isnull=True)
-    if team is not None:
-        queryset = queryset.filter(team=team)
 
     pending = []
     for pipeline in queryset.iterator(chunk_size=BATCH_SIZE):

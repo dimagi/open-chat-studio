@@ -14,7 +14,6 @@ from apps.pipelines.migrations.utils.strip_node_data import (
     strip_node_data_from_pipelines,
 )
 from apps.pipelines.models import Node, Pipeline
-from apps.utils.factories.team import TeamFactory
 
 MIGRATION_NAME = StripNodeDataCommand.migration_name
 # Leading digit, so it cannot be imported with a plain import statement.
@@ -135,18 +134,6 @@ class TestStripNodeData:
 
         pipeline.refresh_from_db()
         assert pipeline.data == data
-
-    def test_scopes_to_single_team(self, team):
-        other_team = TeamFactory.create()
-        pipeline = _create_old_format_pipeline(team)
-        other_pipeline = _create_old_format_pipeline(other_team)
-
-        strip_node_data_from_pipelines(Pipeline, Node, team=team)
-
-        pipeline.refresh_from_db()
-        other_pipeline.refresh_from_db()
-        assert "nodes" not in pipeline.data
-        assert all("data" in node for node in other_pipeline.data["nodes"])
 
     def test_progress_callback_is_optional(self, team):
         _create_old_format_pipeline(team)
