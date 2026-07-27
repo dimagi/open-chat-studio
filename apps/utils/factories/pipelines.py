@@ -3,6 +3,7 @@ import copy
 import factory
 import factory.django
 
+from apps.pipelines.flow import split_flow_data
 from apps.pipelines.models import Node, Pipeline, PipelineChatHistory, PipelineChatHistoryTypes, PipelineChatMessages
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.utils.factories.team import TeamFactory
@@ -59,7 +60,10 @@ class PipelineFactory(factory.django.DjangoModelFactory):
     def nodes(self, create, *args, **kwargs):
         if not create:
             return
-        self.update_nodes_from_data()
+        # `self` is the created Pipeline instance here, not the factory class.
+        self.data, node_data = split_flow_data(self.data)  # ty: ignore[invalid-assignment]
+        self.save(update_fields=["data"])
+        self.update_nodes_from_data(node_data)
 
 
 class PipelineChatHistoryFactory(factory.django.DjangoModelFactory):

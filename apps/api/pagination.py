@@ -2,7 +2,11 @@ from rest_framework.pagination import CursorPagination as RestCursorPagination
 
 
 class CursorPagination(RestCursorPagination):
-    ordering = "-created_at"
+    # ``created_at`` is not unique, so pair it with the primary key as a tiebreaker: this gives a stable
+    # total order across requests, so rows sharing a ``created_at`` at a page boundary aren't skipped or
+    # duplicated. ``-pk`` (not ``-id``) works for models with a non-``id`` primary key. The cursor
+    # position is still keyed on the first field (``created_at``); the tiebreaker only stabilises order.
+    ordering = ("-created_at", "-pk")
     page_size_query_param = "page_size"
     max_page_size = 1500
 

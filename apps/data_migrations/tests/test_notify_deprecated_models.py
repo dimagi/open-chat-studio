@@ -114,20 +114,18 @@ class TestNotifyDeprecatedModelsCommand:
 def _make_pipeline_referencing(llm_provider_model):
     """Create a pipeline with a node referencing the given LlmProviderModel."""
     pipeline: Pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
-    pipeline.data["nodes"].append(
+    pipeline.data["nodes"].append({"id": "1", "type": "pipelineNode"})
+    pipeline.update_nodes_from_data(
         {
-            "id": "1",
-            "data": {
-                "id": "1",
+            "1": {
                 "label": "LLM",
                 "type": "LLMResponseWithPrompt",
                 "params": {
                     "llm_provider_model_id": str(llm_provider_model.id),
                     "prompt": "You are a helpful assistant",
                 },
-            },
+            }
         }
     )
-    pipeline.update_nodes_from_data()
     pipeline.save()
     return pipeline

@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from apps.service_providers.models import LlmProvider
+from apps.teams.metadata import get_team_metadata_fields
 
 logger = logging.getLogger("ocs.admin")
 
@@ -61,14 +62,23 @@ def mask_secret(secret: str, provider_type: str) -> str:
 
 
 def get_provider_key_fingerprints() -> Iterator[dict]:
-    """Yield one masked-key record per LLM provider across all teams."""
+    """Yield one masked-key record per LLM provider across all teams.
+
+    Each record carries the owning team's `metadata` and `slug` so a report can
+    label a team even when it has no usage in the reporting window (and so is
+    absent from the usage report, which is keyed on recorded usage).
+    """
+    metadata_fields = get_team_metadata_fields()
     providers = LlmProvider.objects.select_related("team").order_by("team__name", "type", "name")
     for provider in providers.iterator():
         secret_field = _secret_field_for(provider)
         secret = (provider.config.get(secret_field) or "") if secret_field else ""
+        metadata = provider.team.metadata or {}
         yield {
             "team_id": provider.team_id,
             "team_name": provider.team.name,
+            "team_slug": provider.team.slug,
+            "metadata": {field["key"]: metadata.get(field["key"], "") for field in metadata_fields},
             "provider_id": provider.id,
             "provider_type": provider.type,
             "name": provider.name,

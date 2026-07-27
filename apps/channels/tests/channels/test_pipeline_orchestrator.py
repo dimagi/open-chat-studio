@@ -8,6 +8,7 @@ from apps.channels.pipeline import (
     MessageProcessingPipeline,
 )
 from apps.chat.exceptions import ChatException
+from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 
 from .conftest import make_context
 
@@ -180,6 +181,36 @@ class TestUnexpectedException:
             pipeline.process(ctx)
 
         assert "something bad" in ctx.processing_errors
+
+
+class TestPipelineBuildError:
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(PipelineBuildError("no nodes"), id="build-error"),
+            pytest.param(PipelineNodeBuildError("deprecated model"), id="node-build-error"),
+        ],
+    )
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_build_error_uses_generic_message_and_does_not_reraise(self, mock_gen, error):
+        """Build errors reply with the generic text and run terminal stages, but are not re-raised.
+
+        The LLM is not used to generate the message -- it may be the thing that is
+        misconfigured -- so _generate_error_message is never called.
+        """
+        s1 = _make_stage(side_effect=error)
+        t1 = _make_stage()
+
+        ctx = make_context()
+        pipeline = _pipeline(core=[s1], terminal=[t1])
+
+        result = pipeline.process(ctx)
+
+        assert result is ctx
+        mock_gen.assert_not_called()
+        assert ctx.early_exit_response == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
+        assert str(error) in ctx.processing_errors
+        t1.assert_called_once()
 
 
 class TestErrorMessageGeneration:

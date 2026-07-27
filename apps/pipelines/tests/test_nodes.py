@@ -42,6 +42,21 @@ class TestStructuredDataSchemaValidatorMixin:
         with pytest.raises(ValidationError, match="Invalid schema"):
             self.DummyModel(data_schema=schema)
 
+    @pytest.mark.parametrize(
+        "schema",
+        [
+            pytest.param('{"bad key": "the name of the user"}', id="top-level-key"),
+            pytest.param('{"pets": [{"bad key": "the pet name"}]}', id="nested-list-key"),
+            pytest.param('{"name!": "the name of the user"}', id="illegal-character"),
+            pytest.param(f'{{"{"a" * 65}": "too long"}}', id="too-long"),
+        ],
+    )
+    def test_invalid_property_keys(self, schema):
+        # Anthropic rejects property keys that do not match ^[a-zA-Z0-9_.-]{1,64}$; we should surface a
+        # friendly validation error rather than letting the API call 500.
+        with pytest.raises(ValidationError, match="Schema property names can only contain"):
+            self.DummyModel(data_schema=schema)
+
 
 class TestSendEmailInputValidation:
     @pytest.mark.parametrize(

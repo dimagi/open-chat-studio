@@ -10,7 +10,6 @@ from apps.teams.export import seal as seal_mod
 from apps.teams.export.importer import (
     UnresolvedForeignKey,
     remap_node_params,
-    remap_pipeline_data,
     resolve_fk,
     unseal_secrets,
 )
@@ -70,15 +69,6 @@ def test_remap_node_params_translates_resource_ids():
 def test_remap_node_params_leaves_out_of_scope_refs_untouched():
     params = {"collection_id": 42}  # documents.collection is out of scope
     assert remap_node_params(params, FakeStore({}))["collection_id"] == 42
-
-
-def test_remap_pipeline_data_rewrites_nested_node_params():
-    store = FakeStore({"service_providers.llmprovider": {7: 700}})
-    data = {"nodes": [{"id": "a", "data": {"params": {"llm_provider_id": 7}}}], "edges": []}
-    out = remap_pipeline_data(data, store)
-    assert out is not None
-    assert out["nodes"][0]["data"]["params"]["llm_provider_id"] == 700
-    assert data["nodes"][0]["data"]["params"]["llm_provider_id"] == 7  # original untouched
 
 
 def test_unseal_secrets_restores_plaintext():
