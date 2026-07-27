@@ -31,16 +31,9 @@ Open Chat Studio is built as a Django web application with a modular design. It 
 
 ## Key Concepts
 
-[Concepts User Documentation](https://docs.openchatstudio.com/concepts/)
+See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for full definitions of Chatbots, Channels, Pipelines, Service Providers, and other product concepts.
 
-- **Experiments/Chatbots** - 'Experiments' is a legacy name; on the user interface side, they are referred to as ['Chatbots'](https://docs.openchatstudio.com/concepts/chatbots/). They are configurations for AI chat experiences. They include:
-
-  - Prompts and LLM configurations
-  - Channel connections
-  - Data collection settings
-- **Channels** - [Channels](https://docs.openchatstudio.com/concepts/channels/) are communication interfaces that connect users to the chat system. These include web chat, WhatsApp, etc.
-- **Service Providers** - Service providers enable integration with external services including LLMs, authentication, messaging, voice, tracing, etc.
-- **Pipelines** - [Pipelines](https://docs.openchatstudio.com/concepts/pipelines/) allow for the creation of complex workflows with multiple nodes and processing steps.
+One naming note for engineers reading the code: **Experiments/Chatbots** - 'Experiment' is the legacy name still used throughout the codebase (the `apps/experiments` app, the `Experiment` model, etc.). The UI and user docs refer to the same concept as a ['Chatbot'](https://docs.openchatstudio.com/concepts/chatbots/).
 
 ## Project structure
 
