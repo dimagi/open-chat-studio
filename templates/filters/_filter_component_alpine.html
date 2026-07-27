@@ -204,34 +204,8 @@
         }
       },
       parseCSVTildeValue(csvString) {
-        // Parse tilde-separated values, respecting quoted strings
-        const values = [];
-        let current = '';
-        let inQuotes = false;
-
-        for (let i = 0; i < csvString.length; i++) {
-          const char = csvString[i];
-
-          if (char === '"') {
-            if (inQuotes && csvString[i + 1] === '"') {
-              // Escaped quote ("")
-              current += '"';
-              i++;
-            } else {
-              // Start/end quoted section
-              inQuotes = !inQuotes;
-            }
-          } else if (char === '~' && !inQuotes) {
-            values.push(current);
-            current = '';
-          } else {
-            current += char;
-          }
-        }
-
-        values.push(current);
-
-        return values;
+        // Shared wire-format helper (see assets/javascript/filters/csvTilde.js)
+        return SiteJS.app.parseCSVTildeValue(csvString);
       },
 
       loadFiltersFromQueryString(queryString) {
@@ -307,14 +281,8 @@
       },
 
       serializeCSVTildeValues(values) {
-        // Serialize values for tilde-separated format, quoting values containing ~ or "
-        return values.map(v => {
-          const str = String(v);
-          if (str.includes('~') || str.includes('"')) {
-            return `"${str.replace(/"/g, '""')}"`;
-          }
-          return str;
-        }).join('~');
+        // Shared wire-format helper (see assets/javascript/filters/csvTilde.js)
+        return SiteJS.app.serializeCSVTildeValues(values);
       },
 
       updateUrlWithFilters() {

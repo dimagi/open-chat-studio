@@ -6,21 +6,7 @@
 import TomSelect from "tom-select";
 import {formatDistanceToNow} from "date-fns";
 
-/**
- * Serialize values into the tilde-separated CSV wire format used by the dynamic
- * filters (f_* params), quoting values containing "~" or '"'. Mirrors the
- * serializeCSVTildeValues helper in the Alpine filter component and the Python
- * serialize_csv_tilde_values so producers and parsers agree on the format.
- */
-function serializeCSVTildeValues(values) {
-    return values.map(v => {
-        const str = String(v);
-        if (str.includes('~') || str.includes('"')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    }).join('~');
-}
+import {serializeCSVTildeValues} from "../filters/csvTilde.js";
 
 // Constants
 const DEFAULTS = {
