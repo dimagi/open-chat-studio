@@ -1,12 +1,34 @@
-import pytest
-from django.core.management import CommandError, call_command
+import importlib
 
+import pytest
+from django.apps import apps as django_apps
+from django.core.management import call_command
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+
+from apps.data_migrations.models import CustomMigration
+from apps.data_migrations.utils.migrations import is_migration_applied
+from apps.pipelines.management.commands.strip_node_data import Command as StripNodeDataCommand
 from apps.pipelines.migrations.utils.strip_node_data import (
     rebuild_node_data_in_pipelines,
     strip_node_data_from_pipelines,
 )
 from apps.pipelines.models import Node, Pipeline
 from apps.utils.factories.team import TeamFactory
+
+MIGRATION_NAME = StripNodeDataCommand.migration_name
+# Leading digit, so it cannot be imported with a plain import statement.
+migration_0030 = importlib.import_module("apps.pipelines.migrations.0030_strip_node_data")
+
+
+@pytest.fixture()
+def unapplied_migration():
+    """Clear the run-once marker that migration 0030 set when the test database was built.
+
+    Without this the command short-circuits as already-applied and the command tests pass
+    vacuously. The delete is rolled back with the test transaction.
+    """
+    CustomMigration.objects.filter(name=MIGRATION_NAME).delete()
 
 
 def _old_format_data():
@@ -238,7 +260,11 @@ class TestRebuildNodeData:
 
 
 @pytest.mark.django_db()
+@pytest.mark.usefixtures("unapplied_migration")
 class TestStripNodeDataCommand:
+    """The command backs migration ``pipelines.0030_strip_node_data``, so it runs through
+    IdempotentCommand's run-once marker."""
+
     def test_strips_blobs(self, team):
         pipeline = _create_old_format_pipeline(team)
 
@@ -247,28 +273,67 @@ class TestStripNodeDataCommand:
         pipeline.refresh_from_db()
         assert "nodes" not in pipeline.data
 
-    def test_rebuild_flag_restores_blobs(self, team):
-        pipeline = _create_old_format_pipeline(team)
+    def test_records_the_migration_as_applied(self, team):
+        _create_old_format_pipeline(team)
+
         call_command("strip_node_data")
 
-        call_command("strip_node_data", "--rebuild")
+        assert is_migration_applied(MIGRATION_NAME)
+
+    def test_second_run_is_skipped(self, team):
+        call_command("strip_node_data")
+        pipeline = _create_old_format_pipeline(team)
+
+        call_command("strip_node_data")
+
+        pipeline.refresh_from_db()
+        assert pipeline.data == _old_format_data()
+
+    def test_force_reruns_after_the_marker_is_set(self, team):
+        call_command("strip_node_data")
+        pipeline = _create_old_format_pipeline(team)
+
+        call_command("strip_node_data", "--force")
+
+        pipeline.refresh_from_db()
+        assert "nodes" not in pipeline.data
+
+
+@pytest.mark.django_db()
+class TestMigration0030:
+    """Forward strips via the command, reverse rebuilds the nodes list from the rows."""
+
+    def test_ran_during_database_setup(self):
+        """Building the test database applies the migration, which runs the command. Fails
+        if the migration is dropped or stops reaching the command."""
+        assert is_migration_applied(MIGRATION_NAME)
+
+    def test_is_reversible(self):
+        """A RunDataMigration operation would make unapply raise IrreversibleError, so the
+        forward has to be RunPython for the reverse to be reachable at all."""
+        assert all(operation.reversible for operation in migration_0030.Migration.operations)
+
+    def test_reverse_rebuilds_node_data(self, team):
+        pipeline = _create_old_format_pipeline(team)
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        migration_0030.rebuild_node_data(django_apps, None)
 
         pipeline.refresh_from_db()
         nodes_by_id = {node["id"]: node for node in pipeline.data["nodes"]}
         assert nodes_by_id["start-1"]["data"]["type"] == "StartNode"
+        assert nodes_by_id["start-1"]["position"] == {"x": 0, "y": 0}
+        assert pipeline.data["edges"] == _old_format_data()["edges"]
 
-    def test_team_option_scopes_to_single_team(self, team):
-        other_team = TeamFactory.create()
+    def test_reverse_works_with_historical_models(self, team):
+        """What ``migrate pipelines 0029`` actually passes the reverse. Historical models
+        have no properties or custom managers, so the helper must stick to columns and
+        ``_base_manager``."""
         pipeline = _create_old_format_pipeline(team)
-        other_pipeline = _create_old_format_pipeline(other_team)
+        strip_node_data_from_pipelines(Pipeline, Node)
+        historical_apps = MigrationExecutor(connection).loader.project_state(("pipelines", "0030_strip_node_data")).apps
 
-        call_command("strip_node_data", "--team", team.slug)
+        migration_0030.rebuild_node_data(historical_apps, None)
 
         pipeline.refresh_from_db()
-        other_pipeline.refresh_from_db()
-        assert "nodes" not in pipeline.data
-        assert all("data" in node for node in other_pipeline.data["nodes"])
-
-    def test_team_option_raises_for_unknown_slug(self, team):
-        with pytest.raises(CommandError):
-            call_command("strip_node_data", "--team", "does-not-exist")
+        assert {node["id"] for node in pipeline.data["nodes"]} == {"start-1", "end-1"}
