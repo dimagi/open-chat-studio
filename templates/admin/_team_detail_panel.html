@@ -1,0 +1,41 @@
+{% load form_tags i18n %}
+<div class="flex items-center justify-between mb-4">
+  <div>
+    <h2 class="pg-subtitle">{{ team.name }}</h2>
+    <p class="text-sm text-base-content/60 font-mono">{{ team.slug }}</p>
+  </div>
+  <a href="{% url 'web_team:home' team.slug %}" class="btn btn-primary btn-sm">
+    {% translate "Open team dashboard" %}
+  </a>
+</div>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+  {% for label, value in stat_tiles %}
+    <div class="stats bg-base-200 shadow-sm">
+      <div class="stat">
+        <div class="stat-title text-xs">{{ label }}</div>
+        <div class="stat-value text-2xl">{{ value }}</div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+{% if saved %}
+  <div class="alert alert-success mb-3">{% translate "Metadata saved." %}</div>
+{% endif %}
+
+<div class="pg-subtitle mb-2">{% translate "Team Metadata" %}</div>
+{% if form.fields %}
+  <form hx-post="{% url 'ocs_admin:team_detail' team.slug %}"
+        hx-target="#team-detail-panel"
+        hx-swap="innerHTML"
+        class="flex flex-col gap-3 max-w-2xl">
+    {% csrf_token %}
+    {% render_form_fields form %}
+    <div>
+      <button type="submit" class="btn btn-primary">{% translate "Save metadata" %}</button>
+    </div>
+  </form>
+{% else %}
+  <div class="alert alert-warning">{% translate "No metadata fields are configured." %}</div>
+{% endif %}

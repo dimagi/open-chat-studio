@@ -1,16 +1,23 @@
 import copy
 from uuid import uuid4
 
-from apps.pipelines.flow import FlowNode, FlowNodeData
+from apps.pipelines.flow import FlowNode, FlowNodeData, split_flow_data
 
 
-def duplicate_pipeline_with_new_ids(pipeline_data):
+def duplicate_pipeline_with_new_ids(pipeline_data, node_types: dict[str, str]):
+    """Remap all node ids (and the edges referencing them) in a layout-only graph.
+
+    ``node_types`` maps flow_id to the Node row's type and keeps the copied ids
+    human-readable (``LLMResponseWithPrompt-a1b2c``); the node content itself lives on
+    the rows and is renamed by ``Node.create_new_version``. Old-format input may still
+    embed a content blob per node — it is dropped, not remapped.
+    """
     new_data = copy.deepcopy(pipeline_data)
     old_to_new_node_ids = {}
     for node in new_data.get("nodes", []):
         old_id = node["id"]
         node_type = node.get("type")
-        data_type = node.get("data", {}).get("type")
+        data_type = node_types.get(old_id)
 
         if node_type == "startNode" or node_type == "endNode":
             new_id = str(uuid4())
@@ -21,10 +28,7 @@ def duplicate_pipeline_with_new_ids(pipeline_data):
 
         old_to_new_node_ids[old_id] = new_id
         node["id"] = new_id
-        node["data"]["id"] = new_id
-
-        if "params" in node["data"] and node["data"]["params"].get("name") == old_id:
-            node["data"]["params"]["name"] = new_id
+        node.pop("data", None)
 
     for edge in new_data.get("edges", []):
         old_source_id = edge["source"]
@@ -67,10 +71,9 @@ def create_pipeline_with_nodes(team, name, middle_node=None):
 def _create_pipeline(team, name, all_flow_nodes, edges):
     from apps.pipelines.models import Pipeline  # noqa: PLC0415 - circular: models.py imports helper at module level
 
-    pipeline = Pipeline.objects.create(
-        team=team, name=name, data={"nodes": [node.model_dump() for node in all_flow_nodes], "edges": edges}
-    )
-    pipeline.update_nodes_from_data()
+    layout_data, node_data = split_flow_data({"nodes": [node.model_dump() for node in all_flow_nodes], "edges": edges})
+    pipeline = Pipeline.objects.create(team=team, name=name, data=layout_data)
+    pipeline.update_nodes_from_data(node_data)
     return pipeline
 
 
