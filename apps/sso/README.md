@@ -77,4 +77,3 @@ SOCIALACCOUNT_PROVIDERS = {
 | Client ID | App Client ID |
 | Client secret | App Client Secret |
 | Settings | {"email_domains": ["dimagi.com"], "tenant": "app tenant ID"}
-

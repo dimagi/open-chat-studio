@@ -4,7 +4,7 @@ This app provides a unified framework for integrating external services (LLMs, v
 
 Much of the app relies on consistent conventions and structure across all provider types. This allows the framework to be generic and reusable.
 
-The source of truth is the code so [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio) 
+The source of truth is the code so [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## Service Provider Models
 

@@ -15,6 +15,7 @@ from pydantic.config import JsonDict
 from pydantic.json_schema import SkipJsonSchema
 from typing_extensions import TypedDict
 
+from apps.channels.datamodels import Attachment
 from apps.experiments.models import ExperimentSession
 from apps.generics.help import render_help_with_link
 from apps.pipelines.exceptions import PipelineNodeRunError
@@ -268,8 +269,6 @@ class BasePipelineNode(BaseModel, ABC):
             # init temp state here to avoid having to do it in each place the pipeline is invoked
             state.setdefault("temp_state", {})
             state["temp_state"]["user_input"] = state["last_node_input"]
-            from apps.channels.datamodels import Attachment  # noqa: PLC0415 - circular: channels.datamodels→events→base
-
             state["temp_state"]["attachments"] = [
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
