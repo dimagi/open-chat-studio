@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 import pytz
-from django.db import connection
+from django.db import IntegrityError, connection
 from django.utils import timezone
 from langchain.tools import InjectedState
 from langchain_core.tools import InjectedToolCallId, StructuredTool
@@ -836,6 +836,31 @@ class TestAttachMediaTool(BaseTestAgentTool):
         assert f"* {failing_file.id}: Error fetching file." in response
         assert ok_file.name in response
         # The failed attachment rolled back to its savepoint; the following one still committed.
+        assert list(chat_attachment.files.values_list("id", flat=True)) == [ok_file.id]
+
+    @pytest.mark.django_db(transaction=True)
+    def test_first_file_failing_does_not_orphan_the_attachment_row(self, session):
+        """The ChatAttachment row must survive a rollback of the first file's savepoint.
+
+        `chat_attachment` is a cached_property, so it used to be created lazily inside the first
+        file's savepoint. Rolling that back removed the row while the cached object kept its id,
+        and the m2m table's deferred foreign key then failed at COMMIT — after the tool had
+        already reported the later files as attached.
+
+        Needs a real commit (`transaction=True`): the deferred constraint is only checked there.
+        """
+        assert not ChatAttachment.objects.filter(chat=session.chat).exists()
+        failing_file, ok_file = FileFactory.create_batch(2)
+
+        def fail_for_first_file(file_id):
+            if file_id == failing_file.id:
+                raise IntegrityError("simulated failure attaching the first file")
+
+        with mock.patch.object(ToolCallbacks, "attach_file", side_effect=fail_for_first_file):
+            response = self._invoke_tool(session, file_ids=[failing_file.id, ok_file.id])
+
+        assert f"* {failing_file.id}: Error fetching file." in response
+        chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
         assert list(chat_attachment.files.values_list("id", flat=True)) == [ok_file.id]
 
 

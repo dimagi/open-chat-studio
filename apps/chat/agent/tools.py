@@ -484,11 +484,12 @@ class AttachMediaTool(CustomBaseTool):
 
         response = []
         include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
+        chat_attachment = self.chat_attachment
         for file_id in file_ids:
             try:
                 with transaction.atomic():
                     file = File.objects.get(id=file_id)
-                    self.chat_attachment.files.add(file_id)
+                    chat_attachment.files.add(file_id)
                     self.tool_callbacks.attach_file(file_id)
                     file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
