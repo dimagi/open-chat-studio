@@ -159,15 +159,19 @@ def new_turn_message(request, experiment_id: uuid):
 
     # Verification runs after the ignore-filters so that unsigned provider callbacks,
     # which are discarded either way, are not rejected in the customer's Turn dashboard.
-    if not _turn_signature_is_valid(request, channel):
+    # A failure here returns 401 (rather than Meta's 200-and-drop) because Turn surfaces
+    # the failure in the customer's own Turn dashboard and, unlike Meta, does not
+    # auto-disable a webhook after sustained non-2xx responses.
+    if not _turn_request_is_authorised(request, channel):
         return HttpResponse("Invalid signature.", status=401)
 
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
     return HttpResponse()
 
 
-def _turn_signature_is_valid(request, channel: ExperimentChannel) -> bool:
-    """Verify the Turn.io webhook signature, if the provider has a secret configured.
+def _turn_request_is_authorised(request, channel: ExperimentChannel) -> bool:
+    """Check whether the Turn.io webhook request is authorised: True if the provider has
+    no secret configured (fail-open, see below) or if the request's signature matches.
 
     The secret is optional by design: a provider that has not yet copied it across from
     its own Turn account is left unverified rather than having its live traffic dropped.
@@ -175,7 +179,7 @@ def _turn_signature_is_valid(request, channel: ExperimentChannel) -> bool:
     """
     hmac_secret = (channel.messaging_provider.config.get("hmac_secret") or "").strip()
     if not hmac_secret:
-        log.debug(
+        log.info(
             "Turn.io webhook not verified: no HMAC secret configured for provider %s",
             channel.messaging_provider_id,
         )
@@ -185,11 +189,20 @@ def _turn_signature_is_valid(request, channel: ExperimentChannel) -> bool:
     if turn_webhook.verify_signature(request.body, signature, hmac_secret):
         return True
 
-    log.warning(
-        "Turn.io webhook signature verification failed for provider %s (team %s)",
-        channel.messaging_provider_id,
-        channel.team.slug,
-    )
+    if not signature:
+        log.warning(
+            "Turn.io webhook signature verification failed for provider %s (team %s): "
+            "no signature header present, Turn may not be configured to sign requests",
+            channel.messaging_provider_id,
+            channel.team.slug,
+        )
+    else:
+        log.warning(
+            "Turn.io webhook signature verification failed for provider %s (team %s): "
+            "signature did not match, the configured secret may be incorrect",
+            channel.messaging_provider_id,
+            channel.team.slug,
+        )
     return False
 
 
