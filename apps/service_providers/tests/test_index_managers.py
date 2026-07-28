@@ -105,6 +105,40 @@ class TestLocalIndexManager:
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.FAILED
 
+    def test_add_files_records_the_failure_reason(self, local_index_instance, index_manager):
+        """The exception that caused the failure is the only place the reason exists, so it is
+        captured there rather than reconstructed later from the status."""
+        file = FileFactory.create()
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with mock.patch.object(
+            index_manager, "chunk_file", side_effect=ValueError("Error code: 401 - Incorrect API key provided")
+        ):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+        assert collection_file.failure_reason == "ValueError: Error code: 401 - Incorrect API key provided"
+
+    def test_add_files_clears_the_failure_reason_on_success(self, local_index_instance, index_manager):
+        """A reason left by an earlier attempt describes an outcome that no longer holds."""
+        file = FileFactory.create()
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+        collection_file.status = FileStatus.FAILED
+        collection_file.failure_reason = "ValueError: stale reason from the previous attempt"
+        collection_file.save()
+
+        with mock.patch.object(file, "read_content", return_value="test content"):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.COMPLETED
+        assert collection_file.failure_reason == ""
+
     def test_add_files_calls_get_embedding_vector_with_document_input_type(self, local_index_instance, index_manager):
         file = FileFactory.create()
         local_index_instance.files.add(file)

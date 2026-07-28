@@ -5,6 +5,7 @@ from django.conf import settings
 from pydantic import ValidationError
 
 from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
+from apps.documents.models import FAILURE_REASON_MAX_LENGTH, format_failure_reason
 from apps.files.models import FileChunkEmbedding
 from apps.service_providers.llm_service.index_managers import LocalIndexManager, RemoteIndexManager
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
@@ -270,3 +271,33 @@ class TestJSONCollectionSourceConfig:
         assert wrapper.json_collection is not None
         assert wrapper.github is None
         assert wrapper.confluence is None
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected"),
+    [
+        pytest.param(ValueError("boom"), "ValueError: boom", id="type_and_message"),
+        pytest.param(ValueError(), "ValueError", id="no_message_falls_back_to_type"),
+        pytest.param(
+            ValueError("line one\n  line two"),
+            "ValueError: line one line two",
+            id="whitespace_collapsed_to_one_line",
+        ),
+        pytest.param(ValueError("bad\x00file"), "ValueError: badfile", id="nul_bytes_stripped"),
+        pytest.param(
+            ValueError("bad \x00 name"),
+            "ValueError: bad name",
+            id="nul_between_spaces_leaves_single_space",
+        ),
+        pytest.param(ValueError("bad \ud800 name"), "ValueError: bad ? name", id="lone_surrogate_replaced"),
+    ],
+)
+def test_format_failure_reason(exc, expected):
+    assert format_failure_reason(exc) == expected
+
+
+def test_format_failure_reason_truncates_long_messages():
+    reason = format_failure_reason(ValueError("x" * 1000))
+
+    assert len(reason) == FAILURE_REASON_MAX_LENGTH
+    assert reason.startswith("ValueError: xxx")
