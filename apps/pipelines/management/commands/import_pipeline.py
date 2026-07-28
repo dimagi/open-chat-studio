@@ -4,7 +4,7 @@ import pydantic
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.pipelines.flow import Flow, split_flow_data
+from apps.pipelines.flow import FullFlow, split_flow_data
 from apps.pipelines.models import Pipeline
 from apps.teams.models import Team
 
@@ -37,7 +37,9 @@ class Command(BaseCommand):
             raise CommandError(f"Team with slug {team_slug} does not exist.") from None
 
         try:
-            flow = Flow(**data)
+            # FullFlow, not Flow: an import file with no ``nodes`` key is malformed, and
+            # parsing it as an empty graph would create a pipeline with no nodes.
+            flow = FullFlow(**data)
         except pydantic.ValidationError as e:
             raise CommandError(f"Invalid pipeline data: {e}") from e
 
