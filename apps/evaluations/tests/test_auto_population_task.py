@@ -1,5 +1,4 @@
 from datetime import timedelta as _td
-from unittest.mock import patch
 
 import pytest
 
@@ -100,8 +99,7 @@ def test_ingest_rule_triggers_delta_runs_only_for_opted_in_configs():
     session.chat.messages.create(message_type="human", content="x")
     session.chat.messages.create(message_type="ai", content="y")
 
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay"):
-        _ingest_rule(rule)
+    _ingest_rule(rule)
 
     runs_for_opted_in = opted_in.evaluationrun_set.filter(type=EvaluationRunType.DELTA)
     runs_for_opted_out = opted_out.evaluationrun_set.filter(type=EvaluationRunType.DELTA)
@@ -114,15 +112,18 @@ def test_ingest_rule_triggers_delta_runs_only_for_opted_in_configs():
 
 @pytest.mark.django_db()
 def test_ingest_rule_no_appends_no_runs():
+    """A tick that appends nothing triggers no delta run, even for an opted-in config.
+
+    The source experiment has no sessions, so `auto_run_on_append` has nothing to fire on.
+    """
     team = TeamFactory.create()
     dataset = EvaluationDataset.objects.create(team=team, name="Test Dataset 6", evaluation_mode=EvaluationMode.SESSION)
     rule = DatasetAutoPopulationRuleFactory.create(team=team, dataset=dataset)
-    EvaluationConfigFactory.create(team=team, dataset=dataset, auto_run_on_append=True)
+    config = EvaluationConfigFactory.create(team=team, dataset=dataset, auto_run_on_append=True)
 
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
-        _ingest_rule(rule)
+    _ingest_rule(rule)
 
-    mock_delay.assert_not_called()
+    assert not config.evaluationrun_set.exists()
 
 
 @pytest.mark.django_db()

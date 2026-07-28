@@ -92,7 +92,7 @@ The `heroku.yml` defines three process types:
 | Type | Command | Scale |
 |------|---------|-------|
 | `web` | `gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 config.wsgi:application` | Scale as needed |
-| `worker` | `celery -A config worker -l INFO --pool gevent --concurrency 100` | Scale as needed |
+| `worker` | `celery -A config worker -l INFO --pool threads --concurrency 20` | Scale as needed |
 | `beat` | `celery -A config beat -l INFO` | **Always exactly 1** |
 
 Scale dynos:

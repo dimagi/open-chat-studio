@@ -364,6 +364,13 @@ def test_shared_provider_inlined_identically(inspect_bot):
     assert _node(payload, "Route")["llm"] == _node(payload, "Answer")["llm"] == _expected_llm(inspect_bot)
 
 
+@pytest.mark.django_db()
+def test_graph_and_nodes_agree_on_order(inspect_bot):
+    pipeline = _get(inspect_bot)["pipeline"]
+    # both lists are render-ordered off the same helper, so a client can zip them positionally
+    assert [n["node_id"] for n in pipeline["graph"]["nodes"]] == [n["node_id"] for n in pipeline["nodes"]]
+
+
 # ── Versioning ───────────────────────────────────────────────────────────────────────────────────
 @pytest.mark.django_db()
 def test_version_default_and_specific(inspect_bot):

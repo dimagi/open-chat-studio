@@ -49,9 +49,8 @@ def test_name_identifier_filter(participants_with_various_data, operator, value,
     """Test participant filter with various operators using OR logic on identifier and name"""
     participants = participants_with_various_data
     params = {
-        "filter_0_column": "participant",
-        "filter_0_operator": operator,
-        "filter_0_value": value,
+        "f_participant": value,
+        "op_participant": operator,
     }
 
     queryset = Participant.objects.filter(team=participants[0].team)
