@@ -218,23 +218,23 @@ def runserver(c: Context, public=False):
 
 @task(
     help={
-        "gevent": "Use gevent pool for async tasks (disables beat scheduler)",
+        "threads": "Use thread pool for async tasks (disables beat scheduler)",
         "beat": "Include beat scheduler for periodic tasks (default: False)",
     }
 )
-def celery(c: Context, gevent=False, beat=False):
+def celery(c: Context, threads=False, beat=False):
     """Start Celery worker with auto-reload on code changes."""
     _disable_stdin_forwarding(c)
     cmd = "celery -A config worker -l INFO"
-    if gevent:
-        cmd += " --pool gevent --concurrency 10"
+    if threads:
+        cmd += " --pool threads --concurrency 10"
     else:
         cmd += " --pool=solo"
         if beat:
             cmd += " -B"
 
-    if gevent:
-        cprint("Starting celery worker with gevent pool. This will not run celery beat.", "yellow")
+    if threads:
+        cprint("Starting celery worker with thread pool. This will not run celery beat.", "yellow")
     c.run(f'watchfiles --filter python "{cmd}"', echo=True, pty=sys.stdout.isatty())
 
 
