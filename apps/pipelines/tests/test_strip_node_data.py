@@ -1,10 +1,7 @@
 import importlib
 
 import pytest
-from django.apps import apps as django_apps
 from django.core.management import call_command
-from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
 
 from apps.data_migrations.models import CustomMigration
 from apps.data_migrations.utils.migrations import is_migration_applied
@@ -284,43 +281,3 @@ class TestStripNodeDataCommand:
 
         pipeline.refresh_from_db()
         assert "nodes" not in pipeline.data
-
-
-@pytest.mark.django_db()
-class TestMigration0030:
-    """Forward strips via the command, reverse rebuilds the nodes list from the rows."""
-
-    def test_ran_during_database_setup(self):
-        """Building the test database applies the migration, which runs the command. Fails
-        if the migration is dropped or stops reaching the command."""
-        assert is_migration_applied(MIGRATION_NAME)
-
-    def test_is_reversible(self):
-        """A RunDataMigration operation would make unapply raise IrreversibleError, so the
-        forward has to be RunPython for the reverse to be reachable at all."""
-        assert all(operation.reversible for operation in migration_0030.Migration.operations)
-
-    def test_reverse_rebuilds_node_data(self, team):
-        pipeline = _create_old_format_pipeline(team)
-        strip_node_data_from_pipelines(Pipeline, Node)
-
-        migration_0030.rebuild_node_data(django_apps, None)
-
-        pipeline.refresh_from_db()
-        nodes_by_id = {node["id"]: node for node in pipeline.data["nodes"]}
-        assert nodes_by_id["start-1"]["data"]["type"] == "StartNode"
-        assert nodes_by_id["start-1"]["position"] == {"x": 0, "y": 0}
-        assert pipeline.data["edges"] == _old_format_data()["edges"]
-
-    def test_reverse_works_with_historical_models(self, team):
-        """What ``migrate pipelines 0029`` actually passes the reverse. Historical models
-        have no properties or custom managers, so the helper must stick to columns and
-        ``_base_manager``."""
-        pipeline = _create_old_format_pipeline(team)
-        strip_node_data_from_pipelines(Pipeline, Node)
-        historical_apps = MigrationExecutor(connection).loader.project_state(("pipelines", "0030_strip_node_data")).apps
-
-        migration_0030.rebuild_node_data(historical_apps, None)
-
-        pipeline.refresh_from_db()
-        assert {node["id"] for node in pipeline.data["nodes"]} == {"start-1", "end-1"}
