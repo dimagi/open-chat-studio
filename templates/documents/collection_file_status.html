@@ -1,5 +1,5 @@
 <div id="file-status-{{ collection_file.id }}"
-     class="tooltip before:max-w-xs before:whitespace-normal before:text-left{% if collection_file.failure_reason %} tooltip-error{% endif %}"
+     class="tooltip{% if collection_file.failure_reason %} tooltip-error{% endif %}"
      data-tip="{{ collection_file.failure_reason|default:collection_file.status_enum.label }}"
      {% if collection_file.status == 'pending' or collection_file.status == 'in_progress' %}
        hx-get="{% url 'documents:get_collection_file_status' team.slug collection.id collection_file.id %}"
