@@ -7,11 +7,10 @@ hide:
 
 This section provides an overview of the Open Chat Studio architecture, explaining the core concepts and components that make up the system.
 
-!!! tip "Architecture Decision Records"
+Rather than duplicating details that can drift out of date, this page links to the sources engineers keep current: `AGENTS.md`, ADRs, `CONTEXT.md`, and the developer guides.
 
-    Significant architectural decisions are recorded as ADRs. See the **[ADR index](../adr/index.md)** for the full list.
-
-For AI-generated architecture diagrams based on this GitHub repo, visit
+1. Significant architectural decisions are recorded as ADRs. See the **[ADR index](../adr/index.md)** for the full list.
+2. For AI-generated architecture diagrams based on this GitHub repo, visit
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## System Overview
@@ -20,18 +19,15 @@ Open Chat Studio is built as a Django web application with a modular design. It 
 
 ## Technology Stack
 
-- **Backend**: Python 3.13+, Django, Django REST Framework, Celery
-- **Database**: PostgreSQL (with pgvector)
-- **Cache/Message Broker**: Redis
-- **LLM Abstraction**: [LangChain](https://python.langchain.com/) provides common chat model interfaces, message structures, and callback hooks that let a single `LlmService` layer work across providers
-- **Frontend**: TypeScript, [ReactJS](https://react.dev/) (with [React Flow](https://reactflow.dev/) for pipeline building) and [htmx](https://htmx.org/)/[AlpineJS](https://alpinejs.dev/) in Django templates, bundled with Webpack, styled with [Tailwind](http://tailwindcss.com/) + [DaisyUI](https://daisyui.com/)
-- **Chat Widget**: Standalone [StencilJS](https://stenciljs.com/) web component (`components/chat_widget`) embeddable in third-party sites
-- **External LLM Services**: OpenAI, Anthropic, Groq, Gemini, Azure, and more — see the [full list](https://docs.openchatstudio.com/concepts/team/llm_providers/)
-- **Deployment**: Docker, Heroku
+See the [README's Tech Stack](https://github.com/dimagi/open-chat-studio#tech-stack) for the full list of languages, frameworks, and deployment targets. A few stack choices carry architectural weight beyond that list:
+
+- **LLM Abstraction**: [LangChain](https://python.langchain.com/) provides common chat model interfaces, message structures, and callback hooks that let a single `LlmService` layer work across providers.
+- **Pipeline builder**: the DAG editor is built on [React Flow](https://reactflow.dev/)
+- **Chat Widget**: standalone [StencilJS](https://stenciljs.com/) web component (`components/chat_widget`), built separately from the main app, embeddable in third-party sites
 
 ## Key Concepts
 
-See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for product-facing definitions of Chatbots, Channels, Pipelines, Service Providers, and other concepts.
+See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for product-facing definitions of Chatbots, Channels, Pipelines, Service Providers, and other concepts — or **[AGENTS.md → Core Concepts](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#core-concepts)** for the same concepts summarized for engineers.
 
 For the precise domain language used in code (and by AI coding agents) — e.g. Chatbot vs. Chatbot Version, Working vs. Published Version, Session vs. Participant vs. User, Trace vs. Span — see **[CONTEXT.md](https://github.com/dimagi/open-chat-studio/blob/main/CONTEXT.md)**, the canonical glossary kept up to date as the domain model evolves.
 
