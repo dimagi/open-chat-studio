@@ -35,6 +35,8 @@ from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import AnnotationQueue, QueueStatus
+from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.utils.fields import as_int
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
@@ -314,7 +316,28 @@ class EvaluatorForm(forms.ModelForm):
                 error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
             raise forms.ValidationError(f"{', '.join(error_messages)}") from err
 
+        self._validate_llm_provider_selection(params)
+
         return cleaned_data
+
+    def _validate_llm_provider_selection(self, params: dict):
+        """Reject provider ids the team can't use.
+
+        The ids arrive inside the ``params`` JSON blob, so they never went through a
+        ModelChoiceField queryset. They end up on the ``llm_provider``/``llm_provider_model``
+        FKs, and an id from another team would run this team's evaluations on someone
+        else's credentials.
+        """
+        provider_id = as_int(params.get("llm_provider_id"))
+        if provider_id is not None and not LlmProvider.objects.filter(team=self.team, id=provider_id).exists():
+            raise forms.ValidationError("The selected LLM provider is not available to this team")
+
+        provider_model_id = as_int(params.get("llm_provider_model_id"))
+        if (
+            provider_model_id is not None
+            and not LlmProviderModel.objects.for_team(self.team).filter(id=provider_model_id).exists()
+        ):
+            raise forms.ValidationError("The selected LLM model is not available to this team")
 
 
 class EvaluatorTagRuleForm(forms.ModelForm):

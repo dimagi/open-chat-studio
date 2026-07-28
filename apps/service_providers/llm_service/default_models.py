@@ -319,6 +319,11 @@ def _update_existing_global_model(existing_global_model, model):
 
 def _replace_custom_model_with_global(custom_model, global_model, LlmProviderModel):
     """Repoint everything referencing ``custom_model`` at ``global_model``, then delete it."""
+    # Evaluators first: their FK is derived from params, so they have to be repointed through
+    # the model method that moves both. Once done they drop out of get_related_objects below.
+    for evaluator in custom_model.evaluators.all():
+        evaluator.set_llm_provider_model_id(global_model.id)
+
     for obj in get_related_objects(custom_model):
         fields = [f for f in obj._meta.fields if f.related_model == LlmProviderModel]
         if not fields:

@@ -9,6 +9,7 @@ from django.urls import reverse
 
 from apps.evaluations.models import ConditionType
 from apps.utils.factories.evaluations import EvaluatorFactory, EvaluatorTagRuleFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -26,27 +27,34 @@ def client_with_user(team):
 
 @pytest.fixture()
 def evaluator(team):
-    return EvaluatorFactory.create(team=team)
+    """An LLM evaluator pointing at providers this team is actually allowed to use."""
+    evaluator = EvaluatorFactory.create(team=team)
+    evaluator.params |= {
+        "llm_provider_id": LlmProviderFactory.create(team=team).id,
+        "llm_provider_model_id": LlmProviderModelFactory.create(team=team).id,
+    }
+    evaluator.save(update_fields=["params"])
+    return evaluator
 
 
 def _edit_url(team, evaluator):
     return reverse("evaluations:evaluator_edit", args=[team.slug, evaluator.pk])
 
 
-def _params(output_schema):
+def _params(output_schema, evaluator):
     return {
         "llm_prompt": "prompt",
-        "llm_provider_id": 1,
-        "llm_provider_model_id": 1,
+        "llm_provider_id": evaluator.llm_provider_id,
+        "llm_provider_model_id": evaluator.llm_provider_model_id,
         "output_schema": output_schema,
     }
 
 
-def _post_data(evaluator, output_schema, rule_rows):
+def _post_data(evaluator, output_schema, rule_rows, params=None):
     data = {
         "name": evaluator.name,
         "type": "LlmEvaluator",
-        "params": json.dumps(_params(output_schema)),
+        "params": json.dumps(params if params is not None else _params(output_schema, evaluator)),
         "evaluation_mode": evaluator.evaluation_mode,
         "tag_rules-TOTAL_FORMS": str(len(rule_rows)),
         "tag_rules-INITIAL_FORMS": str(len([r for r in rule_rows if r.get("id")])),
@@ -141,3 +149,36 @@ class TestEditEvaluatorSchemaDrift:
         evaluator.refresh_from_db()
         assert evaluator.params["output_schema"] == new_schema
         assert not evaluator.tag_rules.filter(pk=rule.pk).exists()
+
+
+@pytest.mark.django_db()
+class TestEvaluatorLlmProviderSelection:
+    def test_saving_repoints_the_provider_fks(self, client_with_user, team, evaluator):
+        """The submitted provider ids land on the FK columns, not just in params."""
+        new_provider = LlmProviderFactory.create(team=team)
+        new_model = LlmProviderModelFactory.create(team=team)
+        params = _params(evaluator.params["output_schema"], evaluator) | {
+            "llm_provider_id": new_provider.id,
+            "llm_provider_model_id": new_model.id,
+        }
+
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            response = client_with_user.post(_edit_url(team, evaluator), _post_data(evaluator, {}, [], params=params))
+
+        assert response.status_code == 302, getattr(response, "context_data", None)
+        evaluator.refresh_from_db()
+        assert evaluator.llm_provider_id == new_provider.id
+        assert evaluator.llm_provider_model_id == new_model.id
+
+    def test_another_teams_provider_is_rejected(self, client_with_user, team, evaluator):
+        other_teams_provider = LlmProviderFactory.create()
+        params = _params(evaluator.params["output_schema"], evaluator) | {"llm_provider_id": other_teams_provider.id}
+        original_provider_id = evaluator.llm_provider_id
+
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            response = client_with_user.post(_edit_url(team, evaluator), _post_data(evaluator, {}, [], params=params))
+
+        assert response.status_code == 200
+        assert "not available to this team" in response.content.decode()
+        evaluator.refresh_from_db()
+        assert evaluator.llm_provider_id == original_provider_id
