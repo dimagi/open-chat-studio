@@ -283,9 +283,23 @@ class TwilioMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 
 class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
-    obfuscate_fields = ["auth_token"]
+    obfuscate_fields = ["auth_token", "hmac_secret"]
 
     auth_token = forms.CharField(label=_("Auth Token"))
+    hmac_secret = forms.CharField(
+        label=_("Webhook HMAC Secret"),
+        required=False,
+        help_text=_(
+            "Optional. The HMAC secret from your Turn account's webhook settings. When set, incoming "
+            "webhooks must carry a matching X-Turn-Hook-Signature header or they are rejected."
+        ),
+    )
+
+    def clean(self):
+        """Normalise hmac_secret so the stored value is always a string."""
+        cleaned_data = super().clean()
+        cleaned_data["hmac_secret"] = (cleaned_data.get("hmac_secret") or "").strip()
+        return cleaned_data
 
 
 class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):

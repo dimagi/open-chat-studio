@@ -1,8 +1,8 @@
 # Managing LLM Models
 
-This guide covers the full lifecycle of LLM models in Open Chat Studio: adding new models, deprecating models that are being phased out, and fully deleting models.
+This guide covers the full lifecycle of LLM models in Open Chat Studio: adding new models, deprecating models that are being phased out, and fully deleting models. See the [user documentation](https://docs.openchatstudio.com/concepts/team/llm_providers/) for how deprecation and removal are handled automatically from the end user's perspective.
 
-| | Adding | Deprecation | Deletion |
+| | [Adding](#adding-a-model) | [Deprecation](#deprecating-a-model) | [Deletion](#deleting-a-model) |
 |---|---|---|---|
 | Added to `DEFAULT_LLM_PROVIDER_MODELS` | Yes | Already present (marked `deprecated=True`) | No (removed) |
 | Added to `DELETED_MODELS` | No | No | Yes |

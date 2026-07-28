@@ -560,7 +560,10 @@ class EvaluationConfig(BaseTeamModel):
         run_type: EvaluationRunType = EvaluationRunType.FULL,
         scoped_message_ids: list[int] | None = None,
     ) -> EvaluationRun:
-        """Runs the evaluation asynchronously using Celery.
+        """Creates a PENDING run for the beat coordinator to pick up.
+
+        Dispatching work is solely `coordinate_evaluation_runs`' job: this method
+        only persists the plan, so the run starts on the next coordination tick.
 
         The run's plan is frozen at creation: `scoped_messages` is populated for
         every run type (all dataset ids for FULL, the PREVIEW sample, or the
@@ -595,11 +598,6 @@ class EvaluationConfig(BaseTeamModel):
             if message_ids:
                 run.scoped_messages.add(*message_ids)
 
-        from apps.evaluations.tasks import (  # noqa: PLC0415 - circular: evaluations.tasks imports evaluations.models
-            run_evaluation_task,
-        )
-
-        run_evaluation_task.delay(run.id)
         return run
 
     def run_preview(self) -> EvaluationRun:

@@ -165,7 +165,10 @@ def _resolve_channel_chatbots(channels: list) -> tuple[list[Experiment], list]:
     unique_channels = _dedupe_by_id(channels)
     experiment_ids = {ch.experiment_id for ch in unique_channels if ch.experiment_id}
     experiments_by_id = (
-        {exp.id: exp for exp in Experiment.objects.filter(id__in=experiment_ids).select_related("team")}
+        {
+            exp.id: exp
+            for exp in Experiment.objects.filter(id__in=experiment_ids).select_related("team", "working_version")
+        }
         if experiment_ids
         else {}
     )
@@ -192,7 +195,9 @@ def _build_document_source_categories(document_sources: list) -> list[UsageCateg
     collection_ids = {ds.collection_id for ds in document_sources if ds.collection_id}
     if not collection_ids:
         return []
-    collections = list(Collection.objects.filter(id__in=collection_ids).select_related("team").order_by("name"))
+    collections = list(
+        Collection.objects.filter(id__in=collection_ids).select_related("team", "working_version").order_by("name")
+    )
     return [UsageCategory(label="Collections", items=collections)]
 
 
@@ -209,7 +214,7 @@ def _dedupe_by_id(items: list) -> list:
 
 def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
     by_pipeline: dict[int, dict[int, object]] = defaultdict(dict)
-    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team"):
+    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team", "working_version"):
         by_pipeline[exp.pipeline_id][exp.id] = exp
 
     # Indirect link: an EventAction of type "pipeline_start" stores the
@@ -219,9 +224,10 @@ def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
         "action__action_type": EventActionType.PIPELINE_START,
         "action__params__pipeline_id__in": pipeline_id_values,
     }
+    trigger_select_related = ("action", "experiment", "experiment__team", "experiment__working_version")
     for trigger_qs in (
-        StaticTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
-        TimeoutTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
+        StaticTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
+        TimeoutTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
     ):
         for trigger in trigger_qs:
             raw_pipeline_id = trigger.action.params.get("pipeline_id")

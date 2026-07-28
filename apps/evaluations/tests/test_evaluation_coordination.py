@@ -14,13 +14,11 @@ from taskbadger import StatusEnum
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import (
-    _mark_run_failed,
     _publish_tick,
     _TickResult,
     coordinate_evaluation_runs,
     evaluate_message,
     evaluate_message_batch,
-    run_evaluation_task,
 )
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -61,12 +59,12 @@ def test_run_freezes_full_plan_and_evaluators():
     all_ids = set(config.dataset.messages.values_list("id", flat=True))
     evaluator_ids = list(config.evaluators.values_list("id", flat=True))
 
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay"):
-        run = config.run(run_type=EvaluationRunType.FULL)
+    run = config.run(run_type=EvaluationRunType.FULL)
 
     assert set(run.scoped_messages.values_list("id", flat=True)) == all_ids
     assert run.evaluator_ids == evaluator_ids
     assert run.job_id  # a uuid was assigned
+    assert run.status == EvaluationRunStatus.PENDING  # left for the coordinator to start
 
 
 @pytest.mark.django_db()
@@ -75,8 +73,7 @@ def test_run_freezes_preview_sample():
     for _ in range(PREVIEW_SAMPLE_SIZE + 5):
         config.dataset.messages.add(EvaluationMessageFactory.create())
 
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay"):
-        run = config.run(run_type=EvaluationRunType.PREVIEW)
+    run = config.run(run_type=EvaluationRunType.PREVIEW)
 
     assert run.scoped_messages.count() == PREVIEW_SAMPLE_SIZE
 
@@ -87,10 +84,23 @@ def test_run_freezes_delta_explicit_list():
     msg1 = EvaluationMessageFactory.create()
     msg2 = EvaluationMessageFactory.create()
 
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay"):
-        run = config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=[msg1.id, msg2.id])
+    run = config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=[msg1.id, msg2.id])
 
     assert set(run.scoped_messages.all()) == {msg1, msg2}
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_run_dispatches_nothing_and_waits_for_the_coordinator(delay_mock):
+    """Creating a run must not dispatch work; only coordinate_evaluation_runs does that."""
+    config = EvaluationConfigFactory.create()
+
+    run = config.run()
+
+    delay_mock.assert_not_called()
+    assert run.status == EvaluationRunStatus.PENDING
+    assert run.in_flight == []
+    assert run.batch_dispatched_at is None
 
 
 @pytest.fixture()
@@ -393,19 +403,6 @@ def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_run_evaluation_task_fast_path_dispatches_batch_one(delay_mock, _publish):
-    run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
-
-    run_evaluation_task(run.id)
-
-    run.refresh_from_db()
-    assert run.status == EvaluationRunStatus.PROCESSING
-    assert delay_mock.call_count == 2  # 5 messages => 2 batches
-
-
-@pytest.mark.django_db()
-@patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.models.Evaluator.run")
 def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _publish):
     """A run larger than one batch completes across several ticks, with no duplicate results.
@@ -492,30 +489,6 @@ def test_publish_tick_terminal_success_publishes_stop_state():
         "SUCCESS",
     )
     taskbadger_mock.assert_called_once_with("tb-1", value=5, value_max=5, status=StatusEnum.SUCCESS)
-
-
-@pytest.mark.django_db()
-def test_mark_run_failed_sets_status_and_publishes_stop_state():
-    run = EvaluationRunFactory.create(
-        job_id="job-123", taskbadger_task_id="tb-1", status=EvaluationRunStatus.PROCESSING
-    )
-
-    with (
-        patch("apps.evaluations.tasks.current_app") as app_mock,
-        patch("apps.evaluations.tasks.taskbadger.update_task_safe") as taskbadger_mock,
-    ):
-        _mark_run_failed(run.id, "boom")
-
-    run.refresh_from_db()
-    assert run.status == EvaluationRunStatus.FAILED
-    assert run.error_message == "boom"
-    # The stop publish uses "SUCCESS" so the poller reloads; the page then shows FAILED.
-    app_mock.backend.store_result.assert_called_once_with(
-        "job-123",
-        {"pending": False, "current": 0, "total": 0, "percent": 100.0, "description": "0 of 0 evaluated"},
-        "SUCCESS",
-    )
-    taskbadger_mock.assert_called_once_with("tb-1", value=0, value_max=0, status=StatusEnum.ERROR)
 
 
 @pytest.mark.django_db()

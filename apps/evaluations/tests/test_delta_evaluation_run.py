@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
-from apps.evaluations.tasks import run_evaluation_task
+from apps.evaluations.tasks import coordinate_evaluation_runs
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -17,29 +17,25 @@ def test_run_with_scoped_messages_persists_scope():
     msg1 = EvaluationMessageFactory.create()
     msg2 = EvaluationMessageFactory.create()
 
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
-        run = config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=[msg1.id, msg2.id])
+    run = config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=[msg1.id, msg2.id])
 
     assert run.type == EvaluationRunType.DELTA
     assert set(run.scoped_messages.all()) == {msg1, msg2}
-    mock_delay.assert_called_once_with(run.id)
 
 
 @pytest.mark.django_db()
 def test_full_run_freezes_all_dataset_messages():
     config = EvaluationConfigFactory.create()
     dataset_ids = set(config.dataset.messages.values_list("id", flat=True))
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_delay:
-        run = config.run()
+    run = config.run()
     assert run.type == EvaluationRunType.FULL
     assert set(run.scoped_messages.values_list("id", flat=True)) == dataset_ids
-    mock_delay.assert_called_once_with(run.id)
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_run_evaluation_task_dispatches_only_scoped_messages_for_delta(delay_mock, _publish):
+def test_coordinator_dispatches_only_scoped_messages_for_delta(delay_mock, _publish):
     config = EvaluationConfigFactory.create()
     evaluator = EvaluatorFactory.create(team=config.team)
     config.evaluators.set([evaluator])
@@ -56,7 +52,7 @@ def test_run_evaluation_task_dispatches_only_scoped_messages_for_delta(delay_moc
     )
     run.scoped_messages.add(in_scope)
 
-    run_evaluation_task(run.id)
+    coordinate_evaluation_runs()
 
     dispatched = [message_id for call in delay_mock.call_args_list for message_id in call.args[1]]
     assert dispatched == [in_scope.id]

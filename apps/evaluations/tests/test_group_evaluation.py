@@ -1,5 +1,5 @@
 from typing import cast
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -46,21 +46,15 @@ def test_group_evaluation_with_multiple_evaluators():
         EvaluationConfigFactory.create(evaluators=[evaluator1, evaluator2, evaluator3], dataset=dataset),
     )
 
-    # Mock the main task
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_task:
-        mock_result = Mock()
-        mock_result.id = "test-task-id"
-        mock_task.return_value = mock_result
+    evaluation_run = evaluation_config.run()
 
-        evaluation_run = evaluation_config.run()
+    # Check that the evaluation run was created properly
+    evaluation_run.refresh_from_db()
+    assert evaluation_run.status == EvaluationRunStatus.PENDING
 
-        # Check that the evaluation run was created properly
-        evaluation_run.refresh_from_db()
-        assert evaluation_run.status == EvaluationRunStatus.PENDING
-
-        # Verify config has expected number of evaluators and messages
-        assert evaluation_config.evaluators.count() == 3
-        assert evaluation_config.dataset.messages.count() == 1
+    # Verify config has expected number of evaluators and messages
+    assert evaluation_config.evaluators.count() == 3
+    assert evaluation_config.dataset.messages.count() == 1
 
 
 @pytest.mark.django_db()
@@ -69,20 +63,11 @@ def test_empty_evaluation_config():
     # Create config with no evaluators
     evaluation_config = cast(EvaluationConfig, EvaluationConfigFactory.create(evaluators=[]))
 
-    # Mock the main task to see what happens
-    with patch("apps.evaluations.tasks.run_evaluation_task.delay") as mock_task:
-        mock_result = Mock()
-        mock_result.id = "test-task-id"
-        mock_task.return_value = mock_result
+    evaluation_run = evaluation_config.run()
 
-        evaluation_run = evaluation_config.run()
-
-        # The task should still be called, even with no evaluators
-        evaluation_run.refresh_from_db()
-        assert evaluation_run.status == EvaluationRunStatus.PENDING
-
-        # Task should be called with the evaluation run id
-        mock_task.assert_called_once_with(evaluation_run.id)
+    # A run is still created; it stays PENDING until the coordinator picks it up.
+    evaluation_run.refresh_from_db()
+    assert evaluation_run.status == EvaluationRunStatus.PENDING
 
 
 @pytest.mark.django_db()
