@@ -8,9 +8,10 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind
+from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageSource
 from apps.cost_tracking.services.reporting import (
     CostFilters,
+    GroupBreakdown,
     cost_summary,
     cost_timeseries,
     cost_total,
@@ -18,6 +19,7 @@ from apps.cost_tracking.services.reporting import (
     coverage_gaps,
     session_usage,
     token_counts,
+    usage_by_group,
     usage_timeseries,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -588,3 +590,76 @@ class TestCostFilters:
         )
 
         assert [g.model_name for g in gaps.unpriced] == ["keep-model"]
+
+
+@pytest.mark.django_db()
+class TestEvaluationSourceRule:
+    """ADR-0048: evaluation spend is the team's spend, never a chatbot's, a
+    participant's or a conversation's.
+
+    Every case gives the evaluation row an experiment and a session — the shape a
+    generation run actually produces — so a read that filtered on those columns being
+    null instead of on `source` would fail here.
+    """
+
+    @pytest.fixture()
+    def spend(self):
+        """One chat row and one evaluation row on the same experiment and session."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        when = _NOW - timedelta(days=1)
+        _usage(team, cost="1.00", when=when, experiment=experiment, session=session, quantity=100)
+        _usage(
+            team,
+            cost="0.25",
+            when=when,
+            experiment=experiment,
+            session=session,
+            quantity=40,
+            source=UsageSource.EVALUATION,
+        )
+        return team, experiment, session
+
+    def test_team_total_counts_both_sources(self, spend):
+        team, _, _ = spend
+
+        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert summary.total_cost == Decimal("1.25")
+
+    def test_cost_total_counts_both_sources(self, spend):
+        team, _, _ = spend
+
+        assert cost_total(team, start=_NOW - timedelta(days=30), end=_NOW).total == Decimal("1.25")
+
+    def test_token_counts_count_both_sources(self, spend):
+        team, _, _ = spend
+
+        assert token_counts(team, start=_NOW - timedelta(days=30), end=_NOW).total == 140
+
+    def test_per_experiment_cost_excludes_evaluation(self, spend):
+        team, experiment, _ = spend
+
+        costs = costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert costs == {experiment.id: Decimal("1.00000000")}
+
+    def test_session_usage_excludes_evaluation(self, spend):
+        _, _, session = spend
+
+        assert session_usage(session).total_cost == Decimal("1.00000000")
+
+    def test_usage_by_group_excludes_evaluation(self, spend):
+        team, experiment, _ = spend
+
+        rows = usage_by_group(
+            team,
+            start=_NOW - timedelta(days=30),
+            end=_NOW,
+            breakdown=GroupBreakdown(field="experiment_id", keys=[experiment.id]),
+        )
+
+        assert [(row["key"], row["cost"], row["total"]) for row in rows] == [
+            (experiment.id, Decimal("1.00000000"), 100)
+        ]

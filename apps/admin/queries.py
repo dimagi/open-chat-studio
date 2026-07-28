@@ -98,8 +98,9 @@ def get_token_usage_by_team(start: datetime, end: datetime):
 def get_cost_usage_by_team(start: datetime, end: datetime):
     """Per (team, provider, model, currency) cost + tokens from UsageRecord.
 
-    Includes evaluation spend — both the bot generation an eval run drives and the
-    evaluator's own judge calls (tagged `extra["source"] == "evaluation"`).
+    This is a billing view, so it counts every source (ADR-0048) — the bot generation an
+    eval run drives and the evaluator's own judge calls included, with no per-source
+    split. `UsageRecord.source` is there for whenever cost breakdowns get built.
     """
     return (
         UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
