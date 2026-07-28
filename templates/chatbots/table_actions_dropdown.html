@@ -12,14 +12,14 @@
             Create dataset
           </a>
         </li>
-      {% endflag %}
+      {% endflag "flag_evaluations" %}
       {% flag "flag_session-analysis" %}
         <li>
           <a href="{% url 'analysis:create' team.slug experiment.id %}">
               <i class="fa-solid fa-table-list"></i> Analyze Transcripts
           </a>
         </li>
-      {% endflag %}
+      {% endflag "flag_session-analysis" %}
     </ul>
   </div>
 
