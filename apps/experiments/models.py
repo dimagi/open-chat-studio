@@ -469,6 +469,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
     DEFAULT_VERSION_NUMBER = 0
     TREND_CACHE_KEY_TEMPLATE = "experiment_trend_data_{experiment_id}"
 
+    # ``get_absolute_url`` deep-links a snapshot into the versions tab, so callers may
+    # link straight to a version number.
+    has_version_specific_url = True
+
     # Every concrete model field must appear in exactly one of the two sets below
     # (enforced by a guard test). Version creation clones the whole row, so a new
     # field is versioned content unless it is explicitly classified as identity/state.

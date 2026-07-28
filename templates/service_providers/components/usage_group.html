@@ -1,0 +1,28 @@
+{% load service_provider_tags %}
+{% comment %}
+  One row of the usages list: a whole version family on a single line.
+
+  ``group.head`` is the family's working version, which owns the edit UI, so the
+  name links there. Each family member that actually references the provider gets
+  a version badge; badges past ``MAX_INLINE_VERSIONS`` hide behind a "+N more"
+  toggle so a chatbot with dozens of referencing versions stays one readable row.
+{% endcomment %}
+<li{% if group.hidden_versions %} x-data="{ expanded: false }"{% endif %}>
+  {% with head_url=group.head.get_absolute_url|default_if_none:"" %}
+    {% if head_url %}
+      <a class="link" href="{{ head_url }}">{{ group.name }}</a>
+    {% else %}
+      <span>{{ group.name }}</span>
+    {% endif %}
+  {% endwith %}
+  {% for member in group.visible_versions %}{% usage_version_pill member %}{% endfor %}
+  {% if group.hidden_versions %}
+    <span x-show="expanded" x-cloak>
+      {% for member in group.hidden_versions %}{% usage_version_pill member %}{% endfor %}
+    </span>
+    <button type="button" class="link link-primary text-xs ml-2" @click="expanded = !expanded">
+      <span x-show="!expanded">+{{ group.hidden_versions|length }} more</span>
+      <span x-show="expanded" x-cloak>show fewer</span>
+    </button>
+  {% endif %}
+</li>

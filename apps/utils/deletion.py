@@ -268,7 +268,7 @@ def _with_working_version(queryset):
     """``select_related`` the version parent when the model is versioned.
 
     Callers render each object through its working version, which owns the edit UI
-    (see ``service_providers/components/usage_item.html``). Without this, every row
+    (see ``service_providers/components/usage_group.html``). Without this, every row
     that is not itself a working version costs an extra query.
     """
     if any(field.name == "working_version" for field in queryset.model._meta.concrete_fields):

@@ -5,16 +5,14 @@
 {% else %}
   <p class="mb-4">This provider is referenced by {{ usages.total }} object{{ usages.total|pluralize }}:</p>
   {% for category in usages.categories %}
-    <h2 class="font-semibold my-2">{{ category.label }} ({{ category.items|length }})</h2>
-    <ul class="list-disc list-inside ml-2">
-      {% for obj in category.items %}
-        <li>
-          {% if category.label == "Chatbots" %}
-            {% include "service_providers/components/usage_item.html" with obj=obj link_to_versions_anchor=True %}
-          {% else %}
-            {% include "service_providers/components/usage_item.html" with obj=obj %}
-          {% endif %}
-        </li>
+    <h2 class="font-semibold my-2">{{ category.label }} ({{ category.groups|length }})</h2>
+    {% comment %}
+      Markers sit outside (the CSS default) so a row whose version badges wrap keeps its
+      later lines aligned with the name rather than jumping back to the left edge.
+    {% endcomment %}
+    <ul class="list-disc ml-6">
+      {% for group in category.groups %}
+        {% include "service_providers/components/usage_group.html" %}
       {% endfor %}
     </ul>
   {% endfor %}

@@ -192,7 +192,9 @@
               const target = parseInt(container.dataset.highlightVersion, 10);
               const row = container.querySelector('tr[data-version-number="' + target + '"]');
               if (row) {
-                row.classList.add('bg-base-200');
+                // Not bg-base-200: the table is zebra striped in that colour, so the
+                // highlight was invisible on every other row. See `.row-highlight`.
+                row.classList.add('row-highlight');
                 row.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }
             }
