@@ -12,6 +12,7 @@ from apps.service_providers.utils import ServiceProvider
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -377,12 +378,37 @@ def test_usages_view_renders_version_tags(team_with_users, client):
     assert f'href="{working_url}#versions"' in body, "older-version row should link with the #versions hash"
 
 
-def _add_pipeline_usage(provider, count: int) -> None:
-    """Attach ``count`` more pipeline-node references (each with its own chatbot)."""
+def _add_provider_usage(provider, count: int) -> None:
+    """Attach ``count`` more references: a pipeline node (with its chatbot) and an evaluator."""
     for _ in range(count):
         pipeline = PipelineFactory(team=provider.team)
         NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": provider.id})
         ExperimentFactory(team=provider.team, pipeline=pipeline)
+        EvaluatorFactory(team=provider.team, params={"llm_provider_id": provider.id})
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("stored_id", [pytest.param(int, id="int"), pytest.param(str, id="str")])
+def test_evaluators_referencing_the_provider_in_params_are_reported(anthropic_provider, stored_id):
+    """``Evaluator.params`` holds ``llm_provider_id`` as JSON, not an FK."""
+    evaluator = EvaluatorFactory(
+        team=anthropic_provider.team,
+        name="Sentiment",
+        params={"llm_provider_id": stored_id(anthropic_provider.id)},
+    )
+
+    usages = get_provider_usages(anthropic_provider)
+
+    items_by_label = {c.label: [obj.id for obj in c.items] for c in usages.categories}
+    assert items_by_label == {"Evaluators": [evaluator.id]}
+
+
+@pytest.mark.django_db()
+def test_evaluators_referencing_a_different_provider_are_not_reported(anthropic_provider):
+    other_provider = LlmProviderFactory(team=anthropic_provider.team)
+    EvaluatorFactory(team=anthropic_provider.team, params={"llm_provider_id": other_provider.id})
+
+    assert get_provider_usages(anthropic_provider).is_empty()
 
 
 @pytest.mark.django_db()
@@ -399,21 +425,21 @@ def test_archived_pipelines_are_still_reported(anthropic_provider):
 
 
 @pytest.mark.django_db()
-def test_resolving_usages_does_not_scale_with_pipeline_count(anthropic_provider):
-    """N+1 guard: query count must be flat in the number of referencing pipelines."""
-    _add_pipeline_usage(anthropic_provider, 1)
+def test_resolving_usages_does_not_scale_with_reference_count(anthropic_provider):
+    """N+1 guard: query count must be flat in the number of referencing objects."""
+    _add_provider_usage(anthropic_provider, 1)
     with CaptureQueriesContext(connection) as few:
         usages_few = get_provider_usages(anthropic_provider)
 
-    _add_pipeline_usage(anthropic_provider, 4)
+    _add_provider_usage(anthropic_provider, 4)
     with CaptureQueriesContext(connection) as many:
         usages_many = get_provider_usages(anthropic_provider)
 
-    assert usages_few.total == 1, "sanity: the single pipeline resolves to one chatbot"
-    assert usages_many.total == 5, "sanity: all five pipelines resolve to chatbots"
+    assert usages_few.total == 2, "sanity: one chatbot + one evaluator"
+    assert usages_many.total == 10, "sanity: five chatbots + five evaluators"
     assert len(many.captured_queries) == len(few.captured_queries), (
         f"query count grew from {len(few.captured_queries)} to {len(many.captured_queries)} "
-        f"when pipeline references went from 1 to 5"
+        f"when references went from 2 to 10"
     )
 
 
