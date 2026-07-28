@@ -66,7 +66,3 @@ The wire format is unchanged: the editor still sends and receives full nodes.
   mapping keeps one argument as the authority for both membership and content.
 - **Make the position columns non-null in this change**: rejected — requires the backfill to
   have run on every environment first; sequenced as a later ADR.
-
-## References
-
-- Implementation companion: `docs/design/pipeline-data-layout-only.md`

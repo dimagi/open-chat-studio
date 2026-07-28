@@ -50,7 +50,3 @@ in the graph but absent from both the mapping and the rows is an error.
   FK mirrors, per-node versioning/archiving, and admin/API surfaces the blob cannot.
 - **Strip only `params`, keep `label`/inner `type` in the blob**: rejected — leaves two
   owners for the remaining fields; same class of drift for no benefit.
-
-## References
-
-- Implementation companion: `docs/design/pipeline-data-layout-only.md`
