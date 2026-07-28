@@ -42,6 +42,21 @@ class FileStatus(models.TextChoices):
 # start again. In every case any chunks currently stored for the file are stale or partial.
 UNINDEXED_FILE_STATUSES = [FileStatus.PENDING, FileStatus.IN_PROGRESS, FileStatus.FAILED]
 
+FAILURE_REASON_MAX_LENGTH = 500
+
+
+def format_failure_reason(exc: Exception) -> str:
+    """Render an exception as a short, single-line reason fit for display in the UI.
+
+    Provider errors are neither short nor single-line: an OpenAI 4xx arrives as a multi-line
+    blob with the response body embedded, and this string is rendered into a tooltip. The
+    exception class name is kept because provider messages alone are often ambiguous about
+    whether the fault is auth, quota, or input.
+    """
+    message = " ".join(str(exc).split())
+    reason = f"{type(exc).__name__}: {message}" if message else type(exc).__name__
+    return reason[:FAILURE_REASON_MAX_LENGTH]
+
 
 class CollectionFileQuerySet(models.QuerySet):
     def is_manually_uploaded(self):
@@ -61,6 +76,10 @@ class CollectionFile(models.Model):
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     document_source = models.ForeignKey("documents.DocumentSource", on_delete=models.CASCADE, null=True)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
+    failure_reason = models.TextField(
+        blank=True,
+        help_text="Why the most recent indexing attempt failed. Cleared when the file is re-indexed.",
+    )
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
     external_id = models.CharField(max_length=255, blank=True, help_text="ID of file in document source")
 
