@@ -88,7 +88,7 @@ def test_run_freezes_delta_explicit_list():
     msg2 = EvaluationMessageFactory.create()
 
     with patch("apps.evaluations.tasks.run_evaluation_task.delay"):
-        run = config.run(run_type=EvaluationRunType.DELTA, scoped_messages=[msg1, msg2])
+        run = config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=[msg1.id, msg2.id])
 
     assert set(run.scoped_messages.all()) == {msg1, msg2}
 

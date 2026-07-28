@@ -11,7 +11,7 @@ from celery.utils.log import get_task_logger
 from celery_progress.backend import PROGRESS_STATE, ProgressRecorder
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Max, Prefetch, QuerySet
+from django.db.models import Count, Exists, Max, OuterRef, Prefetch, QuerySet
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger import StatusEnum
@@ -42,7 +42,7 @@ from apps.evaluations.models import (
     EvaluatorTagRule,
 )
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
-from apps.evaluations.utils import make_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
+from apps.evaluations.utils import iter_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.teams.models import Team
@@ -1251,17 +1251,37 @@ def create_dataset_from_sessions_task(self, dataset_id: int, team_id: int, sessi
     dataset.status = DatasetCreationStatus.PROCESSING
     dataset.save(update_fields=["status"])
 
+    progress = {"created": 0, "skipped": 0}
+    total_sessions = 0
+
     try:
         progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
 
         with current_team(dataset.team):
-            evaluation_messages = make_session_evaluation_messages(session_ids, team=dataset.team)
-
-            progress_recorder.set_progress(
-                40, 100, f"Found {len(evaluation_messages)} sessions, checking for duplicates..."
+            # Counted up front: the message source is a generator, so it has no len(), and the
+            # count is needed as the progress denominator. Empty sessions are excluded because
+            # they yield no EvaluationMessage, so counting them would leave the bar (and the
+            # "cloned X of Y" failure message) permanently short of its own total.
+            total_sessions = (
+                ExperimentSession.objects.filter(team=dataset.team, external_id__in=session_ids)
+                .filter(Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))))
+                .count()
+                if session_ids
+                else 0
             )
 
-            created_messages, duplicates_skipped = dataset.add_messages(evaluation_messages)
+            def report(created: int, skipped: int) -> None:
+                """Publish per-batch progress so the bar advances instead of parking at 40%."""
+                progress["created"] = created
+                progress["skipped"] = skipped
+                done = created + skipped
+                percent = int(done / total_sessions * 100) if total_sessions else 100
+                progress_recorder.set_progress(percent, 100, f"Cloned {done} of {total_sessions} sessions")
+
+            created_ids, duplicates_skipped = dataset.add_messages_stream(
+                iter_session_evaluation_messages(session_ids, team=dataset.team),
+                progress_callback=report,
+            )
 
             dataset.status = DatasetCreationStatus.COMPLETED
             dataset.job_id = ""
@@ -1271,14 +1291,23 @@ def create_dataset_from_sessions_task(self, dataset_id: int, team_id: int, sessi
 
             return {
                 "success": True,
-                "created_count": len(created_messages),
+                "created_count": len(created_ids),
                 "duplicates_skipped": duplicates_skipped,
             }
 
-    except Exception as e:
+    # BaseException, not Exception: a gevent.Timeout (raised when a hard task time limit fires)
+    # derives from BaseException and would otherwise leave the dataset stuck in PROCESSING.
+    except BaseException as e:
         logger.exception(f"Error in session-mode clone task for dataset {dataset_id}: {e}")
-        message = "An error occurred while creating session-mode messages"
+        done = progress["created"] + progress["skipped"]
+        message = (
+            f"Failed after cloning {done} of {total_sessions} session(s): {e}. "
+            "Re-running will resume from where it stopped."
+        )
         _save_dataset_error(dataset, message)
+        if not isinstance(e, Exception):
+            # Record the failure, but never swallow SystemExit/KeyboardInterrupt/gevent.Timeout.
+            raise
         return {"success": False, "error": message}
 
 

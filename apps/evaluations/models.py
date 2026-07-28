@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib
+import itertools
 import uuid
 from collections import defaultdict
+from collections.abc import Callable, Iterable
 from functools import cached_property
 from typing import TYPE_CHECKING, Literal
 
@@ -36,6 +38,10 @@ from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
     from apps.evaluations.evaluators import EvaluatorResult
+
+# Messages written per transaction by EvaluationDataset.add_messages_stream. Bounds both the
+# INSERT size and how long the dataset row lock is held on any one batch.
+DATASET_ADD_BATCH_SIZE = 500
 
 
 class EvaluationRunStatus(models.TextChoices):
@@ -352,16 +358,78 @@ class EvaluationDataset(BaseTeamModel):
             return None
         return ("pair", message.input_chat_message_id, message.expected_output_chat_message_id)
 
-    def _existing_dedup_keys(self) -> set[tuple]:
-        """Build the set of dedup keys already present in this dataset."""
+    def _existing_dedup_keys(self, candidates: set[tuple] | None = None) -> set[tuple]:
+        """Build the set of dedup keys already present in this dataset.
+
+        When *candidates* is given, only those keys are looked up. This keeps a streaming add
+        to one index-assisted query per batch, instead of re-scanning every message in the
+        dataset for each batch.
+        """
         if self.evaluation_mode == EvaluationMode.SESSION:
-            session_ids = self.messages.filter(session__isnull=False).values_list("session_id", flat=True)
+            queryset = self.messages.filter(session__isnull=False)
+            if candidates is not None:
+                queryset = queryset.filter(session_id__in=[key[1] for key in candidates])
+            session_ids = queryset.values_list("session_id", flat=True)
             return {("session", session_id) for session_id in session_ids}
-        pairs = self.messages.filter(
+        queryset = self.messages.filter(
             input_chat_message_id__isnull=False,
             expected_output_chat_message_id__isnull=False,
-        ).values_list("input_chat_message_id", "expected_output_chat_message_id")
-        return {("pair", input_id, output_id) for input_id, output_id in pairs}
+        )
+        if candidates is not None:
+            # Narrowing on the (indexed) input id alone can over-select, so the pair equality
+            # is enforced by intersecting with `candidates` below.
+            queryset = queryset.filter(input_chat_message_id__in=[key[1] for key in candidates])
+        pairs = queryset.values_list("input_chat_message_id", "expected_output_chat_message_id")
+        existing = {("pair", input_id, output_id) for input_id, output_id in pairs}
+        return existing & candidates if candidates is not None else existing
+
+    def add_messages_stream(
+        self,
+        messages: Iterable[EvaluationMessage],
+        *,
+        batch_size: int = DATASET_ADD_BATCH_SIZE,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[list[int], int]:
+        """Persist and link messages from an iterable, committing one batch at a time.
+
+        Unlike add_messages, this never holds the whole message list or a single transaction for
+        the duration of the job, so it stays memory- and lock-bounded for very large datasets.
+        Each batch takes the same row lock add_messages does, which is all the dedup invariant
+        needs: mutual exclusion only has to cover one read-check-insert cycle, not the whole
+        stream. Two concurrent streams therefore interleave between batches without either
+        inserting a duplicate.
+
+        Returns (created_ids, skipped_count) — ids rather than instances, since holding 10k
+        EvaluationMessage objects is the memory problem this method exists to avoid.
+
+        Note: callers already inside an atomic block (e.g. the auto-population rule tick) turn
+        these per-batch commits into savepoints, and so keep single-transaction semantics.
+        """
+        created_ids: list[int] = []
+        skipped = 0
+        # strict=False: the final batch is expected to be short.
+        for batch in itertools.batched(messages, batch_size, strict=False):
+            keyed_batch = [(message, self._dedup_key(message)) for message in batch]
+            with transaction.atomic():
+                EvaluationDataset.objects.select_for_update().get(pk=self.pk)
+                candidates = {key for _, key in keyed_batch if key is not None}
+                seen = self._existing_dedup_keys(candidates)
+                to_create = []
+                for message, key in keyed_batch:
+                    if key is not None:
+                        if key in seen:
+                            skipped += 1
+                            continue
+                        seen.add(key)
+                    to_create.append(message)
+
+                if to_create:
+                    created = EvaluationMessage.objects.bulk_create(to_create, batch_size=batch_size)
+                    self.messages.add(*created)
+                    created_ids.extend(message.id for message in created)
+            if progress_callback:
+                progress_callback(len(created_ids), skipped)
+        return created_ids, skipped
 
     class Meta:
         unique_together = ("name", "team")
@@ -490,16 +558,19 @@ class EvaluationConfig(BaseTeamModel):
     def run(
         self,
         run_type: EvaluationRunType = EvaluationRunType.FULL,
-        scoped_messages: list[EvaluationMessage] | None = None,
+        scoped_message_ids: list[int] | None = None,
     ) -> EvaluationRun:
         """Runs the evaluation asynchronously using Celery.
 
         The run's plan is frozen at creation: `scoped_messages` is populated for
         every run type (all dataset ids for FULL, the PREVIEW sample, or the
-        explicit DELTA list) and `evaluator_ids` snapshots the config's evaluators.
-        The beat coordinator only ever reads this frozen plan, never the live
-        dataset, so a dataset that grows mid-run cannot prevent the run finishing.
+        explicit DELTA list in `scoped_message_ids`) and `evaluator_ids` snapshots the
+        config's evaluators. The beat coordinator only ever reads this frozen plan, never
+        the live dataset, so a dataset that grows mid-run cannot prevent the run finishing.
         `job_id` is a uuid used as the progress-publishing key for the run's life.
+
+        DELTA scoping takes ids rather than instances so large appends never have to hold
+        the message objects in memory.
         """
         generation_experiment = self.get_generation_experiment_version()
 
@@ -517,7 +588,7 @@ class EvaluationConfig(BaseTeamModel):
             if run_type == EvaluationRunType.PREVIEW:
                 message_ids = list(self.dataset.messages.values_list("id", flat=True)[:PREVIEW_SAMPLE_SIZE])
             elif run_type == EvaluationRunType.DELTA:
-                message_ids = [message.id for message in (scoped_messages or [])]
+                message_ids = list(scoped_message_ids or [])
             else:  # FULL
                 message_ids = list(self.dataset.messages.values_list("id", flat=True))
 
