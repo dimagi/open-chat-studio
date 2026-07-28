@@ -296,8 +296,7 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
     )
 
     def clean(self):
-        """Normalise hmac_secret so the stored value is always a string.
-        """
+        """Normalise hmac_secret so the stored value is always a string."""
         cleaned_data = super().clean()
         cleaned_data["hmac_secret"] = (cleaned_data.get("hmac_secret") or "").strip()
         return cleaned_data
