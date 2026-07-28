@@ -57,7 +57,7 @@ def format_failure_reason(exc: Exception) -> str:
     # fail the Postgres save -- and a surrogate raises UnicodeEncodeError, which is not a
     # DatabaseError, so it would escape add_files' recovery block and strand the whole batch.
     # Same precedent as the NUL-stripping in add_files' chunk handling.
-    message = " ".join(str(exc).split()).replace("\x00", "")
+    message = " ".join(str(exc).replace("\x00", "").split())
     message = message.encode("utf-8", errors="replace").decode("utf-8")
     reason = f"{type(exc).__name__}: {message}" if message else type(exc).__name__
     return reason[:FAILURE_REASON_MAX_LENGTH]

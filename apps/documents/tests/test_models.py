@@ -284,6 +284,11 @@ class TestJSONCollectionSourceConfig:
             id="whitespace_collapsed_to_one_line",
         ),
         pytest.param(ValueError("bad\x00file"), "ValueError: badfile", id="nul_bytes_stripped"),
+        pytest.param(
+            ValueError("bad \x00 name"),
+            "ValueError: bad name",
+            id="nul_between_spaces_leaves_single_space",
+        ),
         pytest.param(ValueError("bad \ud800 name"), "ValueError: bad ? name", id="lone_surrogate_replaced"),
     ],
 )
