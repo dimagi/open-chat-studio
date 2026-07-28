@@ -283,6 +283,8 @@ class TestJSONCollectionSourceConfig:
             "ValueError: line one line two",
             id="whitespace_collapsed_to_one_line",
         ),
+        pytest.param(ValueError("bad\x00file"), "ValueError: badfile", id="nul_bytes_stripped"),
+        pytest.param(ValueError("bad \ud800 name"), "ValueError: bad ? name", id="lone_surrogate_replaced"),
     ],
 )
 def test_format_failure_reason(exc, expected):
