@@ -248,10 +248,23 @@ def is_non_conversational_whatsapp_message(message_data: dict) -> bool:
     malformed "messages" value - it returns False and lets the request fall through
     to the signature guard instead.
     """
-    messages = message_data.get("messages") or []
-    if not isinstance(messages, list) or not messages or not isinstance(messages[0], dict):
+    first_message = _first_whatsapp_message(message_data)
+    if first_message is None:
         return False
-    return messages[0].get("type") in _NON_CONVERSATIONAL_WA_MESSAGE_TYPES
+    return first_message.get("type") in _NON_CONVERSATIONAL_WA_MESSAGE_TYPES
+
+
+def _first_whatsapp_message(message_data: dict) -> dict | None:
+    """The first entry of a WhatsApp "messages" array, or None if it is absent or malformed.
+
+    Callers reach this with unauthenticated input, so every unexpected shape resolves to
+    None rather than raising.
+    """
+    messages = message_data.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return None
+    first_message = messages[0]
+    return first_message if isinstance(first_message, dict) else None
 
 
 class WhatsAppMessage(BaseMessage):
