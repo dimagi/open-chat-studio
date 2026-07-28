@@ -14,17 +14,21 @@ Two models in `models.py`:
 
 `ServiceKind` covers `llm_input`, `llm_output`, `llm_cached_input`, `llm_cache_write`. `Confidence` is `EXACT` / `ESTIMATED` / `UNKNOWN` and tags each `UsageRecord` based on how the token count was obtained.
 
+`UsageSource` is `chat` / `evaluation` and says what the spend was *for*. It is the only sanctioned way to tell the two apart — do not infer it from `trace_id` or from `experiment`/`session` being null, because judge rows from a generation run carry both. Eval rows also carry an `evaluation_config` FK (`SET_NULL`; the run id is in `extra`, since runs are pruned).
+
 ## Capture Path
 
 The `OCSTracer` (in `apps/service_providers/tracing/`) collects `UsageEvent`s during a trace and calls `record_usage_bulk()` from `services/recorder.py` once at trace finalisation. Cost is computed as `(quantity / 1000) * unit_price`.
 
-LLM calls outside the chat/pipeline path have no trace to drain, so they attach their own `MetricsCollector` and record directly. Evaluator (judge) calls do this via `track_evaluator_usage` in `apps/evaluations/usage.py`, tagging each row `extra["source"] = "evaluation"` with the `evaluation_run_id`. The bot generation an eval run drives is ordinary traced traffic and needs nothing special.
+LLM calls outside the chat/pipeline path have no trace to drain, so they attach their own `MetricsCollector` and record directly. Evaluator (judge) calls do this via `track_evaluator_usage` in `apps/evaluations/usage.py`, writing rows with `source=evaluation`. The bot generation an eval run drives is ordinary traced traffic and needs nothing special — it is `source=chat`.
 
 Provider identity is propagated via `model.metadata["ocs_provider_type"]` (stamped in `LlmService.get_chat_model` via a template method). The collector uses that to bucket usage by `(provider, model)`, so the same model name routed through different providers gets billed separately.
 
 When `usage_metadata` is missing from the LangChain response, the collector falls back: `tiktoken` for the OpenAI family, `count_tokens_approximately` for everything else. Confidence is set to `ESTIMATED`. When there are no prompts to count either, the row is emitted as `UNKNOWN` with `extra["missing_usage_calls"]` so the dashboard's `unknown_call_count` flags the coverage gap.
 
 ## Resolution Path
+
+Reads split on one rule ([ADR-0048](../../docs/adr/0048-evaluation-spend-is-team-spend-not-entity-spend.md)): **evaluation spend is the team's spend, but never a chatbot's, a participant's, or a conversation's.** Team-level totals (`cost_summary`, `cost_total`, `token_counts`, `*_timeseries`, `coverage_gaps`) count every source; per-entity reads (`costs_by_experiment`, `session_usage`, `usage_by_group`) go through `_attributable_records` and count `chat` only. No user-facing surface breaks the total down by source yet — that belongs with cost breakdowns generally.
 
 `PricingResolver` in `services/pricing.py` resolves a `PricingKey` to a `ResolvedRule` at a given time. Team-scoped rules win over globals. Results are cached; `signals.py` busts the cache on every `PricingRule.save()` / `delete()`. Bulk reads from views use `_pricing_lookup` (in `apps/service_providers/views.py`) which does the same join in a single query.
 
@@ -61,7 +65,7 @@ apps/cost_tracking/
   seed_data/llm_pricing.json
   services/
     pricing.py              PricingResolver + cache
-    recorder.py             record_usage_bulk + UsageEvent / TraceContext
+    recorder.py             record_usage_bulk + UsageEvent / UsageContext
     estimation.py           tiktoken + response_text helpers
     reporting.py            cost_summary, costs_by_experiment, coverage_gaps, cost_timeseries
 ```
