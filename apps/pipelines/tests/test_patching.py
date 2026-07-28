@@ -637,6 +637,22 @@ class TestPostEndpointBackwardCompatibility:
         response_nodes = {n["id"]: n for n in response.json()["data"]["nodes"]}
         assert response_nodes["start"]["data"]["params"] == {"name": "start"}
 
+    def test_post_without_nodes_key_is_rejected(self, authed_client, pipeline, team_with_users):
+        """A payload whose data omits ``nodes`` is malformed, not an empty graph — accepting
+        it would reconcile the rows against nothing and delete every node."""
+        team_slug = team_with_users.slug
+        node_count = pipeline.node_set.count()
+        assert node_count > 0
+
+        post_data = {"name": "Updated Pipeline", "data": {"edges": []}}
+        response = authed_client.post(
+            self._post_url(team_slug, pipeline.id),
+            data=json.dumps(post_data),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert pipeline.node_set.count() == node_count
+
     def test_get_returns_edit_revision(self, authed_client, pipeline, team_with_users):
         team_slug = team_with_users.slug
         response = authed_client.get(

@@ -407,9 +407,13 @@ def pipeline_data(request, team_slug: str, pk: int):
 
 def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
     """Handle full-graph POST saves (backward-compatible)."""
+    try:
+        data = FlowPipelineData.model_validate_json(request.body)
+    except pydantic.ValidationError as e:
+        return JsonResponse({"error": f"Malformed payload: {e}"}, status=400)
+
     with transaction.atomic():
         pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
-        data = FlowPipelineData.model_validate_json(request.body)
         pipeline.name = data.name
         pipeline.data, node_data = split_flow_data(data.data.model_dump())
         pipeline.edit_revision += 1

@@ -99,9 +99,17 @@ def node_position_fields(position) -> dict:
     return {}
 
 
+class WireFlow(Flow):
+    """A full-graph save payload. Unlike stored layout-only data, the wire format must
+    state the node list explicitly: an omitted ``nodes`` is a malformed payload, not an
+    empty graph — treating it as empty would delete every node row on save."""
+
+    nodes: list[FlowNode]
+
+
 class FlowPipelineData(pydantic.BaseModel):
     name: str
-    data: Flow
+    data: WireFlow
     experiment_name: str | None = Field(default=None, min_length=1)
 
 
