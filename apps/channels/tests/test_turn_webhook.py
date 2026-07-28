@@ -159,9 +159,19 @@ class TestNewTurnMessageRequestHandling:
         )
         assert client.get(url).status_code == 405
 
-    def test_malformed_body_returns_400(self, client, turnio_whatsapp_channel):
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param(b"not json", id="invalid_json"),
+            pytest.param(b"5", id="valid_json_scalar_not_an_object"),
+            pytest.param(b'"xxmessagesxx"', id="valid_json_string_containing_messages_substring"),
+        ],
+    )
+    @patch("apps.channels.tasks.handle_turn_message")
+    def test_malformed_body_returns_400(self, task, body, client, turnio_whatsapp_channel):
         url = reverse(
             "channels:new_turn_message", kwargs={"experiment_id": turnio_whatsapp_channel.experiment.public_id}
         )
-        response = client.post(url, data=b"not json", content_type="application/json")
+        response = client.post(url, data=body, content_type="application/json")
         assert response.status_code == 400
+        task.delay.assert_not_called()

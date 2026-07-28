@@ -145,6 +145,10 @@ def new_turn_message(request, experiment_id: uuid):
         log.debug("Turn.io webhook received invalid JSON")
         return HttpResponseBadRequest("Invalid JSON.")
 
+    if not isinstance(message_data, dict):
+        log.debug("Turn.io webhook received a non-object JSON body")
+        return HttpResponseBadRequest("Invalid JSON.")
+
     if "messages" not in message_data:
         # Normal inbound messages should have a "messages" key, so ignore everything else
         return HttpResponse()
