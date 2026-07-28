@@ -14,10 +14,13 @@ HMAC_SECRET = "turn_test_hmac_secret"
 
 
 def _sign(payload: bytes, secret: str = HMAC_SECRET) -> str:
+    """Produce the header value Turn.io would send for this body: base64 HMAC-SHA256."""
     return base64.b64encode(hmac.new(secret.encode(), payload, hashlib.sha256).digest()).decode()
 
 
 class TestVerifySignature:
+    """Unit tests for the pure helper, covering the never-raise contract."""
+
     def test_valid_signature(self):
         payload = b'{"messages": [{"id": "abc"}]}'
         assert turn_webhook.verify_signature(payload, _sign(payload), HMAC_SECRET) is True
@@ -57,6 +60,7 @@ class TestVerifySignature:
 
 
 def _post(client, channel, payload: dict, signature: str | None = None):
+    """POST a JSON payload to a channel's Turn.io webhook, omitting the header when signature is None."""
     body = json.dumps(payload).encode()
     headers = {}
     if signature is not None:
@@ -71,6 +75,7 @@ def _post(client, channel, payload: dict, signature: str | None = None):
 
 @pytest.fixture()
 def signed_turn_channel(turnio_whatsapp_channel):
+    """A Turn.io channel whose provider has a secret configured, so verification is enforced."""
     provider = turnio_whatsapp_channel.messaging_provider
     provider.config = {"auth_token": "123", "hmac_secret": HMAC_SECRET}
     provider.save()
@@ -79,6 +84,8 @@ def signed_turn_channel(turnio_whatsapp_channel):
 
 @pytest.mark.django_db()
 class TestNewTurnMessageSignatureVerification:
+    """The signature guard as seen through the view, including the staged-rollout pass-through."""
+
     @patch("apps.channels.tasks.handle_turn_message")
     def test_unconfigured_provider_still_accepts_unsigned_webhooks(self, task, client, turnio_whatsapp_channel):
         """Staged rollout: providers that have not copied their secret across keep working."""
@@ -152,6 +159,8 @@ class TestNewTurnMessageSignatureVerification:
 
 @pytest.mark.django_db()
 class TestNewTurnMessageRequestHandling:
+    """Request shapes that must not reach the guard as a 500: wrong method, unparseable body."""
+
     def test_get_returns_405(self, client, turnio_whatsapp_channel):
         """Previously a GET reached json.loads on an empty body and returned a 500."""
         url = reverse(
