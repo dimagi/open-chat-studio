@@ -10,13 +10,15 @@ There are two halves: the capture path (record what happened) and the resolution
 Two models in `models.py`:
 
 - `PricingRule` stores per-1K-token rates keyed by `(team, provider_type, model_name, service_kind)`. `team=NULL` means a global rule; a row with `team=<team>` is a team override. Effectively write-once: rate changes close the active rule via `effective_to=now()` and insert a fresh one. A partial unique constraint enforces "at most one active rule per key".
-- `UsageRecord` (subclass of `BaseTeamModel`) is one row per `(trace, model, service_kind)` bucket. Snapshots `unit_price` and `currency` so historical rows are stable across rate changes. The `pricing_rule` FK uses `on_delete=PROTECT` so it remains the canonical "this row was priced" anchor.
+- `UsageRecord` (subclass of `BaseTeamModel`) is one row per `(trace, model, service_kind)` bucket — `trace` is null for callers outside the tracer, currently evaluator judge calls. Snapshots `unit_price` and `currency` so historical rows are stable across rate changes. The `pricing_rule` FK uses `on_delete=PROTECT` so it remains the canonical "this row was priced" anchor.
 
 `ServiceKind` covers `llm_input`, `llm_output`, `llm_cached_input`, `llm_cache_write`. `Confidence` is `EXACT` / `ESTIMATED` / `UNKNOWN` and tags each `UsageRecord` based on how the token count was obtained.
 
 ## Capture Path
 
 The `OCSTracer` (in `apps/service_providers/tracing/`) collects `UsageEvent`s during a trace and calls `record_usage_bulk()` from `services/recorder.py` once at trace finalisation. Cost is computed as `(quantity / 1000) * unit_price`.
+
+LLM calls outside the chat/pipeline path have no trace to drain, so they attach their own `MetricsCollector` and record directly. Evaluator (judge) calls do this via `track_evaluator_usage` in `apps/evaluations/usage.py`, tagging each row `extra["source"] = "evaluation"` with the `evaluation_run_id`. The bot generation an eval run drives is ordinary traced traffic and needs nothing special.
 
 Provider identity is propagated via `model.metadata["ocs_provider_type"]` (stamped in `LlmService.get_chat_model` via a template method). The collector uses that to bucket usage by `(provider, model)`, so the same model name routed through different providers gets billed separately.
 

@@ -36,6 +36,7 @@ from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
     from apps.evaluations.evaluators import EvaluatorResult
+    from apps.evaluations.usage import EvaluatorUsageContext
 
 
 class EvaluationRunStatus(models.TextChoices):
@@ -115,8 +116,14 @@ class Evaluator(BaseTeamModel):
         module = importlib.import_module("apps.evaluations.evaluators")
         return getattr(module, self.type)
 
-    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
-        return self.evaluator(**self.params).run(message, generated_response)
+    def run(
+        self,
+        message: EvaluationMessage,
+        generated_response: str,
+        *,
+        usage_context: EvaluatorUsageContext | None = None,
+    ) -> EvaluatorResult:
+        return self.evaluator(**self.params).run(message, generated_response, usage_context=usage_context)
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[get_slug_for_team(self.team_id), self.id])

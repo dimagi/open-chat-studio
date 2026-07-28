@@ -85,6 +85,9 @@ class PricingRule(models.Model):
 class UsageRecord(BaseTeamModel):
     """One row per (trace, model, service_kind) bucket. Snapshots
     `unit_price` / `currency` so historical rows are stable across rate changes.
+
+    `trace` is null for LLM calls made outside the tracer (evaluator judge calls,
+    tagged `extra["source"] = "evaluation"`).
     """
 
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)

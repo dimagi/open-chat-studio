@@ -60,14 +60,15 @@ def usage_to_csv(start: datetime, end: datetime):
 def get_usage_data(start: datetime, end: datetime):
     """Per-team usage from completed trace token counts.
 
-    Only includes traces with a settled status (excludes PENDING) and excludes the
-    evaluations platform. Pre-tracing periods will report lower totals than the
-    legacy character-based proxy.
+    Only includes traces with a settled status (excludes PENDING). Evaluation traffic
+    counts: it costs the same money as chat traffic, and excluding it here while
+    `get_cost_usage_by_team` includes it left the two halves of the usage report
+    unable to reconcile. Pre-tracing periods will report lower totals than the legacy
+    character-based proxy.
     """
     usage_data = (
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
-        .exclude(session__platform=ChannelPlatform.EVALUATIONS)
         .values("team_id", "team__name", "team__metadata")
         .annotate(
             run_count=Count("id"),
@@ -80,11 +81,11 @@ def get_usage_data(start: datetime, end: datetime):
 
 
 def get_token_usage_by_team(start: datetime, end: datetime):
-    """Per-team run count + total tokens from settled, non-eval traces."""
+    """Per-team run count + total tokens from settled traces, evaluations included
+    (see `get_usage_data` — these totals must reconcile with `get_cost_usage_by_team`)."""
     return (
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
-        .exclude(session__platform=ChannelPlatform.EVALUATIONS)
         .values("team_id", "team__name", "team__slug")
         .annotate(
             run_count=Count("id"),
@@ -95,7 +96,11 @@ def get_token_usage_by_team(start: datetime, end: datetime):
 
 
 def get_cost_usage_by_team(start: datetime, end: datetime):
-    """Per (team, provider, model, currency) cost + tokens from UsageRecord."""
+    """Per (team, provider, model, currency) cost + tokens from UsageRecord.
+
+    Includes evaluation spend — both the bot generation an eval run drives and the
+    evaluator's own judge calls (tagged `extra["source"] == "evaluation"`).
+    """
     return (
         UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .values("team_id", "provider_type", "model_name", "currency")
