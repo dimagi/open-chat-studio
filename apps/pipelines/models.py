@@ -241,7 +241,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             nodes.append(
                 FlowNode(
                     id=node.flow_id,
-                    position=node.position or {},
+                    # react-flow does arithmetic on position.x/y, so an un-backfilled row
+                    # must serve a real coordinate pair, not an empty dict (NaN layout).
+                    position=node.position or {"x": 0, "y": 0},
                     type=react_flow_node_type(node.type),
                     data=FlowNodeData(
                         id=node.flow_id,

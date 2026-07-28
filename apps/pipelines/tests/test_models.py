@@ -662,7 +662,9 @@ class TestLayoutOnlyData:
         assert template_node["data"]["type"] == "RenderTemplate"
         assert template_node["data"]["params"]["template_string"] == template["params"]["template_string"]
 
-    def test_flow_data_uses_empty_position_when_row_not_backfilled(self):
+    def test_flow_data_defaults_position_to_origin_when_row_not_backfilled(self):
+        """An unpositioned row must serve a real coordinate pair — react-flow does arithmetic
+        on position.x/y, so an empty dict yields NaN layout that persists on the next save."""
         start, end = start_node(), end_node()
         pipeline = create_pipeline_model([start, end])
         # create_pipeline_model does not carry positions, so the rows stay unpositioned
@@ -670,7 +672,7 @@ class TestLayoutOnlyData:
 
         nodes_by_id = {node["id"]: node for node in pipeline.flow_data["nodes"]}
 
-        assert nodes_by_id[start["id"]]["position"] == {}
+        assert nodes_by_id[start["id"]]["position"] == {"x": 0, "y": 0}
 
     def test_data_without_positions_serves_node_content_from_rows(self):
         start, template, end = start_node(), render_template_node(), end_node()
