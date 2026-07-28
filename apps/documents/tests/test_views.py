@@ -674,3 +674,28 @@ class TestQueueDocumentSourceSync:
         apply_async.assert_not_called()
         source.refresh_from_db()
         assert source.sync_task_id == "running-task"
+
+
+@pytest.mark.django_db()
+class TestIndexFailureReason:
+    @pytest.fixture()
+    def collection(self):
+        return CollectionFactory.create(team=TeamWithUsersFactory.create(), is_index=True, is_remote_index=False)
+
+    def test_retry_failed_uploads_clears_the_failure_reason(self, collection, client):
+        """The reason describes a superseded attempt, so it must not outlive the retry."""
+        collection_file = CollectionFileFactory.create(
+            collection=collection,
+            status=FileStatus.FAILED,
+            failure_reason="ValueError: Error code: 401 - Incorrect API key provided",
+        )
+        client.force_login(collection.team.members.first())
+
+        url = reverse("documents:retry_failed_uploads", args=[collection.team.slug, collection.id])
+        with mock.patch("apps.documents.tasks.index_collection_files_task.delay"):
+            response = client.post(url)
+
+        assert response.status_code == 302
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.PENDING
+        assert collection_file.failure_reason == ""
