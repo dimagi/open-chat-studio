@@ -27,6 +27,8 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 from apps.utils.factories.team import TeamFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+# The 30-day window most tests read over, named where a test needs it inside a lambda.
+_START = _NOW - timedelta(days=30)
 
 
 def _usage(team, *, cost, when, **kwargs):
@@ -649,6 +651,31 @@ class TestEvaluationSourceRule:
         _, _, session = spend
 
         assert session_usage(session).total_cost == Decimal("1.00000000")
+
+    @pytest.mark.parametrize(
+        "read",
+        [
+            pytest.param(
+                lambda team, f: cost_summary(team, start=_START, end=_NOW, filters=f).total_cost, id="summary"
+            ),
+            pytest.param(lambda team, f: cost_total(team, start=_START, end=_NOW, filters=f).total, id="total"),
+        ],
+    )
+    def test_filtering_to_one_chatbot_excludes_evaluation(self, spend, read):
+        """A filter narrows the read to an entity just as a grouping does, so it must
+        obey the same rule — otherwise the dashboard filtered to one chatbot bills it
+        for the judge calls that evaluated it.
+        """
+        team, experiment, _ = spend
+
+        assert read(team, CostFilters(experiment_ids=[experiment.id])) == Decimal("1.00")
+
+    def test_unfiltered_read_stays_a_team_total(self, spend):
+        """The flip side: with no filter the same read is a team total, so it counts
+        eval spend."""
+        team, _, _ = spend
+
+        assert cost_total(team, start=_START, end=_NOW).total == Decimal("1.25")
 
     def test_usage_by_group_excludes_evaluation(self, spend):
         team, experiment, _ = spend

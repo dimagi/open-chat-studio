@@ -120,6 +120,13 @@ class CostFilters:
     platform_names: list[str] | None = None
     participant_ids: list[int] | None = None
 
+    @property
+    def narrows_to_entities(self) -> bool:
+        """True when any filter restricts the read to particular chatbots, participants
+        or conversations — which makes the result per-entity attribution, not a team
+        total, and so subject to the chat-only rule (ADR-0048)."""
+        return bool(self.experiment_ids or self.platform_names or self.participant_ids)
+
 
 @dataclass(frozen=True)
 class GroupBreakdown:
@@ -138,6 +145,11 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
     platform filters applied (mirrors the cost panel's other charts). Platform
     is matched via the record's session, so records with no session are excluded
     when a platform filter is set.
+
+    A filtered read is per-entity attribution, so it counts chat only; only an
+    unfiltered read is a team total and counts every source (ADR-0048). Without that,
+    a dashboard narrowed to one chatbot would bill it for the judge calls that
+    evaluated it, since those rows carry its `experiment_id`.
     """
     filters = filters or CostFilters()
     qs = UsageRecord.objects.filter(team=team)
@@ -147,6 +159,8 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
         qs = qs.filter(participant_id__in=filters.participant_ids)
     if filters.platform_names:
         qs = qs.filter(session__platform__in=filters.platform_names)
+    if filters.narrows_to_entities:
+        qs = qs.filter(source=UsageSource.CHAT)
     return qs
 
 
@@ -154,10 +168,11 @@ def _attributable_records(team: Team, filters: CostFilters | None = None):
     """Scoped records that may be charged to a single entity — chat only.
 
     Evaluation spend is the team's spend but never a chatbot's, a participant's or a
-    conversation's (ADR-0048), so every per-entity read goes through here while
-    team-level totals use `_scoped_records` and count every source. Judge rows from a
-    generation run do carry an experiment/session, so this filters on `source` rather
-    than on those columns being null.
+    conversation's (ADR-0048), so every read that names an entity goes through here
+    (grouping) or gets the same treatment from `_scoped_records` (filtering), while an
+    unfiltered team total counts every source. Judge rows from a generation run do carry
+    an experiment/session, so this filters on `source` rather than on those columns
+    being null.
     """
     return _scoped_records(team, filters).filter(source=UsageSource.CHAT)
 
