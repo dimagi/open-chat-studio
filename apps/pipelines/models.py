@@ -376,9 +376,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
-    # Layout position on the editor canvas, shadow-written from ``Pipeline.data`` — the
-    # blob stays authoritative until a follow-up PR switches reads to these columns.
-    # Null until the row is saved or the strip_node_data command backfills it.
+    # Layout position on the editor canvas (ADR-0048). Null until the row is saved.
     position_x = models.FloatField(null=True, blank=True)
     position_y = models.FloatField(null=True, blank=True)
     working_version = models.ForeignKey(

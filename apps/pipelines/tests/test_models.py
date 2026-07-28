@@ -598,7 +598,7 @@ class TestLayoutOnlyData:
     def test_copy_of_old_format_pipeline_is_layout_only(self):
         """Copying a not-yet-migrated pipeline (data still embeds blobs) must still yield
         layout-only data — a residual blob would keep the old ids, which no longer match
-        the remapped rows, and strip_node_data could never heal it."""
+        the remapped rows, and nothing could heal it after the copy."""
         start, template, end = start_node(), render_template_node(), end_node()
         pipeline = create_pipeline_model([start, template, end])
         # Simulate old-format stored data whose blob ids match the current rows.
