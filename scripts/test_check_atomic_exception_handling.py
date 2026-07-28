@@ -54,51 +54,60 @@ class TestBrokenPattern:
         assert len(found) == 1
         assert found[0].function == "f"
 
-    def test_bare_atomic_decorator(self):
-        found = violations("""
-            @transaction.atomic
-            def f():
-                try:
-                    save()
-                except IntegrityError:
-                    handle()
-        """)
-        assert len(found) == 1
-
-    def test_async_with(self):
-        found = violations("""
-            async def f():
-                async with transaction.atomic():
-                    try:
-                        await save()
-                    except IntegrityError:
-                        handle()
-        """)
-        assert len(found) == 1
-
-    def test_atomic_as_one_of_several_context_managers(self):
-        found = violations("""
-            def f():
-                with transaction.atomic(), current_team(team):
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                """
+                @transaction.atomic
+                def f():
                     try:
                         save()
                     except IntegrityError:
                         handle()
-        """)
-        assert len(found) == 1
-
-    def test_deeply_nested_try(self):
-        found = violations("""
-            def f():
-                with transaction.atomic():
-                    for item in items:
-                        if item:
-                            try:
-                                save(item)
-                            except IntegrityError:
-                                handle()
-        """)
-        assert len(found) == 1
+                """,
+                id="bare-atomic-decorator",
+            ),
+            pytest.param(
+                """
+                async def f():
+                    async with transaction.atomic():
+                        try:
+                            await save()
+                        except IntegrityError:
+                            handle()
+                """,
+                id="async-with",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic(), current_team(team):
+                        try:
+                            save()
+                        except IntegrityError:
+                            handle()
+                """,
+                id="multiple-context-managers",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        for item in items:
+                            if item:
+                                try:
+                                    save(item)
+                                except IntegrityError:
+                                    handle()
+                """,
+                id="deeply-nested-try",
+            ),
+        ],
+    )
+    def test_atomic_scope_is_detected(self, source):
+        """Every way of opening an atomic block, and a `try` at any depth inside it."""
+        assert len(violations(source)) == 1
 
     def test_reports_both_the_handler_and_the_atomic_line(self):
         found = violations("""
@@ -126,106 +135,150 @@ class TestBrokenPattern:
 
 
 class TestAcceptedPatterns:
-    def test_try_outside_atomic(self):
-        assert not violations("""
-            def f():
-                try:
-                    with transaction.atomic():
-                        save()
-                except IntegrityError:
-                    handle()
-        """)
-
-    def test_nested_atomic_savepoint(self):
-        assert not violations("""
-            def f():
-                with transaction.atomic():
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                """
+                def f():
                     try:
                         with transaction.atomic():
                             save()
                     except IntegrityError:
                         handle()
-        """)
-
-    def test_savepoint_with_keyword_argument(self):
-        assert not violations("""
-            def f():
-                with transaction.atomic():
-                    try:
-                        with transaction.atomic(savepoint=True):
+                """,
+                id="try-outside-atomic",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        try:
+                            with transaction.atomic():
+                                save()
+                        except IntegrityError:
+                            handle()
+                """,
+                id="nested-savepoint",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        try:
+                            with transaction.atomic(savepoint=True):
+                                save()
+                        except IntegrityError:
+                            handle()
+                """,
+                id="nested-savepoint-keyword-arg",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        try:
                             save()
+                        except IntegrityError:
+                            log.exception("boom")
+                            raise
+                """,
+                id="handler-reraises",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        try:
+                            save()
+                        except IntegrityError:
+                            transaction.set_rollback(True)
+                            handle()
+                """,
+                id="handler-sets-rollback",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        try:
+                            parse(payload)
+                        except (KeyError, ValueError):
+                            handle()
+                """,
+                id="non-database-exception",
+            ),
+            pytest.param(
+                """
+                def f():
+                    try:
+                        save()
                     except IntegrityError:
                         handle()
-        """)
+                """,
+                id="no-atomic-block-at-all",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with open(path) as fh:
+                        try:
+                            save(fh)
+                        except IntegrityError:
+                            handle()
+                """,
+                id="non-atomic-context-manager",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        try:  # atomic-catch-ok: no DB access, parses an API response
+                            parse(payload)
+                        except Exception:
+                            handle()
+                """,
+                id="marker-on-try",
+            ),
+            pytest.param(
+                """
+                def f():
+                    with transaction.atomic():
+                        try:
+                            parse(payload)
+                        except Exception:  # atomic-catch-ok: no DB access
+                            handle()
+                """,
+                id="marker-on-handler",
+            ),
+        ],
+    )
+    def test_no_violation_reported(self, source):
+        """Patterns that leave the block, force a rollback, or can't break the transaction."""
+        assert not violations(source)
 
-    def test_handler_that_reraises(self):
-        assert not violations("""
+    @pytest.mark.parametrize(
+        "handler_body",
+        [
+            pytest.param("if flaky:\n                            raise", id="conditional-raise"),
+            pytest.param(
+                "if flaky:\n                            transaction.set_rollback(True)", id="conditional-set-rollback"
+            ),
+        ],
+    )
+    def test_escape_hatches_must_be_unconditional(self, handler_body):
+        """A `raise`/`set_rollback` nested in an `if` leaves the other branches swallowing.
+
+        Both helpers scope to the top level of the handler for this reason; they must stay
+        consistent, or the conditional-swallow case slips through as a false negative.
+        """
+        assert violations(f"""
             def f():
                 with transaction.atomic():
                     try:
                         save()
                     except IntegrityError:
-                        log.exception("boom")
-                        raise
-        """)
-
-    def test_handler_that_sets_rollback(self):
-        assert not violations("""
-            def f():
-                with transaction.atomic():
-                    try:
-                        save()
-                    except IntegrityError:
-                        transaction.set_rollback(True)
-                        handle()
-        """)
-
-    def test_non_database_exception(self):
-        assert not violations("""
-            def f():
-                with transaction.atomic():
-                    try:
-                        parse(payload)
-                    except (KeyError, ValueError):
-                        handle()
-        """)
-
-    def test_try_outside_any_atomic_block(self):
-        assert not violations("""
-            def f():
-                try:
-                    save()
-                except IntegrityError:
-                    handle()
-        """)
-
-    def test_non_atomic_context_manager(self):
-        assert not violations("""
-            def f():
-                with open(path) as fh:
-                    try:
-                        save(fh)
-                    except IntegrityError:
-                        handle()
-        """)
-
-    def test_marker_comment_on_try(self):
-        assert not violations("""
-            def f():
-                with transaction.atomic():
-                    try:  # atomic-catch-ok: no DB access, parses an API response
-                        parse(payload)
-                    except Exception:
-                        handle()
-        """)
-
-    def test_marker_comment_on_handler(self):
-        assert not violations("""
-            def f():
-                with transaction.atomic():
-                    try:
-                        parse(payload)
-                    except Exception:  # atomic-catch-ok: no DB access
+                        {handler_body}
                         handle()
         """)
 

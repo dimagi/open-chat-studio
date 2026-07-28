@@ -477,16 +477,23 @@ class AttachMediaTool(CustomBaseTool):
         )
         return chat_attachment
 
-    @transaction.atomic
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
             return "A maximum of 5 files can be attached."
 
         response = []
         include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
+        # Resolve the parent row here, outside the per-file blocks below. `chat_attachment` is a
+        # cached_property, so leaving it to be evaluated on the first loop iteration puts its
+        # get_or_create inside that file's transaction: if the file fails, the rollback drops the row
+        # while the cached object keeps its id, and the m2m table's deferred foreign key then fails
+        # at COMMIT — after every later file has been reported attached.
         chat_attachment = self.chat_attachment
         for file_id in file_ids:
             try:
+                # One transaction per file, so a failed attachment rolls back on its own and the
+                # loop can keep going. Catching a DB error without leaving the block would abort
+                # the transaction and break every remaining iteration.
                 with transaction.atomic():
                     file = File.objects.get(id=file_id)
                     chat_attachment.files.add(file_id)

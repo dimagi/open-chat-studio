@@ -153,11 +153,17 @@ def _always_reraises(handler: ast.ExceptHandler) -> bool:
 
 def _marks_rollback(handler: ast.ExceptHandler) -> bool:
     """Whether the handler calls ``transaction.set_rollback(...)``, which is the
-    documented way to force the enclosing block to roll back after swallowing."""
+    documented way to force the enclosing block to roll back after swallowing.
+
+    Scoped like ``_always_reraises``: only a call at the top level of the handler
+    counts. One nested in an ``if`` leaves the branches that skip it swallowing the
+    error with the transaction still broken.
+    """
     return any(
-        _attr_name(node.func) == "set_rollback"
-        for node in ast.walk(ast.Module(body=handler.body, type_ignores=[]))
-        if isinstance(node, ast.Call)
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Call)
+        and _attr_name(stmt.value.func) == "set_rollback"
+        for stmt in handler.body
     )
 
 
@@ -202,15 +208,29 @@ def find_violations(source: str, path: Path) -> list[Finding]:
     return sorted(findings, key=lambda f: f.lineno)
 
 
+def _unsafe_catch(handler: ast.ExceptHandler) -> str | None:
+    """What makes this handler unsafe inside an atomic block, or None if it is safe.
+
+    Safe means one of: it doesn't catch a database error at all; it re-raises, so the
+    block rolls back on the way out; or it forces the rollback itself.
+    """
+    caught = _catches_db_error(handler)
+    if caught is None:
+        return None
+    if _always_reraises(handler):
+        return None
+    if _marks_rollback(handler):
+        return None
+    return caught
+
+
 def _check_try(try_node: ast.Try, atomic_lineno: int, function: str, lines: list[str], path: Path) -> list[Finding]:
     if _body_is_savepointed(try_node):
         return []
     findings = []
     for handler in try_node.handlers:
-        caught = _catches_db_error(handler)
-        if caught is None or _always_reraises(handler) or _marks_rollback(handler):
-            continue
-        if _has_marker(lines, try_node, handler):
+        caught = _unsafe_catch(handler)
+        if caught is None or _has_marker(lines, try_node, handler):
             continue
         findings.append(
             Finding(

@@ -802,11 +802,11 @@ class TestAttachMediaTool(BaseTestAgentTool):
     def test_integrity_error_on_one_file_does_not_break_the_others(self, session):
         """A DB error attaching one file must leave the loop able to attach the rest.
 
-        Regression test: `action()` is wrapped in `transaction.atomic`, and the
-        `except IntegrityError` used to sit inside that block. Postgres aborts the
-        transaction on the failed insert, so the next iteration's `File.objects.get()`
-        raised "An error occurred in the current transaction. You can't execute queries
-        until the end of the 'atomic' block" instead of attaching the remaining files.
+        Regression test: `action()` used to be wrapped in a single `transaction.atomic`, with the
+        `except IntegrityError` inside it. Postgres aborts the transaction on the failed insert, so
+        the next iteration's `File.objects.get()` raised "An error occurred in the current
+        transaction. You can't execute queries until the end of the 'atomic' block" instead of
+        attaching the remaining files. Each file now gets its own transaction.
         """
         chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
         failing_file, ok_file = FileFactory.create_batch(2)
@@ -840,11 +840,11 @@ class TestAttachMediaTool(BaseTestAgentTool):
 
     @pytest.mark.django_db(transaction=True)
     def test_first_file_failing_does_not_orphan_the_attachment_row(self, session):
-        """The ChatAttachment row must survive a rollback of the first file's savepoint.
+        """The ChatAttachment row must survive a rollback of the first file's transaction.
 
-        `chat_attachment` is a cached_property, so it used to be created lazily inside the first
-        file's savepoint. Rolling that back removed the row while the cached object kept its id,
-        and the m2m table's deferred foreign key then failed at COMMIT — after the tool had
+        `chat_attachment` is a cached_property, so it would otherwise be created lazily inside the
+        first file's transaction. Rolling that back removes the row while the cached object keeps
+        its id, and the m2m table's deferred foreign key then fails at COMMIT — after the tool has
         already reported the later files as attached.
 
         Needs a real commit (`transaction=True`): the deferred constraint is only checked there.
