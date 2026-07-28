@@ -297,11 +297,6 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     def clean(self):
         """Normalise hmac_secret so the stored value is always a string.
-
-        ObfuscatingMixin restores the unmasked original for an unchanged field, which is
-        None for a provider saved before this field existed. Without this, config could
-        hold None and slip past a `not hmac_secret` check. Stripping also makes a
-        whitespace-only secret count as unset.
         """
         cleaned_data = super().clean()
         cleaned_data["hmac_secret"] = (cleaned_data.get("hmac_secret") or "").strip()
