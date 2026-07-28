@@ -39,7 +39,7 @@ flowchart TD
 | Process | Command | Notes |
 |---------|---------|-------|
 | `web` | `gunicorn --bind 0.0.0.0:$PORT --workers 2 --threads 8 --timeout 0 config.wsgi:application` | Scale horizontally. |
-| `celery_worker` | `celery -A config worker -l INFO --pool gevent --concurrency 100` | Handles all async tasks (LLM calls, messaging, evaluations). |
+| `celery_worker` | `celery -A config worker -l INFO --pool threads --concurrency 20` | Handles all async tasks (LLM calls, messaging, evaluations). |
 | `celery_beat` | `celery -A config beat -l INFO` | Scheduled/periodic tasks. **Run exactly one instance.** |
 
 ## Docker Image

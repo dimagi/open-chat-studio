@@ -29,7 +29,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
-from apps.channels import meta_webhook, tasks
+from apps.channels import meta_webhook, tasks, turn_webhook
 from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsapp_message
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
@@ -127,6 +127,7 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
 
 @csrf_exempt
+@require_POST
 def new_turn_message(request, experiment_id: uuid):
     channel = tasks.get_experiment_channel(
         ChannelPlatform.WHATSAPP,
@@ -138,7 +139,16 @@ def new_turn_message(request, experiment_id: uuid):
 
     set_current_team(channel.team)
     request.experiment = channel.experiment  # used by RequestLoggingMiddleware
-    message_data = json.loads(request.body.decode("utf-8"))
+    try:
+        message_data = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        log.debug("Turn.io webhook received invalid JSON")
+        return HttpResponseBadRequest("Invalid JSON.")
+
+    if not isinstance(message_data, dict):
+        log.debug("Turn.io webhook received a non-object JSON body")
+        return HttpResponseBadRequest("Invalid JSON.")
+
     if "messages" not in message_data:
         # Normal inbound messages should have a "messages" key, so ignore everything else
         return HttpResponse()
@@ -147,8 +157,53 @@ def new_turn_message(request, experiment_id: uuid):
         log.info("Ignoring non-conversational Turn.io WhatsApp webhook")
         return HttpResponse()
 
+    # Verification runs after the ignore-filters so that unsigned provider callbacks,
+    # which are discarded either way, are not rejected in the customer's Turn dashboard.
+    # A failure here returns 401 (rather than Meta's 200-and-drop) because Turn surfaces
+    # the failure in the customer's own Turn dashboard and, unlike Meta, does not
+    # auto-disable a webhook after sustained non-2xx responses.
+    if not _turn_request_is_authorised(request, channel):
+        return HttpResponse("Invalid signature.", status=401)
+
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
     return HttpResponse()
+
+
+def _turn_request_is_authorised(request, channel: ExperimentChannel) -> bool:
+    """Check whether the Turn.io webhook request is authorised: True if the provider has
+    no secret configured (fail-open, see below) or if the request's signature matches.
+
+    The secret is optional by design: a provider that has not yet copied it across from
+    its own Turn account is left unverified rather than having its live traffic dropped.
+    See dimagi/open-chat-studio#2346.
+    """
+    hmac_secret = (channel.messaging_provider.config.get("hmac_secret") or "").strip()
+    if not hmac_secret:
+        log.info(
+            "Turn.io webhook not verified: no HMAC secret configured for provider %s",
+            channel.messaging_provider_id,
+        )
+        return True
+
+    signature = request.headers.get(turn_webhook.SIGNATURE_HEADER, "")
+    if turn_webhook.verify_signature(request.body, signature, hmac_secret):
+        return True
+
+    if not signature:
+        log.warning(
+            "Turn.io webhook signature verification failed for provider %s (team %s): "
+            "no signature header present, Turn may not be configured to sign requests",
+            channel.messaging_provider_id,
+            channel.team.slug,
+        )
+    else:
+        log.warning(
+            "Turn.io webhook signature verification failed for provider %s (team %s): "
+            "signature did not match, the configured secret may be incorrect",
+            channel.messaging_provider_id,
+            channel.team.slug,
+        )
+    return False
 
 
 def new_api_message_schema(versioned: bool):

@@ -190,7 +190,6 @@ docs = [
 
 prod = [
     "gunicorn",
-    "gevent==25.*"
 ]
 
 [tool.uv]
@@ -204,6 +203,8 @@ format_attribute_template_tags=true
 use_gitignore=true
 indent=2
 ignore="H030,H031,H021,H006,H013,H014,T003"
+# django-waffle block tags, unknown to djLint's parser
+custom_blocks="flag,switch"
 
 [tool.ty]
 

@@ -72,7 +72,7 @@ services:
 
   celery_worker:
     <<: *app
-    command: celery -A config worker -l INFO --pool gevent --concurrency 100
+    command: celery -A config worker -l INFO --pool threads --concurrency 20
     depends_on:
       migrate:
         condition: service_completed_successfully

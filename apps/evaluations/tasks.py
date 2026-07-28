@@ -387,6 +387,10 @@ def _drive_run(run_id: int) -> None:
 def coordinate_evaluation_runs() -> None:
     """Beat task (every 30s): drive every active evaluation run one tick.
 
+    The only thing that dispatches evaluation work. `EvaluationConfig.run` just creates
+    a PENDING run; this sweep's PENDING branch starts it, so a newly created run waits
+    up to one beat interval before its first batch goes out.
+
     Stateless between ticks — any work lost to a deploy is recomputed and repaired
     on the next tick. Overlapping sweeps partition runs via select_for_update(skip_locked).
     """
@@ -467,18 +471,6 @@ def _publish_tick(run: EvaluationRun, result: "_TickResult") -> None:
     else:
         _publish_progress(run.job_id, result.done, result.total)
         _update_taskbadger(run, value=result.done, value_max=result.total)
-
-
-def _mark_run_failed(run_id: int, message: str) -> None:
-    run = EvaluationRun.objects.filter(id=run_id).first()
-    if run is None:
-        logger.warning("EvaluationRun %s vanished before it could be marked FAILED", run_id)
-        return
-    run.status = EvaluationRunStatus.FAILED
-    run.error_message = message
-    run.save(update_fields=["status", "error_message"])
-    _publish_progress(run.job_id, 0, 0, stop=True)
-    _update_taskbadger(run, value=0, value_max=0, status=StatusEnum.ERROR)
 
 
 def _maybe_apply_tag_rules(
@@ -570,19 +562,6 @@ def _create_message_history(chat: Chat, history: list[dict]) -> None:
         for idx, history_entry in enumerate(history)
     ]
     ChatMessage.objects.bulk_create(history_messages)
-
-
-@shared_task
-def run_evaluation_task(evaluation_run_id: int) -> None:
-    """Fast-path kick for a freshly created run: run one coordination tick immediately
-    so the first batch dispatches without waiting for the next beat. The beat sweep's
-    PENDING branch is the backstop if this dispatcher is lost.
-    """
-    try:
-        _drive_run(evaluation_run_id)
-    except Exception as e:
-        logger.exception(f"Error starting evaluation run {evaluation_run_id}: {e}")
-        _mark_run_failed(evaluation_run_id, str(e))
 
 
 @shared_task(base=TaskbadgerTask)

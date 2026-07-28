@@ -43,7 +43,7 @@ servers:
   workers:
     hosts:
       - your-server-ip
-    cmd: celery -A config worker -l INFO --pool gevent --concurrency 100
+    cmd: celery -A config worker -l INFO --pool threads --concurrency 20
   beat:
     hosts:
       - your-server-ip
