@@ -439,12 +439,22 @@ def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
     """
     if run.taskbadger_task_id:
         return
+    # Below the guard on purpose: one query per run, not one per tick per active run.
+    config = EvaluationConfig.objects.select_related("dataset").get(id=run.config_id)
     task = taskbadger.create_task_safe(
-        name=f"Evaluation run {run.id}",
+        name="Evaluation run",
         status=StatusEnum.PROCESSING,
         value=0,
         value_max=total,
         stale_timeout=TASKBADGER_STALE_TIMEOUT,
+        data={
+            "run_id": run.id,
+            "run_type": run.type,
+            "config_id": config.id,
+            "config_name": config.name,
+            "dataset_id": config.dataset_id,
+            "dataset_name": config.dataset.name,
+        },
     )
     if task is not None:
         run.taskbadger_task_id = task.id
