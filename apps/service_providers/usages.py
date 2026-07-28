@@ -20,6 +20,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Literal
 
 from apps.documents.models import Collection
@@ -42,14 +43,54 @@ _PARAM_KEY_BY_PROVIDER_SLUG = {
 # so showing them on the usages page just adds noise.
 _EXCLUDED_REFERENCE_MODELS = {"SyntheticVoice"}
 
+# Version pills rendered inline on a row before the remainder collapse behind a
+# "+N more" toggle. A busy chatbot can carry 25+ referencing versions; showing them
+# all inline turns one row into a paragraph.
+MAX_INLINE_VERSIONS = 8
+
+
+@dataclass
+class UsageGroup:
+    """One version family, reported as a single row.
+
+    ``head`` supplies the row's name and primary link. It is always the working
+    version — that is what owns the edit UI — even when the working version does
+    not itself reference the provider. ``versions`` holds the family members that
+    *do* reference it, working version first then ascending version number.
+
+    Unversioned objects are their own single-member family, so callers can treat
+    every row the same way.
+    """
+
+    head: object
+    versions: list = field(default_factory=list)
+
+    @property
+    def name(self) -> str:
+        return getattr(self.head, "name", None) or str(self.head)
+
+    @property
+    def visible_versions(self) -> list:
+        return self.versions[:MAX_INLINE_VERSIONS]
+
+    @property
+    def hidden_versions(self) -> list:
+        return self.versions[MAX_INLINE_VERSIONS:]
+
 
 @dataclass
 class UsageCategory:
     label: str
     items: list = field(default_factory=list)
 
+    @cached_property
+    def groups(self) -> list[UsageGroup]:
+        """``items`` collapsed to one entry per version family — what the page renders."""
+        return _group_by_version_family(self.items)
+
     def __len__(self) -> int:
-        return len(self.items)
+        """The number of rows shown, i.e. version families rather than raw objects."""
+        return len(self.groups)
 
 
 @dataclass
@@ -77,6 +118,10 @@ def get_provider_usages(provider) -> ProviderUsages:
 
     Pipeline nodes and evaluators reference providers from a JSON ``params``
     blob rather than a foreign key, so both are looked up by param key.
+
+    Each category keeps every referencing object in ``items`` but reports rows
+    through ``groups``, which collapses version families to one row apiece — so
+    ``total`` counts families, matching what the page shows.
     """
     service_provider = _service_provider_for(provider)
     params_key = _PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
@@ -140,6 +185,47 @@ def _display_key(obj) -> tuple[str, int]:
     """Sort key for usage items: case-insensitive name, then pk for stability."""
     name = getattr(obj, "name", None) or str(obj)
     return (name.lower(), obj.pk)
+
+
+def _group_by_version_family(items: list) -> list[UsageGroup]:
+    """Collapse ``items`` so each version family occupies one group.
+
+    Keyed on (model, working version id) so unrelated models that happen to share
+    a pk never merge. Objects with no ``working_version_id`` are their own family,
+    which covers both unversioned models and working versions.
+    """
+    families: dict[tuple[str, int], list] = defaultdict(list)
+    for obj in items:
+        families[(obj.__class__.__name__, _family_id(obj))].append(obj)
+
+    groups = [
+        UsageGroup(head=_family_head(members), versions=sorted(members, key=_version_sort_key))
+        for members in families.values()
+    ]
+    return sorted(groups, key=lambda group: _display_key(group.head))
+
+
+def _family_id(obj) -> int:
+    return getattr(obj, "working_version_id", None) or obj.pk
+
+
+def _family_head(members: list):
+    """The family's working version, preferring one that is already in ``members``."""
+    for member in members:
+        if getattr(member, "working_version_id", None) is None:
+            return member
+    # Only snapshots reference the provider. Every queryset feeding a category
+    # select_relates ``working_version`` (``_with_working_version`` for reverse-FK
+    # items, explicit ``select_related`` in the pipeline/channel/collection lookups),
+    # so this stays query-free. Any new source must do the same.
+    return members[0].get_working_version()
+
+
+def _version_sort_key(obj) -> tuple[int, int]:
+    """Working version first, then ascending version number."""
+    if getattr(obj, "working_version_id", None) is None:
+        return (0, 0)
+    return (1, getattr(obj, "version_number", None) or 0)
 
 
 def _resolve_pipeline_chatbots(pipelines: list) -> tuple[list[Experiment], list]:

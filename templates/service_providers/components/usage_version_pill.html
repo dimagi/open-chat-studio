@@ -1,0 +1,12 @@
+{% comment %}
+  A single badge on a usages row, describing one member of the row's version
+  family. Rendered by the ``usage_version_pill`` tag, which decides the label,
+  the styling and whether the badge deep-links to that version.
+{% endcomment %}
+{% if label %}
+  {% if url %}
+    <a class="{{ classes }}" href="{{ url }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</a>
+  {% else %}
+    <span class="{{ classes }}"{% if title %} title="{{ title }}"{% endif %}>{{ label }}</span>
+  {% endif %}
+{% endif %}

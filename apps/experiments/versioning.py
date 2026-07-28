@@ -300,6 +300,11 @@ class VersionsMixin:
 
     DEFAULT_EXCLUDED_KEYS = ["id", "created_at", "updated_at", "working_version", "versions", "version_number"]
 
+    # Whether ``get_absolute_url`` on a version snapshot lands on that specific version.
+    # Most versioned models reverse to their own id, which has no page of its own, so UI
+    # that wants to link to an individual version has to check this before doing so.
+    has_version_specific_url = False
+
     @transaction.atomic()
     def create_new_version(self, save=True, is_copy=False):
         """
