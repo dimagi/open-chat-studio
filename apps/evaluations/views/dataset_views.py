@@ -199,8 +199,9 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         initial = super().get_initial()
 
         # Only pre-populate sessions if there are explicit filter parameters in the URL
-        # This prevents selecting all sessions when default filters are applied
-        has_explicit_filters = any(key.startswith("filter_") for key in self.request.GET)
+        # This prevents selecting all sessions when default filters are applied. New-format
+        # filters use the f_/op_ prefixes, matching FilterParams.from_request.
+        has_explicit_filters = any(key.startswith("f_") for key in self.request.GET)
 
         if has_explicit_filters:
             # Apply the same filters to get the filtered session IDs
