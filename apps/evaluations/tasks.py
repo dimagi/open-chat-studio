@@ -170,6 +170,7 @@ def _usage_context_for(evaluation_run: EvaluationRun, session_id: int | None) ->
     return EvaluatorUsageContext(
         team_id=evaluation_run.team_id,
         evaluation_run_id=evaluation_run.id,
+        evaluation_config_id=evaluation_run.config_id,
         experiment_id=generation_experiment.get_working_version_id() if generation_experiment else None,
         session_id=session_id,
     )

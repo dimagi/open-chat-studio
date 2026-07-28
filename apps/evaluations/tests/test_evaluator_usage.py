@@ -13,7 +13,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
-from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord
+from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord, UsageSource
 from apps.evaluations.evaluators import LlmEvaluator
 from apps.evaluations.models import EvaluationConfig, EvaluationRun
 from apps.evaluations.tasks import _usage_context_for, evaluate_message
@@ -140,16 +140,21 @@ def test_judge_call_writes_usage_records(get_llm_service, llm_provider, llm_prov
 
     input_row = rows[ServiceKind.LLM_INPUT]
     assert input_row.team_id == run.team_id
+    assert input_row.source == UsageSource.EVALUATION
+    assert input_row.evaluation_config_id == config.id
     assert input_row.provider_type == _PROVIDER
     assert input_row.model_name == _MODEL
     assert input_row.quantity == 1000
     assert input_row.confidence == Confidence.EXACT
     # 1000 tokens / 1000 * $0.00015
     assert input_row.cost == Decimal("0.00015000")
-    assert input_row.extra == {"source": "evaluation", "evaluation_run_id": run.id}
+    # The run id lives in `extra` because runs get pruned; the config is the FK.
+    assert input_row.extra == {"evaluation_run_id": run.id}
     # 500 tokens / 1000 * $0.00060
     assert rows[ServiceKind.LLM_OUTPUT].cost == Decimal("0.00030000")
-    # No generation experiment on this run, and judge calls never carry a trace.
+    # Judge calls never carry a trace, and with no generation experiment there's nothing
+    # to attribute to — the shape of every session-mode run, where generation is barred.
+    # `source` is what classifies these rows, not the null columns.
     assert all(row.trace_id is None and row.experiment_id is None and row.session_id is None for row in rows.values())
 
 
@@ -185,6 +190,7 @@ def test_usage_context_links_generation_experiment_working_version():
     assert context == EvaluatorUsageContext(
         team_id=config.team_id,
         evaluation_run_id=run.id,
+        evaluation_config_id=config.id,
         experiment_id=working.id,
         session_id=42,
     )

@@ -147,6 +147,7 @@ def test_evaluate_single_message_with_bot_generation(
         usage_context=EvaluatorUsageContext(
             team_id=run.team_id,
             evaluation_run_id=run.id,
+            evaluation_config_id=config.id,
             experiment_id=experiment.get_working_version_id(),
             session_id=session_id,
         ),
@@ -177,7 +178,9 @@ def test_evaluate_single_message_handles_bot_generation_error(
     evaluator_run_mock.assert_called_once_with(
         evaluation_message,
         "",
-        usage_context=EvaluatorUsageContext(team_id=run.team_id, evaluation_run_id=run.id),
+        usage_context=EvaluatorUsageContext(
+            team_id=run.team_id, evaluation_run_id=run.id, evaluation_config_id=run.config_id
+        ),
     )
 
     # Verify result was still created

@@ -15,28 +15,29 @@ from dataclasses import dataclass
 
 from langchain_core.callbacks.base import BaseCallbackHandler
 
-from apps.cost_tracking.services.recorder import TraceContext as CostTraceContext
-from apps.cost_tracking.services.recorder import record_usage_bulk
+from apps.cost_tracking.models import UsageSource
+from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.service_providers.tracing.metrics import MetricsCollector
 
 logger = logging.getLogger("ocs.evaluations")
-
-USAGE_SOURCE = "evaluation"
 
 
 @dataclass(frozen=True)
 class EvaluatorUsageContext:
     """Attribution for the usage a single evaluator run produces.
 
-    `experiment_id`/`session_id` point at the bot generation the judge call is
-    scoring so both halves of a run's spend group together; they stay None when
-    the run has no generation experiment configured. `participant` is left off
-    deliberately — it's only ever the synthetic evaluations participant, and
-    reading it back would cost a query per evaluator per message.
+    `evaluation_config_id` is the durable "whose eval was this" link; the run id is
+    recorded in `extra` because runs are pruned. `experiment_id`/`session_id` point at
+    the bot generation the judge call is scoring so both halves of a run's spend group
+    together; they stay None when the run has no generation experiment — which is every
+    session-mode run, since generation is not supported for session-mode datasets.
+    `participant` is left off deliberately: it's only ever the synthetic evaluations
+    participant, and reading it back would cost a query per evaluator per message.
     """
 
     team_id: int
     evaluation_run_id: int
+    evaluation_config_id: int | None = None
     experiment_id: int | None = None
     session_id: int | None = None
 
@@ -71,15 +72,13 @@ def _record(collector: MetricsCollector, context: EvaluatorUsageContext) -> None
     try:
         events = list(collector.iter_cost_events())
         for event in events:
-            event.extra = {
-                **(event.extra or {}),
-                "source": USAGE_SOURCE,
-                "evaluation_run_id": context.evaluation_run_id,
-            }
+            event.extra = {**(event.extra or {}), "evaluation_run_id": context.evaluation_run_id}
         record_usage_bulk(
             events,
-            CostTraceContext(
+            UsageContext(
                 team_id=context.team_id,
+                source=UsageSource.EVALUATION,
+                evaluation_config_id=context.evaluation_config_id,
                 experiment_id=context.experiment_id,
                 session_id=context.session_id,
             ),

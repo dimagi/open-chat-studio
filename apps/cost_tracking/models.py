@@ -18,6 +18,18 @@ class ServiceKind(models.TextChoices):
     LLM_CACHE_WRITE = "llm_cache_write"
 
 
+class UsageSource(models.TextChoices):
+    """What the spend was for.
+
+    The billing rule this encodes: evaluation spend is the team's spend, but it is
+    never a chatbot's, a participant's, or a conversation's spend. Team-level totals
+    count every source; any per-entity attribution counts `CHAT` only (ADR-0048).
+    """
+
+    CHAT = "chat"
+    EVALUATION = "evaluation"
+
+
 class Confidence(models.TextChoices):
     """Provenance of a UsageRecord's token count, not its pricing state."""
 
@@ -86,11 +98,15 @@ class UsageRecord(BaseTeamModel):
     """One row per (trace, model, service_kind) bucket. Snapshots
     `unit_price` / `currency` so historical rows are stable across rate changes.
 
-    `trace` is null for LLM calls made outside the tracer (evaluator judge calls,
-    tagged `extra["source"] = "evaluation"`).
+    `trace` is null for LLM calls made outside the tracer — currently evaluator
+    judge calls, which carry `source=EVALUATION` instead.
     """
 
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    # What the spend was for. Set explicitly by every writer; the default exists so
+    # the additive migration classifies pre-existing rows (all tracer-written) as chat.
+    source = models.CharField(max_length=16, choices=UsageSource.choices, default=UsageSource.CHAT)
 
     service_kind = models.CharField(max_length=32, choices=ServiceKind.choices)
     provider_type = models.CharField(max_length=64)
@@ -108,6 +124,15 @@ class UsageRecord(BaseTeamModel):
     session = models.ForeignKey("experiments.ExperimentSession", null=True, on_delete=models.SET_NULL)
     participant = models.ForeignKey("experiments.Participant", null=True, on_delete=models.SET_NULL)
     trace = models.ForeignKey("trace.Trace", null=True, on_delete=models.SET_NULL)
+    # Which eval definition drove the spend, for `source=EVALUATION` rows. Points at
+    # the config rather than the run because runs are pruned (cleanup_old_evaluation_data)
+    # while the config is the thing whose cost anyone asks about. SET_NULL keeps the
+    # billing row when a config is deleted; `source` remains the durable classification.
+    # db_index=False: the index is created concurrently in the migration instead, since
+    # this table is high-volume and SET_NULL needs the lookup on config deletion.
+    evaluation_config = models.ForeignKey(
+        "evaluations.EvaluationConfig", null=True, blank=True, on_delete=models.SET_NULL, db_index=False
+    )
     # PROTECT so a rule with usage history can't be hard-deleted - keeps
     # `pricing_rule IS NOT NULL` as a stable historical "priced" anchor.
     pricing_rule = models.ForeignKey(PricingRule, null=True, on_delete=models.PROTECT)
@@ -122,4 +147,6 @@ class UsageRecord(BaseTeamModel):
             models.Index(fields=["team", "session", "timestamp"]),
             models.Index(fields=["team", "model_name", "timestamp"]),
             models.Index(fields=["team", "confidence", "timestamp"]),
+            models.Index(fields=["team", "source", "timestamp"]),
+            models.Index(fields=["evaluation_config"]),
         ]
