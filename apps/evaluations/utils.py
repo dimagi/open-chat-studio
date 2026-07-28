@@ -1,9 +1,13 @@
 import inspect
+import itertools
 import json
+import logging
 import re
 from collections import Counter, defaultdict
+from collections.abc import Generator
 from typing import TYPE_CHECKING, Any, cast
 
+import dictdiffer
 from django.db.models import F
 from pydantic import BaseModel, Field, create_model
 
@@ -11,7 +15,14 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
 from apps.evaluations.field_definitions import FieldDefinition
 from apps.experiments.models import ExperimentSession
+from apps.trace.models import Trace, TraceStatus
 from apps.utils.fields import sanitize_json_data as fields_sanitize_json_data
+
+logger = logging.getLogger("ocs.evaluations")
+
+# Sessions loaded per chunk when building session-mode evaluation messages. Mirrors
+# EXPORT_CHUNK_SIZE in apps.experiments.export — the same bounded-memory pattern.
+SESSION_CHUNK_SIZE = 200
 
 if TYPE_CHECKING:
     from apps.evaluations.models import EvaluationMessage
@@ -205,76 +216,127 @@ def _clean_field_name(field_name):
     return field_name or "context_variable"
 
 
-def make_session_evaluation_messages(session_external_ids: list[str], team=None) -> list["EvaluationMessage"]:
-    """Create one EvaluationMessage per session, with the full conversation as history.
+def _latest_participant_data_by_session(session_ids: list[int]) -> dict[int, dict]:
+    """Map session id -> participant_data as of each session's last completed turn.
 
-    Unlike make_evaluation_messages_from_sessions (which creates one message per human-AI pair),
-    this creates a single message per session for holistic session evaluation.
+    Queries Trace directly rather than joining through ChatMessage.input_message_trace: that
+    is a reverse FK, so joining it emits one row per Trace and duplicates messages. DISTINCT ON
+    returns a single row per session, and requiring both a non-PENDING status and an
+    output_message skips turns that are still running or never produced a reply. The
+    participant_data diff is applied to get the end-of-turn snapshot, matching
+    apps.experiments.export._get_participant_data_for_message.
     """
+    rows = (
+        Trace.objects.filter(session_id__in=session_ids, output_message__isnull=False)
+        .exclude(status=TraceStatus.PENDING)
+        .order_by("session_id", "-timestamp", "-id")
+        .distinct("session_id")
+        .values_list("session_id", "participant_data", "participant_data_diff")
+    )
+    participant_data_by_session = {}
+    for session_id, participant_data, participant_data_diff in rows:
+        participant_data = participant_data or {}
+        if participant_data_diff:
+            try:
+                participant_data = dictdiffer.patch(participant_data_diff, participant_data)
+            except (KeyError, IndexError, TypeError, ValueError):
+                # A diff that no longer applies to its snapshot must not abort the whole stream:
+                # the caller may be part-way through a multi-thousand-session clone, and every
+                # retry would fail on this same session. Fall back to the start-of-turn snapshot.
+                logger.warning("Ignoring unapplicable participant_data_diff on latest trace for session %s", session_id)
+        participant_data_by_session[session_id] = participant_data
+    return participant_data_by_session
+
+
+def _build_session_evaluation_messages(sessions: list[ExperimentSession]) -> Generator["EvaluationMessage"]:
+    """Build one EvaluationMessage per session in *sessions*, using two queries for the batch."""
     from apps.evaluations.models import (  # noqa: PLC0415 - circular: evaluations.models imports evaluations.utils
         EvaluationMessage,
     )
 
-    if not session_external_ids:
-        return []
-
-    filters = {"chat__experiment_session__external_id__in": session_external_ids}
-    if team is not None:
-        filters["chat__experiment_session__team"] = team
-    all_messages = list(
-        ChatMessage.objects.filter(**filters)
-        .annotate(
-            session_external_id=F("chat__experiment_session__external_id"),
-            experiment_public_id=F("chat__experiment_session__experiment__public_id"),
-            trace_participant_data=F("input_message_trace__participant_data"),
-            trace_session_state=F("input_message_trace__session_state"),
-        )
-        .order_by("created_at")
+    session_ids = [session.id for session in sessions]
+    history_by_chat: dict[int, list[dict]] = defaultdict(list)
+    # Grouped by chat_id (a forward field on ExperimentSession) so no join is needed, and
+    # read as values_list rather than model instances: only these three fields reach
+    # `history`, and instantiating a ChatMessage per message is what made this unbounded.
+    message_rows = (
+        ChatMessage.objects.filter(chat_id__in=[session.chat_id for session in sessions])
+        .order_by("chat_id", "created_at", "id")
+        .values_list("chat_id", "message_type", "content", "summary")
     )
+    for chat_id, message_type, content, summary in message_rows:
+        history_by_chat[chat_id].append({"message_type": message_type, "content": content, "summary": summary})
 
-    sessions: dict[str, list] = {}
-    for msg in all_messages:
-        sessions.setdefault(msg.session_external_id, []).append(msg)
+    participant_data_by_session = _latest_participant_data_by_session(session_ids)
 
-    session_map = {str(s.external_id): s for s in ExperimentSession.objects.filter(external_id__in=sessions.keys())}
-
-    result = []
-    for session_id, messages in sessions.items():
-        history = [
-            {
-                "message_type": msg.message_type,
-                "content": msg.content,
-                "summary": msg.summary,
-            }
-            for msg in messages
-        ]
-
-        participant_data = {}
-        session_state = {}
-        for msg in reversed(messages):
-            if msg.message_type == ChatMessageType.AI:
-                participant_data = msg.trace_participant_data or {}
-                session_state = msg.trace_session_state or {}
-                break
-
-        eval_message = EvaluationMessage(
-            session=session_map.get(str(session_id)),
+    for session in sessions:
+        history = history_by_chat.get(session.chat_id)
+        if not history:
+            continue  # a session with no messages produces no EvaluationMessage
+        yield EvaluationMessage(
+            session=session,
             input={},
             output={},
             history=history,
-            participant_data=participant_data,
-            session_state=session_state,
+            participant_data=participant_data_by_session.get(session.id, {}),
+            # Sourced from the session, not the trace: Trace.session_state is the snapshot taken
+            # when the trace *opened*, while post-turn state is written back to
+            # ExperimentSession.state (apps/chat/bots.py). Using the session keeps this
+            # end-of-conversation, consistent with the end-of-turn participant_data above and
+            # with how exports report session state (apps/experiments/export.py).
+            session_state=session.state or {},
             metadata={
-                "session_id": str(session_id),
-                "experiment_id": str(messages[0].experiment_public_id),
+                "session_id": str(session.external_id),
+                "experiment_id": str(session.experiment.public_id),
                 "created_mode": "clone",
             },
             input_chat_message=None,
             expected_output_chat_message=None,
         )
-        result.append(eval_message)
 
-    return result
+
+def iter_session_evaluation_messages(
+    session_external_ids: list[str], team=None, chunk_size: int | None = None
+) -> Generator["EvaluationMessage"]:
+    """Yield one EvaluationMessage per session, with the full conversation as history.
+
+    Unlike make_evaluation_messages_from_sessions (which creates one message per human-AI pair),
+    this creates a single message per session for holistic session evaluation.
+
+    Sessions are loaded one chunk at a time so memory stays flat regardless of how many were
+    selected — only one chunk's messages are resident at a time. Materialising every ChatMessage
+    across all sessions at once previously OOM-killed the worker (see #3963).
+    """
+    if not session_external_ids:
+        return
+
+    # Resolved here rather than as a default argument so the module constant stays patchable
+    # in tests, matching apps.experiments.export's use of EXPORT_CHUNK_SIZE.
+    chunk_size = chunk_size or SESSION_CHUNK_SIZE
+
+    base_qs = ExperimentSession.objects.filter(external_id__in=session_external_ids)
+    if team is not None:
+        base_qs = base_qs.filter(team=team)
+
+    # Resolve the external ids to pks once. Keyset-paginating the external_id queryset instead
+    # would re-send the whole external_id IN-list on every page — 10k bind parameters per chunk,
+    # and a hard ceiling once the statement exceeds PostgreSQL's 65535-parameter limit. A list of
+    # ints is cheap to hold (~8 bytes each) compared to the message rows it lets us avoid.
+    # ExperimentSession.Meta.ordering is ["-created_at"], so pk ordering must be explicit.
+    session_pks = list(base_qs.order_by("pk").values_list("pk", flat=True))
+
+    for pk_chunk in itertools.batched(session_pks, chunk_size, strict=False):
+        sessions = list(ExperimentSession.objects.filter(pk__in=pk_chunk).select_related("experiment").order_by("pk"))
+        yield from _build_session_evaluation_messages(sessions)
+
+
+def make_session_evaluation_messages(session_external_ids: list[str], team=None) -> list["EvaluationMessage"]:
+    """Eager wrapper around iter_session_evaluation_messages.
+
+    Only safe for small session counts; large jobs should consume the generator so memory
+    stays bounded.
+    """
+    return list(iter_session_evaluation_messages(session_external_ids, team=team))
 
 
 def make_evaluation_messages_from_sessions(message_ids_per_session: dict[str, list[str]]) -> list["EvaluationMessage"]:

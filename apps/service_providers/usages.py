@@ -25,7 +25,7 @@ from typing import Literal
 from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
-from apps.utils.deletion import get_related_objects
+from apps.utils.deletion import get_related_evaluators_queryset, get_related_objects
 
 from .utils import ServiceProvider
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 MatchMode = Literal["exact", "suffix", "contains"]
 
-_PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG = {
+_PARAM_KEY_BY_PROVIDER_SLUG = {
     ServiceProvider.llm.slug: "llm_provider_id",
 }
 
@@ -74,10 +74,15 @@ def get_provider_usages(provider) -> ProviderUsages:
     reached by any chatbot stay visible in "Unlinked Pipelines" /
     "Unlinked Channels" categories. Document sources roll up to their
     parent Collection.
+
+    Pipeline nodes and evaluators reference providers from a JSON ``params``
+    blob rather than a foreign key, so both are looked up by param key.
     """
     service_provider = _service_provider_for(provider)
-    pipeline_param_key = _PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
-    related = get_related_objects(provider, pipeline_param_key=pipeline_param_key)
+    params_key = _PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
+    related = get_related_objects(provider, pipeline_param_key=params_key)
+    if params_key:
+        related.extend(get_related_evaluators_queryset(provider, params_key))
 
     # Per-category dicts dedupe rows that are reachable through more than one
     # reverse relation (e.g. TranscriptAnalysis has both llm_provider and
@@ -165,7 +170,10 @@ def _resolve_channel_chatbots(channels: list) -> tuple[list[Experiment], list]:
     unique_channels = _dedupe_by_id(channels)
     experiment_ids = {ch.experiment_id for ch in unique_channels if ch.experiment_id}
     experiments_by_id = (
-        {exp.id: exp for exp in Experiment.objects.filter(id__in=experiment_ids).select_related("team")}
+        {
+            exp.id: exp
+            for exp in Experiment.objects.filter(id__in=experiment_ids).select_related("team", "working_version")
+        }
         if experiment_ids
         else {}
     )
@@ -192,7 +200,9 @@ def _build_document_source_categories(document_sources: list) -> list[UsageCateg
     collection_ids = {ds.collection_id for ds in document_sources if ds.collection_id}
     if not collection_ids:
         return []
-    collections = list(Collection.objects.filter(id__in=collection_ids).select_related("team").order_by("name"))
+    collections = list(
+        Collection.objects.filter(id__in=collection_ids).select_related("team", "working_version").order_by("name")
+    )
     return [UsageCategory(label="Collections", items=collections)]
 
 
@@ -209,7 +219,7 @@ def _dedupe_by_id(items: list) -> list:
 
 def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
     by_pipeline: dict[int, dict[int, object]] = defaultdict(dict)
-    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team"):
+    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team", "working_version"):
         by_pipeline[exp.pipeline_id][exp.id] = exp
 
     # Indirect link: an EventAction of type "pipeline_start" stores the
@@ -219,9 +229,10 @@ def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
         "action__action_type": EventActionType.PIPELINE_START,
         "action__params__pipeline_id__in": pipeline_id_values,
     }
+    trigger_select_related = ("action", "experiment", "experiment__team", "experiment__working_version")
     for trigger_qs in (
-        StaticTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
-        TimeoutTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
+        StaticTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
+        TimeoutTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
     ):
         for trigger in trigger_qs:
             raw_pipeline_id = trigger.action.params.get("pipeline_id")

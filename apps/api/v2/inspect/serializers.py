@@ -23,7 +23,7 @@ from apps.api.v2.inspect.channels import get_channels
 from apps.api.v2.inspect.nodes import (
     graph_digest,
     inspect_node_queryset,
-    node_render_order,
+    nodes_in_render_order,
 )
 from apps.api.v2.inspect.param_serializers import node_params_schema
 from apps.api.v2.utils import parse_custom_actions
@@ -580,16 +580,15 @@ class InspectPipelineSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(GraphSerializer())
     def get_graph(self, pipeline) -> dict:
-        # The graph digest is a topology keyed by flow_id/edges, so node order is immaterial here;
-        # the human-facing ``nodes`` list below is the one that is render-ordered. Rendered through
-        # GraphSerializer so the digest's ``flow_id`` is exposed as ``node_id`` (matching the graph
-        # node shape) rather than leaking the raw column name.
-        return GraphSerializer(graph_digest(list(pipeline.node_set.all()), pipeline.data)).data
+        # Render-ordered like ``nodes`` below so the two lists line up positionally and a given
+        # pipeline always serialises the same way. Rendered through GraphSerializer so the digest's
+        # ``flow_id`` is exposed as ``node_id`` (matching the graph node shape) rather than leaking
+        # the raw column name.
+        return GraphSerializer(graph_digest(nodes_in_render_order(pipeline), pipeline.data)).data
 
     @extend_schema_field(InspectNodeSerializer(many=True))
     def get_nodes(self, pipeline) -> list:
-        nodes = sorted(pipeline.node_set.all(), key=lambda n: (node_render_order(n), n.id))
-        return InspectNodeSerializer(nodes, many=True, context=self.context).data
+        return InspectNodeSerializer(nodes_in_render_order(pipeline), many=True, context=self.context).data
 
 
 # ── Events / triggers / actions (ADR-0025) ───────────────────────────────────────────────────────

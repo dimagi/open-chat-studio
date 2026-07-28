@@ -240,17 +240,40 @@ def _get_m2m_related_models(model):
 
 
 def get_related_objects(instance, pipeline_param_key: str | None = None) -> list:
-    from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
+    from apps.pipelines.models import (  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
+        Node,
+        Pipeline,
+    )
 
     related_objects = []
 
     for queryset in _get_related_objects_querysets(instance, pipeline_param_key):
         if queryset.model == Node:
-            related_objects.extend([node.pipeline for node in queryset.only("pipeline").all()])
-        else:
-            related_objects.extend(queryset.all())
+            # Report the owning pipelines rather than the nodes themselves. Resolving them
+            # through a subquery on the node ids keeps this to a single query (walking
+            # ``node.pipeline`` per row costs one each) and dedupes, so a pipeline with
+            # several referencing nodes is reported once.
+            #
+            # ``get_all()`` rather than ``objects``: the default manager hides archived
+            # rows, but the ``node.pipeline`` fetch this replaces went through the base
+            # manager, so archived pipelines were — and stay — visible to callers.
+            queryset = Pipeline.objects.get_all().filter(id__in=queryset.values("pipeline_id"))
+        # ``.all()`` normalises the related managers yielded above into querysets.
+        related_objects.extend(_with_working_version(queryset.all()))
 
     return related_objects
+
+
+def _with_working_version(queryset):
+    """``select_related`` the version parent when the model is versioned.
+
+    Callers render each object through its working version, which owns the edit UI
+    (see ``service_providers/components/usage_item.html``). Without this, every row
+    that is not itself a working version costs an extra query.
+    """
+    if any(field.name == "working_version" for field in queryset.model._meta.concrete_fields):
+        return queryset.select_related("working_version")
+    return queryset
 
 
 def has_related_objects(instance, pipeline_param_key: str | None = None) -> bool:
@@ -267,13 +290,28 @@ def _get_related_objects_querysets(instance, pipeline_param_key: str | None = No
         yield get_related_pipelines_queryset(instance, pipeline_param_key)
 
 
+def _params_key_filter(params_key: str, instance) -> Q:
+    """Match ``params[params_key]`` against ``instance.id`` stored as either int or str."""
+    return Q(**{f"params__{params_key}": instance.id}) | Q(**{f"params__{params_key}": str(instance.id)})
+
+
 def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = None):
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 
-    pipelines = Node.objects.filter(
-        Q(**{f"params__{pipeline_param_key}": instance.id}) | Q(**{f"params__{pipeline_param_key}": str(instance.id)})
-    )
-    return pipelines
+    return Node.objects.filter(_params_key_filter(pipeline_param_key, instance))
+
+
+def get_related_evaluators_queryset(instance, params_key: str):
+    """Evaluators referencing ``instance`` from their JSON ``params`` (no FK exists).
+
+    Deliberately not part of ``_get_related_objects_querysets``: the delete paths that
+    call it repoint pipeline-node params before deleting, but nothing repoints evaluator
+    params, so including this there would turn a silent orphan into a hard failure.
+    Callers that only want to *report* usages ask for it explicitly.
+    """
+    from apps.evaluations.models import Evaluator  # noqa: PLC0415 - circular: evaluations.models→…→deletion
+
+    return Evaluator.objects.filter(_params_key_filter(params_key, instance))
 
 
 def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):

@@ -385,15 +385,13 @@ def test_chatbot_sessions_table_view_applies_both_filters_on_one_column(client, 
     )
 
     url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    # A date range is two filters on one column, expressed as repeated f_/op_ keys (the Django
+    # test client encodes list values with doseq=True, producing f_first_message twice).
     response = client.get(
         url,
         {
-            "filter_0_column": "first_message",
-            "filter_0_operator": "after",
-            "filter_0_value": "2026-04-30",
-            "filter_1_column": "first_message",
-            "filter_1_operator": "before",
-            "filter_1_value": "2026-06-01",
+            "f_first_message": ["2026-04-30", "2026-06-01"],
+            "op_first_message": ["after", "before"],
         },
     )
 

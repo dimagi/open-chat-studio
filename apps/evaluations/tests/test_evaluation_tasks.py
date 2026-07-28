@@ -18,10 +18,10 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.tasks import (
     EVAL_SESSIONS_TTL_DAYS,
+    _drive_run,
     cleanup_old_evaluation_data,
     evaluate_message,
     run_bot_generation,
-    run_evaluation_task,
 )
 from apps.evaluations.usage import EvaluatorUsageContext
 from apps.experiments.models import ExperimentSession, Participant
@@ -363,13 +363,13 @@ def test_evaluate_message_skips_deleted_run(evaluation_run, evaluation_message):
 
 
 @pytest.mark.django_db()
-def test_run_evaluation_task_handles_deleted_run(evaluation_run):
-    """Run deleted before dispatch -> handler does not raise a second DoesNotExist."""
+def test_drive_run_handles_deleted_run(evaluation_run):
+    """Run deleted before its tick -> the coordination driver returns without raising."""
     run, _ = evaluation_run
     run_id = run.id
     run.delete()
 
-    run_evaluation_task(run_id)
+    _drive_run(run_id)
 
     assert not EvaluationRun.objects.filter(id=run_id).exists()
 
