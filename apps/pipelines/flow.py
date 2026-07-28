@@ -32,24 +32,47 @@ class FlowEdge(pydantic.BaseModel):
     targetHandle: str | None = STANDARD_INPUT_NAME
 
 
-class Flow(pydantic.BaseModel):
+class FlowWithoutNodes(pydantic.BaseModel):
+    """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0048).
+
+    Base of the flow hierarchy — ``Flow`` adds optional nodes, ``FullFlow`` requires them.
+    """
+
     # Keep unknown top-level keys (viewport) so a stored graph survives the round trip.
     model_config = pydantic.ConfigDict(extra="allow")
 
-    # Stored ``Pipeline.data`` is layout-only and carries no ``nodes`` (ADR-0048), so nodes
-    # default to empty; full nodes still arrive on the wire and are rebuilt for reads.
+    edges: list[FlowEdge]
+    errors: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class Flow(FlowWithoutNodes):
+    """A stored graph, which may or may not still list its nodes.
+
+    Layout-only ``Pipeline.data`` carries no ``nodes`` key (ADR-0048) while an un-migrated
+    blob still does, so nodes are optional here. Anywhere a *complete* graph is required,
+    use ``FullFlow`` — this model reads an omitted ``nodes`` as an empty graph.
+    """
+
     nodes: list[FlowNode] = Field(default_factory=list)
-    edges: list[FlowEdge]
-    errors: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
-class FlowWithoutNodes(pydantic.BaseModel):
-    """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0048)."""
+class FullFlow(Flow):
+    """A complete graph, as supplied by a full-graph save or an import file.
 
-    model_config = pydantic.ConfigDict(extra="allow")
+    An omitted ``nodes`` is a malformed payload, not an empty graph: treating it as empty
+    would reconcile every node row away on save. The requirement is not transport-specific
+    — any caller handing over a whole graph must state its nodes. Unknown top-level keys are
+    still preserved (inherited ``extra="allow"``), so an import file keeps its viewport.
+    """
 
-    edges: list[FlowEdge]
-    errors: dict[str, dict[str, str]] = Field(default_factory=dict)
+    nodes: list[FlowNode]
+
+
+class WireFlow(FullFlow):
+    """A complete graph arriving over HTTP. Unknown keys from a client are dropped rather
+    than persisted — which also means a POST save does not carry a viewport, unlike PATCH."""
+
+    model_config = pydantic.ConfigDict(extra="ignore")
 
 
 #: React-flow node types. ``Node.type`` (the pipeline node class name) maps onto one of
@@ -88,17 +111,6 @@ def node_position_fields(position) -> dict:
     if isinstance(x, int | float) and isinstance(y, int | float):
         return {"position_x": x, "position_y": y}
     return {}
-
-
-class WireFlow(Flow):
-    """A full-graph save payload. Unlike stored layout-only data, the wire format must
-    state the node list explicitly: an omitted ``nodes`` is a malformed payload, not an
-    empty graph — treating it as empty would delete every node row on save."""
-
-    # Unknown keys from a client are dropped rather than persisted.
-    model_config = pydantic.ConfigDict(extra="ignore")
-
-    nodes: list[FlowNode]
 
 
 class FlowPipelineData(pydantic.BaseModel):
