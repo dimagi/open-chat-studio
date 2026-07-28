@@ -35,7 +35,7 @@ configured to sign.
 
 1. In your Turn account, open the webhook configuration for the number connected to this chatbot.
 2. Copy the HMAC secret shown there. If the webhook has no secret yet, generate one in Turn first.
-3. In OCS, open **Service Providers - Messaging**, edit the Turn.io provider, paste the value into
+3. In OCS, open **Team Settings**, then in the **Messaging Providers** section edit the Turn.io provider, paste the value into
    **Webhook HMAC Secret**, and save.
 4. Send a test message through WhatsApp and confirm the bot replies.
 
