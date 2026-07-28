@@ -242,9 +242,14 @@ def is_non_conversational_whatsapp_message(message_data: dict) -> bool:
     "system" payloads have a "messages" array but no "contacts" key, so the webhook
     views use this to skip them before dispatching a task that would KeyError while
     parsing. "unsupported"/"unknown" payloads are skipped as there is nothing to process.
+
+    This runs on unauthenticated input on the Turn.io webhook (verification happens
+    after the ignore-filters, see new_turn_message), so it must not raise on a
+    malformed "messages" value - it returns False and lets the request fall through
+    to the signature guard instead.
     """
     messages = message_data.get("messages") or []
-    if not messages:
+    if not isinstance(messages, list) or not messages or not isinstance(messages[0], dict):
         return False
     return messages[0].get("type") in _NON_CONVERSATIONAL_WA_MESSAGE_TYPES
 

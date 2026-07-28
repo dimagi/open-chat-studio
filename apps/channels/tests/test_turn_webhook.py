@@ -175,3 +175,12 @@ class TestNewTurnMessageRequestHandling:
         response = client.post(url, data=body, content_type="application/json")
         assert response.status_code == 400
         task.delay.assert_not_called()
+
+    @patch("apps.channels.tasks.handle_turn_message")
+    def test_malformed_messages_value_does_not_500(self, task, client, signed_turn_channel):
+        """is_non_conversational_whatsapp_message runs on unauthenticated input, before the
+        signature guard. A malformed "messages" entry must not crash it - it should fall
+        through to the (here, failing) signature check rather than raising a 500."""
+        response = _post(client, signed_turn_channel, {"messages": [1]})
+        assert response.status_code == 401
+        task.delay.assert_not_called()
