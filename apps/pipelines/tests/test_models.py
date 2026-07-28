@@ -8,13 +8,14 @@ from apps.chat.bots import PipelineTestBot
 from apps.documents.models import CollectionFile
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
-from apps.pipelines.flow import split_flow_data
+from apps.pipelines.flow import Flow, FlowNode, split_flow_data
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import (
     assistant_node,
     boolean_node,
+    content_flow_node,
     create_pipeline_model,
     create_runnable,
     end_node,
@@ -447,13 +448,14 @@ class TestUpdateNodesFromData:
         pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
             {
-                "start": {"type": "StartNode", "label": "", "params": {"name": "start"}},
-                "template-1": {
-                    "type": "RenderTemplate",
-                    "label": "Template",
-                    "params": {"name": "template-1", "template_string": "{{ input }}"},
-                },
-                "end": {"type": "EndNode", "label": "", "params": {"name": "end"}},
+                "start": content_flow_node("start", "StartNode", params={"name": "start"}),
+                "template-1": content_flow_node(
+                    "template-1",
+                    "RenderTemplate",
+                    label="Template",
+                    params={"name": "template-1", "template_string": "{{ input }}"},
+                ),
+                "end": content_flow_node("end", "EndNode", params={"name": "end"}),
             }
         )
 
@@ -468,7 +470,7 @@ class TestUpdateNodesFromData:
         pipeline = PipelineFactory.create()
         pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
-            {"n1": {"type": "StartNode", "params": {"name": "start"}, "position": {"x": 10.7, "y": -3.2}}}
+            {"n1": content_flow_node("n1", "StartNode", params={"name": "start"}, position={"x": 10.7, "y": -3.2})}
         )
 
         node = Node.objects.get(pipeline=pipeline, flow_id="n1")
@@ -479,10 +481,9 @@ class TestUpdateNodesFromData:
     @pytest.mark.parametrize(
         "position",
         [
-            pytest.param(None, id="absent"),
+            pytest.param({}, id="absent"),
             pytest.param({"x": "abc", "y": 2}, id="non-numeric"),
             pytest.param({"x": 1}, id="missing-axis"),
-            pytest.param({}, id="empty"),
         ],
     )
     def test_unusable_position_is_not_written(self, position):
@@ -491,33 +492,47 @@ class TestUpdateNodesFromData:
         pipeline = PipelineFactory.create()
         pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
-            {"n1": {"type": "StartNode", "params": {"name": "start"}, "position": position}}
+            {"n1": content_flow_node("n1", "StartNode", params={"name": "start"}, position=position)}
         )
 
         node = Node.objects.get(pipeline=pipeline, flow_id="n1")
         assert node.position is None
 
-    def test_membership_only_entries_leave_rows_untouched(self):
+    @pytest.mark.parametrize(
+        "make_entry",
+        [
+            pytest.param(lambda flow_id: None, id="none"),
+            pytest.param(lambda flow_id: FlowNode(id=flow_id), id="content-less-flow-node"),
+        ],
+    )
+    def test_membership_only_entries_leave_rows_untouched(self, make_entry):
         """PATCH saves carry content only for changed nodes; the rest are membership-only
-        (None) and their rows keep their content."""
+        (no content) and their rows keep their content."""
         start, template, end = start_node(), render_template_node(), end_node()
         pipeline = create_pipeline_model([start, template, end])
         row = Node.objects.get(pipeline=pipeline, flow_id=template["id"])
         original_params = row.params
 
-        pipeline.update_nodes_from_data({node["id"]: None for node in (start, template, end)})
+        pipeline.update_nodes_from_data({node["id"]: make_entry(node["id"]) for node in (start, template, end)})
 
         row.refresh_from_db()
         assert row.params == original_params
         assert Node.objects.filter(pipeline=pipeline).count() == 3
 
-    def test_unknown_node_without_mapping_entry_raises(self):
-        """A membership-only entry (None) with no existing row is an error."""
+    @pytest.mark.parametrize(
+        "make_entry",
+        [
+            pytest.param(lambda flow_id: None, id="none"),
+            pytest.param(lambda flow_id: FlowNode(id=flow_id), id="content-less-flow-node"),
+        ],
+    )
+    def test_unknown_node_without_mapping_entry_raises(self, make_entry):
+        """A membership-only entry with no existing row is an error."""
         start, end = start_node(), end_node()
         pipeline = create_pipeline_model([start, end])
 
         with pytest.raises(ValueError, match="ghost"):
-            pipeline.update_nodes_from_data({start["id"]: None, end["id"]: None, "ghost": None})
+            pipeline.update_nodes_from_data({start["id"]: None, end["id"]: None, "ghost": make_entry("ghost")})
 
     def test_re_adding_archived_node_flow_id_creates_fresh_working_node(self):
         """Removing a node that has versions archives it; revert re-introduces the same
@@ -532,7 +547,8 @@ class TestUpdateNodesFromData:
 
         def set_nodes(node_dicts):
             data = {"edges": [], "nodes": [{"id": n["id"], "data": n} for n in node_dicts]}
-            pipeline.data, node_data = split_flow_data(data)
+            layout, node_data = split_flow_data(Flow(**data))
+            pipeline.data = layout.model_dump()
             pipeline.update_nodes_from_data(node_data)
 
         # remove the template node; it has a version so it is archived rather than deleted
@@ -801,7 +817,8 @@ class TestPipelineValidation:
             flow_nodes.append({"id": node["id"], "data": node})
 
         pipeline = PipelineFactory.create()
-        pipeline.data, node_data = split_flow_data({"edges": edges, "nodes": flow_nodes})
+        layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))
+        pipeline.data = layout.model_dump()
         pipeline.update_nodes_from_data(node_data)
         errors = pipeline.validate()
         assert not errors

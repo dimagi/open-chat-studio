@@ -1,111 +1,78 @@
 import pytest
 
-from apps.pipelines.flow import FlowNode, node_position_fields, react_flow_node_type, split_flow_data
+from apps.pipelines.flow import Flow, FlowNode, node_position_fields, react_flow_node_type, split_flow_data
 
 
-def _full_flow_data():
-    """A graph in the old on-the-wire format: node content embedded under each node's "data" key."""
-    return {
-        "nodes": [
-            {
-                "id": "start-1",
-                "type": "startNode",
-                "position": {"x": 100, "y": 200},
-                "data": {"id": "start-1", "type": "StartNode", "label": "", "params": {"name": "start"}},
-            },
-            {
-                "id": "llm-1",
-                "type": "pipelineNode",
-                "position": {"x": 300, "y": 0},
-                "data": {
-                    "id": "llm-1",
-                    "type": "LLMResponseWithPrompt",
-                    "label": "LLM",
-                    "params": {"name": "llm-1", "prompt": "Be helpful"},
+def _full_flow():
+    """A full graph: every node carries its content under ``data``."""
+    return Flow(
+        **{
+            "nodes": [
+                {
+                    "id": "start-1",
+                    "type": "startNode",
+                    "position": {"x": 100, "y": 200},
+                    "data": {"id": "start-1", "type": "StartNode", "label": "", "params": {"name": "start"}},
                 },
-            },
-        ],
-        "edges": [{"id": "e1", "source": "start-1", "target": "llm-1"}],
-        "viewport": {"x": 0, "y": 0, "zoom": 1},
-    }
+                {
+                    "id": "llm-1",
+                    "type": "pipelineNode",
+                    "position": {"x": 300, "y": 0},
+                    "data": {
+                        "id": "llm-1",
+                        "type": "LLMResponseWithPrompt",
+                        "label": "LLM",
+                        "params": {"name": "llm-1", "prompt": "Be helpful"},
+                    },
+                },
+            ],
+            "edges": [{"id": "e1", "source": "start-1", "target": "llm-1"}],
+            "viewport": {"x": 0, "y": 0, "zoom": 1},
+        }
+    )
 
 
 class TestSplitFlowData:
-    def test_drops_the_nodes_key_from_layout(self):
-        layout, _ = split_flow_data(_full_flow_data())
+    def test_the_layout_holds_no_nodes(self):
+        layout, _ = split_flow_data(_full_flow())
 
-        assert "nodes" not in layout
+        assert "nodes" not in layout.model_dump()
 
-    def test_extracts_node_content_and_position_by_flow_id(self):
-        _, node_data = split_flow_data(_full_flow_data())
+    def test_maps_content_carrying_nodes_to_themselves(self):
+        flow = _full_flow()
+        _, node_data = split_flow_data(flow)
 
-        assert node_data == {
-            "start-1": {
-                "type": "StartNode",
-                "label": "",
-                "params": {"name": "start"},
-                "position": {"x": 100, "y": 200},
-            },
-            "llm-1": {
-                "type": "LLMResponseWithPrompt",
-                "label": "LLM",
-                "params": {"name": "llm-1", "prompt": "Be helpful"},
-                "position": {"x": 300, "y": 0},
-            },
-        }
+        assert node_data == {"start-1": flow.nodes[0], "llm-1": flow.nodes[1]}
+        assert node_data["start-1"].data.type == "StartNode"
+        assert node_data["start-1"].position == {"x": 100, "y": 200}
 
     def test_preserves_edges_and_unknown_top_level_keys(self):
-        data = _full_flow_data()
-        layout, _ = split_flow_data(data)
+        flow = _full_flow()
+        layout, _ = split_flow_data(flow)
 
-        assert layout["edges"] == data["edges"]
-        assert layout["viewport"] == data["viewport"]
+        assert layout.edges == flow.edges
+        assert layout.model_dump()["viewport"] == {"x": 0, "y": 0, "zoom": 1}
 
     def test_content_less_nodes_are_membership_only(self):
-        """A node with no embedded ``data`` maps to None: it stays part of the graph
-        membership (so its row must already exist) but supplies no content."""
-        data = {
-            "nodes": [{"id": "start-1", "type": "startNode", "position": {"x": 1, "y": 2}}],
-            "edges": [],
-        }
-        layout, node_data = split_flow_data(data)
+        """A node with no ``data`` maps to None: it stays part of the graph membership (so its
+        row must already exist) but supplies no content."""
+        flow = Flow(nodes=[{"id": "start-1", "type": "startNode", "position": {"x": 1, "y": 2}}], edges=[])
 
-        assert "nodes" not in layout
-        assert layout["edges"] == []
+        layout, node_data = split_flow_data(flow)
+
+        assert layout.edges == []
         assert node_data == {"start-1": None}
 
-    def test_does_not_mutate_input(self):
-        data = _full_flow_data()
-        split_flow_data(data)
+    def test_does_not_mutate_the_flow(self):
+        flow = _full_flow()
+        split_flow_data(flow)
 
-        assert "data" in data["nodes"][0]
+        assert [node.data.type for node in flow.nodes] == ["StartNode", "LLMResponseWithPrompt"]
 
-    @pytest.mark.parametrize(
-        "node",
-        [
-            pytest.param({"id": "n1"}, id="only-id"),
-            pytest.param({"id": "n1", "type": "pipelineNode"}, id="no-position"),
-        ],
-    )
-    def test_content_less_nodes_yield_none_entries(self, node):
-        layout, node_data = split_flow_data({"nodes": [node], "edges": []})
+    def test_flow_without_nodes_yields_no_membership(self):
+        layout, node_data = split_flow_data(Flow(edges=[]))
 
-        assert "nodes" not in layout
-        assert node_data == {"n1": None}
-
-    def test_missing_label_and_params_get_defaults(self):
-        data = {
-            "nodes": [{"id": "n1", "data": {"id": "n1", "type": "StartNode"}}],
-            "edges": [],
-        }
-        _, node_data = split_flow_data(data)
-
-        assert node_data == {"n1": {"type": "StartNode", "label": "", "params": {}, "position": None}}
-
-    def test_data_without_nodes_key_passes_through(self):
-        layout, node_data = split_flow_data({"edges": []})
-
-        assert layout == {"edges": []}
+        assert layout.edges == []
         assert node_data == {}
 
 

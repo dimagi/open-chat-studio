@@ -5,18 +5,28 @@ Never touches the database directly — the caller (the PATCH view) is responsib
 for persisting the merged graph and calling update_nodes_from_data().
 """
 
-from apps.pipelines.flow import EdgeDiff, Flow, NodeDiff, PipelineDiffPayload, split_flow_data
+from apps.pipelines.flow import (
+    EdgeDiff,
+    Flow,
+    FlowNode,
+    FlowWithoutNodes,
+    NodeDiff,
+    PipelineDiffPayload,
+    split_flow_data,
+)
 
 
-def apply_pipeline_patch(current_flow: dict, patch: PipelineDiffPayload) -> tuple[dict, dict[str, dict | None]]:
-    """Apply a semantic graph diff to ``current_flow`` and return ``(layout_data, node_data)``.
+def apply_pipeline_patch(
+    current_flow: dict, patch: PipelineDiffPayload
+) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
+    """Apply a semantic graph diff to ``current_flow`` and return ``(layout, node_data)``.
 
     ``current_flow`` is the full current graph — ``Pipeline.flow_data`` (nodes rebuilt from
     the rows) merged with any stored top-level keys (viewport) — because ``Pipeline.data``
     no longer lists nodes (ADR-0048).
 
-    ``layout_data`` is the merged graph with the ``nodes`` key dropped (edges, viewport and
-    unknown top-level keys preserved) and can be assigned to ``Pipeline.data``.
+    ``layout`` is the merged graph minus its nodes (edges, viewport and unknown top-level
+    keys preserved), ready to be dumped into ``Pipeline.data``.
 
     ``node_data`` is the complete membership of the merged graph, ready for
     ``update_nodes_from_data(node_data)`` — which the caller must still invoke after saving.
@@ -31,15 +41,9 @@ def apply_pipeline_patch(current_flow: dict, patch: PipelineDiffPayload) -> tupl
     _apply_node_diff(flow, patch.nodes)
     _apply_edge_diff(flow, patch.edges)
 
-    merged = flow.model_dump()
-    # model_dump only includes fields defined on the Flow model.
-    # Preserve extra keys like viewport.
-    for key in current_flow:
-        if key not in merged:
-            merged[key] = current_flow[key]
-    layout_data, _ = split_flow_data(merged)
+    layout, _ = split_flow_data(flow)
 
-    return layout_data, _collect_node_data(flow, patch, existing_node_ids)
+    return layout, _collect_node_data(flow, patch, existing_node_ids)
 
 
 def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:
@@ -85,7 +89,9 @@ def _apply_edge_diff(flow: Flow, diff: EdgeDiff) -> None:
     flow.edges = list(edge_map.values())
 
 
-def _collect_node_data(flow: Flow, patch: PipelineDiffPayload, existing_node_ids: set[str]) -> dict[str, dict | None]:
+def _collect_node_data(
+    flow: Flow, patch: PipelineDiffPayload, existing_node_ids: set[str]
+) -> dict[str, FlowNode | None]:
     """Complete membership mapping for the merged graph: content where the patch carries it,
     ``None`` (membership only) everywhere else.
 
@@ -99,16 +105,8 @@ def _collect_node_data(flow: Flow, patch: PipelineDiffPayload, existing_node_ids
         if node.id not in existing_node_ids or node.id in deleted_ids:
             content_nodes.setdefault(node.id, node)
 
-    node_data: dict[str, dict | None] = {}
+    node_data: dict[str, FlowNode | None] = {}
     for node in flow.nodes:
         source = content_nodes.get(node.id)
-        if source is not None and source.data is not None:
-            node_data[node.id] = {
-                "type": source.data.type,
-                "label": source.data.label,
-                "params": source.data.params,
-                "position": source.position,
-            }
-        else:
-            node_data[node.id] = None
+        node_data[node.id] = source if source is not None and source.data is not None else None
     return node_data

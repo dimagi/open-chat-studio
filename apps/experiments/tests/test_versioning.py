@@ -356,7 +356,7 @@ class TestCopyExperiment:
                     },
                 },
             ],
-            "errors": {"test": "value"},
+            "errors": {"render": {"template_string": "bad template"}},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
         pipeline = PipelineFactory.create(data=pipeline_data)
@@ -377,14 +377,18 @@ class TestCopyExperiment:
                     "id": "start->render",
                     "source": node_ids["StartNode"],
                     "target": node_ids["RenderTemplate"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
                 },
                 {
                     "id": "render->end",
                     "source": node_ids["RenderTemplate"],
                     "target": node_ids["EndNode"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
                 },
             ],
-            "errors": {"test": "value"},
+            "errors": {"render": {"template_string": "bad template"}},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
         copied_render = experiment_copy.pipeline.node_set.get(type="RenderTemplate")

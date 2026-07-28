@@ -4,7 +4,7 @@ from uuid import uuid4
 from langgraph.graph.state import CompiledStateGraph
 
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
-from apps.pipelines.flow import split_flow_data
+from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, react_flow_node_type, split_flow_data
 from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes import nodes
@@ -75,9 +75,22 @@ def create_pipeline_model(
     flow_nodes = []
     for node in nodes:
         flow_nodes.append({"id": node["id"], "data": node})
-    pipeline.data, node_data = split_flow_data({"edges": edges, "nodes": flow_nodes})
+    layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))
+    pipeline.data = layout.model_dump()
     pipeline.update_nodes_from_data(node_data)
     return pipeline
+
+
+def content_flow_node(
+    flow_id: str, node_type: str, label: str = "", params: dict | None = None, position: dict | None = None
+) -> FlowNode:
+    """A content-carrying ``FlowNode``, ready to pass to ``Pipeline.update_nodes_from_data``."""
+    return FlowNode(
+        id=flow_id,
+        type=react_flow_node_type(node_type),
+        position=position or {},
+        data=FlowNodeData(id=flow_id, type=node_type, label=label, params=params or {}),
+    )
 
 
 def start_node():

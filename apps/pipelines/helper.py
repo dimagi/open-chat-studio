@@ -1,7 +1,7 @@
 import copy
 from uuid import uuid4
 
-from apps.pipelines.flow import FlowNode, FlowNodeData, split_flow_data
+from apps.pipelines.flow import FlowNode, FlowNodeData
 
 
 def duplicate_pipeline_with_new_ids(pipeline_data, node_types: dict[str, str]):
@@ -63,9 +63,9 @@ def create_pipeline_with_nodes(team, name, middle_node=None):
 def _create_pipeline(team, name, all_flow_nodes, edges):
     from apps.pipelines.models import Pipeline  # noqa: PLC0415 - circular: models.py imports helper at module level
 
-    layout_data, node_data = split_flow_data({"nodes": [node.model_dump() for node in all_flow_nodes], "edges": edges})
-    pipeline = Pipeline.objects.create(team=team, name=name, data=layout_data)
-    pipeline.update_nodes_from_data(node_data)
+    # Stored data is layout-only (ADR-0048): the nodes go to their own rows.
+    pipeline = Pipeline.objects.create(team=team, name=name, data={"edges": edges})
+    pipeline.update_nodes_from_data({node.id: node for node in all_flow_nodes})
     return pipeline
 
 

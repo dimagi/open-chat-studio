@@ -133,21 +133,15 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    def update_nodes_from_data(self, node_data: dict[str, dict | None]) -> None:
+    def update_nodes_from_data(self, node_data: dict[str, FlowNode | None]) -> None:
         """Reconcile this pipeline's ``Node`` rows against ``node_data``.
 
-        ``node_data`` is the complete graph membership: its keys are every node id in the
-        graph (``self.data`` no longer lists nodes — ADR-0048). Rows whose flow_id is absent
-        from the mapping are deleted, or archived when they have versions.
-
-        Each entry's value is either content — ``{"type", "label", "params", "position"}``
-        for nodes whose content originates outside the database (UI saves, imports, creation,
-        revert), used to create or update the row — or ``None`` (membership only), which
-        leaves an existing row untouched and requires that a row already exists. A ``None``
-        entry with no backing row is an error (the graph references content nobody supplied).
-
-        ``position`` is written to the row's position columns, which are the authoritative
-        source of layout for reads (``flow_data``).
+        ``node_data`` is the complete graph membership (``self.data`` no longer lists nodes —
+        ADR-0048): rows whose flow_id is absent are deleted, or archived when they have
+        versions. A ``FlowNode`` carrying content creates or updates its row, position columns
+        included (they are the authoritative layout source for reads). A membership-only entry
+        (``None``, or a ``FlowNode`` with no ``data``) leaves an existing row untouched and is
+        an error when no row exists.
         """
         current_ids = set(self.node_ids)
         new_ids = set(node_data)
@@ -163,21 +157,23 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        missing = {flow_id for flow_id, content in node_data.items() if content is None} - current_ids
+        membership_only = {flow_id for flow_id, node in node_data.items() if node is None or node.data is None}
+        missing = membership_only - current_ids
         if missing:
             raise MissingNodeDataError(missing)
 
-        for flow_id, content in node_data.items():
-            if content is None:
+        for flow_id, node in node_data.items():
+            if flow_id in membership_only:
                 continue
+            content = node.data
             created_node, _ = Node.objects.update_or_create(
                 pipeline=self,
                 flow_id=flow_id,
                 defaults={
-                    "type": content["type"],
-                    "params": content.get("params", {}),
-                    "label": content.get("label", ""),
-                    **node_position_fields(content.get("position")),
+                    "type": content.type,
+                    "params": content.params,
+                    "label": content.label,
+                    **node_position_fields(node.position),
                 },
             )
             created_node.update_from_params()
@@ -302,7 +298,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             for spec in get_versioned_param_specs(content.get("type")):
                 spec.revert_referenced_record(version_node, params)
 
-        self.data, node_data = split_flow_data(data)
+        layout, node_data = split_flow_data(Flow(**data))
+        self.data = layout.model_dump()
         self.edit_revision += 1
         self.save(update_fields=["data", "edit_revision"])
         self.update_nodes_from_data(node_data)

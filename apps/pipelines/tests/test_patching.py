@@ -116,14 +116,14 @@ class TestApplyPipelinePatch:
         _, node_data = apply_pipeline_patch(graph, patch)
         # node_data is the complete membership; the added node carries content
         assert set(node_data) == {"start", "llm-1", "end", "llm-2"}
-        assert node_data["llm-2"]["type"] == LLMResponseWithPrompt.__name__  # ty: ignore[not-subscriptable]
+        assert node_data["llm-2"].data.type == LLMResponseWithPrompt.__name__
 
     def test_delete_node_removes_connected_edges(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["llm-1"]))
         layout, node_data = apply_pipeline_patch(graph, patch)
         assert set(node_data) == {"start", "end"}
-        assert len(layout["edges"]) == 0  # both edges connected to llm-1 are removed
+        assert len(layout.edges) == 0  # both edges connected to llm-1 are removed
 
     def test_update_node_params(self):
         graph = self._sample_graph()
@@ -132,7 +132,7 @@ class TestApplyPipelinePatch:
         )
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
         _, node_data = apply_pipeline_patch(graph, patch)
-        assert node_data["llm-1"]["params"]["prompt"] == "You are a helpful assistant."  # ty: ignore[not-subscriptable]
+        assert node_data["llm-1"].data.params["prompt"] == "You are a helpful assistant."
 
     def test_update_node_position(self):
         graph = self._sample_graph()
@@ -140,21 +140,21 @@ class TestApplyPipelinePatch:
         updated.position = {"x": 999, "y": 888}
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(update=[updated]))
         _, node_data = apply_pipeline_patch(graph, patch)
-        assert node_data["llm-1"]["position"] == {"x": 999, "y": 888}  # ty: ignore[not-subscriptable]
+        assert node_data["llm-1"].position == {"x": 999, "y": 888}
 
     def test_add_edge(self):
         graph = self._sample_graph()
         new_edge = make_flow_edge("e3", "start", "end")
         patch = PipelineDiffPayload(base_revision=0, edges=EdgeDiff(add=[new_edge]))
         layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout["edges"]) == 3
+        assert len(layout.edges) == 3
 
     def test_delete_edge(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, edges=EdgeDiff(delete=["e1"]))
         layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout["edges"]) == 1
-        assert layout["edges"][0]["id"] == "e2"
+        assert len(layout.edges) == 1
+        assert layout.edges[0].id == "e2"
 
     def test_unmodified_nodes_stay_in_membership_without_content(self):
         graph = self._sample_graph()
@@ -169,14 +169,14 @@ class TestApplyPipelinePatch:
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0)
         layout, _ = apply_pipeline_patch(graph, patch)
-        assert layout["viewport"] == {"x": 0, "y": 0, "zoom": 1}
+        assert layout.model_dump()["viewport"] == {"x": 0, "y": 0, "zoom": 1}
 
     def test_no_op_patch(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0)
         layout, node_data = apply_pipeline_patch(graph, patch)
         assert set(node_data) == {node["id"] for node in graph["nodes"]}
-        assert len(layout["edges"]) == len(graph["edges"])
+        assert len(layout.edges) == len(graph["edges"])
 
     def test_duplicate_add_is_idempotent(self):
         graph = self._sample_graph()
@@ -202,7 +202,7 @@ class TestApplyPipelinePatch:
         replacement = make_flow_node("llm-1", LLMResponseWithPrompt.__name__, params={"name": "replaced"})
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["llm-1"], add=[replacement]))
         _, node_data = apply_pipeline_patch(graph, patch)
-        assert node_data["llm-1"]["params"] == {"name": "replaced"}  # ty: ignore[not-subscriptable]
+        assert node_data["llm-1"].data.params == {"name": "replaced"}
 
     def test_delete_unknown_node(self):
         graph = self._sample_graph()
@@ -214,7 +214,7 @@ class TestApplyPipelinePatch:
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, edges=EdgeDiff(delete=["nonexistent"]))
         layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout["edges"]) == 2  # unchanged
+        assert len(layout.edges) == 2  # unchanged
 
     def test_layout_contains_no_nodes(self):
         """Old-format stored graphs (blobs embedded) come out with no nodes key at all."""
@@ -222,7 +222,7 @@ class TestApplyPipelinePatch:
         new_node = make_flow_node("llm-2", LLMResponseWithPrompt.__name__)
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[new_node]))
         layout, _ = apply_pipeline_patch(graph, patch)
-        assert "nodes" not in layout
+        assert "nodes" not in layout.model_dump()
 
     def test_node_data_carries_content_only_for_patched_nodes(self):
         """Only the patch's add/update nodes carry content; the rest are membership-only."""

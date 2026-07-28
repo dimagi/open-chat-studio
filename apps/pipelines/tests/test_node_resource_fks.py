@@ -5,6 +5,7 @@ import pytest
 from django.core.management import call_command
 
 from apps.pipelines.models import Node
+from apps.pipelines.tests.utils import content_flow_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -134,17 +135,18 @@ class TestNodeResourceFKSync:
         model = LlmProviderModelFactory.create()
         pipeline = PipelineFactory.create()
         node_data = {node.flow_id: None for node in pipeline.node_set.all()}
-        node_data["llm1"] = {
-            "type": "LLMResponseWithPrompt",
-            "label": "LLM",
-            "params": {
+        node_data["llm1"] = content_flow_node(
+            "llm1",
+            "LLMResponseWithPrompt",
+            label="LLM",
+            params={
                 "name": "llm1",
                 "llm_provider_id": provider.id,
                 "llm_provider_model_id": model.id,
                 "prompt": "helpful",
                 "history_type": "global",
             },
-        }
+        )
         pipeline.update_nodes_from_data(node_data)
         node = pipeline.node_set.get(flow_id="llm1")
         assert node.llm_provider_id == provider.id

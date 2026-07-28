@@ -4,6 +4,7 @@ import pytest
 from django.core.management import call_command
 
 from apps.pipelines.models import Pipeline
+from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.llm_service.default_models import Model
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -115,13 +116,14 @@ def _make_pipeline_referencing(llm_provider_model):
     """Create a pipeline with a node referencing the given LlmProviderModel."""
     pipeline: Pipeline = PipelineFactory()  # ty: ignore[invalid-assignment]
     node_data = {node.flow_id: None for node in pipeline.node_set.all()}
-    node_data["1"] = {
-        "label": "LLM",
-        "type": "LLMResponseWithPrompt",
-        "params": {
+    node_data["1"] = content_flow_node(
+        "1",
+        "LLMResponseWithPrompt",
+        label="LLM",
+        params={
             "llm_provider_model_id": str(llm_provider_model.id),
             "prompt": "You are a helpful assistant",
         },
-    }
+    )
     pipeline.update_nodes_from_data(node_data)
     return pipeline

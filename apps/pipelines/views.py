@@ -415,7 +415,8 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
     with transaction.atomic():
         pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
         pipeline.name = data.name
-        pipeline.data, node_data = split_flow_data(data.data.model_dump())
+        layout, node_data = split_flow_data(data.data)
+        pipeline.data = layout.model_dump()
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         try:
@@ -464,7 +465,8 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         # The patch engine works off the full current graph: nodes rebuilt from the rows
         # (Pipeline.data no longer lists them, ADR-0048) plus stored top-level keys (viewport).
         current_flow = {**pipeline.data, **pipeline.flow_data}
-        pipeline.data, node_data = apply_pipeline_patch(current_flow, patch)
+        layout, node_data = apply_pipeline_patch(current_flow, patch)
+        pipeline.data = layout.model_dump()
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         try:

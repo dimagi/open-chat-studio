@@ -33,9 +33,21 @@ class FlowEdge(pydantic.BaseModel):
 
 
 class Flow(pydantic.BaseModel):
+    # Keep unknown top-level keys (viewport) so a stored graph survives the round trip.
+    model_config = pydantic.ConfigDict(extra="allow")
+
     # Stored ``Pipeline.data`` is layout-only and carries no ``nodes`` (ADR-0048), so nodes
     # default to empty; full nodes still arrive on the wire and are rebuilt for reads.
     nodes: list[FlowNode] = Field(default_factory=list)
+    edges: list[FlowEdge]
+    errors: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class FlowWithoutNodes(pydantic.BaseModel):
+    """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0048)."""
+
+    model_config = pydantic.ConfigDict(extra="allow")
+
     edges: list[FlowEdge]
     errors: dict[str, dict[str, str]] = Field(default_factory=dict)
 
@@ -56,34 +68,13 @@ def react_flow_node_type(node_type: str) -> str:
     return REACT_FLOW_NODE_TYPE
 
 
-def split_flow_data(data: dict) -> tuple[dict, dict[str, dict | None]]:
-    """Split a full react-flow graph into layout-only data and per-node content.
-
-    Returns ``(layout_data, node_data)`` where ``layout_data`` drops the ``nodes`` key
-    entirely (edges, viewport and unknown top-level keys pass through) — ``Pipeline.data``
-    holds no node information beyond edges (ADR-0048). ``node_data`` is the complete graph
-    membership: it has an entry for *every* node in the input. Nodes carrying an embedded
-    ``data`` key map to ``{"type", "label", "params", "position"}`` (content and layout are
-    owned by the ``Node`` rows); nodes without one map to ``None`` (membership only — the
-    row must already exist, otherwise ``update_nodes_from_data`` raises). The input is not
-    mutated.
+def split_flow_data(flow: Flow) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
+    """Split a graph into its layout (no ``nodes`` — ADR-0048) and the complete node
+    membership: content-carrying nodes map to themselves, content-less ones to ``None``
+    (membership only, so their row must already exist).
     """
-    if "nodes" not in data:
-        return {**data}, {}
-
-    node_data: dict[str, dict | None] = {}
-    for node in data["nodes"]:
-        content = node.get("data")
-        if content:
-            node_data[node["id"]] = {
-                "type": content["type"],
-                "label": content.get("label", ""),
-                "params": content.get("params", {}),
-                "position": node.get("position"),
-            }
-        else:
-            node_data[node["id"]] = None
-    return {key: value for key, value in data.items() if key != "nodes"}, node_data
+    node_data: dict[str, FlowNode | None] = {node.id: node if node.data else None for node in flow.nodes}
+    return FlowWithoutNodes(**flow.model_dump(exclude={"nodes"})), node_data
 
 
 def node_position_fields(position) -> dict:
@@ -103,6 +94,9 @@ class WireFlow(Flow):
     """A full-graph save payload. Unlike stored layout-only data, the wire format must
     state the node list explicitly: an omitted ``nodes`` is a malformed payload, not an
     empty graph — treating it as empty would delete every node row on save."""
+
+    # Unknown keys from a client are dropped rather than persisted.
+    model_config = pydantic.ConfigDict(extra="ignore")
 
     nodes: list[FlowNode]
 
