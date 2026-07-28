@@ -1,4 +1,7 @@
 import pytest
+from django.db import connection
+from django.template.loader import render_to_string
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.analysis.models import TranscriptAnalysis
@@ -372,6 +375,75 @@ def test_usages_view_renders_version_tags(team_with_users, client):
     working_url = working.get_absolute_url()
     assert f'href="{working_url}"' in body, "working version row should link directly to the working URL"
     assert f'href="{working_url}#versions"' in body, "older-version row should link with the #versions hash"
+
+
+def _add_pipeline_usage(provider, count: int) -> None:
+    """Attach ``count`` more pipeline-node references (each with its own chatbot)."""
+    for _ in range(count):
+        pipeline = PipelineFactory(team=provider.team)
+        NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": provider.id})
+        ExperimentFactory(team=provider.team, pipeline=pipeline)
+
+
+@pytest.mark.django_db()
+def test_archived_pipelines_are_still_reported(anthropic_provider):
+    """A provider referenced only by an archived pipeline must not look unreferenced."""
+    team = anthropic_provider.team
+    pipeline = PipelineFactory(team=team, name="Archived", is_archived=True)
+    NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": anthropic_provider.id})
+
+    usages = get_provider_usages(anthropic_provider)
+
+    items_by_label = {c.label: [obj.id for obj in c.items] for c in usages.categories}
+    assert items_by_label == {"Unlinked Pipelines": [pipeline.id]}
+
+
+@pytest.mark.django_db()
+def test_resolving_usages_does_not_scale_with_pipeline_count(anthropic_provider):
+    """N+1 guard: query count must be flat in the number of referencing pipelines."""
+    _add_pipeline_usage(anthropic_provider, 1)
+    with CaptureQueriesContext(connection) as few:
+        usages_few = get_provider_usages(anthropic_provider)
+
+    _add_pipeline_usage(anthropic_provider, 4)
+    with CaptureQueriesContext(connection) as many:
+        usages_many = get_provider_usages(anthropic_provider)
+
+    assert usages_few.total == 1, "sanity: the single pipeline resolves to one chatbot"
+    assert usages_many.total == 5, "sanity: all five pipelines resolve to chatbots"
+    assert len(many.captured_queries) == len(few.captured_queries), (
+        f"query count grew from {len(few.captured_queries)} to {len(many.captured_queries)} "
+        f"when pipeline references went from 1 to 5"
+    )
+
+
+@pytest.mark.django_db()
+def test_rendering_usages_does_not_scale_with_version_count(team_with_users):
+    """N+1 guard: the item partial resolves working versions without a query per row."""
+    voice = VoiceProviderFactory(team=team_with_users)
+
+    def render_for(provider):
+        return render_to_string(
+            "service_providers/components/usages_content.html",
+            {"provider": provider, "usages": get_provider_usages(provider)},
+        )
+
+    working = ExperimentFactory(team=team_with_users, voice_provider=voice)
+    working.create_new_version()
+    render_for(voice)  # warm any process-level caches (e.g. team slug lookups)
+    with CaptureQueriesContext(connection) as few:
+        render_for(voice)
+
+    for _ in range(3):
+        extra = ExperimentFactory(team=team_with_users, voice_provider=voice)
+        extra.create_new_version()
+    with CaptureQueriesContext(connection) as many:
+        render_for(voice)
+
+    assert len(many.captured_queries) == len(few.captured_queries), (
+        f"query count grew from {len(few.captured_queries)} to {len(many.captured_queries)} "
+        f"when versioned chatbot references went from 2 to 8"
+    )
 
 
 @pytest.mark.django_db()
