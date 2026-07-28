@@ -20,6 +20,6 @@
   {% elif collection_file.status == 'completed' %}
     <div aria-label="success" class="status status-success"></div>
   {% else %}
-    <div aria-label="{{ collection_file.failure_reason|default:'error' }}" class="status status-error"></div>
+    <div aria-label="{{ collection_file.failure_reason|default:'error'|truncatechars:100 }}" class="status status-error"></div>
   {% endif %}
 </div>
