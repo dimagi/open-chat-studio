@@ -228,57 +228,53 @@ def test_create_form_annotation_queue_field_filters_to_team(team_with_users, use
 
 
 @pytest.mark.django_db()
-def test_session_selection_list_excludes_sessions_already_in_dataset(
+def test_session_selection_count_excludes_sessions_already_in_dataset(
     client_with_user, team_with_users, session_dataset
 ):
-    """When editing a dataset, sessions already linked to it are excluded from the selection table."""
+    """When editing a dataset, sessions already linked to it are left out of the count."""
     in_dataset = ExperimentSessionFactory.create(team=team_with_users)
-    not_in_dataset = ExperimentSessionFactory.create(team=team_with_users)
+    ExperimentSessionFactory.create(team=team_with_users)
 
     msg = EvaluationMessage.objects.create(
         input={}, output={}, history=[], session=in_dataset, metadata={"session_id": str(in_dataset.external_id)}
     )
     session_dataset.messages.add(msg)
 
-    url = reverse("evaluations:dataset_sessions_selection_json", args=[team_with_users.slug])
+    url = reverse("evaluations:dataset_sessions_selection_count", args=[team_with_users.slug])
     response = client_with_user.get(url, {"dataset_id": session_dataset.pk})
 
     assert response.status_code == 200
-    session_ids = response.json()
-    assert str(not_in_dataset.external_id) in session_ids
-    assert str(in_dataset.external_id) not in session_ids
+    assert response.json() == {"total": 1}
 
 
 @pytest.mark.django_db()
-def test_session_selection_list_without_dataset_id_returns_all(client_with_user, team_with_users, session_dataset):
-    """Without a dataset_id parameter, all team sessions are returned (create flow)."""
+def test_session_selection_count_without_dataset_id_counts_all(client_with_user, team_with_users, session_dataset):
+    """Without a dataset_id parameter, all team sessions are counted (create flow)."""
     in_dataset = ExperimentSessionFactory.create(team=team_with_users)
-    other = ExperimentSessionFactory.create(team=team_with_users)
+    ExperimentSessionFactory.create(team=team_with_users)
 
     msg = EvaluationMessage.objects.create(
         input={}, output={}, history=[], session=in_dataset, metadata={"session_id": str(in_dataset.external_id)}
     )
     session_dataset.messages.add(msg)
 
-    url = reverse("evaluations:dataset_sessions_selection_json", args=[team_with_users.slug])
+    url = reverse("evaluations:dataset_sessions_selection_count", args=[team_with_users.slug])
     response = client_with_user.get(url)
 
     assert response.status_code == 200
-    session_ids = response.json()
-    assert str(in_dataset.external_id) in session_ids
-    assert str(other.external_id) in session_ids
+    assert response.json() == {"total": 2}
 
 
 @pytest.mark.django_db()
-def test_session_selection_list_ignores_invalid_dataset_id(client_with_user, team_with_users):
-    """A non-integer dataset_id param should not raise; just return the unfiltered list."""
-    session = ExperimentSessionFactory.create(team=team_with_users)
+def test_session_selection_count_ignores_invalid_dataset_id(client_with_user, team_with_users):
+    """A non-integer dataset_id param should not raise; just count without the exclusion."""
+    ExperimentSessionFactory.create(team=team_with_users)
 
-    url = reverse("evaluations:dataset_sessions_selection_json", args=[team_with_users.slug])
+    url = reverse("evaluations:dataset_sessions_selection_count", args=[team_with_users.slug])
     response = client_with_user.get(url, {"dataset_id": "not-an-int"})
 
     assert response.status_code == 200
-    assert str(session.external_id) in response.json()
+    assert response.json() == {"total": 1}
 
 
 @pytest.mark.django_db()

@@ -110,6 +110,15 @@
       {% translate "Select at least one session." %}
     </div>
 
+    {% if dataset.evaluation_mode != 'session' and message_mode_all_matching_limit %}
+    <!-- Message-level datasets resolve 'all matching' to an explicit id list, so it is capped
+         server-side (MESSAGE_MODE_ALL_MATCHING_LIMIT). Session-level ships the filter instead. -->
+    <div x-show="mode === 'all_matching' && totalCount > {{ message_mode_all_matching_limit }}" x-cloak
+         class="text-sm text-warning">
+      {% blocktranslate with limit=message_mode_all_matching_limit %}Adding every match is limited to {{ limit }} sessions for message-level datasets. Narrow the filters, sample, or select sessions individually.{% endblocktranslate %}
+    </div>
+    {% endif %}
+
     <!-- Clear selections (visible in selected mode when selections exist) -->
     <div x-show="mode === 'selected' && selectedSessionIds.size > 0" x-cloak class="text-sm">
       <span x-text="selectedSessionIds.size"></span>

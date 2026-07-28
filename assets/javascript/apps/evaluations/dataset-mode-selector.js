@@ -11,14 +11,6 @@ const sessionManagement = {
     }
   },
 
-  cleanupRemovedFromAvailable(component) {
-    // Drop selected IDs that are no longer in the available set (e.g. after a filter change).
-    component.selectedSessionIds = new Set(
-      [...component.selectedSessionIds].filter(id => component.allSessionIds.has(id))
-    );
-    this.syncHiddenInputs(component);
-  },
-
   updateSelectedSessions(component) {
     const checkboxes = document.querySelectorAll('tbody .session-checkbox:checked');
     const currentPageSelections = Array.from(checkboxes).map(cb => cb.value);
@@ -64,12 +56,15 @@ const sessionManagement = {
     this.updateHeaderCheckboxes(component);
   },
 
+  // Header checkbox selects the current page only. Selecting every session matching the
+  // filters is the 'all_matching' scope instead, which never enumerates ids client-side.
   toggleSelectedSessions(component, val) {
     const toggleInput = document.querySelector('thead .session-checkbox');
-    if (toggleInput.checked || val) {
-      component.selectedSessionIds = new Set([...component.allSessionIds]);
+    const pageIds = Array.from(document.querySelectorAll('tbody .session-checkbox')).map(cb => cb.value);
+    if (toggleInput?.checked || val) {
+      pageIds.forEach(id => component.selectedSessionIds.add(id));
     } else {
-      component.selectedSessionIds = new Set();
+      pageIds.forEach(id => component.selectedSessionIds.delete(id));
     }
 
     this.syncHiddenInputs(component);
@@ -77,17 +72,13 @@ const sessionManagement = {
   },
 
   updateHeaderCheckboxes(component) {
-    const allSessionIds = component.allSessionIds;
     const selectedSessionIds = component.selectedSessionIds;
     const toggleInput = document.querySelector('thead .session-checkbox');
-    if (!toggleInput || !allSessionIds.size) {
+    if (!toggleInput) {
       return; // page load
     }
-    if (selectedSessionIds.size === 0) {
-      toggleInput.checked = false;
-    } else {
-      toggleInput.checked = [...allSessionIds].every(id => selectedSessionIds.has(id));
-    }
+    const pageIds = Array.from(document.querySelectorAll('tbody .session-checkbox')).map(cb => cb.value);
+    toggleInput.checked = pageIds.length > 0 && pageIds.every(id => selectedSessionIds.has(id));
   },
 };
 
@@ -97,9 +88,19 @@ window.datasetModeSelector = function(options = {}) {
     mode: options.defaultMode || 'clone',
     evaluationMode: options.evaluationMode || 'message',
     selectedSessionIds: new Set(),
-    allSessionIds: new Set(),
-    sessionIdsFetchUrl: options.sessionIdsFetchUrl || '',
-    sessionIdsIsLoading: false,
+    // 'selected' (hand-picked rows) or 'all_matching' (resolved server-side from the filters).
+    sessionScope: 'selected',
+    // The active filters, mirrored into the POST body as hidden inputs.
+    filterParams: [],
+    totalCount: 0,
+    sessionCountUrl: options.sessionCountUrl || '',
+    // Message-level datasets cap 'all_matching' (see MESSAGE_MODE_ALL_MATCHING_LIMIT); 0 disables
+    // the client-side warning and leaves the server as the only check.
+    messageModeLimit: options.messageModeLimit || 0,
+    // Monotonic request token rather than an in-flight boolean: in 'all_matching' scope the count
+    // IS what the user is told will be cloned, so a request must never be dropped just because an
+    // older one is still open — the last request issued has to be the one that sets totalCount.
+    countRequestId: 0,
     errorMessages: [],
 
     updateModeRadioVisibility() {
@@ -120,6 +121,11 @@ window.datasetModeSelector = function(options = {}) {
 
       this.$nextTick(() => {
         sessionManagement.syncFromHiddenInputs(this);
+        // The server picks the initial scope (arriving with filters pre-selects 'all_matching'),
+        // so read it from the hidden input rather than overwriting it.
+        if (this.$refs.sessionScope?.value) {
+          this.sessionScope = this.$refs.sessionScope.value;
+        }
       });
 
       // Form validation for clone mode
@@ -128,23 +134,57 @@ window.datasetModeSelector = function(options = {}) {
       }
 
       window.addEventListener('dataset-mode:table-update', () => this.onSessionsTableUpdate());
-      window.addEventListener('filter:change', () => this.loadSessionIds());
-      window.addEventListener('dataset-mode:session-ids-loaded', () => this.clearAllSelections());
+      window.addEventListener('filter:change', () => {
+        this.clearAllSelections();
+        this.loadCount();
+        this.syncFilterParams();
+      });
 
       this.$nextTick(() => this.updateModeRadioVisibility());
 
+      this.syncFilterParams();
+      this.loadCount();
       this.loaded = true;
+    },
+
+    // Only f_/op_ params are mirrored: they are the reserved filter prefixes, and copying any
+    // other query param into this form would collide with its own fields (e.g. ?name=...).
+    syncFilterParams() {
+      this.filterParams = Array.from(new URLSearchParams(window.location.search).entries())
+        .filter(([name]) => name.startsWith('f_') || name.startsWith('op_'))
+        .map(([name, value]) => ({name, value}));
+    },
+
+    setSessionScope(scope) {
+      this.sessionScope = scope;
+      if (this.$refs.sessionScope) {
+        this.$refs.sessionScope.value = scope;
+      }
+      this.errorMessages = [];
+    },
+
+    // A method, not a getter: datasetModeSelectorBuilder spreads this object, and a spread
+    // invokes getters once at build time instead of carrying them over.
+    cloneCount() {
+      return this.sessionScope === 'all_matching' ? this.totalCount : this.selectedSessionIds.size;
+    },
+
+    // Warn before submitting a message-level 'all_matching' clone the server will reject. Session
+    // level is exempt: it ships the filter instead of the ids, so it has no ceiling.
+    overMessageModeLimit() {
+      return this.messageModeLimit > 0
+        && this.sessionScope === 'all_matching'
+        && this.evaluationMode !== 'session'
+        && this.totalCount > this.messageModeLimit;
     },
 
     validateForm(e) {
       this.errorMessages = [];
 
-      if (this.mode === 'clone') {
-        if (this.selectedSessionIds.size === 0) {
-          e.preventDefault();
-          this.errorMessages.push('Please select at least one session to clone messages from.');
-          window.scrollTo({top: 0, behavior: 'smooth'});
-        }
+      if (this.mode === 'clone' && this.sessionScope === 'selected' && this.selectedSessionIds.size === 0) {
+        e.preventDefault();
+        this.errorMessages.push('Please select at least one session to clone messages from.');
+        window.scrollTo({top: 0, behavior: 'smooth'});
       }
     },
 
@@ -159,17 +199,18 @@ window.datasetModeSelector = function(options = {}) {
     restoreCheckboxStates() {
       sessionManagement.restoreCheckboxStates(this);
     },
-    loadSessionIds() {
-      // Loading id from Sessions filtered
-      if (this.sessionIdsIsLoading) {
+    // How many sessions match the current filters. A count, not the ids: the id list this
+    // replaced was ~390 KB of UUIDs at 10k sessions, re-fetched on every filter change.
+    loadCount() {
+      if (!this.sessionCountUrl) {
         return;
       }
-      this.sessionIdsIsLoading = true;
+      const requestId = ++this.countRequestId;
 
-      // Merge any params baked into sessionIdsFetchUrl (e.g. dataset_id) with the
-      // current filter params from window.location.search. Naively concatenating
-      // produces a double-'?' URL when both sides have query strings.
-      const fetchUrl = new URL(this.sessionIdsFetchUrl, window.location.origin);
+      // Merge any params baked into sessionCountUrl (e.g. dataset_id) with the current filter
+      // params from window.location.search. Naively concatenating produces a double-'?' URL
+      // when both sides have query strings.
+      const fetchUrl = new URL(this.sessionCountUrl, window.location.origin);
       new URLSearchParams(window.location.search).forEach((value, key) => {
         fetchUrl.searchParams.append(key, value);
       });
@@ -184,14 +225,14 @@ window.datasetModeSelector = function(options = {}) {
       })
         .then(res => res.json())
         .then(data => {
-          this.allSessionIds = new Set(data);
+          // Drop a response that a newer filter change has already superseded, otherwise a slow
+          // first request can land after a fast second one and show the wrong filter's count.
+          if (requestId === this.countRequestId) {
+            this.totalCount = data.total;
+          }
         })
         .catch(err => {
-          console.error('Failed to load session ids:' + err);
-        })
-        .finally(() => {
-          this.sessionIdsIsLoading = false;
-          window.dispatchEvent(new CustomEvent('dataset-mode:session-ids-loaded'));
+          console.error('Failed to load session count:' + err);
         });
     },
     toggleSelectedSessions() {
