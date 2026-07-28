@@ -1,5 +1,9 @@
 <div id="file-status-{{ collection_file.id }}"
-     class="tooltip{% if collection_file.failure_reason %} tooltip-error{% endif %}"
+{# `before:wrap-break-word` targets the tooltip body, which daisyUI renders as a ::before pseudo-element.
+   It already wraps at 20rem but sets no word-breaking, so an unbroken token longer than that
+   overflows the bubble -- and a provider error carrying a masked API key (sk-svcac****...im8A) is
+   exactly such a token. #}
+     class="tooltip before:wrap-break-word{% if collection_file.failure_reason %} tooltip-error{% endif %}"
      data-tip="{{ collection_file.failure_reason|default:collection_file.status_enum.label }}"
      {% if collection_file.status == 'pending' or collection_file.status == 'in_progress' %}
        hx-get="{% url 'documents:get_collection_file_status' team.slug collection.id collection_file.id %}"
