@@ -436,11 +436,12 @@ def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
     if run.taskbadger_task_id:
         return
     task = taskbadger.create_task_safe(
-        name=f"Evaluation run {run.id}",
+        name="Evaluation run",
         status=StatusEnum.PROCESSING,
         value=0,
         value_max=total,
         stale_timeout=TASKBADGER_STALE_TIMEOUT,
+        data={"run_id": run.id},
     )
     if task is not None:
         run.taskbadger_task_id = task.id
