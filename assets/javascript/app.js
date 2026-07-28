@@ -3,6 +3,10 @@ import * as JsCookie from "js-cookie"; // generated
 // pass-through for Cookies API
 export const Cookies = JsCookie.default;
 
+// Shared dynamic-filter CSV wire-format helpers, exposed on SiteJS.app for inline template JS
+// (e.g. the Alpine filter component). Webpack modules should import from ./filters/csvTilde.js.
+export {serializeCSVTildeValues, parseCSVTildeValue} from "./filters/csvTilde.js";
+
 export async function copyToClipboard (callee, elementId) {
   const element = document.getElementById(elementId)
   if (!element) return;

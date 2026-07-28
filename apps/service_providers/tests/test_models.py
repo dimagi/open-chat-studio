@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.assistants import OpenAiAssistantFactory
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
@@ -74,6 +75,22 @@ class TestServiceProviderModel:
         provider_model = LlmProviderModel.objects.get(id=node.params["llm_provider_model_id"])
         with pytest.raises(ValidationError, match=pipeline.name):
             provider_model.delete()
+
+    @pytest.mark.django_db()
+    def test_evaluator_params_do_not_block_provider_model_deletion(self):
+        """Deletion deliberately ignores evaluator params.
+
+        Nothing repoints evaluator params when a custom model is replaced by a global one
+        (see ``_replace_custom_model_with_global``), so blocking here would break that
+        sync instead of orphaning a reference. The usages page reports these separately.
+        """
+        provider_model = LlmProviderModelFactory.create()
+        EvaluatorFactory(
+            team=provider_model.team,
+            params={"llm_provider_model_id": provider_model.id},
+        )
+
+        provider_model.delete()
 
     @pytest.mark.django_db()
     def test_can_delete_unassociated_provider_models(self):

@@ -127,9 +127,10 @@ class ColumnFilter(BaseModel):
     Abstract base class for a single column filter.
 
     Each `ColumnFilter` implementation is responsible for applying a specific filter to a queryset.
-    It bridges the gap between URL query parameters and ORM filters. When a request contains a
-    `filter_{i}_column` parameter that matches the `query_param` of a `ColumnFilter`, this filter
-    processes the associated operator and value to generate the appropriate database query.
+    It bridges the gap between URL query parameters and ORM filters. When a request contains an
+    `f_<query_param>` value parameter (paired with an `op_<query_param>` operator parameter) whose
+    `<query_param>` matches this filter's `query_param`, this filter processes the associated
+    operator and value to generate the appropriate database query.
 
     Attributes:
         query_param: The name of the query parameter used in the URL to identify this filter.

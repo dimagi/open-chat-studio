@@ -8,6 +8,7 @@ from apps.evaluations.forms import EvaluationConfigForm, EvaluationDatasetEditFo
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMessage, EvaluationMode
 from apps.evaluations.tasks import create_dataset_from_sessions_task
 from apps.evaluations.utils import make_session_evaluation_messages
+from apps.trace.models import TraceStatus
 from apps.utils.factories.evaluations import EvaluationDatasetFactory, EvaluatorFactory
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
@@ -65,19 +66,21 @@ class TestMakeSessionEvaluationMessages:
     def test_happy_path_multi_turn_session(self):
         """Session with N turns produces one EvaluationMessage with full history."""
         team = TeamFactory.create()
-        session = ExperimentSessionFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, state={"step": 3})
         chat = session.chat
 
-        ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
+        human_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
         ai_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Hi there!")
-        ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="How are you?")
+        human_2 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="How are you?")
 
         TraceFactory.create(
             team=team,
             experiment=session.experiment,
             session=session,
             participant=session.participant,
-            input_message=ai_1,
+            input_message=human_1,
+            output_message=ai_1,
+            status=TraceStatus.SUCCESS,
             duration=100,
             participant_data={"name": "Alice"},
             session_state={"step": 2},
@@ -89,7 +92,9 @@ class TestMakeSessionEvaluationMessages:
             experiment=session.experiment,
             session=session,
             participant=session.participant,
-            input_message=ai_2,
+            input_message=human_2,
+            output_message=ai_2,
+            status=TraceStatus.SUCCESS,
             duration=100,
             participant_data={"name": "Alice", "visits": 3},
             session_state={"step": 3},
@@ -177,33 +182,44 @@ class TestMakeSessionEvaluationMessages:
 
         assert len(result) == 0
 
-    def test_participant_data_from_last_ai_trace(self):
-        """Verify participant_data and session_state come from last AI message's trace."""
+    def test_participant_data_from_production_shaped_trace(self):
+        """participant_data comes from the trace of the last completed turn.
+
+        Production wires Trace.input_message to the *human* message
+        (apps/channels/stages/core.py) and Trace.output_message to the AI message
+        (apps/chat/bots.py). A trace shaped that way must still supply
+        participant_data. session_state comes from the session itself, since
+        Trace.session_state is only the start-of-turn snapshot.
+        """
         team = TeamFactory.create()
-        session = ExperimentSessionFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, state={"final": True})
         chat = session.chat
 
-        ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
+        human_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
         ai_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Hi!")
         TraceFactory.create(
             team=team,
             experiment=session.experiment,
             session=session,
             participant=session.participant,
-            input_message=ai_1,
+            input_message=human_1,
+            output_message=ai_1,
+            status=TraceStatus.SUCCESS,
             duration=100,
             participant_data={"version": 1},
             session_state={"first": True},
         )
 
-        ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="More")
+        human_2 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="More")
         ai_2 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Sure!")
         TraceFactory.create(
             team=team,
             experiment=session.experiment,
             session=session,
             participant=session.participant,
-            input_message=ai_2,
+            input_message=human_2,
+            output_message=ai_2,
+            status=TraceStatus.SUCCESS,
             duration=100,
             participant_data={"version": 2},
             session_state={"first": False},
@@ -211,8 +227,110 @@ class TestMakeSessionEvaluationMessages:
 
         result = make_session_evaluation_messages([session.external_id])
 
+        assert len(result) == 1
+        assert len(result[0].history) == 4
         assert result[0].participant_data == {"version": 2}
-        assert result[0].session_state == {"first": False}
+        # From ExperimentSession.state, not the trace snapshot.
+        assert result[0].session_state == {"final": True}
+
+    @pytest.mark.parametrize(
+        ("newest_trace_kwargs", "case_description"),
+        [
+            pytest.param(
+                {"status": TraceStatus.PENDING, "with_output_message": True},
+                "a trace still marked PENDING even though its reply row exists",
+                id="pending_with_output_message",
+            ),
+            pytest.param(
+                {"status": TraceStatus.SUCCESS, "with_output_message": False},
+                "a turn that never produced a reply",
+                id="no_output_message",
+            ),
+        ],
+    )
+    def test_incomplete_newest_trace_is_ignored(self, newest_trace_kwargs, case_description):
+        """An in-flight turn must not supply participant_data; the last completed turn wins.
+
+        Both discriminators are exercised independently: `status != PENDING` and
+        `output_message IS NOT NULL`. Dropping either filter has to fail one of these cases.
+        """
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        chat = session.chat
+
+        human_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
+        ai_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Hi!")
+        TraceFactory.create(
+            team=team,
+            experiment=session.experiment,
+            session=session,
+            participant=session.participant,
+            input_message=human_1,
+            output_message=ai_1,
+            status=TraceStatus.SUCCESS,
+            duration=100,
+            participant_data={"version": 1},
+            session_state={"first": True},
+        )
+        # A newer turn that is still running.
+        human_2 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="More")
+        in_flight_output = None
+        if newest_trace_kwargs["with_output_message"]:
+            in_flight_output = ChatMessageFactory.create(
+                chat=chat, message_type=ChatMessageType.AI, content="Working on it"
+            )
+        TraceFactory.create(
+            team=team,
+            experiment=session.experiment,
+            session=session,
+            participant=session.participant,
+            input_message=human_2,
+            output_message=in_flight_output,
+            status=newest_trace_kwargs["status"],
+            duration=0,
+            participant_data={"version": "in-flight"},
+            session_state={"first": "in-flight"},
+        )
+
+        result = make_session_evaluation_messages([session.external_id])
+
+        assert len(result) == 1
+        assert result[0].participant_data == {"version": 1}
+
+    def test_multiple_traces_on_one_message_do_not_duplicate_history(self):
+        """Two traces referencing the same ChatMessage must not duplicate it in history.
+
+        Trace.input_message is a reverse FK (related_name="input_message_trace"), so
+        joining through it emits one row per Trace and inflates the conversation.
+        """
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        chat = session.chat
+
+        human_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Hello")
+        ai_1 = ChatMessageFactory.create(chat=chat, message_type=ChatMessageType.AI, content="Hi!")
+        # The same turn traced twice (e.g. a retried generation).
+        for version in (1, 2):
+            TraceFactory.create(
+                team=team,
+                experiment=session.experiment,
+                session=session,
+                participant=session.participant,
+                input_message=human_1,
+                output_message=ai_1,
+                status=TraceStatus.SUCCESS,
+                duration=100,
+                participant_data={"version": version},
+                session_state={"attempt": version},
+            )
+
+        result = make_session_evaluation_messages([session.external_id])
+
+        assert len(result) == 1
+        assert len(result[0].history) == 2
+        assert [entry["content"] for entry in result[0].history] == ["Hello", "Hi!"]
+        # Tie-break is the most recent trace (-timestamp, -id).
+        assert result[0].participant_data == {"version": 2}
 
     def test_multiple_sessions(self):
         """Multiple sessions produce one EvaluationMessage each."""

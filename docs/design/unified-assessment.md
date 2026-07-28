@@ -144,7 +144,7 @@ Automated scorers run code or LLMs against session data to produce structured re
 
 **Existing code:**
 - `LlmEvaluator`, `PythonEvaluator`: [`apps/evaluations/evaluators.py`](../../apps/evaluations/evaluators.py)
-- Celery chord orchestration: [`apps/evaluations/tasks.py:run_evaluation_task`](../../apps/evaluations/tasks.py)
+- Run orchestration (beat coordinator): [`apps/evaluations/tasks.py:coordinate_evaluation_runs`](../../apps/evaluations/tasks.py)
 - Bot generation: [`apps/evaluations/tasks.py:run_bot_generation`](../../apps/evaluations/tasks.py)
 - Version resolution: [`apps/evaluations/models.py:EvaluationConfig.get_generation_experiment_version`](../../apps/evaluations/models.py)
 - **Tag emission from eval results** (FR-3.8, backlog #4): [`apps/evaluations/models.py:EvaluatorTagRule`](../../apps/evaluations/models.py) (rule shape) + [`apps/evaluations/tagging.py`](../../apps/evaluations/tagging.py) (matcher) + [`apps/evaluations/models.py:AppliedTag`](../../apps/evaluations/models.py) (audit row). Session-mode rules tag `session.chat`; message-mode rules tag `ChatMessage`. Generalised by `RoutingRule` / `AppliedRoutingRule` in the unified design — see D-14.

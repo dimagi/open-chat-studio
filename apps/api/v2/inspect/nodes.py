@@ -37,6 +37,17 @@ def node_render_order(node) -> int:
     return {"StartNode": 0, "EndNode": 2}.get(node.type, 1)
 
 
+def nodes_in_render_order(pipeline) -> list:
+    """The pipeline's nodes in a stable order: start node first, end node last, the rest by id.
+
+    ``Node`` declares no default ordering, so ``node_set.all()`` comes back in whatever order the
+    database happens to yield and the same pipeline can serialise its nodes differently between
+    requests. Sorting happens in Python rather than via ``order_by`` so it reads the prefetched rows
+    (see ``inspect_node_queryset``) instead of costing another query.
+    """
+    return sorted(pipeline.node_set.all(), key=lambda node: (node_render_order(node), node.id))
+
+
 def graph_digest(node_list, pipeline_data: dict | None) -> dict:
     """Build a lightweight view of the pipeline's shape.
 

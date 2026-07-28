@@ -101,7 +101,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
     For a production-like setup, use:
 
     ```bash
-    inv celery --gevent
+    inv celery --threads
     ```
 
 ---

@@ -63,6 +63,20 @@ class TestIsNonConversationalWhatsAppMessage:
         assert is_non_conversational_whatsapp_message({}) is False
         assert is_non_conversational_whatsapp_message({"messages": []}) is False
 
+    @pytest.mark.parametrize(
+        "message_data",
+        [
+            pytest.param({"messages": [1]}, id="messages_list_of_int"),
+            pytest.param({"messages": "abc"}, id="messages_is_string"),
+            pytest.param({"messages": {"a": "b"}}, id="messages_is_dict"),
+            pytest.param({"messages": [[]]}, id="messages_list_of_list"),
+        ],
+    )
+    def test_false_for_malformed_messages(self, message_data):
+        """Runs on unauthenticated input (verification happens after this filter on the
+        Turn.io webhook), so malformed shapes must return False rather than raise."""
+        assert is_non_conversational_whatsapp_message(message_data) is False
+
 
 @pytest.mark.parametrize(
     ("value", "expected"),

@@ -105,7 +105,7 @@ def test_create_dataset_from_sessions_task_error_path():
         team=team, name="Test Session Dataset 3", evaluation_mode=EvaluationMode.SESSION
     )
 
-    with patch("apps.evaluations.tasks.make_session_evaluation_messages", side_effect=Exception("DB error")):
+    with patch("apps.evaluations.tasks.iter_session_evaluation_messages", side_effect=Exception("DB error")):
         task_result = create_dataset_from_sessions_task.delay(dataset.id, team.id, [session.external_id])
         result = task_result.get()
 
@@ -113,3 +113,6 @@ def test_create_dataset_from_sessions_task_error_path():
 
     dataset.refresh_from_db()
     assert dataset.status == DatasetCreationStatus.FAILED
+    # The real exception reaches the user, not a fixed string, and names what was committed.
+    assert "DB error" in dataset.error_message
+    assert "0 of 1 session(s)" in dataset.error_message
