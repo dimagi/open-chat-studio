@@ -112,7 +112,7 @@ def test_document_sources_roll_up_to_collections(team_with_users, client):
     client.force_login(user)
     response = client.get(
         reverse(
-            "service_providers:usages",
+            "service_providers:usages_content",
             kwargs={"team_slug": team_with_users.slug, "provider_type": "auth", "pk": auth_provider.pk},
         )
     )
@@ -359,7 +359,7 @@ def test_usages_view_renders_version_tags(team_with_users, client):
     user = team_with_users.members.first()
     client.force_login(user)
     url = reverse(
-        "service_providers:usages",
+        "service_providers:usages_content",
         kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "pk": voice.pk},
     )
     response = client.get(url)
@@ -375,7 +375,8 @@ def test_usages_view_renders_version_tags(team_with_users, client):
 
 
 @pytest.mark.django_db()
-def test_usages_view_renders(team_with_users, client, anthropic_provider):
+def test_usages_view_renders_shell_with_loading_state(team_with_users, client, anthropic_provider):
+    """The shell must not resolve usages itself; it defers to the content view."""
     user = team_with_users.members.first()
     client.force_login(user)
     url = reverse(
@@ -384,4 +385,24 @@ def test_usages_view_renders(team_with_users, client, anthropic_provider):
     )
     response = client.get(url)
     assert response.status_code == 200
-    assert b"Where is" in response.content
+    body = response.content.decode()
+    assert "Where is" in body
+    assert "loading-spinner" in body
+    content_url = reverse(
+        "service_providers:usages_content",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": anthropic_provider.pk},
+    )
+    assert f'hx-get="{content_url}"' in body
+
+
+@pytest.mark.django_db()
+def test_usages_content_view_renders(team_with_users, client, anthropic_provider):
+    user = team_with_users.members.first()
+    client.force_login(user)
+    url = reverse(
+        "service_providers:usages_content",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": anthropic_provider.pk},
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert b"not currently referenced" in response.content

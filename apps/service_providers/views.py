@@ -66,26 +66,50 @@ class ServiceProviderMixin:
         return ServiceProvider[type_]
 
 
-class ServiceProviderUsagesView(
-    LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin, django_views.View
-):
-    template_name = "service_providers/usages.html"
-
+class ServiceProviderUsagesMixin(LoginAndTeamRequiredMixin, ServiceProviderMixin, PermissionRequiredMixin):
     def get_permission_required(self):
         return (self.provider_type.get_permission("view"),)
 
+    def get_provider(self):
+        return get_object_or_404(self.provider_type.model, team=self.request.team, pk=self.kwargs["pk"])
+
+
+class ServiceProviderUsagesView(ServiceProviderUsagesMixin, django_views.View):
+    """Page shell only.
+
+    Resolving usages fans out over many tables and can take several seconds,
+    so the list itself is fetched by ``ServiceProviderUsagesContentView`` via
+    HTMX and the shell shows a spinner in the meantime.
+    """
+
+    template_name = "service_providers/usages.html"
+
     def get(self, request, *args, **kwargs):
-        provider = get_object_or_404(self.provider_type.model, team=request.team, pk=self.kwargs["pk"])
-        usages = get_provider_usages(provider)
+        provider = self.get_provider()
         return render(
             request,
             self.template_name,
             {
                 "provider": provider,
                 "provider_type": self.provider_type,
-                "usages": usages,
                 "title": f"Usages of {provider.name}",
                 "active_tab": "manage-team",
+            },
+        )
+
+
+class ServiceProviderUsagesContentView(ServiceProviderUsagesMixin, django_views.View):
+    template_name = "service_providers/components/usages_content.html"
+
+    def get(self, request, *args, **kwargs):
+        provider = self.get_provider()
+        return render(
+            request,
+            self.template_name,
+            {
+                "provider": provider,
+                "provider_type": self.provider_type,
+                "usages": get_provider_usages(provider),
             },
         )
 
