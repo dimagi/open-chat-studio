@@ -310,20 +310,32 @@ def iter_session_evaluation_messages(
     if not session_external_ids:
         return
 
-    # Resolved here rather than as a default argument so the module constant stays patchable
-    # in tests, matching apps.experiments.export's use of EXPORT_CHUNK_SIZE.
-    chunk_size = chunk_size or SESSION_CHUNK_SIZE
-
     base_qs = ExperimentSession.objects.filter(external_id__in=session_external_ids)
     if team is not None:
         base_qs = base_qs.filter(team=team)
 
-    # Resolve the external ids to pks once. Keyset-paginating the external_id queryset instead
-    # would re-send the whole external_id IN-list on every page — 10k bind parameters per chunk,
-    # and a hard ceiling once the statement exceeds PostgreSQL's 65535-parameter limit. A list of
-    # ints is cheap to hold (~8 bytes each) compared to the message rows it lets us avoid.
+    yield from iter_session_evaluation_messages_for_sessions(base_qs, chunk_size=chunk_size)
+
+
+def iter_session_evaluation_messages_for_sessions(
+    session_qs, chunk_size: int | None = None
+) -> Generator["EvaluationMessage"]:
+    """Yield one EvaluationMessage per session in *session_qs*, a chunk of sessions at a time.
+
+    Takes a queryset rather than a list of ids so a caller holding a filter (rather than a
+    user-supplied selection) never has to materialise the ids to hand them over.
+    """
+    # Resolved here rather than as a default argument so the module constant stays patchable
+    # in tests, matching apps.experiments.export's use of EXPORT_CHUNK_SIZE.
+    chunk_size = chunk_size or SESSION_CHUNK_SIZE
+
+    # Resolve to pks once, then page over that list. Keyset-paginating the source queryset
+    # instead would re-run its filter (external_id IN-lists of 10k bind parameters, or a
+    # multi-column session filter) on every chunk, and would re-resolve relative date ranges
+    # against a moving `now()` mid-walk. A list of ints is cheap to hold (~8 bytes each)
+    # compared to the message rows it lets us avoid.
     # ExperimentSession.Meta.ordering is ["-created_at"], so pk ordering must be explicit.
-    session_pks = list(base_qs.order_by("pk").values_list("pk", flat=True))
+    session_pks = list(session_qs.order_by("pk").values_list("pk", flat=True))
 
     for pk_chunk in itertools.batched(session_pks, chunk_size, strict=False):
         sessions = list(ExperimentSession.objects.filter(pk__in=pk_chunk).select_related("experiment").order_by("pk"))
