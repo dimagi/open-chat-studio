@@ -207,7 +207,7 @@ disappears, leaving `Pipeline.data` as `{edges, viewport}`. It landed in two pha
   `apply_pipeline_patch` include a `position` per entry) and `update_nodes_from_data`
   mirrors them onto the columns via `node_position_fields` (unusable positions from raw
   import files are skipped, not written). `data.nodes` stayed authoritative for layout.
-- The `strip_node_data` command also backfills the columns from the blob positions.
+- The strip (migration `pipelines.0030`) also backfills the columns from the blob positions.
 
 **Phase 2 — read switch (ADR-0048):**
 
@@ -219,10 +219,12 @@ disappears, leaving `Pipeline.data` as `{edges, viewport}`. It landed in two pha
 - `apply_pipeline_patch` works off `flow_data` (merged with the stored `viewport`) and
   returns the complete mapping; `duplicate_pipeline_with_new_ids` shrinks to id generation
   and edge rewriting, taking the id→type map from the rows.
-- `strip_node_data` now drops the `nodes` key entirely (after the position backfill);
-  rolling back migration `pipelines.0030` (`migrate pipelines 0029`) reconstructs the full
-  `nodes` list from the rows for a code rollback. Rerun the command at deploy to heal any
-  writer that bypassed the shadow-write (e.g. revert).
+- Migration `pipelines.0030` drops the `nodes` key entirely (after the position backfill),
+  calling the helpers in `pipelines/migrations/utils/strip_node_data.py` with historical
+  models; rolling it back (`migrate pipelines 0029`) reconstructs the full `nodes` list from
+  the rows for a code rollback. The strip is idempotent but runs once, at deploy — there is
+  no rerunnable command, so drift introduced afterwards (e.g. a revert restoring old blobs)
+  needs a fresh data migration to heal.
 - Deferred: making the position columns non-null once the backfill has run everywhere.
 
 ## Backward compatibility

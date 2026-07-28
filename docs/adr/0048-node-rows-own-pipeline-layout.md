@@ -37,9 +37,9 @@ from `Node.type`.
   mapping.
 - `duplicate_pipeline_with_new_ids` takes the id→type mapping from the rows, generates new
   ids and rewrites edges — it no longer reads a node list from the blob.
-- The `strip_node_data` command drops the `nodes` key (after backfilling positions from any
-  remaining blob); rolling back migration `pipelines.0030` (`migrate pipelines 0029`)
-  reconstructs the full `nodes` list from the rows for a code rollback.
+- Migration `pipelines.0030` drops the `nodes` key (after backfilling positions from any
+  remaining blob); rolling it back (`migrate pipelines 0029`) reconstructs the full `nodes`
+  list from the rows for a code rollback.
 
 The wire format is unchanged: the editor still sends and receives full nodes.
 
@@ -49,8 +49,9 @@ The wire format is unchanged: the editor still sends and receives full nodes.
   impossible for migrated rows, and `flow_data`'s old missing-node `KeyError` (a row absent
   from `data["nodes"]`) is gone because the rows drive the read.
 - Position columns stay nullable; an un-backfilled row renders at the origin until its next
-  save. Running `strip_node_data` at deploy backfills positions and heals any writer that
-  bypassed the shadow-write (e.g. revert).
+  save. Migration `pipelines.0030` backfills positions at deploy and heals any writer that
+  bypassed the shadow-write (e.g. revert). It runs once — later drift needs a new data
+  migration, not a command rerun.
 - `update_nodes_from_data` changed signature again (values may be `None`); every caller and
   test passes a complete mapping.
 - Making the position columns non-null is deferred to a follow-up once the backfill has run

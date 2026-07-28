@@ -15,7 +15,7 @@ def duplicate_pipeline_with_new_ids(pipeline_data, node_types: dict[str, str]):
     to the edges.
 
     Any residual ``nodes`` key (an un-migrated old-format source) is dropped so the copy is
-    layout-only: keeping it would leave a stale, un-remapped blob that ``strip_node_data``
+    layout-only: keeping it would leave a stale, un-remapped blob that the strip migration
     can no longer heal, since the copied rows now use new ids.
     """
     new_data = copy.deepcopy(pipeline_data)

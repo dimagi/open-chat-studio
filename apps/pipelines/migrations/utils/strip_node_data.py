@@ -8,9 +8,9 @@ at deploy also heals any writer that bypassed the phase-1 shadow-write (e.g. rev
 restoring old layout data). Idempotent and safe to rerun: rows already positioned produce
 no write, and data already without a ``nodes`` key is skipped.
 
-``strip_node_data_from_pipelines`` is run by the ``strip_node_data`` management command,
-which migration ``pipelines.0030_strip_node_data`` invokes; that migration's reverse calls
-``rebuild_node_data_in_pipelines`` with historical models.
+Migration ``pipelines.0030_strip_node_data`` runs ``strip_node_data_from_pipelines``; its
+reverse runs ``rebuild_node_data_in_pipelines``. Both are called with historical models,
+so they stick to ``_base_manager`` and plain column access.
 """
 
 import logging
@@ -22,25 +22,15 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 500
 
 
-def strip_node_data_from_pipelines(Pipeline, Node, progress_callback=None):
-    """`progress_callback(processed, total)` is invoked every ``BATCH_SIZE`` pipelines
-    and once more on the final pipeline, if given.
-    """
+def strip_node_data_from_pipelines(Pipeline, Node):
     queryset = Pipeline._base_manager.exclude(data__isnull=True)
-    total = queryset.count()
 
     pending = []
-    processed = 0
     for pipeline in queryset.iterator(chunk_size=BATCH_SIZE):
-        rows = []
-        for row in Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"):
-            rows.append(row)
+        rows = list(Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"))
 
         _backfill_positions(pipeline, Node, node_rows=rows)
         stripped_data = _strip_nodes(pipeline, Node, rows)
-        processed += 1
-        if progress_callback and (processed % BATCH_SIZE == 0 or processed == total):
-            progress_callback(processed, total)
         if stripped_data is None:
             continue
         pipeline.data = stripped_data

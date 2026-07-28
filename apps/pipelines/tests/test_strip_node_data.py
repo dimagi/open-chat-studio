@@ -1,30 +1,10 @@
-import importlib
-
 import pytest
-from django.core.management import call_command
 
-from apps.data_migrations.models import CustomMigration
-from apps.data_migrations.utils.migrations import is_migration_applied
-from apps.pipelines.management.commands.strip_node_data import Command as StripNodeDataCommand
 from apps.pipelines.migrations.utils.strip_node_data import (
     rebuild_node_data_in_pipelines,
     strip_node_data_from_pipelines,
 )
 from apps.pipelines.models import Node, Pipeline
-
-MIGRATION_NAME = StripNodeDataCommand.migration_name
-# Leading digit, so it cannot be imported with a plain import statement.
-migration_0030 = importlib.import_module("apps.pipelines.migrations.0030_strip_node_data")
-
-
-@pytest.fixture()
-def unapplied_migration():
-    """Clear the run-once marker that migration 0030 set when the test database was built.
-
-    Without this the command short-circuits as already-applied and the command tests pass
-    vacuously. The delete is rolled back with the test transaction.
-    """
-    CustomMigration.objects.filter(name=MIGRATION_NAME).delete()
 
 
 def _old_format_data():
@@ -132,11 +112,6 @@ class TestStripNodeData:
         pipeline.refresh_from_db()
         assert pipeline.data == data
 
-    def test_progress_callback_is_optional(self, team):
-        _create_old_format_pipeline(team)
-
-        strip_node_data_from_pipelines(Pipeline, Node)
-
 
 @pytest.mark.django_db()
 class TestBackfillPositions:
@@ -241,43 +216,3 @@ class TestRebuildNodeData:
         rebuild_node_data_in_pipelines(Pipeline, Node)
         pipeline.refresh_from_db()
         assert pipeline.data == first_pass
-
-
-@pytest.mark.django_db()
-@pytest.mark.usefixtures("unapplied_migration")
-class TestStripNodeDataCommand:
-    """The command backs migration ``pipelines.0030_strip_node_data``, so it runs through
-    IdempotentCommand's run-once marker."""
-
-    def test_strips_blobs(self, team):
-        pipeline = _create_old_format_pipeline(team)
-
-        call_command("strip_node_data")
-
-        pipeline.refresh_from_db()
-        assert "nodes" not in pipeline.data
-
-    def test_records_the_migration_as_applied(self, team):
-        _create_old_format_pipeline(team)
-
-        call_command("strip_node_data")
-
-        assert is_migration_applied(MIGRATION_NAME)
-
-    def test_second_run_is_skipped(self, team):
-        call_command("strip_node_data")
-        pipeline = _create_old_format_pipeline(team)
-
-        call_command("strip_node_data")
-
-        pipeline.refresh_from_db()
-        assert pipeline.data == _old_format_data()
-
-    def test_force_reruns_after_the_marker_is_set(self, team):
-        call_command("strip_node_data")
-        pipeline = _create_old_format_pipeline(team)
-
-        call_command("strip_node_data", "--force")
-
-        pipeline.refresh_from_db()
-        assert "nodes" not in pipeline.data
