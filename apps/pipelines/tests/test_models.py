@@ -534,6 +534,35 @@ class TestUpdateNodesFromData:
         with pytest.raises(ValueError, match="ghost"):
             pipeline.update_nodes_from_data({start["id"]: None, end["id"]: None, "ghost": make_entry("ghost")})
 
+    def test_rejected_mapping_leaves_existing_rows_intact(self):
+        """An incomplete mapping means "delete the rest", so a mapping that turns out to be
+        invalid must not take the pipeline's nodes with it."""
+        start, template, end = start_node(), render_template_node(), end_node()
+        pipeline = create_pipeline_model([start, template, end])
+
+        with pytest.raises(ValueError, match="ghost"):
+            pipeline.update_nodes_from_data({"ghost": None})
+
+        assert set(pipeline.node_set.values_list("flow_id", flat=True)) == {
+            start["id"],
+            template["id"],
+            end["id"],
+        }
+
+    def test_mapping_key_must_match_the_node_id(self):
+        """The key is the flow_id the content is written under, so a mismatch would store
+        this node's content on a different row."""
+        start, end = start_node(), end_node()
+        pipeline = create_pipeline_model([start, end])
+
+        with pytest.raises(ValueError, match="does not match node id"):
+            pipeline.update_nodes_from_data(
+                {
+                    start["id"]: None,
+                    end["id"]: content_flow_node("somewhere-else", "EndNode", params={"name": "end"}),
+                }
+            )
+
     def test_re_adding_archived_node_flow_id_creates_fresh_working_node(self):
         """Removing a node that has versions archives it; revert re-introduces the same
         flow_id, which must yield a fresh editable working node without colliding with
@@ -631,6 +660,18 @@ class TestLayoutOnlyData:
         for edge in copy.data["edges"]:
             assert edge["source"] in copied_flow_ids
             assert edge["target"] in copied_flow_ids
+
+    def test_flow_data_tolerates_empty_stored_data(self):
+        """``edges`` is required on the flow model, so empty stored data must not break the
+        read — the rows still describe the graph."""
+        start, end = start_node(), end_node()
+        pipeline = create_pipeline_model([start, end])
+        pipeline.data = {}
+
+        flow_data = pipeline.flow_data
+
+        assert {node["id"] for node in flow_data["nodes"]} == {start["id"], end["id"]}
+        assert flow_data["edges"] == []
 
     def test_flow_data_ignores_stale_embedded_blob(self):
         """Old-format stored data still embeds node content; flow_data must ignore it and

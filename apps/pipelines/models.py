@@ -133,6 +133,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[get_slug_for_team(self.team_id), self.id])
 
+    @transaction.atomic()
     def update_nodes_from_data(self, node_data: dict[str, FlowNode | None]) -> None:
         """Reconcile this pipeline's ``Node`` rows against ``node_data``.
 
@@ -142,11 +143,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         included (they are the authoritative layout source for reads). A membership-only entry
         (``None``, or a ``FlowNode`` with no ``data``) leaves an existing row untouched and is
         an error when no row exists.
+
+        Because an incomplete mapping means "delete the rest", the mapping is validated
+        before anything is removed, and the whole reconcile runs in one transaction: a
+        caller that passes a bad mapping gets an exception, not a pipeline with no nodes.
         """
         current_ids = set(self.node_ids)
-        new_ids = set(node_data)
-        to_remove = current_ids - new_ids
+        membership_only = {flow_id for flow_id, node in node_data.items() if node is None or node.data is None}
+        missing = membership_only - current_ids
+        if missing:
+            raise MissingNodeDataError(missing)
 
+        to_remove = current_ids - set(node_data)
         pipeline_nodes = Node.objects.annotate(versions_count=models.Count("versions")).filter(
             pipeline=self, flow_id__in=to_remove
         )
@@ -157,14 +165,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        membership_only = {flow_id for flow_id, node in node_data.items() if node is None or node.data is None}
-        missing = membership_only - current_ids
-        if missing:
-            raise MissingNodeDataError(missing)
-
         for flow_id, node in node_data.items():
             if flow_id in membership_only:
                 continue
+            if node.id != flow_id:
+                # The key is the flow_id the content is written under, so a mismatch would
+                # silently store this node's content on a different row.
+                raise ValueError(f"node_data key {flow_id!r} does not match node id {node.id!r}")
             content = node.data
             created_node, _ = Node.objects.update_or_create(
                 pipeline=self,
@@ -231,7 +238,10 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         ``self.data`` supplies only edges (and viewport when present); each node's content,
         layout position and react-flow type come from its ``Node`` row (ADR-0048).
         """
-        flow = Flow(**self.data)
+        # ``edges`` is required, so stand in for data that is empty or missing entirely; the
+        # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
+        # different fallback: that one returns the empty data as-is rather than rebuilding.
+        flow = Flow(**(self.data or {"edges": []}))
         nodes = []
         for node in self.node_set.all():
             nodes.append(
@@ -375,7 +385,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
-    # Layout position on the editor canvas (ADR-0048). Null until the row is saved.
+    # Layout position on the editor canvas (ADR-0048) — the authoritative source for reads.
+    # Null until the row is saved, or until migration 0030 backfills it from the old blob.
     position_x = models.FloatField(null=True, blank=True)
     position_y = models.FloatField(null=True, blank=True)
     working_version = models.ForeignKey(
