@@ -21,9 +21,9 @@ def apply_pipeline_patch(
 ) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
     """Apply a semantic graph diff to ``current_flow`` and return ``(layout, node_data)``.
 
-    ``current_flow`` is the full current graph — ``Pipeline.flow_data`` (nodes rebuilt from
-    the rows) merged with any stored top-level keys (viewport) — because ``Pipeline.data``
-    no longer lists nodes (ADR-0048).
+    ``current_flow`` is the full current graph — ``Pipeline.flow_data``, whose nodes are
+    rebuilt from the rows because ``Pipeline.data`` no longer lists them (ADR-0048), and
+    which carries the stored top-level keys (viewport) straight through.
 
     ``layout`` is the merged graph minus its nodes (edges, viewport and unknown top-level
     keys preserved), ready to be dumped into ``Pipeline.data``.

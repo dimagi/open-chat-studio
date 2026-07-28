@@ -466,8 +466,8 @@ class TestPatchEndpoint:
         assert response_nodes["llm-new"]["data"]["label"] == "New LLM"
 
     def test_patch_preserves_stored_viewport(self, authed_client, pipeline, team_with_users):
-        """flow_data drops viewport, so the PATCH engine merges it back from the stored
-        data; a patch touching only a node must leave the viewport intact."""
+        """flow_data carries the stored viewport through to the PATCH engine, which returns
+        it in the layout; a patch touching only a node must leave the viewport intact."""
         team_slug = team_with_users.slug
         pipeline.data = {**pipeline.data, "viewport": {"x": 12, "y": 34, "zoom": 2}}
         pipeline.save(update_fields=["data"])

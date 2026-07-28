@@ -462,10 +462,10 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         if patch.name is not None:
             pipeline.name = patch.name
 
-        # The patch engine works off the full current graph: nodes rebuilt from the rows
-        # (Pipeline.data no longer lists them, ADR-0048) plus stored top-level keys (viewport).
-        current_flow = {**pipeline.data, **pipeline.flow_data}
-        layout, node_data = apply_pipeline_patch(current_flow, patch)
+        # The patch engine works off the full current graph: nodes rebuilt from the rows,
+        # since Pipeline.data no longer lists them (ADR-0048). flow_data already carries the
+        # stored top-level keys (viewport) through Flow's extra="allow", so it is complete.
+        layout, node_data = apply_pipeline_patch(pipeline.flow_data, patch)
         pipeline.data = layout.model_dump()
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
