@@ -14,6 +14,7 @@ from taskbadger import StatusEnum
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
 from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
 from apps.evaluations.tasks import (
+    _ensure_taskbadger_task,
     _mark_run_failed,
     _publish_tick,
     _TickResult,
@@ -442,6 +443,42 @@ def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _pu
     for message_id, evaluator_id in EvaluationResult.objects.filter(run=run).values_list("message_id", "evaluator_id"):
         assert (message_id, evaluator_id) not in seen
         seen.add((message_id, evaluator_id))
+
+
+@pytest.mark.django_db()
+def test_ensure_taskbadger_task_records_run_context():
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(config=config, team=config.team, type=EvaluationRunType.DELTA)
+
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe") as create_mock:
+        create_mock.return_value = Mock(id="tb-new")
+        _ensure_taskbadger_task(run, total=5)
+
+    assert create_mock.call_args.kwargs["name"] == "Evaluation run"
+    assert create_mock.call_args.kwargs["data"] == {
+        "run_id": run.id,
+        "run_type": "delta",
+        "config_id": config.id,
+        "config_name": config.name,
+        "dataset_id": config.dataset_id,
+        "dataset_name": config.dataset.name,
+    }
+    run.refresh_from_db()
+    assert run.taskbadger_task_id == "tb-new"
+
+
+@pytest.mark.django_db()
+def test_ensure_taskbadger_task_is_free_once_created(django_assert_num_queries):
+    """The config lookup must stay below the task-id guard: it runs once per run, not once per tick."""
+    run = EvaluationRunFactory.create(taskbadger_task_id="tb-1")
+
+    with (
+        patch("apps.evaluations.tasks.taskbadger.create_task_safe") as create_mock,
+        django_assert_num_queries(0),
+    ):
+        _ensure_taskbadger_task(run, total=5)
+
+    create_mock.assert_not_called()
 
 
 @pytest.mark.django_db()
