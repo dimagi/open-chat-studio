@@ -412,17 +412,8 @@ class EvaluationDataset(BaseTeamModel):
             keyed_batch = [(message, self._dedup_key(message)) for message in batch]
             with transaction.atomic():
                 EvaluationDataset.objects.select_for_update().get(pk=self.pk)
-                candidates = {key for _, key in keyed_batch if key is not None}
-                seen = self._existing_dedup_keys(candidates)
-                to_create = []
-                for message, key in keyed_batch:
-                    if key is not None:
-                        if key in seen:
-                            skipped += 1
-                            continue
-                        seen.add(key)
-                    to_create.append(message)
-
+                to_create, batch_skipped = self._partition_new_in_batch(keyed_batch)
+                skipped += batch_skipped
                 if to_create:
                     created = EvaluationMessage.objects.bulk_create(to_create, batch_size=batch_size)
                     self.messages.add(*created)
@@ -430,6 +421,29 @@ class EvaluationDataset(BaseTeamModel):
             if progress_callback:
                 progress_callback(len(created_ids), skipped)
         return created_ids, skipped
+
+    def _partition_new_in_batch(
+        self, keyed_batch: list[tuple[EvaluationMessage, tuple | None]]
+    ) -> tuple[list[EvaluationMessage], int]:
+        """Split one keyed batch into (messages_to_create, skipped_count), applying dedup.
+
+        Must run under the dataset row lock so the existing-key lookup stays consistent with the
+        insert. Messages with a null key can't be duplicates and are always kept.
+        """
+        candidates = {key for _, key in keyed_batch if key is not None}
+        seen = self._existing_dedup_keys(candidates)
+        to_create = []
+        skipped = 0
+        for message, key in keyed_batch:
+            if key is None:
+                to_create.append(message)
+                continue
+            if key in seen:
+                skipped += 1
+                continue
+            seen.add(key)
+            to_create.append(message)
+        return to_create, skipped
 
     class Meta:
         unique_together = ("name", "team")
