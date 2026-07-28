@@ -27,7 +27,10 @@ logger = get_task_logger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -> dict:
+def async_export_chat(self, experiment_id: int, query_params: str, time_zone) -> dict:
+    from django.http import QueryDict
+
+    query_params = QueryDict(query_params)
     experiment = Experiment.objects.get(id=experiment_id)
     filtered_sessions = get_filtered_sessions(experiment, query_params, time_zone)
     filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv.gz"
