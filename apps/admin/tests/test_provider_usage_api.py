@@ -117,8 +117,8 @@ def test_includes_team_metadata(superuser_client, settings):
 @pytest.mark.django_db()
 def test_total_cost_counts_evaluation_spend(superuser_client):
     """Billing view: eval spend is the team's spend, counted in the total with no
-    per-source split (ADR-0048). The report's token half counts eval traces too, so
-    the two halves reconcile."""
+    per-source split (ADR-0048). Only the cost half sees judge spend — the token half
+    reads `Trace`, and judge calls have no trace."""
     team = TeamFactory(name="Alpha")
     _trace(team, 100)
     UsageRecordFactory(team=team, model_name="gpt-4o", cost=Decimal("1.00"), at=WHEN)
