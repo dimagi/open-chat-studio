@@ -330,9 +330,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         Split text content into overlapping chunks for processing.
 
         Args:
-            text: Optional pre-read file content. Passed by callers that already
-                have the content in memory (e.g. contextual indexing) to avoid a
-                second read.
+            text: File content as text.
             chunk_size: Maximum size of each text chunk.
             chunk_overlap: Number of characters/tokens to overlap between chunks.
 
