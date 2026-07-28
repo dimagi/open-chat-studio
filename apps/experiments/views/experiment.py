@@ -23,7 +23,6 @@ from django.http import (
     HttpResponseForbidden,
     HttpResponseRedirect,
     JsonResponse,
-    QueryDict,
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
