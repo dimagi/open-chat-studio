@@ -47,21 +47,10 @@ A couple of conventions worth knowing:
 
 ## Cross-Cutting Concerns
 
-The architectural patterns underlying these concerns — multi-tenancy, versioning, async tasks, API design, LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. The key files below are useful pointers when working in these areas.
-
-### Background Tasks
-
-**Key Files**:
-
-- `config/celery.py`: Celery configuration
-- Various `tasks.py` files in different apps
+The architectural patterns underlying these concerns — multi-tenancy, versioning, async tasks, API design, LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. Additional useful pointers below for when working in these areas:
 
 ### Authentication and Authorization
-
-**Key Files**:
-
-- `teams/middleware.py`: Team-based access control
-- `teams/decorators.py`: Permission decorators
+See the [multi-tenancy guide](../agents/multi_tenancy.md) and [view security guide](../agents/django_view_security.md) for team-scoping and permission patterns.
 
 ## Monitoring & Observability
 
