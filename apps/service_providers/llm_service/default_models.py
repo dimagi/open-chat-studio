@@ -1,7 +1,8 @@
 import dataclasses
 from collections import defaultdict
 
-from django.db import transaction
+from django.apps import apps as global_apps
+from django.db import connection, transaction
 from pydantic import BaseModel
 
 from apps.service_providers.llm_service.model_parameters import (
@@ -317,8 +318,54 @@ def _update_existing_global_model(existing_global_model, model):
         existing_global_model.save()
 
 
+def _evaluator_provider_model_fk_in_db() -> bool:
+    """Whether ``Evaluator.llm_provider_model_id`` exists as a column in the database.
+
+    Asked by introspection rather than the migration recorder because what matters is
+    whether the FK constraint is live, not which migration installed it.
+    """
+    evaluator_table = global_apps.get_model("evaluations", "Evaluator")._meta.db_table
+    with connection.cursor() as cursor:
+        columns = connection.introspection.get_table_description(cursor, evaluator_table)
+    return any(column.name == "llm_provider_model_id" for column in columns)
+
+
+def _repoint_evaluators(custom_model, global_model) -> None:
+    """Move every evaluator on ``custom_model`` to ``global_model``, ``params`` and FK together.
+
+    Written out here rather than calling ``Evaluator.set_llm_provider_model_id`` because
+    this also runs from migrations (``migration_utils.llm_model_migration``), where these
+    are historical models: they carry no custom methods, and in states older than
+    ``evaluations.0018`` the ``evaluators`` accessor does not exist at all.
+    """
+    evaluators = getattr(custom_model, "evaluators", None)
+    if evaluators is None:
+        # No accessor means this migration state predates ``evaluations.0018``. Skipping is
+        # only safe while the FK column is absent from the database too — once it exists the
+        # constraint is live even though this state cannot see it, and the caller's delete
+        # would fail on a deferred FK violation at commit rather than here.
+        if _evaluator_provider_model_fk_in_db():
+            raise RuntimeError(
+                f"Cannot repoint evaluators off LlmProviderModel {custom_model.type}/{custom_model.name}: "
+                "evaluations.Evaluator is absent from this migration's app state, but its "
+                "llm_provider_model FK is already live in the database, so deleting the model would "
+                "violate it. Add ('evaluations', '0018_evaluator_llm_provider_fks') to the dependencies "
+                "of the migration calling llm_model_migration()."
+            )
+        return
+
+    for evaluator in evaluators.all():
+        evaluator.params["llm_provider_model_id"] = global_model.id
+        evaluator.llm_provider_model_id = global_model.id
+        evaluator.save(update_fields=["params", "llm_provider_model_id"])
+
+
 def _replace_custom_model_with_global(custom_model, global_model, LlmProviderModel):
     """Repoint everything referencing ``custom_model`` at ``global_model``, then delete it."""
+    # Evaluators first: they keep a copy of the model id in ``params`` alongside the FK, so
+    # both have to move together. Once done they drop out of get_related_objects below.
+    _repoint_evaluators(custom_model, global_model)
+
     for obj in get_related_objects(custom_model):
         fields = [f for f in obj._meta.fields if f.related_model == LlmProviderModel]
         if not fields:

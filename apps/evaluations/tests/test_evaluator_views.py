@@ -152,7 +152,8 @@ class TestEditEvaluatorSchemaDrift:
 
 @pytest.mark.django_db()
 class TestEvaluatorLlmProviderSelection:
-    def test_a_valid_selection_saves(self, client_with_user, team, evaluator):
+    def test_a_valid_selection_saves_and_repoints_the_fks(self, client_with_user, team, evaluator):
+        """The submitted ids land on the FK columns, not just in params."""
         new_provider = LlmProviderFactory.create(team=team)
         new_model = LlmProviderModelFactory.create(team=team, type=new_provider.type)
         params = _params(evaluator.params["output_schema"], evaluator) | {
@@ -167,6 +168,8 @@ class TestEvaluatorLlmProviderSelection:
         evaluator.refresh_from_db()
         assert evaluator.params["llm_provider_id"] == new_provider.id
         assert evaluator.params["llm_provider_model_id"] == new_model.id
+        assert evaluator.llm_provider_id == new_provider.id
+        assert evaluator.llm_provider_model_id == new_model.id
 
     def test_a_model_from_another_provider_type_is_rejected(self, client_with_user, team, evaluator):
         """The picker only offers matching types, so a mismatch means a hand-crafted post."""

@@ -20,7 +20,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
-from apps.evaluations.exceptions import InFlightRunsError
+from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError
 from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
     ConditionType,
@@ -33,7 +33,7 @@ from apps.experiments.filters import ChatMessageFilter
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import get_slug_for_team
-from apps.utils.fields import SanitizedJSONField
+from apps.utils.fields import SanitizedJSONField, as_int
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
@@ -104,6 +104,24 @@ class Evaluator(BaseTeamModel):
         default=EvaluationMode.MESSAGE,
         help_text="Message mode evaluates individual message pairs; Session mode evaluates entire conversations",
     )
+    # The LLM provider an LLM-backed evaluator runs against. Null for evaluators with no LLM
+    # dependency (PythonEvaluator), and nulled by SET_NULL when the provider is deleted —
+    # which is the point: the id used to live only in ``params``, where a deleted provider
+    # left a dangling integer behind. Kept in sync with params by ``sync_llm_provider_fks``.
+    llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluators",
+    )
+    llm_provider_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evaluators",
+    )
 
     def __str__(self):
         try:
@@ -111,6 +129,57 @@ class Evaluator(BaseTeamModel):
         except KeyError:
             label = self.type
         return f"{self.name} ({label})"
+
+    def save(self, *args, **kwargs):
+        """Derive the LLM FK columns from ``params`` before every write.
+
+        Doing it here rather than in the form keeps every writer (the form, team cloning,
+        bootstrap data, factories) consistent without each having to remember.
+        """
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "params" in update_fields:
+            changed = self.sync_llm_provider_fks()
+            if update_fields is not None:
+                kwargs["update_fields"] = [*update_fields, *changed]
+        return super().save(*args, **kwargs)
+
+    def sync_llm_provider_fks(self) -> list[str]:
+        """Point the LLM FK columns at the ids in ``params``, returning the columns changed.
+
+        A dangling id becomes null instead of being written straight through: nothing stops
+        an LlmProvider being deleted while an evaluator references it, and re-deriving the
+        stale id would trip the deferred DB constraint at commit. Mirrors
+        ``Node._sync_resource_fk_fields``.
+        """
+        changed = []
+        for field_name in ("llm_provider", "llm_provider_model"):
+            attname = f"{field_name}_id"
+            value = as_int((self.params or {}).get(attname))
+            current = getattr(self, attname)
+            if value == current:
+                # Already in sync, so there is nothing to validate: a non-null FK column is
+                # guaranteed to resolve by the constraint itself, and SET_NULL would have
+                # nulled it if the row had since been deleted. Skipping the existence query
+                # here keeps the common re-save free.
+                continue
+            if value is not None:
+                related_model = self._meta.get_field(field_name).related_model
+                if not related_model._base_manager.filter(pk=value).exists():
+                    value = None
+                if value == current:
+                    continue
+            setattr(self, attname, value)
+            changed.append(attname)
+        return changed
+
+    def set_llm_provider_model_id(self, provider_model_id: int | None):
+        """Repoint this evaluator at another LLM provider model (or at nothing).
+
+        ``params`` still carries a copy of the id for the schema-driven form UI, so both
+        move together: saving ``params`` re-derives the FK column.
+        """
+        self.params["llm_provider_model_id"] = provider_model_id
+        self.save(update_fields=["params"])
 
     def delete(self, *args, **kwargs):
         """Block deletion while any config using this evaluator has an in-flight run."""
@@ -122,6 +191,32 @@ class Evaluator(BaseTeamModel):
         module = importlib.import_module("apps.evaluations.evaluators")
         return getattr(module, self.type)
 
+    def requires_llm_provider(self) -> bool:
+        """Whether this evaluator type runs against an LLM (so needs the provider FKs set)."""
+        module = importlib.import_module("apps.evaluations.evaluators")
+        return issubclass(self.evaluator, module.LLMResponseMixin)
+
+    def get_evaluator_params(self) -> dict:
+        """``params`` with the LLM ids taken from the FK columns rather than the JSON blob.
+
+        The FK columns are the resolved reference. ``params`` only carries the raw ids the
+        form submitted — it is what the schema-driven UI edits — and may still name a
+        provider that has since been deleted.
+        """
+        params = dict(self.params or {})
+        if not self.requires_llm_provider():
+            return params
+
+        if self.llm_provider_id is None or self.llm_provider_model_id is None:
+            raise EvaluationRunException(
+                f"Evaluator '{self.name}' has no LLM provider configured. "
+                "Edit the evaluator and select a provider and model."
+            )
+        return params | {
+            "llm_provider_id": self.llm_provider_id,
+            "llm_provider_model_id": self.llm_provider_model_id,
+        }
+
     def run(
         self,
         message: EvaluationMessage,
@@ -129,7 +224,9 @@ class Evaluator(BaseTeamModel):
         *,
         usage_context: EvaluatorUsageContext | None = None,
     ) -> EvaluatorResult:
-        return self.evaluator(**self.params).run(message, generated_response, usage_context=usage_context)
+        return self.evaluator(**self.get_evaluator_params()).run(
+            message, generated_response, usage_context=usage_context
+        )
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[get_slug_for_team(self.team_id), self.id])
