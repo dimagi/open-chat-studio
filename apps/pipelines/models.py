@@ -20,9 +20,9 @@ from apps.pipelines.flow import (
     Flow,
     FlowNode,
     FlowNodeData,
+    FlowWithoutNodes,
     node_position_fields,
     react_flow_node_type,
-    split_flow_data,
 )
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.versioning import get_versioned_param_specs
@@ -255,24 +255,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
         # different fallback: that one returns the empty data as-is rather than rebuilding.
         flow = Flow(**(self.data or {"edges": []}))
-        nodes = []
-        for node in self.node_set.all():
-            nodes.append(
-                FlowNode(
-                    id=node.flow_id,
-                    # react-flow does arithmetic on position.x/y, so an un-backfilled row
-                    # must serve a real coordinate pair, not an empty dict (NaN layout).
-                    position=node.position or {"x": 0, "y": 0},
-                    type=react_flow_node_type(node.type),
-                    data=FlowNodeData(
-                        id=node.flow_id,
-                        type=node.type,
-                        params=node.params,
-                        label=node.label,
-                    ),
-                )
-            )
-        flow.nodes = nodes
+        flow.nodes = [node.to_flow_node() for node in self.node_set.all()]
         return flow.model_dump()
 
     @property
@@ -304,25 +287,23 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def revert_to_version(self, version: "Pipeline") -> None:
         """Reset this working pipeline to the state of ``version``.
 
-        Builds the full flow from ``version.flow_data`` (which reconstructs each node's
-        content from the version's node rows), remaps params that reference versioned
-        records back to their working id — the inverse of the rewriting done during
-        publish, see ``apps.pipelines.versioning`` — then persists the edges and rebuilds
-        every working node from the version's content via ``update_nodes_from_data``. The
-        versioned record for each param is read from the version node's resource FK column.
-        """
-        # flow_data's nodes are built from the same node_set, so every flow_id resolves here.
-        version_nodes_by_flow_id = {node.flow_id: node for node in version.node_set.all()}
-        data = copy.deepcopy(version.flow_data)
-        for node in data.get("nodes", []):
-            content = node.get("data", {})
-            params = content.get("params", {})
-            version_node = version_nodes_by_flow_id[node["id"]]
-            for spec in get_versioned_param_specs(content.get("type")):
-                spec.revert_referenced_record(version_node, params)
+        Takes the version's node rows one at a time and remaps params that reference
+        versioned records back to their working id — the inverse of the rewriting done
+        during publish, see ``apps.pipelines.versioning`` — then persists the version's
+        edges and rebuilds every working node from that content via
+        ``update_nodes_from_data``. The versioned record for each param is read from the
+        version node's resource FK column.
 
-        edge_data, node_data = split_flow_data(Flow(**data))
-        self.data = edge_data.model_dump()
+        The version's stored ``data`` supplies the edges only.
+        """
+        node_data: dict[str, FlowNode | None] = {}
+        for version_node in version.node_set.all():
+            flow_node = version_node.to_flow_node()
+            for spec in get_versioned_param_specs(version_node.type):
+                spec.revert_referenced_record(version_node, flow_node.data.params)
+            node_data[version_node.flow_id] = flow_node
+
+        self.data = FlowWithoutNodes(**(version.data or {"edges": []})).model_dump()
         self.edit_revision += 1
         self.save(update_fields=["data", "edit_revision"])
         self.update_nodes_from_data(node_data)
@@ -473,6 +454,24 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if self.position_x is None or self.position_y is None:
             return None
         return {"x": self.position_x, "y": self.position_y}
+
+    def to_flow_node(self) -> FlowNode:
+        """This row as a react-flow node, content included.
+
+        ``params`` is deep-copied so a caller that rewrites the returned node's params
+        (``Pipeline.revert_to_version``) cannot reach back into this row's stored dict.
+        """
+        return FlowNode(
+            id=self.flow_id,
+            position=self.position or {"x": 0, "y": 0},
+            type=react_flow_node_type(self.type),
+            data=FlowNodeData(
+                id=self.flow_id,
+                type=self.type,
+                params=copy.deepcopy(self.params),
+                label=self.label,
+            ),
+        )
 
     def has_parameter(self, param_name: str) -> bool:
         """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
