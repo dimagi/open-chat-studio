@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from apps.pipelines.flow import Flow, split_flow_data
+from apps.pipelines.flow import Flow, react_flow_node_type, split_flow_data
 from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
     add_missing_start_end_nodes,
     remove_all_start_end_nodes,
@@ -274,8 +274,21 @@ def test_remove_start_end_nodes(team):
 @pytest.mark.django_db()
 def test_remove_start_end_nodes_with_layout_only_pipeline(team):
     """``remove_all_start_end_nodes`` sweeps every pipeline in the DB, so it has to cope with
-    layout-only ``Pipeline.data`` (ADR-0046) where nodes carry no embedded ``data``."""
+    layout-only ``Pipeline.data`` (ADR-0046) where nodes are listed but carry no embedded
+    ``data``. Such rows exist wherever the ``strip_node_data`` command ran without migration
+    0030 following it; the ADR-0049 shape never reaches this sweep, because unapplying 0030
+    rebuilds the nodes list first.
+    """
     pipeline = PipelineFactory.create(team=team)
+    # Put the nodes list back in the ADR-0046 shape: layout keys only, no content.
+    pipeline.data = {
+        **pipeline.data,
+        "nodes": [
+            {"id": node.flow_id, "type": react_flow_node_type(node.type), "position": node.position or {}}
+            for node in pipeline.node_set.all()
+        ],
+    }
+    pipeline.save(update_fields=["data"])
     assert all("data" not in node for node in pipeline.data["nodes"])
 
     remove_all_start_end_nodes(Node)
@@ -283,6 +296,7 @@ def test_remove_start_end_nodes_with_layout_only_pipeline(team):
 
     assert not pipeline.node_set.filter(type__in=[StartNode.__name__, EndNode.__name__]).exists()
     assert pipeline.data["nodes"] == []
+    assert pipeline.data["edges"] == []
 
 
 @pytest.mark.django_db()
