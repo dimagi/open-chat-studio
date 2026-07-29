@@ -88,7 +88,9 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
             if collection_file.file.external_id:
                 previous_remote_file_ids.append(collection_file.file.external_id)
 
-        CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS)
+        # Every re-index route funnels through here, so this is where a reason from a previous
+        # attempt stops applying.
+        CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
 
         collection.add_files_to_index(
             collection_files=CollectionFile.objects.filter(id__in=ids).select_related("file").iterator(100),

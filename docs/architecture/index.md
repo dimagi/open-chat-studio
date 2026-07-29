@@ -7,89 +7,69 @@ hide:
 
 This section provides an overview of the Open Chat Studio architecture, explaining the core concepts and components that make up the system.
 
-!!! tip "Architecture Decision Records"
+Rather than duplicating details that can drift out of date, this page links to the sources engineers keep current: `AGENTS.md`, ADRs, `CONTEXT.md`, and the developer guides.
 
-    Significant architectural decisions are recorded as ADRs. See the **[ADR index](../adr/index.md)** for the full list.
-
-For AI-generated architecture diagrams based on this GitHub repo, visit
+1. Significant architectural decisions are recorded as ADRs. See the **[ADR index](../adr/index.md)** for the full list.
+2. For AI-generated architecture diagrams based on this GitHub repo, visit
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## System Overview
 
-Open Chat Studio is built as a Django web application with a modular design. It consists of several Django apps that handle different aspects of the system.
+Open Chat Studio is a multi-tenant platform: teams build and configure chatbots through the web UI, then publish them to reach **participants** — the end users who actually chat with a bot. It sits between two external ecosystems it doesn't own:
+- **Messaging channels** — participants reach a chatbot over the web widget, Telegram, WhatsApp, Slack, email, CommCare Connect, or the API directly.
+- **LLM service providers** — each team brings its own credentials for the LLM, voice, and tracing providers it wants to use.
+Internally it's a modular Django app: the web process serves the UI, API, and channel webhooks synchronously, while Celery workers handle everything that shouldn't block a request (message processing, evaluations, document/media ingestion, scheduled events). For the production process topology and backing services (PostgreSQL, Redis), see the [Self-Hosting overview](../hosting/index.md#architecture-overview); for the third-party services that keep it observable in production, see [Monitoring & Observability](#monitoring-observability) below.
 
 ## Technology Stack
 
-- **Backend**: Django, Django REST Framework, Celery
-- **Database**: PostgreSQL
-- **Cache/Message Broker**: Redis
-- **Frontend**: HTML, CSS ([Tailwind](http://tailwindcss.com/) + [DaisyUI](https://daisyui.com/)), [htmx](https://htmx.org/), [AlpineJS](https://alpinejs.dev/), [ReactJS](https://react.dev/) with [React Flow](https://reactflow.dev/) (for specific components)
-- **External Services**: OpenAI, Azure, etc.
+See the [README's Tech Stack](https://github.com/dimagi/open-chat-studio#tech-stack) for the full list of languages, frameworks, and deployment targets. A few stack choices carry architectural weight beyond that list:
+
+- **LLM Abstraction**: [LangChain](https://python.langchain.com/) provides common chat model interfaces, message structures, and callback hooks that let a single `LlmService` layer work across providers.
+- **Pipeline builder**: the DAG editor is built on [React Flow](https://reactflow.dev/)
+- **Chat Widget**: standalone [StencilJS](https://stenciljs.com/) web component (`components/chat_widget`), built separately from the main app, embeddable in third-party sites
 
 ## Key Concepts
 
-[Concepts User Documentation](https://docs.openchatstudio.com/concepts/)
+See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for product-facing definitions of Chatbots, Channels, Pipelines, Service Providers, and other concepts — or **[AGENTS.md → Core Concepts](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#core-concepts)** for the same concepts summarized for engineers.
 
-- **Experiments/Chatbots** - The term 'Experiments' is a legacy term. On the user interface side, they are referred to as ['Chatbots'](https://docs.openchatstudio.com/concepts/chatbots/). They are configurations for AI chat experiences. They include:
-  - Prompts and LLM configurations
-  - Channel connections
-  - Data collection settings
-- **Channels** - [Channels](https://docs.openchatstudio.com/concepts/channels/) are communication interfaces that connect users to the chat system. These include: Web chat, WhatsApp etc
-- **Service Providers** - Service providers enable integration with external services including LLMs, authentication, messaging, voice, tracing etc.
-- **Pipelines** - [Pipelines](https://docs.openchatstudio.com/concepts/pipelines/) allow for the creation of complex workflows with multiple nodes and processing steps.
+For the precise domain language used in code (and by AI coding agents) — e.g. Chatbot vs. Chatbot Version, Working vs. Published Version, Session vs. Participant vs. User, Trace vs. Span — see **[CONTEXT.md](https://github.com/dimagi/open-chat-studio/blob/main/CONTEXT.md)**, the canonical glossary kept up to date as the domain model evolves.
 
 ## Project structure
 
-The project is organized into several Django apps, each responsible for a specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests. See the **[package map](package-map.md)** for what each app does and how dependencies flow between them.
+The project is organized into several Django apps, each responsible for specific functionality. Apps are placed in the `apps` folder, and each app has its own models, views, serializers, and tests. See the **[package map](package-map.md)** for what each app does and how dependencies flow between them.
 
-- **Django Templates** - Templates as well as static files are centralized in the `templates` and `assets` folders, respectively. Templates specific to an app should be placed in the `templates/{app_name}` directory.
+Not everything lives under `apps/` — for example, the chat widget (`components/chat_widget`) is a standalone StencilJS component with its own build. For the full, up-to-date inventory of key files and folders (settings, webpack config, package management, shared test fixtures/factories, etc.), see **[AGENTS.md → Key Paths](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#key-paths)**.
 
-- **Static Files** - The `assets` folder contains JavaScript, CSS. The `assets/styles` folder contains Tailwind CSS configurations, while the `assets/javascript` folder contains JavaScript modules. These files are processed and bundled using Webpack to create the final static assets served to users. Other static assets like images are placed directly in the `static/` folder.
+A couple of conventions worth knowing:
+
+- **Django Templates** - Centralized in `templates/`; templates specific to an app go in `templates/{app_name}`.
+- **Static Files** - Frontend source (TypeScript, JavaScript, CSS) lives in `assets/` (`assets/styles` for Tailwind config, `assets/javascript` for JS/TS modules) and is bundled with Webpack into the static assets served to users. Other static assets, like images, go directly in `static/`.
 
 ## Cross-Cutting Concerns
 
-### Background Tasks
-
-Open Chat Studio uses Celery for asynchronous task processing, which is critical for handling LLM interactions, scheduled messages, and other background operations.
-
-**Key Files**:
-
-- `config/celery.py`: Celery configuration
-- Various `tasks.py` files in different apps
+The architectural patterns underlying these concerns — multi-tenancy, versioning, async tasks, API design, LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. Additional useful pointers below for when working in these areas:
 
 ### Authentication and Authorization
+See the [multi-tenancy guide](../agents/multi_tenancy.md) and [view security guide](../agents/django_view_security.md) for team-scoping and permission patterns.
 
-The system uses Django's authentication system along with custom middleware and decorators to ensure proper access control.
+## Monitoring & Observability
 
-**Key Files**:
-
-- `teams/middleware.py`: Team-based access control
-- `teams/decorators.py`: Permission decorators
-
-### Frontend Framework
-
-The frontend uses a combination of Django templates, Tailwind CSS, and JavaScript to create a responsive and interactive user interface.
-
-**Key Files**:
-
-- `templates/`: HTML templates
-- `assets/styles/`: CSS and Tailwind configurations
-- `assets/javascript/`: JavaScript modules
-
-## Monitoring & Observability external services
+Open Chat Studio relies on a small set of external services to keep production healthy: errors are captured and triaged in Sentry, Celery task execution is tracked in Task Badger, and overall uptime is monitored and communicated via BetterStack's status page.
 
 ### [Sentry](https://sentry.io/)
 
-- Purpose: Error reporting and tracking
+- **Purpose**: Error reporting and tracking
 - Used for: Identifying and debugging production issues
+- See more: [Sentry Configuration](../hosting/configuration.md#observability)
 
 ### [Task Badger](https://taskbadger.net/)
 
-- Purpose: Celery task monitoring
+- **Purpose**: Celery task monitoring
 - Used for: Monitoring asynchronous task execution and performance
+- See more: [Task Badger configuration](../hosting/configuration.md#task-badger-optional)
 
 ### [BetterStack](https://betterstack.com/)
 
-- Purpose: Uptime monitoring and status page
-- Status Page: [status.openchatstudio.com](https://status.openchatstudio.com/)
+- **Purpose**: Uptime monitoring and status page
 - Used for: Monitoring system availability and communicating status to users
+- See more: Status Page: [status.openchatstudio.com](https://status.openchatstudio.com/)

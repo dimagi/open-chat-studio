@@ -35,6 +35,8 @@ from apps.evaluations.utils import parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import AnnotationQueue, QueueStatus
+from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
+from apps.utils.fields import as_int
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
@@ -314,7 +316,47 @@ class EvaluatorForm(forms.ModelForm):
                 error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
             raise forms.ValidationError(f"{', '.join(error_messages)}") from err
 
+        self._validate_llm_provider_selection(params)
+
         return cleaned_data
+
+    def _validate_llm_provider_selection(self, params: dict):
+        """Reject provider ids the team can't use, and pairings the provider can't serve.
+
+        The ids arrive inside the ``params`` JSON blob, so they never went through a
+        ModelChoiceField queryset, and an id from another team would run this team's
+        evaluations on someone else's credentials.
+        """
+        provider = None
+        provider_id = as_int(params.get("llm_provider_id"))
+        if provider_id is not None:
+            provider = LlmProvider.objects.filter(team=self.team, id=provider_id).first()
+            if provider is None:
+                raise forms.ValidationError("The selected LLM provider is not available to this team")
+
+        provider_model = None
+        provider_model_id = as_int(params.get("llm_provider_model_id"))
+        if provider_model_id is not None:
+            provider_model = LlmProviderModel.objects.for_team(self.team).filter(id=provider_model_id).first()
+            if provider_model is None:
+                raise forms.ValidationError("The selected LLM model is not available to this team")
+
+        # The picker only offers models matching the chosen provider's type (see
+        # ``_evaluator_parameter_values``), so a mismatch means the ids were not submitted
+        # through the UI. Left unchecked it fails at run time inside get_llm_service.
+        if provider is not None and provider_model is not None and provider.type != provider_model.type:
+            raise forms.ValidationError(
+                f"The selected LLM model is for {_provider_type_label(provider_model.type)} providers, "
+                f"but the selected provider is {_provider_type_label(provider.type)}"
+            )
+
+
+def _provider_type_label(provider_type: str) -> str:
+    """Human label for an LLM provider type slug, falling back to the slug itself."""
+    try:
+        return str(LlmProviderTypes[provider_type].label)
+    except KeyError:
+        return provider_type
 
 
 class EvaluatorTagRuleForm(forms.ModelForm):

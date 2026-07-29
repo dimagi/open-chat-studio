@@ -50,6 +50,7 @@ class UsageRecordAdmin(admin.ModelAdmin):
     readonly_fields = (
         "team",
         "timestamp",
+        "source",
         "service_kind",
         "provider_type",
         "model_name",
@@ -62,10 +63,11 @@ class UsageRecordAdmin(admin.ModelAdmin):
         "session",
         "participant",
         "trace",
+        "evaluation_config",
         "pricing_rule",
         "extra",
     )
-    raw_id_fields = ("team", "experiment", "session", "participant", "trace", "pricing_rule")
+    raw_id_fields = ("team", "experiment", "session", "participant", "trace", "evaluation_config", "pricing_rule")
     ordering = ("-timestamp",)
 
     def has_add_permission(self, request):

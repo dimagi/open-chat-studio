@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 import pytz
+from django.db import IntegrityError, connection
 from django.utils import timezone
 from langchain.tools import InjectedState
 from langchain_core.tools import InjectedToolCallId, StructuredTool
@@ -797,6 +798,70 @@ class TestAttachMediaTool(BaseTestAgentTool):
         assert chat_attachment.files.count() == 3
         assert all(str(file.id) in response for file in files)
         print(response)
+
+    def test_integrity_error_on_one_file_does_not_break_the_others(self, session):
+        """A DB error attaching one file must leave the loop able to attach the rest.
+
+        Regression test: `action()` used to be wrapped in a single `transaction.atomic`, with the
+        `except IntegrityError` inside it. Postgres aborts the transaction on the failed insert, so
+        the next iteration's `File.objects.get()` raised "An error occurred in the current
+        transaction. You can't execute queries until the end of the 'atomic' block" instead of
+        attaching the remaining files. Each file now gets its own transaction.
+        """
+        chat_attachment, _ = ChatAttachment.objects.get_or_create(chat=session.chat, tool_type="ocs_attachments")
+        failing_file, ok_file = FileFactory.create_batch(2)
+
+        through = ChatAttachment.files.through
+        table = through._meta.db_table
+        attachment_column = through._meta.get_field("chatattachment").column
+        file_column = through._meta.get_field("file").column
+
+        def duplicate_the_attachment_row(file_id):
+            """Re-insert the row `files.add()` just created, for one file only.
+
+            Raw SQL so Postgres really aborts the transaction, the way it does for paths
+            Django doesn't wrap in `mark_for_rollback_on_error`.
+            """
+            if file_id != failing_file.id:
+                return
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"INSERT INTO {table} ({attachment_column}, {file_column}) VALUES (%s, %s)",  # noqa: S608
+                    [chat_attachment.id, file_id],
+                )
+
+        with mock.patch.object(ToolCallbacks, "attach_file", side_effect=duplicate_the_attachment_row):
+            response = self._invoke_tool(session, file_ids=[failing_file.id, ok_file.id])
+
+        assert f"* {failing_file.id}: Error fetching file." in response
+        assert ok_file.name in response
+        # The failed attachment rolled back to its savepoint; the following one still committed.
+        assert list(chat_attachment.files.values_list("id", flat=True)) == [ok_file.id]
+
+    @pytest.mark.django_db(transaction=True)
+    def test_first_file_failing_does_not_orphan_the_attachment_row(self, session):
+        """The ChatAttachment row must survive a rollback of the first file's transaction.
+
+        `chat_attachment` is a cached_property, so it would otherwise be created lazily inside the
+        first file's transaction. Rolling that back removes the row while the cached object keeps
+        its id, and the m2m table's deferred foreign key then fails at COMMIT — after the tool has
+        already reported the later files as attached.
+
+        Needs a real commit (`transaction=True`): the deferred constraint is only checked there.
+        """
+        assert not ChatAttachment.objects.filter(chat=session.chat).exists()
+        failing_file, ok_file = FileFactory.create_batch(2)
+
+        def fail_for_first_file(file_id):
+            if file_id == failing_file.id:
+                raise IntegrityError("simulated failure attaching the first file")
+
+        with mock.patch.object(ToolCallbacks, "attach_file", side_effect=fail_for_first_file):
+            response = self._invoke_tool(session, file_ids=[failing_file.id, ok_file.id])
+
+        assert f"* {failing_file.id}: Error fetching file." in response
+        chat_attachment = ChatAttachment.objects.get(chat=session.chat, tool_type="ocs_attachments")
+        assert list(chat_attachment.files.values_list("id", flat=True)) == [ok_file.id]
 
 
 @pytest.mark.django_db()

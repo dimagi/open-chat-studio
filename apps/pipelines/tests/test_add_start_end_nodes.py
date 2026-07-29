@@ -11,6 +11,7 @@ from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.pipelines.tests.utils import end_node, passthrough_node, start_node
+from apps.utils.factories.pipelines import PipelineFactory
 
 
 @pytest.mark.django_db()
@@ -268,6 +269,20 @@ def test_remove_start_end_nodes(team):
         "sourceHandle": "output",
         "targetHandle": "input",
     }
+
+
+@pytest.mark.django_db()
+def test_remove_start_end_nodes_with_layout_only_pipeline(team):
+    """``remove_all_start_end_nodes`` sweeps every pipeline in the DB, so it has to cope with
+    layout-only ``Pipeline.data`` (ADR-0046) where nodes carry no embedded ``data``."""
+    pipeline = PipelineFactory.create(team=team)
+    assert all("data" not in node for node in pipeline.data["nodes"])
+
+    remove_all_start_end_nodes(Node)
+    pipeline.refresh_from_db()
+
+    assert not pipeline.node_set.filter(type__in=[StartNode.__name__, EndNode.__name__]).exists()
+    assert pipeline.data["nodes"] == []
 
 
 @pytest.mark.django_db()

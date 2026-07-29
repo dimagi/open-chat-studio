@@ -42,6 +42,7 @@ from apps.evaluations.models import (
     EvaluatorTagRule,
 )
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
+from apps.evaluations.usage import EvaluatorUsageContext
 from apps.evaluations.utils import iter_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
@@ -139,8 +140,9 @@ def _run_evaluator_on_message(
     On evaluator failure an error result is stored (matching the no-retry behaviour);
     on success the result is written and its Score rows are derived.
     """
+    usage_context = _usage_context_for(evaluation_run, session_id)
     try:
-        output = evaluator.run(message, bot_response or "").model_dump()
+        output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
     except Exception as e:
         logger.exception(f"Error running evaluator {evaluator.id} on message {message.id}: {e}")
         _create_evaluation_result(evaluation_run, evaluator, message, {"error": str(e)}, session_id, apply_tags=False)
@@ -155,6 +157,23 @@ def _run_evaluator_on_message(
         write_scores_from_evaluation_result(evaluation_result)
     except Exception:
         logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
+
+
+def _usage_context_for(evaluation_run: EvaluationRun, session_id: int | None) -> EvaluatorUsageContext:
+    """Attribution for the LLM spend an evaluator incurs judging one message.
+
+    Judge calls bypass the tracer, so they carry no trace. The generation experiment
+    is resolved to its working version to match how OCSTracer attributes the bot
+    generation from the same run, keeping both sides of the run on one chatbot.
+    """
+    generation_experiment = evaluation_run.generation_experiment
+    return EvaluatorUsageContext(
+        team_id=evaluation_run.team_id,
+        evaluation_run_id=evaluation_run.id,
+        evaluation_config_id=evaluation_run.config_id,
+        experiment_id=generation_experiment.get_working_version_id() if generation_experiment else None,
+        session_id=session_id,
+    )
 
 
 def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_id: int) -> None:
@@ -300,12 +319,12 @@ def _redispatch_unfinished(run: EvaluationRun, remaining: set[int]) -> tuple[lis
         run.stall_count = (run.stall_count or 0) + 1
 
     if run.stall_count >= MAX_STALLS and not made_progress:
-        run.status = EvaluationRunStatus.FAILED
-        run.error_message = (
+        run.mark_failed(
             f"Evaluation stalled: {len(unfinished)} message(s) made no progress after "
-            f"{MAX_STALLS} re-dispatch attempts."
+            f"{MAX_STALLS} re-dispatch attempts.",
+            save=False,
         )
-        run.save(update_fields=["status", "error_message", "stall_count"])
+        run.save(update_fields=["finished_at", "status", "error_message", "stall_count"])
         return [], True
 
     run.in_flight = unfinished

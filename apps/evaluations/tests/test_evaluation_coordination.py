@@ -399,6 +399,8 @@ def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.FAILED
     assert run.error_message
+    assert run.finished_at is not None  # or the run renders no finish time and no duration
+    assert run.stall_count == 3  # mark_failed must not clobber the counter it is saved alongside
     delay_mock.assert_not_called()
 
 

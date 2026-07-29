@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
 
-from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord
+from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
 
@@ -35,7 +35,11 @@ _PROMPT_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_CACHED_INPUT)
 
 @dataclass(frozen=True)
 class CostSummary:
-    """Period-over-period rollup for the dashboard panel."""
+    """Period-over-period rollup for the dashboard panel.
+
+    `total_cost` is every source — it's what the team actually spent, evaluations
+    included, with no per-source split (ADR-0048).
+    """
 
     period_start: datetime
     period_end: datetime
@@ -116,6 +120,13 @@ class CostFilters:
     platform_names: list[str] | None = None
     participant_ids: list[int] | None = None
 
+    @property
+    def narrows_to_entities(self) -> bool:
+        """True when any filter restricts the read to particular chatbots, participants
+        or conversations — which makes the result per-entity attribution, not a team
+        total, and so subject to the chat-only rule (ADR-0048)."""
+        return bool(self.experiment_ids or self.platform_names or self.participant_ids)
+
 
 @dataclass(frozen=True)
 class GroupBreakdown:
@@ -134,6 +145,11 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
     platform filters applied (mirrors the cost panel's other charts). Platform
     is matched via the record's session, so records with no session are excluded
     when a platform filter is set.
+
+    A filtered read is per-entity attribution, so it counts chat only; only an
+    unfiltered read is a team total and counts every source (ADR-0048). Without that,
+    a dashboard narrowed to one chatbot would bill it for the judge calls that
+    evaluated it, since those rows carry its `experiment_id`.
     """
     filters = filters or CostFilters()
     qs = UsageRecord.objects.filter(team=team)
@@ -143,7 +159,22 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
         qs = qs.filter(participant_id__in=filters.participant_ids)
     if filters.platform_names:
         qs = qs.filter(session__platform__in=filters.platform_names)
+    if filters.narrows_to_entities:
+        qs = qs.filter(source=UsageSource.CHAT)
     return qs
+
+
+def _attributable_records(team: Team, filters: CostFilters | None = None):
+    """Scoped records that may be charged to a single entity — chat only.
+
+    Evaluation spend is the team's spend but never a chatbot's, a participant's or a
+    conversation's (ADR-0048), so every read that names an entity goes through here
+    (grouping) or gets the same treatment from `_scoped_records` (filtering), while an
+    unfiltered team total counts every source. Judge rows from a generation run do carry
+    an experiment/session, so this filters on `source` rather than on those columns
+    being null.
+    """
+    return _scoped_records(team, filters).filter(source=UsageSource.CHAT)
 
 
 def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None) -> CostSummary:
@@ -236,10 +267,11 @@ def costs_by_experiment(
 ) -> dict[int, Decimal]:
     """Total cost per experiment in the period, keyed by `experiment_id`.
     Feeds the dashboard's Bot Performance table cost column. Records with a
-    null experiment (e.g. trace whose experiment was hard-deleted) are excluded.
+    null experiment (e.g. trace whose experiment was hard-deleted) are excluded,
+    as is evaluation spend — judging a chatbot is not the chatbot's cost.
     """
     rows = (
-        _scoped_records(team, filters)
+        _attributable_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end, experiment__isnull=False)
         .values("experiment_id")
         .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
@@ -251,9 +283,12 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
     """Cost/token breakdown by model for a single session, plus the overall
     total. Rows are ordered by descending cost. Uses the
     `(team, session, timestamp)` index.
+
+    Chat only: for an eval session this shows what generating the responses cost,
+    not what judging them cost (ADR-0048).
     """
     rows = (
-        UsageRecord.objects.filter(team_id=session.team_id, session=session)
+        UsageRecord.objects.filter(team_id=session.team_id, session=session, source=UsageSource.CHAT)
         .values("model_name")
         .annotate(
             cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
@@ -374,16 +409,18 @@ def usage_by_group(
     ``experiment_id`` / ``session__platform``), restricted to ``breakdown.keys``. One row per group — or
     per (group, bucket) when ``breakdown.granularity`` is set, truncated in ``breakdown.tz``. Each row is
     ``{'key', ['bucket'], 'cost' (Decimal), 'currency', 'prompt', 'completion', 'total'}``. Shares the
-    scoped-record path with ``cost_total``/``token_counts`` (same team + ``CostFilters`` scoping); the
-    caller zero-fills groups/buckets absent from the result. Note the per-group rows need not sum to the
-    ungrouped window total: records whose ``group_field`` is NULL (e.g. a session-less record under
-    platform grouping) or falls outside ``keys`` are excluded from the breakdown.
+    scoped-record path with ``cost_total``/``token_counts`` (same team + ``CostFilters`` scoping), but
+    counts chat spend only — every group here is an entity, and evaluation spend is not any entity's
+    (ADR-0048); the caller zero-fills groups/buckets absent from the result. Note the per-group rows need
+    not sum to the ungrouped window total: evaluation records, and records whose ``group_field`` is NULL
+    (e.g. a session-less record under platform grouping) or falls outside ``keys``, are all excluded from
+    the breakdown.
 
     ``resolve_currency=False`` skips the extra ``SELECT DISTINCT currency`` scan when the caller only
     wants token counts; ``currency`` then defaults to ``"USD"`` (unused by a tokens-only caller).
     """
     scoped = (
-        _scoped_records(team, filters)
+        _attributable_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end, **{f"{breakdown.field}__in": breakdown.keys})
         .annotate(key=F(breakdown.field))
     )
