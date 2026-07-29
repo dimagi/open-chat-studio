@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -8,6 +9,7 @@ from apps.service_providers.llm_service.default_models import (
     DEFAULT_EMBEDDING_PROVIDER_MODELS,
     DEFAULT_LLM_PROVIDER_MODELS,
     Model,
+    _repoint_evaluators,
     _update_llm_provider_models,
     get_default_model,
     update_embedding_provider_models,
@@ -120,6 +122,35 @@ def test_converts_custom_models_to_global_models_from_a_migration():
     evaluator.refresh_from_db()
     assert evaluator.llm_provider_model_id == global_model.id
     assert evaluator.params["llm_provider_model_id"] == global_model.id
+
+
+@pytest.mark.django_db()
+def test_repointing_raises_when_the_evaluator_relation_is_missing_but_its_fk_is_live():
+    """A migration state predating evaluations.0018 cannot see a constraint that still binds.
+
+    ``_replace_custom_model_with_global`` deletes the custom model, so skipping the repoint
+    here would surface as a deferred FK violation at commit rather than at the cause.
+    """
+    custom_model = LlmProviderModelFactory.create()
+    global_model = LlmProviderModelFactory.create(team=None, type=custom_model.type, name=custom_model.name)
+    # Stands in for a historical LlmProviderModel from a state without evaluations.Evaluator,
+    # which has no ``evaluators`` reverse accessor at all.
+    pre_0018_model = SimpleNamespace(id=custom_model.id, type=custom_model.type, name=custom_model.name)
+
+    with pytest.raises(RuntimeError, match="0018_evaluator_llm_provider_fks"):
+        _repoint_evaluators(pre_0018_model, global_model)
+
+
+@pytest.mark.django_db()
+def test_repointing_skips_quietly_when_the_evaluator_fk_is_not_in_the_database_yet():
+    """Before evaluations.0018 is applied there is no constraint and nothing to repoint."""
+    global_model = LlmProviderModelFactory.create(team=None)
+    pre_0018_model = SimpleNamespace(id=global_model.id + 1, type="openai", name="custom")
+
+    with patch(
+        "apps.service_providers.llm_service.default_models._evaluator_provider_model_fk_in_db", return_value=False
+    ):
+        _repoint_evaluators(pre_0018_model, global_model)  # must not raise
 
 
 @pytest.mark.django_db()
