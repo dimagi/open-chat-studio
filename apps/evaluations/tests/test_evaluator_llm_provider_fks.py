@@ -89,6 +89,29 @@ class TestFkSync:
         assert evaluator.name == "renamed"
         assert evaluator.llm_provider_model_id == other_model.id
 
+    def test_an_unchanged_provider_costs_no_existence_queries(
+        self, provider, provider_model, django_assert_num_queries
+    ):
+        """Re-deriving an id the FK column already holds needs no validation.
+
+        A non-null FK is guaranteed to resolve by the constraint, and SET_NULL would have
+        nulled it if the row had gone away.
+        """
+        evaluator = EvaluatorFactory.create(team=provider.team, params=_params(provider.id, provider_model.id))
+        evaluator.refresh_from_db()
+
+        with django_assert_num_queries(1):  # the UPDATE only
+            evaluator.save(update_fields=["params"])
+
+    def test_a_changed_provider_is_still_validated(self, provider, provider_model):
+        """The check is skipped only when the value matches; a new id is still verified."""
+        evaluator = EvaluatorFactory.create(team=provider.team, params=_params(provider.id, provider_model.id))
+        evaluator.params["llm_provider_id"] = provider.id + 1000
+        evaluator.save(update_fields=["params"])
+
+        evaluator.refresh_from_db()
+        assert evaluator.llm_provider_id is None
+
     def test_set_llm_provider_model_id_moves_params_and_fk(self, provider, provider_model):
         evaluator = EvaluatorFactory.create(team=provider.team, params=_params(provider.id, provider_model.id))
         replacement = LlmProviderModelFactory.create(team=provider.team)

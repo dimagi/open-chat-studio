@@ -238,6 +238,7 @@ def test_pending_run_with_an_unconfigured_evaluator_fails_before_dispatching(del
     assert run.status == EvaluationRunStatus.FAILED
     assert evaluators[0].name in run.error_message
     assert "select a provider and model" in run.error_message
+    assert run.finished_at is not None  # or the run renders no finish time and no duration
     assert delay_mock.call_count == 0
     assert EvaluationResult.objects.filter(run=run).count() == 0
 
@@ -443,6 +444,8 @@ def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.FAILED
     assert run.error_message
+    assert run.finished_at is not None
+    assert run.stall_count == 3  # mark_failed must not clobber the counter it is saved alongside
     delay_mock.assert_not_called()
 
 

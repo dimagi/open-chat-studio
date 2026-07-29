@@ -155,13 +155,21 @@ class Evaluator(BaseTeamModel):
         for field_name in ("llm_provider", "llm_provider_model"):
             attname = f"{field_name}_id"
             value = as_int((self.params or {}).get(attname))
+            current = getattr(self, attname)
+            if value == current:
+                # Already in sync, so there is nothing to validate: a non-null FK column is
+                # guaranteed to resolve by the constraint itself, and SET_NULL would have
+                # nulled it if the row had since been deleted. Skipping the existence query
+                # here keeps the common re-save free.
+                continue
             if value is not None:
                 related_model = self._meta.get_field(field_name).related_model
                 if not related_model._base_manager.filter(pk=value).exists():
                     value = None
-            if getattr(self, attname) != value:
-                setattr(self, attname, value)
-                changed.append(attname)
+                if value == current:
+                    continue
+            setattr(self, attname, value)
+            changed.append(attname)
         return changed
 
     def set_llm_provider_model_id(self, provider_model_id: int | None):
@@ -764,6 +772,18 @@ class EvaluationRun(BaseTeamModel):
         self.status = EvaluationRunStatus.COMPLETED
         if save:
             self.save(update_fields=["finished_at", "status"])
+
+    def mark_failed(self, error_message: str, save=True):
+        """Terminate the run with an error, stamping ``finished_at`` like ``mark_complete``.
+
+        Without the timestamp a failed run renders no finish time and no duration
+        (see ``evaluation_result_home.html`` and the run detail view).
+        """
+        self.finished_at = timezone.now()
+        self.status = EvaluationRunStatus.FAILED
+        self.error_message = error_message
+        if save:
+            self.save(update_fields=["finished_at", "status", "error_message"])
 
     def get_table_data(self, include_ids: bool = False):
         results_qs = (

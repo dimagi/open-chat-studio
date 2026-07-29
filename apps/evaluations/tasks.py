@@ -319,12 +319,12 @@ def _redispatch_unfinished(run: EvaluationRun, remaining: set[int]) -> tuple[lis
         run.stall_count = (run.stall_count or 0) + 1
 
     if run.stall_count >= MAX_STALLS and not made_progress:
-        run.status = EvaluationRunStatus.FAILED
-        run.error_message = (
+        run.mark_failed(
             f"Evaluation stalled: {len(unfinished)} message(s) made no progress after "
-            f"{MAX_STALLS} re-dispatch attempts."
+            f"{MAX_STALLS} re-dispatch attempts.",
+            save=False,
         )
-        run.save(update_fields=["status", "error_message", "stall_count"])
+        run.save(update_fields=["finished_at", "status", "error_message", "stall_count"])
         return [], True
 
     run.in_flight = unfinished
@@ -354,12 +354,10 @@ def _unconfigured_evaluator_names(evaluator_ids: list[int]) -> list[str]:
 
 
 def _fail_run_for_unconfigured_evaluators(run: EvaluationRun, names: list[str]) -> None:
-    run.status = EvaluationRunStatus.FAILED
-    run.error_message = (
+    run.mark_failed(
         f"No LLM provider configured for: {', '.join(names)}. "
         "Edit each evaluator to select a provider and model, then start a new run."
     )
-    run.save(update_fields=["status", "error_message"])
 
 
 def _finalize_complete(run: EvaluationRun) -> None:
