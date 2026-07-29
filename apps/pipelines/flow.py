@@ -85,9 +85,9 @@ def react_flow_node_type(node_type: str) -> str:
 
 
 def split_flow_data(flow: Flow) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
-    """Split a graph into its layout (no ``nodes`` — ADR-0048) and the complete node
-    membership: content-carrying nodes map to themselves, content-less ones to ``None``
-    (membership only, so their row must already exist).
+    """Split a graph into the part ``Pipeline.data`` stores — the edges, no ``nodes``
+    (ADR-0048) — and the complete node membership: content-carrying nodes map to themselves,
+    content-less ones to ``None`` (membership only, so their row must already exist).
     """
     node_data: dict[str, FlowNode | None] = {node.id: node if node.data else None for node in flow.nodes}
     return FlowWithoutNodes(**flow.model_dump(exclude={"nodes"})), node_data

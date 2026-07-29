@@ -307,7 +307,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         Builds the full flow from ``version.flow_data`` (which reconstructs each node's
         content from the version's node rows), remaps params that reference versioned
         records back to their working id — the inverse of the rewriting done during
-        publish, see ``apps.pipelines.versioning`` — then persists the layout and rebuilds
+        publish, see ``apps.pipelines.versioning`` — then persists the edges and rebuilds
         every working node from the version's content via ``update_nodes_from_data``. The
         versioned record for each param is read from the version node's resource FK column.
         """
@@ -321,8 +321,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             for spec in get_versioned_param_specs(content.get("type")):
                 spec.revert_referenced_record(version_node, params)
 
-        layout, node_data = split_flow_data(Flow(**data))
-        self.data = layout.model_dump()
+        edge_data, node_data = split_flow_data(Flow(**data))
+        self.data = edge_data.model_dump()
         self.edit_revision += 1
         self.save(update_fields=["data", "edit_revision"])
         self.update_nodes_from_data(node_data)

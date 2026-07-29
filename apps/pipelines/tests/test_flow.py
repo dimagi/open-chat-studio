@@ -33,10 +33,10 @@ def _full_flow():
 
 
 class TestSplitFlowData:
-    def test_the_layout_holds_no_nodes(self):
-        layout, _ = split_flow_data(_full_flow())
+    def test_the_edge_data_holds_no_nodes(self):
+        edge_data, _ = split_flow_data(_full_flow())
 
-        assert "nodes" not in layout.model_dump()
+        assert "nodes" not in edge_data.model_dump()
 
     def test_maps_content_carrying_nodes_to_themselves(self):
         flow = _full_flow()
@@ -48,19 +48,19 @@ class TestSplitFlowData:
 
     def test_preserves_edges_and_drops_unknown_top_level_keys(self):
         flow = _full_flow()
-        layout, _ = split_flow_data(flow)
+        edge_data, _ = split_flow_data(flow)
 
-        assert layout.edges == flow.edges
-        assert "viewport" not in layout.model_dump()
+        assert edge_data.edges == flow.edges
+        assert "viewport" not in edge_data.model_dump()
 
     def test_content_less_nodes_are_membership_only(self):
         """A node with no ``data`` maps to None: it stays part of the graph membership (so its
         row must already exist) but supplies no content."""
         flow = Flow(nodes=[{"id": "start-1", "type": "startNode", "position": {"x": 1, "y": 2}}], edges=[])
 
-        layout, node_data = split_flow_data(flow)
+        edge_data, node_data = split_flow_data(flow)
 
-        assert layout.edges == []
+        assert edge_data.edges == []
         assert node_data == {"start-1": None}
 
     def test_does_not_mutate_the_flow(self):
@@ -70,9 +70,9 @@ class TestSplitFlowData:
         assert [node.data.type for node in flow.nodes] == ["StartNode", "LLMResponseWithPrompt"]
 
     def test_flow_without_nodes_yields_no_membership(self):
-        layout, node_data = split_flow_data(Flow(edges=[]))
+        edge_data, node_data = split_flow_data(Flow(edges=[]))
 
-        assert layout.edges == []
+        assert edge_data.edges == []
         assert node_data == {}
 
 

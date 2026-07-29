@@ -19,12 +19,12 @@ from apps.pipelines.flow import (
 def apply_pipeline_patch(
     current_flow: dict, patch: PipelineDiffPayload
 ) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
-    """Apply a semantic graph diff to ``current_flow`` and return ``(layout, node_data)``.
+    """Apply a semantic graph diff to ``current_flow`` and return ``(edge_data, node_data)``.
 
     ``current_flow`` is the full current graph — ``Pipeline.flow_data``, whose nodes are
     rebuilt from the rows because ``Pipeline.data`` no longer lists them (ADR-0048).
 
-    ``layout`` is the merged graph minus its nodes, ready to be dumped into
+    ``edge_data`` is the merged graph minus its nodes, ready to be dumped into
     ``Pipeline.data``.
 
     ``node_data`` is the complete membership of the merged graph, ready for
@@ -40,9 +40,9 @@ def apply_pipeline_patch(
     _apply_node_diff(flow, patch.nodes)
     _apply_edge_diff(flow, patch.edges)
 
-    layout, _ = split_flow_data(flow)
+    edge_data, _ = split_flow_data(flow)
 
-    return layout, _collect_node_data(flow, patch, existing_node_ids)
+    return edge_data, _collect_node_data(flow, patch, existing_node_ids)
 
 
 def _apply_node_diff(flow: Flow, diff: NodeDiff) -> None:

@@ -121,9 +121,9 @@ class TestApplyPipelinePatch:
     def test_delete_node_removes_connected_edges(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(delete=["llm-1"]))
-        layout, node_data = apply_pipeline_patch(graph, patch)
+        edge_data, node_data = apply_pipeline_patch(graph, patch)
         assert set(node_data) == {"start", "end"}
-        assert len(layout.edges) == 0  # both edges connected to llm-1 are removed
+        assert len(edge_data.edges) == 0  # both edges connected to llm-1 are removed
 
     def test_update_node_params(self):
         graph = self._sample_graph()
@@ -146,15 +146,15 @@ class TestApplyPipelinePatch:
         graph = self._sample_graph()
         new_edge = make_flow_edge("e3", "start", "end")
         patch = PipelineDiffPayload(base_revision=0, edges=EdgeDiff(add=[new_edge]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout.edges) == 3
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+        assert len(edge_data.edges) == 3
 
     def test_delete_edge(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, edges=EdgeDiff(delete=["e1"]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout.edges) == 1
-        assert layout.edges[0].id == "e2"
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+        assert len(edge_data.edges) == 1
+        assert edge_data.edges[0].id == "e2"
 
     def test_unmodified_nodes_stay_in_membership_without_content(self):
         graph = self._sample_graph()
@@ -168,15 +168,15 @@ class TestApplyPipelinePatch:
     def test_unknown_top_level_keys_dropped(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0)
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert "viewport" not in layout.model_dump()
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+        assert "viewport" not in edge_data.model_dump()
 
     def test_no_op_patch(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0)
-        layout, node_data = apply_pipeline_patch(graph, patch)
+        edge_data, node_data = apply_pipeline_patch(graph, patch)
         assert set(node_data) == {node["id"] for node in graph["nodes"]}
-        assert len(layout.edges) == len(graph["edges"])
+        assert len(edge_data.edges) == len(graph["edges"])
 
     def test_duplicate_add_is_idempotent(self):
         graph = self._sample_graph()
@@ -213,16 +213,16 @@ class TestApplyPipelinePatch:
     def test_delete_unknown_edge(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0, edges=EdgeDiff(delete=["nonexistent"]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert len(layout.edges) == 2  # unchanged
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+        assert len(edge_data.edges) == 2  # unchanged
 
-    def test_layout_contains_no_nodes(self):
+    def test_edge_data_contains_no_nodes(self):
         """Old-format stored graphs (blobs embedded) come out with no nodes key at all."""
         graph = self._sample_graph()
         new_node = make_flow_node("llm-2", LLMResponseWithPrompt.__name__)
         patch = PipelineDiffPayload(base_revision=0, nodes=NodeDiff(add=[new_node]))
-        layout, _ = apply_pipeline_patch(graph, patch)
-        assert "nodes" not in layout.model_dump()
+        edge_data, _ = apply_pipeline_patch(graph, patch)
+        assert "nodes" not in edge_data.model_dump()
 
     def test_node_data_carries_content_only_for_patched_nodes(self):
         """Only the patch's add/update nodes carry content; the rest are membership-only."""
@@ -395,8 +395,8 @@ class TestPatchEndpoint:
         assert updated_node_in_db.label == "Updated end"
 
     def test_patch_shadow_writes_position_to_the_row(self, authed_client, pipeline, team_with_users):
-        """Pipeline.data stays authoritative for layout, but saves mirror each patched
-        node's position onto the row's position columns for the upcoming read switch."""
+        """The rows own layout (ADR-0048), so a patched node's position is written to its
+        position columns — Pipeline.data holds no position to fall back on."""
         team_slug = team_with_users.slug
         node_id = pipeline.node_set.get(type=EndNode.__name__).flow_id
         updated_node = {
