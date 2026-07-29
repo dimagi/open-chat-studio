@@ -1555,7 +1555,6 @@ class ExperimentSession(BaseTeamModel):
         if commit and trigger_type:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
-    @transaction.atomic()
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str | None,
@@ -1583,7 +1582,7 @@ class ExperimentSession(BaseTeamModel):
 
         trace_service = None
         try:
-            with current_team(self.team):
+            with transaction.atomic(), current_team(self.team):
                 experiment = use_experiment or self.experiment
                 trace_service = TracingService.create_for_experiment(experiment)
                 with trace_service.trace_or_span(
