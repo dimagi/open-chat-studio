@@ -15,8 +15,10 @@ from field_audit.models import AuditingManager
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import EmbeddingProviderModel
-from apps.teams.models import BaseTeamModel
+from apps.teams.flags import Flags
+from apps.teams.models import BaseTeamModel, Flag
 from apps.teams.utils import get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
@@ -412,7 +414,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         it returns None (and logs) so indexing continues without contextualization
         rather than aborting.
         """
-        from apps.service_providers.exceptions import ServiceProviderConfigError  # noqa: PLC0415
         from apps.service_providers.llm_service.contextualizer import LLMContextualizer  # noqa: PLC0415
 
         if not self.enable_contextual_retrieval or not self.contextualizer_llm_model:
@@ -454,8 +455,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         Flag.is_active precedence directly: an explicit `everyone` value wins,
         otherwise fall back to team membership.
         """
-        from apps.teams.flags import Flags  # noqa: PLC0415
-        from apps.teams.models import Flag  # noqa: PLC0415
 
         flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
         if not flag:
