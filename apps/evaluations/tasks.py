@@ -333,6 +333,35 @@ def _redispatch_unfinished(run: EvaluationRun, remaining: set[int]) -> tuple[lis
     return _chunk(unfinished, BATCH_SIZE), False
 
 
+def _unconfigured_evaluator_names(evaluator_ids: list[int]) -> list[str]:
+    """Names of LLM-backed evaluators in the plan that have no provider to run against.
+
+    ``Evaluator.get_evaluator_params`` raises per message, so without a pre-flight a single
+    unconfigured evaluator writes one error result per message in the dataset instead of
+    failing the run once.
+    """
+    names = []
+    for evaluator in Evaluator.objects.filter(id__in=evaluator_ids):
+        try:
+            requires_provider = evaluator.requires_llm_provider()
+        except AttributeError:
+            # Unknown evaluator type — ``type`` is free-text, so this is possible. Leave it
+            # to the per-message path, which already reports it as a result error.
+            continue
+        if requires_provider and (evaluator.llm_provider_id is None or evaluator.llm_provider_model_id is None):
+            names.append(evaluator.name)
+    return sorted(names)
+
+
+def _fail_run_for_unconfigured_evaluators(run: EvaluationRun, names: list[str]) -> None:
+    run.status = EvaluationRunStatus.FAILED
+    run.error_message = (
+        f"No LLM provider configured for: {', '.join(names)}. "
+        "Edit each evaluator to select a provider and model, then start a new run."
+    )
+    run.save(update_fields=["status", "error_message"])
+
+
 def _finalize_complete(run: EvaluationRun) -> None:
     """Mark the run complete and run the completion side effects (aggregates, tag reversal)."""
     run.mark_complete()
@@ -354,6 +383,14 @@ def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
     if total == 0 or not evaluator_ids:
         _finalize_complete(run)
         return _TickResult(batches=[], done=0, total=total, terminal="success")
+
+    # First tick only, to keep the steady-state tick free of this query. A provider deleted
+    # mid-run still nulls the FK, and those messages fall back to the per-message error path.
+    if run.status == EvaluationRunStatus.PENDING:
+        unconfigured = _unconfigured_evaluator_names(evaluator_ids)
+        if unconfigured:
+            _fail_run_for_unconfigured_evaluators(run, unconfigured)
+            return _TickResult(batches=[], done=0, total=total, terminal="error")
 
     remaining = set(plan_ids) - _done_message_ids(run, plan_ids, evaluator_ids)
     done = total - len(remaining)
