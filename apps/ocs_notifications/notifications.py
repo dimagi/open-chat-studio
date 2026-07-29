@@ -216,16 +216,15 @@ def deprecated_model_notification(
     affected_chatbots: dict[str, str],
     affected_pipelines: dict[str, str],
     affected_assistants: dict[str, str],
+    affected_evaluators: dict[str, str],
 ) -> None:
     """Notify a team that a model they use has been deprecated."""
-    resource_parts = []
-    if affected_chatbots:
-        resource_parts.append(f"{len(affected_chatbots)} chatbot(s)")
-    if affected_pipelines:
-        resource_parts.append(f"{len(affected_pipelines)} pipeline(s)")
-    if affected_assistants:
-        resource_parts.append(f"{len(affected_assistants)} assistant(s)")
-    resources_text = ", ".join(resource_parts) if resource_parts else "some resources"
+    resources_text = _affected_resources_text(
+        ("chatbot", affected_chatbots),
+        ("pipeline", affected_pipelines),
+        ("assistant", affected_assistants),
+        ("evaluator", affected_evaluators),
+    )
 
     message = (
         f"The model '{model_name}' has been deprecated and will be removed soon. {resources_text} are still using it."
@@ -241,8 +240,14 @@ def deprecated_model_notification(
         slug="llm-model-deprecated",
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
-        links={**affected_chatbots, **affected_pipelines, **affected_assistants},
+        links={**affected_chatbots, **affected_pipelines, **affected_assistants, **affected_evaluators},
     )
+
+
+def _affected_resources_text(*groups: tuple[str, dict[str, str]]) -> str:
+    """Summarise the non-empty groups in the order given, e.g. `2 chatbot(s), 1 evaluator(s)`."""
+    parts = [f"{len(items)} {noun}(s)" for noun, items in groups if items]
+    return ", ".join(parts) if parts else "some resources"
 
 
 @silence_exceptions(logger, log_message="Failed to create deprecated widget version notification")
@@ -343,16 +348,15 @@ def deleted_model_notification(
     affected_chatbots: dict[str, str],
     affected_pipelines: dict[str, str],
     affected_assistants: dict[str, str],
+    affected_evaluators: dict[str, str],
 ) -> None:
     """Notify a team that a model has been removed from the platform."""
-    resource_parts = []
-    if affected_chatbots:
-        resource_parts.append(f"{len(affected_chatbots)} chatbot(s)")
-    if affected_pipelines:
-        resource_parts.append(f"{len(affected_pipelines)} pipeline(s)")
-    if affected_assistants:
-        resource_parts.append(f"{len(affected_assistants)} assistant(s)")
-    resources_text = ", ".join(resource_parts) if resource_parts else "some resources"
+    resources_text = _affected_resources_text(
+        ("chatbot", affected_chatbots),
+        ("pipeline", affected_pipelines),
+        ("assistant", affected_assistants),
+        ("evaluator", affected_evaluators),
+    )
 
     if replacement_model_name:
         action_text = f"References have been automatically updated to use '{replacement_model_name}'."
@@ -371,5 +375,5 @@ def deleted_model_notification(
         slug="llm-model-deleted",
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
-        links={**affected_chatbots, **affected_pipelines, **affected_assistants},
+        links={**affected_chatbots, **affected_pipelines, **affected_assistants, **affected_evaluators},
     )
