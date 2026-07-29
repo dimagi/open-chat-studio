@@ -98,8 +98,10 @@ class UsageRecord(BaseTeamModel):
     """One row per (trace, model, service_kind) bucket. Snapshots
     `unit_price` / `currency` so historical rows are stable across rate changes.
 
-    `trace` is null for LLM calls made outside the tracer — currently evaluator
-    judge calls, which carry `source=EVALUATION` instead.
+    `trace` is null whenever the writer kept no `Trace` — evaluator judge calls, which
+    run outside tracing altogether, and eval-driven generation, which is billed by
+    `UsageOnlyTracer` (ADR-0049). It is not a proxy for `source` in either direction:
+    use `source` to tell evaluation spend from chat spend.
     """
 
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -137,7 +139,8 @@ class UsageRecord(BaseTeamModel):
     # `pricing_rule IS NOT NULL` as a stable historical "priced" anchor.
     pricing_rule = models.ForeignKey(PricingRule, null=True, on_delete=models.PROTECT)
 
-    # Known keys: `estimator` (confidence=ESTIMATED), `missing_usage_calls` (confidence=UNKNOWN).
+    # Known keys: `estimator` (confidence=ESTIMATED), `missing_usage_calls` (confidence=UNKNOWN),
+    # `evaluation_run_id` (source=EVALUATION — the run isn't an FK because runs get pruned).
     extra = SanitizedJSONField(default=dict, blank=True)
 
     class Meta:

@@ -60,12 +60,13 @@ def usage_to_csv(start: datetime, end: datetime):
 def get_usage_data(start: datetime, end: datetime):
     """Per-team usage from completed trace token counts.
 
-    Only includes traces with a settled status (excludes PENDING). Evaluation traffic
-    counts: it costs the same money as chat traffic, and excluding it here while
-    `get_cost_usage_by_team` counted it made eval-driven generation one-sided in the
-    usage report. The two halves still don't sum to each other — tokens come from
-    `Trace`, cost from `UsageRecord`, and judge calls have no trace at all, so judge
-    spend is cost-only. Pre-tracing periods will report lower totals than the legacy
+    Only includes traces with a settled status (excludes PENDING). No platform is
+    filtered out — spend costs the same money whatever produced it — but that alone
+    doesn't make this reconcile with `get_cost_usage_by_team`: tokens come from `Trace`
+    and cost from `UsageRecord`, and neither half of an evaluation run writes a `Trace`
+    (judge calls bypass tracing, and eval generation is billed by `UsageOnlyTracer`,
+    ADR-0049). So eval runs are cost-only here until token reporting moves onto
+    `UsageRecord`. Pre-tracing periods will report lower totals than the legacy
     character-based proxy.
     """
     usage_data = (
@@ -83,9 +84,8 @@ def get_usage_data(start: datetime, end: datetime):
 
 
 def get_token_usage_by_team(start: datetime, end: datetime):
-    """Per-team run count + total tokens from settled traces, evaluations included
-    (see `get_usage_data` for why, and for how far these totals track
-    `get_cost_usage_by_team`)."""
+    """Per-team run count + total tokens from settled traces, unfiltered by platform
+    (see `get_usage_data` for how far these totals track `get_cost_usage_by_team`)."""
     return (
         Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
         .exclude(status=TraceStatus.PENDING)
