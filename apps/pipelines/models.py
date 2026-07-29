@@ -307,6 +307,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         self.edit_revision += 1
         self.save(update_fields=["data", "edit_revision"])
         self.update_nodes_from_data(node_data)
+        # The rows were written straight to the DB, so hand back an instance that reads as the
+        # reverted pipeline rather than the one it replaced. Same reason the save paths do it.
+        self.clear_node_caches()
 
     @transaction.atomic()
     def archive(self) -> bool:

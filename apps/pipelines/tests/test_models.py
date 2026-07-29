@@ -794,6 +794,24 @@ class TestPipelineRevert:
         assert version_asst.params["assistant_id"] == str(assistant.latest_version.id)
         assert version_asst.assistant_id == assistant.latest_version.id
 
+    def test_revert_leaves_no_stale_node_caches(self):
+        """Revert writes the node rows straight to the DB, behind the back of ``flow_data``'s
+        cache, so it clears the caches itself — as the save paths do. Without that, the
+        instance it hands back still reads as the pre-revert pipeline."""
+        start, template, end = start_node(), render_template_node("published"), end_node()
+        pipeline = create_pipeline_model([start, template, end])
+        version = pipeline.create_new_version()
+
+        template["params"]["template_string"] = "edited"
+        create_pipeline_model([start, template, end], pipeline=pipeline)
+        # Prime the cache with the edited graph, as any read before the revert would.
+        assert pipeline.flow_data["nodes"]
+
+        pipeline.revert_to_version(version)
+
+        reverted = {node["id"]: node["data"]["params"] for node in pipeline.flow_data["nodes"]}
+        assert reverted[template["id"]]["template_string"] == "published"
+
     def test_revert_from_version_with_old_format_data(self):
         """Version rows created before ADR-0046 (or skipped by the migration's drift guard)
         still embed node blobs in their data. Revert must work against them, taking
