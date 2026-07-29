@@ -301,19 +301,6 @@ def get_related_pipelines_queryset(instance, pipeline_param_key: str | None = No
     return Node.objects.filter(_params_key_filter(pipeline_param_key, instance))
 
 
-def get_related_evaluators_queryset(instance, params_key: str):
-    """Evaluators referencing ``instance`` from their JSON ``params`` (no FK exists).
-
-    Deliberately not part of ``_get_related_objects_querysets``: the delete paths that
-    call it repoint pipeline-node params before deleting, but nothing repoints evaluator
-    params, so including this there would turn a silent orphan into a hard failure.
-    Callers that only want to *report* usages ask for it explicitly.
-    """
-    from apps.evaluations.models import Evaluator  # noqa: PLC0415 - circular: evaluations.models→…→deletion
-
-    return Evaluator.objects.filter(_params_key_filter(params_key, instance))
-
-
 def get_related_pipelines_queryset_for_list_param(instance, pipeline_param_key: str | None = None):
     from apps.pipelines.models import Node  # noqa: PLC0415 - circular: pipelines.models→experiments.models→deletion
 

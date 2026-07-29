@@ -89,6 +89,13 @@ class Command(IdempotentCommand):
         for db_model, replacement_name, replacement_model in models_to_delete:
             db_model_id = db_model.id  # Capture before delete sets pk to None
 
+            # Evaluators keep a copy of the model id in params for the form UI, so they are
+            # repointed through the model method that moves params and FK together. Has to
+            # happen before the generic FK pass, which would otherwise claim them first.
+            new_value = replacement_model.id if replacement_model else None
+            for evaluator in db_model.evaluators.all():
+                evaluator.set_llm_provider_model_id(new_value)
+
             # Update FK references (assistants, analyses, etc.) to replacement, or let cascade handle them
             if replacement_model:
                 for obj in get_related_objects(db_model):
@@ -104,7 +111,6 @@ class Command(IdempotentCommand):
 
             # Update pipeline node references (stored as JSON params, not DB FKs)
             related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
-            new_value = replacement_model.id if replacement_model else None
             for node in related_pipeline_nodes.all():
                 _update_pipeline_node_param(node, "llm_provider_model_id", new_value)
 

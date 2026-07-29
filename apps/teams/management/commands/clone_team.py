@@ -461,7 +461,8 @@ class Command(BaseCommand):
 
     def _clone_evaluations(self, ctx: CloneContext):
         """Clone evaluators, datasets, and configs."""
-        # Evaluators - remap llm_provider_id and llm_provider_model_id in params
+        # Evaluators - remap llm_provider_id and llm_provider_model_id in params; the matching
+        # FK columns are derived from those on save.
         for evaluator in Evaluator.objects.filter(team=ctx.source_team):
             params = dict(evaluator.params)
             self._remap_evaluator_params(ctx, evaluator.name, params)

@@ -6,6 +6,7 @@ from django.core.management import call_command
 from apps.pipelines.models import Pipeline
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.models import LlmProviderModel
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
@@ -97,6 +98,33 @@ class TestRemoveDeprecatedModelsCommand:
 
         node.refresh_from_db()
         assert node.llm_provider_id is None
+
+    @pytest.mark.parametrize(
+        "replacement_name",
+        [pytest.param("test-replacement-model", id="with-replacement"), pytest.param(None, id="without-replacement")],
+    )
+    @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
+    def test_repoints_evaluators(self, mock_notify, replacement_name):
+        """Evaluator params and FK move together, so the delete pre-check no longer blocks."""
+        old_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4-old")
+        replacement_model = (
+            LlmProviderModelFactory(team=None, type="openai", name=replacement_name) if replacement_name else None
+        )
+        evaluator = EvaluatorFactory.create(params={"llm_provider_model_id": old_model.id})
+        assert evaluator.llm_provider_model_id == old_model.id
+
+        deleted_models = [("openai", "gpt-4-old", replacement_name) if replacement_name else ("openai", "gpt-4-old")]
+        with patch(
+            "apps.data_migrations.management.commands.remove_deprecated_models.DELETED_MODELS",
+            deleted_models,
+        ):
+            call_command("remove_deprecated_models", force=True)
+
+        assert not LlmProviderModel.objects.filter(id=old_model.id).exists()
+        evaluator.refresh_from_db()
+        expected_id = replacement_model.id if replacement_model else None
+        assert evaluator.llm_provider_model_id == expected_id
+        assert evaluator.params["llm_provider_model_id"] == expected_id
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_notifies_affected_team(self, mock_notify):

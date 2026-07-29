@@ -26,7 +26,7 @@ from typing import Literal
 from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
-from apps.utils.deletion import get_related_evaluators_queryset, get_related_objects
+from apps.utils.deletion import get_related_objects
 
 from .utils import ServiceProvider
 
@@ -116,8 +116,9 @@ def get_provider_usages(provider) -> ProviderUsages:
     "Unlinked Channels" categories. Document sources roll up to their
     parent Collection.
 
-    Pipeline nodes and evaluators reference providers from a JSON ``params``
-    blob rather than a foreign key, so both are looked up by param key.
+    Pipeline nodes reference providers from a JSON ``params`` blob rather than a
+    foreign key, so they are looked up by param key. Everything else, evaluators
+    included, is reached through a reverse FK.
 
     Each category keeps every referencing object in ``items`` but reports rows
     through ``groups``, which collapses version families to one row apiece — so
@@ -126,8 +127,6 @@ def get_provider_usages(provider) -> ProviderUsages:
     service_provider = _service_provider_for(provider)
     params_key = _PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
     related = get_related_objects(provider, pipeline_param_key=params_key)
-    if params_key:
-        related.extend(get_related_evaluators_queryset(provider, params_key))
 
     # Per-category dicts dedupe rows that are reachable through more than one
     # reverse relation (e.g. TranscriptAnalysis has both llm_provider and
