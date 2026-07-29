@@ -46,9 +46,9 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 * Lint python: `uv run ruff check path/to/file.py --fix`
 * Format python: `uv run ruff format path/to/file.py`
 * Type check python: `uv run ty check apps/`
-* Build JS & CSS: `npm run dev`
-* Lint JS: `npm run lint path/to/file.js`
-* TypeScript type checking: `npm run type-check path/to/file.ts`
+* Build JS & CSS: `pnpm run dev`
+* Lint JS: `pnpm run lint path/to/file.js`
+* TypeScript type checking: `pnpm run type-check path/to/file.ts`
 * Run Django dev server: `uv run inv runserver` (uses `portless` if available, otherwise falls back to `uv run python manage.py runserver`)
 * Django migrations: `uv run python manage.py migrate`
 * Create migration: `uv run python manage.py makemigrations <app_name>`
@@ -68,6 +68,7 @@ Tests and typecheck are necessary but not sufficient. For any change with a runt
 * For regressions: add a failing test that reproduces the bug, then fix to green
 * Prefer `pytest.mark.parametrize` for tests over enumerated data (same assertion, varying inputs); give each case a readable ID with `pytest.param(..., id="...")` rather than an inline comment
 * Always use @.github/pull_request_template.md as the template for pull request descriptions
+* Catch database exceptions *outside* `transaction.atomic()`, or wrap the failing code in a nested `atomic()` savepoint — a DB error caught inside the block leaves an aborted transaction that raises on the next query or on block exit. Enforced by `scripts/check_atomic_exception_handling.py` (pre-commit hook `atomic-exception-handling`)
 
 ## Ask first
 Confirm with a human before these — they are hard to reverse or change a shared contract:

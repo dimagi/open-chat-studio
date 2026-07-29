@@ -70,6 +70,8 @@ class Command(BaseCommand):
                                 flow_id=node.flow_id,
                                 type=node.type,
                                 label=node.label,
+                                position_x=node.position_x,
+                                position_y=node.position_y,
                                 working_version=None,
                                 is_archived=node.is_archived,
                                 pipeline=new_pipeline,

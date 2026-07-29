@@ -3,8 +3,9 @@
 ## Getting Started in 3 Steps
 
 ### 1. Install Cypress
+Cypress is an optional dependency of the project, so a normal install pulls it in:
 ```bash
-npm install cypress --save-dev
+pnpm install
 ```
 
 ### 2. Create Test User and Seed Data
@@ -53,14 +54,14 @@ This runs only the robust, simplified tests that gracefully handle empty pages a
 
 ### Interactive Mode (Recommended for development)
 ```bash
-npx cypress open
+pnpm exec cypress open
 ```
 
 Then select only the `*-simple.cy.js` files from the list.
 
 ### Headless Mode (All Tests)
 ```bash
-npx cypress run
+pnpm exec cypress run
 ```
 
 **Warning:** This runs ALL tests including detailed ones that may fail if pages are empty.
@@ -68,13 +69,13 @@ npx cypress run
 ### Run Specific Tests
 ```bash
 # Run simplified tests only (RECOMMENDED - these are more robust)
-npx cypress run --spec "cypress/e2e/*-simple.cy.js"
+pnpm exec cypress run --spec "cypress/e2e/*-simple.cy.js"
 
 # Run just chatbots tests
-npx cypress run --spec "cypress/e2e/chatbots-simple.cy.js"
+pnpm exec cypress run --spec "cypress/e2e/chatbots-simple.cy.js"
 
 # Run all apps test
-npx cypress run --spec "cypress/e2e/all-apps-simple.cy.js"
+pnpm exec cypress run --spec "cypress/e2e/all-apps-simple.cy.js"
 ```
 
 **Note:** The detailed tests (`assistants.cy.js`, `dashboard.cy.js`, etc.) make more assumptions about page structure and may fail if:

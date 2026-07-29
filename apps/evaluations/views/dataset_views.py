@@ -87,7 +87,7 @@ class DatasetHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
         }
 
 
-class DatasetTableView(PermissionRequiredMixin, SingleTableView):
+class DatasetTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     permission_required = "evaluations.view_evaluationdataset"
     model = EvaluationDataset
     table_class = EvaluationDatasetTable
@@ -199,8 +199,9 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         initial = super().get_initial()
 
         # Only pre-populate sessions if there are explicit filter parameters in the URL
-        # This prevents selecting all sessions when default filters are applied
-        has_explicit_filters = any(key.startswith("filter_") for key in self.request.GET)
+        # This prevents selecting all sessions when default filters are applied. New-format
+        # filters use the f_/op_ prefixes, matching FilterParams.from_request.
+        has_explicit_filters = any(key.startswith("f_") for key in self.request.GET)
 
         if has_explicit_filters:
             # Apply the same filters to get the filtered session IDs
@@ -250,7 +251,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         return response
 
 
-class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """Table view for selecting sessions to create a dataset from."""
 
     model = ExperimentSession
@@ -298,7 +299,7 @@ def dataset_sessions_selection_json(request, team_slug: str):
     return JsonResponse(session_keys, safe=False)
 
 
-class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """Table view for dataset messages with pagination."""
 
     model = EvaluationMessage
@@ -816,7 +817,7 @@ def dataset_sessions_count(request, team_slug: str, pk: int):
     return JsonResponse({"total": count})
 
 
-class EvalDatasetSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class EvalDatasetSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     """Paginated session table for the 'Add sessions' sub-page."""
 
     model = ExperimentSession

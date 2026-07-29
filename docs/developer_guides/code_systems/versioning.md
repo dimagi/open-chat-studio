@@ -84,7 +84,7 @@ def _get_version_details(self) -> VersionDetails:
         fields=[
             VersionField(group_name="General", name="name", raw_value=self.name),
             VersionField(group_name="Settings", name="enabled", raw_value=self.enabled),
-        ]
+        ],
     )
 ```
 

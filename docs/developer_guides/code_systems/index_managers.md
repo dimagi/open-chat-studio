@@ -75,11 +75,7 @@ file = File.objects.get(id=file_id)
 index_manager.upload_file_to_remote(file)
 
 # Link files to existing vector store with chunking
-index_manager.link_files_to_remote_index(
-    file_ids=["file-789", "file-101"],
-    chunk_size=1000,
-    chunk_overlap=200
-)
+index_manager.link_files_to_remote_index(file_ids=["file-789", "file-101"], chunk_size=1000, chunk_overlap=200)
 
 # Check if file exists remotely
 exists = index_manager.file_exists_at_remote(file)
@@ -115,16 +111,9 @@ from apps.documents.models import Collection, CollectionFile
 collection = Collection.objects.get(id=collection_id)
 
 # Add files to index (automatically chooses remote vs local)
-collection_files = CollectionFile.objects.filter(
-    collection=collection,
-    status=FileStatus.PENDING
-).iterator(100)
+collection_files = CollectionFile.objects.filter(collection=collection, status=FileStatus.PENDING).iterator(100)
 
-collection.add_files_to_index(
-    collection_files=collection_files,
-    chunk_size=1000,
-    chunk_overlap=200
-)
+collection.add_files_to_index(collection_files=collection_files, chunk_size=1000, chunk_overlap=200)
 ```
 
 ### Configuration-Driven Selection
@@ -134,13 +123,9 @@ The system automatically selects the appropriate manager based on collection set
 ```python
 def get_index_manager(self):
     if self.is_index and self.is_remote_index:
-        return self.llm_provider.get_remote_index_manager(
-            self.openai_vector_store_id
-        )
+        return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
     else:
-        return self.llm_provider.get_local_index_manager(
-            embedding_model_name=self.embedding_provider_model.name
-        )
+        return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
 ```
 
 ## Citations

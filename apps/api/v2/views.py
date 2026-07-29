@@ -20,11 +20,13 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
     list=extend_schema(
         operation_id="chatbot_list",
         summary="List Chatbots",
+        description="List the chatbots belonging to the API key's team.",
         tags=["Chatbots"],
     ),
     retrieve=extend_schema(
         operation_id="chatbot_retrieve",
         summary="Retrieve Chatbot",
+        description="Retrieve a single chatbot by its ID.",
         tags=["Chatbots"],
         parameters=[
             OpenApiParameter(

@@ -38,13 +38,14 @@ All flags must be declared in `apps/teams/flags.py` as entries in the `Flags` en
 ```python
 from apps.teams.flags import Flags
 
+
 class Flags(FlagInfo, Enum):
     MY_FEATURE = (
-        "flag_my_feature",   # slug — must start with "flag_"
-        "Short description", # shown in admin and team settings UI
-        "docs-slug",         # key into settings.DOCUMENTATION_LINKS (use "" if none)
-        [],                  # other flag slugs this flag requires (auto-enabled together)
-        True,                # teams_can_manage: whether team admins can toggle this themselves
+        "flag_my_feature",  # slug — must start with "flag_"
+        "Short description",  # shown in admin and team settings UI
+        "docs-slug",  # key into settings.DOCUMENTATION_LINKS (use "" if none)
+        [],  # other flag slugs this flag requires (auto-enabled together)
+        True,  # teams_can_manage: whether team admins can toggle this themselves
     )
 ```
 
@@ -67,6 +68,7 @@ if flag_is_active(request, Flags.MY_FEATURE.slug):
 ```python
 # ✅ Correct
 "flag_new_dashboard"
+
 "flag_enhanced_chat"
 
 # ❌ Incorrect - will raise ValidationError
@@ -87,6 +89,7 @@ In Django views or other Python code where a request object is available, you ca
 
 ```python
 from waffle import flag_is_active
+
 
 def my_view(request):
     if flag_is_active(request, "flag_new_feature"):

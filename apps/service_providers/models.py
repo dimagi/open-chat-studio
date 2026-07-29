@@ -436,7 +436,8 @@ class VoiceProvider(BaseTeamModel, ProviderMixin):
         warnings: list[str] = []
         if self.type == VoiceProviderType.elevenlabs.value:
             try:
-                self.sync_voices()
+                with transaction.atomic(savepoint=True):
+                    self.sync_voices()
             except Exception:
                 log.exception("Failed to sync voices for ElevenLabs provider %s", self.pk)
                 warnings.append("Provider saved, but voice sync failed. You can retry via the sync button.")

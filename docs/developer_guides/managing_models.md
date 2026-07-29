@@ -1,8 +1,8 @@
 # Managing LLM Models
 
-This guide covers the full lifecycle of LLM models in Open Chat Studio: adding new models, deprecating models that are being phased out, and fully deleting models.
+This guide covers the full lifecycle of LLM models in Open Chat Studio: adding new models, deprecating models that are being phased out, and fully deleting models. See the [user documentation](https://docs.openchatstudio.com/concepts/team/llm_providers/) for how deprecation and removal are handled automatically from the end user's perspective.
 
-| | Adding | Deprecation | Deletion |
+| | [Adding](#adding-a-model) | [Deprecation](#deprecating-a-model) | [Deletion](#deleting-a-model) |
 |---|---|---|---|
 | Added to `DEFAULT_LLM_PROVIDER_MODELS` | Yes | Already present (marked `deprecated=True`) | No (removed) |
 | Added to `DELETED_MODELS` | No | No | Yes |
@@ -143,7 +143,6 @@ class Migration(migrations.Migration):
     operations = [
         # Update model list (marks deprecated models in DB)
         llm_model_migration(),
-
         # notify affected teams about the deprecation and recommended replacement
         RunDataMigration("notify_deprecated_models", command_options={"force": True}),
     ]
@@ -184,7 +183,6 @@ In `apps/service_providers/llm_service/default_models.py`:
    DELETED_MODELS = [
        # Without replacement: references to this model are set to None
        ("openai", "gpt-4"),
-
        # With replacement: references are updated to point to the replacement model
        ("anthropic", "claude-2.0", "claude-3-5-sonnet-latest"),
    ]
@@ -207,7 +205,6 @@ class Migration(migrations.Migration):
     operations = [
         # Update model list
         llm_model_migration(),
-
         # Clean up references and notify teams
         RunDataMigration("remove_deprecated_models", command_options={"force": True}),
     ]
@@ -297,7 +294,6 @@ It is safe to remove models from `DELETED_MODELS` when **both** conditions are m
    DELETED_MODELS = [
        # Keep recent additions (< 1 month in main)
        ("openai", "gpt-4"),
-
        # Remove these - added 2 months ago, migrated everywhere
        # ("azure", "gpt-35-turbo"),
        # ("groq", "llama3-70b-8192"),

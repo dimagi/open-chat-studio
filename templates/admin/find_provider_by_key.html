@@ -55,7 +55,8 @@
                     {% blocktranslate count total=usages.total %}{{ total }} usage across:{% plural %}{{ total }} usages across:{% endblocktranslate %}
                     <ul class="list-disc list-inside ml-2">
                       {% for category in usages.categories %}
-                        <li>{{ category.label }} ({{ category.items|length }})</li>
+                        {# ``groups``, not ``items``: version families collapse to one entry, which is what ``usages.total`` counts. #}
+                        <li>{{ category.label }} ({{ category.groups|length }})</li>
                       {% endfor %}
                     </ul>
                   </div>

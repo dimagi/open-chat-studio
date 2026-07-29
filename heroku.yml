@@ -20,7 +20,7 @@ run:
     image: django
   worker:
     command:
-      - celery -A config worker -l INFO --pool gevent --concurrency 100
+      - celery -A config worker -l INFO --pool threads --concurrency 20
     image: django
   beat:
     command:

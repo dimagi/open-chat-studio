@@ -174,8 +174,8 @@ class UserComment(BaseTeamModel):
     object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey("content_type", "object_id")
 
-    @transaction.atomic()
     @staticmethod
+    @transaction.atomic()
     def add_for_model(model, comment: str, added_by: CustomUser, team: Team) -> "UserComment | None":
         try:
             model._meta.get_field("comments")

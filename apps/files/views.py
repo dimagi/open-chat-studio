@@ -214,7 +214,7 @@ class FileHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):
+class FileTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = File
     table_class = FilesTable
     template_name = "table/single_table.html"

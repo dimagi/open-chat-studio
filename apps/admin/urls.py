@@ -14,6 +14,7 @@ urlpatterns = [
     path("usage/section/team-activity/", views.section_team_activity, name="section_team_activity"),
     path("usage/section/charts/", views.section_charts, name="section_charts"),
     path("usage/section/top-teams/", views.section_top_teams, name="section_top_teams"),
+    path("team-metadata/", views.team_metadata, name="team_metadata"),
     path("teams/<slug:slug>/", views.team_detail, name="team_detail"),
     path("usage/section/platform/", views.section_platform, name="section_platform"),
     path("usage/section/top-experiments/", views.section_top_experiments, name="section_top_experiments"),
@@ -24,7 +25,6 @@ urlpatterns = [
     path("export/top-teams/", views.export_top_teams, name="export_top_teams"),
     path("export/top-experiments/", views.export_top_experiments, name="export_top_experiments"),
     path("export/team-metadata/", views.export_team_metadata, name="export_team_metadata"),
-    path("import/team-metadata/", views.import_team_metadata, name="import_team_metadata"),
     # Feature Flags
     path("flags/", views.flags_home, name="flags_home"),
     path("flags/<str:flag_name>/", views.flag_detail, name="flag_detail"),

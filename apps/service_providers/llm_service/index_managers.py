@@ -12,7 +12,7 @@ from pgvector.django import CosineDistance
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
-from apps.documents.models import CollectionFile, FileStatus
+from apps.documents.models import CollectionFile, FileStatus, chunk_from_indexed_file, format_failure_reason
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
@@ -273,6 +273,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ):
+        """Chunk and embed each file, marking its CollectionFile COMPLETED or FAILED.
+
+        Files are independent: one failing does not stop the rest. A file that fails leaves
+        no embeddings behind, since a partial index is not a usable representation of it.
+        """
         for collection_file in collection_files:
             file = collection_file.file
             embeddings = []
@@ -309,11 +314,18 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         )
                     )
                 collection_file.status = FileStatus.COMPLETED
+                # An earlier attempt may have left a reason behind; this attempt supersedes it.
+                collection_file.failure_reason = ""
             except Exception as e:
                 logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
                 collection_file.status = FileStatus.FAILED
+                collection_file.failure_reason = format_failure_reason(e)
+                # A partial index leaves nothing behind: the chunks written before the provider
+                # failed are not a usable representation of the file and must not reach retrieval.
+                FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+                embeddings = []
             try:
-                collection_file.save(update_fields=["status"])
+                collection_file.save(update_fields=["status", "failure_reason"])
             except DatabaseError:
                 collection_file_id = collection_file.id
                 collection_file = CollectionFile.objects.filter(id=collection_file_id).first()
@@ -371,6 +383,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         return (
             FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", embedding_vector))
             .filter(collection_id=index_id)
+            .filter(chunk_from_indexed_file())
             .order_by("distance")
             .select_related("file")
             .only("text", "file__name")[:top_k]

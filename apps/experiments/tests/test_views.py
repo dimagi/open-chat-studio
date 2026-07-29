@@ -575,3 +575,27 @@ class TestVerifyPublicChatToken:
         )
         assert response.url == expected_redirect_url
         record_consent_and_redirect.assert_not_called()
+
+
+@pytest.mark.django_db()
+@mock.patch("apps.experiments.views.experiment.async_export_chat.delay")
+def test_generate_chat_export_enqueues_serializable_query_params(delay_mock, experiment, client):
+    """The task args must survive Celery's JSON serializer.
+
+    A QueryDict is serialized into a plain dict, which has no ``.getlist()``, so the view
+    passes the raw query string and the task rebuilds the QueryDict itself.
+    """
+    delay_mock.return_value = "task-123"  # rendered into the template as the progress task id
+    current_url = "https://example.com/sessions?f_participant=alice&op_participant=equals"
+    client.force_login(experiment.team.members.first())
+
+    response = client.post(
+        reverse("experiments:generate_chat_export", args=[experiment.team.slug, experiment.id]),
+        HTTP_HX_REQUEST="true",
+        HTTP_HX_CURRENT_URL=current_url,
+    )
+
+    assert response.status_code == 200
+    _experiment_id, query_params, _time_zone = delay_mock.call_args.args
+    assert isinstance(query_params, str)
+    assert query_params == "f_participant=alice&op_participant=equals"

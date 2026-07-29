@@ -30,24 +30,46 @@ The frontend is built using [Alpine.js](https://alpinejs.dev/) and HTMX. It dyna
 ## Linking query parameters to ORM operations
 
 ### Query Parameters
-Filter values are passed through URL query parameters using a structured naming convention:
 
-- **`filter_{i}_column`** - Specifies which column to filter on (matches the `query_param` of a `ColumnFilter`)
-- **`filter_{i}_operator`** - Defines the filter operation (e.g., equals, contains, before, after)
-- **`filter_{i}_value`** - Contains the actual filter value
+Filter values are passed through URL query parameters using a modern format that optimizes URL length and readability:
 
-The `{i}` represents the filter index (0 to `MAX_FILTER_PARAMS-1`), allowing multiple filters to be applied simultaneously (e.g., `filter_0_column`, `filter_1_column`, etc.).
+#### New Format (Recommended)
+- **`f_{column_name}`** - Contains the filter value(s)
+- **`op_{column_name}`** - Defines the filter operation (e.g., equals, contains, before, after)
+
+!!! warning "Reserved prefixes"
+    `f_` and `op_` are **reserved** query-string prefixes. `FilterParams` treats *every* param beginning with `f_` as a filter column (with `op_<column>` as its operator). Do not add unrelated query parameters using these prefixes to any page that renders a filterable table — they would be silently interpreted as filters.
+
+**Examples:**
+- Single value: `?f_status=active&op_status=equals`
+- Multiple values (separated by `~`): `?f_tags=tag1~tag2&op_tags=any%20of`
+- Values containing `~` are quoted: `?f_tags=tag1~"tag~2"~tag3&op_tags=any%20of`
+
+#### Legacy Format (Deprecated)
+The old `filter_{i}_column` / `filter_{i}_operator` / `filter_{i}_value` query-string format is deprecated. The UI no longer produces it, and it is rejected when *saving* new filter sets. However, existing legacy URLs (bookmarks or externally-generated links) keep working on *read*: `FilterParams.from_request` transparently translates them to the new `f_*`/`op_*` format via `convert_saved_filter_data`. Stored filter values are migrated to the new format by data migrations.
+
+**Example (legacy — auto-translated to the new format on read):**
+- `?filter_0_column=status&filter_0_operator=equals&filter_0_value=active`
+- `?filter_0_column=tags&filter_0_operator=any%20of&filter_0_value=["tag1", "tag2"]`
+
+#### Value Encoding for Multiple Values
+
+For operators that accept multiple values (`any of`, `all of`, `excludes`), values are separated by `~`:
+- Simple values: `tag1~tag2~tag3`
+- Values with special characters: `tag1~"tag~2"~tag3` (quoted using CSV formatting)
 
 ### FilterParams and ColumnFilterData
 The `FilterParams` class extracts filter parameters from request query parameters and organizes them into `ColumnFilterData` objects. Each `ColumnFilterData` contains the column name, operator, and value for a single filter.
 
+The same column may appear more than once — a date range is expressed as `after X` plus `before Y` on the same column — so `FilterParams` keeps a flat, ordered list of filters rather than one entry per column. Use `FilterParams.get_all(column)` to retrieve every filter for a column.
+
 ### Column Filter
-The `ColumnFilter` class acts as a bridge between query parameters and ORM filters. Each filter defines a `query_param` attribute that corresponds to the column name in the query parameters. When a request contains `filter_{i}_column` matching this `query_param`, the filter processes the associated operator and value to generate the appropriate database query.
+The `ColumnFilter` class acts as a bridge between query parameters and ORM filters. Each filter defines a `query_param` attribute that corresponds to the column name in the query parameters. When a request contains an `f_<query_param>` value (paired with an `op_<query_param>` operator) matching this `query_param`, the filter processes the associated operator and value to generate the appropriate database query.
 
 The `ColumnFilter.apply()` method:
-1. Retrieves the `ColumnFilterData` for its `query_param` from `FilterParams`
-2. Converts the operator to a method name (e.g., "starts with" → `apply_starts_with`)
-3. Calls the appropriate `apply_*` method with the parsed value
+1. Retrieves every `ColumnFilterData` for its `query_param` from `FilterParams`
+2. For each one, converts the operator to a method name (e.g., "starts with" → `apply_starts_with`)
+3. Calls the appropriate `apply_*` method with the parsed value, narrowing the queryset further each time (filters on the same column combine with AND)
 
 ### Available Filter Types
 
@@ -105,17 +127,17 @@ First, let's create a filter for product categories using the existing filter ty
 from apps.web.dynamic_filters.base import ChoiceColumnFilter, StringColumnFilter
 from apps.web.dynamic_filters.column_filters import TimestampFilter
 
+
 class ProductCategoryFilter(ChoiceColumnFilter):
     """Filter products by category name."""
+
     query_param: str = "category"
     column: str = "category__name"  # Database field path
     label: str = "Category"
 
     def prepare(self, team, **kwargs):
-        self.options = [
-            {"id": cat.id, "label": cat.name}
-            for cat in Category.objects.filter(team=team).all()
-        ]
+        self.options = [{"id": cat.id, "label": cat.name} for cat in Category.objects.filter(team=team).all()]
+
 
 p_filter = ProductCategoryFilter()
 
@@ -134,6 +156,7 @@ from typing import ClassVar
 from collections.abc import Sequence
 from apps.web.dynamic_filters.base import MultiColumnFilter
 
+
 class ProductInventoryFilter(MultiColumnFilter):
     """Filter for product inventory using multiple column filters."""
 
@@ -145,13 +168,13 @@ class ProductInventoryFilter(MultiColumnFilter):
         StringColumnFilter(
             label="Category",
             columns=["category__name", "category__description"],  # Searches both fields with OR logic
-            query_param="category_search"
+            query_param="category_search",
         ),
     ]
 
     def prepare_queryset(self, queryset):
         """Prepare the queryset with any necessary annotations or select_related calls."""
-        return queryset.select_related('category')
+        return queryset.select_related("category")
 ```
 
 ### Step 3: Create the Model and Table (for completeness)
@@ -160,9 +183,11 @@ class ProductInventoryFilter(MultiColumnFilter):
 # apps/inventory/models.py
 from django.db import models
 
+
 class Category(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+
 
 class Product(models.Model):
     name = models.CharField(max_length=200)
@@ -178,11 +203,12 @@ class Product(models.Model):
 import django_tables2 as tables
 from .models import Product
 
+
 class ProductTable(tables.Table):
     class Meta:
         model = Product
-        fields = ('name', 'category', 'price', 'stock_quantity', 'created_at', 'updated_at')
-        attrs = {'class': 'table table-striped'}
+        fields = ("name", "category", "price", "stock_quantity", "created_at", "updated_at")
+        attrs = {"class": "table table-striped"}
 ```
 
 ### Step 4: Create the View
@@ -199,8 +225,10 @@ from .models import Product
 from .tables import ProductTable
 from .filters import ProductInventoryFilter
 
+
 class ProductInventoryView(SingleTableView):
     """View for displaying filtered product inventory."""
+
     model = Product
     table_class = ProductTable
     template_name = "inventory/product_list.html"
@@ -227,7 +255,7 @@ class ProductInventoryView(SingleTableView):
             filter_class=ProductInventoryFilter,
             table_url=reverse("inventory:product_table"),  # Your HTMX table URL
             table_container_id="product-table",
-            table_type="your-table-type"
+            table_type="your-table-type",
         )
 
         context.update(filter_context)

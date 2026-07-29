@@ -12,11 +12,11 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(rg:*)",
-      "Bash(npm run build:*)",
-      "Bash(npm run type-check:*)",
-      "Bash(npx stencil test:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(pnpm run type-check:*)",
+      "Bash(pnpm exec stencil test:*)",
       "WebFetch(domain:docs.openchatstudio.com)",
-      "Bash(npm run lint:*)",
+      "Bash(pnpm run lint:*)",
       "Bash(uv run ruff check:*)",
       "Bash(uv run ruff format:*)"
     ]

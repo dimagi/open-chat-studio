@@ -61,11 +61,10 @@ Then navigate to the login page and append this to the URL: `?dwft_sso_login=1`.
 INSTALLED_APPs = [..., "allauth.socialaccount.providers.microsoft"]
 
 SOCIALACCOUNT_PROVIDERS = {
-   "microsoft": {
-       "SCOPE": ["openid", "profile", "email", "User.Read"],
-       "AUTH_PARAMS": {"claims": '{"id_token": {"login_hint": null}}'},
-   }
-
+    "microsoft": {
+        "SCOPE": ["openid", "profile", "email", "User.Read"],
+        "AUTH_PARAMS": {"claims": '{"id_token": {"login_hint": null}}'},
+    }
 }
 ```
 
@@ -78,4 +77,3 @@ SOCIALACCOUNT_PROVIDERS = {
 | Client ID | App Client ID |
 | Client secret | App Client Secret |
 | Settings | {"email_domains": ["dimagi.com"], "tenant": "app tenant ID"}
-

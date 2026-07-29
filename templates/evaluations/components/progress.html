@@ -8,23 +8,18 @@
 </div>
 
 <script>
-  const progressUrl = "{% url 'web:celery_group_status' group_job_id %}";
+  const progressUrl = "{% url 'celery_progress:task_status' celery_job_id %}";
   CeleryProgressBar.initProgressBar(progressUrl, {
-    pollInterval: 1000,
+    pollInterval: 2000,
     onSuccess: () => {
       location.reload()
     },
     onProgress: (progressBarElement, progressBarMessageElement, progress) => {
       progressBarElement.style.width = progress.percent + "%";
-      let description = progress.description || progress.current / 100 + ' of ' + progress.total / 100 + ' batches evaluated';
-      if (progress.current === 0) {
-        if (progress.pending === true) {
-          progressBarMessageElement.textContent = 'Waiting for evaluation to start...';
-        } else {
-          progressBarMessageElement.textContent = 'Evaluation started...';
-        }
+      if (progress.current === 0 && !progress.total) {
+        progressBarMessageElement.textContent = 'Waiting for evaluation to start...';
       } else {
-        progressBarMessageElement.textContent = description;
+        progressBarMessageElement.textContent = progress.description || (progress.current + ' of ' + progress.total + ' evaluated');
       }
     }
   })

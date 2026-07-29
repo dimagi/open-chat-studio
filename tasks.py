@@ -1,5 +1,6 @@
 import platform
 import re
+import shutil
 import sys
 import textwrap
 import time
@@ -117,11 +118,11 @@ def setup_dev_env(c: Context, step=False):
     cprint(f"\nChecking node version (>{MIN_NODE_VERSION} required)", "green")
     if not _check_node_version(c):
         cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
-        cprint("\nSkipping front end build. Run 'inv npm --install' once you have upgraded node.", "yellow")
+        cprint("\nSkipping front end build. Run 'inv pnpm --install' once you have upgraded node.", "yellow")
     else:
-        cprint("\nInstalling npm packages and building front end resources", "green")
+        cprint("\nInstalling pnpm packages and building front end resources", "green")
         if not step or _confirm("\tOK?", _exit=False):
-            npm(c, install=True)
+            pnpm(c, install=True)
 
     _run_with_confirm(c, "Create superuser", "python manage.py createsuperuser", step)
 
@@ -217,23 +218,23 @@ def runserver(c: Context, public=False):
 
 @task(
     help={
-        "gevent": "Use gevent pool for async tasks (disables beat scheduler)",
+        "threads": "Use thread pool for async tasks (disables beat scheduler)",
         "beat": "Include beat scheduler for periodic tasks (default: False)",
     }
 )
-def celery(c: Context, gevent=False, beat=False):
+def celery(c: Context, threads=False, beat=False):
     """Start Celery worker with auto-reload on code changes."""
     _disable_stdin_forwarding(c)
     cmd = "celery -A config worker -l INFO"
-    if gevent:
-        cmd += " --pool gevent --concurrency 10"
+    if threads:
+        cmd += " --pool threads --concurrency 10"
     else:
         cmd += " --pool=solo"
         if beat:
             cmd += " -B"
 
-    if gevent:
-        cprint("Starting celery worker with gevent pool. This will not run celery beat.", "yellow")
+    if threads:
+        cprint("Starting celery worker with thread pool. This will not run celery beat.", "yellow")
     c.run(f'watchfiles --filter python "{cmd}"', echo=True, pty=sys.stdout.isatty())
 
 
@@ -259,18 +260,35 @@ def ruff(c: Context, no_fix=False, unsafe_fixes=False, paths=""):
     c.run(f"ruff format {target_paths}", echo=True, pty=True)
 
 
+def _ensure_pnpm(c: Context):
+    """Ensure pnpm is available via Corepack (pinned in package.json), failing clearly if it cannot be."""
+    if shutil.which("pnpm"):
+        return
+    if shutil.which("corepack"):
+        cprint("pnpm not found; enabling it via 'corepack enable'...", "yellow")
+        if c.run("corepack enable", echo=True, warn=True).ok and shutil.which("pnpm"):
+            return
+    raise Exit(
+        "pnpm is required but unavailable. Corepack ships with Node.js; "
+        "ensure Node 24+ is installed and run 'corepack enable'.",
+        -1,
+    )
+
+
 @task(
+    aliases=["npm"],
     help={
-        "watch": "Build assets and watch for changes (npm run dev-watch)",
-        "install": "Install npm packages before building",
-    }
+        "watch": "Build assets and watch for changes (pnpm run dev-watch)",
+        "install": "Install pnpm packages before building",
+    },
 )
-def npm(c: Context, watch=False, install=False):
+def pnpm(c: Context, watch=False, install=False):
     """Build frontend assets with webpack. Use --watch for development."""
+    _ensure_pnpm(c)
     if install:
-        c.run("npm install", echo=True)
+        c.run("pnpm install", echo=True)
     cmd = "dev-watch" if watch else "dev"
-    c.run(f"npm run {cmd}", echo=True, pty=True)
+    c.run(f"pnpm run {cmd}", echo=True, pty=True)
 
 
 @task(help={"port": "Port to serve docs on (default: 8001)"})

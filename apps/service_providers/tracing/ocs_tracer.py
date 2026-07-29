@@ -10,8 +10,8 @@ from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
-from apps.cost_tracking.services.recorder import TraceContext as CostTraceContext
-from apps.cost_tracking.services.recorder import record_usage_bulk
+from apps.cost_tracking.models import UsageSource
+from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.ocs_notifications.notifications import trace_error_notification
 from apps.service_providers.tracing.const import OCS_TRACE_PROVIDER, SpanLevel
@@ -169,8 +169,9 @@ class OCSTracer(Tracer):
             return
         record_usage_bulk(
             events,
-            CostTraceContext(
+            UsageContext(
                 team_id=self.team_id,
+                source=UsageSource.CHAT,
                 trace_id=self.trace_record.id,
                 experiment_id=self.trace_record.experiment_id,
                 session_id=self.session.id if self.session else None,

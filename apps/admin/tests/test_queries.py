@@ -427,7 +427,9 @@ class TestGetUsageData:
         result = list(get_usage_data(start, end))
         assert [row[0] for row in result] == ["Big", "Small"]
 
-    def test_excludes_evaluations_platform(self, date_range):
+    def test_includes_evaluations_platform(self, date_range):
+        # Eval traffic bills like any other traffic, and the cost half of the usage
+        # report counts it, so the token half must too.
         start, end = date_range
         team = TeamFactory.create(name="T")
         web_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.WEB)
@@ -445,10 +447,10 @@ class TestGetUsageData:
             platform=ChannelPlatform.EVALUATIONS,
         )
         self._make_trace(session=web_session, tokens=100)
-        self._make_trace(session=eval_session, tokens=99999)
+        self._make_trace(session=eval_session, tokens=400)
 
         rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 100, {})]
+        assert rows == [("T", 2, 500, {})]
 
     def test_excludes_pending_traces_but_includes_errors(self, date_range):
         start, end = date_range

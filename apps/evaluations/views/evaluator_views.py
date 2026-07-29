@@ -36,7 +36,7 @@ class EvaluatorHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Template
         }
 
 
-class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):
+class EvaluatorTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     permission_required = "evaluations.view_evaluator"
     model = Evaluator
     table_class = EvaluatorTable

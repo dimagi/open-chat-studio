@@ -1,14 +1,18 @@
 import pytest
+from django.db import connection
+from django.template.loader import render_to_string
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.analysis.models import TranscriptAnalysis
 from apps.events.models import EventActionType
 from apps.service_providers.models import LlmProviderTypes, MessagingProviderType, TraceProviderType, VoiceProviderType
-from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
+from apps.service_providers.usages import MAX_INLINE_VERSIONS, get_provider_usages, search_providers_by_api_key
 from apps.service_providers.utils import ServiceProvider
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.events import EventActionFactory, StaticTriggerFactory
 from apps.utils.factories.experiment import ExperimentFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
@@ -112,7 +116,7 @@ def test_document_sources_roll_up_to_collections(team_with_users, client):
     client.force_login(user)
     response = client.get(
         reverse(
-            "service_providers:usages",
+            "service_providers:usages_content",
             kwargs={"team_slug": team_with_users.slug, "provider_type": "auth", "pk": auth_provider.pk},
         )
     )
@@ -352,30 +356,209 @@ def test_search_invalid_match_mode_raises(anthropic_provider):
 
 
 @pytest.mark.django_db()
-def test_usages_view_renders_version_tags(team_with_users, client):
+def test_usages_view_collapses_versions_into_one_row(team_with_users, client):
     voice = VoiceProviderFactory(team=team_with_users)
-    working = ExperimentFactory(team=team_with_users, voice_provider=voice)
-    working.create_new_version()  # published v1; working is still a working version
+    working = ExperimentFactory(team=team_with_users, voice_provider=voice, name="Interview Bot")
+    version = working.create_new_version()  # published v1; working is still a working version
     user = team_with_users.members.first()
     client.force_login(user)
     url = reverse(
-        "service_providers:usages",
+        "service_providers:usages_content",
         kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "pk": voice.pk},
     )
     response = client.get(url)
 
     body = response.content.decode()
+    assert body.count(">Interview Bot</a>") == 1, "the family should occupy a single row"
+    assert "Chatbots (1)" in body, "the category count should count families, not versions"
     assert "working version" in body, "expected working-version badge"
-    assert ("v1" in body) or ("published" in body), "expected a version badge for the published copy"
+    assert "published v1" in body, "expected a version badge for the published copy"
 
-    # Both rows should point at the working version's URL; the v1 row appends #versions.
-    working_url = working.get_absolute_url()
-    assert f'href="{working_url}"' in body, "working version row should link directly to the working URL"
-    assert f'href="{working_url}#versions"' in body, "older-version row should link with the #versions hash"
+    # The row name links to the working version; the v1 badge deep-links to that version's row.
+    assert f'href="{working.get_absolute_url()}"' in body
+    assert f'href="{version.get_absolute_url()}"' in body
+    assert "?version_id=1#versions" in version.get_absolute_url(), "sanity: version URLs are version-aware"
 
 
 @pytest.mark.django_db()
-def test_usages_view_renders(team_with_users, client, anthropic_provider):
+def test_versions_collapse_into_one_group(team_with_users):
+    voice = VoiceProviderFactory(team=team_with_users)
+    working = ExperimentFactory(team=team_with_users, voice_provider=voice)
+    v1 = working.create_new_version()
+    v2 = working.create_new_version()
+
+    usages = get_provider_usages(voice)
+
+    chatbots = next(c for c in usages.categories if c.label == "Chatbots")
+    assert {item.id for item in chatbots.items} == {working.id, v1.id, v2.id}, "sanity: all three reference the voice"
+    (group,) = chatbots.groups
+    assert group.head.id == working.id
+    assert [m.id for m in group.versions] == [working.id, v1.id, v2.id], "working version first, then ascending"
+    assert usages.total == 1, "the total counts families, matching the rows shown"
+
+
+@pytest.mark.django_db()
+def test_group_head_is_the_working_version_even_when_only_a_snapshot_references_the_provider(team_with_users):
+    voice = VoiceProviderFactory(team=team_with_users)
+    working = ExperimentFactory(team=team_with_users, voice_provider=voice, name="Interview Bot")
+    v1 = working.create_new_version()
+    working.voice_provider_id = None
+    working.save()
+
+    usages = get_provider_usages(voice)
+
+    (group,) = next(c for c in usages.categories if c.label == "Chatbots").groups
+    assert [m.id for m in group.versions] == [v1.id]
+    assert group.head.id == working.id, "the row must still link to the family's editable working version"
+    assert group.name == "Interview Bot"
+
+
+@pytest.mark.django_db()
+def test_versions_past_the_inline_limit_collapse_behind_a_toggle(team_with_users, client):
+    voice = VoiceProviderFactory(team=team_with_users)
+    working = ExperimentFactory(team=team_with_users, voice_provider=voice)
+    extra = 2
+    for _ in range(MAX_INLINE_VERSIONS - 1 + extra):  # working version occupies one inline slot
+        working.create_new_version()
+
+    user = team_with_users.members.first()
+    client.force_login(user)
+    response = client.get(
+        reverse(
+            "service_providers:usages_content",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "voice", "pk": voice.pk},
+        )
+    )
+
+    body = response.content.decode()
+    assert f"+{extra} more" in body
+    assert "Chatbots (1)" in body
+
+
+@pytest.mark.django_db()
+def test_versions_of_models_without_version_urls_are_not_linked(team_with_users, client, anthropic_provider):
+    """Only chatbots deep-link to a version; other snapshots have no page to link to."""
+    assistant = OpenAiAssistantFactory(team=team_with_users, llm_provider=anthropic_provider)
+    # Built directly rather than via ``create_new_version``, which would push to OpenAI.
+    version = OpenAiAssistantFactory(
+        team=team_with_users,
+        llm_provider=anthropic_provider,
+        working_version=assistant,
+        version_number=1,
+    )
+
+    user = team_with_users.members.first()
+    client.force_login(user)
+    response = client.get(
+        reverse(
+            "service_providers:usages_content",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": anthropic_provider.pk},
+        )
+    )
+
+    body = response.content.decode()
+    assert "v1" in body, "the version is still reported"
+    assert f'href="{version.get_absolute_url()}"' not in body, "a snapshot's own url is not a usable destination"
+    assert f'href="{assistant.get_absolute_url()}"' in body, "the row links to the working version"
+
+
+def _add_provider_usage(provider, count: int) -> None:
+    """Attach ``count`` more references: a pipeline node (with its chatbot) and an evaluator."""
+    for _ in range(count):
+        pipeline = PipelineFactory(team=provider.team)
+        NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": provider.id})
+        ExperimentFactory(team=provider.team, pipeline=pipeline)
+        EvaluatorFactory(team=provider.team, params={"llm_provider_id": provider.id})
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("stored_id", [pytest.param(int, id="int"), pytest.param(str, id="str")])
+def test_evaluators_referencing_the_provider_in_params_are_reported(anthropic_provider, stored_id):
+    """``Evaluator.params`` holds ``llm_provider_id`` as JSON, not an FK."""
+    evaluator = EvaluatorFactory(
+        team=anthropic_provider.team,
+        name="Sentiment",
+        params={"llm_provider_id": stored_id(anthropic_provider.id)},
+    )
+
+    usages = get_provider_usages(anthropic_provider)
+
+    items_by_label = {c.label: [obj.id for obj in c.items] for c in usages.categories}
+    assert items_by_label == {"Evaluators": [evaluator.id]}
+
+
+@pytest.mark.django_db()
+def test_evaluators_referencing_a_different_provider_are_not_reported(anthropic_provider):
+    other_provider = LlmProviderFactory(team=anthropic_provider.team)
+    EvaluatorFactory(team=anthropic_provider.team, params={"llm_provider_id": other_provider.id})
+
+    assert get_provider_usages(anthropic_provider).is_empty()
+
+
+@pytest.mark.django_db()
+def test_archived_pipelines_are_still_reported(anthropic_provider):
+    """A provider referenced only by an archived pipeline must not look unreferenced."""
+    team = anthropic_provider.team
+    pipeline = PipelineFactory(team=team, name="Archived", is_archived=True)
+    NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": anthropic_provider.id})
+
+    usages = get_provider_usages(anthropic_provider)
+
+    items_by_label = {c.label: [obj.id for obj in c.items] for c in usages.categories}
+    assert items_by_label == {"Unlinked Pipelines": [pipeline.id]}
+
+
+@pytest.mark.django_db()
+def test_resolving_usages_does_not_scale_with_reference_count(anthropic_provider):
+    """N+1 guard: query count must be flat in the number of referencing objects."""
+    _add_provider_usage(anthropic_provider, 1)
+    with CaptureQueriesContext(connection) as few:
+        usages_few = get_provider_usages(anthropic_provider)
+
+    _add_provider_usage(anthropic_provider, 4)
+    with CaptureQueriesContext(connection) as many:
+        usages_many = get_provider_usages(anthropic_provider)
+
+    assert usages_few.total == 2, "sanity: one chatbot + one evaluator"
+    assert usages_many.total == 10, "sanity: five chatbots + five evaluators"
+    assert len(many.captured_queries) == len(few.captured_queries), (
+        f"query count grew from {len(few.captured_queries)} to {len(many.captured_queries)} "
+        f"when references went from 2 to 10"
+    )
+
+
+@pytest.mark.django_db()
+def test_rendering_usages_does_not_scale_with_version_count(team_with_users):
+    """N+1 guard: the item partial resolves working versions without a query per row."""
+    voice = VoiceProviderFactory(team=team_with_users)
+
+    def render_for(provider):
+        return render_to_string(
+            "service_providers/components/usages_content.html",
+            {"provider": provider, "usages": get_provider_usages(provider)},
+        )
+
+    working = ExperimentFactory(team=team_with_users, voice_provider=voice)
+    working.create_new_version()
+    render_for(voice)  # warm any process-level caches (e.g. team slug lookups)
+    with CaptureQueriesContext(connection) as few:
+        render_for(voice)
+
+    for _ in range(3):
+        extra = ExperimentFactory(team=team_with_users, voice_provider=voice)
+        extra.create_new_version()
+    with CaptureQueriesContext(connection) as many:
+        render_for(voice)
+
+    assert len(many.captured_queries) == len(few.captured_queries), (
+        f"query count grew from {len(few.captured_queries)} to {len(many.captured_queries)} "
+        f"when versioned chatbot references went from 2 to 8"
+    )
+
+
+@pytest.mark.django_db()
+def test_usages_view_renders_shell_with_loading_state(team_with_users, client, anthropic_provider):
+    """The shell must not resolve usages itself; it defers to the content view."""
     user = team_with_users.members.first()
     client.force_login(user)
     url = reverse(
@@ -384,4 +567,24 @@ def test_usages_view_renders(team_with_users, client, anthropic_provider):
     )
     response = client.get(url)
     assert response.status_code == 200
-    assert b"Where is" in response.content
+    body = response.content.decode()
+    assert "Where is" in body
+    assert "loading-spinner" in body
+    content_url = reverse(
+        "service_providers:usages_content",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": anthropic_provider.pk},
+    )
+    assert f'hx-get="{content_url}"' in body
+
+
+@pytest.mark.django_db()
+def test_usages_content_view_renders(team_with_users, client, anthropic_provider):
+    user = team_with_users.members.first()
+    client.force_login(user)
+    url = reverse(
+        "service_providers:usages_content",
+        kwargs={"team_slug": team_with_users.slug, "provider_type": "llm", "pk": anthropic_provider.pk},
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    assert b"not currently referenced" in response.content

@@ -23,7 +23,7 @@ from apps.chat.agent import schemas
 from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
-from apps.documents.models import Collection
+from apps.documents.models import Collection, chunk_from_indexed_file
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
@@ -172,6 +172,7 @@ def _perform_collection_search(
     embeddings = list(
         FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
         .filter(collection_id=collection.id)
+        .filter(chunk_from_indexed_file())
         .order_by("distance")
         .select_related("file")
         .only("text", "file__name", "file__metadata")[:max_results]
@@ -477,37 +478,46 @@ class AttachMediaTool(CustomBaseTool):
         )
         return chat_attachment
 
-    @transaction.atomic
     def action(self, file_ids: list[int]) -> str:
         if len(file_ids) > 5:
             return "A maximum of 5 files can be attached."
 
         response = []
         include_links = self.experiment_session.experiment_channel.platform == ChannelPlatform.WEB
+        # Resolve the parent row here, outside the per-file blocks below. `chat_attachment` is a
+        # cached_property, so leaving it to be evaluated on the first loop iteration puts its
+        # get_or_create inside that file's transaction: if the file fails, the rollback drops the row
+        # while the cached object keeps its id, and the m2m table's deferred foreign key then fails
+        # at COMMIT — after every later file has been reported attached.
+        chat_attachment = self.chat_attachment
         for file_id in file_ids:
             try:
-                file = File.objects.get(id=file_id)
-                self.chat_attachment.files.add(file_id)
-                self.tool_callbacks.attach_file(file_id)
-                file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
+                # One transaction per file, so a failed attachment rolls back on its own and the
+                # loop can keep going. Catching a DB error without leaving the block would abort
+                # the transaction and break every remaining iteration.
+                with transaction.atomic():
+                    file = File.objects.get(id=file_id)
+                    chat_attachment.files.add(file_id)
+                    self.tool_callbacks.attach_file(file_id)
+                    file_response = SUCCESSFUL_ATTACHMENT_MESSAGE.format(file_id=file_id, name=file.name)
 
-                if include_links:
-                    # Only the web platform is able to render these links
-                    if file.is_image:
-                        link_text = IMAGE_LINK_TEXT.format(
-                            file_id=file_id,
-                            session_id=self.experiment_session.id,
-                            team_slug=get_slug_for_team(file.team_id),
-                        )
-                    else:
-                        link_text = FILE_LINK_TEXT.format(
-                            name=file.name,
-                            file_id=file_id,
-                            session_id=self.experiment_session.id,
-                            team_slug=get_slug_for_team(file.team_id),
-                        )
-                    file_response = f"{file_response} {link_text}"
-                response.append(file_response)
+                    if include_links:
+                        # Only the web platform is able to render these links
+                        if file.is_image:
+                            link_text = IMAGE_LINK_TEXT.format(
+                                file_id=file_id,
+                                session_id=self.experiment_session.id,
+                                team_slug=get_slug_for_team(file.team_id),
+                            )
+                        else:
+                            link_text = FILE_LINK_TEXT.format(
+                                name=file.name,
+                                file_id=file_id,
+                                session_id=self.experiment_session.id,
+                                team_slug=get_slug_for_team(file.team_id),
+                            )
+                        file_response = f"{file_response} {link_text}"
+                    response.append(file_response)
             except File.DoesNotExist:
                 response.append(f"* {file_id}: File not found.")
             except utils.IntegrityError:
@@ -531,7 +541,6 @@ class SearchIndexTool(CustomBaseTool):
     args_schema: type[schemas.SearchIndexSchema] = schemas.SearchIndexSchema
     search_config: SearchToolConfig
 
-    @transaction.atomic
     def action(self, query: str) -> str:
         """
         Do a simple search for the top most relevant file chunks based on the query provided by the user. A little query
@@ -561,7 +570,6 @@ class SearchCollectionByIdTool(CustomBaseTool):
     generate_citations: bool = True
     allowed_collection_ids: list[int]
 
-    @transaction.atomic
     def action(self, collection_index_id: int, query: str) -> str:
         """
         Search a specific collection index for the most relevant file chunks based on the query.

@@ -80,15 +80,9 @@ In your `settings.py`:
 ```python
 SITE_URL_ROOT = "https://<your-ngrok-subdomain>.ngrok.io"
 
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-    "<your-ngrok-subdomain>.ngrok.io"
-]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "<your-ngrok-subdomain>.ngrok.io"]
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://<your-ngrok-subdomain>.ngrok.io"
-]
+CSRF_TRUSTED_ORIGINS = ["https://<your-ngrok-subdomain>.ngrok.io"]
 ```
 
 ## 9. Configure Messaging Provider in Open Chat Studio

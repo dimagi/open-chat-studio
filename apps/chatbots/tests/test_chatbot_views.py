@@ -364,6 +364,43 @@ def test_chatbot_sessions_table_view(team_with_users):
 
 
 @pytest.mark.django_db()
+def test_chatbot_sessions_table_view_applies_both_filters_on_one_column(client, team_with_users):
+    """A date range built from two filters on the same column must exclude out-of-range sessions.
+
+    Regression test for filters on the same column overwriting each other, which let
+    sessions from outside the requested range through.
+    """
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team)
+    in_range, out_of_range = (
+        ExperimentSessionFactory.create(
+            team=team,
+            experiment=experiment,
+            participant__team=team,
+            first_activity_at=datetime(2026, month, 15, tzinfo=UTC),
+        )
+        for month in (5, 1)
+    )
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    # A date range is two filters on one column, expressed as repeated f_/op_ keys (the Django
+    # test client encodes list values with doseq=True, producing f_first_message twice).
+    response = client.get(
+        url,
+        {
+            "f_first_message": ["2026-04-30", "2026-06-01"],
+            "op_first_message": ["after", "before"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert list(response.context_data["table"].data.data) == [in_range]
+    assert str(out_of_range.external_id) not in response.content.decode()
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize("flag_active", [True, False])
 def test_continue_chat_action_respects_widget_flag(flag_active, client, team_with_users):
     """With ``flag_chat_widget`` active the Continue Chat action opens the embedded widget;

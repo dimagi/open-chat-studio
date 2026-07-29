@@ -12,7 +12,7 @@ from apps.assessments.score_writers import (
     write_scores_from_evaluation_result,
 )
 from apps.evaluations.models import EvaluationResult
-from apps.evaluations.tasks import evaluate_single_message_task
+from apps.evaluations.tasks import evaluate_message
 from apps.human_annotations.models import Annotation, AnnotationStatus
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -463,7 +463,7 @@ def test_evaluation_task_survives_score_writer_failure(evaluator_run_mock, caplo
 
     monkeypatch.setattr("apps.evaluations.tasks.write_scores_from_evaluation_result", _boom)
 
-    evaluate_single_message_task(run.id, [evaluator.id], message.id)
+    evaluate_message(run.id, [evaluator.id], message.id)
 
     # EvaluationResult was created successfully despite writer failure
     results = list(EvaluationResult.objects.filter(run=run, evaluator=evaluator, message=message))
