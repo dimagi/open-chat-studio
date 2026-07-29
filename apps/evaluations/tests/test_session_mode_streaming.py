@@ -20,7 +20,11 @@ from django.test.utils import CaptureQueriesContext
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset, EvaluationMode
 from apps.evaluations.tasks import create_dataset_from_sessions_task
-from apps.evaluations.utils import iter_session_evaluation_messages
+from apps.evaluations.utils import (
+    iter_session_evaluation_messages,
+    iter_session_evaluation_messages_for_sessions,
+)
+from apps.experiments.models import ExperimentSession
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
@@ -201,3 +205,22 @@ def test_task_resumes_after_partial_failure(experiment_and_channel):
     assert result["created_count"] == 2
     assert result["duplicates_skipped"] == 2
     assert dataset.messages.count() == 4
+
+
+@pytest.mark.django_db()
+def test_queryset_entry_point_pages_in_chunks(experiment_and_channel):
+    """The filter-resolved entry point pages exactly like the id-list one.
+
+    This is the path a "all sessions matching these filters" job takes: the task hands over a
+    queryset, so no caller ever materialises the ids.
+    """
+    experiment, channel = experiment_and_channel
+    sessions = _make_sessions(5, experiment, channel)
+
+    queryset = ExperimentSession.objects.filter(experiment=experiment)
+    with CaptureQueriesContext(connection) as ctx:
+        result = list(iter_session_evaluation_messages_for_sessions(queryset, chunk_size=2))
+
+    assert [message.session_id for message in result] == sorted(session.id for session in sessions)
+    # 5 sessions in chunks of 2 is 3 chunks, on top of the single pk-resolution query.
+    assert len(ctx.captured_queries) == PK_RESOLUTION_QUERIES + QUERIES_PER_CHUNK * 3
