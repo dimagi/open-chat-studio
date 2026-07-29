@@ -19,12 +19,14 @@ import pydantic
 
 from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.flow import Flow
+from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import PipelineRouterNode
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 
 
-def pipeline_build_state(pipeline) -> dict:
+def pipeline_build_state(pipeline: Pipeline) -> dict:
     """``pipeline_valid`` + normalized ``errors`` + advisory ``unwired_handles`` for a pipeline."""
     errors = normalize_errors(pipeline.validate())
     return {
@@ -44,19 +46,20 @@ def normalize_errors(raw: dict | None) -> dict:
     }
 
 
-def unwired_handles(pipeline) -> dict:
+def unwired_handles(pipeline: Pipeline) -> dict:
     """The advisory ``{node_id: [{handle, label}]}`` map of handles with no edge.
 
     Covers both sides: output handles with no outgoing edge and the implicit ``input`` handle when
     a node has no incoming edge — so an off-graph island shows up in full. Start's input and End's
     output are excluded (they have none).
     """
-    edges = (pipeline.data or {}).get("edges", [])
+    # The empty defaults keep a pipeline with no stored graph yet from failing Flow validation.
+    edges = Flow.model_validate({"nodes": [], "edges": [], **(pipeline.data or {})}).edges
     # Wiredness is judged purely from the stored edges: an edge pointing at a handle its source no
     # longer offers still marks that (source, handle) pair "wired" here — the stranded edge itself
     # is the errors.edge bucket's concern (and, like validation, only surfaces for reachable nodes).
-    wired_outputs = {(edge.get("source"), edge.get("sourceHandle") or STANDARD_OUTPUT_NAME) for edge in edges}
-    wired_inputs = {edge.get("target") for edge in edges}
+    wired_outputs = {(edge.source, edge.sourceHandle or STANDARD_OUTPUT_NAME) for edge in edges}
+    wired_inputs = {edge.target for edge in edges}
 
     unwired = {}
     for node in pipeline.node_set.all():
@@ -65,7 +68,7 @@ def unwired_handles(pipeline) -> dict:
     return unwired
 
 
-def _dangling_handles(node, wired_inputs: set, wired_outputs: set) -> list[dict]:
+def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tuple[str, str]]) -> list[dict]:
     """One node's unwired handles: the implicit input plus any output with no edge."""
     dangling = []
     if node.type != StartNode.__name__ and node.flow_id not in wired_inputs:
@@ -76,7 +79,7 @@ def _dangling_handles(node, wired_inputs: set, wired_outputs: set) -> list[dict]
     return dangling
 
 
-def node_output_handles(node) -> list[dict]:
+def node_output_handles(node: Node) -> list[dict]:
     """The output handles a :class:`~apps.pipelines.models.Node` offers, as ``{handle, label}``.
 
     Routers get one handle per branch from ``get_output_map()`` (``output_0``, ``output_1``, …,
@@ -95,7 +98,7 @@ def node_output_handles(node) -> list[dict]:
     return [{"handle": STANDARD_OUTPUT_NAME, "label": None}]
 
 
-def _router_output_map(node_class, node) -> dict:
+def _router_output_map(node_class: type[PipelineRouterNode], node: Node) -> dict:
     """A router's handle -> branch-label map, tolerant of invalid params.
 
     Prefer full validation so every field normalization applies — a router type whose
