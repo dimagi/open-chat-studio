@@ -12,6 +12,7 @@ from apps.service_providers.models import (
     VoiceProviderType,
 )
 from apps.service_providers.utils import ServiceProvider
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import NodeFactory
 from apps.utils.factories.service_provider_factories import (
     AuthProviderFactory,
@@ -156,6 +157,31 @@ def test_delete_llm_provider_referenced_by_pipeline_nullifies_node_fk(team_with_
     node.refresh_from_db()
     assert node.llm_provider_id is None
     assert node.params["llm_provider_id"] == provider.id  # params unchanged (authoritative)
+
+
+@pytest.mark.django_db()
+def test_delete_llm_provider_blocked_by_an_evaluator(team_with_users, authed_client):
+    """Evaluators reference the provider by FK, so deleting underneath one is blocked.
+
+    Previously they were collected by get_related_objects but silently dropped, leaving the
+    evaluator with a nulled FK and a stale id in params — unrunnable, with no warning.
+    """
+    provider = LlmProviderFactory(team=team_with_users)
+    evaluator = EvaluatorFactory.create(team=team_with_users, params={"llm_provider_id": provider.id})
+    assert evaluator.llm_provider_id == provider.id
+
+    response = authed_client.delete(
+        reverse(
+            "service_providers:delete",
+            kwargs={"team_slug": team_with_users.slug, "provider_type": ServiceProvider.llm.slug, "pk": provider.pk},
+        )
+    )
+
+    assert response.status_code == 200
+    assert evaluator.name in response.content.decode()
+    assert LlmProvider.objects.filter(pk=provider.pk).exists()
+    evaluator.refresh_from_db()
+    assert evaluator.llm_provider_id == provider.id
 
 
 @pytest.mark.django_db()

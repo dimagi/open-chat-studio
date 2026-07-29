@@ -20,10 +20,14 @@ def get_affected_teams_data(db_model) -> dict:
     """Return affected resources per team for a given LlmProviderModel.
 
     Returns a dict of the form:
-        {team_id: {"chatbots": {name: url}, "pipelines": {name: url}, "assistants": {name: url}}}
+        {team_id: {"chatbots": {name: url}, "pipelines": {name: url},
+                   "assistants": {name: url}, "evaluators": {name: url}}}
+
+    Call this before repointing anything: evaluators are found through the FK, which the
+    removal flow moves off ``db_model``.
     """
 
-    teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}})
+    teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}, "evaluators": {}})
 
     related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
     nodes_by_pipeline = defaultdict(list)
@@ -46,6 +50,8 @@ def get_affected_teams_data(db_model) -> dict:
         teams_data[pipeline.team_id]["pipelines"][pipeline.name] = pipeline.get_absolute_url()
     for assistant in referenced_assistants:
         teams_data[assistant.team_id]["assistants"][assistant.name] = assistant.get_absolute_url()
+    for evaluator in db_model.evaluators.all():
+        teams_data[evaluator.team_id]["evaluators"][evaluator.name] = evaluator.get_absolute_url()
 
     return dict(teams_data)
 

@@ -77,6 +77,7 @@ class Command(IdempotentCommand):
                     self.stdout.write(f"      Chatbots: {sorted(data['chatbots'])}")
                     self.stdout.write(f"      Pipelines: {sorted(data['pipelines'])}")
                     self.stdout.write(f"      Assistants: {sorted(data['assistants'])}")
+                    self.stdout.write(f"      Evaluators: {sorted(data['evaluators'])}")
 
         if dry_run:
             return f"Would remove {len(models_to_delete)} models"
@@ -127,6 +128,7 @@ class Command(IdempotentCommand):
                     affected_chatbots=data["chatbots"],
                     affected_pipelines=data["pipelines"],
                     affected_assistants=data["assistants"],
+                    affected_evaluators=data["evaluators"],
                 )
 
         self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} models"))

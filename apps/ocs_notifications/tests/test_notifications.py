@@ -402,6 +402,7 @@ class TestDeprecatedModelNotification:
             affected_chatbots={"My Bot": "/chatbots/my-bot/"},
             affected_pipelines={},
             affected_assistants={},
+            affected_evaluators={},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'gpt-4' Deprecated",
@@ -429,6 +430,7 @@ class TestDeprecatedModelNotification:
             affected_chatbots={},
             affected_pipelines={"My Pipeline": "/pipelines/1/"},
             affected_assistants={"My Assistant": "/assistants/1/"},
+            affected_evaluators={},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'gpt-4' Deprecated",
@@ -457,6 +459,7 @@ class TestDeletedModelNotification:
             affected_chatbots={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"},
             affected_pipelines={},
             affected_assistants={},
+            affected_evaluators={},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'claude-2.0' Removed",
@@ -484,6 +487,7 @@ class TestDeletedModelNotification:
             affected_chatbots={},
             affected_pipelines={"Pipeline X": "/pipelines/1/"},
             affected_assistants={"Assistant Y": "/assistants/1/"},
+            affected_evaluators={},
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'claude-2.0' Removed",
@@ -499,3 +503,21 @@ class TestDeletedModelNotification:
             permissions=["service_providers.change_llmprovidermodel"],
             links={"Pipeline X": "/pipelines/1/", "Assistant Y": "/assistants/1/"},
         )
+
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_affected_evaluators_are_counted_and_linked(self, mock_create_notification):
+        """Without a replacement an affected evaluator cannot run until someone edits it."""
+        team = TeamFactory.create()
+        deleted_model_notification(
+            team=team,
+            model_name="claude-2.0",
+            replacement_model_name=None,
+            affected_chatbots={},
+            affected_pipelines={},
+            affected_assistants={},
+            affected_evaluators={"Sentiment": "/evaluators/7/"},
+        )
+        _title, kwargs = mock_create_notification.call_args
+        assert "1 evaluator(s) were affected" in kwargs["message"]
+        assert kwargs["links"] == {"Sentiment": "/evaluators/7/"}
