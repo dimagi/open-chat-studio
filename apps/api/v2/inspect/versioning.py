@@ -19,18 +19,24 @@ class InspectVersionError(ValueError):
 
 
 def _inspect_target_queryset():
-    return Experiment.objects.select_related(
-        "team",
-        "consent_form",
-        "trace_provider",
-        "voice_provider",
-        "synthetic_voice",
-        "synthetic_voice__voice_provider",
-        "pipeline",
-    ).prefetch_related(
-        Prefetch("pipeline__node_set", queryset=inspect_node_queryset()),
-        Prefetch("static_triggers", queryset=StaticTrigger.objects.select_related("action")),
-        Prefetch("timeout_triggers", queryset=TimeoutTrigger.objects.select_related("action")),
+    # Only pipeline-backed experiments are chatbots (matching the chatbots UI list), so a
+    # pipeline-less legacy experiment resolves to nothing and the view returns a 404.
+    return (
+        Experiment.objects.filter(pipeline__isnull=False)
+        .select_related(
+            "team",
+            "consent_form",
+            "trace_provider",
+            "voice_provider",
+            "synthetic_voice",
+            "synthetic_voice__voice_provider",
+            "pipeline",
+        )
+        .prefetch_related(
+            Prefetch("pipeline__node_set", queryset=inspect_node_queryset()),
+            Prefetch("static_triggers", queryset=StaticTrigger.objects.select_related("action")),
+            Prefetch("timeout_triggers", queryset=TimeoutTrigger.objects.select_related("action")),
+        )
     )
 
 

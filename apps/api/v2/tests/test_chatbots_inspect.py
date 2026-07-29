@@ -170,7 +170,7 @@ def _node(payload, label):
 
 def _expected_llm(bot):
     return {
-        "id": bot.model.id,
+        "model_id": bot.model.id,
         "provider_id": bot.provider.id,
         "provider_name": "Prod OpenAI",
         "type": "openai",
@@ -224,7 +224,7 @@ def test_acceptance_3_rag_collection_files(inspect_bot):
             "id": inspect_bot.collection.id,
             "name": "Policy index",
             "embedding": {
-                "id": inspect_bot.collection.embedding_provider_model_id,
+                "model_id": inspect_bot.collection.embedding_provider_model_id,
                 "provider_id": inspect_bot.collection.llm_provider_id,
                 "provider_name": inspect_bot.collection.llm_provider.name,
                 "type": inspect_bot.collection.llm_provider.type,
@@ -458,12 +458,11 @@ def test_build_state_present_on_version_reads():
 
 
 @pytest.mark.django_db()
-def test_build_state_null_valid_for_chatbot_without_pipeline():
+def test_experiment_without_pipeline_is_not_a_chatbot():
+    """A pipeline is what makes an Experiment a chatbot, so a pipeline-less one isn't inspectable
+    (and the build-state fields never have to describe a missing pipeline)."""
     experiment = _build_state_bot(pipeline=None)
-    payload = _client(experiment).get(_inspect_url(experiment)).json()
-    assert payload["pipeline_valid"] is None
-    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": None}
-    assert payload["unwired_handles"] == {}
+    assert _client(experiment).get(_inspect_url(experiment)).status_code == 404
 
 
 # ── Full response body ───────────────────────────────────────────────────────────────────────────
@@ -667,7 +666,7 @@ def test_full_response_body():
             "identifier_type": "email",
         },
         "voice": {
-            "id": bot.synthetic_voice.id,
+            "synthetic_voice_id": bot.synthetic_voice.id,
             "provider_id": bot.voice_provider.id,
             "provider_name": "ElevenLabs Prod",
             "type": bot.voice_provider.type,
@@ -716,7 +715,7 @@ def test_full_response_body():
                     "params": {"prompt": "Answer the user using {source_material} and {media}"},
                     "output_handles": [{"handle": "output", "label": None}],
                     "llm": {
-                        "id": bot.llm_model.id,
+                        "model_id": bot.llm_model.id,
                         "provider_id": bot.llm_provider.id,
                         "provider_name": "Prod OpenAI",
                         "type": "openai",
@@ -749,7 +748,7 @@ def test_full_response_body():
                             "id": bot.index_collection.id,
                             "name": "Policy index",
                             "embedding": {
-                                "id": bot.index_collection.embedding_provider_model_id,
+                                "model_id": bot.index_collection.embedding_provider_model_id,
                                 "provider_id": bot.llm_provider.id,
                                 "provider_name": "Prod OpenAI",
                                 "type": "openai",
@@ -783,7 +782,7 @@ def test_full_response_body():
                         }
                     ],
                     "voice": {
-                        "id": bot.synthetic_voice.id,
+                        "synthetic_voice_id": bot.synthetic_voice.id,
                         "provider_id": bot.voice_provider.id,
                         "provider_name": "ElevenLabs Prod",
                         "type": bot.voice_provider.type,

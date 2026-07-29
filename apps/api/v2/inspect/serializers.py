@@ -35,7 +35,7 @@ from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
-from apps.pipelines.build_state import node_output_handles, normalize_errors, pipeline_build_state
+from apps.pipelines.build_state import node_output_handles, pipeline_build_state
 from apps.pipelines.models import Node, Pipeline
 from apps.utils.fields import as_int
 
@@ -263,7 +263,7 @@ class FlattenedModelProviderSerializer(FlattenedProviderSerializer):
     Expects a :class:`ProviderModelPair`; a missing provider or model renders its fields as null.
     """
 
-    id = serializers.IntegerField(
+    model_id = serializers.IntegerField(
         source="model.id",
         default=None,
         allow_null=True,
@@ -297,11 +297,11 @@ class FlattenedVoiceSerializer(FlattenedProviderSerializer):
     Expects a :class:`VoicePair`.
     """
 
-    id = serializers.IntegerField(
+    synthetic_voice_id = serializers.IntegerField(
         source="voice.id",
         default=None,
         allow_null=True,
-        help_text="The synthetic voice's id — the value to write back as ``synthetic_voice_id``.",
+        help_text="The synthetic voice's id — the value to write back to set the voice.",
     )
     # Unlike the llm/embedding pairs, ``type`` has no fallback to the voice half — a provider-less
     # voice renders ``type: null`` (matches the pre-refactor shape).
@@ -770,11 +770,11 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     trace_provider = ProviderSerializer(allow_null=True)
     voice = serializers.SerializerMethodField()
     channels = serializers.SerializerMethodField()
-    pipeline = InspectPipelineSerializer(allow_null=True, read_only=True)
+    pipeline = InspectPipelineSerializer(read_only=True)
     pipeline_valid = serializers.SerializerMethodField(
         help_text=(
-            "Whether this chatbot's pipeline validates cleanly (all three ``errors`` buckets empty); "
-            "null for a chatbot with no pipeline. Unwired handles never affect it."
+            "Whether this chatbot's pipeline validates cleanly (all three ``errors`` buckets empty). "
+            "Unwired handles never affect it."
         )
     )
     errors = serializers.SerializerMethodField()
@@ -819,15 +819,11 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
         # items under many=True.
         cached = getattr(self, "_build_state_cache", None)
         if cached is None or cached[0] != experiment.pk:
-            if experiment.pipeline is None:
-                state = {"pipeline_valid": None, "errors": normalize_errors({}), "unwired_handles": {}}
-            else:
-                state = pipeline_build_state(experiment.pipeline)
-            self._build_state_cache = (experiment.pk, state)
+            self._build_state_cache = (experiment.pk, pipeline_build_state(experiment.pipeline))
         return self._build_state_cache[1]
 
-    @extend_schema_field(serializers.BooleanField(allow_null=True))
-    def get_pipeline_valid(self, experiment) -> bool | None:
+    @extend_schema_field(serializers.BooleanField())
+    def get_pipeline_valid(self, experiment) -> bool:
         return self._build_state(experiment)["pipeline_valid"]
 
     @extend_schema_field(PipelineBuildErrorsSerializer())
