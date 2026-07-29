@@ -424,7 +424,7 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
             # The message is built from the client-supplied node ids only.
             transaction.set_rollback(True)
             return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
-        pipeline.refresh_from_db(fields=["node_set"])
+        pipeline.clear_node_caches()
     return JsonResponse(
         {
             "data": pipeline.flow_data,
@@ -473,9 +473,8 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
             # The message is built from the client-supplied node ids only.
             transaction.set_rollback(True)
             return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
-        pipeline.refresh_from_db(fields=["node_set"])
-        # flow_data was cached above off the pre-patch rows; drop it so the response rebuilds.
-        pipeline.__dict__.pop("flow_data", None)
+        # flow_data was read above, off the pre-patch rows, so the response needs it rebuilt.
+        pipeline.clear_node_caches()
 
     return JsonResponse(
         {

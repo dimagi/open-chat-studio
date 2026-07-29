@@ -1,3 +1,4 @@
+import contextlib
 import copy
 from collections import defaultdict
 from collections.abc import Iterator
@@ -184,6 +185,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 },
             )
             created_node.update_from_params()
+
+    def clear_node_caches(self) -> None:
+        """Forget the cached ``Node`` rows and the ``flow_data`` rebuilt from them.
+
+        ``update_nodes_from_data`` writes rows straight to the database, behind the back of a
+        prefetched ``node_set`` and of ``flow_data``'s cache. A caller that reads either after
+        reconciling must call this first or it sees the pre-reconcile graph.
+        """
+        # No fields: clears the whole prefetch cache, node_set included.
+        self.refresh_from_db()
+        with contextlib.suppress(AttributeError):  # nothing cached if flow_data was never read
+            del self.flow_data
 
     def validate(self, full=True) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
