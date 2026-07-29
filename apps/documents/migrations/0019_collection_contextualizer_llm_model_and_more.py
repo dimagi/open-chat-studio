@@ -7,8 +7,8 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('documents', '0016_documentsourcesynclog_files_failed_and_more'),
-        ('service_providers', '0066_add_gemini_3_6_flash_models'),
+        ("documents", "0018_collectionfile_failure_reason"),
+        ("service_providers", "0066_add_gemini_3_6_flash_models"),
     ]
 
     operations = [
