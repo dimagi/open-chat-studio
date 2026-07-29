@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from apps.channels.datamodels import BaseMessage
     from apps.channels.models import ExperimentChannel
     from apps.experiments.models import Experiment, ExperimentSession
+    from apps.service_providers.tracing.base import Tracer
 
 
 class EvaluationChannel(ChannelBase):
@@ -43,14 +44,25 @@ class EvaluationChannel(ChannelBase):
         experiment_channel: ExperimentChannel,
         experiment_session: ExperimentSession,
         participant_data: dict,
+        usage_tracer: Tracer | None = None,
     ):
+        # Set before super().__init__, which builds the trace service from it.
+        self._usage_tracer = usage_tracer
         super().__init__(experiment, experiment_channel, experiment_session)
         if not self.experiment_session:
             raise ChannelException("EvaluationChannel requires an existing session")
         self._participant_data = participant_data
 
     def _create_trace_service(self):
-        return TracingService.empty()
+        """No tracing for eval runs beyond billing.
+
+        An eval run leaves no `Trace` behind — one per evaluated message would flood the
+        team's trace list and outlive the pruned eval session. The usage tracer is the
+        exception: it records what the run spent without keeping a trace (ADR-0049).
+        """
+        if not self._usage_tracer:
+            return TracingService.empty()
+        return TracingService([self._usage_tracer], self.experiment.id, self.experiment.team_id)
 
     def _create_context(self, message: BaseMessage) -> MessageProcessingContext:
         ctx = super()._create_context(message)
