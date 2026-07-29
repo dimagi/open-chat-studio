@@ -16,6 +16,11 @@ class FakeSchemaEditor:
     connection = connection
 
 
+@pytest.fixture(autouse=True)
+def _requires_migrations(requires_migrations):
+    """Every test here loads historical state via the migration graph."""
+
+
 def _run_migration():
     """Run the backfill against the app state it actually receives at migration time.
 

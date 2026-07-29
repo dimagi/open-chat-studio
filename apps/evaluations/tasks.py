@@ -319,12 +319,12 @@ def _redispatch_unfinished(run: EvaluationRun, remaining: set[int]) -> tuple[lis
         run.stall_count = (run.stall_count or 0) + 1
 
     if run.stall_count >= MAX_STALLS and not made_progress:
-        run.status = EvaluationRunStatus.FAILED
-        run.error_message = (
+        run.mark_failed(
             f"Evaluation stalled: {len(unfinished)} message(s) made no progress after "
-            f"{MAX_STALLS} re-dispatch attempts."
+            f"{MAX_STALLS} re-dispatch attempts.",
+            save=False,
         )
-        run.save(update_fields=["status", "error_message", "stall_count"])
+        run.save(update_fields=["finished_at", "status", "error_message", "stall_count"])
         return [], True
 
     run.in_flight = unfinished
