@@ -676,6 +676,18 @@ class EvaluationRun(BaseTeamModel):
         if save:
             self.save(update_fields=["finished_at", "status"])
 
+    def mark_failed(self, error_message: str, save=True):
+        """Terminate the run with an error, stamping ``finished_at`` like ``mark_complete``.
+
+        Without the timestamp a failed run renders no finish time and no duration
+        (see ``evaluation_result_home.html`` and the run detail view).
+        """
+        self.finished_at = timezone.now()
+        self.status = EvaluationRunStatus.FAILED
+        self.error_message = error_message
+        if save:
+            self.save(update_fields=["finished_at", "status", "error_message"])
+
     def get_table_data(self, include_ids: bool = False):
         results_qs = (
             self.results.select_related("message__session__experiment", "evaluator", "session")
