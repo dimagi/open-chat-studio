@@ -306,7 +306,8 @@ class DocumentSourceManager:
         existing_file.save()
 
         collection_file.status = FileStatus.PENDING
-        collection_file.save(update_fields=["status"])
+        collection_file.failure_reason = ""
+        collection_file.save(update_fields=["status", "failure_reason"])
 
     def _remove_files(self, connection_files: list[CollectionFile]):
         bulk_delete_collection_files(self.collection, connection_files)

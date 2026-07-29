@@ -6,6 +6,7 @@ from pydantic_core import ValidationError
 from apps.evaluations.exceptions import EvaluationRunException
 from apps.evaluations.field_definitions import FieldDefinition
 from apps.evaluations.models import EvaluationMessage, EvaluationMessageContent
+from apps.evaluations.usage import EvaluatorUsageContext, track_evaluator_usage
 from apps.evaluations.utils import schema_to_pydantic_model
 from apps.pipelines.nodes.base import UiSchema, Widgets
 from apps.service_providers.exceptions import ServiceProviderConfigError
@@ -29,7 +30,15 @@ class EvaluatorResult(BaseModel):
 
 
 class BaseEvaluator(BaseModel):
-    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
+    def run(
+        self,
+        message: EvaluationMessage,
+        generated_response: str,
+        *,
+        usage_context: EvaluatorUsageContext | None = None,
+    ) -> EvaluatorResult:
+        """Evaluate one message. `usage_context` attributes any LLM spend the
+        evaluator incurs; evaluators that don't call an LLM ignore it."""
         raise NotImplementedError
 
 
@@ -93,7 +102,13 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
         json_schema_extra=UiSchema(widget=Widgets.key_value_pairs),
     )
 
-    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
+    def run(
+        self,
+        message: EvaluationMessage,
+        generated_response: str,
+        *,
+        usage_context: EvaluatorUsageContext | None = None,
+    ) -> EvaluatorResult:
         # Create a pydantic class so the llm output is validated
         output_model = schema_to_pydantic_model(self.output_schema)
         llm = self.get_chat_model().with_structured_output(output_model)
@@ -120,7 +135,8 @@ class LlmEvaluator(LLMResponseMixin, BaseEvaluator):
             full_history=message.full_history,
             generated_response=generated_response,
         )
-        result_model = llm_with_retry.invoke(formatted_prompt)
+        with track_evaluator_usage(usage_context) as callbacks:
+            result_model = llm_with_retry.invoke(formatted_prompt, config={"callbacks": callbacks})
         result = result_model.model_dump()
         return EvaluatorResult(message=message.as_result_dict(), generated_response=generated_response, result=result)
 
@@ -168,7 +184,13 @@ class PythonEvaluator(BaseEvaluator, RestrictedPythonExecutionMixin):
     def _get_function_args(cls) -> list[str]:
         return ["input", "output", "context", "full_history", "generated_response", "**kwargs"]
 
-    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
+    def run(
+        self,
+        message: EvaluationMessage,
+        generated_response: str,
+        *,
+        usage_context: EvaluatorUsageContext | None = None,
+    ) -> EvaluatorResult:
         try:
             input = EvaluationMessageContent.model_validate(message.input).model_dump()
         except ValidationError:

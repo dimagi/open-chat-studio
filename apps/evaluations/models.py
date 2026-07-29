@@ -38,6 +38,7 @@ from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
     from apps.evaluations.evaluators import EvaluatorResult
+    from apps.evaluations.usage import EvaluatorUsageContext
 
 # Messages written per transaction by EvaluationDataset.add_messages_stream. Bounds both the
 # INSERT size and how long the dataset row lock is held on any one batch.
@@ -208,8 +209,14 @@ class Evaluator(BaseTeamModel):
             "llm_provider_model_id": self.llm_provider_model_id,
         }
 
-    def run(self, message: EvaluationMessage, generated_response: str) -> EvaluatorResult:
-        return self.evaluator(**self.get_evaluator_params()).run(message, generated_response)
+    def run(
+        self,
+        message: EvaluationMessage,
+        generated_response: str,
+        *,
+        usage_context: EvaluatorUsageContext | None = None,
+    ) -> EvaluatorResult:
+        return self.evaluator(**self.get_evaluator_params()).run(message, generated_response, usage_context=usage_context)
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[get_slug_for_team(self.team_id), self.id])

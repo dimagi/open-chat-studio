@@ -702,7 +702,8 @@ def retry_failed_uploads(request, team_slug: str, pk: int):
     # deleting a healthy file's chunks would take a published version's copies with it.
     FileChunkEmbedding.objects.filter(collection_id=pk, file_id__in=failed_file_ids).delete()
 
-    queryset.update(status=FileStatus.PENDING)
+    # The reason describes the attempt being replaced, so it goes out with the stale chunks.
+    queryset.update(status=FileStatus.PENDING, failure_reason="")
     tasks.index_collection_files_task.delay(collection_file_ids)
     return redirect("documents:single_collection_home", team_slug=team_slug, pk=pk)
 
