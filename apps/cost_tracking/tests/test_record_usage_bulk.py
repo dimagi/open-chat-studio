@@ -3,8 +3,9 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord
-from apps.cost_tracking.services.recorder import TraceContext, UsageEvent, record_usage_bulk
+from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageRecord, UsageSource
+from apps.cost_tracking.services.recorder import UsageContext, UsageEvent, record_usage_bulk
+from apps.utils.factories.evaluations import EvaluationConfigFactory
 
 _EVENT_KWARGS = {"provider_type", "model_name", "confidence", "extra"}
 
@@ -29,7 +30,7 @@ def _event(qty=1000, kind=ServiceKind.LLM_INPUT, **overrides):
 @pytest.mark.django_db()
 def test_empty_events_short_circuits(team):
     with patch.object(UsageRecord.objects, "bulk_create") as bulk:
-        record_usage_bulk([], TraceContext(team_id=team.id))
+        record_usage_bulk([], UsageContext(team_id=team.id))
         assert bulk.call_count == 0
     assert UsageRecord.objects.count() == 0
 
@@ -43,7 +44,7 @@ def test_priced_event_writes_row_with_computed_cost(team):
         service_kind=ServiceKind.LLM_INPUT,
         unit_price=Decimal("0.00015"),
     )
-    record_usage_bulk([_event(qty=1000)], TraceContext(team_id=team.id))
+    record_usage_bulk([_event(qty=1000)], UsageContext(team_id=team.id))
 
     row = UsageRecord.objects.get()
     # 1000 tokens / 1000 = 1 unit; 1 * 0.00015 = 0.00015
@@ -55,7 +56,7 @@ def test_priced_event_writes_row_with_computed_cost(team):
 
 @pytest.mark.django_db()
 def test_unpriced_event_writes_row_with_zero_cost(team):
-    record_usage_bulk([_event(qty=1000)], TraceContext(team_id=team.id))
+    record_usage_bulk([_event(qty=1000)], UsageContext(team_id=team.id))
 
     row = UsageRecord.objects.get()
     assert row.cost == Decimal("0")
@@ -86,7 +87,7 @@ def test_bulk_create_issued_once_per_call(team):
     ]
 
     with patch.object(UsageRecord.objects, "bulk_create", wraps=UsageRecord.objects.bulk_create) as bulk:
-        record_usage_bulk(events, TraceContext(team_id=team.id))
+        record_usage_bulk(events, UsageContext(team_id=team.id))
         assert bulk.call_count == 1
         assert len(bulk.call_args[0][0]) == 2
 
@@ -105,7 +106,7 @@ def test_exception_in_bulk_create_is_swallowed(team, caplog):
 
     with patch.object(UsageRecord.objects, "bulk_create", side_effect=RuntimeError("simulated db hiccup")):
         # Must NOT raise — a DB failure can't break the LLM/tracer path.
-        record_usage_bulk([_event(qty=1000)], TraceContext(team_id=team.id))
+        record_usage_bulk([_event(qty=1000)], UsageContext(team_id=team.id))
 
     assert "cost_tracking.bulk_insert_failed" in caplog.text
     assert UsageRecord.objects.count() == 0
@@ -115,8 +116,48 @@ def test_exception_in_bulk_create_is_swallowed(team, caplog):
 def test_event_extra_is_preserved_on_the_row(team):
     record_usage_bulk(
         [_event(qty=1000, extra={"estimator": "tiktoken"}, confidence=Confidence.ESTIMATED)],
-        TraceContext(team_id=team.id),
+        UsageContext(team_id=team.id),
     )
     row = UsageRecord.objects.get()
     assert row.extra == {"estimator": "tiktoken"}
     assert row.confidence == Confidence.ESTIMATED
+
+
+@pytest.mark.django_db()
+def test_defaults_to_chat_source(team):
+    record_usage_bulk([_event(qty=1000)], UsageContext(team_id=team.id))
+
+    row = UsageRecord.objects.get()
+    assert row.source == UsageSource.CHAT
+    assert row.evaluation_config_id is None
+
+
+@pytest.mark.django_db()
+def test_records_evaluation_source_and_config(team):
+    config = EvaluationConfigFactory.create(team=team)
+
+    record_usage_bulk(
+        [_event(qty=1000)],
+        UsageContext(team_id=team.id, source=UsageSource.EVALUATION, evaluation_config_id=config.id),
+    )
+
+    row = UsageRecord.objects.get()
+    assert row.source == UsageSource.EVALUATION
+    assert row.evaluation_config_id == config.id
+
+
+@pytest.mark.django_db()
+def test_deleting_the_config_keeps_the_row_and_its_source(team):
+    """SET_NULL: billing history survives eval-config deletion, and `source` stays
+    the durable classification once the drill-down link is gone."""
+    config = EvaluationConfigFactory.create(team=team)
+    record_usage_bulk(
+        [_event(qty=1000)],
+        UsageContext(team_id=team.id, source=UsageSource.EVALUATION, evaluation_config_id=config.id),
+    )
+
+    config.delete()
+
+    row = UsageRecord.objects.get()
+    assert row.evaluation_config_id is None
+    assert row.source == UsageSource.EVALUATION

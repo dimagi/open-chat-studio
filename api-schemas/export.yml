@@ -5957,6 +5957,8 @@ components:
           type: string
           format: date-time
           readOnly: true
+        source:
+          $ref: '#/components/schemas/UsageRecordDetailSourceEnum'
         service_kind:
           $ref: '#/components/schemas/ServiceKindEnum'
         provider_type:
@@ -5997,6 +5999,9 @@ components:
         trace:
           type: integer
           nullable: true
+        evaluation_config:
+          type: integer
+          nullable: true
         pricing_rule:
           type: integer
           nullable: true
@@ -6008,6 +6013,14 @@ components:
       - service_kind
       - timestamp
       - updated_at
+    UsageRecordDetailSourceEnum:
+      enum:
+      - chat
+      - evaluation
+      type: string
+      description: |-
+        * `chat` - Chat
+        * `evaluation` - Evaluation
     UsageRecordList:
       type: object
       properties:
