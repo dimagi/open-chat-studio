@@ -10,6 +10,7 @@ from django.core.cache import cache
 from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
+from apps.channels.models import ChannelPlatform
 from apps.cost_tracking.models import UsageSource
 from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.experiments.models import Experiment, ExperimentSession
@@ -171,13 +172,30 @@ class OCSTracer(Tracer):
             events,
             UsageContext(
                 team_id=self.team_id,
-                source=UsageSource.CHAT,
+                source=self._usage_source(),
                 trace_id=self.trace_record.id,
                 experiment_id=self.trace_record.experiment_id,
                 session_id=self.session.id if self.session else None,
                 participant_id=self.trace_record.participant_id,
             ),
         )
+
+    def _usage_source(self) -> UsageSource:
+        """What the traced spend was for (ADR-0049).
+
+        Spend on an eval session isn't traffic a participant asked the chatbot to serve, so
+        it's the team's spend and not the chatbot's or the conversation's. An eval run's own
+        generation is billed by `UsageOnlyTracer`, but anything else that traces an eval
+        session (a static trigger firing on one, say) lands here, so the rule is applied
+        rather than assumed. The session's platform is the signal — `run_bot_generation`
+        puts every eval session on `ChannelPlatform.EVALUATIONS`.
+
+        Read here rather than at trace start because `set_session` can back-fill the
+        session mid-trace.
+        """
+        if self.session and self.session.platform == ChannelPlatform.EVALUATIONS:
+            return UsageSource.EVALUATION
+        return UsageSource.CHAT
 
     def _fire_error_notification_if_needed(self) -> None:
         """Fire notification if a span declared one and the trace errored."""
