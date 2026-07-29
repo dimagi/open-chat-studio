@@ -361,8 +361,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         """
         from apps.service_providers.exceptions import ServiceProviderConfigError  # noqa: PLC0415
         from apps.service_providers.llm_service.contextualizer import LLMContextualizer  # noqa: PLC0415
-        from apps.teams.flags import Flags  # noqa: PLC0415
-        from apps.teams.models import Flag  # noqa: PLC0415
 
         if not self.enable_contextual_retrieval or not self.contextualizer_llm_model:
             return None
@@ -383,18 +381,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                 },
             )
             return None
-        flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
-        if not flag:
-            return None
-        # Mirror Waffle's Flag.is_active precedence outside a request context:
-        # explicit everyone True/False overrides, otherwise check team membership.
-        if flag.everyone is True:
-            active = True
-        elif flag.everyone is False:
-            active = False
-        else:
-            active = flag.is_active_for_team(self.team)
-        if not active:
+        if not self._contextual_retrieval_flag_active():
             return None
         try:
             service = self.contextualizer_llm_provider.get_llm_service()
@@ -406,6 +393,23 @@ class Collection(BaseTeamModel, VersionsMixin):
             )
             return None
         return LLMContextualizer(chat_model)
+
+    def _contextual_retrieval_flag_active(self) -> bool:
+        """Whether the contextual retrieval flag is active for this collection's team.
+
+        Indexing runs in a Celery task with no request, so this mirrors Waffle's
+        Flag.is_active precedence directly: an explicit `everyone` value wins,
+        otherwise fall back to team membership.
+        """
+        from apps.teams.flags import Flags  # noqa: PLC0415
+        from apps.teams.models import Flag  # noqa: PLC0415
+
+        flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
+        if not flag:
+            return False
+        if flag.everyone is not None:
+            return flag.everyone
+        return flag.is_active_for_team(self.team)    
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
