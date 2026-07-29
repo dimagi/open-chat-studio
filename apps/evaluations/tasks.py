@@ -44,7 +44,7 @@ from apps.evaluations.models import (
 from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
 from apps.evaluations.usage import EvaluatorUsageContext
-from apps.evaluations.utils import iter_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
+from apps.evaluations.utils import parse_csv_value_as_json, parse_history_text
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.teams.models import Team
