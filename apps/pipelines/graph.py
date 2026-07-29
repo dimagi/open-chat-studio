@@ -103,8 +103,10 @@ class PipelineGraph(pydantic.BaseModel):
                 continue
             source_node = self.nodes_by_id[edge.source].pipeline_node_instance
             output_map = source_node.get_output_map()
-            # An edge can be left pointing at a handle the source no longer offers (e.g. a router
-            # keyword was removed); report those as stranded rather than raising a KeyError.
+            # Nothing validates a sourceHandle against its source node on write, so an edge can be
+            # left pointing at a handle the source no longer offers — e.g. an API write that drops
+            # a router keyword but keeps the edge (the editor prunes and reindexes those itself).
+            # Report them as stranded rather than raising a KeyError.
             if edge.sourceHandle not in output_map:
                 stranded_edges.append(edge)
                 continue
