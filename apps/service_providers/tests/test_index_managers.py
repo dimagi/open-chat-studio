@@ -631,5 +631,3 @@ class TestOpenAILlmServiceLocalIndexManager:
         manager = service.get_local_index_manager(embedding_model_name="text-embedding-3-small")
 
         assert manager._openai_api_base is None
-
-        

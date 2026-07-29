@@ -193,9 +193,7 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
         """
         Returns a LocalIndexManager for the given embedding model.
         """
-        return self.get_llm_service().get_local_index_manager(
-            embedding_model_name, contextualizer=contextualizer
-        )
+        return self.get_llm_service().get_local_index_manager(embedding_model_name, contextualizer=contextualizer)
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """

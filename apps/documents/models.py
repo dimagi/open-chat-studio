@@ -409,7 +409,7 @@ class Collection(BaseTeamModel, VersionsMixin):
             return False
         if flag.everyone is not None:
             return flag.everyone
-        return flag.is_active_for_team(self.team)    
+        return flag.is_active_for_team(self.team)
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
