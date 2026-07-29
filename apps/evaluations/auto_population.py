@@ -17,7 +17,7 @@ from apps.evaluations.models import (
     EvaluationRunType,
 )
 from apps.evaluations.notifications import auto_population_rule_disabled_notification
-from apps.evaluations.utils import iter_session_evaluation_messages
+from apps.evaluations.utils import iter_session_evaluation_messages_for_sessions
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -78,13 +78,7 @@ def _scan_for_new_sessions(rule: DatasetAutoPopulationRule, created_floor) -> li
         params = FilterParams(QueryDict(rule.filter_query_string))
         qs = ExperimentSessionFilter().apply(qs, params, timezone=None)
 
-    session_external_ids = list(qs.values_list("external_id", flat=True))
-    if not session_external_ids:
-        return []
-
-    created_ids, _ = rule.dataset.add_messages_stream(
-        iter_session_evaluation_messages(session_external_ids, team=rule.team)
-    )
+    created_ids, _ = rule.dataset.add_messages_stream(iter_session_evaluation_messages_for_sessions(qs))
     return created_ids
 
 

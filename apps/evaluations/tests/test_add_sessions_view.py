@@ -128,3 +128,67 @@ def test_post_reads_filter_params_from_post_body(client_with_user, team_with_use
     assert filter_query, "filter_query should be populated from POST body, not empty"
     assert "f_tags=%2B1" in filter_query
     assert "op_tags=any" in filter_query
+
+
+@pytest.mark.django_db()
+def test_session_mode_all_matching_passes_filter_instead_of_ids(client_with_user, team_with_users, session_dataset):
+    """Session-mode "all matching" hands the filter to the task rather than resolving 10k UUIDs
+    into the Celery message."""
+    session = ExperimentSessionFactory.create(team=team_with_users)
+    ExperimentSessionFactory.create(team=team_with_users)  # different experiment, excluded
+
+    with patch("apps.evaluations.dataset_clone.create_dataset_from_sessions_task.delay") as mock_delay:
+        mock_delay.return_value.id = "test-task-id"
+        response = client_with_user.post(
+            _add_sessions_url(team_with_users, session_dataset),
+            {
+                "mode": "all_matching",
+                "session_ids": "",
+                "f_experiment": str(session.experiment_id),
+                "op_experiment": "any of",
+            },
+        )
+
+    assert response.status_code == 302
+    mock_delay.assert_called_once()
+    _dataset_id, _team_id, session_ids, filter_query, _tz = mock_delay.call_args.args
+    assert session_ids is None
+    assert f"f_experiment={session.experiment_id}" in filter_query
+
+
+@pytest.mark.django_db()
+def test_session_mode_selected_still_passes_ids(client_with_user, team_with_users, session_dataset):
+    """The hand-picked path is unchanged: explicit ids, no filter."""
+    session = ExperimentSessionFactory.create(team=team_with_users)
+
+    with patch("apps.evaluations.dataset_clone.create_dataset_from_sessions_task.delay") as mock_delay:
+        mock_delay.return_value.id = "test-task-id"
+        response = client_with_user.post(
+            _add_sessions_url(team_with_users, session_dataset),
+            {"mode": "selected", "session_ids": str(session.external_id)},
+        )
+
+    assert response.status_code == 302
+    _dataset_id, _team_id, session_ids, filter_query, _tz = mock_delay.call_args.args
+    assert session_ids == [str(session.external_id)]
+    assert filter_query is None
+
+
+@pytest.mark.django_db()
+def test_message_mode_all_matching_over_limit_is_rejected(client_with_user, team_with_users, message_dataset):
+    """Message mode has to resolve "all matching" to ids, so the same cap applies here as on the
+    create form — the dataset must not be marked pending or dispatched."""
+    ExperimentSessionFactory.create_batch(2, team=team_with_users)
+
+    with (
+        patch("apps.evaluations.dataset_clone.MESSAGE_MODE_ALL_MATCHING_LIMIT", 1),
+        patch("apps.evaluations.dataset_clone.create_dataset_from_session_messages_task.delay") as mock_delay,
+    ):
+        response = client_with_user.post(
+            _add_sessions_url(team_with_users, message_dataset),
+            {"mode": "all_matching", "session_ids": ""},
+            follow=True,
+        )
+
+    mock_delay.assert_not_called()
+    assert any("limited to 1 session" in str(m) for m in response.context["messages"])
