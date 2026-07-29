@@ -12,6 +12,19 @@ from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
 
 
 @pytest.fixture()
+def requires_migrations(django_db_use_migrations):
+    """Skip a test when pytest-django is run with ``--no-migrations``.
+
+    Tests that rebuild historical model state from the migration graph
+    (``MigrationLoader``/``MigrationExecutor``) have nothing to load when migrations are
+    disabled. PR CI passes ``--no-migrations`` for speed; ``main`` CI runs with migrations,
+    so these tests still get exercised before deploy.
+    """
+    if not django_db_use_migrations:
+        pytest.skip("requires the migration graph (disabled by --no-migrations)")
+
+
+@pytest.fixture()
 def team():
     return TeamFactory.create()
 
