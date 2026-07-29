@@ -319,10 +319,19 @@ def _update_existing_global_model(existing_global_model, model):
 
 def _replace_custom_model_with_global(custom_model, global_model, LlmProviderModel):
     """Repoint everything referencing ``custom_model`` at ``global_model``, then delete it."""
-    # Evaluators first: their FK is derived from params, so they have to be repointed through
-    # the model method that moves both. Once done they drop out of get_related_objects below.
-    for evaluator in custom_model.evaluators.all():
-        evaluator.set_llm_provider_model_id(global_model.id)
+    # Evaluators first: they keep a copy of the model id in ``params`` alongside the FK, so
+    # both have to move together. Once done they drop out of get_related_objects below.
+    #
+    # Written out here rather than calling ``Evaluator.set_llm_provider_model_id`` because
+    # this also runs from migrations (``migration_utils.llm_model_migration``), where these
+    # are historical models: they carry no custom methods, and in states older than
+    # ``evaluations.0018`` the ``evaluators`` accessor does not exist at all.
+    evaluators = getattr(custom_model, "evaluators", None)
+    if evaluators is not None:
+        for evaluator in evaluators.all():
+            evaluator.params["llm_provider_model_id"] = global_model.id
+            evaluator.llm_provider_model_id = global_model.id
+            evaluator.save(update_fields=["params", "llm_provider_model_id"])
 
     for obj in get_related_objects(custom_model):
         fields = [f for f in obj._meta.fields if f.related_model == LlmProviderModel]

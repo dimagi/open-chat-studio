@@ -1,16 +1,20 @@
 from unittest.mock import patch
 
 import pytest
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 
 from apps.service_providers.llm_service.default_models import (
     DEFAULT_EMBEDDING_PROVIDER_MODELS,
     DEFAULT_LLM_PROVIDER_MODELS,
     Model,
+    _update_llm_provider_models,
     get_default_model,
     update_embedding_provider_models,
     update_llm_provider_models,
 )
 from apps.service_providers.models import EmbeddingProviderModel, LlmProviderModel
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
 
@@ -77,6 +81,45 @@ def test_converts_custom_models_to_global_models_pipelines():
     # pipeline is updated to use the custom model
     pipeline.refresh_from_db()
     assert pipeline.node_set.get(type="LLMResponseWithPrompt").params["llm_provider_model_id"] == global_model.id
+
+
+@pytest.mark.django_db()
+def test_converts_custom_models_to_global_models_evaluators():
+    custom_model = LlmProviderModelFactory.create()
+    evaluator = EvaluatorFactory.create(team=custom_model.team, params={"llm_provider_model_id": custom_model.id})
+    assert evaluator.llm_provider_model_id == custom_model.id
+
+    defaults = {custom_model.type: [Model(custom_model.name, custom_model.max_token_limit)]}
+    with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
+        update_llm_provider_models()
+
+    global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
+    evaluator.refresh_from_db()
+    assert evaluator.llm_provider_model_id == global_model.id
+    assert evaluator.params["llm_provider_model_id"] == global_model.id
+
+
+@pytest.mark.django_db()
+def test_converts_custom_models_to_global_models_from_a_migration():
+    """``_update_llm_provider_models`` also runs from migrations, with historical models.
+
+    Historical models carry no custom methods, so the evaluator repointing has to work
+    without ``Evaluator.set_llm_provider_model_id``.
+    """
+    custom_model = LlmProviderModelFactory.create()
+    evaluator = EvaluatorFactory.create(team=custom_model.team, params={"llm_provider_model_id": custom_model.id})
+
+    historical_state = MigrationExecutor(connection).loader.project_state()
+    HistoricalLlmProviderModel = historical_state.apps.get_model("service_providers", "LlmProviderModel")
+
+    defaults = {custom_model.type: [Model(custom_model.name, custom_model.max_token_limit)]}
+    with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
+        _update_llm_provider_models(HistoricalLlmProviderModel)
+
+    global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
+    evaluator.refresh_from_db()
+    assert evaluator.llm_provider_model_id == global_model.id
+    assert evaluator.params["llm_provider_model_id"] == global_model.id
 
 
 @pytest.mark.django_db()
