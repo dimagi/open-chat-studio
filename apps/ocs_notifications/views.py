@@ -1,6 +1,7 @@
 from functools import cached_property
 
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http.response import HttpResponse as HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -21,16 +22,15 @@ from apps.ocs_notifications.utils import (
     toggle_notification_read,
     unmute_notification,
 )
-from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
-class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
+class NotificationHome(LoginRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
     def get_context_data(self, **kwargs):
-        table_url = reverse("ocs_notifications:notifications_table", args=[self.request.team.slug])
+        table_url = reverse("ocs_notifications:notifications_table")
         user_preferences, _created = UserNotificationPreferences.objects.get_or_create(
             user=self.request.user, team=self.request.team
         )
@@ -49,15 +49,11 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
             "table_url": table_url,
             "enable_search": False,
             "filter_bar_action": "ocs_notifications/components/mark_all_read_button.html",
-            "mark_all_read_url": reverse(
-                "ocs_notifications:mark_all_notifications_read", args=[self.request.team.slug]
-            ),
+            "mark_all_read_url": reverse("ocs_notifications:mark_all_notifications_read"),
             "actions": [
                 actions.Action(
                     url_name="ocs_notifications:toggle_do_not_disturb",
-                    url_factory=lambda url_name, _request, _record, _value: reverse(
-                        url_name, args=[_request.team.slug]
-                    ),
+                    url_factory=lambda url_name, _request, _record, _value: reverse(url_name),
                     template="ocs_notifications/components/do_not_disturb_button.html",
                     extra_context={"is_activated": do_not_disturbed_active, "end_datetime": end_datetime},
                 ),
@@ -71,7 +67,7 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
         # Add filter context
-        columns = UserNotificationFilter.columns(team=self.request.team)
+        columns = UserNotificationFilter.columns(team=self.request.team, user=self.request.user)
         filter_context = get_filter_context_data(
             team=self.request.team,
             columns=columns,
@@ -85,36 +81,44 @@ class NotificationHome(LoginAndTeamRequiredMixin, TemplateView):
         return context
 
 
-class UserNotificationTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+def get_filtered_user_notifications(request):
+    """Build the current user's cross-team notifications queryset, narrowed by whatever
+    filters (including the team filter) are active in the requesting view.
+
+    Shared by ``UserNotificationTableView`` and ``MarkAllNotificationsReadView`` so that
+    "mark all read" always acts on exactly the rows currently displayed in the table.
+    """
+    queryset = (
+        EventUser.objects.with_latest_event()
+        .with_mute_status()
+        .filter(user=request.user, team__in=request.user.teams.all())
+        .select_related("event_type", "team")
+        .filter(latest_event_created_at__isnull=False)
+    )
+
+    notification_filter = UserNotificationFilter()
+    filter_params = FilterParams.from_request(request)
+    user_timezone = request.session.get("detected_tz")
+
+    return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
+
+
+class UserNotificationTableView(LoginRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = EventUser
     table_class = UserNotificationTable
     template_name = "table/single_table.html"
 
     def get_queryset(self):
-        queryset = (
-            EventUser.objects.with_latest_event()
-            .with_mute_status()
-            .filter(user=self.request.user, team=self.request.team)
-            .select_related("event_type")
-            .filter(latest_event_created_at__isnull=False)
-            .order_by("-latest_event_created_at")
-        )
-
-        # Apply filters
-        notification_filter = UserNotificationFilter()
-        filter_params = FilterParams.from_request(self.request)
-        user_timezone = self.request.session.get("detected_tz")
-
-        return notification_filter.apply(queryset, filter_params=filter_params, timezone=user_timezone)
+        return get_filtered_user_notifications(self.request).order_by("-latest_event_created_at")
 
 
-class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
-    def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
+class ToggleNotificationReadView(LoginRequiredMixin, View):
+    def post(self, request, notification_id: int, *args, **kwargs):
         event_user = get_object_or_404(
             EventUser.objects.with_latest_event().with_mute_status(),
             id=notification_id,
             user=self.request.user,
-            team=request.team,
+            team__in=request.user.teams.all(),
         )
 
         toggle_notification_read(user=request.user, event_user=event_user, read=not event_user.read)
@@ -122,15 +126,15 @@ class ToggleNotificationReadView(LoginAndTeamRequiredMixin, View):
         return render_table_row(request, UserNotificationTable, event_user)
 
 
-class MuteNotificationView(LoginAndTeamRequiredMixin, View):
+class MuteNotificationView(LoginRequiredMixin, View):
     """Mute a specific notification identifier or all notifications"""
 
-    def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
+    def post(self, request, notification_id: int, *args, **kwargs):
         event_user = get_object_or_404(
             EventUser.objects.with_mute_status().select_related("event_type"),
             id=notification_id,
             user=self.request.user,
-            team=request.team,
+            team__in=request.user.teams.all(),
         )
 
         # Get duration from POST data (in hours)
@@ -148,7 +152,7 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
             )
         event_user = mute_notification(
             user=request.user,
-            team=request.team,
+            team=event_user.team,
             event_type=event_user.event_type,
             timedelta=TIMEDELTA_MAP[duration_param],
         )
@@ -164,18 +168,18 @@ class MuteNotificationView(LoginAndTeamRequiredMixin, View):
         )
 
 
-class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
+class UnmuteNotificationView(LoginRequiredMixin, View):
     """Unmute a specific notification identifier or all notifications"""
 
-    def post(self, request, team_slug: str, notification_id: int, *args, **kwargs):
+    def post(self, request, notification_id: int, *args, **kwargs):
         user_notification = get_object_or_404(
             EventUser.objects.select_related("event_type"),
             id=notification_id,
             user=self.request.user,
-            team=request.team,
+            team__in=request.user.teams.all(),
         )
 
-        unmute_notification(user=request.user, team=request.team, event_type=user_notification.event_type)
+        unmute_notification(user=request.user, team=user_notification.team, event_type=user_notification.event_type)
 
         return render(
             request,
@@ -184,8 +188,8 @@ class UnmuteNotificationView(LoginAndTeamRequiredMixin, View):
         )
 
 
-class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
-    def post(self, request, team_slug: str, *args, **kwargs):
+class ToggleDoNotDisturbView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
         duration_param = request.POST.get("duration", None)
         user_preferences, _created = UserNotificationPreferences.objects.get_or_create(
             user=request.user, team=request.team
@@ -212,36 +216,43 @@ class ToggleDoNotDisturbView(LoginAndTeamRequiredMixin, View):
         )
 
 
-class MarkAllNotificationsReadView(LoginAndTeamRequiredMixin, View):
-    def post(self, request, team_slug: str, *args, **kwargs):
-        EventUser.objects.filter(user=request.user, team=request.team, read=False).update(
-            read=True, read_at=timezone.now()
-        )
-        bust_unread_notification_cache(user_id=request.user.id, team_slug=team_slug)
-        table_url = reverse("ocs_notifications:notifications_table", args=[team_slug])
+class MarkAllNotificationsReadView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        # Same filters (including the team filter) as the table currently displayed, so "mark
+        # all read" only ever touches the filtered set the user is looking at.
+        unread = get_filtered_user_notifications(request).filter(read=False)
+        team_slugs = list(unread.values_list("team__slug", flat=True).distinct())
+        unread.update(read=True, read_at=timezone.now())
+
+        for team_slug in team_slugs:
+            bust_unread_notification_cache(user_id=request.user.id, team_slug=team_slug)
+
+        table_url = reverse("ocs_notifications:notifications_table")
         return render(request, "ocs_notifications/components/mark_all_read_reload.html", {"table_url": table_url})
 
 
-class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
+class NotificationEventHome(LoginRequiredMixin, TemplateView):
     template_name = "ocs_notifications/notification_event_home.html"
 
     @cached_property
     def event_type(self) -> EventType:
-        return get_object_or_404(EventType, team=self.request.team, id=self.kwargs["event_type_id"])
+        return get_object_or_404(
+            EventType.objects.select_related("team"),
+            team__in=self.request.user.teams.all(),
+            id=self.kwargs["event_type_id"],
+        )
 
     def get(self, request, *args, **kwargs) -> HttpResponse:
         # Clicking the event marks it as read. We explicitly don't use the toggle_notification_read function here to
         # avoid multiple DB queries
         EventUser.objects.filter(
-            user=self.request.user, team=self.request.team, event_type=self.event_type, read=False
+            user=self.request.user, team=self.event_type.team, event_type=self.event_type, read=False
         ).update(read=True, read_at=timezone.now())
-        bust_unread_notification_cache(user_id=self.request.user.id, team_slug=self.kwargs["team_slug"])
+        bust_unread_notification_cache(user_id=self.request.user.id, team_slug=self.event_type.team.slug)
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        table_url = reverse(
-            "ocs_notifications:notification_event_table", args=[self.request.team.slug, self.event_type.id]
-        )
+        table_url = reverse("ocs_notifications:notification_event_table", args=[self.event_type.id])
 
         title = self.event_type.notificationevent_set.order_by("-created_at").values_list("title", flat=True).first()
         context = {
@@ -255,14 +266,16 @@ class NotificationEventHome(LoginAndTeamRequiredMixin, TemplateView):
         return context
 
 
-class NotificationEventTableView(LoginAndTeamRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+class NotificationEventTableView(LoginRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = NotificationEvent
     table_class = NotificationEventTable
     template_name = "table/single_table.html"
 
     def get_queryset(self):
         return (
-            NotificationEvent.objects.filter(team=self.request.team, event_type_id=self.kwargs["event_type_id"])
+            NotificationEvent.objects.filter(
+                team__in=self.request.user.teams.all(), event_type_id=self.kwargs["event_type_id"]
+            )
             .select_related("event_type")
             .order_by("-created_at")
         )

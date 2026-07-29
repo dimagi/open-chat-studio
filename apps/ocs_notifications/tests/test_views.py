@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 import pytest
 from django.urls import reverse
@@ -6,7 +7,17 @@ from django.utils import timezone
 from time_machine import travel
 
 from apps.ocs_notifications.models import EventUser, UserNotificationPreferences
-from apps.utils.factories.notifications import EventUserFactory
+from apps.utils.factories.notifications import EventUserFactory, NotificationEventFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
+
+
+def _create_notification(*, user, team):
+    """Create an EventUser with a matching NotificationEvent, so it satisfies the
+    `latest_event_created_at__isnull=False` filter and shows up in the table (and is
+    therefore eligible to be picked up by "mark all read")."""
+    event_user = EventUserFactory.create(user=user, team=team, read=False, read_at=None)
+    NotificationEventFactory.create(team=team, event_type=event_user.event_type)
+    return event_user
 
 
 @pytest.mark.django_db()
@@ -37,6 +48,9 @@ class TestToggleNotificationReadView:
 
         # Login user and set team in session
         client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
 
         # Step 1: Verify initial state is read=False
         user_notification.refresh_from_db()
@@ -44,7 +58,7 @@ class TestToggleNotificationReadView:
         assert user_notification.read_at is None
 
         # Step 2: Toggle read status to True
-        url = reverse("ocs_notifications:toggle_notification_read", args=[team_with_users.slug, notification_id])
+        url = reverse("ocs_notifications:toggle_notification_read", args=[notification_id])
         response = client.post(url)
 
         # Verify response is successful
@@ -78,6 +92,45 @@ class TestToggleNotificationReadView:
         second_cache_call = mock_bust_cache.call_args_list[0]
         assert second_cache_call[0][0] == user.id
         assert second_cache_call[1]["team_slug"] == team_with_users.slug
+
+    def test_toggle_read_status_for_notification_in_a_non_current_team(self, client, team_with_users):
+        """A user browsing the cross-team notifications list can still toggle read status on a
+        notification that belongs to a team other than their current session team."""
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+        user_notification = EventUserFactory.create(user=user, team=other_team, read=False, read_at=None)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id  # current team is NOT the notification's team
+        session.save()
+
+        url = reverse("ocs_notifications:toggle_notification_read", args=[user_notification.id])
+        response = client.post(url)
+
+        assert response.status_code == 200
+        user_notification.refresh_from_db()
+        assert user_notification.read is True
+
+    def test_cannot_toggle_read_status_for_notification_in_a_team_user_is_not_a_member_of(
+        self, client, team_with_users
+    ):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        user_notification = EventUserFactory.create(user=user, team=other_team, read=False, read_at=None)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        url = reverse("ocs_notifications:toggle_notification_read", args=[user_notification.id])
+        response = client.post(url)
+
+        assert response.status_code == 404
+        user_notification.refresh_from_db()
+        assert user_notification.read is False
 
 
 @pytest.mark.django_db()
@@ -167,13 +220,16 @@ class TestMarkAllNotificationsReadView:
     def test_marks_all_unread_as_read_and_busts_cache(self, mock_bust_cache, client, team_with_users):
         user = team_with_users.members.first()
         other_user = team_with_users.members.last()
-        EventUserFactory.create(user=user, team=team_with_users, read=False, read_at=None)
-        EventUserFactory.create(user=user, team=team_with_users, read=False, read_at=None)
+        _create_notification(user=user, team=team_with_users)
+        _create_notification(user=user, team=team_with_users)
         EventUserFactory.create(user=user, team=team_with_users, read=True)
         other_user_notification = EventUserFactory.create(user=other_user, team=team_with_users, read=False)
 
         client.force_login(user)
-        url = reverse("ocs_notifications:mark_all_notifications_read", args=[team_with_users.slug])
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+        url = reverse("ocs_notifications:mark_all_notifications_read")
         response = client.post(url)
 
         assert response.status_code == 200
@@ -182,6 +238,79 @@ class TestMarkAllNotificationsReadView:
         assert EventUser.objects.filter(user=user, team=team_with_users, read=True).count() == 3
         other_user_notification.refresh_from_db()
         assert other_user_notification.read is False
+        mock_bust_cache.assert_called_once_with(user_id=user.id, team_slug=team_with_users.slug)
+
+    @patch("apps.ocs_notifications.views.bust_unread_notification_cache")
+    def test_marks_unread_across_all_of_the_users_teams(self, mock_bust_cache, client, team_with_users):
+        """Mark-all-read applies to the whole cross-team list, not just the current session team."""
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+
+        current_team_notification = _create_notification(user=user, team=team_with_users)
+        other_team_notification = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.post(reverse("ocs_notifications:mark_all_notifications_read"))
+        assert response.status_code == 200
+
+        current_team_notification.refresh_from_db()
+        other_team_notification.refresh_from_db()
+        assert current_team_notification.read is True
+        assert other_team_notification.read is True
+
+        busted_team_slugs = {call.kwargs["team_slug"] for call in mock_bust_cache.call_args_list}
+        assert busted_team_slugs == {team_with_users.slug, other_team.slug}
+
+    @patch("apps.ocs_notifications.views.bust_unread_notification_cache")
+    def test_does_not_mark_notifications_for_teams_user_is_not_a_member_of(
+        self, mock_bust_cache, client, team_with_users
+    ):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        other_team_notification = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.post(reverse("ocs_notifications:mark_all_notifications_read"))
+        assert response.status_code == 200
+
+        other_team_notification.refresh_from_db()
+        assert other_team_notification.read is False
+
+    @patch("apps.ocs_notifications.views.bust_unread_notification_cache")
+    def test_only_marks_read_within_the_currently_active_team_filter(self, mock_bust_cache, client, team_with_users):
+        """When the table is filtered to a single team, mark-all-read must stay in sync with
+        it and only touch that team's notifications -- not the user's other teams."""
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+
+        current_team_notification = _create_notification(user=user, team=team_with_users)
+        other_team_notification = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        query = urlencode({"f_team": f"[{team_with_users.id}]", "op_team": "any of"})
+        url = f"{reverse('ocs_notifications:mark_all_notifications_read')}?{query}"
+        response = client.post(url)
+        assert response.status_code == 200
+
+        current_team_notification.refresh_from_db()
+        other_team_notification.refresh_from_db()
+        assert current_team_notification.read is True
+        assert other_team_notification.read is False
+
         mock_bust_cache.assert_called_once_with(user_id=user.id, team_slug=team_with_users.slug)
 
 
@@ -199,7 +328,7 @@ class TestToggleDoNotDisturbView:
         UserNotificationPreferences.objects.update_or_create(
             user=user, team=team_with_users, defaults={"do_not_disturb_until": "2026-02-13T00:00:00Z"}
         )
-        url = reverse("ocs_notifications:toggle_do_not_disturb", args=[team_with_users.slug])
+        url = reverse("ocs_notifications:toggle_do_not_disturb")
         response = client.post(url, data={"duration": ""})
         assert response.status_code == 200
         pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
@@ -215,9 +344,131 @@ class TestToggleDoNotDisturbView:
         session.save()
 
         with travel("2025-01-01 10:00:00+00:00", tick=False):
-            url = reverse("ocs_notifications:toggle_do_not_disturb", args=[team_with_users.slug])
+            url = reverse("ocs_notifications:toggle_do_not_disturb")
             response = client.post(url, data={"duration": "8h"})
             assert response.status_code == 200
             pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
             assert pref.do_not_disturb_until is not None
             assert pref.do_not_disturb_until - timezone.now() == timezone.timedelta(hours=8)
+
+
+@pytest.mark.django_db()
+class TestUserNotificationTableView:
+    """Tests for the cross-team notifications list (UserNotificationTableView)."""
+
+    def test_defaults_to_notifications_from_all_of_the_users_teams(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+
+        current_team_notification = _create_notification(user=user, team=team_with_users)
+        other_team_notification = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        assert response.status_code == 200
+        row_ids = {obj.id for obj in response.context["table"].data}
+        assert row_ids == {current_team_notification.id, other_team_notification.id}
+
+    def test_excludes_notifications_from_teams_the_user_is_not_a_member_of(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        _create_notification(user=user, team=team_with_users)
+        other_team_notification = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_table"))
+
+        row_ids = {obj.id for obj in response.context["table"].data}
+        assert other_team_notification.id not in row_ids
+
+    def test_team_filter_narrows_results_to_the_selected_team(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+
+        current_team_notification = _create_notification(user=user, team=team_with_users)
+        other_team_notification = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(
+            reverse("ocs_notifications:notifications_table"),
+            {"f_team": f"[{team_with_users.id}]", "op_team": "any of"},
+        )
+
+        assert response.status_code == 200
+        row_ids = {obj.id for obj in response.context["table"].data}
+        assert row_ids == {current_team_notification.id}
+        assert other_team_notification.id not in row_ids
+
+
+@pytest.mark.django_db()
+class TestNotificationEventHome:
+    def test_user_can_view_an_event_belonging_to_a_non_current_team(self, client, team_with_users):
+        """Regression test: clicking a cross-team row must not 404 just because the event's
+        team differs from the user's current session team."""
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+        event_user = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id  # current team is NOT the event's team
+        session.save()
+
+        url = reverse("ocs_notifications:notification_event_home", args=[event_user.event_type_id])
+        response = client.get(url)
+
+        assert response.status_code == 200
+        event_user.refresh_from_db()
+        assert event_user.read is True
+
+    def test_404s_for_an_event_belonging_to_a_team_the_user_is_not_a_member_of(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        event_user = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        url = reverse("ocs_notifications:notification_event_home", args=[event_user.event_type_id])
+        response = client.get(url)
+
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db()
+class TestMuteNotificationView:
+    def test_can_mute_a_notification_belonging_to_a_non_current_team(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+        event_user = EventUserFactory.create(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        url = reverse("ocs_notifications:mute_notification", args=[event_user.id])
+        response = client.post(url, data={"duration": "8h"})
+
+        assert response.status_code == 200
+        event_user.refresh_from_db()
+        assert event_user.muted_until is not None

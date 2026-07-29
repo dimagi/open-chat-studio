@@ -128,5 +128,5 @@ class EventUser(BaseTeamModel):
     def get_absolute_url(self):
         return reverse(
             "ocs_notifications:notification_event_home",
-            args=[self.team.slug, self.event_type_id],
+            args=[self.event_type_id],
         )
