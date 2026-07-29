@@ -122,6 +122,9 @@ def _set_new_nodes(pipeline, Node):
     to_delete = current_ids - new_ids
     Node.objects.filter(pipeline=pipeline, flow_id__in=to_delete).delete()
     for node in nodes:
+        if node.data is None:
+            # Layout-only node (ADR-0046): the Node row owns the content, so there is nothing to sync.
+            continue
         Node.objects.update_or_create(
             pipeline=pipeline,
             flow_id=node.id,
