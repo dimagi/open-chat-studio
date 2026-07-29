@@ -56,8 +56,9 @@ def configure_evaluator_llm_provider(evaluator: Evaluator) -> Evaluator:
     """Point an LLM evaluator at real providers in its own team, making it runnable.
 
     ``EvaluatorFactory`` leaves the provider ids out of ``params``, so by default an
-    ``LlmEvaluator`` it builds names no provider — which the form now rejects on save.
-    Tests that post the evaluator form need this; most tests do not.
+    ``LlmEvaluator`` it builds names no provider — which the form rejects on save and an
+    evaluation run rejects pre-flight. Tests that post the evaluator form, or drive a run
+    through the coordinator, need this; most tests do not.
     """
     evaluator.params |= {
         "llm_provider_id": LlmProviderFactory.create(team=evaluator.team).id,
