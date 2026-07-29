@@ -102,7 +102,7 @@ def test_converts_custom_models_to_global_models_evaluators():
 
 
 @pytest.mark.django_db()
-def test_converts_custom_models_to_global_models_from_a_migration():
+def test_converts_custom_models_to_global_models_from_a_migration(requires_migrations):
     """``_update_llm_provider_models`` also runs from migrations, with historical models.
 
     Historical models carry no custom methods, so the evaluator repointing has to work
