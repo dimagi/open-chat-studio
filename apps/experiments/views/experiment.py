@@ -23,7 +23,6 @@ from django.http import (
     HttpResponseForbidden,
     HttpResponseRedirect,
     JsonResponse,
-    QueryDict,
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
@@ -437,8 +436,7 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     timezone = request.session.get("detected_tz", None)
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     parsed_url = urlparse(request.htmx.current_url)
-    query_params = QueryDict(parsed_url.query)
-    task_id = async_export_chat.delay(experiment_id, query_params, timezone)
+    task_id = async_export_chat.delay(experiment_id, parsed_url.query, timezone)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
     )

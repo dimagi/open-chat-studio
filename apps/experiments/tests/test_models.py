@@ -21,7 +21,7 @@ from apps.experiments.models import (
 )
 from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.prompt_context import ParticipantDataProxy
-from apps.service_providers.tracing import TraceInfo
+from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.utils import get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -406,7 +406,7 @@ class TestExperimentSession:
     @patch("apps.channels.registry.from_experiment_session")
     @patch.object(ExperimentSession, "_bot_prompt_for_user")
     def test_ad_hoc_message_transaction_rollback(self, mock_bot_prompt, from_experiment_session, experiment_session):
-        """Test that the @transaction.atomic() decorator on ad_hoc_bot_message
+        """Test that the transaction.atomic() block in ad_hoc_bot_message
         rolls back database changes when an exception occurs."""
         # Set up initial state
         initial_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
@@ -438,6 +438,44 @@ class TestExperimentSession:
         # Verify that the database changes were rolled back
         final_message_count = ChatMessage.objects.filter(chat=experiment_session.chat).count()
         assert final_message_count == initial_message_count, "Transaction should have rolled back the message creation"
+
+    @patch("apps.channels.registry.from_experiment_session")
+    @patch.object(ExperimentSession, "_bot_prompt_for_user")
+    def test_ad_hoc_message_db_error_is_swallowed_when_failing_silently(
+        self, mock_bot_prompt, from_experiment_session, experiment_session
+    ):
+        """`fail_silently=True` must also hold for database errors.
+
+        Regression test: the atomic block used to wrap the `except Exception` handler
+        (`@transaction.atomic()` on the method), so a swallowed DB error left the block to
+        commit a transaction Postgres had already aborted — raising `InternalError: current
+        transaction is aborted` out of a call that promised to fail silently.
+
+        The tracing service is stubbed out with one that has no tracers: with the OCS tracer
+        active, its own (also failing) trace-metadata write happens to mark the connection for
+        rollback and masks this, so the assertion here is about this method's transaction
+        handling rather than that accident.
+        """
+        mock_bot_prompt.return_value = "Test message"
+        mock_channel = Mock()
+        from_experiment_session.return_value = mock_channel
+
+        def send_and_break_the_transaction(message):
+            # Raw SQL so Postgres really aborts the transaction (division by zero), the way it
+            # does for paths Django doesn't wrap in `mark_for_rollback_on_error`.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1 / 0")
+
+        mock_channel.send_message_to_user = send_and_break_the_transaction
+        untraced = TracingService(
+            [], experiment_id=experiment_session.experiment_id, team_id=experiment_session.team_id
+        )
+
+        with patch.object(TracingService, "create_for_experiment", return_value=untraced):
+            assert experiment_session.ad_hoc_bot_message("Testing", TraceInfo(name="test"), fail_silently=True) is None
+
+        # The connection is still usable, i.e. the failed send was rolled back cleanly.
+        assert ChatMessage.objects.filter(chat=experiment_session.chat).exists() is False
 
     @patch("apps.channels.registry.from_experiment_session")
     @patch("apps.service_providers.models.LlmProvider.get_llm_service")

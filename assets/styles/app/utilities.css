@@ -3,6 +3,13 @@
   display: none !important;
 }
 
+/* Marks the row a deep link landed on, e.g. ?version_id=N on a chatbot's versions tab.
+   `table-zebra` paints alternate rows via `tr:nth-child(even)`, which outranks a plain
+   utility class, so this needs !important to be visible on every row. */
+.row-highlight {
+  background-color: color-mix(in oklab, var(--color-primary) 12%, transparent) !important;
+}
+
 /* this is the default class assigned to errors by django forms */
 .errorlist {
   color: var(--danger);

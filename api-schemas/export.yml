@@ -2520,6 +2520,10 @@ components:
           oneOf:
           - $ref: '#/components/schemas/CollectionFileDetailStatusEnum'
           - $ref: '#/components/schemas/BlankEnum'
+        failure_reason:
+          type: string
+          description: Why the most recent indexing attempt failed. Cleared when the
+            file is re-indexed.
         metadata:
           nullable: true
         external_id:
@@ -5953,6 +5957,8 @@ components:
           type: string
           format: date-time
           readOnly: true
+        source:
+          $ref: '#/components/schemas/UsageRecordDetailSourceEnum'
         service_kind:
           $ref: '#/components/schemas/ServiceKindEnum'
         provider_type:
@@ -5993,6 +5999,9 @@ components:
         trace:
           type: integer
           nullable: true
+        evaluation_config:
+          type: integer
+          nullable: true
         pricing_rule:
           type: integer
           nullable: true
@@ -6004,6 +6013,14 @@ components:
       - service_kind
       - timestamp
       - updated_at
+    UsageRecordDetailSourceEnum:
+      enum:
+      - chat
+      - evaluation
+      type: string
+      description: |-
+        * `chat` - Chat
+        * `evaluation` - Evaluation
     UsageRecordList:
       type: object
       properties:

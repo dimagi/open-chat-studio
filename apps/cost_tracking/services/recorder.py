@@ -12,7 +12,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord
+from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.cost_tracking.services.pricing import PricingKey, PricingResolver
 
 logger = logging.getLogger("ocs.cost_tracking")
@@ -23,8 +23,8 @@ _THOUSAND = Decimal(1000)
 
 @dataclass
 class UsageEvent:
-    """One bucket from the collector. Trace-scoped context is supplied
-    separately as `TraceContext` and shared across all events from a trace.
+    """One bucket from the collector. Attribution is supplied separately as
+    `UsageContext` and shared across all events in one recording call.
     """
 
     service_kind: ServiceKind
@@ -36,20 +36,25 @@ class UsageEvent:
 
 
 @dataclass
-class TraceContext:
-    """Trace-scoped context that's the same for every UsageEvent emitted from
-    a single trace. Passed once to `record_usage_bulk` rather than carried on
-    each event.
+class UsageContext:
+    """Attribution shared by every UsageEvent in one recording call. Passed once to
+    `record_usage_bulk` rather than carried on each event.
+
+    `trace_id` is None for callers outside the tracer (evaluator judge calls, which
+    set `source=EVALUATION`); `source` decides how the rows may be attributed
+    downstream, so writers set it explicitly rather than leaning on the default.
     """
 
     team_id: int
+    source: UsageSource = UsageSource.CHAT
     trace_id: int | None = None
     experiment_id: int | None = None
     session_id: int | None = None
     participant_id: int | None = None
+    evaluation_config_id: int | None = None
 
 
-def record_usage_bulk(events: list[UsageEvent], ctx: TraceContext) -> None:
+def record_usage_bulk(events: list[UsageEvent], ctx: UsageContext) -> None:
     """Resolve pricing per event, build UsageRecord rows, bulk-insert in one
     statement inside a transaction. Never raises — a DB hiccup must not
     propagate back into the LLM/tracer path; failures are logged.
@@ -85,6 +90,7 @@ def record_usage_bulk(events: list[UsageEvent], ctx: TraceContext) -> None:
         rows.append(
             UsageRecord(
                 team_id=ctx.team_id,
+                source=ctx.source,
                 service_kind=event.service_kind,
                 provider_type=event.provider_type,
                 model_name=event.model_name,
@@ -98,6 +104,7 @@ def record_usage_bulk(events: list[UsageEvent], ctx: TraceContext) -> None:
                 session_id=ctx.session_id,
                 participant_id=ctx.participant_id,
                 trace_id=ctx.trace_id,
+                evaluation_config_id=ctx.evaluation_config_id,
                 extra=event.extra or {},
             )
         )

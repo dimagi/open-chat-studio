@@ -680,3 +680,24 @@ def test_async_create_collection_version_clears_task_id_on_failure(create_new_ve
 
     collection.refresh_from_db()
     assert collection.create_version_task_id == ""
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.models.Collection.add_files_to_index")
+def test_index_collection_files_clears_the_failure_reason(add_files_to_index_mock, collection):
+    """Every re-index route funnels through this transition, so it is where a reason from a
+    previous attempt stops applying. Indexing itself is patched out, so nothing downstream can
+    clear it: an empty reason here proves the IN_PROGRESS transition did it."""
+    collection_file = CollectionFile.objects.create(
+        file=FileFactory.create(team=collection.team),
+        collection=collection,
+        status=FileStatus.FAILED,
+        failure_reason="ValueError: Error code: 401 - Incorrect API key provided",
+        metadata={"chunking_strategy": {"chunk_size": 800, "chunk_overlap": 400}},
+    )
+
+    index_collection_files_task([collection_file.id])
+
+    collection_file.refresh_from_db()
+    assert collection_file.status == FileStatus.IN_PROGRESS
+    assert collection_file.failure_reason == ""
