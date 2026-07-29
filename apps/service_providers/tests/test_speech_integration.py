@@ -1,4 +1,6 @@
+import difflib
 import os
+import re
 import subprocess
 import tempfile
 
@@ -199,6 +201,21 @@ class TestAzureSpeechIntegration:
         _test_transcription(service, test_audio_wav_path)
 
 
+EXPECTED_TRANSCRIPTION = (
+    "Oh, I do feel so ill all over me, my dear Ribby; "
+    "I have swallowed a large tin patty-pan with a sharp scalloped edge!"
+)
+
+# Providers reliably score above 0.9 against the expected text; unusable transcriptions
+# (truncated audio, wrong words) score below 0.6.
+TRANSCRIPTION_SIMILARITY_THRESHOLD = 0.8
+
+
+def _normalize_transcription(text: str) -> str:
+    """Reduce a transcription to lowercase words so punctuation and spacing don't affect comparison."""
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
 def _test_transcription(service, audio_path=None):
     # Load test audio file
     test_audio_path = audio_path or os.path.join(
@@ -206,15 +223,17 @@ def _test_transcription(service, audio_path=None):
     )
     with open(test_audio_path, "rb") as audio_file:
         result = service.transcribe_audio(audio_file)
-    # Expected: "Oh, I do feel so ill all over me, my dear Ribby;
-    # I have swallowed a large tin patty-pan with a sharp scalloped edge!"
-    # Verify transcription contains key phrases (allowing for minor variations)
+
     assert result is not None
     assert len(result) > 0
-    result_lower = result.lower()
-    assert any(word in result_lower for word in ["ribby", "ribbie", "ribbey", "ruby"])
-    assert any(word in result_lower for word in ["patty", "patty-pan"])
-    assert any(word in result_lower for word in ["scalloped", "scallop"])
+    # Speech recognition output varies between runs and providers (e.g. "Ribby" vs "Ruby", dropped
+    # words), so compare on overall similarity rather than asserting on individual words.
+    similarity = difflib.SequenceMatcher(
+        None, _normalize_transcription(EXPECTED_TRANSCRIPTION), _normalize_transcription(result)
+    ).ratio()
+    assert similarity >= TRANSCRIPTION_SIMILARITY_THRESHOLD, (
+        f"Transcription similarity {similarity:.2f} below {TRANSCRIPTION_SIMILARITY_THRESHOLD}: {result!r}"
+    )
 
 
 @pytest.mark.django_db()
