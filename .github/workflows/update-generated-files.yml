@@ -1,6 +1,6 @@
 # This workflow automatically fixes and regenerates files when Python code changes:
 # - Ruff safe fixes and formatting
-# - API schema (api-schemas/v1.yml) when API-related code changes
+# - API schemas (api-schemas/*.yml) when API-related code changes
 # - Django migrations when model files change
 # Ruff runs first so any regenerated files are already formatted. All changes are
 # committed back to the PR branch in a single commit if anything changed. This keeps
@@ -89,9 +89,9 @@ jobs:
           DJANGO_DATABASE_USER: postgres
           DJANGO_DATABASE_PASSWORD: postgres_password
           SECRET_KEY: secret-test-key
-        run: |
-          uv run python manage.py spectacular --api-version v1 --file api-schemas/v1.yml --validate
-          uv run python manage.py spectacular --api-version v2 --file api-schemas/v2.yml --validate
+        # `inv schema` covers every API surface (v1, v2, export) so this stays in
+        # sync when a new surface is added.
+        run: uv run inv schema
 
       - name: Create Missing Migrations
         env:
