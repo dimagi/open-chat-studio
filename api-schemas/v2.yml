@@ -1671,6 +1671,23 @@ components:
           description: Total number of items matching the query. Only present on the
             first page (requests without a cursor).
           example: 123
+    ParticipantIdentity:
+      type: object
+      properties:
+        public_id:
+          type: string
+          format: uuid
+          description: Stable participant identifier.
+        identifier:
+          type: string
+          description: Human-readable handle (email/phone/anon id).
+        platform:
+          type: string
+          description: Channel platform the participant belongs to.
+      required:
+      - identifier
+      - platform
+      - public_id
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects
@@ -1699,23 +1716,6 @@ components:
       - edge
       - node
       - pipeline
-    ParticipantIdentity:
-      type: object
-      properties:
-        public_id:
-          type: string
-          format: uuid
-          description: Stable participant identifier.
-        identifier:
-          type: string
-          description: Human-readable handle (email/phone/anon id).
-        platform:
-          type: string
-          description: Channel platform the participant belongs to.
-      required:
-      - identifier
-      - platform
-      - public_id
     PlatformEnum:
       enum:
       - telegram
