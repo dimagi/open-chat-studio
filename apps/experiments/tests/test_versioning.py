@@ -369,7 +369,7 @@ class TestCopyExperiment:
         assert experiment_copy.pipeline.node_set.count() == 3
         node_ids = {node.type: node.flow_id for node in experiment_copy.pipeline.node_set.all()}
         assert experiment_copy.pipeline.data != pipeline_data
-        # The copy's data has no node information beyond edges (ADR-0048); node content and
+        # The copy's data has no node information beyond edges (ADR-0049); node content and
         # layout live on the Node rows. Only the edges are remapped to the new ids.
         assert experiment_copy.pipeline.data == {
             "edges": [

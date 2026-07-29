@@ -443,7 +443,7 @@ class TestPipeline:
 class TestUpdateNodesFromData:
     def test_node_content_comes_from_the_mapping_not_from_data(self):
         """The node_data mapping is the sole source of membership and content; ``Pipeline.data``
-        carries no node information (ADR-0048)."""
+        carries no node information (ADR-0049)."""
         pipeline = PipelineFactory.create()
         pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
@@ -466,7 +466,7 @@ class TestUpdateNodesFromData:
 
     def test_position_is_written_to_the_row(self):
         """A mapping entry's position lands on the row's position columns (floats kept
-        verbatim); the columns are the authoritative layout source for reads (ADR-0048)."""
+        verbatim); the columns are the authoritative layout source for reads (ADR-0049)."""
         pipeline = PipelineFactory.create()
         pipeline.data = {"edges": []}
         pipeline.update_nodes_from_data(
@@ -701,7 +701,7 @@ class TestLayoutOnlyData:
 
     def test_flow_data_rebuilds_nodes_from_rows(self):
         """flow_data reconstructs each node from its row: content, react-flow type derived
-        from Node.type, and position from the row's columns (ADR-0048)."""
+        from Node.type, and position from the row's columns (ADR-0049)."""
         start, template, end = start_node(), render_template_node(), end_node()
         pipeline = create_pipeline_model([start, template, end])
         template_row = Node.objects.get(pipeline=pipeline, flow_id=template["id"])

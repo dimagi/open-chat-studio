@@ -139,7 +139,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """Reconcile this pipeline's ``Node`` rows against ``node_data``.
 
         ``node_data`` is the complete graph membership (``self.data`` no longer lists nodes —
-        ADR-0048): rows whose flow_id is absent are deleted, or archived when they have
+        ADR-0049): rows whose flow_id is absent are deleted, or archived when they have
         versions. A ``FlowNode`` carrying content creates or updates its row, position columns
         included (they are the authoritative layout source for reads). A membership-only entry
         (``None``, or a ``FlowNode`` with no ``data``) leaves an existing row untouched and is
@@ -249,7 +249,7 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         """The full react-flow graph, rebuilt from the ``Node`` rows.
 
         ``self.data`` supplies only the edges; each node's content, layout position and
-        react-flow type come from its ``Node`` row (ADR-0048).
+        react-flow type come from its ``Node`` row (ADR-0049).
         """
         # ``edges`` is required, so stand in for data that is empty or missing entirely; the
         # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
@@ -379,7 +379,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
-    # Layout position on the editor canvas (ADR-0048) — the authoritative source for reads.
+    # Layout position on the editor canvas (ADR-0049) — the authoritative source for reads.
     # Null until the row is saved, or until migration 0030 backfills it from the old blob.
     position_x = models.FloatField(null=True, blank=True)
     position_y = models.FloatField(null=True, blank=True)

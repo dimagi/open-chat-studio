@@ -121,7 +121,7 @@ class TestStripNodeData:
 @pytest.mark.django_db()
 class TestBackfillPositions:
     """The strip also mirrors each blob node's position onto the row's position columns,
-    which is what makes the rows a complete layout source for reads (ADR-0048)."""
+    which is what makes the rows a complete layout source for reads (ADR-0049)."""
 
     def test_copies_blob_positions_onto_rows(self, team):
         pipeline = _create_old_format_pipeline(team)
@@ -145,7 +145,7 @@ class TestBackfillPositions:
         assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
 
     def test_reads_serve_backfilled_positions_instead_of_the_origin(self, team):
-        """Why the backfill must ship with the read switch (ADR-0048): until it runs, a row
+        """Why the backfill must ship with the read switch (ADR-0049): until it runs, a row
         with NULL columns reads back at the origin, and the first save of that pipeline drops
         the blob holding the only copy of its real layout."""
         pipeline = _create_old_format_pipeline(team)
@@ -200,7 +200,7 @@ class TestBackfillPositions:
 @pytest.mark.django_db()
 class TestRebuildNodeData:
     """The reverse of the strip: rebuild the embedded blobs from the Node rows so that
-    pre-ADR-0048 code (which requires them) works again after a code rollback."""
+    pre-ADR-0049 code (which requires them) works again after a code rollback."""
 
     def test_rebuilds_blobs_from_rows(self, team):
         pipeline = _create_old_format_pipeline(team)
@@ -267,6 +267,6 @@ class TestMigration0030:
         assert rebuilt["end-1"]["position"] == {"x": 100, "y": 0}
         assert rebuilt["end-1"]["data"]["params"] == {"name": "end"}
         assert rebuilt["end-1"]["type"] == "endNode"
-        # the reverse must restore what pre-ADR-0048 code requires: a parseable full graph
+        # the reverse must restore what pre-ADR-0049 code requires: a parseable full graph
         assert pipeline.data["edges"] == _old_format_data()["edges"]
         assert pipeline.data["viewport"] == _old_format_data()["viewport"]

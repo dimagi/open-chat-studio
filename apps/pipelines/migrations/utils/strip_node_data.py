@@ -1,4 +1,4 @@
-"""Drop the ``nodes`` key from ``Pipeline.data`` and backfill row positions (ADR-0048).
+"""Drop the ``nodes`` key from ``Pipeline.data`` and backfill row positions (ADR-0049).
 
 Node content (type, label, params) and layout (position) are owned by the ``Node`` rows;
 ``Pipeline.data`` keeps only edges. This helper first mirrors each node's position from the
@@ -11,7 +11,7 @@ Idempotent and safe to rerun: rows already positioned produce no write, and data
 without a ``nodes`` key is skipped.
 
 The strip is a targeted key removal, so a ``viewport`` left over from an older blob stays put
-here. The flow models no longer carry that key (ADR-0048), so it falls away on the pipeline's
+here. The flow models no longer carry that key (ADR-0049), so it falls away on the pipeline's
 next save instead — nothing reads it in the meantime.
 
 Migration ``pipelines.0030_strip_node_data`` runs ``strip_node_data_from_pipelines``; its

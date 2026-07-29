@@ -21,7 +21,7 @@ def strip_node_data(apps, schema_editor):
 def rebuild_node_data(apps, schema_editor):
     """Reverse: rebuild the nodes list (with embedded content blobs) from the Node rows.
 
-    Pre-ADR-0048 code requires ``Pipeline.data["nodes"]``, so a code rollback needs it back.
+    Pre-ADR-0049 code requires ``Pipeline.data["nodes"]``, so a code rollback needs it back.
     The rows own both content and layout and are untouched by the strip, which makes them a
     complete source.
     """

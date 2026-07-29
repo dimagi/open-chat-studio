@@ -461,7 +461,7 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
             pipeline.name = patch.name
 
         # The patch engine works off the full current graph: nodes rebuilt from the rows,
-        # since Pipeline.data no longer lists them (ADR-0048).
+        # since Pipeline.data no longer lists them (ADR-0049).
         edge_data, node_data = apply_pipeline_patch(pipeline.flow_data, patch)
         pipeline.data = edge_data.model_dump()
         pipeline.edit_revision += 1

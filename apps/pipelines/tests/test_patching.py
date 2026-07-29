@@ -395,7 +395,7 @@ class TestPatchEndpoint:
         assert updated_node_in_db.label == "Updated end"
 
     def test_patch_shadow_writes_position_to_the_row(self, authed_client, pipeline, team_with_users):
-        """The rows own layout (ADR-0048), so a patched node's position is written to its
+        """The rows own layout (ADR-0049), so a patched node's position is written to its
         position columns — Pipeline.data holds no position to fall back on."""
         team_slug = team_with_users.slug
         node_id = pipeline.node_set.get(type=EndNode.__name__).flow_id

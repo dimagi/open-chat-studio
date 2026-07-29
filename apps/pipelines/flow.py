@@ -33,7 +33,7 @@ class FlowEdge(pydantic.BaseModel):
 
 
 class FlowWithoutNodes(pydantic.BaseModel):
-    """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0048).
+    """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0049).
 
     Base of the flow hierarchy — ``Flow`` adds optional nodes, ``FullFlow`` requires them.
 
@@ -49,7 +49,7 @@ class FlowWithoutNodes(pydantic.BaseModel):
 class Flow(FlowWithoutNodes):
     """A stored graph, which may or may not still list its nodes.
 
-    Layout-only ``Pipeline.data`` carries no ``nodes`` key (ADR-0048) while an un-migrated
+    Layout-only ``Pipeline.data`` carries no ``nodes`` key (ADR-0049) while an un-migrated
     blob still does, so nodes are optional here. Anywhere a *complete* graph is required,
     use ``FullFlow`` — this model reads an omitted ``nodes`` as an empty graph.
     """
@@ -86,7 +86,7 @@ def react_flow_node_type(node_type: str) -> str:
 
 def split_flow_data(flow: Flow) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
     """Split a graph into the part ``Pipeline.data`` stores — the edges, no ``nodes``
-    (ADR-0048) — and the complete node membership: content-carrying nodes map to themselves,
+    (ADR-0049) — and the complete node membership: content-carrying nodes map to themselves,
     content-less ones to ``None`` (membership only, so their row must already exist).
     """
     node_data: dict[str, FlowNode | None] = {node.id: node if node.data else None for node in flow.nodes}

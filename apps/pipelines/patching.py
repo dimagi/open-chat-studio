@@ -22,7 +22,7 @@ def apply_pipeline_patch(
     """Apply a semantic graph diff to ``current_flow`` and return ``(edge_data, node_data)``.
 
     ``current_flow`` is the full current graph — ``Pipeline.flow_data``, whose nodes are
-    rebuilt from the rows because ``Pipeline.data`` no longer lists them (ADR-0048).
+    rebuilt from the rows because ``Pipeline.data`` no longer lists them (ADR-0049).
 
     ``edge_data`` is the merged graph minus its nodes, ready to be dumped into
     ``Pipeline.data``.

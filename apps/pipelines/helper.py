@@ -7,7 +7,7 @@ from apps.pipelines.flow import FlowNode, FlowNodeData
 def duplicate_pipeline_with_new_ids(pipeline_data, node_types: dict[str, str]):
     """Generate fresh node ids and rewrite the edges of a layout-only graph.
 
-    ``Pipeline.data`` no longer lists nodes (ADR-0048), so membership and the id-to-type
+    ``Pipeline.data`` no longer lists nodes (ADR-0049), so membership and the id-to-type
     mapping come from ``node_types`` (flow_id -> ``Node.type``, built from the rows). Reserved
     start/end nodes get an opaque uuid; other nodes keep human-readable ids
     (``LLMResponseWithPrompt-a1b2c``). The node content itself lives on the rows and is
@@ -63,7 +63,7 @@ def create_pipeline_with_nodes(team, name, middle_node=None):
 def _create_pipeline(team, name, all_flow_nodes, edges):
     from apps.pipelines.models import Pipeline  # noqa: PLC0415 - circular: models.py imports helper at module level
 
-    # Stored data is layout-only (ADR-0048): the nodes go to their own rows.
+    # Stored data is layout-only (ADR-0049): the nodes go to their own rows.
     pipeline = Pipeline.objects.create(team=team, name=name, data={"edges": edges})
     pipeline.update_nodes_from_data({node.id: node for node in all_flow_nodes})
     return pipeline
