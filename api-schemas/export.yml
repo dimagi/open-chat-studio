@@ -3562,6 +3562,12 @@ components:
 
             * `message` - Message
             * `session` - Session
+        llm_provider:
+          type: integer
+          nullable: true
+        llm_provider_model:
+          type: integer
+          nullable: true
       required:
       - created_at
       - id
