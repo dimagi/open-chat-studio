@@ -216,7 +216,9 @@ class Evaluator(BaseTeamModel):
         *,
         usage_context: EvaluatorUsageContext | None = None,
     ) -> EvaluatorResult:
-        return self.evaluator(**self.get_evaluator_params()).run(message, generated_response, usage_context=usage_context)
+        return self.evaluator(**self.get_evaluator_params()).run(
+            message, generated_response, usage_context=usage_context
+        )
 
     def get_absolute_url(self):
         return reverse("evaluations:evaluator_edit", args=[get_slug_for_team(self.team_id), self.id])
