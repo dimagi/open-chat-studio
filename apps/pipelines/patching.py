@@ -22,11 +22,10 @@ def apply_pipeline_patch(
     """Apply a semantic graph diff to ``current_flow`` and return ``(layout, node_data)``.
 
     ``current_flow`` is the full current graph — ``Pipeline.flow_data``, whose nodes are
-    rebuilt from the rows because ``Pipeline.data`` no longer lists them (ADR-0048), and
-    which carries the stored top-level keys (viewport) straight through.
+    rebuilt from the rows because ``Pipeline.data`` no longer lists them (ADR-0048).
 
-    ``layout`` is the merged graph minus its nodes (edges, viewport and unknown top-level
-    keys preserved), ready to be dumped into ``Pipeline.data``.
+    ``layout`` is the merged graph minus its nodes, ready to be dumped into
+    ``Pipeline.data``.
 
     ``node_data`` is the complete membership of the merged graph, ready for
     ``update_nodes_from_data(node_data)`` — which the caller must still invoke after saving.

@@ -44,9 +44,10 @@ def test_import_pipeline_from_old_format_file(tmp_path):
 
 
 @pytest.mark.django_db()
-def test_import_preserves_unknown_top_level_keys(tmp_path):
-    """Requiring ``nodes`` must not also discard the file's viewport: dropping unknown keys
-    is an HTTP-input rule, not a property of a complete graph."""
+def test_import_drops_unknown_top_level_keys(tmp_path):
+    """An export file may carry keys the graph does not model (older exports have a
+    viewport). They are dropped rather than persisted, so the stored blob holds only
+    edges and errors."""
     team = TeamFactory()
     file_path = tmp_path / "pipeline.json"
     file_path.write_text(json.dumps({**_old_format_flow(), "viewport": {"x": 9, "y": 9, "zoom": 2}}))
@@ -54,7 +55,7 @@ def test_import_preserves_unknown_top_level_keys(tmp_path):
     call_command("import_pipeline", team.slug, "Imported", str(file_path))
 
     pipeline = Pipeline.objects.get(team=team, name="Imported")
-    assert pipeline.data["viewport"] == {"x": 9, "y": 9, "zoom": 2}
+    assert "viewport" not in pipeline.data
 
 
 @pytest.mark.django_db()

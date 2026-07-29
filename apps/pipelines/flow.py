@@ -36,10 +36,11 @@ class FlowWithoutNodes(pydantic.BaseModel):
     """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0048).
 
     Base of the flow hierarchy — ``Flow`` adds optional nodes, ``FullFlow`` requires them.
-    """
 
-    # Keep unknown top-level keys (viewport) so a stored graph survives the round trip.
-    model_config = pydantic.ConfigDict(extra="allow")
+    Unknown top-level keys are dropped, wherever the graph came from. A save rewrites
+    ``Pipeline.data`` from the parsed graph, so the stored blob only ever holds what is
+    modelled here — no caller, and no older blob, can smuggle a key past it.
+    """
 
     edges: list[FlowEdge]
     errors: dict[str, dict[str, str]] = Field(default_factory=dict)
@@ -61,18 +62,10 @@ class FullFlow(Flow):
 
     An omitted ``nodes`` is a malformed payload, not an empty graph: treating it as empty
     would reconcile every node row away on save. The requirement is not transport-specific
-    — any caller handing over a whole graph must state its nodes. Unknown top-level keys are
-    still preserved (inherited ``extra="allow"``), so an import file keeps its viewport.
+    — any caller handing over a whole graph must state its nodes.
     """
 
     nodes: list[FlowNode]
-
-
-class WireFlow(FullFlow):
-    """A complete graph arriving over HTTP. Unknown keys from a client are dropped rather
-    than persisted — which also means a POST save does not carry a viewport, unlike PATCH."""
-
-    model_config = pydantic.ConfigDict(extra="ignore")
 
 
 #: React-flow node types. ``Node.type`` (the pipeline node class name) maps onto one of
@@ -114,8 +107,10 @@ def node_position_fields(position) -> dict:
 
 
 class FlowPipelineData(pydantic.BaseModel):
+    """A full-graph save arriving over HTTP."""
+
     name: str
-    data: WireFlow
+    data: FullFlow
     experiment_name: str | None = Field(default=None, min_length=1)
 
 

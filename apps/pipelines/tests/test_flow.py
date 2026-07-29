@@ -46,12 +46,12 @@ class TestSplitFlowData:
         assert node_data["start-1"].data.type == "StartNode"
         assert node_data["start-1"].position == {"x": 100, "y": 200}
 
-    def test_preserves_edges_and_unknown_top_level_keys(self):
+    def test_preserves_edges_and_drops_unknown_top_level_keys(self):
         flow = _full_flow()
         layout, _ = split_flow_data(flow)
 
         assert layout.edges == flow.edges
-        assert layout.model_dump()["viewport"] == {"x": 0, "y": 0, "zoom": 1}
+        assert "viewport" not in layout.model_dump()
 
     def test_content_less_nodes_are_membership_only(self):
         """A node with no ``data`` maps to None: it stays part of the graph membership (so its

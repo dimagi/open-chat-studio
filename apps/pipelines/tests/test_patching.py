@@ -165,11 +165,11 @@ class TestApplyPipelinePatch:
         assert node_data["start"] is None
         assert node_data["end"] is None
 
-    def test_viewport_preserved(self):
+    def test_unknown_top_level_keys_dropped(self):
         graph = self._sample_graph()
         patch = PipelineDiffPayload(base_revision=0)
         layout, _ = apply_pipeline_patch(graph, patch)
-        assert layout.model_dump()["viewport"] == {"x": 0, "y": 0, "zoom": 1}
+        assert "viewport" not in layout.model_dump()
 
     def test_no_op_patch(self):
         graph = self._sample_graph()
@@ -465,9 +465,9 @@ class TestPatchEndpoint:
         response_nodes = {n["id"]: n for n in response.json()["data"]["nodes"]}
         assert response_nodes["llm-new"]["data"]["label"] == "New LLM"
 
-    def test_patch_preserves_stored_viewport(self, authed_client, pipeline, team_with_users):
-        """flow_data carries the stored viewport through to the PATCH engine, which returns
-        it in the layout; a patch touching only a node must leave the viewport intact."""
+    def test_patch_drops_stored_unknown_keys(self, authed_client, pipeline, team_with_users):
+        """A save rewrites Pipeline.data from the parsed graph, which models only edges and
+        errors; an unknown key left over in a stored blob does not survive the round trip."""
         team_slug = team_with_users.slug
         pipeline.data = {**pipeline.data, "viewport": {"x": 12, "y": 34, "zoom": 2}}
         pipeline.save(update_fields=["data"])
@@ -495,7 +495,7 @@ class TestPatchEndpoint:
         )
         assert response.status_code == 200
         pipeline.refresh_from_db()
-        assert pipeline.data["viewport"] == {"x": 12, "y": 34, "zoom": 2}
+        assert "viewport" not in pipeline.data
         assert "nodes" not in pipeline.data
 
     def test_patch_does_not_rewrite_rows_from_stale_stored_blob(self, authed_client, pipeline, team_with_users):

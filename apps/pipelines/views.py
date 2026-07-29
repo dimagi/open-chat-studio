@@ -389,9 +389,7 @@ def pipeline_data(request, team_slug: str, pk: int):
     try:
         pipeline = Pipeline.objects.get(pk=pk)
     except Pipeline.DoesNotExist:
-        pipeline = Pipeline.objects.create(
-            id=pk, team=request.team, data={"edges": [], "viewport": {}}, name="New Pipeline"
-        )
+        pipeline = Pipeline.objects.create(id=pk, team=request.team, data={"edges": []}, name="New Pipeline")
     return JsonResponse(
         {
             "pipeline": {
@@ -463,8 +461,7 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
             pipeline.name = patch.name
 
         # The patch engine works off the full current graph: nodes rebuilt from the rows,
-        # since Pipeline.data no longer lists them (ADR-0048). flow_data already carries the
-        # stored top-level keys (viewport) through Flow's extra="allow", so it is complete.
+        # since Pipeline.data no longer lists them (ADR-0048).
         layout, node_data = apply_pipeline_patch(pipeline.flow_data, patch)
         pipeline.data = layout.model_dump()
         pipeline.edit_revision += 1

@@ -235,8 +235,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def flow_data(self) -> dict:
         """The full react-flow graph, rebuilt from the ``Node`` rows.
 
-        ``self.data`` supplies only edges (and viewport when present); each node's content,
-        layout position and react-flow type come from its ``Node`` row (ADR-0048).
+        ``self.data`` supplies only the edges; each node's content, layout position and
+        react-flow type come from its ``Node`` row (ADR-0048).
         """
         # ``edges`` is required, so stand in for data that is empty or missing entirely; the
         # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
