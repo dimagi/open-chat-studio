@@ -11,7 +11,7 @@ from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.pipelines.tests.utils import end_node, passthrough_node, start_node
-from apps.utils.factories.pipelines import PipelineFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 
 @pytest.mark.django_db()
@@ -269,6 +269,24 @@ def test_remove_start_end_nodes(team):
         "sourceHandle": "output",
         "targetHandle": "input",
     }
+
+
+@pytest.mark.django_db()
+def test_remove_start_end_nodes_with_pipeline_that_lists_no_nodes(team):
+    """The sweep covers every pipeline in the DB, so it meets ADR-0049 data too: no ``nodes``
+    key, membership owned by the rows. It has to delete the row rather than read the list —
+    and must not read the missing list as "no nodes", which would take every row with it.
+    """
+    pipeline = PipelineFactory.create(team=team)
+    assert "nodes" not in pipeline.data
+    passthrough = NodeFactory.create(pipeline=pipeline)
+
+    remove_all_start_end_nodes(Node)
+    pipeline.refresh_from_db()
+
+    assert set(pipeline.node_set.values_list("flow_id", flat=True)) == {passthrough.flow_id}
+    assert "nodes" not in pipeline.data
+    assert pipeline.data["edges"] == []
 
 
 @pytest.mark.django_db()
