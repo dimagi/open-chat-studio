@@ -6,6 +6,7 @@ from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
 from django.core.files.base import ContentFile
+from django.http import QueryDict
 from django.utils import timezone
 from langchain_core.messages import AIMessage, HumanMessage
 from taskbadger.celery import Task as TaskbadgerTask
@@ -27,9 +28,13 @@ logger = get_task_logger("ocs.experiments")
 
 
 @shared_task(bind=True, base=TaskbadgerTask)
-def async_export_chat(self, experiment_id: int, query_params: dict, time_zone) -> dict:
+def async_export_chat(self, experiment_id: int, query_params: str, time_zone) -> dict:
+    # The filters need a QueryDict (multi-value params, `.getlist()`), but Celery's JSON
+    # serializer would flatten one into a plain dict, so the caller passes the raw query
+    # string and we rebuild it here.
+    query_dict = QueryDict(query_params)
     experiment = Experiment.objects.get(id=experiment_id)
-    filtered_sessions = get_filtered_sessions(experiment, query_params, time_zone)
+    filtered_sessions = get_filtered_sessions(experiment, query_dict, time_zone)
     filename = f"{experiment.name} Chat Export {timezone.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv.gz"
 
     progress_recorder = ProgressRecorder(self)
