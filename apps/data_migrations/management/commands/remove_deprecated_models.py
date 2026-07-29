@@ -89,30 +89,7 @@ class Command(IdempotentCommand):
         for db_model, replacement_name, replacement_model in models_to_delete:
             db_model_id = db_model.id  # Capture before delete sets pk to None
 
-            # Evaluators keep a copy of the model id in params for the form UI, so they are
-            # repointed through the model method that moves params and FK together. Has to
-            # happen before the generic FK pass, which would otherwise claim them first.
-            new_value = replacement_model.id if replacement_model else None
-            for evaluator in db_model.evaluators.all():
-                evaluator.set_llm_provider_model_id(new_value)
-
-            # Update FK references (assistants, analyses, etc.) to replacement, or let cascade handle them
-            if replacement_model:
-                for obj in get_related_objects(db_model):
-                    fields_to_update = [
-                        f
-                        for f in obj._meta.fields
-                        if f.related_model == LlmProviderModel and getattr(obj, f.attname) == db_model.id
-                    ]
-                    for field in fields_to_update:
-                        setattr(obj, field.attname, replacement_model.id)
-                    if fields_to_update:
-                        obj.save(update_fields=[f.name for f in fields_to_update])
-
-            # Update pipeline node references (stored as JSON params, not DB FKs)
-            related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
-            for node in related_pipeline_nodes.all():
-                _update_pipeline_node_param(node, "llm_provider_model_id", new_value)
+            self._repoint_references(db_model, replacement_model)
 
             # Delete the model (bypass custom delete to avoid related-object pre-checks)
             super(LlmProviderModel, db_model).delete()
@@ -131,3 +108,31 @@ class Command(IdempotentCommand):
 
         self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} models"))
         return f"Removed {total_deleted} models, notified {total_teams} teams"
+
+    def _repoint_references(self, db_model, replacement_model):
+        """Move every reference to ``db_model`` onto ``replacement_model`` (or clear it) before delete."""
+        new_value = replacement_model.id if replacement_model else None
+
+        # Evaluators keep a copy of the model id in params for the form UI, so they are
+        # repointed through the model method that moves params and FK together. Has to
+        # happen before the generic FK pass, which would otherwise claim them first.
+        for evaluator in db_model.evaluators.all():
+            evaluator.set_llm_provider_model_id(new_value)
+
+        # Update FK references (assistants, analyses, etc.) to replacement, or let cascade handle them
+        if replacement_model:
+            for obj in get_related_objects(db_model):
+                fields_to_update = [
+                    f
+                    for f in obj._meta.fields
+                    if f.related_model == LlmProviderModel and getattr(obj, f.attname) == db_model.id
+                ]
+                for field in fields_to_update:
+                    setattr(obj, field.attname, replacement_model.id)
+                if fields_to_update:
+                    obj.save(update_fields=[f.name for f in fields_to_update])
+
+        # Update pipeline node references (stored as JSON params, not DB FKs)
+        related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
+        for node in related_pipeline_nodes.all():
+            _update_pipeline_node_param(node, "llm_provider_model_id", new_value)
