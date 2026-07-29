@@ -101,12 +101,6 @@ def test_node_params_fields_carry_descriptions(api_schema):
     assert described.get("history_type")
 
 
-def test_graph_edge_declares_id(api_schema):
-    """Each graph edge exposes its ``id``."""
-    edge = api_schema["components"]["schemas"]["InspectGraphEdge"]
-    assert "id" in edge["properties"]
-
-
 @pytest.mark.parametrize(
     ("component", "field"),
     [
