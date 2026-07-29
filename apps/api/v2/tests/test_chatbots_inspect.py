@@ -397,7 +397,7 @@ def test_unknown_version_404(inspect_bot):
 
 
 # ── Top-level build state (pipeline_valid / errors / unwired_handles) ────────────────────────────
-def _build_state_bot(**kwargs):
+def _build_state_bot():
     """A bot with a valid, fully wired start -> end pipeline.
 
     ``PipelineFactory``'s default data seeds start/end nodes without a ``name`` param, which
@@ -405,12 +405,10 @@ def _build_state_bot(**kwargs):
     validation tests use (it names every node).
     """
     team = TeamWithUsersFactory.create()
-    if "pipeline" not in kwargs:
-        pipeline = PipelineFactory.create(team=team)
-        create_pipeline_model([start_node(), end_node()], pipeline=pipeline)
-        pipeline.save()  # create_pipeline_model mutates pipeline.data without persisting it
-        kwargs["pipeline"] = pipeline
-    return ExperimentFactory.create(team=team, **kwargs)
+    pipeline = PipelineFactory.create(team=team)
+    create_pipeline_model([start_node(), end_node()], pipeline=pipeline)
+    pipeline.save()  # create_pipeline_model mutates pipeline.data without persisting it
+    return ExperimentFactory.create(team=team, pipeline=pipeline)
 
 
 @pytest.mark.django_db()
@@ -455,14 +453,6 @@ def test_build_state_present_on_version_reads():
     assert payload["pipeline_valid"] is True
     assert payload["errors"] == {"node": {}, "edge": [], "pipeline": None}
     assert payload["unwired_handles"] == {}
-
-
-@pytest.mark.django_db()
-def test_experiment_without_pipeline_is_not_a_chatbot():
-    """A pipeline is what makes an Experiment a chatbot, so a pipeline-less one isn't inspectable
-    (and the build-state fields never have to describe a missing pipeline)."""
-    experiment = _build_state_bot(pipeline=None)
-    assert _client(experiment).get(_inspect_url(experiment)).status_code == 404
 
 
 # ── Full response body ───────────────────────────────────────────────────────────────────────────

@@ -46,10 +46,8 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     lookup_url_kwarg = "id"
 
     def get_queryset(self):
-        # ``pipeline__isnull=False`` is what makes an Experiment a chatbot (matching the chatbots UI
-        # list), so a pipeline-less legacy experiment is not addressable here.
         return (
-            Experiment.objects.filter(team=self.request.team, working_version__isnull=True, pipeline__isnull=False)
+            Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
             .select_related("team")
             .prefetch_related("versions")
         )
