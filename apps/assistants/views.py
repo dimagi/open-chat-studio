@@ -68,7 +68,7 @@ class OpenAiAssistantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Te
         }
 
 
-class OpenAiAssistantTableView(PermissionRequiredMixin, SingleTableView):
+class OpenAiAssistantTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     template_name = "table/single_table.html"
     table_class = OpenAiAssistantTable
     permission_required = "assistants.view_openaiassistant"
@@ -92,7 +92,7 @@ class BaseOpenAiAssistantView(LoginAndTeamRequiredMixin, PermissionRequiredMixin
             "title": self.title,
             "button_text": self.button_text,
             "active_tab": "assistants",
-            "form_attrs": {"x-data": "assistant", "enctype": "multipart/form-data"},
+            "form_attrs": {"enctype": "multipart/form-data"},
             "llm_options": get_llm_provider_choices(self.request.team),
         }
 
@@ -126,7 +126,8 @@ class CreateOpenAiAssistant(BaseOpenAiAssistantView, CreateView):
         self.object = form.save()
         resource_formsets.save(self.request, self.object)
         try:
-            push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
+            with transaction.atomic():
+                push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing assistant to OpenAI: {e}")
             return self.form_invalid(form)
@@ -149,7 +150,8 @@ class EditOpenAiAssistant(BaseOpenAiAssistantView, UpdateView):
         if "file_search" in self.object.builtin_tools:
             ToolResources.objects.get_or_create(assistant=self.object, tool_type="file_search")
         try:
-            push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
+            with transaction.atomic():
+                push_assistant_to_openai(self.object, internal_tools=get_assistant_tools(self.object))
         except OpenAiSyncError as e:
             messages.error(self.request, f"Error syncing changes to OpenAI: {e}")
             form.add_error(None, str(e))

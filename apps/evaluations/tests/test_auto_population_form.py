@@ -34,10 +34,29 @@ def test_form_rejects_invalid_filter_query():
         data={
             "source_experiment": experiment.id,
             # Half-formed query (missing operator/value pairs):
-            "filter_query_string": "filter_0_column=tags",
+            "filter_query_string": "f_tags=tag1",
             "is_enabled": True,
         },
     )
+    assert not form.is_valid()
+    assert "filter_query_string" in form.errors
+
+
+@pytest.mark.django_db()
+def test_form_rejects_legacy_filter_query():
+    dataset = EvaluationDatasetFactory.create(evaluation_mode="session")
+    experiment = ExperimentFactory.create(team=dataset.team)
+
+    form = DatasetAutoPopulationRuleForm(
+        team=dataset.team,
+        dataset=dataset,
+        data={
+            "source_experiment": experiment.id,
+            "filter_query_string": "filter_0_column=tags&filter_0_operator=any%20of&filter_0_value=tag1~tag2",
+            "is_enabled": True,
+        },
+    )
+
     assert not form.is_valid()
     assert "filter_query_string" in form.errors
 

@@ -199,7 +199,7 @@ def test_delete_view_does_not_block_when_only_archived_pipeline_references_actio
 
 
 @pytest.mark.django_db()
-def test_cleanup_command_strips_stale_refs_from_node_and_pipeline(team_with_users):
+def test_cleanup_command_strips_stale_refs_from_node(team_with_users):
     stale_action = CustomActionFactory.create(team=team_with_users)
     live_action = CustomActionFactory.create(team=team_with_users)
     llm_provider = LlmProviderFactory.create(team=team_with_users)
@@ -221,16 +221,12 @@ def test_cleanup_command_strips_stale_refs_from_node_and_pipeline(team_with_user
     _force_delete_custom_action(stale_action)
 
     node.refresh_from_db()
-    pipeline.refresh_from_db()
     assert node.params["custom_actions"] == [stale_ref, live_ref]
-    assert pipeline.data["nodes"][1]["data"]["params"]["custom_actions"] == [stale_ref, live_ref]
 
     call_command("cleanup_stale_custom_action_refs")
 
     node.refresh_from_db()
-    pipeline.refresh_from_db()
     assert node.params["custom_actions"] == [live_ref]
-    assert pipeline.data["nodes"][1]["data"]["params"]["custom_actions"] == [live_ref]
     # The still-live operation must survive the cleanup.
     assert CustomActionOperation.objects.filter(node=node, custom_action=live_action).exists()
 
@@ -251,16 +247,12 @@ def test_cleanup_command_is_idempotent_and_dry_run_leaves_data_untouched(team_wi
 
     call_command("cleanup_stale_custom_action_refs", "--dry-run")
     node.refresh_from_db()
-    pipeline.refresh_from_db()
     assert node.params["custom_actions"] == [stale_ref]
-    assert pipeline.data["nodes"][1]["data"]["params"]["custom_actions"] == [stale_ref]
 
     call_command("cleanup_stale_custom_action_refs")
     call_command("cleanup_stale_custom_action_refs")
     node.refresh_from_db()
-    pipeline.refresh_from_db()
     assert node.params["custom_actions"] == []
-    assert pipeline.data["nodes"][1]["data"]["params"]["custom_actions"] == []
     # Ensure there are no orphan CustomActionOperation rows referencing the deleted action.
     assert not CustomActionOperation.objects.filter(custom_action_id=action.id).exists()
     assert Node.objects.filter(pk=node.pk).exists()

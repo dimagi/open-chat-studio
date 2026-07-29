@@ -4,6 +4,7 @@ from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
+from field_audit.models import AuditAction
 from langchain_core.documents import Document
 
 from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig, JSONCollectionSourceConfig
@@ -12,6 +13,7 @@ from apps.documents.document_source_service import (
     DocumentSourceManager,
     _safe_external_id,
 )
+from apps.documents.exceptions import DocumentSourceDeleted
 from apps.documents.models import (
     Collection,
     CollectionFile,
@@ -296,6 +298,32 @@ class TestDocumentSourceManager:
         assert file.name == "My Doc.pdf"
         assert file.file.read() == b"v2"
 
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_update_file_clears_stale_failure_reason(self, create_loader, collection, document_source):
+        """A re-sync of a previously failed file must clear failure_reason along with status,
+        otherwise the pending badge still shows the old error in its tooltip until the Celery
+        indexing task eventually clears it.
+        """
+        url = "https://example.com/files/doc.pdf"
+        docs = [Mock(page_content="v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+        manager.sync_collection()
+
+        collection_file = CollectionFile.objects.get(collection=collection)
+        collection_file.status = FileStatus.FAILED
+        collection_file.failure_reason = "ValueError: old error"
+        collection_file.save(update_fields=["status", "failure_reason"])
+
+        updated_docs = [Mock(page_content="v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
+        create_loader.return_value = MockLoader(collection, updated_docs)
+        manager.sync_collection()
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.PENDING
+        assert collection_file.failure_reason == ""
+
     def test_sync_log_created(self, document_source):
         initial_count = DocumentSourceSyncLog.objects.count()
 
@@ -316,6 +344,43 @@ class TestDocumentSourceManager:
         sync_log = DocumentSourceSyncLog.objects.latest("sync_date")
         assert sync_log.document_source == document_source
         assert sync_log.status == SyncStatus.SUCCESS
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_sync_aborts_when_source_deleted_mid_sync(self, create_loader, collection, document_source):
+        """Deleting the source mid-sync aborts the whole run instead of crashing on a dangling FK.
+
+        Regression: the source is fetched once at the start of a long sync; if a user deletes
+        it before the sync persists its results, writes against the now-missing foreign key
+        used to raise an unhandled IntegrityError/DatabaseError and crash the task.
+        """
+        source_id = document_source.id
+
+        class _DeletingLoader(MockLoader):
+            def load_documents(self) -> Iterator[Document]:
+                # Simulate a user deleting the source while documents are being loaded.
+                DocumentSource.objects.filter(id=source_id).delete(audit_action=AuditAction.AUDIT)
+                yield Mock(page_content="# Doc", metadata={"source": "test.md", "sha": "abc", "source_type": "test"})
+
+        loader = _DeletingLoader(collection, [])
+        create_loader.return_value = loader
+
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+
+        with pytest.raises(DocumentSourceDeleted):
+            manager.sync_collection()
+
+        # Nothing is indexed and no orphaned files survive the aborted run.
+        manager._index_files.assert_not_called()
+        assert not CollectionFile.objects.filter(collection=collection).exists()
+
+    def test_sync_aborts_when_source_already_gone(self, document_source):
+        """If the source disappears before any documents load, sync aborts immediately."""
+        manager = DocumentSourceManager(document_source)
+        DocumentSource.objects.filter(id=document_source.id).delete(audit_action=AuditAction.AUDIT)
+
+        with pytest.raises(DocumentSourceDeleted):
+            manager.sync_collection()
 
 
 @pytest.mark.django_db()

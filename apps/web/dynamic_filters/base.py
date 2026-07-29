@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Literal
 from django.db.models import Q, QuerySet
 from pydantic import BaseModel, Field, computed_field
 
-from .datastructures import FilterParams
+from .datastructures import ColumnFilterData, FilterParams
 
 logger = logging.getLogger("ocs.filters")
 
@@ -127,9 +127,10 @@ class ColumnFilter(BaseModel):
     Abstract base class for a single column filter.
 
     Each `ColumnFilter` implementation is responsible for applying a specific filter to a queryset.
-    It bridges the gap between URL query parameters and ORM filters. When a request contains a
-    `filter_{i}_column` parameter that matches the `query_param` of a `ColumnFilter`, this filter
-    processes the associated operator and value to generate the appropriate database query.
+    It bridges the gap between URL query parameters and ORM filters. When a request contains an
+    `f_<query_param>` value parameter (paired with an `op_<query_param>` operator parameter) whose
+    `<query_param>` matches this filter's `query_param`, this filter processes the associated
+    operator and value to generate the appropriate database query.
 
     Attributes:
         query_param: The name of the query parameter used in the URL to identify this filter.
@@ -161,10 +162,18 @@ class ColumnFilter(BaseModel):
         return query_value
 
     def apply(self, queryset: QuerySet, filter_params: FilterParams, timezone=None) -> QuerySet:
-        column_filter = filter_params.get(self.query_param)
-        if not column_filter:
-            return queryset
+        """Apply every filter targeting this column, combining them with AND.
 
+        A column may appear more than once — the UI expresses a date range as
+        ``after X`` plus ``before Y`` on the same column — so each one narrows the
+        queryset further.
+        """
+        for column_filter in filter_params.get_all(self.query_param):
+            if column_filter:
+                queryset = self._apply_one(queryset, column_filter, timezone)
+        return queryset
+
+    def _apply_one(self, queryset: QuerySet, column_filter: ColumnFilterData, timezone=None) -> QuerySet:
         operator = column_filter.operator.replace(" ", "_").lower()
         if method := getattr(self, f"apply_{operator}", None):
             parsed_value = self.parse_query_value(column_filter.value)

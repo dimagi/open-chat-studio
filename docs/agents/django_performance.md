@@ -7,12 +7,15 @@ Avoid importing heavy AI/ML libraries at module level to keep Django startup tim
 from langchain_google_vertexai import ChatVertexAI
 from langchain_anthropic import ChatAnthropic
 
+
 def get_model():
     return ChatVertexAI(...)
+
 
 # ✅ GOOD - lazy import inside method (fast startup)
 def get_model():
     from langchain_google_vertexai import ChatVertexAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
+
     return ChatVertexAI(...)
 ```
 

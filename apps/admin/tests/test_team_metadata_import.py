@@ -116,7 +116,7 @@ class TestImportTeamMetadataFromCsv:
 @pytest.mark.django_db()
 class TestImportTeamMetadataView:
     def _url(self):
-        return reverse("ocs_admin:import_team_metadata")
+        return reverse("ocs_admin:team_metadata")
 
     def test_non_staff_blocked(self, client):
         user = CustomUser.objects.create(username="member@acme.com")

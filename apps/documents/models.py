@@ -1,7 +1,10 @@
 from collections.abc import Iterator
+from datetime import timedelta
 
 from django.db import models, transaction
+from django.db.models.expressions import Combinable
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 from django_pydantic_field import SchemaField
@@ -35,6 +38,31 @@ class FileStatus(models.TextChoices):
     FAILED = "failed", _("Failed")
 
 
+# Statuses whose chunks cannot be trusted: either indexing never finished, or it is about to
+# start again. In every case any chunks currently stored for the file are stale or partial.
+UNINDEXED_FILE_STATUSES = [FileStatus.PENDING, FileStatus.IN_PROGRESS, FileStatus.FAILED]
+
+FAILURE_REASON_MAX_LENGTH = 500
+
+
+def format_failure_reason(exc: Exception) -> str:
+    """Render an exception as a short, single-line reason fit for display in the UI.
+
+    Provider errors are neither short nor single-line: an OpenAI 4xx arrives as a multi-line
+    blob with the response body embedded, and this string is rendered into a tooltip. The
+    exception class name is kept because provider messages alone are often ambiguous about
+    whether the fault is auth, quota, or input.
+    """
+    # NUL bytes and lone surrogates (surrogateescape-decoded filenames in OSError messages) both
+    # fail the Postgres save -- and a surrogate raises UnicodeEncodeError, which is not a
+    # DatabaseError, so it would escape add_files' recovery block and strand the whole batch.
+    # Same precedent as the NUL-stripping in add_files' chunk handling.
+    message = " ".join(str(exc).replace("\x00", "").split())
+    message = message.encode("utf-8", errors="replace").decode("utf-8")
+    reason = f"{type(exc).__name__}: {message}" if message else type(exc).__name__
+    return reason[:FAILURE_REASON_MAX_LENGTH]
+
+
 class CollectionFileQuerySet(models.QuerySet):
     def is_manually_uploaded(self):
         return self.filter(document_source__isnull=True)
@@ -53,6 +81,10 @@ class CollectionFile(models.Model):
     collection = models.ForeignKey("documents.Collection", on_delete=models.CASCADE)
     document_source = models.ForeignKey("documents.DocumentSource", on_delete=models.CASCADE, null=True)
     status = models.CharField(max_length=64, choices=FileStatus.choices, blank=True)
+    failure_reason = models.TextField(
+        blank=True,
+        help_text="Why the most recent indexing attempt failed. Cleared when the file is re-indexed.",
+    )
     metadata = SchemaField(schema=CollectionFileMetadata, null=True)
     external_id = models.CharField(max_length=255, blank=True, help_text="ID of file in document source")
 
@@ -73,6 +105,23 @@ class CollectionFile(models.Model):
     @property
     def status_enum(self):
         return FileStatus(self.status)
+
+
+def chunk_from_indexed_file() -> Combinable:
+    """Filter expression dropping `FileChunkEmbedding` rows whose file has not indexed cleanly.
+
+    Excludes `UNINDEXED_FILE_STATUSES` rather than requiring COMPLETED because
+    `create_new_version` adds files via `files.add(...)`, leaving `status` blank, so requiring
+    COMPLETED would return no chunks at all for published collections. Correlates on collection
+    as well as file, since a file can fail in one collection while indexing cleanly in another.
+    """
+    return ~models.Exists(
+        CollectionFile.objects.filter(
+            file_id=models.OuterRef("file_id"),
+            collection_id=models.OuterRef("collection_id"),
+            status__in=UNINDEXED_FILE_STATUSES,
+        )
+    )
 
 
 @audit_fields(
@@ -230,8 +279,12 @@ class Collection(BaseTeamModel, VersionsMixin):
                 if collection_files := CollectionFile.objects.filter(collection_id=new_version.id):
                     index_collection_files(collection_files)
             else:
-                # Create versions of file chunk embeddings and add them to the new collection
-                for embedding in self.filechunkembedding_set.iterator(chunk_size=50):
+                # Create versions of file chunk embeddings and add them to the new collection.
+                # A version's CollectionFile rows carry a blank status, so anything copied here is
+                # trusted forever: chunks of a file that never indexed cleanly must not be laundered
+                # into the version that way.
+                embeddings = self.filechunkembedding_set.filter(chunk_from_indexed_file())
+                for embedding in embeddings.iterator(chunk_size=50):
                     # Skip embeddings for files that are no longer in the collection
                     if embedding.file_id not in file_versions:
                         continue
@@ -376,6 +429,13 @@ class DocumentSourceManager(VersionsObjectManagerMixin, AuditingManager):
     pass
 
 
+# A sync lock (``sync_task_id`` + ``sync_started_at``) older than this is treated as stale
+# and may be reclaimed. This guards against a worker dying (SIGKILL/OOM/deploy restart)
+# mid-sync and leaving a lock set forever, which would otherwise exclude the source from
+# both scheduled and manual syncs with no way to recover.
+SYNC_LOCK_TIMEOUT = timedelta(hours=2)
+
+
 @audit_fields(
     "collection",
     "source_type",
@@ -399,6 +459,9 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
     sync_task_id = models.CharField(
         max_length=40, blank=True, default="", help_text="System ID of the sync task, if present."
     )
+    sync_started_at = models.DateTimeField(
+        null=True, blank=True, help_text="When the current sync task acquired its lock."
+    )
     auth_provider = models.ForeignKey("service_providers.AuthProvider", on_delete=models.PROTECT, blank=True, null=True)
     working_version = models.ForeignKey(
         "self",
@@ -417,6 +480,19 @@ class DocumentSource(BaseTeamModel, VersionsMixin):
     @property
     def source_type_enum(self):
         return SourceType(self.source_type)
+
+    @property
+    def is_sync_in_progress(self) -> bool:
+        """Whether a sync lock is currently held and still fresh.
+
+        A lock held past ``SYNC_LOCK_TIMEOUT`` — or one with no recorded start time (e.g. a
+        row locked by a previous release before ``sync_started_at`` existed) — is considered
+        stale (its owning task is presumed dead) and reported as not in progress so it can be
+        reclaimed rather than blocking the source forever.
+        """
+        if not self.sync_task_id or self.sync_started_at is None:
+            return False
+        return timezone.now() - self.sync_started_at <= SYNC_LOCK_TIMEOUT
 
     @property
     def source_config(self):

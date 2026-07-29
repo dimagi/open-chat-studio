@@ -31,7 +31,7 @@ class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
         }
 
 
-class TraceTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class TraceTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     template_name = "table/single_table.html"
     model = Trace
     table_class = TraceTable

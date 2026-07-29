@@ -20,12 +20,13 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Literal
 
 from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import Experiment
-from apps.utils.deletion import get_related_objects
+from apps.utils.deletion import get_related_evaluators_queryset, get_related_objects
 
 from .utils import ServiceProvider
 
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 MatchMode = Literal["exact", "suffix", "contains"]
 
-_PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG = {
+_PARAM_KEY_BY_PROVIDER_SLUG = {
     ServiceProvider.llm.slug: "llm_provider_id",
 }
 
@@ -42,14 +43,54 @@ _PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG = {
 # so showing them on the usages page just adds noise.
 _EXCLUDED_REFERENCE_MODELS = {"SyntheticVoice"}
 
+# Version pills rendered inline on a row before the remainder collapse behind a
+# "+N more" toggle. A busy chatbot can carry 25+ referencing versions; showing them
+# all inline turns one row into a paragraph.
+MAX_INLINE_VERSIONS = 8
+
+
+@dataclass
+class UsageGroup:
+    """One version family, reported as a single row.
+
+    ``head`` supplies the row's name and primary link. It is always the working
+    version — that is what owns the edit UI — even when the working version does
+    not itself reference the provider. ``versions`` holds the family members that
+    *do* reference it, working version first then ascending version number.
+
+    Unversioned objects are their own single-member family, so callers can treat
+    every row the same way.
+    """
+
+    head: object
+    versions: list = field(default_factory=list)
+
+    @property
+    def name(self) -> str:
+        return getattr(self.head, "name", None) or str(self.head)
+
+    @property
+    def visible_versions(self) -> list:
+        return self.versions[:MAX_INLINE_VERSIONS]
+
+    @property
+    def hidden_versions(self) -> list:
+        return self.versions[MAX_INLINE_VERSIONS:]
+
 
 @dataclass
 class UsageCategory:
     label: str
     items: list = field(default_factory=list)
 
+    @cached_property
+    def groups(self) -> list[UsageGroup]:
+        """``items`` collapsed to one entry per version family — what the page renders."""
+        return _group_by_version_family(self.items)
+
     def __len__(self) -> int:
-        return len(self.items)
+        """The number of rows shown, i.e. version families rather than raw objects."""
+        return len(self.groups)
 
 
 @dataclass
@@ -74,10 +115,19 @@ def get_provider_usages(provider) -> ProviderUsages:
     reached by any chatbot stay visible in "Unlinked Pipelines" /
     "Unlinked Channels" categories. Document sources roll up to their
     parent Collection.
+
+    Pipeline nodes and evaluators reference providers from a JSON ``params``
+    blob rather than a foreign key, so both are looked up by param key.
+
+    Each category keeps every referencing object in ``items`` but reports rows
+    through ``groups``, which collapses version families to one row apiece — so
+    ``total`` counts families, matching what the page shows.
     """
     service_provider = _service_provider_for(provider)
-    pipeline_param_key = _PIPELINE_PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
-    related = get_related_objects(provider, pipeline_param_key=pipeline_param_key)
+    params_key = _PARAM_KEY_BY_PROVIDER_SLUG.get(service_provider.slug)
+    related = get_related_objects(provider, pipeline_param_key=params_key)
+    if params_key:
+        related.extend(get_related_evaluators_queryset(provider, params_key))
 
     # Per-category dicts dedupe rows that are reachable through more than one
     # reverse relation (e.g. TranscriptAnalysis has both llm_provider and
@@ -137,6 +187,47 @@ def _display_key(obj) -> tuple[str, int]:
     return (name.lower(), obj.pk)
 
 
+def _group_by_version_family(items: list) -> list[UsageGroup]:
+    """Collapse ``items`` so each version family occupies one group.
+
+    Keyed on (model, working version id) so unrelated models that happen to share
+    a pk never merge. Objects with no ``working_version_id`` are their own family,
+    which covers both unversioned models and working versions.
+    """
+    families: dict[tuple[str, int], list] = defaultdict(list)
+    for obj in items:
+        families[(obj.__class__.__name__, _family_id(obj))].append(obj)
+
+    groups = [
+        UsageGroup(head=_family_head(members), versions=sorted(members, key=_version_sort_key))
+        for members in families.values()
+    ]
+    return sorted(groups, key=lambda group: _display_key(group.head))
+
+
+def _family_id(obj) -> int:
+    return getattr(obj, "working_version_id", None) or obj.pk
+
+
+def _family_head(members: list):
+    """The family's working version, preferring one that is already in ``members``."""
+    for member in members:
+        if getattr(member, "working_version_id", None) is None:
+            return member
+    # Only snapshots reference the provider. Every queryset feeding a category
+    # select_relates ``working_version`` (``_with_working_version`` for reverse-FK
+    # items, explicit ``select_related`` in the pipeline/channel/collection lookups),
+    # so this stays query-free. Any new source must do the same.
+    return members[0].get_working_version()
+
+
+def _version_sort_key(obj) -> tuple[int, int]:
+    """Working version first, then ascending version number."""
+    if getattr(obj, "working_version_id", None) is None:
+        return (0, 0)
+    return (1, getattr(obj, "version_number", None) or 0)
+
+
 def _resolve_pipeline_chatbots(pipelines: list) -> tuple[list[Experiment], list]:
     """Return chatbots reachable via the given pipelines, and any unreached pipelines.
 
@@ -165,7 +256,10 @@ def _resolve_channel_chatbots(channels: list) -> tuple[list[Experiment], list]:
     unique_channels = _dedupe_by_id(channels)
     experiment_ids = {ch.experiment_id for ch in unique_channels if ch.experiment_id}
     experiments_by_id = (
-        {exp.id: exp for exp in Experiment.objects.filter(id__in=experiment_ids).select_related("team")}
+        {
+            exp.id: exp
+            for exp in Experiment.objects.filter(id__in=experiment_ids).select_related("team", "working_version")
+        }
         if experiment_ids
         else {}
     )
@@ -192,7 +286,9 @@ def _build_document_source_categories(document_sources: list) -> list[UsageCateg
     collection_ids = {ds.collection_id for ds in document_sources if ds.collection_id}
     if not collection_ids:
         return []
-    collections = list(Collection.objects.filter(id__in=collection_ids).select_related("team").order_by("name"))
+    collections = list(
+        Collection.objects.filter(id__in=collection_ids).select_related("team", "working_version").order_by("name")
+    )
     return [UsageCategory(label="Collections", items=collections)]
 
 
@@ -209,7 +305,7 @@ def _dedupe_by_id(items: list) -> list:
 
 def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
     by_pipeline: dict[int, dict[int, object]] = defaultdict(dict)
-    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team"):
+    for exp in Experiment.objects.filter(pipeline_id__in=pipeline_ids).select_related("team", "working_version"):
         by_pipeline[exp.pipeline_id][exp.id] = exp
 
     # Indirect link: an EventAction of type "pipeline_start" stores the
@@ -219,9 +315,10 @@ def _experiments_for_pipelines(pipeline_ids: set[int]) -> dict[int, list]:
         "action__action_type": EventActionType.PIPELINE_START,
         "action__params__pipeline_id__in": pipeline_id_values,
     }
+    trigger_select_related = ("action", "experiment", "experiment__team", "experiment__working_version")
     for trigger_qs in (
-        StaticTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
-        TimeoutTrigger.objects.filter(**trigger_filter).select_related("action", "experiment", "experiment__team"),
+        StaticTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
+        TimeoutTrigger.objects.filter(**trigger_filter).select_related(*trigger_select_related),
     ):
         for trigger in trigger_qs:
             raw_pipeline_id = trigger.action.params.get("pipeline_id")

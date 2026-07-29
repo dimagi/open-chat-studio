@@ -24,18 +24,18 @@ repos:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.22
+    rev: v0.16.0
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
       - id: ruff-format
   - repo: https://github.com/djlint/djLint
-    rev: v1.41.0
+    rev: v1.42.3
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: 'v10.7.0'
+    rev: 'v10.8.0'
     hooks:
       - id: eslint
         additional_dependencies:
@@ -47,14 +47,14 @@ repos:
         types: [ file ]
         args: [ --fix ]
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: 'v3.9.5'
+    rev: 'v3.9.6'
     hooks:
       - id: prettier
         files: ^components/chat_widget/src/.*\.(ts|tsx|css)$
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.61
+    rev: v0.0.63
     hooks:
       # Run the type checker.
       - id: ty-check
@@ -73,3 +73,12 @@ repos:
         pass_filenames: false
         always_run: true
         fail_fast: true
+      - id: atomic-exception-handling
+        name: database exceptions must not be caught inside transaction.atomic()
+        # Stdlib-only AST check, so it needs no virtualenv of its own. The repo-wide
+        # gate lives in scripts/test_check_atomic_exception_handling.py; this hook is
+        # the fast signal on the files a commit or PR actually touches.
+        entry: python3 scripts/check_atomic_exception_handling.py apps --files
+        language: system
+        files: ^apps/.*\.py$
+        exclude: /migrations/

@@ -67,8 +67,8 @@ so only the active form's fields submit.
 
 ```python
 # apps/service_providers/urls.py
-path("<slug:provider_type>/create/<str:subtype>/", views.CreateServiceProvider.as_view(), name="new"),
-path("<slug:provider_type>/<int:pk>/", views.EditServiceProvider.as_view(), name="edit"),
+(path("<slug:provider_type>/create/<str:subtype>/", views.CreateServiceProvider.as_view(), name="new"),)
+(path("<slug:provider_type>/<int:pk>/", views.EditServiceProvider.as_view(), name="edit"),)
 ```
 
 The `service_providers:new` reverse signature gains a `subtype` argument.
@@ -169,11 +169,13 @@ Add one new endpoint:
 
 ```python
 # apps/events/urls.py
-path(
-    "experiments/<int:experiment_id>/events/action-params/",
-    views.action_params_form_view,
-    name="action_params_form",
-),
+(
+    path(
+        "experiments/<int:experiment_id>/events/action-params/",
+        views.action_params_form_view,
+        name="action_params_form",
+    ),
+)
 ```
 
 Returns the rendered HTML for the secondary form matching `action_type` (a

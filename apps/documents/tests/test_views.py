@@ -1,12 +1,15 @@
+from datetime import timedelta
 from unittest import mock
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 from waffle.testutils import override_flag
 
 from apps.documents.datamodels import DocumentSourceConfig, JSONCollectionSourceConfig
 from apps.documents.models import (
+    SYNC_LOCK_TIMEOUT,
     Collection,
     CollectionFile,
     DocumentSourceSyncLog,
@@ -14,6 +17,7 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
+from apps.documents.views import _queue_document_source_sync
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.documents import CollectionFactory, CollectionFileFactory, DocumentSourceFactory
 from apps.utils.factories.files import FileFactory
@@ -602,3 +606,136 @@ class TestCollectionSnapshots:
         response = client.get(url)
 
         assert b"Create snapshot" not in response.content
+
+
+@pytest.mark.django_db()
+class TestQueueDocumentSourceSync:
+    """Guard against clobbering a running sync's lock and spawning a second concurrent sync.
+
+    Regression: ``BaseDocumentSourceView.form_valid`` (and the manual-sync view) queued a new
+    sync unconditionally. Editing a source mid-sync overwrote the running task's
+    ``sync_task_id`` with a new one; the original task then couldn't release its lock and both
+    tasks ran concurrently — the exact race that raised
+    ``DatabaseError: Save with update_fields did not affect any rows``.
+    """
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_queues_when_not_syncing(self, apply_async):
+        source = DocumentSourceFactory.create()
+
+        assert _queue_document_source_sync(source) is True
+
+        apply_async.assert_called_once()
+        dispatched_task_id = apply_async.call_args.kwargs["task_id"]
+        source.refresh_from_db()
+        assert source.sync_task_id == dispatched_task_id
+        assert source.sync_started_at is not None
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_skips_when_sync_in_progress(self, apply_async):
+        source = DocumentSourceFactory.create(sync_task_id="running-task", sync_started_at=timezone.now())
+
+        assert _queue_document_source_sync(source) is False
+
+        apply_async.assert_not_called()
+        source.refresh_from_db()
+        # The running task's lock is left untouched.
+        assert source.sync_task_id == "running-task"
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_reclaims_stale_lock(self, apply_async):
+        """A lock older than SYNC_LOCK_TIMEOUT (dead worker) does not block a fresh sync."""
+        stale = timezone.now() - SYNC_LOCK_TIMEOUT - timedelta(minutes=1)
+        source = DocumentSourceFactory.create(sync_task_id="dead-task", sync_started_at=stale)
+
+        assert _queue_document_source_sync(source) is True
+
+        apply_async.assert_called_once()
+        source.refresh_from_db()
+        assert source.sync_task_id == apply_async.call_args.kwargs["task_id"]
+
+    @mock.patch("apps.documents.views.sync_document_source_task.apply_async")
+    def test_manual_sync_view_skips_when_in_progress(self, apply_async, client):
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(is_index=True, team=team)
+        source = DocumentSourceFactory.create(
+            collection=collection,
+            team=collection.team,
+            source_type="github",
+            sync_task_id="running-task",
+            sync_started_at=timezone.now(),
+        )
+        client.force_login(collection.team.members.first())
+        url = reverse("documents:sync_document_source", args=[collection.team.slug, collection.id, source.id])
+
+        response = client.post(url)
+
+        assert response.status_code == 200
+        apply_async.assert_not_called()
+        source.refresh_from_db()
+        assert source.sync_task_id == "running-task"
+
+
+@pytest.mark.django_db()
+class TestIndexFailureReason:
+    @pytest.fixture()
+    def collection(self):
+        return CollectionFactory.create(team=TeamWithUsersFactory.create(), is_index=True, is_remote_index=False)
+
+    def test_retry_failed_uploads_clears_the_failure_reason(self, collection, client):
+        """The reason describes a superseded attempt, so it must not outlive the retry."""
+        collection_file = CollectionFileFactory.create(
+            collection=collection,
+            status=FileStatus.FAILED,
+            failure_reason="ValueError: Error code: 401 - Incorrect API key provided",
+        )
+        client.force_login(collection.team.members.first())
+
+        url = reverse("documents:retry_failed_uploads", args=[collection.team.slug, collection.id])
+        with mock.patch("apps.documents.tasks.index_collection_files_task.delay"):
+            response = client.post(url)
+
+        assert response.status_code == 302
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.PENDING
+        assert collection_file.failure_reason == ""
+
+    def test_status_endpoint_renders_the_failure_reason(self, collection, client):
+        """The status poll is what repaints the badge, so the reason has to ride along with it,
+        or a file that fails while the user is watching keeps an empty tooltip until reload."""
+        collection_file = CollectionFileFactory.create(
+            collection=collection,
+            status=FileStatus.FAILED,
+            failure_reason="AuthenticationError: Error code: 401 - Incorrect API key provided",
+        )
+        client.force_login(collection.team.members.first())
+
+        url = reverse(
+            "documents:get_collection_file_status",
+            args=[collection.team.slug, collection.id, collection_file.id],
+        )
+        response = client.get(url)
+        content = response.content.decode()
+
+        assert response.status_code == 200
+        assert f'data-tip="{collection_file.failure_reason}"' in content
+        assert f'aria-label="{collection_file.failure_reason}"' in content
+
+    def test_aria_label_is_bounded_while_data_tip_carries_the_full_reason(self, collection, client):
+        """The aria-label is a screen reader's accessible NAME for the status dot, so it stays
+        short; the full text lives in data-tip for the visual tooltip."""
+        long_reason = "AuthenticationError: " + "x" * 300
+        collection_file = CollectionFileFactory.create(
+            collection=collection, status=FileStatus.FAILED, failure_reason=long_reason
+        )
+        client.force_login(collection.team.members.first())
+
+        url = reverse(
+            "documents:get_collection_file_status",
+            args=[collection.team.slug, collection.id, collection_file.id],
+        )
+        content = client.get(url).content.decode()
+
+        assert f'data-tip="{long_reason}"' in content
+        assert f'aria-label="{long_reason}"' not in content
+        assert 'aria-label="AuthenticationError: ' in content

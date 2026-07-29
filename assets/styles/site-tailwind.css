@@ -2,6 +2,7 @@
 @import './app/chat.css';
 @import './app/table.css' layer(components);
 @import './app/alertify.css';
+@import './app/react-select.css';
 @import './app/pg-components.css';
 @import './app/prompt-builder.css' layer(components);
 @import './app/dashboard.css' layer(components);

@@ -18,10 +18,10 @@ from apps.evaluations.models import (
 )
 from apps.evaluations.tasks import (
     EVAL_SESSIONS_TTL_DAYS,
+    _drive_run,
     cleanup_old_evaluation_data,
-    evaluate_single_message_task,
+    evaluate_message,
     run_bot_generation,
-    run_evaluation_task,
 )
 from apps.experiments.models import ExperimentSession, Participant
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
@@ -135,7 +135,7 @@ def test_evaluate_single_message_with_bot_generation(
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
 
     # Run the evaluation task
-    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
 
     # Verify evaluator was called with message and bot response
     expected = "I heard: " + evaluation_message.input["content"]
@@ -160,7 +160,7 @@ def test_evaluate_single_message_handles_bot_generation_error(
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"score": 0.8}))
 
     # Run the evaluation task - should not fail
-    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
 
     # Verify evaluator was still called despite bot error, with empty string response since bot failed
     evaluator_run_mock.assert_called_once_with(evaluation_message, "")
@@ -290,7 +290,7 @@ def test_evaluate_single_message_applies_tag_rules(
 
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"sentiment": "negative"}}))
 
-    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
 
     result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
     assert result.output == {"result": {"sentiment": "negative"}}
@@ -325,7 +325,7 @@ def test_evaluate_single_message_skips_tagging_for_preview_run(
 
     evaluator_run_mock.return_value = Mock(model_dump=Mock(return_value={"result": {"sentiment": "negative"}}))
 
-    evaluate_single_message_task(run.id, [evaluator.id], evaluation_message.id)
+    evaluate_message(run.id, [evaluator.id], evaluation_message.id)
 
     assert EvaluationResult.objects.filter(message=evaluation_message, run=run, evaluator=evaluator).exists()
     assert not expected_output.tags.filter(pk=tag.pk).exists()
@@ -333,31 +333,31 @@ def test_evaluate_single_message_skips_tagging_for_preview_run(
 
 
 @pytest.mark.django_db()
-def test_evaluate_single_message_task_skips_deleted_run(evaluation_run, evaluation_message):
+def test_evaluate_message_skips_deleted_run(evaluation_run, evaluation_message):
     """Run row deleted before the task executes -> no result written, no exception."""
     run, evaluator = evaluation_run
     run_id = run.id
     run.delete()
 
-    evaluate_single_message_task(run_id, [evaluator.id], evaluation_message.id)
+    evaluate_message(run_id, [evaluator.id], evaluation_message.id)
 
     assert not EvaluationResult.objects.filter(run_id=run_id).exists()
 
 
 @pytest.mark.django_db()
-def test_run_evaluation_task_handles_deleted_run(evaluation_run):
-    """Run deleted before dispatch -> handler does not raise a second DoesNotExist."""
+def test_drive_run_handles_deleted_run(evaluation_run):
+    """Run deleted before its tick -> the coordination driver returns without raising."""
     run, _ = evaluation_run
     run_id = run.id
     run.delete()
 
-    run_evaluation_task(run_id)
+    _drive_run(run_id)
 
     assert not EvaluationRun.objects.filter(id=run_id).exists()
 
 
 @pytest.mark.django_db()
-def test_evaluate_single_message_task_skips_deleted_message(evaluation_run, evaluation_message):
+def test_evaluate_message_skips_deleted_message(evaluation_run, evaluation_message):
     """Message deleted out from under a surviving in-flight run -> no result written, no exception.
 
     Uses a bulk queryset delete to mimic the cascade/race path that bypasses the model guard.
@@ -366,6 +366,6 @@ def test_evaluate_single_message_task_skips_deleted_message(evaluation_run, eval
     message_id = evaluation_message.id
     EvaluationMessage.objects.filter(id=message_id).delete()
 
-    evaluate_single_message_task(run.id, [evaluator.id], message_id)
+    evaluate_message(run.id, [evaluator.id], message_id)
 
     assert not EvaluationResult.objects.filter(run=run).exists()

@@ -715,6 +715,7 @@ Expected: PASS
 )
 def test_elevenlabs_gender_mapping(labels, expected_gender):
     from apps.service_providers.models import _map_elevenlabs_gender
+
     assert _map_elevenlabs_gender(labels) == expected_gender
 ```
 
@@ -959,7 +960,7 @@ git commit -m "feat: add ElevenLabs IVC file upload and provider delete cleanup"
 In `apps/service_providers/urls.py`, add:
 
 ```python
-path("<slug:provider_type>/<int:pk>/sync-voices/", views.sync_voices, name="sync_voices"),
+(path("<slug:provider_type>/<int:pk>/sync-voices/", views.sync_voices, name="sync_voices"),)
 ```
 
 - [ ] **Step 2: Add sync_voices view**
@@ -999,7 +1000,7 @@ def form_valid(self, form, file_formset):
         files = file_formset.save(self.request)
         instance.add_files(files)
     # Sync voices for providers that support it
-    if hasattr(instance, 'sync_voices'):
+    if hasattr(instance, "sync_voices"):
         instance.sync_voices()
 ```
 
@@ -1035,11 +1036,14 @@ def test_sync_voices_endpoint(team_with_users):
     )
     client = Client()
     client.force_login(team.members.first())
-    url = reverse("service_providers:sync_voices", kwargs={
-        "team_slug": team.slug,
-        "provider_type": "voice",
-        "pk": provider.pk,
-    })
+    url = reverse(
+        "service_providers:sync_voices",
+        kwargs={
+            "team_slug": team.slug,
+            "provider_type": "voice",
+            "pk": provider.pk,
+        },
+    )
     with mock.patch.object(VoiceProvider, "sync_voices") as mock_sync:
         response = client.post(url)
 

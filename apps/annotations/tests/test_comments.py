@@ -3,6 +3,7 @@ import json
 import pytest
 from django.urls import reverse
 
+from apps.annotations.models import UserComment
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -51,6 +52,30 @@ def test_unlink_comment_view(chat, client):
     client.post(url, data=data)
 
     assert message.comments.count() == 0
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "accessor",
+    [
+        pytest.param(lambda: UserComment, id="via-class"),
+        pytest.param(lambda: UserComment(), id="via-instance"),
+    ],
+)
+def test_add_for_model_is_a_real_staticmethod(chat, accessor):
+    """`add_for_model` must not bind an instance to its `model` argument.
+
+    Stacking `@transaction.atomic()` above `@staticmethod` wraps the descriptor rather than
+    the function, leaving a plain function on the class — instance access then passes the
+    instance as `model` and the call fails with a TypeError.
+    """
+    message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Sqeezy")
+    user = chat.team.members.first()
+
+    comment = accessor().add_for_model(message, comment="a comment", added_by=user, team=chat.team)
+
+    assert comment is not None
+    assert comment.content_object == message
 
 
 @pytest.mark.django_db()

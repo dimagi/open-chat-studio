@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import unicodedata
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
 
@@ -16,6 +17,7 @@ from pydantic_core.core_schema import FieldValidationInfo
 from apps.annotations.models import TagCategories
 from apps.pipelines.exceptions import (
     PipelineNodeBuildError,
+    PipelineNodeRunError,
 )
 from apps.pipelines.models import (
     PipelineChatHistoryModes,
@@ -119,9 +121,13 @@ class LLMResponseMixin(BaseModel):
         try:
             return self.repo.get_llm_service(self.llm_provider_id)
         except RepositoryLookupError:
+            # Missing provider is a configuration problem the team can fix; surfaced as a build
+            # error so the channel pipeline replies with a canned message without reporting to Sentry.
             raise PipelineNodeBuildError(f"LLM provider with id {self.llm_provider_id} does not exist") from None
         except ServiceProviderConfigError as e:
-            raise PipelineNodeBuildError("There was an issue configuring the LLM service provider") from e
+            # A configured provider that fails to initialise (e.g. credentials that won't decrypt) is an
+            # operational failure that may be systemic -- raise a run error so it still reaches Sentry.
+            raise PipelineNodeRunError("There was an issue configuring the LLM service provider") from e
 
     def get_chat_model(self):
         model_name = self.repo.get_llm_provider_model(self.llm_provider_model_id).name
@@ -405,6 +411,22 @@ class ExtractStructuredDataNodeMixin:
         return dict_to_json_schema(data)
 
 
+# Anthropic requires tool property keys to match this pattern. Mirror it here so we can surface a friendly
+# validation error instead of a 500 from a rejected API call.
+_SCHEMA_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9_.\-]{1,64}$")
+
+
+def _collect_invalid_schema_keys(schema: dict) -> list[str]:
+    """Recursively collect property keys that violate Anthropic's naming rules, mirroring ``dict_to_json_schema``."""
+    invalid = []
+    for key, val in schema.items():
+        if not _SCHEMA_KEY_PATTERN.match(key):
+            invalid.append(key)
+        if isinstance(val, list) and val and isinstance(val[0], dict):
+            invalid.extend(_collect_invalid_schema_keys(val[0]))
+    return invalid
+
+
 class StructuredDataSchemaValidatorMixin:
     @field_validator("data_schema")
     def validate_data_schema(cls, value):
@@ -415,5 +437,14 @@ class StructuredDataSchemaValidatorMixin:
 
         if not isinstance(parsed_value, dict) or len(parsed_value) == 0:
             raise PydanticCustomError("invalid_schema", "Invalid schema")
+
+        invalid_keys = _collect_invalid_schema_keys(parsed_value)
+        if invalid_keys:
+            raise PydanticCustomError(
+                "invalid_schema",
+                "Schema property names can only contain letters, numbers, underscores, dots and hyphens, "
+                "and must be between 1 and 64 characters long. Invalid names: {keys}",
+                {"keys": ", ".join(repr(k) for k in invalid_keys)},
+            )
 
         return value

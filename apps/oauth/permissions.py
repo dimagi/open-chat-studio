@@ -8,10 +8,12 @@ Framework's OAuth2 functionality with team-aware scoping. It ensures that:
 - Fine-grained permission control via required scopes
 """
 
+from django.contrib.auth.models import AnonymousUser
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasResourceScope, TokenHasScope
 from rest_framework import exceptions
 
-from apps.teams.helpers import get_team_membership_for_request
+from apps.oauth.models import OAuth2Application
+from apps.teams.helpers import SyntheticTeamMembership, get_team_membership_for_request
 from apps.teams.utils import set_current_team
 
 from .models import OAuth2AccessToken
@@ -32,16 +34,42 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
             return
 
         user, access_token = response
-
-        request.user = user
         request.team = access_token.team
-        request.team_membership = get_team_membership_for_request(request)
-        if not request.team_membership:
-            raise exceptions.AuthenticationFailed()
+
+        application = access_token.application
+        is_client_credentials = (
+            application is not None
+            and application.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS
+        )
+        if is_client_credentials:
+            # Machine token: no user and no Membership row. Access is granted by the token's pinned
+            # team alone (a synthetic service identity), so skip the human membership gate.
+            user = AnonymousUser()
+            request.user = user
+            request.team_membership = SyntheticTeamMembership(access_token.team)
+        else:
+            request.user = user
+            request.team_membership = get_team_membership_for_request(request)
+            if not request.team_membership:
+                raise exceptions.AuthenticationFailed()
 
         # this is unset by the request_finished signal
         set_current_team(access_token.team)
         return user, access_token
+
+
+def is_client_credentials_request(request) -> bool:
+    """True when the request is authenticated by a client-credentials (machine) OAuth token.
+
+    Machine tokens have no user, so the user-based authorization gates (IsAuthenticated,
+    DjangoModelPermissions, ...) cannot apply. Their authorization instead rests entirely on the
+    OAuth scope (enforced by TokenHasOAuthScope / TokenHasOAuthResourceScope) and the team pinned on
+    the token.
+    """
+    token = getattr(request, "auth", None)
+    if not isinstance(token, OAuth2AccessToken) or token.application_id is None:
+        return False
+    return token.application.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS
 
 
 class TokenHasOAuthScope(TokenHasScope):

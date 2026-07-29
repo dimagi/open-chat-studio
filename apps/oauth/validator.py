@@ -1,9 +1,10 @@
+from django.conf import settings
 from oauth2_provider.oauth2_validators import OAuth2Validator
 
 from apps.teams.utils import get_current_team, get_slug_for_team
 from apps.users.helpers import user_has_confirmed_email_address
 
-from .models import OAuth2Grant
+from .models import OAuth2Application, OAuth2Grant
 
 
 class APIScopedValidator(OAuth2Validator):
@@ -20,6 +21,17 @@ class APIScopedValidator(OAuth2Validator):
 
     oidc_claim_scope = OAuth2Validator.oidc_claim_scope
     oidc_claim_scope.update({"is_active": "openid", "team": "openid", "email_verified": "openid"})
+
+    def validate_scopes(self, client_id, scopes, client, request, *args, **kwargs):
+        is_valid = super().validate_scopes(client_id, scopes, client, request, *args, **kwargs)
+        if not is_valid:
+            return False
+
+        # Client-credentials (machine) tokens are restricted to an explicit allow-list, so they can
+        # never be granted scopes that only make sense for a user (e.g. openid/profile).
+        if client and client.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS:
+            return set(scopes).issubset(settings.OAUTH_CLIENT_CREDENTIALS_SCOPES)
+        return True
 
     def _create_authorization_code(self, request, code, expires=None):
         grant = super()._create_authorization_code(request, code, expires)
@@ -41,7 +53,15 @@ class APIScopedValidator(OAuth2Validator):
     def _create_access_token(self, expires, request, token, source_refresh_token=None):
         """This will be hit whenever an access token is created, including during refresh."""
         access_token = super()._create_access_token(expires, request, token, source_refresh_token)
-        access_token.team = getattr(request, "team", None) or source_refresh_token.team
+        # Authorization-code: team comes from the request (set in validate_code) or the source refresh
+        # token on refresh. Client-credentials has neither, so fall back to the team pinned on the
+        # Application (request.client).
+        team = getattr(request, "team", None)
+        if not team and source_refresh_token:
+            team = source_refresh_token.team
+        if not team:
+            team = getattr(request.client, "team", None)
+        access_token.team = team
         access_token.save()
         return access_token
 
@@ -56,12 +76,16 @@ class APIScopedValidator(OAuth2Validator):
         # `sub` is the user's email, so we also assert whether that email has been verified. This lets
         # downstream consumers that federate against OCS decide whether to trust the asserted email
         # (e.g. for cross-provider account linking) instead of assuming it has been verified.
-        claims = {
-            "sub": request.user.email,
-            "name": request.user.get_full_name(),
-            "is_active": request.user.is_active,
-            "email_verified": user_has_confirmed_email_address(request.user, request.user.email),
-        }
+        # Client-credentials tokens have no user, so the user-derived claims are omitted.
+        user = getattr(request, "user", None)
+        claims = {}
+        if user and user.is_authenticated:
+            claims = {
+                "sub": user.email,
+                "name": user.get_full_name(),
+                "is_active": user.is_active,
+                "email_verified": user_has_confirmed_email_address(user, user.email),
+            }
         if team := getattr(request, "team", None):
             claims["team"] = team.slug
         else:

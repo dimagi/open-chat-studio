@@ -16,11 +16,15 @@ from rest_framework import serializers
 from apps.api.v2.usage.services import (
     GRANULARITY_CHOICES,
     GRANULARITY_TOTAL,
+    GROUP_BY_CHOICES,
+    GROUP_PARTICIPANT,
+    METRIC_PARTICIPANTS,
     PERIOD_CHOICES,
     PERIOD_CURRENT_MONTH,
     SUPPORTED_METRICS,
     _month_bounds,
 )
+from apps.channels.models import ChannelPlatform
 
 # Cap on how many buckets a single response may span, applied per granularity. It bounds both the
 # response size and the aggregation cost, and is what rejects e.g. ``daily`` over a multi-year range.
@@ -78,6 +82,14 @@ class UsageQuerySerializer(serializers.Serializer):
             "one row per bucket, each carrying 'bucket_start'."
         ),
     )
+    group_by = serializers.ChoiceField(
+        choices=list(GROUP_BY_CHOICES),
+        required=False,
+        help_text=(
+            "Break the results down by this dimension: one row per group, cursor-paginated. Combines "
+            "with 'granularity' to give one row per (group, time bucket)."
+        ),
+    )
     participant = serializers.UUIDField(
         required=False,
         help_text="Restrict to a single participant by their ``public_id``.",
@@ -86,6 +98,17 @@ class UsageQuerySerializer(serializers.Serializer):
         required=False,
         max_length=320,
         help_text="Restrict to a single participant by their raw identifier (email/phone).",
+    )
+    chatbot = serializers.UUIDField(
+        required=False,
+        help_text="Restrict to a single chatbot by its ``public_id``.",
+    )
+    platform = serializers.ChoiceField(
+        # ``evaluations`` is excluded: the usage API drops evaluation-harness sessions, so filtering or
+        # grouping by that platform would report messages while ``sessions`` stayed structurally zero.
+        choices=[value for value in ChannelPlatform.values if value != ChannelPlatform.EVALUATIONS],
+        required=False,
+        help_text="Restrict to a single channel platform by its slug (e.g. 'web', 'whatsapp').",
     )
     tz = serializers.CharField(
         default="UTC",
@@ -102,6 +125,11 @@ class UsageQuerySerializer(serializers.Serializer):
         if attrs.get("participant") and attrs.get("participant_identifier"):
             raise serializers.ValidationError(
                 "Provide only one of 'participant' or 'participant_identifier', not both."
+            )
+        if attrs.get("group_by") == GROUP_PARTICIPANT and METRIC_PARTICIPANTS in attrs["metric"]:
+            # A per-participant breakdown makes the distinct-participant count trivially 1 per row.
+            raise serializers.ValidationError(
+                "The 'participants' metric is redundant with group_by=participant; drop one of them."
             )
         tz = attrs["tz"]
         start, end = self._resolve_window(attrs, tz)

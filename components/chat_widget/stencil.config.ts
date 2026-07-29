@@ -28,6 +28,14 @@ export const config: Config = {
   ],
   testing: {
     browserHeadless: "new",
+    moduleNameMapper: {
+      // marked v18 is published as ESM only (its `exports` map resolves to lib/marked.esm.js)
+      // and Stencil's Jest preprocessor only transforms .ts/.tsx/.jsx/.css/.mjs, so Jest's
+      // CommonJS runtime chokes on `export {...}` when a spec imports src/utils/markdown.ts.
+      // Point spec tests at marked's UMD build: same source, same esbuild config, but wrapped
+      // for CommonJS. Production/dist builds are unaffected and still use the ESM entry point.
+      '^marked$': '<rootDir>/node_modules/marked/lib/marked.umd.js',
+    },
   },
   devServer: {
     reloadStrategy: 'pageReload',

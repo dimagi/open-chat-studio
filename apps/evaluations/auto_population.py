@@ -14,11 +14,10 @@ from apps.evaluations.models import (
     DatasetAutoPopulationRule,
     EvaluationConfig,
     EvaluationDataset,
-    EvaluationMessage,
     EvaluationRunType,
 )
 from apps.evaluations.notifications import auto_population_rule_disabled_notification
-from apps.evaluations.utils import make_session_evaluation_messages
+from apps.evaluations.utils import iter_session_evaluation_messages
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
 from apps.web.dynamic_filters.datastructures import FilterParams
@@ -26,11 +25,11 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 logger = get_task_logger("ocs.evaluations")
 
 
-def _trigger_delta_runs_for_dataset(dataset: EvaluationDataset, appended: list[EvaluationMessage]) -> None:
+def _trigger_delta_runs_for_dataset(dataset: EvaluationDataset, appended_ids: list[int]) -> None:
     """Enqueue a DELTA evaluation run for each opted-in config on this dataset."""
     configs = EvaluationConfig.objects.filter(dataset=dataset, auto_run_on_append=True)
     for config in configs:
-        config.run(run_type=EvaluationRunType.DELTA, scoped_messages=appended)
+        config.run(run_type=EvaluationRunType.DELTA, scoped_message_ids=appended_ids)
 
 
 def _handle_rule_failure(rule: DatasetAutoPopulationRule, exception: Exception) -> None:
@@ -58,8 +57,17 @@ def _handle_rule_failure(rule: DatasetAutoPopulationRule, exception: Exception) 
         )
 
 
-def _scan_for_new_sessions(rule: DatasetAutoPopulationRule, created_floor) -> list[EvaluationMessage]:
-    """Find new sessions matching the rule's filter and build session-mode EvaluationMessages."""
+def _scan_for_new_sessions(rule: DatasetAutoPopulationRule, created_floor) -> list[int]:
+    """Find new sessions matching the rule's filter and append them to the dataset.
+
+    Returns the ids of the newly created EvaluationMessage rows. Messages are streamed rather
+    than materialised: a rule's first tick spans EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS and
+    can therefore match as many sessions as a bulk clone would.
+
+    Note this runs inside the per-rule transaction opened by auto_populate_eval_datasets, so
+    add_messages_stream's per-batch commits degrade to savepoints here and the whole tick stays
+    one transaction. That is fine for incremental ticks, and memory stays bounded regardless.
+    """
     qs = ExperimentSession.objects.filter(
         team=rule.team,
         experiment=rule.source_experiment,
@@ -74,21 +82,20 @@ def _scan_for_new_sessions(rule: DatasetAutoPopulationRule, created_floor) -> li
     if not session_external_ids:
         return []
 
-    eval_messages = make_session_evaluation_messages(session_external_ids, team=rule.team)
-    if not eval_messages:
-        return []
-    created, _ = rule.dataset.add_messages(eval_messages)
-    return created
+    created_ids, _ = rule.dataset.add_messages_stream(
+        iter_session_evaluation_messages(session_external_ids, team=rule.team)
+    )
+    return created_ids
 
 
-def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[EvaluationMessage]:
+def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[int]:
     """Scan the rule's source experiment for new sessions, append matches to the dataset.
 
     Rules are only valid against session-mode datasets (enforced by
     `DatasetAutoPopulationRule.clean()`), so the scan always builds
     session-mode `EvaluationMessage` rows.
 
-    Returns the list of newly appended EvaluationMessage rows.
+    Returns the ids of the newly appended EvaluationMessage rows.
     """
     dataset = rule.dataset
     lookback_floor = timezone.now() - timedelta(days=settings.EVALUATIONS_AUTO_POPULATION_LOOKBACK_DAYS)

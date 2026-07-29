@@ -6,6 +6,8 @@
 import TomSelect from "tom-select";
 import {formatDistanceToNow} from "date-fns";
 
+import {serializeCSVTildeValues} from "../filters/csvTilde.js";
+
 // Constants
 const DEFAULTS = {
     DATE_RANGE: '30',
@@ -821,9 +823,8 @@ function dashboard() {
 
         buildBaseTagDynamicFilter(tagName) {
             const urlParams = new URLSearchParams();
-            urlParams.append("filter_0_column", "tags");
-            urlParams.append("filter_0_value", JSON.stringify([tagName]));
-            urlParams.append("filter_0_operator", "any of");
+            urlParams.append("f_tags", tagName);
+            urlParams.append("op_tags", "any of");
             return urlParams;
         },
 
@@ -835,7 +836,7 @@ function dashboard() {
                 "date_range": "message_date",
             };
             let params = this.sanitizeParams(this.filters);
-            Object.entries(params).forEach(([key, value], index) => {
+            Object.entries(params).forEach(([key, value]) => {
                 if (key === "granularity" || key === "tags" || value === "custom" || key === "participants") {
                     // dynamic filters do not support granularity, and the tags filter is already added
                     return;
@@ -857,12 +858,11 @@ function dashboard() {
                     operator = "range";
                     parsedValue = value + "d";
                 } else {
-                    // Non-date fields expects array values
-                    parsedValue = JSON.stringify((Array.isArray(value) ? value : [value]))
+                    // Non-date fields expect array values in the tilde/CSV wire format
+                    parsedValue = serializeCSVTildeValues(Array.isArray(value) ? value : [value]);
                 }
-                urlParams.append(`filter_${index + 1}_column`, keyMapped);
-                urlParams.append(`filter_${index + 1}_value`, parsedValue);
-                urlParams.append(`filter_${index + 1}_operator`, operator);
+                urlParams.append(`f_${keyMapped}`, parsedValue);
+                urlParams.append(`op_${keyMapped}`, operator);
             });
         },
 

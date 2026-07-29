@@ -10,8 +10,10 @@ Open Chat Studio is a platform for building, deploying, and evaluating AI-powere
 We welcome contributions to Open Chat Studio! If you're interested in contributing, please check out our [contributing guidelines](https://developers.openchatstudio.com/contributing/) for more information on how to get started.
 
 ## Tech Stack
-- **Backend:** Python 3.13+, Django, Celery, PostgreSQL (with pgvector), Redis
-- **Frontend:** React, TypeScript, HTMX, Alpine.js, webpack
+- **Backend:** Python 3.13+, Django, Django REST Framework, Celery
+- **Database:** PostgreSQL (with pgvector)
+- **Cache/Message Broker:** Redis
+- **Frontend:** TypeScript, CSS ([Tailwind](http://tailwindcss.com/) + [DaisyUI](https://daisyui.com/)), HTMX, Alpine.js, webpack, [ReactJS](https://react.dev/) with [React Flow](https://reactflow.dev/) (for specific components)
 - **LLM integrations:** OpenAI, Anthropic, Groq, Gemini, Azure, and more
 - **Deployment:** Docker, Heroku
 

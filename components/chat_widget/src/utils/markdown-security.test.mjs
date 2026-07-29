@@ -5,7 +5,7 @@
  * that doesn't support DOMPurify) using Node's built-in test runner with
  * jsdom for a real DOM implementation.
  *
- * Run: npm run test:security
+ * Run: pnpm run test:security
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,7 +35,7 @@ const { window } = new JSDOM('');
 const DOMPurify = createDOMPurify(window);
 
 function sanitizeMarkdown(content) {
-  const html = marked.parse(content);
+  const html = marked.parse(content, { async: false });
   return DOMPurify.sanitize(html, SANITIZE_CONFIG);
 }
 

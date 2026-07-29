@@ -150,7 +150,7 @@ class CreateParticipant(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Crea
         )
 
 
-class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):
+class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     model = Participant
     table_class = ParticipantTable
     template_name = "table/single_table.html"

@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from apps.api.v2.inspect.nodes import graph_digest, node_render_order
+from apps.api.v2.inspect.nodes import graph_digest, node_render_order, nodes_in_render_order
 from apps.api.v2.inspect.serializers import InspectNodeSerializer
 from apps.pipelines.nodes import nodes as pipeline_nodes
 
@@ -24,6 +24,20 @@ def test_node_render_order_pins_start_first_end_last():
     end = SimpleNamespace(type="EndNode")
     middle = SimpleNamespace(type="LLMResponseWithPrompt")
     assert node_render_order(start) < node_render_order(middle) < node_render_order(end)
+
+
+def test_nodes_in_render_order_is_stable_whatever_order_the_db_returns():
+    """``Node`` has no default ordering, so the same pipeline can come back from the database in a
+    different row order each time. The helper has to impose the order, not inherit it."""
+    end = SimpleNamespace(type="EndNode", id=2)
+    start = SimpleNamespace(type="StartNode", id=9)
+    llm = SimpleNamespace(type="LLMResponseWithPrompt", id=7)
+    assistant = SimpleNamespace(type="AssistantNode", id=4)
+
+    expected = [start, assistant, llm, end]
+    for row_order in ([end, start, llm, assistant], [llm, assistant, end, start], expected):
+        pipeline = SimpleNamespace(node_set=SimpleNamespace(all=lambda rows=row_order: rows))
+        assert nodes_in_render_order(pipeline) == expected
 
 
 def test_graph_digest_strips_positions_and_normalises_handles():

@@ -273,9 +273,7 @@ class CreateServiceProvider(
     def _get_instance(self):
         if not self.kwargs.get("pk"):
             return None
-        return get_object_or_404(
-            self.provider_type.model, team=self.request.team, pk=self.kwargs["pk"]
-        )
+        return get_object_or_404(self.provider_type.model, team=self.request.team, pk=self.kwargs["pk"])
 
     def get(self, request, *args, **kwargs):
         subtype = self._resolve_subtype()
@@ -358,9 +356,7 @@ calls to `render(... self.template_name ...)` with:
 
 ```python
 template = (
-    "service_providers/llm_provider_form.html"
-    if self.provider_type == ServiceProvider.llm
-    else self.template_name
+    "service_providers/llm_provider_form.html" if self.provider_type == ServiceProvider.llm else self.template_name
 )
 return render(request, template, self._get_context(...))
 ```
@@ -940,8 +936,7 @@ class EventActionTypeSelectForm(TypeSelectForm):
         return instance
 
 
-def get_action_params_form(data=None, instance=None, team_id=None, experiment_id=None):
-    ...
+def get_action_params_form(data=None, instance=None, team_id=None, experiment_id=None): ...
 ```
 
 Drop the `from apps.generics.type_select_form import TypeSelectForm` import
@@ -1024,7 +1019,7 @@ from apps.events.forms import (
 In `apps/events/urls.py`, append to `urlpatterns`:
 
 ```python
-path("action-params/", views.action_params_form_view, name="action_params_form"),
+(path("action-params/", views.action_params_form_view, name="action_params_form"),)
 ```
 
 - [ ] **Step 4: Commit**
@@ -1058,11 +1053,7 @@ def _create_event_view(trigger_form_class, request, team_slug: str, experiment_i
         )
         trigger_form = trigger_form_class(request.POST)
 
-        if (
-            action_primary_form.is_valid()
-            and action_params_form.is_valid()
-            and trigger_form.is_valid()
-        ):
+        if action_primary_form.is_valid() and action_params_form.is_valid() and trigger_form.is_valid():
             saved_action = action_primary_form.save(experiment_id=experiment_id)
             saved_action.params = action_params_form.cleaned_data
             saved_action.save()
@@ -1130,11 +1121,7 @@ def _edit_event_view(trigger_type, request, team_slug: str, experiment_id: str, 
             experiment_id=experiment_id,
         )
         trigger_form = trigger_form_class(request.POST, instance=trigger)
-        if (
-            action_primary_form.is_valid()
-            and action_params_form.is_valid()
-            and trigger_form.is_valid()
-        ):
+        if action_primary_form.is_valid() and action_params_form.is_valid() and trigger_form.is_valid():
             saved_action = action_primary_form.save(experiment_id=experiment_id)
             saved_action.params = action_params_form.cleaned_data
             saved_action.save()
