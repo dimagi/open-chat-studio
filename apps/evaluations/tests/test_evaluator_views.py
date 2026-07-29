@@ -8,6 +8,7 @@ from django.test import Client
 from django.urls import reverse
 
 from apps.evaluations.models import ConditionType
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.evaluations import (
     EvaluatorFactory,
     EvaluatorTagRuleFactory,
@@ -167,6 +168,22 @@ class TestEvaluatorLlmProviderSelection:
         evaluator.refresh_from_db()
         assert evaluator.llm_provider_id == new_provider.id
         assert evaluator.llm_provider_model_id == new_model.id
+
+    def test_a_model_from_another_provider_type_is_rejected(self, client_with_user, team, evaluator):
+        """The picker only offers matching types, so a mismatch means a hand-crafted post."""
+        provider = evaluator.llm_provider
+        mismatched_type = next(t for t in LlmProviderTypes if str(t) != provider.type)
+        mismatched_model = LlmProviderModelFactory.create(team=team, type=str(mismatched_type))
+        params = _params(evaluator.params["output_schema"], evaluator) | {"llm_provider_model_id": mismatched_model.id}
+        original_model_id = evaluator.llm_provider_model_id
+
+        with patch("apps.evaluations.evaluators.LlmEvaluator.__init__", return_value=None):
+            response = client_with_user.post(_edit_url(team, evaluator), _post_data(evaluator, {}, [], params=params))
+
+        assert response.status_code == 200
+        assert "providers, but the selected provider is" in response.content.decode()
+        evaluator.refresh_from_db()
+        assert evaluator.llm_provider_model_id == original_model_id
 
     def test_another_teams_provider_is_rejected(self, client_with_user, team, evaluator):
         other_teams_provider = LlmProviderFactory.create()
