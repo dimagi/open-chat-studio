@@ -1,4 +1,4 @@
-# ADR-0048: Node rows own pipeline layout; `Pipeline.data` keeps only edges and viewport
+# ADR-0048: Node rows own pipeline layout; `Pipeline.data` keeps only edges
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 
@@ -10,7 +10,7 @@ Extends: [ADR-0046](0046-layout-only-pipeline-data.md)
 
 ADR-0046 made the `Node` rows the sole source of node *content* and reduced
 `Pipeline.data` to a layout blob: per node an `id`, react-flow `type` and `position`,
-plus `edges` and `viewport`. Position was the only per-node value still living in the
+plus the graph's `edges`. Position was the only per-node value still living in the
 blob, and the react-flow `type` is derivable from `Node.type` (`StartNode` → `startNode`,
 `EndNode` → `endNode`, everything else → `pipelineNode`). Keeping the `nodes` list in the
 blob meant every read still reconciled two node lists, and layout could drift from the
@@ -21,20 +21,23 @@ them on every save, so the rows already carry layout. This ADR completes the mov
 
 ## Decision
 
-We will remove node information from `Pipeline.data` entirely: it becomes `{edges, viewport}`
-with no `nodes` key (plus a vestigial `errors` key, still written on every save). The `Node`
-rows are the sole source of layout as well as content — position from the
-`position_x`/`position_y` columns, react-flow type derived from `Node.type`.
+We will remove node information from `Pipeline.data` entirely: it becomes `{edges}` with no
+`nodes` key (plus a vestigial `errors` key, still written on every save). The `Node` rows are
+the sole source of layout as well as content — position from the `position_x`/`position_y`
+columns, react-flow type derived from `Node.type`.
 
 - `Pipeline.flow_data` rebuilds the full react-flow graph from the rows (position and type
-  from each row); it reads only `edges`/`viewport` from `Pipeline.data`.
+  from each row); it reads only `edges` from `Pipeline.data`.
 - Saves supply a *complete* membership mapping to `update_nodes_from_data(node_data)`: its
   keys are every node id in the graph, each value either content (create/update the row,
   writing its position) or `None` (membership only — the row must exist and is left
   untouched). Removed rows are deleted, or archived when they have versions.
-- The PATCH engine works off `flow_data` since `Pipeline.data` no longer lists nodes;
-  `flow_data` passes the stored `viewport` straight through, so no separate merge is needed.
-  It returns the layout-only blob and the complete mapping.
+- The PATCH engine works off `flow_data` since `Pipeline.data` no longer lists nodes. It
+  returns the node-less blob and the complete mapping.
+- The flow models carry no unknown top-level keys, and every save rewrites `Pipeline.data`
+  from the parsed graph, so the stored blob only ever holds what they model. A key left over
+  in an older blob (the editor's `viewport`, which nothing has read since ADR-0046) is
+  therefore dropped by the pipeline's next save.
 - `duplicate_pipeline_with_new_ids` takes the id→type mapping from the rows, generates new
   ids and rewrites edges — it no longer reads a node list from the blob.
 - Migration `pipelines.0030_strip_node_data` backfills `position_x`/`position_y` from the
@@ -46,9 +49,7 @@ rows are the sole source of layout as well as content — position from the
   keep their `nodes` key, so "no `nodes` key" holds for every pipeline the migration
   touched, not literally all of them.
 
-The wire format is unchanged: the editor still sends and receives full nodes. (GET responses
-now carry `viewport` inside `data`, which they previously did not — additive, and the editor
-does not read it.)
+The wire format is unchanged: the editor still sends and receives full nodes.
 
 ## Consequences
 
