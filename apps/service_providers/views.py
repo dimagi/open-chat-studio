@@ -21,6 +21,7 @@ from waffle.decorators import waffle_flag
 
 from apps.assistants.models import OpenAiAssistant
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
+from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
@@ -159,11 +160,18 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
             Chip(label=assistant.name, url=assistant.get_absolute_url())
             for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
         ]
-        if related_experiments or related_assistants:
+        # Evaluators reference the provider by FK. Deleting underneath one leaves it
+        # unrunnable — nulled FK, stale id in params — so it blocks like the rest.
+        related_evaluators = [
+            Chip(label=evaluator.name, url=evaluator.get_absolute_url())
+            for evaluator in [obj for obj in filtered_objects if isinstance(obj, Evaluator)]
+        ]
+        if related_experiments or related_assistants or related_evaluators:
             return render_referenced_objects_modal(
                 "service provider",
                 experiments=related_experiments,
                 assistants=related_assistants,
+                evaluators=related_evaluators,
             )
     service_config.delete()
     return HttpResponse()
