@@ -414,6 +414,31 @@ class TestUserNotificationTableView:
         assert row_ids == {current_team_notification.id}
         assert other_team_notification.id not in row_ids
 
+    def test_malformed_team_filter_value_leaves_the_default_all_teams_scope(self, client, team_with_users):
+        """A `f_team` value that fails to parse to any team ID (e.g. tampered/garbage input)
+        must not be silently treated as "no teams match" -- it should fall back to the
+        default all-teams scope, same as if no team filter were applied at all."""
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+
+        current_team_notification = _create_notification(user=user, team=team_with_users)
+        other_team_notification = _create_notification(user=user, team=other_team)
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(
+            reverse("ocs_notifications:notifications_table"),
+            {"f_team": '["not-a-valid-id"]', "op_team": "any of"},
+        )
+
+        assert response.status_code == 200
+        row_ids = {obj.id for obj in response.context["table"].data}
+        assert row_ids == {current_team_notification.id, other_team_notification.id}
+
 
 @pytest.mark.django_db()
 class TestNotificationEventHome:

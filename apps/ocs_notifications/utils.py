@@ -23,7 +23,7 @@ logger = logging.getLogger("ocs.notifications")
 
 CACHE_KEY_FORMAT = "{user_id}-{team_slug}-unread-notifications-count"
 # Pseudo team_slug used to cache the unread count aggregated across all of a user's teams.
-ALL_TEAMS_CACHE_KEY = "all-teams"
+ALL_TEAMS_CACHE_KEY = "__all_teams__"
 
 
 class DurationTimeDelta(Enum):

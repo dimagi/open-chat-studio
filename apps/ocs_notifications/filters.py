@@ -64,13 +64,15 @@ class TeamFilter(ChoiceColumnFilter):
         teams = user.teams.all().order_by("name") if user else []
         self.options = [{"id": t.id, "label": t.name} for t in teams]
 
-    def parse_query_value(self, value) -> list[int]:  # ty: ignore[invalid-method-override]
+    def parse_query_value(self, value) -> list[int] | None:  # ty: ignore[invalid-method-override]
         values = []
         for v in self.values_list(value):
             try:
                 values.append(int(v))
             except (ValueError, TypeError):
                 continue
+        if not values:
+            return None
         return values
 
 
