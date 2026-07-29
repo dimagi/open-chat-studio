@@ -24,11 +24,12 @@ from django_tables2 import LazyPaginator, SingleTableView
 
 from apps.chat.models import ChatMessage
 from apps.evaluations.dataset_clone import (
+    MESSAGE_MODE_ALL_MATCHING_LIMIT,
     dispatch_clone_task,
     mark_dataset_pending,
-    resolve_add_sessions_external_ids,
+    resolve_sessions_to_clone,
 )
-from apps.evaluations.exceptions import InFlightRunsError
+from apps.evaluations.exceptions import InFlightRunsError, SessionSelectionTooLargeError
 from apps.evaluations.forms import (
     EvaluationDatasetEditForm,
     EvaluationDatasetForm,
@@ -41,6 +42,7 @@ from apps.evaluations.models import (
     EvaluationMessageContent,
     EvaluationMode,
 )
+from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tables import (
     DatasetAutoPopulationRuleTable,
     DatasetMessagesTable,
@@ -188,33 +190,31 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
         kwargs["team"] = self.request.team
         kwargs["user"] = self.request.user
 
-        # Pass current filter parameters to the form
-        kwargs["filter_params"] = FilterParams.from_request(self.request)
+        # The filter widget rewrites the URL, so a POST to this page carries the filters in its
+        # query string — but the form also replicates them as hidden inputs, and those win when
+        # present. "All matching filters" resolves the filter server-side, and reading it from the
+        # POST body keeps that resolution from silently widening to the whole team if the query
+        # string is ever lost (the same bug the Add Sessions view was fixed for).
+        if self.request.method == "POST" and any(key.startswith("f_") for key in self.request.POST):
+            kwargs["filter_params"] = FilterParams(self.request.POST)
+        else:
+            kwargs["filter_params"] = FilterParams.from_request(self.request)
         kwargs["timezone"] = self.request.session.get("detected_tz", None)
 
         return kwargs
 
     def get_initial(self):
-        """Support filters from experiment session list via URL parameters."""
+        """Support filters from experiment session list via URL parameters.
+
+        Arriving with explicit filters selects the "all matching filters" scope rather than
+        pre-filling every matching session id: that hidden input reached ~390 KB of UUIDs at 10k
+        sessions (and a POST body that size is rejected by the WAF), and the filter is resolved
+        server-side at save time anyway. New-format filters use the f_/op_ prefixes, matching
+        FilterParams.from_request; anything else means no filters were applied deliberately.
+        """
         initial = super().get_initial()
-
-        # Only pre-populate sessions if there are explicit filter parameters in the URL
-        # This prevents selecting all sessions when default filters are applied. New-format
-        # filters use the f_/op_ prefixes, matching FilterParams.from_request.
-        has_explicit_filters = any(key.startswith("f_") for key in self.request.GET)
-
-        if has_explicit_filters:
-            # Apply the same filters to get the filtered session IDs
-            queryset = ExperimentSession.objects.filter(team=self.request.team).select_related("participant__user")
-            timezone = self.request.session.get("detected_tz", None)
-            session_filter = ExperimentSessionFilter()
-            filtered_queryset = session_filter.apply(
-                queryset, filter_params=FilterParams.from_request(self.request), timezone=timezone
-            )
-            filtered_session_ids = ",".join(str(session.external_id) for session in filtered_queryset)
-            if filtered_session_ids:
-                initial["session_ids"] = filtered_session_ids
-
+        if any(key.startswith("f_") for key in self.request.GET):
+            initial["session_scope"] = "all_matching"
         return initial
 
     def _get_filter_context_data(self):
@@ -232,6 +232,7 @@ class CreateDataset(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateVi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.update(self._get_filter_context_data())
+        context["message_mode_all_matching_limit"] = MESSAGE_MODE_ALL_MATCHING_LIMIT
         return context
 
     def get_success_url(self):
@@ -268,35 +269,33 @@ class DatasetSessionsSelectionTableView(LoginAndTeamRequiredMixin, PermissionReq
 
 def get_base_session_queryset(request):
     """Returns a queryset with filtering applied but without any annotations or related model selection."""
-    timezone = request.session.get("detected_tz", None)
-    filter_params = FilterParams.from_request(request)
-    query_set = ExperimentSession.objects.filter(team=request.team)
-    session_filter = ExperimentSessionFilter()
-    query_set = session_filter.apply(query_set, filter_params=filter_params, timezone=timezone)
-
-    # Filter out sessions already in the dataset being edited.
     dataset_id = request.GET.get("dataset_id")
     if dataset_id:
         try:
-            dataset_id_int = int(dataset_id)
+            dataset_id = int(dataset_id)
         except (TypeError, ValueError):
             logger.warning("Ignoring non-integer dataset_id %r on session selection endpoint", dataset_id)
-            return query_set
-        existing_session_ids = EvaluationMessage.objects.filter(
-            evaluationdataset=dataset_id_int,
-            evaluationdataset__team=request.team,
-            session__isnull=False,
-        ).values_list("session_id", flat=True)
-        query_set = query_set.exclude(id__in=existing_session_ids)
-    return query_set
+            dataset_id = None
+    else:
+        dataset_id = None
+
+    return resolve_dataset_available_sessions(
+        request.team,
+        filter_params=FilterParams.from_request(request),
+        dataset_id=dataset_id,
+        timezone=request.session.get("detected_tz", None),
+    )
 
 
 @login_and_team_required
 @permission_required("experiments.view_experimentsession")
-def dataset_sessions_selection_json(request, team_slug: str):
-    query_set = get_base_session_queryset(request)
-    session_keys = list(query_set.values_list("external_id", flat=True))
-    return JsonResponse(session_keys, safe=False)
+def dataset_sessions_selection_count(request, team_slug: str):
+    """Return how many sessions match the current filters, for the create form's scope toggle.
+
+    Deliberately a count and not the ids: this is re-fetched on every filter change, and the
+    id list it replaced was ~390 KB of UUIDs at 10k sessions.
+    """
+    return JsonResponse({"total": get_base_session_queryset(request).count()})
 
 
 class DatasetMessagesTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
@@ -794,18 +793,14 @@ class ImportFromAnnotationQueue(LoginAndTeamRequiredMixin, PermissionRequiredMix
 
 def _get_dataset_available_sessions(request, dataset_pk, filter_params=None):
     """Return filtered team sessions excluding those already in the dataset."""
-    tz = request.session.get("detected_tz", None)
     if filter_params is None:
         filter_params = FilterParams.from_request(request)
-    qs = ExperimentSession.objects.filter(team=request.team)
-    qs = ExperimentSessionFilter().apply(qs, filter_params=filter_params, timezone=tz)
-    existing = EvaluationMessage.objects.filter(
-        evaluationdataset=dataset_pk,
-        evaluationdataset__team=request.team,
-        session__isnull=False,
-    ).values_list("session_id", flat=True)
-    qs = qs.exclude(id__in=existing)
-    return qs
+    return resolve_dataset_available_sessions(
+        request.team,
+        filter_params=filter_params,
+        dataset_id=dataset_pk,
+        timezone=request.session.get("detected_tz", None),
+    )
 
 
 @login_and_team_required
@@ -841,8 +836,15 @@ class EvalDatasetSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequired
         )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
-    """Dedicated sub-page to add sessions to an existing dataset (clone mode)."""
+    """Dedicated sub-page to add sessions to an existing dataset (clone mode).
+
+    'selected' mode posts one UUID per hand-picked session, which outgrows the WAF's default body
+    size limit at a few hundred rows — hence the decorator. NOTE: it only registers the view; the
+    generated regexes still have to be pasted into the ocs-deploy waf module (see
+    apps/web/management/commands/export_waf_allow_list.py) for the exception to take effect.
+    """
 
     permission_required = "evaluations.change_evaluationdataset"
 
@@ -868,6 +870,7 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
                 "dataset": dataset,
                 "sessions_count_url": count_url,
                 "active_tab": "evaluation_datasets",
+                "message_mode_all_matching_limit": MESSAGE_MODE_ALL_MATCHING_LIMIT,
                 **filter_context,
             },
         )
@@ -877,29 +880,36 @@ class EvalDatasetAddSessionsView(LoginAndTeamRequiredMixin, PermissionRequiredMi
         # Filter params are submitted in the POST body (the form replicates them as
         # hidden inputs), not the query string, so build FilterParams from request.POST.
         filter_params = FilterParams(request.POST)
+        filter_query = filter_params.to_query()
         base_qs = _get_dataset_available_sessions(request, pk, filter_params=filter_params)
-        external_ids = resolve_add_sessions_external_ids(
-            mode=request.POST.get("mode", "selected"),
-            post_data=request.POST,
-            base_qs=base_qs,
-            team=request.team,
-        )
-        if not external_ids:
+        try:
+            selection = resolve_sessions_to_clone(
+                dataset=dataset,
+                mode=request.POST.get("mode", "selected"),
+                post_data=request.POST,
+                base_qs=base_qs,
+                team=request.team,
+                filter_query=filter_query,
+            )
+        except SessionSelectionTooLargeError as e:
+            messages.error(request, e.messages[0])
+            return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)
+        if not selection.count:
             messages.error(request, "No sessions selected.")
             return redirect("evaluations:dataset_add_sessions", team_slug=team_slug, pk=pk)
 
         mark_dataset_pending(dataset)
         task = dispatch_clone_task(
             dataset=dataset,
-            external_ids=external_ids,
+            selection=selection,
             message_scope=request.POST.get("message_scope", "all"),
-            filter_query=filter_params.to_query() if filter_params else None,
+            filter_query=filter_query,
             timezone=request.session.get("detected_tz", None),
         )
         dataset.job_id = task.id
         dataset.save(update_fields=["job_id"])
         messages.success(
             request,
-            f"Adding {len(external_ids)} session(s) to dataset. This may take a moment.",
+            f"Adding {selection.count} session(s) to dataset. This may take a moment.",
         )
         return redirect("evaluations:dataset_edit", team_slug=team_slug, pk=pk)

@@ -78,9 +78,9 @@ urlpatterns = [
         name="dataset_sessions_selection_list",
     ),
     path(
-        "sessions_selection_json",
-        dataset_views.dataset_sessions_selection_json,
-        name="dataset_sessions_selection_json",
+        "sessions_selection_count",
+        dataset_views.dataset_sessions_selection_count,
+        name="dataset_sessions_selection_count",
     ),
     path(
         "dataset/<int:pk>/add-sessions/",
