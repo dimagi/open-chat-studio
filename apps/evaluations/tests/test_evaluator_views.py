@@ -8,7 +8,11 @@ from django.test import Client
 from django.urls import reverse
 
 from apps.evaluations.models import ConditionType
-from apps.utils.factories.evaluations import EvaluatorFactory, EvaluatorTagRuleFactory
+from apps.utils.factories.evaluations import (
+    EvaluatorFactory,
+    EvaluatorTagRuleFactory,
+    configure_evaluator_llm_provider,
+)
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -28,13 +32,7 @@ def client_with_user(team):
 @pytest.fixture()
 def evaluator(team):
     """An LLM evaluator pointing at providers this team is actually allowed to use."""
-    evaluator = EvaluatorFactory.create(team=team)
-    evaluator.params |= {
-        "llm_provider_id": LlmProviderFactory.create(team=team).id,
-        "llm_provider_model_id": LlmProviderModelFactory.create(team=team).id,
-    }
-    evaluator.save(update_fields=["params"])
-    return evaluator
+    return configure_evaluator_llm_provider(EvaluatorFactory.create(team=team))
 
 
 def _edit_url(team, evaluator):

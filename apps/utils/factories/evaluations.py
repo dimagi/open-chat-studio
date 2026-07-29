@@ -18,6 +18,7 @@ from apps.evaluations.models import (
     EvaluatorTagRule,
 )
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
 
 
@@ -49,6 +50,22 @@ class EvaluatorFactory(DjangoModelFactory):
             },
         }
     )
+
+
+def configure_evaluator_llm_provider(evaluator: Evaluator) -> Evaluator:
+    """Point an LLM evaluator at real providers in its own team, making it runnable.
+
+    ``EvaluatorFactory`` leaves the provider ids out of ``params``, so by default an
+    ``LlmEvaluator`` it builds has null provider FKs — which the form rejects on save and
+    which an evaluation run rejects pre-flight. Tests that drive a run through the
+    coordinator, or that post the evaluator form, need this; most tests do not.
+    """
+    evaluator.params |= {
+        "llm_provider_id": LlmProviderFactory.create(team=evaluator.team).id,
+        "llm_provider_model_id": LlmProviderModelFactory.create(team=evaluator.team).id,
+    }
+    evaluator.save(update_fields=["params"])
+    return evaluator
 
 
 class EvaluationTagFactory(DjangoModelFactory):
