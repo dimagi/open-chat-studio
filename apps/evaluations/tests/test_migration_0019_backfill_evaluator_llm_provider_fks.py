@@ -1,8 +1,8 @@
 import importlib
 
 import pytest
-from django.apps import apps
 from django.db import connection
+from django.db.migrations.loader import MigrationLoader
 
 from apps.evaluations.models import Evaluator
 from apps.utils.factories.evaluations import EvaluatorFactory
@@ -17,7 +17,14 @@ class FakeSchemaEditor:
 
 
 def _run_migration():
-    backfill_evaluator_llm_provider_fks(apps, FakeSchemaEditor())
+    """Run the backfill against the app state it actually receives at migration time.
+
+    Handing it the live registry instead would let it see model methods and fields that
+    don't exist in the historical state — the class of bug commit 72686ae6d fixed in
+    ``_repoint_evaluators``.
+    """
+    state = MigrationLoader(None).project_state([("evaluations", "0018_evaluator_llm_provider_fks")])
+    backfill_evaluator_llm_provider_fks(state.apps, FakeSchemaEditor())
 
 
 def _make_pre_migration_evaluator(**kwargs):
