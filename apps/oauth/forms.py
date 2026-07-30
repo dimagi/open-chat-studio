@@ -128,4 +128,8 @@ class RegisterGlobalApplicationForm(RegisterApplicationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["authorization_grant_type"].disabled = True
-        self.initial["authorization_grant_type"] = OAuth2Application.GRANT_AUTHORIZATION_CODE
+        if not self.instance.pk:
+            # Only force the grant type when registering. A disabled field takes its value from the
+            # initial data, so doing this on edit would silently rewrite the stored grant type -- and the
+            # grant type re-scopes every token the application issues.
+            self.initial["authorization_grant_type"] = OAuth2Application.GRANT_AUTHORIZATION_CODE

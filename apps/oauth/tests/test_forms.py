@@ -85,6 +85,21 @@ def test_global_form_ignores_client_credentials():
 
 
 @pytest.mark.django_db()
+def test_global_form_does_not_rewrite_the_grant_type_of_an_existing_application():
+    """Editing must not silently re-scope an application's tokens by changing its grant type."""
+    app = OAuth2Application.objects.create(
+        name="machine-app",
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+    )
+    form = RegisterGlobalApplicationForm(instance=app, data=_form_data(name="renamed"))
+
+    assert form.initial["authorization_grant_type"] == OAuth2Application.GRANT_CLIENT_CREDENTIALS
+    assert not form.is_valid()
+    assert "authorization_grant_type" in form.errors
+
+
+@pytest.mark.django_db()
 def test_global_form_saves_as_authorization_code():
     form = RegisterGlobalApplicationForm(data=_form_data(redirect_uris="https://example.com/callback"))
     assert form.is_valid(), form.errors

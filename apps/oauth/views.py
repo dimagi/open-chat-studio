@@ -68,6 +68,11 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
                     }
                 }
             )
+        if not team and self.requested_team:
+            # The paths that skip the authorization form (`skip_authorization`, `approval_prompt=auto`)
+            # never reach `form_valid`, so pin the requested team here too or the grant would be scoped
+            # to the team on the session instead of the one that was asked for.
+            set_current_team(self.requested_team)
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -103,10 +108,11 @@ def _manage_team_url(team_slug: str) -> str:
     return f"{reverse('single_team:manage_team', args=[team_slug])}#oauth-applications"
 
 
-class ApplicationHome(LoginAndTeamRequiredMixin, TemplateView):
+class ApplicationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     """Home view for the team's OAuth applications."""
 
     template_name = "generic/object_home.html"
+    permission_required = "oauth.view_oauth2application"
 
     def get_context_data(self, **kwargs):
         return {
