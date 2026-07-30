@@ -84,3 +84,14 @@ class TestBackfillCommand:
         other.refresh_from_db()
         assert target.metadata == METADATA
         assert other.metadata == {}
+
+    def test_filters_by_team(self):
+        target = TraceProviderFactory()
+        other = TraceProviderFactory()
+        with patch(FETCH, return_value=METADATA):
+            self._run("--team", target.team.slug)
+
+        target.refresh_from_db()
+        other.refresh_from_db()
+        assert target.metadata == METADATA
+        assert other.metadata == {}
