@@ -32,6 +32,7 @@ from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.ocs_notifications.notifications import widget_auth_level_upgrade_notification
 from apps.service_providers.models import MessagingProviderType
+from apps.service_providers.tracing.base import Tracer
 from apps.teams.utils import set_current_team
 from apps.utils.taskbadger import update_taskbadger_data
 
@@ -156,12 +157,26 @@ def handle_api_message(
 
 
 def handle_evaluation_message(
-    experiment_version, experiment_channel, message_text: str, session: ExperimentSession, participant_data: dict
+    experiment_version,
+    experiment_channel,
+    message_text: str,
+    session: ExperimentSession,
+    participant_data: dict,
+    usage_tracer: Tracer | None = None,
 ) -> ChatMessage:
-    """Synchronously handles the message coming from evaluations"""
+    """Synchronously handles the message coming from evaluations.
+
+    `usage_tracer` is the only tracer an eval run gets: it bills the LLM calls without
+    leaving a trace behind (see `UsageOnlyTracer`). Optional so a caller with nothing to
+    bill to can omit it; every evaluation run supplies one.
+    """
     message = BaseMessage(participant_id=session.participant.identifier, message_text=message_text)
     channel = EvaluationChannel(
-        experiment_version, experiment_channel, experiment_session=session, participant_data=participant_data
+        experiment_version,
+        experiment_channel,
+        experiment_session=session,
+        participant_data=participant_data,
+        usage_tracer=usage_tracer,
     )
     return channel.new_user_message(message)
 

@@ -1,9 +1,10 @@
 import json
 
+import pydantic
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.pipelines.flow import split_flow_data
+from apps.pipelines.flow import FullFlow, split_flow_data
 from apps.pipelines.models import Pipeline
 from apps.teams.models import Team
 
@@ -35,10 +36,17 @@ class Command(BaseCommand):
         except Team.DoesNotExist:
             raise CommandError(f"Team with slug {team_slug} does not exist.") from None
 
-        layout_data, node_data = split_flow_data(data)
+        try:
+            # FullFlow, not Flow: an import file with no ``nodes`` key is malformed, and
+            # parsing it as an empty graph would create a pipeline with no nodes.
+            flow = FullFlow(**data)
+        except pydantic.ValidationError as e:
+            raise CommandError(f"Invalid pipeline data: {e}") from e
+
+        layout, node_data = split_flow_data(flow)
         new_pipeline = Pipeline.objects.create(
             team=team,
-            data=layout_data,
+            data=layout.model_dump(),
             name=name,
         )
         new_pipeline.update_nodes_from_data(node_data)

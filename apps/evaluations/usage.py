@@ -1,10 +1,12 @@
-"""Cost tracking for evaluator LLM calls.
+"""Cost tracking for an evaluation run's two halves — the judge calls and the bot
+generation they score. Both are the team's spend and neither is a chatbot's, so both are
+recorded with `source=EVALUATION` (ADR-0048, ADR-0050).
 
-Judge-model calls run outside the chat/pipeline path, so there is no OCSTracer
-trace whose finalisation would drain their token usage into UsageRecord rows.
-This module attaches a MetricsCollector to the evaluator's own LLM call and
-writes the rows itself, tagging each one so eval spend stays distinguishable
-from the chat traffic recorded by the tracer.
+Judge-model calls run outside the chat/pipeline path, so no tracer would drain their
+token usage: this module attaches a MetricsCollector to the evaluator's own LLM call and
+writes the rows itself. Bot generation does run through the pipeline, but with tracing
+switched off for eval channels, so it gets a `UsageOnlyTracer` — which bills without
+leaving a `Trace` behind.
 """
 
 import logging
@@ -12,12 +14,18 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from langchain_core.callbacks.base import BaseCallbackHandler
 
 from apps.cost_tracking.models import UsageSource
 from apps.cost_tracking.services.recorder import UsageContext, record_usage_bulk
 from apps.service_providers.tracing.metrics import MetricsCollector
+from apps.service_providers.tracing.usage_tracer import UsageOnlyTracer
+
+if TYPE_CHECKING:
+    from apps.evaluations.models import EvaluationRun
+    from apps.experiments.models import Experiment
 
 logger = logging.getLogger("ocs.evaluations")
 
@@ -40,6 +48,25 @@ class EvaluatorUsageContext:
     evaluation_config_id: int | None = None
     experiment_id: int | None = None
     session_id: int | None = None
+
+
+def generation_usage_tracer(experiment: "Experiment", evaluation_run: "EvaluationRun") -> UsageOnlyTracer:
+    """The tracer that bills the bot generation an evaluation run drives.
+
+    `experiment` is resolved to its working version, matching how OCSTracer attributes
+    chat traffic and how `_usage_context_for` attributes the judge calls scoring this
+    generation, so both halves of a run's spend land on one chatbot. The session is
+    filled in by the tracer once the trace opens.
+    """
+    return UsageOnlyTracer(
+        UsageContext(
+            team_id=evaluation_run.team_id,
+            source=UsageSource.EVALUATION,
+            experiment_id=experiment.get_working_version_id(),
+            evaluation_config_id=evaluation_run.config_id,
+        ),
+        event_extra={"evaluation_run_id": evaluation_run.id},
+    )
 
 
 @contextmanager

@@ -40,9 +40,10 @@ class UsageContext:
     """Attribution shared by every UsageEvent in one recording call. Passed once to
     `record_usage_bulk` rather than carried on each event.
 
-    `trace_id` is None for callers outside the tracer (evaluator judge calls, which
-    set `source=EVALUATION`); `source` decides how the rows may be attributed
-    downstream, so writers set it explicitly rather than leaning on the default.
+    `trace_id` is None for callers outside the tracer (evaluator judge calls); it is not a
+    proxy for `source`, which the tracer also sets to `EVALUATION` for eval-driven
+    generation (ADR-0050). `source` decides how the rows may be attributed downstream, so
+    writers set it explicitly rather than leaning on the default.
     """
 
     team_id: int

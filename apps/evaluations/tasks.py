@@ -41,9 +41,14 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
+from apps.evaluations.session_selection import resolve_dataset_available_sessions
 from apps.evaluations.tagging import apply_rules_to_result, reverse_stale_tags
-from apps.evaluations.usage import EvaluatorUsageContext
-from apps.evaluations.utils import iter_session_evaluation_messages, parse_csv_value_as_json, parse_history_text
+from apps.evaluations.usage import EvaluatorUsageContext, generation_usage_tracer
+from apps.evaluations.utils import (
+    iter_session_evaluation_messages_for_sessions,
+    parse_csv_value_as_json,
+    parse_history_text,
+)
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.teams.models import Team
@@ -163,8 +168,8 @@ def _usage_context_for(evaluation_run: EvaluationRun, session_id: int | None) ->
     """Attribution for the LLM spend an evaluator incurs judging one message.
 
     Judge calls bypass the tracer, so they carry no trace. The generation experiment
-    is resolved to its working version to match how OCSTracer attributes the bot
-    generation from the same run, keeping both sides of the run on one chatbot.
+    is resolved to its working version to match how `generation_usage_tracer` attributes
+    the bot generation from the same run, keeping both sides of the run on one chatbot.
     """
     generation_experiment = evaluation_run.generation_experiment
     return EvaluatorUsageContext(
@@ -213,7 +218,9 @@ def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_i
         generation_experiment = evaluation_run.generation_experiment
         session_id, bot_response = None, ""
         if generation_experiment is not None:
-            session_id, bot_response = run_bot_generation(evaluation_run.team, message, generation_experiment)
+            session_id, bot_response = run_bot_generation(
+                evaluation_run.team, message, generation_experiment, evaluation_run=evaluation_run
+            )
 
         evaluators_qs = Evaluator.objects.filter(id__in=pending_evaluator_ids).prefetch_related(
             Prefetch("tag_rules", queryset=EvaluatorTagRule.objects.select_related("tag")),
@@ -516,9 +523,13 @@ def _maybe_apply_tag_rules(
     apply_rules_to_result(evaluation_result, evaluator, message)
 
 
-def run_bot_generation(team: Team, message: EvaluationMessage, experiment: Experiment) -> tuple[int | None, str | None]:
+def run_bot_generation(
+    team: Team, message: EvaluationMessage, experiment: Experiment, *, evaluation_run: EvaluationRun
+) -> tuple[int | None, str | None]:
     """
     Run the evaluation message through the bot to generate a response.
+
+    `evaluation_run` is what the generation's LLM spend gets billed to (ADR-0050).
     """
     try:
         # TODO: Do we get the participant from the EvaluationMessage?
@@ -564,6 +575,7 @@ def run_bot_generation(team: Team, message: EvaluationMessage, experiment: Exper
             message_text=input_content,
             session=session,
             participant_data=participant_data,
+            usage_tracer=generation_usage_tracer(experiment, evaluation_run),
         )
         response_content = bot_response.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")
@@ -1235,8 +1247,45 @@ def create_dataset_from_session_messages_task(
         return {"success": False, "error": message}
 
 
+def _sessions_for_session_mode_clone(
+    dataset: EvaluationDataset,
+    session_ids: list[str] | None,
+    filter_query: str | None,
+    timezone: str | None,
+) -> QuerySet[ExperimentSession]:
+    """Resolve which sessions a session-mode clone should walk.
+
+    A stored filter is resolved here rather than by the request that dispatched the job, so an
+    "everything matching these filters" selection never travels as tens of thousands of UUIDs.
+
+    The pk ceiling snapshots the result set at job start. The caller counts the sessions and
+    pages over them in separate queries, and a relative filter (e.g. "last 7 days") re-resolves
+    against a moving `now()`, so without the ceiling a session arriving mid-job would make the
+    two disagree.
+    """
+    if filter_query is not None:
+        queryset = resolve_dataset_available_sessions(
+            dataset.team,
+            filter_params=FilterParams(QueryDict(filter_query)),
+            dataset_id=dataset.id,
+            timezone=timezone,
+        )
+        ceiling = queryset.aggregate(Max("pk"))["pk__max"]
+        return queryset.filter(pk__lte=ceiling) if ceiling is not None else queryset.none()
+    if not session_ids:
+        return ExperimentSession.objects.none()
+    return ExperimentSession.objects.filter(team=dataset.team, external_id__in=session_ids)
+
+
 @shared_task(bind=True, base=TaskbadgerTask)
-def create_dataset_from_sessions_task(self, dataset_id: int, team_id: int, session_ids: list[str]) -> dict:
+def create_dataset_from_sessions_task(
+    self,
+    dataset_id: int,
+    team_id: int,
+    session_ids: list[str] | None = None,
+    filter_query: str | None = None,
+    timezone: str | None = None,
+) -> dict:
     """
     Create session-mode evaluation messages from sessions asynchronously.
 
@@ -1245,7 +1294,10 @@ def create_dataset_from_sessions_task(self, dataset_id: int, team_id: int, sessi
     Args:
         dataset_id: ID of the EvaluationDataset to populate
         team_id: ID of the team
-        session_ids: List of session external IDs
+        session_ids: List of session external IDs, when the caller has an explicit selection
+        filter_query: Serialized session filter to resolve server-side, when the caller asked for
+            every session matching a filter. Takes precedence over session_ids.
+        timezone: Timezone used to interpret relative date filters in filter_query
     """
     progress_recorder = ProgressRecorder(self)
     dataset = None
@@ -1266,17 +1318,13 @@ def create_dataset_from_sessions_task(self, dataset_id: int, team_id: int, sessi
         progress_recorder.set_progress(0, 100, "Starting session-mode clone...")
 
         with current_team(dataset.team):
+            session_qs = _sessions_for_session_mode_clone(dataset, session_ids, filter_query, timezone)
+
             # Counted up front: the message source is a generator, so it has no len(), and the
             # count is needed as the progress denominator. Empty sessions are excluded because
             # they yield no EvaluationMessage, so counting them would leave the bar (and the
             # "cloned X of Y" failure message) permanently short of its own total.
-            total_sessions = (
-                ExperimentSession.objects.filter(team=dataset.team, external_id__in=session_ids)
-                .filter(Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id"))))
-                .count()
-                if session_ids
-                else 0
-            )
+            total_sessions = session_qs.filter(Exists(ChatMessage.objects.filter(chat_id=OuterRef("chat_id")))).count()
 
             def report(created: int, skipped: int) -> None:
                 """Publish per-batch progress so the bar advances instead of parking at 40%."""
@@ -1287,7 +1335,7 @@ def create_dataset_from_sessions_task(self, dataset_id: int, team_id: int, sessi
                 progress_recorder.set_progress(percent, 100, f"Cloned {done} of {total_sessions} sessions")
 
             created_ids, duplicates_skipped = dataset.add_messages_stream(
-                iter_session_evaluation_messages(session_ids, team=dataset.team),
+                iter_session_evaluation_messages_for_sessions(session_qs),
                 progress_callback=report,
             )
 
