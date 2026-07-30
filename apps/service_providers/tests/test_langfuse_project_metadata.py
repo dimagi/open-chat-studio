@@ -76,7 +76,7 @@ class TestLangfuseTraceProviderForm:
         instance = TraceProviderFactory.build()
 
         with patch(
-            "apps.service_providers.tracing.langfuse.fetch_project_metadata",
+            "apps.service_providers.forms.fetch_project_metadata",
             return_value={"project_id": "proj-1", "organization_name": "Dimagi"},
         ):
             form.save(instance)
@@ -91,7 +91,7 @@ class TestLangfuseTraceProviderForm:
         instance = TraceProviderFactory.build(metadata={"project_id": "proj-old"})
 
         with patch(
-            "apps.service_providers.tracing.langfuse.fetch_project_metadata",
+            "apps.service_providers.forms.fetch_project_metadata",
             side_effect=Exception("API unreachable"),
         ):
             form.save(instance)
@@ -162,7 +162,7 @@ class TestProviderViews:
 
     def test_creating_a_provider_records_the_project(self, team_with_users, authed_client):
         with patch(
-            "apps.service_providers.tracing.langfuse.fetch_project_metadata",
+            "apps.service_providers.forms.fetch_project_metadata",
             return_value=METADATA,
         ):
             response = self._post(authed_client, team_with_users, {"name": "Langfuse", **CONFIG})
@@ -174,7 +174,7 @@ class TestProviderViews:
 
     def test_a_failed_lookup_still_saves_and_warns(self, team_with_users, authed_client):
         with patch(
-            "apps.service_providers.tracing.langfuse.fetch_project_metadata",
+            "apps.service_providers.forms.fetch_project_metadata",
             side_effect=Exception("API unreachable"),
         ):
             response = self._post(authed_client, team_with_users, {"name": "Langfuse", **CONFIG})
@@ -188,7 +188,7 @@ class TestProviderViews:
     def test_editing_a_provider_refreshes_the_project(self, team_with_users, authed_client):
         provider = TraceProviderFactory(team=team_with_users, config=CONFIG, metadata={"project_id": "proj-old"})
         with patch(
-            "apps.service_providers.tracing.langfuse.fetch_project_metadata",
+            "apps.service_providers.forms.fetch_project_metadata",
             return_value=METADATA,
         ):
             self._post(authed_client, team_with_users, {"name": provider.name, **CONFIG}, pk=provider.pk)

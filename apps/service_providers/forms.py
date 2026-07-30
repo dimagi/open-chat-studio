@@ -10,6 +10,7 @@ from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
 from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.tracing.langfuse import fetch_project_metadata
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
 
@@ -450,9 +451,6 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
         recorded metadata in place and returns a warning for the caller to surface. The
         `backfill_langfuse_metadata` management command can fill the gap later.
         """
-        # lazy: avoids loading langfuse (heavy dep) at startup
-        from apps.service_providers.tracing.langfuse import fetch_project_metadata  # noqa: PLC0415
-
         instance = super().save(instance)
         try:
             instance.metadata = fetch_project_metadata(self.cleaned_data)
