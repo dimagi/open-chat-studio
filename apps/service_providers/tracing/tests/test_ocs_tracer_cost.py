@@ -8,7 +8,8 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
-from apps.cost_tracking.models import PricingRule, ServiceKind, UsageRecord
+from apps.channels.models import ChannelPlatform
+from apps.cost_tracking.models import PricingRule, ServiceKind, UsageRecord, UsageSource
 from apps.service_providers.tracing.base import TraceContext
 from apps.service_providers.tracing.metrics import MetricsCollector
 from apps.service_providers.tracing.ocs_tracer import OCSTracer
@@ -143,3 +144,86 @@ class TestCostRecordingEndToEnd:
         # duration, which can round to 0ms on fast machines.
         trace_row = Trace.objects.get(team_id=experiment.team_id, trace_id=ctx.id)
         assert trace_row.status == TraceStatus.SUCCESS
+
+
+@pytest.mark.django_db()
+class TestUsageSourceClassification:
+    """ADR-0050: spend on an eval session is evaluation spend, whichever writer records it.
+
+    An eval run's own generation is billed by `UsageOnlyTracer`, but an eval session can
+    still reach this tracer — a static trigger firing on one goes through
+    `ExperimentSession.ad_hoc_bot_message`, which builds a full tracer — so the rule is
+    enforced here too rather than assumed to be someone else's job.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _pricing(self):
+        """Seed the rules these traces price against. Saving them also invalidates the
+        resolver's Redis cache, which outlives a test's DB rollback."""
+        _seed_rule("openai", "test-model", ServiceKind.LLM_INPUT, "0.00015")
+        _seed_rule("openai", "test-model", ServiceKind.LLM_OUTPUT, "0.00060")
+
+    def _record(self, tracer, session):
+        run_id = uuid4()
+        with tracer.trace(trace_context=TraceContext(id=uuid4(), name="t"), session=session):
+            tracer.metrics_collector.on_llm_start(
+                {},
+                ["hello"],
+                run_id=run_id,
+                invocation_params={"model": "test-model"},
+                metadata={"ocs_provider_type": "openai"},
+            )
+            tracer.metrics_collector.on_llm_end(_llm_result(10, 5), run_id=run_id)
+
+    @pytest.mark.parametrize(
+        ("platform", "expected"),
+        [
+            pytest.param(ChannelPlatform.EVALUATIONS, UsageSource.EVALUATION, id="eval-session"),
+            pytest.param(ChannelPlatform.WEB, UsageSource.CHAT, id="chat-session"),
+        ],
+    )
+    def test_source_follows_session_platform(self, experiment, platform, expected):
+        session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team, platform=platform)
+        tracer = OCSTracer(experiment, experiment.team_id)
+
+        self._record(tracer, session)
+
+        rows = UsageRecord.objects.filter(team=experiment.team)
+        assert rows.count() == 2
+        assert {row.source for row in rows} == {expected}
+        # Eval rows still carry the entity columns; `source` is what keeps them out of
+        # per-entity attribution.
+        assert all(row.session_id == session.id for row in rows)
+
+    def test_source_is_read_at_finalisation_not_trace_start(self, experiment):
+        """`set_session` can back-fill the session mid-trace, so a trace opened without
+        one must still be classified from the session it ends up with."""
+        session = ExperimentSessionFactory.create(
+            experiment=experiment, team=experiment.team, platform=ChannelPlatform.EVALUATIONS
+        )
+        tracer = OCSTracer(experiment, experiment.team_id)
+        run_id = uuid4()
+
+        with tracer.trace(trace_context=TraceContext(id=uuid4(), name="t"), session=None):
+            tracer.metrics_collector.on_llm_start(
+                {},
+                ["hello"],
+                run_id=run_id,
+                invocation_params={"model": "test-model"},
+                metadata={"ocs_provider_type": "openai"},
+            )
+            tracer.metrics_collector.on_llm_end(_llm_result(10, 5), run_id=run_id)
+            tracer.set_session(session)
+
+        rows = UsageRecord.objects.filter(team=experiment.team)
+        assert rows.count() == 2
+        assert {row.source for row in rows} == {UsageSource.EVALUATION}
+
+    def test_session_less_trace_is_chat(self, experiment):
+        tracer = OCSTracer(experiment, experiment.team_id)
+
+        self._record(tracer, None)
+
+        rows = UsageRecord.objects.filter(team=experiment.team)
+        assert rows.count() == 2
+        assert {row.source for row in rows} == {UsageSource.CHAT}

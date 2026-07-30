@@ -170,9 +170,9 @@ def _attributable_records(team: Team, filters: CostFilters | None = None):
     Evaluation spend is the team's spend but never a chatbot's, a participant's or a
     conversation's (ADR-0048), so every read that names an entity goes through here
     (grouping) or gets the same treatment from `_scoped_records` (filtering), while an
-    unfiltered team total counts every source. Judge rows from a generation run do carry
-    an experiment/session, so this filters on `source` rather than on those columns
-    being null.
+    unfiltered team total counts every source. Eval rows do carry an experiment/session —
+    always for generation (ADR-0050), and for the judge calls scoring it — so this filters
+    on `source` rather than on those columns being null.
     """
     return _scoped_records(team, filters).filter(source=UsageSource.CHAT)
 
@@ -268,7 +268,8 @@ def costs_by_experiment(
     """Total cost per experiment in the period, keyed by `experiment_id`.
     Feeds the dashboard's Bot Performance table cost column. Records with a
     null experiment (e.g. trace whose experiment was hard-deleted) are excluded,
-    as is evaluation spend — judging a chatbot is not the chatbot's cost.
+    as is evaluation spend — neither judging a chatbot nor exercising it from an
+    eval run is the chatbot's cost.
     """
     rows = (
         _attributable_records(team, filters)
@@ -284,8 +285,8 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
     total. Rows are ordered by descending cost. Uses the
     `(team, session, timestamp)` index.
 
-    Chat only: for an eval session this shows what generating the responses cost,
-    not what judging them cost (ADR-0048).
+    Chat only, so an eval session totals $0 — since ADR-0050 both halves of its spend
+    (generation and judging) are `source=EVALUATION`.
     """
     rows = (
         UsageRecord.objects.filter(team_id=session.team_id, session=session, source=UsageSource.CHAT)

@@ -68,6 +68,12 @@ def evaluation_message(team_with_users, db):
 
 
 @pytest.fixture()
+def generation_run(team_with_users, db):
+    """The run whose generation spend gets billed. Only the billing attribution reads it."""
+    return EvaluationRunFactory.create(team=team_with_users)
+
+
+@pytest.fixture()
 def evaluation_run(evaluation_message, team_with_users, db):
     """Create an evaluation run with config and evaluator"""
     # Get the dataset that contains the message
@@ -79,9 +85,11 @@ def evaluation_run(evaluation_message, team_with_users, db):
 
 
 @pytest.mark.django_db()
-def test_run_bot_generation(experiment, evaluation_message, team_with_users):
+def test_run_bot_generation(experiment, evaluation_message, team_with_users, generation_run):
     """Test that _run_bot_generation calls the bot correctly"""
-    session_id, result = run_bot_generation(team_with_users, evaluation_message, experiment)
+    session_id, result = run_bot_generation(
+        team_with_users, evaluation_message, experiment, evaluation_run=generation_run
+    )
 
     assert result == "I heard: " + evaluation_message.input["content"]
 
@@ -102,7 +110,7 @@ def test_run_bot_generation(experiment, evaluation_message, team_with_users):
 
 
 @pytest.mark.django_db()
-def test_run_bot_generation_with_participant_data_session_state(evaluation_message, team_with_users):
+def test_run_bot_generation_with_participant_data_session_state(evaluation_message, team_with_users, generation_run):
     """Test that _run_bot_generation calls the bot correctly"""
     experiment = ChatbotFactory.create()
     template_node = render_template_node("{{participant_data}}:{{session_state}}")
@@ -111,7 +119,9 @@ def test_run_bot_generation_with_participant_data_session_state(evaluation_messa
 
     evaluation_message.participant_data = {"test_pd": "demo_pd"}
     evaluation_message.session_state = {"test_ss": "demo_ss"}
-    session_id, result = run_bot_generation(team_with_users, evaluation_message, experiment)
+    session_id, result = run_bot_generation(
+        team_with_users, evaluation_message, experiment, evaluation_run=generation_run
+    )
 
     data = {"name": "Evaluations Bot"} | evaluation_message.participant_data
     assert result == f"{data}:{evaluation_message.session_state}"
@@ -191,7 +201,7 @@ def test_evaluate_single_message_handles_bot_generation_error(
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
 def test_run_bot_generation_creates_evaluations_participant(
-    get_llm_service, experiment, evaluation_message, team_with_users
+    get_llm_service, experiment, evaluation_message, team_with_users, generation_run
 ):
     """Test that _run_bot_generation creates the evaluations participant if it doesn't exist"""
     service = build_fake_llm_service(responses=["Bot generated response"])
@@ -201,7 +211,7 @@ def test_run_bot_generation_creates_evaluations_participant(
     assert not Participant.objects.filter(identifier="evaluations", team=team_with_users).exists()
 
     # Run bot generation
-    run_bot_generation(team_with_users, evaluation_message, experiment)
+    run_bot_generation(team_with_users, evaluation_message, experiment, evaluation_run=generation_run)
 
     # Verify participant was created
     participant = Participant.objects.get(identifier="evaluations", team=team_with_users)
@@ -209,7 +219,7 @@ def test_run_bot_generation_creates_evaluations_participant(
     assert participant.platform == "evaluations"
 
     # Run again - should get the same participant
-    run_bot_generation(team_with_users, evaluation_message, experiment)
+    run_bot_generation(team_with_users, evaluation_message, experiment, evaluation_run=generation_run)
 
     # Should still be only one participant
     assert Participant.objects.filter(identifier="evaluations", team=team_with_users).count() == 1
@@ -217,7 +227,9 @@ def test_run_bot_generation_creates_evaluations_participant(
 
 @pytest.mark.django_db()
 @patch("apps.service_providers.models.LlmProvider.get_llm_service")
-def test_run_bot_generation_creates_session(get_llm_service, experiment, evaluation_message, team_with_users):
+def test_run_bot_generation_creates_session(
+    get_llm_service, experiment, evaluation_message, team_with_users, generation_run
+):
     """Test that _run_bot_generation creates a session"""
 
     # Mock the LLM service
@@ -225,7 +237,7 @@ def test_run_bot_generation_creates_session(get_llm_service, experiment, evaluat
     get_llm_service.return_value = service
 
     # Call the bot generation function
-    run_bot_generation(team_with_users, evaluation_message, experiment)
+    run_bot_generation(team_with_users, evaluation_message, experiment, evaluation_run=generation_run)
 
     # Verify session was created
     sessions = ExperimentSession.objects.filter(team=team_with_users)

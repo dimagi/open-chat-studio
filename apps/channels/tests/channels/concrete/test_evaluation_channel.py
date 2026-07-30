@@ -9,6 +9,9 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage
+from apps.cost_tracking.models import UsageSource
+from apps.cost_tracking.services.recorder import UsageContext
+from apps.service_providers.tracing.usage_tracer import UsageOnlyTracer
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
@@ -49,6 +52,35 @@ def test_team_evaluations_channel_is_unique_per_team(evals_experiment):
 
     with pytest.raises(IntegrityError):
         ExperimentChannel.objects.create(team=team, platform=ChannelPlatform.EVALUATIONS, name="another-evals-channel")
+
+
+@pytest.mark.django_db()
+class TestEvaluationChannelTracing:
+    """An eval run leaves no `Trace` behind, so the billing tracer is the only tracer it
+    ever gets — never OCSTracer, and never the experiment's external trace provider.
+    """
+
+    def _channel(self, experiment, channel, usage_tracer=None):
+        session = ExperimentSessionFactory.create(experiment=experiment, experiment_channel=channel)
+        return EvaluationChannel(
+            experiment=experiment,
+            experiment_channel=channel,
+            experiment_session=session,
+            participant_data={},
+            usage_tracer=usage_tracer,
+        )
+
+    def test_no_tracers_when_nothing_is_being_billed(self, evals_experiment, evals_channel):
+        channel = self._channel(evals_experiment, evals_channel)
+
+        assert channel.trace_service._tracers == []
+
+    def test_usage_tracer_is_the_only_tracer(self, evals_experiment, evals_channel):
+        tracer = UsageOnlyTracer(UsageContext(team_id=evals_experiment.team_id, source=UsageSource.EVALUATION))
+
+        channel = self._channel(evals_experiment, evals_channel, usage_tracer=tracer)
+
+        assert channel.trace_service._tracers == [tracer]
 
 
 @pytest.mark.django_db()
