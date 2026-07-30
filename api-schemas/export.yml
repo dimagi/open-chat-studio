@@ -5794,6 +5794,10 @@ components:
         name:
           type: string
           maxLength: 255
+        metadata:
+          description: Provider-side details fetched from the tracing service (e.g.
+            Langfuse project and organization). Populated on save; unencrypted so
+            usage can be aggregated by project/organization.
       required:
       - config
       - created_at
