@@ -1,5 +1,5 @@
 from apps.data_migrations.management.commands.base import IdempotentCommand, get_affected_teams_data
-from apps.ocs_notifications.notifications import deleted_model_notification
+from apps.ocs_notifications.notifications import AffectedResources, deleted_model_notification
 from apps.service_providers.llm_service.default_models import DELETED_MODELS, _update_pipeline_node_param
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.models import Team
@@ -77,6 +77,7 @@ class Command(IdempotentCommand):
                     self.stdout.write(f"      Chatbots: {sorted(data['chatbots'])}")
                     self.stdout.write(f"      Pipelines: {sorted(data['pipelines'])}")
                     self.stdout.write(f"      Assistants: {sorted(data['assistants'])}")
+                    self.stdout.write(f"      Evaluators: {sorted(data['evaluators'])}")
 
         if dry_run:
             return f"Would remove {len(models_to_delete)} models"
@@ -101,9 +102,12 @@ class Command(IdempotentCommand):
                     team=teams_objs[team_id],
                     model_name=f"{db_model.type}/{db_model.name}",
                     replacement_model_name=replacement_name if replacement_model else None,
-                    affected_chatbots=data["chatbots"],
-                    affected_pipelines=data["pipelines"],
-                    affected_assistants=data["assistants"],
+                    affected=AffectedResources(
+                        chatbots=data["chatbots"],
+                        pipelines=data["pipelines"],
+                        assistants=data["assistants"],
+                        evaluators=data["evaluators"],
+                    ),
                 )
 
         self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} models"))

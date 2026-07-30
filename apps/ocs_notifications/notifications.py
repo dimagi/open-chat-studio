@@ -1,4 +1,6 @@
 import logging
+from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime
 
 from django.utils.text import slugify
@@ -208,27 +210,60 @@ def tool_error_notification(team, tool_name: str, error_message: str, session=No
     )
 
 
+@dataclass(frozen=True)
+class AffectedResources:
+    """The resources referencing an LLM model, grouped by kind as ``{name: url}`` maps.
+
+    Every kind is required: a new kind of resource that can reference a model has to be
+    threaded through here deliberately, rather than defaulting to empty and silently
+    dropping out of the notifications.
+    """
+
+    chatbots: dict[str, str]
+    pipelines: dict[str, str]
+    assistants: dict[str, str]
+    evaluators: dict[str, str]
+
+    def summary_text(self) -> str:
+        """Summarise the non-empty kinds, e.g. `2 chatbot(s), 1 evaluator(s)`."""
+        parts = [f"{len(items)} {noun}(s)" for noun, items in self._by_noun() if items]
+        return ", ".join(parts) if parts else "some resources"
+
+    def links(self) -> dict[str, str]:
+        """Every affected resource as a single `{name: url}` map for the notification links.
+
+        Names are only unique within a kind, so a name two kinds both claim would collide
+        into one link. Those names are qualified with their kind (`My Bot (evaluator)`) so
+        every resource keeps a link; names claimed by one kind are left alone.
+        """
+        claims = Counter(name for _, items in self._by_noun() for name in items)
+        return {
+            f"{name} ({noun})" if claims[name] > 1 else name: url
+            for noun, items in self._by_noun()
+            for name, url in items.items()
+        }
+
+    def _by_noun(self) -> tuple[tuple[str, dict[str, str]], ...]:
+        """The kinds paired with their singular noun, in the order they are reported."""
+        return (
+            ("chatbot", self.chatbots),
+            ("pipeline", self.pipelines),
+            ("assistant", self.assistants),
+            ("evaluator", self.evaluators),
+        )
+
+
 @silence_exceptions(logger, log_message="Failed to create deprecated model notification")
 def deprecated_model_notification(
     team,
     model_name: str,
     replacement_model_name: str | None,
-    affected_chatbots: dict[str, str],
-    affected_pipelines: dict[str, str],
-    affected_assistants: dict[str, str],
+    affected: AffectedResources,
 ) -> None:
     """Notify a team that a model they use has been deprecated."""
-    resource_parts = []
-    if affected_chatbots:
-        resource_parts.append(f"{len(affected_chatbots)} chatbot(s)")
-    if affected_pipelines:
-        resource_parts.append(f"{len(affected_pipelines)} pipeline(s)")
-    if affected_assistants:
-        resource_parts.append(f"{len(affected_assistants)} assistant(s)")
-    resources_text = ", ".join(resource_parts) if resource_parts else "some resources"
-
     message = (
-        f"The model '{model_name}' has been deprecated and will be removed soon. {resources_text} are still using it."
+        f"The model '{model_name}' has been deprecated and will be removed soon. "
+        f"{affected.summary_text()} are still using it."
     )
     if replacement_model_name:
         message += f" Please update to '{replacement_model_name}' before it is removed."
@@ -241,7 +276,7 @@ def deprecated_model_notification(
         slug="llm-model-deprecated",
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
-        links={**affected_chatbots, **affected_pipelines, **affected_assistants},
+        links=affected.links(),
     )
 
 
@@ -340,20 +375,9 @@ def deleted_model_notification(
     team,
     model_name: str,
     replacement_model_name: str | None,
-    affected_chatbots: dict[str, str],
-    affected_pipelines: dict[str, str],
-    affected_assistants: dict[str, str],
+    affected: AffectedResources,
 ) -> None:
     """Notify a team that a model has been removed from the platform."""
-    resource_parts = []
-    if affected_chatbots:
-        resource_parts.append(f"{len(affected_chatbots)} chatbot(s)")
-    if affected_pipelines:
-        resource_parts.append(f"{len(affected_pipelines)} pipeline(s)")
-    if affected_assistants:
-        resource_parts.append(f"{len(affected_assistants)} assistant(s)")
-    resources_text = ", ".join(resource_parts) if resource_parts else "some resources"
-
     if replacement_model_name:
         action_text = f"References have been automatically updated to use '{replacement_model_name}'."
     else:
@@ -363,7 +387,7 @@ def deleted_model_notification(
         title=f"LLM Model '{model_name}' Removed",
         message=(
             f"The model '{model_name}' has been removed from the platform. "
-            f"{resources_text} were affected. "
+            f"{affected.summary_text()} were affected. "
             f"{action_text}"
         ),
         level=LevelChoices.WARNING,
@@ -371,5 +395,5 @@ def deleted_model_notification(
         slug="llm-model-deleted",
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
-        links={**affected_chatbots, **affected_pipelines, **affected_assistants},
+        links=affected.links(),
     )
