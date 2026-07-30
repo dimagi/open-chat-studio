@@ -271,6 +271,8 @@ class CreateServiceProvider(
                 if isinstance(obj, VoiceProvider):
                     for warning in obj.run_post_save_hook():
                         messages.warning(request, warning)
+            for warning in config_form.warnings:
+                messages.warning(request, warning)
             return HttpResponseRedirect(self.get_success_url())
 
         if file_formset and not file_formset.is_valid():

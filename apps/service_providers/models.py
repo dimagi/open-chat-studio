@@ -684,6 +684,12 @@ class TraceProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=TraceProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Provider-side details fetched from the tracing service (e.g. Langfuse project and organization). "
+        "Populated on save; unencrypted so usage can be aggregated by project/organization.",
+    )
 
     class Meta:
         ordering = ("type", "name")
