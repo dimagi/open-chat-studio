@@ -83,20 +83,21 @@
 {% block page_js %}
   {{ llm_options|json_script:"llmModelOptions" }}
   <script>
-    const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
-    document.addEventListener('alpine:init', () => {
-      Alpine.data('assistant', () => ({
-        builtinTools: [],
-        llmProvider: null,
-        llm_provider_model: '{{ object.llm_provider_model.id|default:form.llm_provider_model.value|default:'null' }}',
-        llm_provider_model_options: [],
-        init() {
-          this.$watch('llmProvider', () => {
-            const opts = llmModelOptions[this.llmProvider];
-            this.llm_provider_model_options = opts ? (opts.models || []) : [];
-          })
-        }
-      }));
+    // Defined as a window global (not via Alpine.data/alpine:init) so it is
+    // available synchronously, even when Alpine initialises before this script
+    // runs (e.g. on fast page loads or HTMX-cached navigation).
+    window.assistant = () => ({
+      builtinTools: [],
+      llmProvider: null,
+      llm_provider_model: '{{ object.llm_provider_model.id|default:form.llm_provider_model.value|default:'null' }}',
+      llm_provider_model_options: [],
+      init() {
+        const llmModelOptions = JSON.parse(document.getElementById("llmModelOptions").textContent);
+        this.$watch('llmProvider', () => {
+          const opts = llmModelOptions[this.llmProvider];
+          this.llm_provider_model_options = opts ? (opts.models || []) : [];
+        });
+      }
     });
   </script>
 {% endblock page_js %}
