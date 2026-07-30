@@ -13,7 +13,7 @@ from apps.experiments.filters import get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
-from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent, UserNotificationPreferences
+from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent
 from apps.ocs_notifications.tables import NotificationEventTable, UserNotificationTable
 from apps.ocs_notifications.utils import (
     TIMEDELTA_MAP,
@@ -31,18 +31,12 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         table_url = reverse("ocs_notifications:notifications_table")
-        user_preferences, _created = UserNotificationPreferences.objects.get_or_create(
-            user=self.request.user, team=self.request.team
-        )
-        do_not_disturbed_active = bool(user_preferences.do_not_disturb_until)
-        end_datetime = None
-        if user_preferences.do_not_disturb_until and user_preferences.do_not_disturb_until < timezone.now():
-            user_preferences.do_not_disturb_until = None
-            user_preferences.save(update_fields=["do_not_disturb_until"])
-            do_not_disturbed_active = False
-        elif user_preferences.do_not_disturb_until:
-            end_datetime = user_preferences.do_not_disturb_until
 
+        # NOTE: the "Do Not Disturb" toggle was removed from this (now cross-team) page.
+        # UserNotificationPreferences.do_not_disturb_until is per-team, so a single on/off
+        # button no longer makes sense here. Follow-up PR: a modal to set DND for a chosen
+        # set of teams (or "All Teams") + duration, plus a list of currently-silenced teams
+        # with per-team cancel buttons.
         context = {
             "active_tab": "notifications",
             "title": "Notifications",
@@ -51,12 +45,6 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
             "filter_bar_action": "ocs_notifications/components/mark_all_read_button.html",
             "mark_all_read_url": reverse("ocs_notifications:mark_all_notifications_read"),
             "actions": [
-                actions.Action(
-                    url_name="ocs_notifications:toggle_do_not_disturb",
-                    url_factory=lambda url_name, _request, _record, _value: reverse(url_name),
-                    template="ocs_notifications/components/do_not_disturb_button.html",
-                    extra_context={"is_activated": do_not_disturbed_active, "end_datetime": end_datetime},
-                ),
                 actions.Action(
                     url_name="users:user_profile",
                     url_factory=lambda url_name, _request, _record, _value: reverse(url_name),
@@ -185,34 +173,6 @@ class UnmuteNotificationView(LoginRequiredMixin, View):
             request,
             "ocs_notifications/components/mute_button.html",
             context={"record": user_notification, "is_muted": False, "muted_until": None},
-        )
-
-
-class ToggleDoNotDisturbView(LoginRequiredMixin, View):
-    def post(self, request, *args, **kwargs):
-        duration_param = request.POST.get("duration", None)
-        user_preferences, _created = UserNotificationPreferences.objects.get_or_create(
-            user=request.user, team=request.team
-        )
-
-        update = True
-        if duration_param == "":
-            # Reset do not disturb
-            user_preferences.do_not_disturb_until = None
-        elif duration_param in TIMEDELTA_MAP and duration_param != "forever":
-            timedelta = TIMEDELTA_MAP.get(duration_param)
-            user_preferences.do_not_disturb_until = timezone.now() + timedelta.value
-        else:
-            update = False
-            messages.error(request, "Invalid duration for Do Not Disturb")
-
-        if update:
-            user_preferences.save(update_fields=["do_not_disturb_until"])
-
-        return render(
-            request,
-            "ocs_notifications/components/do_not_disturb_button.html",
-            context={"end_datetime": user_preferences.do_not_disturb_until},
         )
 
 
