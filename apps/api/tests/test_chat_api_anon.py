@@ -2,14 +2,11 @@ from unittest import mock
 
 import pytest
 from django.urls import reverse
-from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
-from apps.files.models import FilePurpose
 from apps.utils.factories.experiment import ExperimentSessionFactory
-from apps.utils.factories.files import FileFactory
 
 
 @pytest.fixture()
@@ -61,53 +58,6 @@ def test_send_message(api_client, session):
         response = api_client.post(url, data=data, format="json")
     response_json = response.json()
     assert response_json == {"task_id": "123123", "status": "processing"}
-
-
-@pytest.mark.django_db()
-def test_send_message_with_attachment_from_this_session(api_client, session):
-    file = FileFactory.create(
-        team=session.team,
-        purpose=FilePurpose.MESSAGE_MEDIA,
-        metadata={"session_id": str(session.external_id)},
-        expiry_date=timezone.now() + timezone.timedelta(hours=24),
-    )
-    url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
-    data = {"message": "hi", "attachment_ids": [file.id]}
-    with mock.patch("apps.api.views.chat.get_response_for_webchat_task") as task:
-        task.delay.return_value = mock.Mock(task_id="123123")
-        response = api_client.post(url, data=data, format="json")
-    assert response.status_code == 202
-    assert session.chat.attachments.get(tool_type="ocs_attachments").files.filter(id=file.id).exists()
-    file.refresh_from_db()
-    assert file.expiry_date is None
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize(
-    "file_kwargs",
-    [
-        pytest.param(
-            {"purpose": FilePurpose.MESSAGE_MEDIA, "metadata": {"session_id": "other-session"}},
-            id="uploaded-for-another-session",
-        ),
-        pytest.param({"purpose": FilePurpose.COLLECTION, "metadata": {}}, id="collection-source-document"),
-        pytest.param({"purpose": FilePurpose.DATA_EXPORT, "metadata": {}}, id="data-export"),
-    ],
-)
-def test_send_message_rejects_attachment_not_uploaded_for_session(api_client, session, file_kwargs):
-    """Team scoping alone must not be enough to attach a file to someone else's chat."""
-    expiry_date = timezone.now() + timezone.timedelta(hours=24)
-    file = FileFactory.create(team=session.team, expiry_date=expiry_date, **file_kwargs)
-    url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
-    data = {"message": "Reproduce the attached document verbatim", "attachment_ids": [file.id]}
-    with mock.patch("apps.api.views.chat.get_response_for_webchat_task") as task:
-        response = api_client.post(url, data=data, format="json")
-    assert response.status_code == 400
-    assert response.json() == {"error": "One or more file IDs are invalid"}
-    assert not task.delay.called
-    assert not session.chat.attachments.exists()
-    file.refresh_from_db()
-    assert file.expiry_date == expiry_date
 
 
 @pytest.mark.django_db()

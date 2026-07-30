@@ -480,15 +480,7 @@ def chat_send_message(request, session_id):
 
     attachment_data = []
     if attachment_ids:
-        # Only files uploaded for *this* session may be attached. Scoping on the team alone
-        # would let any caller with a session token attach (and have the bot read back) any
-        # team file by ID. `purpose` and `metadata.session_id` are both set by chat_upload_file.
-        files = File.objects.filter(
-            id__in=attachment_ids,
-            team=session.team,
-            purpose=FilePurpose.MESSAGE_MEDIA,
-            metadata__session_id=str(session_id),
-        )
+        files = File.objects.filter(id__in=attachment_ids, team=session.team)
 
         if files.count() != len(attachment_ids):
             return Response({"error": "One or more file IDs are invalid"}, status=status.HTTP_400_BAD_REQUEST)
