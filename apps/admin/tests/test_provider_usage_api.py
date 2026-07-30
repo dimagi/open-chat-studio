@@ -5,12 +5,10 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.cost_tracking.models import UsageSource
-from apps.trace.models import Trace, TraceStatus
+from apps.cost_tracking.models import ServiceKind, UsageSource
 from apps.users.models import CustomUser
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.team import TeamFactory
-from apps.utils.factories.traces import TraceFactory
 
 DATE_RANGE = {"range_type": "custom", "start": "2026-05-01", "end": "2026-05-31"}
 INVALID_RANGE = {"range_type": "custom", "start": "not-a-date", "end": "2026-05-31"}
@@ -24,11 +22,9 @@ def superuser_client(client):
     return client
 
 
-def _trace(team, tokens):
-    trace = TraceFactory(team=team, status=TraceStatus.SUCCESS, n_total_tokens=tokens)
-    # timestamp uses auto_now_add, so place it inside the window after creation.
-    Trace.objects.filter(pk=trace.pk).update(timestamp=WHEN)
-    return trace
+def _usage(team, **kwargs):
+    kwargs.setdefault("at", WHEN)
+    return UsageRecordFactory(team=team, **kwargs)
 
 
 @pytest.mark.django_db()
@@ -61,18 +57,14 @@ def test_reporting_token_auth(client, settings, configured_token, auth_header, e
 
 
 @pytest.mark.django_db()
-def test_merges_token_totals_and_cost_detail(superuser_client):
+def test_token_totals_reconcile_with_per_model_detail(superuser_client):
+    """The whole point of reading one table: `total_tokens` is exactly the sum of
+    `models[].tokens`, and `total_cost` the sum of their costs."""
     team_a = TeamFactory(name="Alpha")
     team_b = TeamFactory(name="Bravo")
-    _trace(team_a, 500)
-    _trace(team_a, 300)
-    _trace(team_b, 100)
-    UsageRecordFactory(
-        team=team_a, provider_type="openai", model_name="gpt-4o", quantity=500, cost=Decimal("1.25"), at=WHEN
-    )
-    UsageRecordFactory(
-        team=team_a, provider_type="anthropic", model_name="claude", quantity=200, cost=Decimal("0.75"), at=WHEN
-    )
+    _usage(team_a, provider_type="openai", model_name="gpt-4o", quantity=500, cost=Decimal("1.25"))
+    _usage(team_a, provider_type="anthropic", model_name="claude", quantity=300, cost=Decimal("0.75"))
+    _usage(team_b, provider_type="openai", model_name="gpt-4o", quantity=100, cost=Decimal("0.10"))
 
     response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
 
@@ -80,18 +72,25 @@ def test_merges_token_totals_and_cost_detail(superuser_client):
     teams = {t["team_name"]: t for t in response.json()["teams"]}
 
     alpha = teams["Alpha"]
-    assert alpha["run_count"] == 2
     assert alpha["total_tokens"] == 800
     assert alpha["team_slug"] == team_a.slug
     assert Decimal(alpha["total_cost"]["USD"]) == Decimal("2.00")
     models = {m["model_name"]: m for m in alpha["models"]}
     assert Decimal(models["gpt-4o"]["cost"]) == Decimal("1.25")
     assert models["gpt-4o"]["tokens"] == 500
+    assert alpha["total_tokens"] == sum(m["tokens"] for m in alpha["models"])
 
-    bravo = teams["Bravo"]
-    assert bravo["run_count"] == 1
-    assert bravo["models"] == []
-    assert bravo["total_cost"] == {}
+    assert teams["Bravo"]["total_tokens"] == 100
+
+
+@pytest.mark.django_db()
+def test_teams_ordered_by_token_total(superuser_client):
+    _usage(TeamFactory(name="Small"), quantity=10)
+    _usage(TeamFactory(name="Big"), quantity=900)
+
+    payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
+
+    assert [t["team_name"] for t in payload["teams"]] == ["Big", "Small"]
 
 
 @pytest.mark.django_db()
@@ -101,7 +100,7 @@ def test_includes_team_metadata(superuser_client, settings):
         {"key": "region", "label": "Region"},
     ]
     team = TeamFactory(name="Alpha", metadata={"team_owner": "Jia", "internal_only": "hidden"})
-    _trace(team, 100)
+    _usage(team, quantity=100)
 
     payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
 
@@ -115,27 +114,42 @@ def test_includes_team_metadata(superuser_client, settings):
 
 
 @pytest.mark.django_db()
-def test_total_cost_counts_evaluation_spend(superuser_client):
-    """Billing view: eval spend is the team's spend, counted in the total with no
-    per-source split (ADR-0048). Only the cost half sees judge spend — the token half
-    reads `Trace`, and judge calls have no trace."""
+def test_counts_untraced_evaluation_spend_in_both_halves(superuser_client):
+    """Billing view: eval spend is the team's spend, counted with no per-source split
+    (ADR-0048). Judge calls have no trace, so a trace-sourced token count saw the cost
+    but not the tokens — reading UsageRecord for both closes that."""
     team = TeamFactory(name="Alpha")
-    _trace(team, 100)
-    UsageRecordFactory(team=team, model_name="gpt-4o", cost=Decimal("1.00"), at=WHEN)
-    UsageRecordFactory(team=team, model_name="gpt-4o", cost=Decimal("0.25"), source=UsageSource.EVALUATION, at=WHEN)
+    _usage(team, model_name="gpt-4o", quantity=1000, cost=Decimal("1.00"))
+    _usage(team, model_name="gpt-4o", quantity=250, cost=Decimal("0.25"), source=UsageSource.EVALUATION, trace=None)
 
     payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
 
     alpha = {t["team_name"]: t for t in payload["teams"]}["Alpha"]
+    assert alpha["total_tokens"] == 1250
     assert Decimal(alpha["total_cost"]["USD"]) == Decimal("1.25")
+
+
+@pytest.mark.django_db()
+def test_total_tokens_spans_service_kinds(superuser_client):
+    """One LLM call becomes several per-kind rows; the team total is every kind, so it
+    tracks the trace-sourced `usage_metadata` total it replaces."""
+    team = TeamFactory(name="Alpha")
+    _usage(team, model_name="gpt-4o", service_kind=ServiceKind.LLM_INPUT, quantity=700)
+    _usage(team, model_name="gpt-4o", service_kind=ServiceKind.LLM_CACHED_INPUT, quantity=200)
+    _usage(team, model_name="gpt-4o", service_kind=ServiceKind.LLM_CACHE_WRITE, quantity=100)
+    _usage(team, model_name="gpt-4o", service_kind=ServiceKind.LLM_OUTPUT, quantity=50)
+
+    payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
+
+    alpha = {t["team_name"]: t for t in payload["teams"]}["Alpha"]
+    assert alpha["total_tokens"] == 1050
 
 
 @pytest.mark.django_db()
 def test_total_cost_keeps_currencies_separate(superuser_client):
     team = TeamFactory(name="Alpha")
-    _trace(team, 100)
-    UsageRecordFactory(team=team, model_name="gpt-4o", cost=Decimal("1.25"), currency="USD", at=WHEN)
-    UsageRecordFactory(team=team, model_name="claude", cost=Decimal("0.90"), currency="EUR", at=WHEN)
+    _usage(team, model_name="gpt-4o", cost=Decimal("1.25"), currency="USD")
+    _usage(team, model_name="claude", cost=Decimal("0.90"), currency="EUR")
 
     response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
 
@@ -146,14 +160,12 @@ def test_total_cost_keeps_currencies_separate(superuser_client):
 
 
 @pytest.mark.django_db()
-def test_excludes_pending_traces(superuser_client):
+def test_excludes_records_outside_the_range(superuser_client):
     team = TeamFactory(name="Alpha")
-    _trace(team, 500)
-    pending = TraceFactory(team=team, status=TraceStatus.PENDING, n_total_tokens=999)
-    Trace.objects.filter(pk=pending.pk).update(timestamp=WHEN)
+    _usage(team, quantity=500)
+    _usage(team, quantity=999, at=timezone.make_aware(datetime(2026, 4, 30, 23, 59)))
 
     response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
 
     alpha = {t["team_name"]: t for t in response.json()["teams"]}["Alpha"]
-    assert alpha["run_count"] == 1
     assert alpha["total_tokens"] == 500

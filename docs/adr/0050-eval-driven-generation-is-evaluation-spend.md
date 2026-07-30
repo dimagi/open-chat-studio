@@ -31,7 +31,7 @@ We will bill eval-driven generation as evaluation spend, and record it without a
 - The read path is untouched: keying on `source` alone (ADR-0048) already answers correctly for every consumer.
 - An eval session's own cost page reports $0, since both halves of its spend are now `EVALUATION`; surfacing it is [#3981](https://github.com/dimagi/open-chat-studio/issues/3981).
 - "What did evaluating this cost?" now covers a whole run, not just the judging.
-- The admin report's halves diverge further: cost counts eval runs, tokens come from `Trace` and cannot, until [#3984](https://github.com/dimagi/open-chat-studio/issues/3984) moves token reporting onto `UsageRecord`.
+- The admin report's halves diverged further while its tokens came from `Trace`: cost counted eval runs and tokens could not. [#3984](https://github.com/dimagi/open-chat-studio/issues/3984) closed that by moving token reporting onto `UsageRecord`, so both halves now read the same rows.
 - Eval runs still write no trace, so debugging a failing one stays as hard as it was.
 - A tracer now exists that keeps no trace, so "tracer implies `Trace` row" is no longer true.
 
