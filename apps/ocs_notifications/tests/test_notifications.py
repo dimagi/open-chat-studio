@@ -401,6 +401,17 @@ def _affected(chatbots=None, pipelines=None, assistants=None, evaluators=None) -
     )
 
 
+class TestAffectedResourcesLinks:
+    def test_unique_names_are_not_qualified(self):
+        links = _affected(chatbots={"My Bot": "/chatbots/1/"}, evaluators={"Sentiment": "/evaluators/7/"}).links()
+        assert links == {"My Bot": "/chatbots/1/", "Sentiment": "/evaluators/7/"}
+
+    def test_name_claimed_by_two_kinds_keeps_both_links(self):
+        """Names are unique per kind, so a shared name must not collapse into one link."""
+        links = _affected(chatbots={"Support": "/chatbots/1/"}, evaluators={"Support": "/evaluators/7/"}).links()
+        assert links == {"Support (chatbot)": "/chatbots/1/", "Support (evaluator)": "/evaluators/7/"}
+
+
 class TestDeprecatedModelNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")

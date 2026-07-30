@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -229,8 +230,18 @@ class AffectedResources:
         return ", ".join(parts) if parts else "some resources"
 
     def links(self) -> dict[str, str]:
-        """Every affected resource as a single `{name: url}` map for the notification links."""
-        return {**self.chatbots, **self.pipelines, **self.assistants, **self.evaluators}
+        """Every affected resource as a single `{name: url}` map for the notification links.
+
+        Names are only unique within a kind, so a name two kinds both claim would collide
+        into one link. Those names are qualified with their kind (`My Bot (evaluator)`) so
+        every resource keeps a link; names claimed by one kind are left alone.
+        """
+        claims = Counter(name for _, items in self._by_noun() for name in items)
+        return {
+            f"{name} ({noun})" if claims[name] > 1 else name: url
+            for noun, items in self._by_noun()
+            for name, url in items.items()
+        }
 
     def _by_noun(self) -> tuple[tuple[str, dict[str, str]], ...]:
         """The kinds paired with their singular noun, in the order they are reported."""
