@@ -43,6 +43,9 @@ class BaseEvaluator(BaseModel):
 
 
 class LLMResponseMixin(BaseModel):
+    # These two ids drive the form UI (which is generated from this schema) but the stored
+    # reference lives on the ``Evaluator.llm_provider``/``llm_provider_model`` FKs.
+    # ``Evaluator.get_evaluator_params`` resolves them from there, not from the params JSON.
     llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
     llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
     llm_temperature: float = Field(
