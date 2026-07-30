@@ -126,10 +126,15 @@ def test_converts_custom_models_to_global_models_from_a_migration(requires_migra
 
 @pytest.mark.django_db()
 def test_repointing_raises_when_the_evaluator_relation_is_missing_but_its_fk_is_live():
-    """A migration state predating evaluations.0018 cannot see a constraint that still binds.
+    """Fail loudly when the evaluators exist in the database but not in the app state.
 
-    ``_replace_custom_model_with_global`` deletes the custom model, so skipping the repoint
-    here would surface as a deferred FK violation at commit rather than at the cause.
+    A migration whose dependencies don't reach ``evaluations.0018`` gets an app state with no
+    ``Evaluator`` model, so there is no ``evaluators`` accessor to repoint through. The FK
+    column is in the database regardless, and its constraint still binds. Carrying on would
+    mean ``_replace_custom_model_with_global`` deletes the custom model out from under those
+    evaluators, and Postgres would only notice the orphans when the deferred constraint is
+    checked at commit — an opaque failure a long way from its cause. Raise here instead,
+    naming the dependency to add.
     """
     custom_model = LlmProviderModelFactory.create()
     global_model = LlmProviderModelFactory.create(team=None, type=custom_model.type, name=custom_model.name)
