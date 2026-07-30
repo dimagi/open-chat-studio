@@ -134,6 +134,12 @@ def matches_blocking_deletion_condition(obj):
     return (getattr(obj, "working_version_id", None) is None) or (getattr(obj, "is_default_version", False) is True)
 
 
+def _experiment_chip_label(experiment) -> str:
+    if experiment.is_working_version:
+        return f"{experiment.name} [{experiment.get_version_name()}]"
+    return f"{experiment.name} {experiment.get_version_name()} [published]"
+
+
 @require_http_methods(["DELETE"])
 @login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
@@ -145,34 +151,27 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
 
     if related_objects:
         filtered_objects = [obj for obj in related_objects if matches_blocking_deletion_condition(obj)]
-        related_experiments = [
-            Chip(
-                label=(
-                    f"{experiment.name} [{experiment.get_version_name()}]"
-                    if experiment.is_working_version
-                    else f"{experiment.name} {experiment.get_version_name()} [published]"
-                ),
-                url=experiment.get_absolute_url(),
-            )
-            for experiment in [obj for obj in filtered_objects if isinstance(obj, Experiment)]
-        ]
-        related_assistants = [
-            Chip(label=assistant.name, url=assistant.get_absolute_url())
-            for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
-        ]
-        # Evaluators reference the provider by FK. Deleting underneath one leaves it
-        # unrunnable — nulled FK, stale id in params — so it blocks like the rest.
-        related_evaluators = [
-            Chip(label=evaluator.name, url=evaluator.get_absolute_url())
-            for evaluator in [obj for obj in filtered_objects if isinstance(obj, Evaluator)]
-        ]
-        if related_experiments or related_assistants or related_evaluators:
-            return render_referenced_objects_modal(
-                "service provider",
-                experiments=related_experiments,
-                assistants=related_assistants,
-                evaluators=related_evaluators,
-            )
+        chips_by_kind = {
+            "experiments": [
+                Chip(label=_experiment_chip_label(experiment), url=experiment.get_absolute_url())
+                for experiment in filtered_objects
+                if isinstance(experiment, Experiment)
+            ],
+            "assistants": [
+                Chip(label=assistant.name, url=assistant.get_absolute_url())
+                for assistant in filtered_objects
+                if isinstance(assistant, OpenAiAssistant)
+            ],
+            # Evaluators reference the provider by FK. Deleting underneath one leaves it
+            # unrunnable — nulled FK, stale id in params — so it blocks like the rest.
+            "evaluators": [
+                Chip(label=evaluator.name, url=evaluator.get_absolute_url())
+                for evaluator in filtered_objects
+                if isinstance(evaluator, Evaluator)
+            ],
+        }
+        if any(chips_by_kind.values()):
+            return render_referenced_objects_modal("service provider", **chips_by_kind)
     service_config.delete()
     return HttpResponse()
 
