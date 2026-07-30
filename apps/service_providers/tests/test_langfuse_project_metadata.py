@@ -63,6 +63,13 @@ class TestFetchProjectMetadata:
 
 
 class TestLangfuseTraceProviderForm:
+    def test_host_defaults_to_langfuse_cloud(self):
+        assert LangfuseTraceProviderForm(None)["host"].value() == "https://cloud.langfuse.com"
+
+    def test_an_existing_providers_host_wins_over_the_default(self):
+        form = LangfuseTraceProviderForm(None, initial={**CONFIG, "host": "https://langfuse.example.com"})
+        assert form["host"].value() == "https://langfuse.example.com"
+
     def test_save_populates_metadata(self):
         form = LangfuseTraceProviderForm(None, data=CONFIG)
         assert form.is_valid(), form.errors

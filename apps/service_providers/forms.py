@@ -439,7 +439,8 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     secret_key = forms.CharField(label=_("Secret Key"))
     public_key = forms.CharField(label=_("Public Key"))
-    host = forms.URLField(label=_("Host"))
+    # Only applies when creating: an existing provider's saved host arrives as form-level initial.
+    host = forms.URLField(label=_("Host"), initial="https://cloud.langfuse.com")
 
     def save(self, instance):
         """Save the config and record which Langfuse project/organization the keys belong to.
