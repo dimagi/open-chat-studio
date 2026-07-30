@@ -18,18 +18,22 @@ from oauth2_provider.models import (
 
 from apps.generics.chips import Chip
 from apps.teams.models import Team
+from apps.teams.utils import get_slug_for_team
 
 
 class OAuth2Application(AbstractApplication):
-    # For client-credentials applications the team is pinned here at registration (there is no
-    # authorizing user to scope the token to). Null for authorization-code applications, where the
-    # team is chosen interactively and threaded via the Grant instead.
+    # The team is pinned here at registration and every token the application issues is scoped to it.
+    # Null means the application is *global*: only superusers may register those (from the site admin
+    # area), and only with the authorization-code grant, where the team is instead chosen by the
+    # authorizing user and threaded via the Grant.
     team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)
 
     objects = ApplicationManager()
 
     def get_absolute_url(self):
-        return reverse("oauth2_provider:application_edit", args=[self.pk])
+        if self.team_id:
+            return reverse("oauth_apps:edit", args=[get_slug_for_team(self.team_id), self.pk])
+        return reverse("oauth2_provider:global_application_edit", args=[self.pk])
 
     def as_chip(self) -> Chip:
         return Chip(label=self.name, url=self.get_absolute_url())

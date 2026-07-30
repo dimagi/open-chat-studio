@@ -1,12 +1,16 @@
+from unittest import mock
+
 import pytest
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory
+from django.urls import reverse
+from oauth2_provider.settings import oauth2_settings
 
 from apps.oauth.models import OAuth2Application
-from apps.oauth.views import ApplicationTableView, EditApplication, TeamScopedAuthorizationView
+from apps.oauth.views import TeamScopedAuthorizationView
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Team
-from apps.utils.factories.team import MembershipFactory
+from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 
 
@@ -25,12 +29,6 @@ def user_with_team(db):
 
 
 @pytest.fixture()
-def user_without_team(db):
-    """Create a user without any teams."""
-    return UserFactory.create()
-
-
-@pytest.fixture()
 def view_with_oauth2_data():
     """Create a TeamScopedAuthorizationView instance with mocked oauth2_data."""
     view = TeamScopedAuthorizationView()
@@ -46,23 +44,6 @@ def get_request_with_user(request_factory):
         request = request_factory.get(url)
         request.user = user
         request.method = "GET"
-        # Add session middleware
-        middleware = SessionMiddleware(lambda x: None)
-        middleware.process_request(request)
-        request.session.save()
-        return request
-
-    return _create_request
-
-
-@pytest.fixture()
-def post_request_with_user(request_factory):
-    """Factory fixture to create POST requests with user attached."""
-
-    def _create_request(url="/", user=None):
-        request = request_factory.post(url)
-        request.user = user
-        request.method = "POST"
         # Add session middleware
         middleware = SessionMiddleware(lambda x: None)
         middleware.process_request(request)
@@ -95,29 +76,22 @@ def request_with_session(request_factory):
 
 
 @pytest.fixture()
-def oauth_applications_for_multiple_users(db, user_with_team):
-    """Create OAuth applications for multiple users."""
-    other_user = UserFactory.create()
+def _oidc_signing_key():
+    """The registration views ask for RS256, which `Application.clean()` rejects without a signing key."""
+    with mock.patch.object(oauth2_settings, "OIDC_RSA_PRIVATE_KEY", "test-key", create=True):
+        yield
 
-    app_for_current_user = OAuth2Application.objects.create(
-        name="Current User App",
-        user=user_with_team,
+
+def _create_application(team=None, user=None, name="App", **kwargs):
+    return OAuth2Application.objects.create(
+        name=name,
+        team=team,
+        user=user,
         client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
         authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
+        redirect_uris="https://example.com/callback",
+        **kwargs,
     )
-    app_for_other_user = OAuth2Application.objects.create(
-        name="Other User App",
-        user=other_user,
-        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
-        authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
-    )
-
-    return {
-        "current_user": user_with_team,
-        "other_user": other_user,
-        "current_user_app": app_for_current_user,
-        "other_user_app": app_for_other_user,
-    }
 
 
 @pytest.mark.django_db()
@@ -218,44 +192,220 @@ def test_requested_team_returns_none_user_not_member(get_request_with_user, user
 
 
 @pytest.mark.django_db()
-def test_edit_application_queryset_scoped_to_user(request_factory, oauth_applications_for_multiple_users):
-    """Test that EditApplication queryset is scoped to the logged-in user."""
-    current_user = oauth_applications_for_multiple_users["current_user"]
-    current_user_app = oauth_applications_for_multiple_users["current_user_app"]
-    other_user_app = oauth_applications_for_multiple_users["other_user_app"]
+class TestTeamApplicationViews:
+    """The application CRUD views are scoped to the team in the URL, not to the user who registered."""
 
-    # Create request with current user
-    request = request_factory.get("/oauth/applications/edit/")
-    request.user = current_user
+    @pytest.fixture()
+    def team(self):
+        return TeamWithUsersFactory.create()
 
-    # Create view instance and check queryset
-    view = EditApplication()
-    view.request = request
-    queryset = view.get_queryset()
+    @pytest.fixture()
+    def admin_user(self, team):
+        return team.members.first()
 
-    # Verify only current user's application is in queryset
-    assert current_user_app in queryset
-    assert other_user_app not in queryset
-    assert queryset.count() == 1
+    @pytest.mark.parametrize("url_name", ["home", "new"])
+    def test_pages_render(self, client, team, admin_user, url_name):
+        client.force_login(admin_user)
+        response = client.get(reverse(f"oauth_apps:{url_name}", args=[team.slug]))
+
+        assert response.status_code == 200
+
+    def test_table_lists_all_of_the_team_s_applications(self, client, team, admin_user):
+        own = _create_application(team=team, user=admin_user, name="Own App")
+        other_member = MembershipFactory.create(team=team).user
+        colleagues = _create_application(team=team, user=other_member, name="Colleague's App")
+        other_team = _create_application(team=TeamWithUsersFactory.create(), name="Other Team's App")
+        global_app = _create_application(team=None, name="Global App")
+
+        client.force_login(admin_user)
+        response = client.get(reverse("oauth_apps:table", args=[team.slug]))
+
+        assert response.status_code == 200
+        listed = set(response.context["table"].data.data.values_list("id", flat=True))
+        assert listed == {own.id, colleagues.id}
+        assert other_team.id not in listed
+        assert global_app.id not in listed
+
+    @pytest.mark.usefixtures("_oidc_signing_key")
+    def test_create_pins_the_application_to_the_team_in_the_url(self, client, team, admin_user):
+        client.force_login(admin_user)
+        response = client.post(
+            reverse("oauth_apps:new", args=[team.slug]),
+            {
+                "name": "New App",
+                "client_id": "new-client-id",
+                "client_secret": "new-client-secret",
+                "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
+                "redirect_uris": "https://example.com/callback",
+                "algorithm": "RS256",
+            },
+        )
+
+        assert response.status_code == 302
+        # Registration is initiated from the team admin page, so it returns to that section.
+        assert response.url == f"{reverse('single_team:manage_team', args=[team.slug])}#oauth-applications"
+        application = OAuth2Application.objects.get(name="New App")
+        assert application.team == team
+        assert application.user == admin_user
+
+    @pytest.mark.usefixtures("_oidc_signing_key")
+    def test_create_registers_client_credentials_for_the_team(self, client, team, admin_user):
+        client.force_login(admin_user)
+        response = client.post(
+            reverse("oauth_apps:new", args=[team.slug]),
+            {
+                "name": "Machine App",
+                "client_id": "machine-client-id",
+                "client_secret": "machine-client-secret",
+                "authorization_grant_type": OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+                "algorithm": "RS256",
+            },
+        )
+
+        assert response.status_code == 302
+        assert OAuth2Application.objects.get(name="Machine App").team == team
+
+    def test_edit_is_scoped_to_the_team_in_the_url(self, client, team, admin_user):
+        """An application belonging to another team is not reachable, even by its own owner."""
+        other_team = TeamWithUsersFactory.create()
+        MembershipFactory.create(team=other_team, user=admin_user)
+        application = _create_application(team=other_team, user=admin_user)
+
+        client.force_login(admin_user)
+        response = client.get(reverse("oauth_apps:edit", args=[team.slug, application.pk]))
+
+        assert response.status_code == 404
+
+    def test_edit_updates_a_team_application_registered_by_someone_else(self, client, team, admin_user):
+        application = _create_application(team=team, user=MembershipFactory.create(team=team).user)
+
+        client.force_login(admin_user)
+        response = client.post(
+            reverse("oauth_apps:edit", args=[team.slug, application.pk]),
+            {
+                "name": "Renamed",
+                "client_id": application.client_id,
+                "redirect_uris": "https://example.com/callback",
+                "algorithm": "RS256",
+            },
+        )
+
+        assert response.status_code == 302
+        assert response.url == f"{reverse('single_team:manage_team', args=[team.slug])}#oauth-applications"
+        application.refresh_from_db()
+        assert application.name == "Renamed"
+        assert application.team == team
+
+    def test_delete_is_scoped_to_the_team_in_the_url(self, client, team, admin_user):
+        other_team = TeamWithUsersFactory.create()
+        MembershipFactory.create(team=other_team, user=admin_user)
+        application = _create_application(team=other_team, user=admin_user)
+
+        client.force_login(admin_user)
+        response = client.delete(reverse("oauth_apps:delete", args=[team.slug, application.pk]))
+
+        assert response.status_code == 404
+        assert OAuth2Application.objects.filter(pk=application.pk).exists()
+
+    def test_member_without_permission_cannot_register(self, client, team):
+        membership = next(m for m in team.membership_set.all() if not m.has_perm("oauth.add_oauth2application"))
+
+        client.force_login(membership.user)
+        response = client.get(reverse("oauth_apps:new", args=[team.slug]))
+
+        assert response.status_code == 403
+
+    def test_non_member_cannot_list(self, client, team):
+        client.force_login(UserFactory.create())
+        response = client.get(reverse("oauth_apps:table", args=[team.slug]))
+
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db()
-def test_application_table_view_queryset_scoped_to_user(request_factory, oauth_applications_for_multiple_users):
-    """Test that ApplicationTableView queryset is scoped to the logged-in user."""
-    current_user = oauth_applications_for_multiple_users["current_user"]
-    current_user_app = oauth_applications_for_multiple_users["current_user_app"]
-    other_user_app = oauth_applications_for_multiple_users["other_user_app"]
+class TestGlobalApplicationViews:
+    """Global (team-less) applications are managed by superusers only."""
 
-    # Create request with current user
-    request = request_factory.get("/oauth/applications/")
-    request.user = current_user
+    @pytest.fixture()
+    def superuser(self):
+        return UserFactory.create(is_superuser=True, is_staff=True)
 
-    # Create view instance and check queryset
-    view = ApplicationTableView()
-    view.request = request
-    queryset = view.get_queryset()
+    @pytest.mark.parametrize("url_name", ["global_application_home", "global_application_new"])
+    def test_pages_render_for_superusers(self, client, superuser, url_name):
+        client.force_login(superuser)
+        response = client.get(reverse(f"oauth2_provider:{url_name}"))
 
-    # Verify only current user's application is in queryset
-    assert current_user_app in queryset
-    assert other_user_app not in queryset
-    assert queryset.count() == 1
+        assert response.status_code == 200
+
+    def test_table_lists_only_global_applications(self, client, superuser):
+        global_app = _create_application(team=None, name="Global App")
+        team_app = _create_application(team=TeamWithUsersFactory.create(), name="Team App")
+
+        client.force_login(superuser)
+        response = client.get(reverse("oauth2_provider:global_application_table"))
+
+        assert response.status_code == 200
+        listed = set(response.context["table"].data.data.values_list("id", flat=True))
+        assert listed == {global_app.id}
+        assert team_app.id not in listed
+
+    @pytest.mark.usefixtures("_oidc_signing_key")
+    def test_create_registers_a_team_less_application(self, client, superuser):
+        client.force_login(superuser)
+        response = client.post(
+            reverse("oauth2_provider:global_application_new"),
+            {
+                "name": "Global App",
+                "client_id": "global-client-id",
+                "client_secret": "global-client-secret",
+                "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
+                "redirect_uris": "https://example.com/callback",
+                "algorithm": "RS256",
+            },
+        )
+
+        assert response.status_code == 302
+        application = OAuth2Application.objects.get(name="Global App")
+        assert application.team is None
+        assert application.authorization_grant_type == OAuth2Application.GRANT_AUTHORIZATION_CODE
+
+    @pytest.mark.usefixtures("_oidc_signing_key")
+    def test_create_forces_the_authorization_code_grant(self, client, superuser):
+        """A global client-credentials application would issue tokens scoped to no team at all."""
+        client.force_login(superuser)
+        response = client.post(
+            reverse("oauth2_provider:global_application_new"),
+            {
+                "name": "Global Machine App",
+                "client_id": "global-machine-client-id",
+                "client_secret": "global-machine-client-secret",
+                "authorization_grant_type": OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+                "redirect_uris": "https://example.com/callback",
+                "algorithm": "RS256",
+            },
+        )
+
+        assert response.status_code == 302
+        application = OAuth2Application.objects.get(name="Global Machine App")
+        assert application.authorization_grant_type == OAuth2Application.GRANT_AUTHORIZATION_CODE
+
+    def test_edit_rejects_a_team_scoped_application(self, client, superuser):
+        application = _create_application(team=TeamWithUsersFactory.create())
+
+        client.force_login(superuser)
+        response = client.get(reverse("oauth2_provider:global_application_edit", args=[application.pk]))
+
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize(
+        "url_name",
+        ["global_application_home", "global_application_table", "global_application_new"],
+    )
+    def test_non_superuser_has_no_access(self, client, url_name):
+        """A non-superuser is not told the page exists."""
+        team = TeamWithUsersFactory.create()
+        client.force_login(team.members.first())
+
+        response = client.get(reverse(f"oauth2_provider:{url_name}"))
+
+        assert response.status_code == 404

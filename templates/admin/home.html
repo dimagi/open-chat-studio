@@ -17,6 +17,11 @@
         <a href="{% url 'ocs_admin:team_metadata' %}" class="btn btn-primary">
           {% translate "Manage Team Metadata" %}
         </a>
+        {% if request.user.is_superuser %}
+          <a href="{% url 'oauth2_provider:global_application_home' %}" class="btn btn-primary">
+            {% translate "Global OAuth Applications" %}
+          </a>
+        {% endif %}
       </div>
     </div>
     <form hx-get="{% url "ocs_admin:usage_chart" %}" hx-target="#charts" hx-trigger="load, change, submit">

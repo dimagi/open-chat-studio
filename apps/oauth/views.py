@@ -1,8 +1,8 @@
 from functools import cached_property
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
-from django.http import HttpResponse
+from django.contrib.auth.mixins import PermissionRequiredMixin, UserPassesTestMixin
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.views import View
@@ -11,12 +11,13 @@ from django_tables2 import SingleTableView
 from oauth2_provider.views.base import AuthorizationView as BaseAuthorizationView
 
 from apps.teams.helpers import get_default_team_from_request
+from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Team
 from apps.teams.utils import set_current_team
 
-from .forms import AuthorizationForm, RegisterApplicationForm
+from .forms import AuthorizationForm, RegisterApplicationForm, RegisterGlobalApplicationForm
 from .models import OAuth2Application
-from .tables import OAuth2ApplicationTable
+from .tables import GlobalOAuth2ApplicationTable, OAuth2ApplicationTable
 
 
 class TeamScopedAuthorizationView(BaseAuthorizationView):
@@ -67,29 +68,31 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
         return super().form_valid(form)
 
 
-class ApplicationOwnerIsUserMixin(LoginRequiredMixin):
-    """Mixin to ensure users can only access their own OAuth applications."""
+def _manage_team_url(team_slug: str) -> str:
+    """The team admin page, anchored on the OAuth applications section it is managed from.
 
-    def get_queryset(self):
-        return OAuth2Application.objects.filter(user=self.request.user)
+    The anchor is the slugified section title rendered by `generic/object_home_content.html`.
+    """
+    return f"{reverse('single_team:manage_team', args=[team_slug])}#oauth-applications"
 
 
-class ApplicationHome(LoginRequiredMixin, TemplateView):
-    """Home view for OAuth applications."""
+class ApplicationHome(LoginAndTeamRequiredMixin, TemplateView):
+    """Home view for the team's OAuth applications."""
 
     template_name = "generic/object_home.html"
 
     def get_context_data(self, **kwargs):
         return {
+            "active_tab": "manage-team",
             "title": "OAuth Applications",
-            "new_object_url": reverse("oauth2_provider:application_new"),
-            "table_url": reverse("oauth2_provider:application_table"),
+            "new_object_url": reverse("oauth_apps:new", args=[self.request.team.slug]),
+            "table_url": reverse("oauth_apps:table", args=[self.request.team.slug]),
             "enable_search": False,
         }
 
 
-class ApplicationTableView(LoginRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
-    """List view for all OAuth applications owned by the current user using django-tables2."""
+class ApplicationTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+    """List view for the OAuth applications registered to the current team."""
 
     model = OAuth2Application
     table_class = OAuth2ApplicationTable
@@ -97,25 +100,123 @@ class ApplicationTableView(LoginRequiredMixin, PermissionRequiredMixin, SingleTa
     permission_required = "oauth.view_oauth2application"
 
     def get_queryset(self):
-        return OAuth2Application.objects.filter(user=self.request.user).order_by("-created")
+        return OAuth2Application.objects.filter(team=self.request.team).order_by("-created")
 
 
-class CreateApplication(LoginRequiredMixin, CreateView):
-    """Create view for registering a new OAuth application with restricted fields."""
+class CreateApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, CreateView):
+    """Register a new OAuth application for the current team."""
 
     model = OAuth2Application
     form_class = RegisterApplicationForm
     template_name = "oauth2_provider/application_form.html"
-    success_url = reverse_lazy("oauth2_provider:application_home")
+    permission_required = "oauth.add_oauth2application"
     extra_context = {
+        "active_tab": "manage-team",
         "title": "Register New Application",
         "button_text": "Register",
     }
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
-        return kwargs
+    def get_initial(self):
+        return {
+            "authorization_grant_type": OAuth2Application.GRANT_AUTHORIZATION_CODE,
+            "algorithm": OAuth2Application.RS256_ALGORITHM,
+        }
+
+    def get_success_url(self):
+        return _manage_team_url(self.request.team.slug)
+
+    def form_valid(self, form):
+        form.instance.user = self.request.user
+        # Every token this application issues is scoped to its team, so it is taken from the URL rather
+        # than the form: see RegisterApplicationForm.
+        form.instance.team = self.request.team
+        return super().form_valid(form)
+
+
+class EditApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, UpdateView):
+    """Update an OAuth application belonging to the current team."""
+
+    model = OAuth2Application
+    form_class = RegisterApplicationForm
+    template_name = "oauth2_provider/application_form.html"
+    permission_required = "oauth.change_oauth2application"
+    extra_context = {
+        "active_tab": "manage-team",
+        "title": "Update Application",
+        "button_text": "Update",
+    }
+
+    def get_queryset(self):
+        return OAuth2Application.objects.filter(team=self.request.team)
+
+    def get_success_url(self):
+        return _manage_team_url(self.request.team.slug)
+
+
+class DeleteApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
+    """Delete an OAuth application belonging to the current team."""
+
+    permission_required = "oauth.delete_oauth2application"
+
+    def delete(self, request, team_slug: str, pk: int):
+        application = get_object_or_404(OAuth2Application, id=pk, team=request.team)
+        application.delete()
+        messages.success(request, "Application deleted")
+        return HttpResponse()
+
+
+class SuperuserRequiredMixin(UserPassesTestMixin):
+    """Restrict a view to superusers, hiding its existence from everyone else."""
+
+    def test_func(self):
+        return self.request.user.is_authenticated and self.request.user.is_superuser
+
+    def handle_no_permission(self):
+        # Don't reveal that the page exists, matching the site admin area (apps/admin/views.py, which
+        # sends everyone else to /404).
+        raise Http404
+
+
+class GlobalApplicationHome(SuperuserRequiredMixin, TemplateView):
+    """Home view for global (team-less) OAuth applications."""
+
+    template_name = "generic/object_home.html"
+
+    def get_context_data(self, **kwargs):
+        return {
+            "title": "Global OAuth Applications",
+            "subtitle": (
+                "Applications that are not registered to a team. The authorizing user chooses which of "
+                "their teams the token is scoped to."
+            ),
+            "new_object_url": reverse("oauth2_provider:global_application_new"),
+            "table_url": reverse("oauth2_provider:global_application_table"),
+            "enable_search": False,
+        }
+
+
+class GlobalApplicationTableView(SuperuserRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
+    """List view for global (team-less) OAuth applications."""
+
+    model = OAuth2Application
+    table_class = GlobalOAuth2ApplicationTable
+    template_name = "table/single_table.html"
+
+    def get_queryset(self):
+        return OAuth2Application.objects.filter(team__isnull=True).order_by("-created")
+
+
+class CreateGlobalApplication(SuperuserRequiredMixin, CreateView):
+    """Register a new global OAuth application."""
+
+    model = OAuth2Application
+    form_class = RegisterGlobalApplicationForm
+    template_name = "oauth2_provider/application_form.html"
+    success_url = reverse_lazy("oauth2_provider:global_application_home")
+    extra_context = {
+        "title": "Register New Global Application",
+        "button_text": "Register",
+    }
 
     def get_initial(self):
         return {
@@ -125,35 +226,31 @@ class CreateApplication(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.user = self.request.user
+        form.instance.team = None
         return super().form_valid(form)
 
 
-class EditApplication(ApplicationOwnerIsUserMixin, UpdateView):
-    """Update view for an OAuth application owned by the current user."""
+class EditGlobalApplication(SuperuserRequiredMixin, UpdateView):
+    """Update a global OAuth application."""
 
     model = OAuth2Application
-    form_class = RegisterApplicationForm
+    form_class = RegisterGlobalApplicationForm
     template_name = "oauth2_provider/application_form.html"
-    success_url = reverse_lazy("oauth2_provider:application_home")
+    success_url = reverse_lazy("oauth2_provider:global_application_home")
     extra_context = {
-        "title": "Update Application",
+        "title": "Update Global Application",
         "button_text": "Update",
     }
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["user"] = self.request.user
-        return kwargs
-
     def get_queryset(self):
-        return OAuth2Application.objects.filter(user=self.request.user)
+        return OAuth2Application.objects.filter(team__isnull=True)
 
 
-class DeleteApplication(LoginRequiredMixin, View):
-    """Delete view for an OAuth application owned by the current user."""
+class DeleteGlobalApplication(SuperuserRequiredMixin, View):
+    """Delete a global OAuth application."""
 
     def delete(self, request, pk: int):
-        application = get_object_or_404(OAuth2Application, id=pk, user=request.user)
+        application = get_object_or_404(OAuth2Application, id=pk, team__isnull=True)
         application.delete()
         messages.success(request, "Application deleted")
         return HttpResponse()
