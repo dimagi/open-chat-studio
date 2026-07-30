@@ -267,22 +267,27 @@ class CreateServiceProvider(
         config_valid = config_form.is_valid()
         file_formset_valid = not file_formset or file_formset.is_valid()
         if primary_valid and config_valid and file_formset_valid:
-            with transaction.atomic():
-                obj = primary_form.save(commit=False)
-                obj.team = request.team
-                config_form.save(obj)
-                obj.save()
-                if file_formset:
-                    files = file_formset.save(request)
-                    obj.add_files(files)
-                if isinstance(obj, VoiceProvider):
-                    for warning in obj.run_post_save_hook():
-                        messages.warning(request, warning)
+            self._save_provider(request, primary_form, config_form, file_formset)
             return HttpResponseRedirect(self.get_success_url())
 
         if file_formset and not file_formset.is_valid():
             messages.error(request, ", ".join(file_formset.non_form_errors()))
         return render(request, self._template(), self._get_context(primary_form, config_form, subtype, instance))
+
+    def _save_provider(self, request, primary_form, config_form, file_formset):
+        with transaction.atomic():
+            obj = primary_form.save(commit=False)
+            obj.team = request.team
+            config_form.save(obj)
+            obj.save()
+            if file_formset:
+                files = file_formset.save(request)
+                obj.add_files(files)
+            if isinstance(obj, VoiceProvider):
+                for warning in obj.run_post_save_hook():
+                    messages.warning(request, warning)
+        for warning in config_form.warnings:
+            messages.warning(request, warning)
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         ctx = {

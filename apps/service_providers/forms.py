@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from decimal import Decimal
 
 from django import forms
@@ -9,8 +10,11 @@ from apps.files.forms import BaseFileFormSet
 from apps.generics.help import render_help_with_link
 from apps.service_providers.minimax import DEFAULT_MINIMAX_TTS_MODEL
 from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.tracing.langfuse import fetch_project_metadata
 from apps.slack.models import SlackInstallation
 from apps.utils.json import PrettyJSONEncoder
+
+logger = logging.getLogger("ocs.service_providers")
 
 
 class ProviderTypeConfigForm(forms.Form):
@@ -31,6 +35,9 @@ class ProviderTypeConfigForm(forms.Form):
 
     def __init__(self, team, *args, **kwargs):
         self.team = team
+        # User-facing messages raised by `save()` for non-fatal side-effect failures.
+        # The view surfaces these via Django's messages framework.
+        self.warnings: list[str] = []
         super().__init__(*args, **kwargs)
 
     def save(self, instance):
@@ -433,7 +440,27 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
     secret_key = forms.CharField(label=_("Secret Key"))
     public_key = forms.CharField(label=_("Public Key"))
-    host = forms.URLField(label=_("Host"))
+    # Only applies when creating: an existing provider's saved host arrives as form-level initial.
+    host = forms.URLField(label=_("Host"), initial="https://cloud.langfuse.com")
+
+    def save(self, instance):
+        """Save the config and record which Langfuse project/organization the keys belong to.
+
+        The lookup is best-effort: a Langfuse outage or an organization-scoped key pair
+        must not stop someone configuring tracing, so a failure leaves any previously
+        recorded metadata in place and returns a warning for the caller to surface. The
+        `backfill_langfuse_metadata` management command can fill the gap later.
+        """
+        instance = super().save(instance)
+        try:
+            instance.metadata = fetch_project_metadata(self.cleaned_data)
+        except Exception:
+            logger.exception("Failed to fetch Langfuse project metadata for provider %s", instance.pk)
+            self.warnings.append(
+                "Provider saved, but the Langfuse project details could not be fetched. "
+                "Usage reporting for this provider may be incomplete."
+            )
+        return instance
 
 
 def _price_per_million_field(label):

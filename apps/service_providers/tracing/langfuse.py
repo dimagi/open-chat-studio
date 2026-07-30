@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
+from django.utils import timezone
 from langfuse import propagate_attributes
 from langfuse._client.get_client import _create_client_from_instance
 from langfuse._client.resource_manager import LangfuseResourceManager
@@ -39,6 +40,32 @@ def get_langfuse_api_client(config: dict) -> LangfuseAPI:
         password=config["secret_key"],
         timeout=10,
     )
+
+
+def fetch_project_metadata(config: dict) -> dict:
+    """Fetch the Langfuse project and organization that ``config``'s API keys belong to.
+
+    ``GET /api/public/projects`` resolves the project from the key pair itself, so a
+    project-scoped key returns exactly one project. An organization-scoped key can
+    return several, in which case we have nothing to disambiguate on and record none
+    of them rather than attributing usage to an arbitrary project.
+
+    Raises whatever the Langfuse client raises (network, auth, etc.); callers decide
+    how loud that failure should be.
+    """
+    projects = get_langfuse_api_client(config).projects.get().data
+    if len(projects) != 1:
+        raise ValueError(f"Expected exactly one Langfuse project for these credentials, got {len(projects)}")
+
+    project = projects[0]
+    return {
+        "project_id": project.id,
+        "project_name": project.name,
+        "organization_id": project.organization.id,
+        "organization_name": project.organization.name,
+        "retention_days": project.retention_days,
+        "synced_at": timezone.now().isoformat(),
+    }
 
 
 class LangFuseTracer(Tracer):
