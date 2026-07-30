@@ -736,6 +736,9 @@ if TASKBADGER_API_KEY:
                     "apps.evaluations.tasks.evaluate_message_batch",
                 ],
                 record_task_args=True,
+                # ping running tasks so long-running ones aren't marked stale
+                # (stale_timeout is derived as twice this value)
+                heartbeat_interval=60,
             )
         ],
         before_create=_before_create,
