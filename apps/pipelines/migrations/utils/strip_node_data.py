@@ -1,18 +1,14 @@
-"""Drop the ``nodes`` key from ``Pipeline.data`` and backfill row positions (ADR-0049).
+"""Drop the legacy keys from ``Pipeline.data`` and backfill row positions (ADR-0049).
 
 Node content (type, label, params) and layout (position) are owned by the ``Node`` rows;
 ``Pipeline.data`` keeps only edges. This helper first mirrors each node's position from the
 blob onto the row's position columns — the rows are the authoritative layout source that
-reads now use — then removes the ``nodes`` key entirely. The backfill is
+reads now use — then removes the keys the flow models no longer persist. The backfill is
 the load-bearing half: without it a row reads back at the origin and the next save drops the
 blob holding the only copy of its layout. Only rows still missing a position are filled — a row
 that already has one is the live layout and the blob may predate the last move, so it is left
 alone. Idempotent and safe to rerun: rows already positioned produce no write, and data already
-without a ``nodes`` key is skipped.
-
-The strip is a targeted key removal, so a ``viewport`` left over from an older blob stays put
-here. The flow models no longer carry that key (ADR-0049), so it falls away on the pipeline's
-next save instead — nothing reads it in the meantime.
+carrying none of the legacy keys is skipped.
 
 Migration ``pipelines.0030_strip_node_data`` runs ``strip_node_data_from_pipelines``; its
 reverse runs ``rebuild_node_data_in_pipelines``. Both are called with historical models,
@@ -26,6 +22,7 @@ from apps.pipelines.flow import react_flow_node_type
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 500
+LEGACY_DATA_KEYS = ("nodes", "viewport")
 
 
 def strip_node_data_from_pipelines(Pipeline, Node):
@@ -36,7 +33,7 @@ def strip_node_data_from_pipelines(Pipeline, Node):
         rows = list(Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"))
 
         _backfill_positions(pipeline, Node, node_rows=rows)
-        stripped_data = _strip_nodes(pipeline, rows)
+        stripped_data = _strip_legacy_keys(pipeline, rows)
         if stripped_data is None:
             continue
         pipeline.data = stripped_data
@@ -78,17 +75,18 @@ def _backfill_positions(pipeline, Node, node_rows):
         Node._base_manager.bulk_update(rows_to_update, ["position_x", "position_y"])
 
 
-def _strip_nodes(pipeline, node_rows):
-    """The pipeline's data with the ``nodes`` key removed, or None when nothing to strip.
+def _strip_legacy_keys(pipeline, node_rows):
+    """The pipeline's data with ``LEGACY_DATA_KEYS`` removed, or None when nothing to strip.
 
-    None when there is no ``nodes`` key (already stripped — idempotent), and also None when
-    any blob has no backing Node row (drift, a known bad state): the blob is then the only
-    copy of that node's content, so the pipeline is skipped and logged for manual healing
-    rather than have its content destroyed. Archived rows count — they still hold the
-    content.
+    None when the data carries none of those keys (already stripped — idempotent), and also
+    None when any blob has no backing Node row (drift, a known bad state): the blob is then the
+    only copy of that node's content, so the whole pipeline is skipped and logged for manual
+    healing rather than have its content destroyed — which leaves its ``viewport`` in place too,
+    since a pipeline flagged for healing is left exactly as found. Archived rows count — they
+    still hold the content.
     """
     data = pipeline.data or {}
-    if "nodes" not in data:
+    if not any(key in data for key in LEGACY_DATA_KEYS):
         return None
     nodes = data.get("nodes") or []
 
@@ -103,7 +101,7 @@ def _strip_nodes(pipeline, node_rows):
         )
         return None
 
-    return {key: value for key, value in data.items() if key != "nodes"}
+    return {key: value for key, value in data.items() if key not in LEGACY_DATA_KEYS}
 
 
 def rebuild_node_data_in_pipelines(Pipeline, Node):
@@ -113,6 +111,11 @@ def rebuild_node_data_in_pipelines(Pipeline, Node):
     them needs the react-flow nodes — id, react-flow type, position and embedded content
     blob — reconstructed from the rows. Pipelines that still carry a ``nodes`` key are left
     untouched (idempotent); pipelines with no backing rows are skipped.
+
+    ``viewport`` is not restored — the forward strip drops it and nothing rebuilds the canvas
+    position it held. That is not a gap in the rollback guarantee: no code on either side of
+    ADR-0049 reads the key. Pre-ADR-0049 code only carried it along on save and seeded an empty
+    one on create, and the editor stopped writing it long before that.
     """
     queryset = Pipeline._base_manager.exclude(data__isnull=True)
 

@@ -48,17 +48,27 @@ def _create_old_format_pipeline(team, with_rows=True):
 
 @pytest.mark.django_db()
 class TestStripNodeData:
-    def test_drops_nodes_key_and_preserves_edges(self, team):
+    def test_drops_legacy_keys_and_preserves_edges(self, team):
         pipeline = _create_old_format_pipeline(team)
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
         pipeline.refresh_from_db()
-        assert "nodes" not in pipeline.data
-        assert pipeline.data["edges"] == _old_format_data()["edges"]
-        assert pipeline.data["viewport"] == _old_format_data()["viewport"]
+        assert pipeline.data == {"edges": _old_format_data()["edges"]}
         # rows untouched
         assert pipeline.node_set.get(flow_id="start-1").params == {"name": "start"}
+
+    def test_drops_a_viewport_from_already_stripped_data(self, team):
+        """``viewport`` is modelled nowhere, so a blob that has already lost its ``nodes`` key
+        still gets it removed rather than waiting for the pipeline's next save."""
+        pipeline = Pipeline.objects.create(
+            team=team, name="stripped", data={"edges": [], "viewport": {"x": 9, "y": 9, "zoom": 2}}
+        )
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        pipeline.refresh_from_db()
+        assert pipeline.data == {"edges": []}
 
     def test_is_idempotent(self, team):
         pipeline = _create_old_format_pipeline(team)
@@ -73,7 +83,8 @@ class TestStripNodeData:
 
     def test_skips_pipeline_whose_blob_has_no_matching_row(self, team, caplog):
         """A blob without a backing Node row is the only copy of that node's content —
-        never destroy it; skip and log so it can be healed manually."""
+        never destroy it; skip and log so it can be healed manually. The skip is wholesale, so
+        the pipeline keeps its ``viewport`` too: one flagged for healing is left as found."""
         pipeline = _create_old_format_pipeline(team, with_rows=False)
 
         strip_node_data_from_pipelines(Pipeline, Node)
@@ -246,7 +257,20 @@ class TestRebuildNodeData:
         }
         assert nodes_by_id["start-1"]["position"] == {"x": 0, "y": 0}
         assert pipeline.data["edges"] == _old_format_data()["edges"]
-        assert pipeline.data["viewport"] == _old_format_data()["viewport"]
+
+    def test_does_not_restore_the_stripped_viewport(self, team):
+        """The forward strip drops ``viewport`` for good. Not a gap in the rollback guarantee:
+        no code on either side of ADR-0049 reads it."""
+        pipeline = _create_old_format_pipeline(team)
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        rebuild_node_data_in_pipelines(Pipeline, Node)
+
+        pipeline.refresh_from_db()
+        assert "viewport" not in pipeline.data
+        # the graph pre-ADR-0049 code does read is whole again
+        assert len(pipeline.data["nodes"]) == 2
+        assert pipeline.data["edges"] == _old_format_data()["edges"]
 
     def test_leaves_nodes_without_rows_untouched(self, team):
         pipeline = Pipeline.objects.create(
@@ -286,6 +310,7 @@ class TestMigration0030:
 
         pipeline.refresh_from_db()
         assert "nodes" not in pipeline.data
+        assert "viewport" not in pipeline.data
         assert pipeline.node_set.get(flow_id="end-1").position == {"x": 100, "y": 0}
 
         migration_0030.rebuild_node_data(global_apps, None)
@@ -295,6 +320,6 @@ class TestMigration0030:
         assert rebuilt["end-1"]["position"] == {"x": 100, "y": 0}
         assert rebuilt["end-1"]["data"]["params"] == {"name": "end"}
         assert rebuilt["end-1"]["type"] == "endNode"
-        # the reverse must restore what pre-ADR-0049 code requires: a parseable full graph
+        # the reverse must restore what pre-ADR-0049 code requires: a parseable full graph.
+        # ``viewport`` is not part of that — nothing on either side of ADR-0049 reads it.
         assert pipeline.data["edges"] == _old_format_data()["edges"]
-        assert pipeline.data["viewport"] == _old_format_data()["viewport"]
