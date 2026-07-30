@@ -9,7 +9,7 @@ from oauth2_provider.oauth2_validators import OAuth2Validator
 
 from apps.oauth.models import OAuth2Application, OAuth2Grant
 from apps.oauth.validator import APIScopedValidator
-from apps.teams.utils import set_current_team
+from apps.teams.utils import current_team
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 
@@ -81,9 +81,10 @@ def test_authorization_code_team(validator, pin_application_to_team, expect_appl
         expires=timezone.now() + timedelta(minutes=5),
         redirect_uri="https://example.com/callback",
     )
-    set_current_team(context_team)
-
-    with mock.patch.object(OAuth2Validator, "_create_authorization_code", return_value=grant):
+    with (
+        current_team(context_team),
+        mock.patch.object(OAuth2Validator, "_create_authorization_code", return_value=grant),
+    ):
         result = validator._create_authorization_code(SimpleNamespace(client=application), "code")
 
     assert result.team == (application_team if expect_application_team else context_team)
