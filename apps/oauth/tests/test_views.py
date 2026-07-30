@@ -8,6 +8,7 @@ from oauth2_provider.settings import oauth2_settings
 
 from apps.oauth.models import OAuth2Application
 from apps.oauth.views import TeamScopedAuthorizationView
+from apps.teams.backends import TEAM_ADMIN_GROUP, get_groups
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Team
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
@@ -209,6 +210,60 @@ def test_authorize_refuses_non_member_of_the_application_team(client, user_with_
 
 
 @pytest.mark.django_db()
+def test_authorize_refusal_redirects_for_silent_authentication(client, user_with_team):
+    """`prompt=none` runs without a UI, so the relying party needs the error at its redirect URI.
+
+    Uses a non-OIDC scope: `prompt=none` combined with `openid` reaches oauthlib's
+    `validate_silent_login`, which no validator in the stack implements (see APIScopedValidator).
+    """
+    application_team = Team.objects.create(name="App Team", slug="app-team")
+    application = _create_application(team=application_team)
+    client.force_login(user_with_team)
+
+    response = client.get(
+        reverse("oauth_authorize"),
+        {
+            "client_id": application.client_id,
+            "response_type": "code",
+            "redirect_uri": "https://example.com/callback",
+            "scope": "sessions:read",
+            "prompt": "none",
+            "state": "abc123",
+            # PKCE is required (settings.OAUTH2_PROVIDER), and request validity is judged before the
+            # membership refusal, so an incomplete request would report invalid_request instead.
+            "code_challenge": "0" * 43,
+            "code_challenge_method": "S256",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url.startswith("https://example.com/callback?")
+    assert "error=access_denied" in response.url
+    assert "state=abc123" in response.url
+
+
+@pytest.mark.django_db()
+def test_authorize_refusal_for_silent_authentication_ignores_unregistered_redirect_uri(client, user_with_team):
+    """The redirect URI is validated first, so a refusal can't be turned into an open redirect."""
+    application_team = Team.objects.create(name="App Team", slug="app-team")
+    application = _create_application(team=application_team)
+    client.force_login(user_with_team)
+
+    response = client.get(
+        reverse("oauth_authorize"),
+        {
+            "client_id": application.client_id,
+            "response_type": "code",
+            "redirect_uri": "https://attacker.example.net/steal",
+            "scope": "openid",
+            "prompt": "none",
+        },
+    )
+
+    assert "attacker.example.net" not in str(response.get("Location", ""))
+
+
+@pytest.mark.django_db()
 def test_requested_team_returns_valid_user_team(get_request_with_user, user_with_team, view_with_oauth2_data):
     """Test that requested_team returns a team when one was requested via URL parameter
     and the user is a member of that team."""
@@ -353,6 +408,15 @@ class TestTeamApplicationViews:
 
         assert response.status_code == 404
         assert OAuth2Application.objects.filter(pk=application.pk).exists()
+
+    def test_team_admin_can_register(self, client, team):
+        """The Team Admin role administers the page this section lives on, so it must reach it."""
+        membership = MembershipFactory.create(team=team, groups=lambda: get_groups([TEAM_ADMIN_GROUP]))
+
+        client.force_login(membership.user)
+        response = client.get(reverse("oauth_apps:new", args=[team.slug]))
+
+        assert response.status_code == 200
 
     def test_member_without_permission_cannot_register(self, client, team):
         membership = next(m for m in team.membership_set.all() if not m.has_perm("oauth.add_oauth2application"))

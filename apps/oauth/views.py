@@ -9,7 +9,9 @@ from django.utils.translation import gettext
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
+from oauth2_provider.exceptions import OAuthToolkitError
 from oauth2_provider.views.base import AuthorizationView as BaseAuthorizationView
+from oauthlib.oauth2 import AccessDeniedError
 
 from apps.teams.helpers import get_default_team_from_request
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -58,22 +60,38 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
     def get(self, request, *args, **kwargs):
         team = self.application_team
         if team and not request.user.teams.filter(id=team.id).exists():
-            # The token would be scoped to a team the user has no access to. The form rejects this too;
-            # this is here so the user gets told why instead of an authorization screen they can't use.
-            return self.render_to_response(
-                {
-                    "error": {
-                        "error": "access_denied",
-                        "description": gettext("You are not a member of the %(team)s team.") % {"team": team.name},
-                    }
-                }
-            )
+            return self._refuse_non_member(request, team)
         if not team and self.requested_team:
             # The paths that skip the authorization form (`skip_authorization`, `approval_prompt=auto`)
             # never reach `form_valid`, so pin the requested team here too or the grant would be scoped
             # to the team on the session instead of the one that was asked for.
             set_current_team(self.requested_team)
         return super().get(request, *args, **kwargs)
+
+    def _refuse_non_member(self, request, team):
+        """Refuse to authorize, since the token would be scoped to a team the user has no access to.
+
+        `AuthorizationForm.clean_team_slug` rejects the POST; this covers the GET.
+        """
+        description = gettext("You are not a member of the %(team)s team.") % {"team": team.name}
+        if request.GET.get("prompt") != "none":
+            # Interactive request: show the reason. Redirecting back to the client would bounce the user
+            # somewhere that cannot explain why they were refused.
+            return self.render_to_response({"error": {"error": "access_denied", "description": description}})
+
+        # Silent authentication runs in a hidden iframe, so an HTML page is never seen: the relying party
+        # expects `error=access_denied` at its redirect URI (OIDC 3.1.2.6). Validate the request first so
+        # the URI redirected to is one registered on the application, not whatever the query string asked
+        # for -- otherwise this would be an open redirect.
+        try:
+            _scopes, credentials = self.validate_authorization_request(request)
+        except OAuthToolkitError as error:
+            return self.error_response(error, application=None)
+        error = OAuthToolkitError(
+            error=AccessDeniedError(description=description, state=credentials.get("state")),
+            redirect_uri=credentials["redirect_uri"],
+        )
+        return self.error_response(error, application=self.application)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
