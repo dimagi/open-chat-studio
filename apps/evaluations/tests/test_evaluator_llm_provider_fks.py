@@ -50,7 +50,11 @@ class TestFkSync:
         assert evaluator.llm_provider_id == other_provider.id
 
     def test_dangling_ids_become_null(self, provider, provider_model):
-        """A deleted provider leaves a stale id in params; the FK must not resurrect it."""
+        """A deleted provider leaves a stale id in params; the FK must not resurrect it.
+
+        The stale id stays in ``params`` on purpose — the form still edits it, and #3995
+        removes the copy from ``params`` altogether.
+        """
         evaluator = EvaluatorFactory.create(
             team=provider.team, params=_params(provider.id + 1000, provider_model.id + 1000)
         )
