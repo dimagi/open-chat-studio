@@ -4,6 +4,7 @@ import pytest
 
 from apps.ocs_notifications.models import LevelChoices
 from apps.ocs_notifications.notifications import (
+    AffectedResources,
     audio_synthesis_failure_notification,
     audio_transcription_failure_notification,
     custom_action_api_failure_notification,
@@ -390,6 +391,16 @@ class TestTraceErrorNotification:
         assert call_kwargs["title"] == f"Seed Message Failed for '{experiment}'"
 
 
+def _affected(chatbots=None, pipelines=None, assistants=None, evaluators=None) -> AffectedResources:
+    """Build an ``AffectedResources`` with only the kinds a test cares about."""
+    return AffectedResources(
+        chatbots=chatbots or {},
+        pipelines=pipelines or {},
+        assistants=assistants or {},
+        evaluators=evaluators or {},
+    )
+
+
 class TestDeprecatedModelNotification:
     @pytest.mark.django_db()
     @patch("apps.ocs_notifications.notifications.create_notification")
@@ -399,10 +410,7 @@ class TestDeprecatedModelNotification:
             team=team,
             model_name="gpt-4",
             replacement_model_name="gpt-4o",
-            affected_chatbots={"My Bot": "/chatbots/my-bot/"},
-            affected_pipelines={},
-            affected_assistants={},
-            affected_evaluators={},
+            affected=_affected(chatbots={"My Bot": "/chatbots/my-bot/"}),
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'gpt-4' Deprecated",
@@ -427,10 +435,10 @@ class TestDeprecatedModelNotification:
             team=team,
             model_name="gpt-4",
             replacement_model_name=None,
-            affected_chatbots={},
-            affected_pipelines={"My Pipeline": "/pipelines/1/"},
-            affected_assistants={"My Assistant": "/assistants/1/"},
-            affected_evaluators={},
+            affected=_affected(
+                pipelines={"My Pipeline": "/pipelines/1/"},
+                assistants={"My Assistant": "/assistants/1/"},
+            ),
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'gpt-4' Deprecated",
@@ -456,10 +464,7 @@ class TestDeletedModelNotification:
             team=team,
             model_name="claude-2.0",
             replacement_model_name="claude-3-5-sonnet-latest",
-            affected_chatbots={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"},
-            affected_pipelines={},
-            affected_assistants={},
-            affected_evaluators={},
+            affected=_affected(chatbots={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"}),
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'claude-2.0' Removed",
@@ -484,10 +489,10 @@ class TestDeletedModelNotification:
             team=team,
             model_name="claude-2.0",
             replacement_model_name=None,
-            affected_chatbots={},
-            affected_pipelines={"Pipeline X": "/pipelines/1/"},
-            affected_assistants={"Assistant Y": "/assistants/1/"},
-            affected_evaluators={},
+            affected=_affected(
+                pipelines={"Pipeline X": "/pipelines/1/"},
+                assistants={"Assistant Y": "/assistants/1/"},
+            ),
         )
         mock_create_notification.assert_called_once_with(
             title="LLM Model 'claude-2.0' Removed",
@@ -513,10 +518,7 @@ class TestDeletedModelNotification:
             team=team,
             model_name="claude-2.0",
             replacement_model_name=None,
-            affected_chatbots={},
-            affected_pipelines={},
-            affected_assistants={},
-            affected_evaluators={"Sentiment": "/evaluators/7/"},
+            affected=_affected(evaluators={"Sentiment": "/evaluators/7/"}),
         )
         _title, kwargs = mock_create_notification.call_args
         assert "1 evaluator(s) were affected" in kwargs["message"]

@@ -57,7 +57,7 @@ class TestNotifyDeprecatedModelsCommand:
         assert call_kwargs["team"] == experiment.team
         assert call_kwargs["model_name"] == "openai/test-deprecated-model"
         assert call_kwargs["replacement_model_name"] == "test-replacement-model"
-        assert experiment.name in call_kwargs["affected_chatbots"]
+        assert experiment.name in call_kwargs["affected"].chatbots
 
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_notifies_affected_teams_without_replacement(self, mock_notify):
@@ -79,7 +79,7 @@ class TestNotifyDeprecatedModelsCommand:
         assert call_kwargs["team"] == experiment.team
         assert call_kwargs["model_name"] == "openai/test-deprecated-model"
         assert call_kwargs["replacement_model_name"] is None
-        assert experiment.name in call_kwargs["affected_chatbots"]
+        assert experiment.name in call_kwargs["affected"].chatbots
 
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_dry_run_does_not_notify(self, mock_notify):

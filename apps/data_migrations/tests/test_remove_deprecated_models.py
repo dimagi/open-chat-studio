@@ -145,7 +145,7 @@ class TestRemoveDeprecatedModelsCommand:
         assert kwargs["team"] == experiment.team
         assert kwargs["model_name"] == "openai/gpt-4-old"
         assert kwargs["replacement_model_name"] == "test-replacement-model"
-        assert experiment.name in kwargs["affected_chatbots"]
+        assert experiment.name in kwargs["affected"].chatbots
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_notifies_the_team_about_affected_evaluators(self, mock_notify):
@@ -162,7 +162,7 @@ class TestRemoveDeprecatedModelsCommand:
 
         kwargs = mock_notify.call_args.kwargs
         assert kwargs["team"] == evaluator.team
-        assert evaluator.name in kwargs["affected_evaluators"]
+        assert evaluator.name in kwargs["affected"].evaluators
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_dry_run_does_not_delete_or_notify(self, mock_notify):
