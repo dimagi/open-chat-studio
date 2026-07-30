@@ -5,6 +5,7 @@ from django.contrib.auth.mixins import PermissionRequiredMixin, UserPassesTestMi
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
+from django.utils.translation import gettext
 from django.views import View
 from django.views.generic import CreateView, TemplateView, UpdateView
 from django_tables2 import SingleTableView
@@ -21,14 +22,28 @@ from .tables import GlobalOAuth2ApplicationTable, OAuth2ApplicationTable
 
 
 class TeamScopedAuthorizationView(BaseAuthorizationView):
-    """Authorization view that supports team-scoped OAuth access.
+    """Authorization view that scopes the granted token to a team.
 
-    The team can be specified via the 'team' URL parameter (optional).
-    If not provided, defaults to the user's team on the current session.
+    An application registered to a team always authorizes against that team, and only members of it may
+    do so. A global application has no team of its own, so the authorizing user picks one: either the
+    team named by the 'team' URL parameter, or the team on the current session.
     """
 
     form_class = AuthorizationForm
     template_name = "oauth2_provider/authorize.html"
+
+    @cached_property
+    def application(self):
+        """The application being authorized, resolved from the client_id on the request."""
+        client_id = self.request.POST.get("client_id") or self.request.GET.get("client_id")
+        if not client_id:
+            return None
+        return OAuth2Application.objects.filter(client_id=client_id).select_related("team").first()
+
+    @cached_property
+    def application_team(self):
+        """The team the application is registered to, or None if it is global."""
+        return self.application.team if self.application else None
 
     @cached_property
     def requested_team(self):
@@ -40,26 +55,38 @@ class TeamScopedAuthorizationView(BaseAuthorizationView):
                 return None
         return None
 
+    def get(self, request, *args, **kwargs):
+        team = self.application_team
+        if team and not request.user.teams.filter(id=team.id).exists():
+            # The token would be scoped to a team the user has no access to. The form rejects this too;
+            # this is here so the user gets told why instead of an authorization screen they can't use.
+            return self.render_to_response(
+                {
+                    "error": {
+                        "error": "access_denied",
+                        "description": gettext("You are not a member of the %(team)s team.") % {"team": team.name},
+                    }
+                }
+            )
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["application_team"] = self.application_team
         context["requested_team"] = self.requested_team
         return context
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
+        kwargs["application_team"] = self.application_team
         kwargs["team_requested"] = bool(self.requested_team)
         return kwargs
 
     def get_initial(self):
         initial = super().get_initial()
-        if (team := self.requested_team) or (team := get_default_team_from_request(self.request)):
-            team_slug = team.slug
-            # If no team found, team_slug remains None and the form will handle it.
-        else:
-            team_slug = None
-
-        initial["team_slug"] = team_slug
+        team = self.application_team or self.requested_team or get_default_team_from_request(self.request)
+        initial["team_slug"] = team.slug if team else None
         return initial
 
     def form_valid(self, form):

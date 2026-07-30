@@ -1,4 +1,5 @@
 from django import forms
+from django.utils.translation import gettext_lazy as _
 from oauth2_provider.forms import AllowForm
 
 from apps.oauth.models import OAuth2Application
@@ -9,13 +10,29 @@ class AuthorizationForm(AllowForm):
     # Make the `scope` field not required, since it will be populated manually in the view
     scope = forms.CharField(widget=forms.HiddenInput(), required=False)
 
-    def __init__(self, user, team_requested, *args, **kwargs):
+    def __init__(self, user, application_team, team_requested, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["team_slug"].choices = [(team.slug, team.name) for team in user.teams.all()]
+        self.user = user
+        if application_team:
+            # The application is registered to a team, so there is nothing to choose: show the team but
+            # don't let it be changed. The value of a disabled field comes from the form's initial data
+            # (set by the view from the application), never from the POST payload.
+            self.fields["team_slug"].choices = [(application_team.slug, application_team.name)]
+            self.fields["team_slug"].disabled = True
+            return
 
+        self.fields["team_slug"].choices = [(team.slug, team.name) for team in user.teams.all()]
         if team_requested:
             self.fields["team_slug"].widget = forms.HiddenInput()
             self.fields["team_slug"].disabled = True
+
+    def clean_team_slug(self):
+        # Every path that populates this field is either user-supplied or derived from the application,
+        # so membership is asserted here rather than at each of them.
+        team_slug = self.cleaned_data["team_slug"]
+        if not self.user.teams.filter(slug=team_slug).exists():
+            raise forms.ValidationError(_("You are not a member of this team."))
+        return team_slug
 
 
 class RegisterApplicationForm(forms.ModelForm):

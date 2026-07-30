@@ -162,6 +162,53 @@ def test_get_initial_with_multiple_teams_respects_parameter(
 
 
 @pytest.mark.django_db()
+def test_get_initial_ignores_team_parameter_for_team_scoped_application(
+    get_request_with_user, user_with_team, view_with_oauth2_data
+):
+    """The application's own team wins over anything the request asks for."""
+    application_team = Team.objects.create(name="App Team", slug="app-team")
+    MembershipFactory.create(team=application_team, user=user_with_team)
+    application = _create_application(team=application_team)
+    user_team = user_with_team.teams.first()
+
+    request = get_request_with_user(f"/?team={user_team.slug}&client_id={application.client_id}", user_with_team)
+    view_with_oauth2_data.request = request
+
+    assert view_with_oauth2_data.application_team == application_team
+    assert view_with_oauth2_data.get_initial()["team_slug"] == application_team.slug
+
+
+@pytest.mark.django_db()
+def test_application_team_is_none_for_global_application(get_request_with_user, user_with_team, view_with_oauth2_data):
+    application = _create_application(team=None)
+    request = get_request_with_user(f"/?client_id={application.client_id}", user_with_team)
+    view_with_oauth2_data.request = request
+
+    assert view_with_oauth2_data.application_team is None
+
+
+@pytest.mark.django_db()
+def test_authorize_refuses_non_member_of_the_application_team(client, user_with_team):
+    """A non-member can't authorize: the token would be scoped to a team they have no access to."""
+    application_team = Team.objects.create(name="App Team", slug="app-team")
+    application = _create_application(team=application_team)
+    client.force_login(user_with_team)
+
+    response = client.get(
+        reverse("oauth_authorize"),
+        {
+            "client_id": application.client_id,
+            "response_type": "code",
+            "redirect_uri": "https://example.com/callback",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.context["error"]["error"] == "access_denied"
+    assert "form" not in response.context
+
+
+@pytest.mark.django_db()
 def test_requested_team_returns_valid_user_team(get_request_with_user, user_with_team, view_with_oauth2_data):
     """Test that requested_team returns a team when one was requested via URL parameter
     and the user is a member of that team."""

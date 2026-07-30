@@ -1,8 +1,8 @@
 import pytest
 
-from apps.oauth.forms import RegisterApplicationForm, RegisterGlobalApplicationForm
+from apps.oauth.forms import AuthorizationForm, RegisterApplicationForm, RegisterGlobalApplicationForm
 from apps.oauth.models import OAuth2Application
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 
 
 @pytest.fixture()
@@ -89,3 +89,69 @@ def test_global_form_saves_as_authorization_code():
     form = RegisterGlobalApplicationForm(data=_form_data(redirect_uris="https://example.com/callback"))
     assert form.is_valid(), form.errors
     assert form.cleaned_data["authorization_grant_type"] == OAuth2Application.GRANT_AUTHORIZATION_CODE
+
+
+def _authorization_form_data(team_slug=None):
+    data = {
+        "redirect_uri": "https://example.com/callback",
+        "client_id": "test-client-id",
+        "response_type": "code",
+        "allow": True,
+    }
+    if team_slug:
+        data["team_slug"] = team_slug
+    return data
+
+
+@pytest.mark.django_db()
+def test_authorization_form_pins_team_of_team_scoped_application(user_with_team):
+    """The team of a team-scoped application is shown but cannot be swapped for another."""
+    user, team = user_with_team
+    other_team = TeamWithUsersFactory.create()
+    MembershipFactory.create(team=other_team, user=user)
+
+    form = AuthorizationForm(
+        user,
+        team,
+        False,
+        data=_authorization_form_data(team_slug=other_team.slug),
+        initial={"team_slug": team.slug},
+    )
+
+    assert form.fields["team_slug"].disabled
+    assert form.fields["team_slug"].choices == [(team.slug, team.name)]
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["team_slug"] == team.slug
+
+
+@pytest.mark.django_db()
+def test_authorization_form_offers_all_teams_for_global_application(user_with_team):
+    user, team = user_with_team
+    other_team = TeamWithUsersFactory.create()
+    MembershipFactory.create(team=other_team, user=user)
+
+    form = AuthorizationForm(user, None, False, data=_authorization_form_data(team_slug=other_team.slug))
+
+    assert not form.fields["team_slug"].disabled
+    assert {slug for slug, _label in form.fields["team_slug"].choices} == {team.slug, other_team.slug}
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["team_slug"] == other_team.slug
+
+
+@pytest.mark.django_db()
+def test_authorization_form_rejects_team_user_is_not_a_member_of(user_with_team):
+    user, _team = user_with_team
+    other_team = TeamWithUsersFactory.create()
+
+    # Supplied as initial data (as it would be for a disabled field) so that it gets past the choice
+    # validation and reaches the membership check.
+    form = AuthorizationForm(
+        user,
+        other_team,
+        False,
+        data=_authorization_form_data(),
+        initial={"team_slug": other_team.slug},
+    )
+
+    assert not form.is_valid()
+    assert "team_slug" in form.errors

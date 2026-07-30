@@ -13,8 +13,9 @@ class APIScopedValidator(OAuth2Validator):
 
     The flow is as follows:
     1. When the user grants authorization, the selected team is set in the thread's context. This happens in the
-        TeamScopedAuthorizationView.
-    2. When creating the authorization code, we read the team from the context and associate it with the code (Grant).
+        TeamScopedAuthorizationView. Applications registered to a team don't offer a choice, so for those the
+        application's own team wins over the context.
+    2. When creating the authorization code, we read the team as above and associate it with the code (Grant).
     3. When validating the code (from a new request context), we load the team from the Grant onto the request
     4. When creating the access token, we read the team from the request and associate it with the token.
     """
@@ -35,8 +36,9 @@ class APIScopedValidator(OAuth2Validator):
 
     def _create_authorization_code(self, request, code, expires=None):
         grant = super()._create_authorization_code(request, code, expires)
-        team = get_current_team()
-        grant.team = team
+        # The team pinned on the application takes precedence: it is authoritative and, unlike the thread
+        # context, is also set on the paths that skip the authorization form (e.g. `approval_prompt=auto`).
+        grant.team = getattr(request.client, "team", None) or get_current_team()
         grant.save()
         return grant
 
