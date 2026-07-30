@@ -94,6 +94,25 @@ class TestLangfuseTraceProviderForm:
         assert "could not be fetched" in form.warnings[0]
 
 
+class TestProjectUrl:
+    @pytest.mark.parametrize(
+        ("host", "expected"),
+        [
+            pytest.param("https://cloud.langfuse.com", "https://cloud.langfuse.com/project/proj-1", id="no-slash"),
+            pytest.param(
+                "https://cloud.langfuse.com/", "https://cloud.langfuse.com/project/proj-1", id="trailing-slash"
+            ),
+            pytest.param("", None, id="no-host"),
+        ],
+    )
+    def test_url_is_built_from_the_host_and_project_id(self, host, expected):
+        provider = TraceProviderFactory.build(config={**CONFIG, "host": host}, metadata=METADATA)
+        assert provider.project_url == expected
+
+    def test_no_url_until_the_project_is_known(self):
+        assert TraceProviderFactory.build(config=CONFIG, metadata={}).project_url is None
+
+
 @pytest.mark.django_db()
 class TestProviderViews:
     """The create/edit view is the real entry point: it must persist metadata and surface warnings."""
@@ -102,6 +121,29 @@ class TestProviderViews:
     def authed_client(self, team_with_users, client):
         client.force_login(team_with_users.members.first())
         return client
+
+    def _get_edit_page(self, client, team, provider):
+        return client.get(
+            reverse(
+                "service_providers:edit",
+                kwargs={"team_slug": team.slug, "provider_type": "tracing", "pk": provider.pk},
+            )
+        )
+
+    def test_edit_page_shows_the_project_and_a_link_to_langfuse(self, team_with_users, authed_client):
+        provider = TraceProviderFactory(team=team_with_users, config=CONFIG, metadata=METADATA)
+        response = self._get_edit_page(authed_client, team_with_users, provider)
+
+        content = response.content.decode()
+        assert "Dimagi" in content
+        assert "OCS Prod" in content
+        assert "https://cloud.langfuse.com/project/proj-1" in content
+
+    def test_edit_page_prompts_a_save_when_the_project_is_unknown(self, team_with_users, authed_client):
+        provider = TraceProviderFactory(team=team_with_users, config=CONFIG, metadata={})
+        response = self._get_edit_page(authed_client, team_with_users, provider)
+
+        assert "Project details haven't been retrieved yet" in response.content.decode()
 
     def _post(self, client, team, data, pk=None):
         kwargs = {"team_slug": team.slug, "provider_type": "tracing"}

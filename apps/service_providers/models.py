@@ -701,6 +701,19 @@ class TraceProvider(BaseTeamModel):
     def type_enum(self):
         return TraceProviderType(self.type)
 
+    @property
+    def project_url(self) -> str | None:
+        """Link to this provider's project in the tracing service's own UI.
+
+        None until `metadata` has been populated (on save, or by the
+        `backfill_langfuse_metadata` command).
+        """
+        project_id = (self.metadata or {}).get("project_id")
+        if self.type_enum != TraceProviderType.langfuse or not project_id:
+            return None
+        host = (self.config.get("host") or "").rstrip("/")
+        return f"{host}/project/{project_id}" if host else None
+
     def get_service(self) -> "tracing.Tracer":
         return self.type_enum.get_service(self.config)
 
