@@ -163,15 +163,43 @@ class TestBackfillPositions:
             "end-1": {"x": 100, "y": 0},
         }
 
-    def test_overwrites_differing_row_position(self, team):
-        """The blob is the pre-migration layout of record, so it wins over a row value that
-        disagrees (e.g. a writer that bypassed the shadow-write)."""
+    @pytest.mark.parametrize(
+        ("position_x", "position_y"),
+        [
+            pytest.param(999, 888, id="off-axis"),
+            pytest.param(0, 50, id="on-the-y-axis"),
+            pytest.param(50, 0, id="on-the-x-axis"),
+            pytest.param(0, 0, id="at-the-origin"),
+        ],
+    )
+    def test_leaves_an_already_positioned_row_alone(self, team, position_x, position_y):
+        """A row with both columns set is the live layout — the shadow-write has been running
+        since the columns shipped, so the blob may predate the last move. Zero is a real
+        coordinate here, not a missing one."""
         pipeline = _create_old_format_pipeline(team)
-        pipeline.node_set.filter(flow_id="start-1").update(position_x=999, position_y=999)
+        pipeline.node_set.filter(flow_id="end-1").update(position_x=position_x, position_y=position_y)
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
+        assert pipeline.node_set.get(flow_id="end-1").position == {"x": position_x, "y": position_y}
+        # its unpositioned sibling is still backfilled from the blob
         assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
+
+    @pytest.mark.parametrize(
+        ("position_x", "position_y"),
+        [
+            pytest.param(999, None, id="only-x-set"),
+            pytest.param(None, 888, id="only-y-set"),
+        ],
+    )
+    def test_backfills_a_half_positioned_row(self, team, position_x, position_y):
+        """One NULL column reads back as no position at all, so the blob still fills it."""
+        pipeline = _create_old_format_pipeline(team)
+        pipeline.node_set.filter(flow_id="end-1").update(position_x=position_x, position_y=position_y)
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        assert pipeline.node_set.get(flow_id="end-1").position == {"x": 100, "y": 0}
 
     def test_skips_unusable_positions(self, team):
         pipeline = _create_old_format_pipeline(team)

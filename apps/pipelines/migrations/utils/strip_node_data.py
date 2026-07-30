@@ -5,9 +5,9 @@ Node content (type, label, params) and layout (position) are owned by the ``Node
 blob onto the row's position columns — the rows are the authoritative layout source that
 reads now use — then removes the ``nodes`` key entirely. The backfill is
 the load-bearing half: without it a row reads back at the origin and the next save drops the
-blob holding the only copy of its layout. Running it at deploy also heals any writer that
-bypassed the shadow-write added with the columns (e.g. revert restoring old layout data).
-Idempotent and safe to rerun: rows already positioned produce no write, and data already
+blob holding the only copy of its layout. Only rows still missing a position are filled — a row
+that already has one is the live layout and the blob may predate the last move, so it is left
+alone. Idempotent and safe to rerun: rows already positioned produce no write, and data already
 without a ``nodes`` key is skipped.
 
 The strip is a targeted key removal, so a ``viewport`` left over from an older blob stays put
@@ -65,10 +65,11 @@ def _backfill_positions(pipeline, Node, node_rows):
         position = node.get("position")
         if row is None or not isinstance(position, dict):
             continue
+
+        if row.position_x is not None and row.position_y is not None:
+            continue
         x, y = position.get("x"), position.get("y")
         if not isinstance(x, int | float) or not isinstance(y, int | float):
-            continue
-        if (row.position_x, row.position_y) == (x, y):
             continue
         row.position_x = x
         row.position_y = y
