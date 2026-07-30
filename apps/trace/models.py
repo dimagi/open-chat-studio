@@ -53,6 +53,8 @@ class Trace(models.Model):
     error = models.TextField(blank=True, help_text="Error message if the trace failed")
     n_turns = models.IntegerField(null=True, blank=True, help_text="Number of LLM calls during pipeline execution")
     n_toolcalls = models.IntegerField(null=True, blank=True, help_text="Number of tool invocations across all turns")
+    # Dormant: nothing reads or writes these any more — token counts come off `UsageRecord`, which
+    # covers estimated calls too and splits by model. Columns dropped in a following release (#3986).
     n_total_tokens = models.IntegerField(null=True, blank=True, help_text="Total tokens (prompt + completion) consumed")
     n_prompt_tokens = models.IntegerField(null=True, blank=True, help_text="Total input/prompt tokens consumed")
     n_completion_tokens = models.IntegerField(

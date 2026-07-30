@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from langchain_core.callbacks import UsageMetadataCallbackHandler
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages.utils import count_tokens_approximately
 
 from apps.cost_tracking.models import Confidence, ServiceKind
@@ -31,31 +31,29 @@ class TraceMetrics:
 
     n_turns: int | None = None
     n_toolcalls: int | None = None
-    n_total_tokens: int | None = None
-    n_prompt_tokens: int | None = None
-    n_completion_tokens: int | None = None
 
 
-class MetricsCollector(UsageMetadataCallbackHandler):
+class MetricsCollector(BaseCallbackHandler):
     """Thread-safe accumulator for pipeline execution metrics.
 
-    Collects turn counts, tool call counts, and token usage across all LLM
-    calls in a pipeline execution. Token usage is inherited from
-    UsageMetadataCallbackHandler, which reads AIMessage.usage_metadata — the
-    standard location populated by modern LangChain chat-model integrations
-    (including OpenAI's Responses API, where LLMResult.llm_output is None).
+    Counts turns and tool calls for the `Trace` row, and accumulates token
+    usage for `UsageRecord`. Those are the only two destinations: the trace
+    carries no token counters of its own, since per-(provider, model) rows
+    cover more calls and answer more questions than one summed integer could.
 
     Counter access is protected by a threading lock because LangGraph
     executes nodes in threads via DjangoSafeContextThreadPoolExecutor.
 
-    Cost tracking extension: holds per-call pending state keyed by `run_id`
-    so `on_llm_end` can attribute each response to its originating
-    (provider, model). EXACT usage routes to `_exact_usage`; missing usage
-    routes to `_fallback_usage` with ESTIMATED confidence (tiktoken for
-    OPENAI_FAMILY, count_tokens_approximately for everything else) — only
-    falls back to UNKNOWN when prompts are also empty. Both buckets are
-    keyed by (provider, model) so the same model name routed through two
-    different providers in one trace gets billed separately.
+    Token usage is read from AIMessage.usage_metadata — the standard location
+    populated by modern LangChain chat-model integrations (including OpenAI's
+    Responses API, where LLMResult.llm_output is None). Per-call pending state
+    is keyed by `run_id` so `on_llm_end` can attribute each response to its
+    originating (provider, model). EXACT usage routes to `_exact_usage`;
+    missing usage routes to `_fallback_usage` with ESTIMATED confidence
+    (tiktoken for OPENAI_FAMILY, count_tokens_approximately for everything
+    else) — only falls back to UNKNOWN when prompts are also empty. Both
+    buckets are keyed by (provider, model) so the same model name routed
+    through two different providers in one trace gets billed separately.
     `iter_cost_events()` drains both into `UsageEvent`s.
     """
 
@@ -64,8 +62,7 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         self._counter_lock = threading.Lock()
         self._turns = 0
         self._toolcalls = 0
-        # Cost-tracking state. All access guarded by `_counter_lock`; the
-        # parent's `_lock` covers `self.usage_metadata` separately.
+        # Cost-tracking state. All access guarded by `_counter_lock`.
         self._pending_calls: dict[UUID, dict[str, Any]] = {}
         self._exact_usage: dict[tuple[str, str], dict[str, Any]] = {}
         self._fallback_usage: dict[tuple[str, str, Confidence], dict[str, int]] = {}
@@ -102,9 +99,6 @@ class MetricsCollector(UsageMetadataCallbackHandler):
             }
 
     def on_llm_end(self, response, *, run_id: UUID | None = None, **kwargs: Any) -> None:
-        # Parent still tracks self.usage_metadata for get_metrics()'s
-        # token totals; the cost path uses our own (provider, model) buckets.
-        super().on_llm_end(response, run_id=run_id, **kwargs)
         if run_id is None:
             return
         with self._counter_lock:
@@ -174,21 +168,7 @@ class MetricsCollector(UsageMetadataCallbackHandler):
         with self._counter_lock:
             turns = self._turns
             toolcalls = self._toolcalls
-        prompt_tokens, completion_tokens, total_tokens = self._sum_token_counts()
-        return TraceMetrics(
-            n_turns=turns or None,
-            n_toolcalls=toolcalls or None,
-            n_total_tokens=total_tokens or None,
-            n_prompt_tokens=prompt_tokens or None,
-            n_completion_tokens=completion_tokens or None,
-        )
-
-    def _sum_token_counts(self) -> tuple[int, int, int]:
-        with self._lock:
-            prompt = sum(u.get("input_tokens", 0) for u in self.usage_metadata.values())
-            completion = sum(u.get("output_tokens", 0) for u in self.usage_metadata.values())
-            total = sum(u.get("total_tokens", 0) for u in self.usage_metadata.values())
-        return prompt, completion, total
+        return TraceMetrics(n_turns=turns or None, n_toolcalls=toolcalls or None)
 
 
 def _estimate_tokens(provider: str, model: str, prompts: list[str], response) -> tuple[int, int]:

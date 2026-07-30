@@ -129,11 +129,11 @@ class TestCostRecordingEndToEnd:
         assert all(r.trace_id is not None for r in rows)
         assert all(r.session_id == session.id for r in rows)
 
-    def test_usage_record_quantity_matches_trace_token_count(self, experiment):
-        """Both counts come from the same `usage_metadata`, so they agree even with the
-        cache sub-buckets split out: `_split_buckets` subtracts cache_read/cache_creation
-        from the headline input and gives them their own rows, which sum back to it.
-        This is why the admin report can read tokens off UsageRecord.
+    def test_usage_record_quantity_matches_reported_usage(self, experiment):
+        """The recorded rows sum back to the provider's reported total even with the cache
+        sub-buckets split out: `_split_buckets` subtracts cache_read/cache_creation from the
+        headline input and gives them their own rows. This is why UsageRecord is the only
+        token source the reports and the trace detail page need.
         """
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
@@ -155,13 +155,11 @@ class TestCostRecordingEndToEnd:
 
         trace_row = Trace.objects.get(team_id=experiment.team_id, trace_id=ctx.id)
         recorded = sum(row.quantity for row in UsageRecord.objects.filter(trace=trace_row))
-        assert trace_row.n_total_tokens == 1500
-        assert recorded == trace_row.n_total_tokens
+        assert recorded == 1500
 
-    def test_estimated_tokens_are_recorded_but_absent_from_the_trace(self, experiment):
-        """A call with no `usage_metadata` is estimated into UsageRecord, while the trace
-        counter only sums reported usage — the report reads the source that covers a call
-        the trace counter has no number for at all.
+    def test_estimated_tokens_are_recorded(self, experiment):
+        """A call with no `usage_metadata` still lands on UsageRecord, estimated — coverage
+        the trace counters never had, since they only summed reported usage.
         """
         tracer = OCSTracer(experiment, experiment.team_id)
         session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
@@ -180,7 +178,6 @@ class TestCostRecordingEndToEnd:
 
         trace_row = Trace.objects.get(team_id=experiment.team_id, trace_id=ctx.id)
         recorded = sum(row.quantity for row in UsageRecord.objects.filter(trace=trace_row))
-        assert trace_row.n_total_tokens is None
         assert recorded > 0
 
     def test_trace_finalisation_continues_when_recorder_fails(self, experiment):

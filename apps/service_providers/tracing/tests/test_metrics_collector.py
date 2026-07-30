@@ -66,43 +66,6 @@ class TestMetricsCollectorToolCalls:
         assert metrics.n_toolcalls is None
 
 
-class TestMetricsCollectorTokens:
-    def test_accumulates_tokens_across_calls(self):
-        collector = MetricsCollector(start_time=time.time())
-        collector.on_llm_end(_make_llm_result(100, 50))
-        collector.on_llm_end(_make_llm_result(200, 100))
-
-        metrics = collector.get_metrics()
-        assert metrics.n_prompt_tokens == 300
-        assert metrics.n_completion_tokens == 150
-        assert metrics.n_total_tokens == 450
-
-    def test_accumulates_tokens_across_models(self):
-        collector = MetricsCollector(start_time=time.time())
-        collector.on_llm_end(_make_llm_result(100, 50, model_name="gpt-4.1-mini"))
-        collector.on_llm_end(_make_llm_result(80, 40, model_name="claude-haiku-4-5"))
-
-        metrics = collector.get_metrics()
-        assert metrics.n_prompt_tokens == 180
-        assert metrics.n_completion_tokens == 90
-        assert metrics.n_total_tokens == 270
-
-    def test_missing_usage_metadata_handled(self):
-        collector = MetricsCollector(start_time=time.time())
-        collector.on_llm_start({}, ["prompt"])
-        message = AIMessage(content="response", response_metadata={"model_name": "gpt-4.1-mini"})
-        collector.on_llm_end(LLMResult(generations=[[ChatGeneration(message=message)]]))
-
-        metrics = collector.get_metrics()
-        assert metrics.n_turns == 1
-        assert metrics.n_total_tokens is None
-
-    def test_no_llm_calls_tokens_none(self):
-        collector = MetricsCollector(start_time=time.time())
-        metrics = collector.get_metrics()
-        assert metrics.n_total_tokens is None
-
-
 class TestMetricsCollectorThreadSafety:
     def test_concurrent_increments(self):
         collector = MetricsCollector(start_time=time.time())
@@ -129,25 +92,22 @@ class TestMetricsCollectorThreadSafety:
 
 class TestMetricsCollectorZeroToNone:
     """Verify that zero counts are converted to None to distinguish
-    'no LLM calls' from '0 tokens used'."""
+    'no LLM calls' from 'calls that counted nothing'."""
 
     def test_all_zeros_become_none(self):
         collector = MetricsCollector(start_time=time.time())
         metrics = collector.get_metrics()
         assert metrics.n_turns is None
         assert metrics.n_toolcalls is None
-        assert metrics.n_total_tokens is None
 
-    def test_turns_present_but_no_tokens(self):
-        """LLM called but no usage_metadata reported — n_turns is set, n_total_tokens is None."""
+    def test_turn_counted_even_without_usage_metadata(self):
+        """A call the provider reported no usage for is still a turn."""
         collector = MetricsCollector(start_time=time.time())
         collector.on_llm_start({}, ["prompt"])
         message = AIMessage(content="response", response_metadata={"model_name": "gpt-4.1-mini"})
         collector.on_llm_end(LLMResult(generations=[[ChatGeneration(message=message)]]))
 
-        metrics = collector.get_metrics()
-        assert metrics.n_turns == 1
-        assert metrics.n_total_tokens is None
+        assert collector.get_metrics().n_turns == 1
 
 
 # Cost-tracking extension: provider capture, on_llm_end fallback, iter_cost_events
@@ -212,8 +172,7 @@ class TestOnLlmEndFallback:
         collector.on_llm_start({}, **args)
         collector.on_llm_end(_result_with_usage("gpt-4o-mini", 100, 50), run_id=args["run_id"])
         assert collector._fallback_usage == {}
-        # Parent class accumulated usage_metadata.
-        assert sum(u["input_tokens"] for u in collector.usage_metadata.values()) == 100
+        assert collector._exact_usage[("openai", "gpt-4o-mini")]["input_tokens"] == 100
 
     def test_pending_call_cleared_on_end(self):
         collector = MetricsCollector(start_time=time.time())
@@ -278,7 +237,7 @@ class TestOnLlmEndFallback:
 
 
 class TestIterCostEvents:
-    """`iter_cost_events` drains usage_metadata + fallback buckets into UsageEvents."""
+    """`iter_cost_events` drains the exact + fallback buckets into UsageEvents."""
 
     def test_empty_collector_yields_nothing(self):
         collector = MetricsCollector(start_time=time.time())
