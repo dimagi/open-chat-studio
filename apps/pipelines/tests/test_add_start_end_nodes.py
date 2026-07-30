@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from apps.pipelines.flow import split_flow_data
+from apps.pipelines.flow import Flow, react_flow_node_type, split_flow_data
 from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
     add_missing_start_end_nodes,
     remove_all_start_end_nodes,
@@ -11,13 +11,13 @@ from apps.pipelines.migrations.utils.migrate_start_end_nodes import (
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 from apps.pipelines.tests.utils import end_node, passthrough_node, start_node
-from apps.utils.factories.pipelines import PipelineFactory
+from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 
 
 @pytest.mark.django_db()
 def test_empty_pipeline_gets_start_end_nodes(team):
     pipeline = Pipeline.objects.create(team=team, data={"nodes": [], "edges": []})
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
 
     add_missing_start_end_nodes(pipeline, Node)
 
@@ -46,7 +46,7 @@ def test_recursive_pipeline_has_start_end_nodes(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
     pipeline.save()
     pipeline.refresh_from_db()
 
@@ -77,7 +77,7 @@ def test_dangling_edge_has_start_end_nodes(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
     pipeline.save()
     pipeline.refresh_from_db()
 
@@ -175,7 +175,7 @@ def test_compliant_pipeline_not_modified(team):
             "edges": [],
         },
     )
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
     add_missing_start_end_nodes(pipeline, Node)
 
     assert pipeline.node_set.all().count() == 3
@@ -205,7 +205,7 @@ def test_pipeline_gets_start_end_nodes_with_edges(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
 
     add_missing_start_end_nodes(pipeline, Node)
 
@@ -255,7 +255,7 @@ def test_remove_start_end_nodes(team):
             ],
         },
     )
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
 
     remove_all_start_end_nodes(Node)
     pipeline.refresh_from_db()
@@ -272,10 +272,41 @@ def test_remove_start_end_nodes(team):
 
 
 @pytest.mark.django_db()
+def test_remove_start_end_nodes_with_pipeline_that_lists_no_nodes(team):
+    """The sweep covers every pipeline in the DB, so it meets ADR-0049 data too: no ``nodes``
+    key, membership owned by the rows. It has to delete the row rather than read the list —
+    and must not read the missing list as "no nodes", which would take every row with it.
+    """
+    pipeline = PipelineFactory.create(team=team)
+    assert "nodes" not in pipeline.data
+    passthrough = NodeFactory.create(pipeline=pipeline)
+
+    remove_all_start_end_nodes(Node)
+    pipeline.refresh_from_db()
+
+    assert set(pipeline.node_set.values_list("flow_id", flat=True)) == {passthrough.flow_id}
+    assert "nodes" not in pipeline.data
+    assert pipeline.data["edges"] == []
+
+
+@pytest.mark.django_db()
 def test_remove_start_end_nodes_with_layout_only_pipeline(team):
     """``remove_all_start_end_nodes`` sweeps every pipeline in the DB, so it has to cope with
-    layout-only ``Pipeline.data`` (ADR-0046) where nodes carry no embedded ``data``."""
+    layout-only ``Pipeline.data`` (ADR-0046) where nodes are listed but carry no embedded
+    ``data``. Such rows exist wherever the ``strip_node_data`` command ran without migration
+    0030 following it; the ADR-0049 shape never reaches this sweep, because unapplying 0030
+    rebuilds the nodes list first.
+    """
     pipeline = PipelineFactory.create(team=team)
+    # Put the nodes list back in the ADR-0046 shape: layout keys only, no content.
+    pipeline.data = {
+        **pipeline.data,
+        "nodes": [
+            {"id": node.flow_id, "type": react_flow_node_type(node.type), "position": node.position or {}}
+            for node in pipeline.node_set.all()
+        ],
+    }
+    pipeline.save(update_fields=["data"])
     assert all("data" not in node for node in pipeline.data["nodes"])
 
     remove_all_start_end_nodes(Node)
@@ -283,6 +314,7 @@ def test_remove_start_end_nodes_with_layout_only_pipeline(team):
 
     assert not pipeline.node_set.filter(type__in=[StartNode.__name__, EndNode.__name__]).exists()
     assert pipeline.data["nodes"] == []
+    assert pipeline.data["edges"] == []
 
 
 @pytest.mark.django_db()
@@ -329,7 +361,7 @@ def test_remove_nodes(version_before_removing_node, team):
             ],
         },
     )
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
 
     if version_before_removing_node:
         pipeline.create_new_version()
@@ -359,7 +391,7 @@ def test_remove_nodes(version_before_removing_node, team):
         ],
     }
     pipeline.save()
-    pipeline.update_nodes_from_data(split_flow_data(pipeline.data)[1])
+    pipeline.update_nodes_from_data(split_flow_data(Flow(**pipeline.data))[1])
 
     if version_before_removing_node:
         node = Node.objects.get_all().get(flow_id=passthrough_2["id"], working_version_id=None)
@@ -374,9 +406,9 @@ def test_pipeline_creation_without_llm(team):
     pipeline = Pipeline.create_default(team=team)
 
     assert pipeline.name == "New Pipeline 1"
-    assert "nodes" in pipeline.data
+    assert "nodes" not in pipeline.data
     assert "edges" in pipeline.data
-    assert len(pipeline.data["nodes"]) == 2
+    assert pipeline.node_set.count() == 2
     assert len(pipeline.data["edges"]) == 0
     node_types = list(pipeline.node_set.values_list("type", flat=True))
     assert "StartNode" in node_types
@@ -394,9 +426,9 @@ def test_pipeline_creation_with_llm(team):
         llm_provider_model=mock_llm_model,
     )
 
-    assert "nodes" in pipeline.data
+    assert "nodes" not in pipeline.data
     assert "edges" in pipeline.data
-    assert len(pipeline.data["nodes"]) == 3
+    assert pipeline.node_set.count() == 3
     params = pipeline.node_set.get(type="LLMResponseWithPrompt").params
     assert params["llm_provider_id"] == mock_llm_provider.id
     assert params["llm_provider_model_id"] == mock_llm_model.id

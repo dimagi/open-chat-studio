@@ -32,44 +32,65 @@ class FlowEdge(pydantic.BaseModel):
     targetHandle: str | None = STANDARD_INPUT_NAME
 
 
-class Flow(pydantic.BaseModel):
-    nodes: list[FlowNode]
+class FlowWithoutNodes(pydantic.BaseModel):
+    """The shape of a stored ``Pipeline.data``: a graph minus its nodes (ADR-0049).
+
+    Base of the flow hierarchy — ``Flow`` adds optional nodes, ``FullFlow`` requires them.
+
+    Unknown top-level keys are dropped, wherever the graph came from. A save rewrites
+    ``Pipeline.data`` from the parsed graph, so the stored blob only ever holds what is
+    modelled here — no caller, and no older blob, can smuggle a key past it.
+    """
+
     edges: list[FlowEdge]
     errors: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
-#: The only node keys persisted in ``Pipeline.data`` — everything else is node content
-#: owned by the ``Node`` model (see ADR-0046).
-LAYOUT_NODE_KEYS = ("id", "type", "position")
+class Flow(FlowWithoutNodes):
+    """A stored graph, which may or may not still list its nodes.
 
-
-def split_flow_data(data: dict) -> tuple[dict, dict[str, dict]]:
-    """Split a full react-flow graph into layout-only data and per-node content.
-
-    Returns ``(layout_data, node_data)`` where ``layout_data`` keeps only
-    ``LAYOUT_NODE_KEYS`` per node (edges and unknown top-level keys pass through) and
-    ``node_data`` maps flow_id to ``{"type", "label", "params", "position"}`` for every
-    node that carried an embedded ``data`` key. ``position`` lets the save shadow-write
-    the layout onto the ``Node`` position columns; the layout in ``Pipeline.data`` stays
-    authoritative until a follow-up PR switches reads over. Layout-only input yields an
-    empty ``node_data``. The input is not mutated.
+    Layout-only ``Pipeline.data`` carries no ``nodes`` key (ADR-0049) while an un-migrated
+    blob still does, so nodes are optional here. Anywhere a *complete* graph is required,
+    use ``FullFlow`` — this model reads an omitted ``nodes`` as an empty graph.
     """
-    if "nodes" not in data:
-        return {**data}, {}
 
-    node_data = {}
-    layout_nodes = []
-    for node in data["nodes"]:
-        content = node.get("data")
-        if content:
-            node_data[node["id"]] = {
-                "type": content["type"],
-                "label": content.get("label", ""),
-                "params": content.get("params", {}),
-                "position": node.get("position"),
-            }
-        layout_nodes.append({key: node[key] for key in LAYOUT_NODE_KEYS if key in node})
-    return {**data, "nodes": layout_nodes}, node_data
+    nodes: list[FlowNode] = Field(default_factory=list)
+
+
+class FullFlow(Flow):
+    """A complete graph, as supplied by a full-graph save or an import file.
+
+    An omitted ``nodes`` is a malformed payload, not an empty graph: treating it as empty
+    would reconcile every node row away on save. The requirement is not transport-specific
+    — any caller handing over a whole graph must state its nodes.
+    """
+
+    nodes: list[FlowNode]
+
+
+#: React-flow node types. ``Node.type`` (the pipeline node class name) maps onto one of
+#: these for the editor; the reserved start/end classes get their own types.
+REACT_FLOW_START_TYPE = "startNode"
+REACT_FLOW_END_TYPE = "endNode"
+REACT_FLOW_NODE_TYPE = "pipelineNode"
+
+
+def react_flow_node_type(node_type: str) -> str:
+    """Map a ``Node.type`` (pipeline node class name) onto its react-flow node type."""
+    if node_type == "StartNode":
+        return REACT_FLOW_START_TYPE
+    if node_type == "EndNode":
+        return REACT_FLOW_END_TYPE
+    return REACT_FLOW_NODE_TYPE
+
+
+def split_flow_data(flow: Flow) -> tuple[FlowWithoutNodes, dict[str, FlowNode | None]]:
+    """Split a graph into the part ``Pipeline.data`` stores — the edges, no ``nodes``
+    (ADR-0049) — and the complete node membership: content-carrying nodes map to themselves,
+    content-less ones to ``None`` (membership only, so their row must already exist).
+    """
+    node_data: dict[str, FlowNode | None] = {node.id: node if node.data else None for node in flow.nodes}
+    return FlowWithoutNodes(**flow.model_dump(exclude={"nodes"})), node_data
 
 
 def node_position_fields(position) -> dict:
@@ -86,8 +107,10 @@ def node_position_fields(position) -> dict:
 
 
 class FlowPipelineData(pydantic.BaseModel):
+    """A full-graph save arriving over HTTP."""
+
     name: str
-    data: Flow
+    data: FullFlow
     experiment_name: str | None = Field(default=None, min_length=1)
 
 

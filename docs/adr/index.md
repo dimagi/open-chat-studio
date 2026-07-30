@@ -68,3 +68,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0046](0046-layout-only-pipeline-data.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Node rows are the sole source of pipeline node content |
 | [0047](0047-deploy-safe-evaluation-runs.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Deploy-safe evaluation runs via a beat coordinator over a frozen plan |
 | [0048](0048-evaluation-spend-is-team-spend-not-entity-spend.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Evaluation spend is team spend, never entity spend |
+| [0049](0049-node-rows-own-pipeline-layout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Node rows own pipeline layout; `Pipeline.data` keeps only edges |
