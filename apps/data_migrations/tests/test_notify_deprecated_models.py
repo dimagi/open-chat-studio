@@ -6,6 +6,7 @@ from django.core.management import call_command
 from apps.pipelines.models import Pipeline
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.llm_service.default_models import Model
+from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
@@ -81,6 +82,26 @@ class TestNotifyDeprecatedModelsCommand:
         assert call_kwargs["model_name"] == "openai/test-deprecated-model"
         assert call_kwargs["replacement_model_name"] is None
         assert experiment.name in call_kwargs["affected"].chatbots
+
+    @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
+    def test_notifies_the_team_about_affected_evaluators(self, mock_notify):
+        """Evaluators are reached through the FK, so they need reporting cover of their own."""
+        deprecated_model = LlmProviderModelFactory(
+            team=None, type="openai", name="test-deprecated-model", deprecated=True
+        )
+        evaluator = EvaluatorFactory.create(params={"llm_provider_model_id": deprecated_model.id})
+
+        with patch(
+            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            FAKE_DEPRECATED_MODELS,
+        ):
+            call_command("notify_deprecated_models", force=True)
+
+        mock_notify.assert_called_once()
+        call_kwargs = mock_notify.call_args.kwargs
+        assert call_kwargs["team"] == evaluator.team
+        assert call_kwargs["model_name"] == "openai/test-deprecated-model"
+        assert evaluator.name in call_kwargs["affected"].evaluators
 
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_dry_run_does_not_notify(self, mock_notify):
