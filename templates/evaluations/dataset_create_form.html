@@ -7,7 +7,7 @@
   {% render_form_fields form "evaluation_mode" %}
 
   <div x-data="datasetModeSelectorBuilder()" x-init="init()">
-    {% render_form_fields form "mode" "session_ids" "messages_json" "column_mapping" "csv_file_id" %}
+    {% render_form_fields form "mode" "session_ids" "session_scope" "messages_json" "column_mapping" "csv_file_id" %}
     <div x-show="!loaded" class="text-center py-8">
       <i class="fa-solid fa-spinner fa-spin fa-2x text-primary"></i>
     </div>
@@ -43,22 +43,53 @@
               </div>
 
               <div class="flex items-center gap-3">
-                <div x-show="selectedSessionIds.size > 0" class="text-sm font-medium">
-                  <span x-text="selectedSessionIds.size"></span> session<span x-show="selectedSessionIds.size !== 1">s</span> of <span x-text="allSessionIds.size"></span> selected
-                  <button type="button" class="btn btn-xs btn-outline ml-2" @click="clearAllSelections()">
-                    Clear
+                <div class="join">
+                  <button type="button"
+                          class="join-item btn btn-sm"
+                          :class="sessionScope === 'selected' ? 'btn-primary' : 'btn-ghost'"
+                          @click="setSessionScope('selected')">
+                    {% translate "Selected only" %}
+                  </button>
+                  <button type="button"
+                          class="join-item btn btn-sm"
+                          :class="sessionScope === 'all_matching' ? 'btn-primary' : 'btn-ghost'"
+                          @click="setSessionScope('all_matching')">
+                    {% translate "All matching filters" %}
                   </button>
                 </div>
-                <div x-show="selectedSessionIds.size == 0 && allSessionIds.size > 0" class="text-sm font-medium">
-                  <span x-text="allSessionIds.size"></span> session<span x-show="allSessionIds.size !== 1">s</span>
+                <div class="text-sm font-medium">
+                  <span x-text="cloneCount()"></span>
+                  session<span x-show="cloneCount() !== 1">s</span>
+                  {% translate "will be cloned" %}
+                  <button type="button" class="btn btn-xs btn-outline ml-2"
+                          x-show="sessionScope === 'selected' && selectedSessionIds.size > 0"
+                          @click="clearAllSelections()">
+                    {% translate "Clear" %}
+                  </button>
                 </div>
               </div>
             </div>
+            <div x-show="sessionScope === 'all_matching'" x-cloak class="text-sm text-base-content/60 mt-2">
+              {% translate "Every session matching the current filters will be cloned. Row selections do not affect this mode." %}
+            </div>
+            <div x-show="overMessageModeLimit()" x-cloak class="text-sm text-warning mt-2">
+              {% blocktranslate with limit=message_mode_all_matching_limit %}Cloning every match is limited to {{ limit }} sessions for message-level datasets. Narrow the filters, select sessions individually, or use a session-level dataset.{% endblocktranslate %}
+            </div>
           </div>
 
-          <div id="sessions-table" :class="{'session-mode-active': evaluationMode === 'session'}" data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
+          <div id="sessions-table"
+               :class="{'session-mode-active': evaluationMode === 'session', 'opacity-60': sessionScope !== 'selected'}"
+               data-url="{% url 'evaluations:dataset_sessions_selection_list' request.team.slug %}">
             {% include "table/table_placeholder.html" %}
           </div>
+
+          <!-- Replicate the active filters into the POST body so "all matching filters" is
+               resolved against exactly what the user is looking at. -->
+          <!-- Keyed by index, not name: a column may carry several filters (a date range is
+               `f_col=after X` AND `f_col=before Y`), so names repeat. -->
+          <template x-for="(param, index) in filterParams" :key="index">
+            <input type="hidden" :name="param.name" :value="param.value">
+          </template>
         </div>
       </div>
 
@@ -300,7 +331,8 @@
       // Extend the shared datasetModeSelector with create-specific functionality
       const baseComponent = window.datasetModeSelector({
         defaultMode: 'clone',
-        sessionIdsFetchUrl: "{% url 'evaluations:dataset_sessions_selection_json' team.slug %}"
+        sessionCountUrl: "{% url 'evaluations:dataset_sessions_selection_count' team.slug %}",
+        messageModeLimit: {{ message_mode_all_matching_limit|default:0 }}
       });
 
       return {

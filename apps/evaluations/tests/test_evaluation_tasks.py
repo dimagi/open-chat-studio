@@ -23,6 +23,7 @@ from apps.evaluations.tasks import (
     evaluate_message,
     run_bot_generation,
 )
+from apps.evaluations.usage import EvaluatorUsageContext
 from apps.experiments.models import ExperimentSession, Participant
 from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -139,7 +140,18 @@ def test_evaluate_single_message_with_bot_generation(
 
     # Verify evaluator was called with message and bot response
     expected = "I heard: " + evaluation_message.input["content"]
-    evaluator_run_mock.assert_called_once_with(evaluation_message, expected)
+    session_id = EvaluationResult.objects.get(run=run).session_id
+    evaluator_run_mock.assert_called_once_with(
+        evaluation_message,
+        expected,
+        usage_context=EvaluatorUsageContext(
+            team_id=run.team_id,
+            evaluation_run_id=run.id,
+            evaluation_config_id=config.id,
+            experiment_id=experiment.get_working_version_id(),
+            session_id=session_id,
+        ),
+    )
 
     # Verify result was created
     result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)
@@ -163,7 +175,13 @@ def test_evaluate_single_message_handles_bot_generation_error(
     evaluate_message(run.id, [evaluator.id], evaluation_message.id)
 
     # Verify evaluator was still called despite bot error, with empty string response since bot failed
-    evaluator_run_mock.assert_called_once_with(evaluation_message, "")
+    evaluator_run_mock.assert_called_once_with(
+        evaluation_message,
+        "",
+        usage_context=EvaluatorUsageContext(
+            team_id=run.team_id, evaluation_run_id=run.id, evaluation_config_id=run.config_id
+        ),
+    )
 
     # Verify result was still created
     result = EvaluationResult.objects.get(message=evaluation_message, run=run, evaluator=evaluator)

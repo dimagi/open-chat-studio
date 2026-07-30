@@ -1,3 +1,4 @@
+import contextlib
 import copy
 from collections import defaultdict
 from collections.abc import Iterator
@@ -15,7 +16,14 @@ from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
 from apps.pipelines.exceptions import MissingNodeDataError, PipelineBuildError, PipelineNodeBuildError
-from apps.pipelines.flow import Flow, FlowNode, FlowNodeData, node_position_fields, split_flow_data
+from apps.pipelines.flow import (
+    Flow,
+    FlowNode,
+    FlowNodeData,
+    FlowWithoutNodes,
+    node_position_fields,
+    react_flow_node_type,
+)
 from apps.pipelines.helper import create_pipeline_with_nodes, duplicate_pipeline_with_new_ids
 from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
@@ -126,24 +134,28 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def get_absolute_url(self):
         return reverse("pipelines:edit", args=[get_slug_for_team(self.team_id), self.id])
 
-    def update_nodes_from_data(self, node_data: dict[str, dict]) -> None:
-        """Reconcile this pipeline's ``Node`` rows with the node list in ``self.data``.
+    @transaction.atomic()
+    def update_nodes_from_data(self, node_data: dict[str, FlowNode | None]) -> None:
+        """Reconcile this pipeline's ``Node`` rows against ``node_data``.
 
-        ``self.data`` (already persisted) decides graph membership only: rows whose
-        flow_id disappeared from it are deleted, or archived when they have versions.
-        Node content never comes from ``self.data`` — the rows own it (ADR-0046).
-        ``node_data`` maps flow_id to ``{"type", "label", "params", "position"}`` for
-        nodes whose content originates outside the database (UI saves, imports,
-        creation, revert); those rows are created or updated from the mapping. Graph
-        nodes absent from the mapping must already have a row, which is left untouched.
+        ``node_data`` is the complete graph membership (``self.data`` no longer lists nodes —
+        ADR-0049): rows whose flow_id is absent are deleted, or archived when they have
+        versions. A ``FlowNode`` carrying content creates or updates its row, position columns
+        included (they are the authoritative layout source for reads). A membership-only entry
+        (``None``, or a ``FlowNode`` with no ``data``) leaves an existing row untouched and is
+        an error when no row exists.
 
-        ``position`` is shadow-written to the row's position columns; ``self.data``
-        stays authoritative for layout until a follow-up PR switches reads over.
+        Because an incomplete mapping means "delete the rest", the mapping is validated
+        before anything is removed, and the whole reconcile runs in one transaction: a
+        caller that passes a bad mapping gets an exception, not a pipeline with no nodes.
         """
         current_ids = set(self.node_ids)
-        new_ids = {node["id"] for node in self.data["nodes"]}
-        to_remove = current_ids - new_ids
+        membership_only = {flow_id for flow_id, node in node_data.items() if node is None or node.data is None}
+        missing = membership_only - current_ids
+        if missing:
+            raise MissingNodeDataError(missing)
 
+        to_remove = current_ids - set(node_data)
         pipeline_nodes = Node.objects.annotate(versions_count=models.Count("versions")).filter(
             pipeline=self, flow_id__in=to_remove
         )
@@ -154,25 +166,37 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Preserve the node if it has versions, otherwise we tamper with previous versions
             node.archive()
 
-        missing = new_ids - current_ids - set(node_data)
-        if missing:
-            raise MissingNodeDataError(missing)
-
-        for flow_node in self.data["nodes"]:
-            content = node_data.get(flow_node["id"])
-            if content is None:
+        for flow_id, node in node_data.items():
+            if flow_id in membership_only:
                 continue
+            if node.id != flow_id:
+                # The key is the flow_id the content is written under, so a mismatch would
+                # silently store this node's content on a different row.
+                raise ValueError(f"node_data key {flow_id!r} does not match node id {node.id!r}")
+            content = node.data
             created_node, _ = Node.objects.update_or_create(
                 pipeline=self,
-                flow_id=flow_node["id"],
+                flow_id=flow_id,
                 defaults={
-                    "type": content["type"],
-                    "params": content.get("params", {}),
-                    "label": content.get("label", ""),
-                    **node_position_fields(content.get("position")),
+                    "type": content.type,
+                    "params": content.params,
+                    "label": content.label,
+                    **node_position_fields(node.position),
                 },
             )
             created_node.update_from_params()
+
+    def clear_node_caches(self) -> None:
+        """Forget the cached ``Node`` rows and the ``flow_data`` rebuilt from them.
+
+        ``update_nodes_from_data`` writes rows straight to the database, behind the back of a
+        prefetched ``node_set`` and of ``flow_data``'s cache. A caller that reads either after
+        reconciling must call this first or it sees the pre-reconcile graph.
+        """
+        # No fields: clears the whole prefetch cache, node_set included.
+        self.refresh_from_db()
+        with contextlib.suppress(AttributeError):  # nothing cached if flow_data was never read
+            del self.flow_data
 
     def validate(self, full=True) -> dict:
         """Validate the pipeline nodes and return a dictionary of errors"""
@@ -226,34 +250,25 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @property
     def data_without_positions(self):
         """The full flow (node content reconstructed from the Node rows) minus layout positions."""
-        if not self.data or "nodes" not in self.data:
+        if not self.data:
             return self.data
         return {
-            **self.data,
+            **{key: value for key, value in self.data.items() if key != "nodes"},
             "nodes": [{k: v for k, v in node.items() if k != "position"} for node in self.flow_data["nodes"]],
         }
 
     @cached_property
     def flow_data(self) -> dict:
-        flow = Flow(**self.data)
-        flow_nodes_by_id = {node.id: node for node in flow.nodes}
-        nodes = []
+        """The full react-flow graph, rebuilt from the ``Node`` rows.
 
-        for node in self.node_set.all():
-            nodes.append(
-                FlowNode(
-                    id=node.flow_id,
-                    position=flow_nodes_by_id[node.flow_id].position,
-                    type=flow_nodes_by_id[node.flow_id].type,
-                    data=FlowNodeData(
-                        id=node.flow_id,
-                        type=node.type,
-                        params=node.params,
-                        label=node.label,
-                    ),
-                )
-            )
-        flow.nodes = nodes
+        ``self.data`` supplies only the edges; each node's content, layout position and
+        react-flow type come from its ``Node`` row (ADR-0049).
+        """
+        # ``edges`` is required, so stand in for data that is empty or missing entirely; the
+        # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
+        # different fallback: that one returns the empty data as-is rather than rebuilding.
+        flow = Flow(**(self.data or {"edges": []}))
+        flow.nodes = [node.to_flow_node() for node in self.node_set.all()]
         return flow.model_dump()
 
     @property
@@ -285,27 +300,29 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     def revert_to_version(self, version: "Pipeline") -> None:
         """Reset this working pipeline to the state of ``version``.
 
-        Builds the full flow from ``version.flow_data`` (which reconstructs each node's
-        content from the version's node rows), remaps params that reference versioned
-        records back to their working id — the inverse of the rewriting done during
-        publish, see ``apps.pipelines.versioning`` — then persists the layout and rebuilds
-        every working node from the version's content via ``update_nodes_from_data``. The
-        versioned record for each param is read from the version node's resource FK column.
-        """
-        # flow_data's nodes are built from the same node_set, so every flow_id resolves here.
-        version_nodes_by_flow_id = {node.flow_id: node for node in version.node_set.all()}
-        data = copy.deepcopy(version.flow_data)
-        for node in data.get("nodes", []):
-            content = node.get("data", {})
-            params = content.get("params", {})
-            version_node = version_nodes_by_flow_id[node["id"]]
-            for spec in get_versioned_param_specs(content.get("type")):
-                spec.revert_referenced_record(version_node, params)
+        Takes the version's node rows one at a time and remaps params that reference
+        versioned records back to their working id — the inverse of the rewriting done
+        during publish, see ``apps.pipelines.versioning`` — then persists the version's
+        edges and rebuilds every working node from that content via
+        ``update_nodes_from_data``. The versioned record for each param is read from the
+        version node's resource FK column.
 
-        self.data, node_data = split_flow_data(data)
+        The version's stored ``data`` supplies the edges only.
+        """
+        node_data: dict[str, FlowNode | None] = {}
+        for version_node in version.node_set.all():
+            flow_node = version_node.to_flow_node()
+            for spec in get_versioned_param_specs(version_node.type):
+                spec.revert_referenced_record(version_node, flow_node.data.params)
+            node_data[version_node.flow_id] = flow_node
+
+        self.data = FlowWithoutNodes(**(version.data or {"edges": []})).model_dump()
         self.edit_revision += 1
         self.save(update_fields=["data", "edit_revision"])
         self.update_nodes_from_data(node_data)
+        # The rows were written straight to the DB, so hand back an instance that reads as the
+        # reverted pipeline rather than the one it replaced. Same reason the save paths do it.
+        self.clear_node_caches()
 
     @transaction.atomic()
     def archive(self) -> bool:
@@ -378,9 +395,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
     type = models.CharField(max_length=128)  # The node type, should be one from nodes/nodes.py
     label = models.CharField(max_length=128, blank=True, default="")  # The human readable label
     params = SanitizedJSONField(default=dict)  # Parameters for the specific node type
-    # Layout position on the editor canvas, shadow-written from ``Pipeline.data`` — the
-    # blob stays authoritative until a follow-up PR switches reads to these columns.
-    # Null until the row is saved or the strip_node_data command backfills it.
+    # Layout position on the editor canvas (ADR-0049) — the authoritative source for reads.
+    # Null until the row is saved, or until migration 0030 backfills it from the old blob.
     position_x = models.FloatField(null=True, blank=True)
     position_y = models.FloatField(null=True, blank=True)
     working_version = models.ForeignKey(
@@ -454,6 +470,24 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         if self.position_x is None or self.position_y is None:
             return None
         return {"x": self.position_x, "y": self.position_y}
+
+    def to_flow_node(self) -> FlowNode:
+        """This row as a react-flow node, content included.
+
+        ``params`` is deep-copied so a caller that rewrites the returned node's params
+        (``Pipeline.revert_to_version``) cannot reach back into this row's stored dict.
+        """
+        return FlowNode(
+            id=self.flow_id,
+            position=self.position or {"x": 0, "y": 0},
+            type=react_flow_node_type(self.type),
+            data=FlowNodeData(
+                id=self.flow_id,
+                type=self.type,
+                params=copy.deepcopy(self.params),
+                label=self.label,
+            ),
+        )
 
     def has_parameter(self, param_name: str) -> bool:
         """True if this node's type declares ``param_name`` as a param. Unknown types have none."""

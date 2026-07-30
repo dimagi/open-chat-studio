@@ -13,20 +13,31 @@ def remove_all_start_end_nodes(Node):
     for start_node in Node.objects.filter(type=StartNode.__name__).all():
         pipeline = start_node.pipeline
         edges = pipeline.data["edges"]
-        nodes = pipeline.data["nodes"]
         pipeline.data["edges"] = [edge for edge in edges if edge["source"] != start_node.flow_id]
-        pipeline.data["nodes"] = [node for node in nodes if node["id"] != start_node.flow_id]
-        _set_new_nodes(pipeline, Node)
-        pipeline.save()
+        _drop_node(pipeline, start_node, Node)
 
     for end_node in Node.objects.filter(type=EndNode.__name__).all():
         pipeline = end_node.pipeline
         edges = pipeline.data["edges"]
-        nodes = pipeline.data["nodes"]
         pipeline.data["edges"] = [edge for edge in edges if edge["target"] != end_node.flow_id]
-        pipeline.data["nodes"] = [node for node in nodes if node["id"] != end_node.flow_id]
+        _drop_node(pipeline, end_node, Node)
+
+
+def _drop_node(pipeline, node, Node):
+    """Take ``node`` out of ``pipeline`` and persist the data.
+
+    This sweep runs over every pipeline in the DB, so it meets both data shapes. One that
+    still embeds a nodes list loses the entry and has its rows re-synced from the list. One
+    whose list is gone (ADR-0049) has the row deleted directly: the rows own membership
+    there, and handing ``_set_new_nodes`` a missing list would read as "no nodes" and delete
+    every row on the pipeline.
+    """
+    if "nodes" in pipeline.data:
+        pipeline.data["nodes"] = [n for n in pipeline.data["nodes"] if n["id"] != node.flow_id]
         _set_new_nodes(pipeline, Node)
-        pipeline.save()
+    else:
+        Node.objects.filter(pipeline=pipeline, flow_id=node.flow_id).delete()
+    pipeline.save()
 
 
 def add_missing_start_end_nodes(pipeline, Node):
@@ -122,6 +133,9 @@ def _set_new_nodes(pipeline, Node):
     to_delete = current_ids - new_ids
     Node.objects.filter(pipeline=pipeline, flow_id__in=to_delete).delete()
     for node in nodes:
+        if node.data is None:
+            # Layout-only node (ADR-0046): the Node row owns the content, so there is nothing to sync.
+            continue
         Node.objects.update_or_create(
             pipeline=pipeline,
             flow_id=node.id,

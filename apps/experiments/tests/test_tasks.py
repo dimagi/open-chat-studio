@@ -1,3 +1,4 @@
+import gzip
 import logging
 from unittest.mock import MagicMock, patch
 
@@ -13,10 +14,38 @@ from apps.utils.factories.experiment import ExperimentFactory, ExperimentSession
 @pytest.mark.django_db()
 def test_async_export_chat_returns_file_id():
     session = ExperimentSessionFactory.create()
-    result = async_export_chat.run(session.experiment_id, {}, "UTC")
+    result = async_export_chat.run(session.experiment_id, "", "UTC")
     file = File.objects.get(id=result["file_id"])
     assert file.purpose == FilePurpose.DATA_EXPORT
     assert file.expiry_date is not None
+
+
+@pytest.mark.django_db()
+@patch("apps.experiments.tasks.ProgressRecorder")
+def test_async_export_chat_applies_query_string_filters(mock_recorder_cls):
+    """The task takes the raw query string, not a QueryDict.
+
+    Celery's JSON serializer flattens a QueryDict into a plain dict, which has no
+    `.getlist()` — passing one through made the task raise
+    ``AttributeError: 'dict' object has no attribute 'getlist'``. Two filters on the same
+    column exercise the multi-value handling that only a QueryDict provides.
+    """
+    experiment = ExperimentFactory.create()
+    included = ExperimentSessionFactory.create(experiment=experiment, participant__identifier="alice")
+    excluded = ExperimentSessionFactory.create(experiment=experiment, participant__identifier="bob")
+    for session in (included, excluded):
+        ChatMessage.objects.create(
+            chat=session.chat,
+            content=f"message from {session.participant.identifier}",
+            message_type=ChatMessageType.HUMAN,
+        )
+
+    query_string = "f_participant=alice&op_participant=equals&f_participant=bob&op_participant=does+not+contain"
+    result = async_export_chat.run(experiment.id, query_string, "UTC")
+
+    csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).file.read()).decode()
+    assert "message from alice" in csv_content
+    assert "message from bob" not in csv_content
 
 
 @pytest.mark.django_db()
@@ -28,7 +57,7 @@ def test_async_export_chat_reports_progress(mock_recorder_cls, caplog):
         ChatMessage.objects.create(chat=session.chat, content=f"m{i}", message_type=ChatMessageType.HUMAN)
 
     with caplog.at_level(logging.INFO, logger="ocs.experiments"):
-        async_export_chat.run(session.experiment_id, {}, "UTC")
+        async_export_chat.run(session.experiment_id, "", "UTC")
 
     # Final progress update reports all messages processed against the total.
     recorder.set_progress.assert_called_with(2, 2, description="Processing 2 of 2 messages")

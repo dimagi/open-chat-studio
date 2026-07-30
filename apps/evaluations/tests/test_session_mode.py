@@ -461,8 +461,10 @@ class TestDatasetFormEvaluationMode:
         mock_session_clone.assert_called_once()
         mock_clone.assert_not_called()
 
-    def test_create_form_session_mode_allows_zero_sessions(self):
-        """Session-mode datasets may be created empty (e.g. to be auto-populated later)."""
+    @pytest.mark.parametrize("evaluation_mode", ["session", "message"])
+    def test_create_form_allows_zero_sessions(self, evaluation_mode):
+        """Either mode may be created empty and filled later — session mode by an auto-population
+        rule, either mode from the Add Sessions page."""
         team = TeamWithUsersFactory.create()
         user = team.members.first()
 
@@ -470,16 +472,24 @@ class TestDatasetFormEvaluationMode:
             team=team,
             user=user,
             data={
-                "name": "Empty Session Dataset",
-                "evaluation_mode": "session",
+                "name": "Empty Dataset",
+                "evaluation_mode": evaluation_mode,
                 "mode": "clone",
                 "session_ids": "",
             },
         )
         assert form.is_valid(), form.errors
 
-    def test_create_form_message_mode_still_requires_sessions(self):
-        """Message-mode datasets in clone mode still require at least one session."""
+    @pytest.mark.parametrize(
+        ("evaluation_mode", "task_name"),
+        [
+            ("session", "create_dataset_from_sessions_task"),
+            ("message", "create_dataset_from_session_messages_task"),
+        ],
+    )
+    def test_create_form_with_zero_sessions_completes_instead_of_pending(self, evaluation_mode, task_name):
+        """No clone job is dispatched for an empty selection, so nothing else would ever move the
+        dataset off PENDING — it must be closed out at save time."""
         team = TeamWithUsersFactory.create()
         user = team.members.first()
 
@@ -487,14 +497,22 @@ class TestDatasetFormEvaluationMode:
             team=team,
             user=user,
             data={
-                "name": "Empty Message Dataset",
-                "evaluation_mode": "message",
+                "name": "Empty Dataset To Complete",
+                "evaluation_mode": evaluation_mode,
                 "mode": "clone",
                 "session_ids": "",
             },
         )
-        assert not form.is_valid()
-        assert any("at least one session" in str(e).lower() for e in form.errors.get("__all__", []))
+        assert form.is_valid(), form.errors
+        form.instance.team = team  # the view sets these before saving
+        form.instance.created_by = user
+
+        with patch(f"apps.evaluations.forms.{task_name}.delay") as mock_delay:
+            dataset = form.save()
+
+        mock_delay.assert_not_called()
+        dataset.refresh_from_db()
+        assert dataset.status == DatasetCreationStatus.COMPLETED
 
     def test_edit_form_message_mode_uses_message_clone_task(self):
         """Editing a message-mode dataset calls _save_session_messages_clone, not _save_sessions_clone."""

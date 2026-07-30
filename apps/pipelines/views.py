@@ -389,9 +389,7 @@ def pipeline_data(request, team_slug: str, pk: int):
     try:
         pipeline = Pipeline.objects.get(pk=pk)
     except Pipeline.DoesNotExist:
-        pipeline = Pipeline.objects.create(
-            id=pk, team=request.team, data={"nodes": [], "edges": [], "viewport": {}}, name="New Pipeline"
-        )
+        pipeline = Pipeline.objects.create(id=pk, team=request.team, data={"edges": []}, name="New Pipeline")
     return JsonResponse(
         {
             "pipeline": {
@@ -407,11 +405,16 @@ def pipeline_data(request, team_slug: str, pk: int):
 
 def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
     """Handle full-graph POST saves (backward-compatible)."""
+    try:
+        data = FlowPipelineData.model_validate_json(request.body)
+    except pydantic.ValidationError as e:
+        return JsonResponse({"error": f"Malformed payload: {e}"}, status=400)
+
     with transaction.atomic():
         pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
-        data = FlowPipelineData.model_validate_json(request.body)
         pipeline.name = data.name
-        pipeline.data, node_data = split_flow_data(data.data.model_dump())
+        edge_data, node_data = split_flow_data(data.data)
+        pipeline.data = edge_data.model_dump()
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         try:
@@ -421,7 +424,7 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
             # The message is built from the client-supplied node ids only.
             transaction.set_rollback(True)
             return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
-        pipeline.refresh_from_db(fields=["node_set"])
+        pipeline.clear_node_caches()
     return JsonResponse(
         {
             "data": pipeline.flow_data,
@@ -457,7 +460,10 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
         if patch.name is not None:
             pipeline.name = patch.name
 
-        pipeline.data, node_data = apply_pipeline_patch(pipeline.data, patch)
+        # The patch engine works off the full current graph: nodes rebuilt from the rows,
+        # since Pipeline.data no longer lists them (ADR-0049).
+        edge_data, node_data = apply_pipeline_patch(pipeline.flow_data, patch)
+        pipeline.data = edge_data.model_dump()
         pipeline.edit_revision += 1
         pipeline.save(update_fields=["name", "data", "edit_revision"])
         try:
@@ -467,7 +473,8 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
             # The message is built from the client-supplied node ids only.
             transaction.set_rollback(True)
             return JsonResponse({"error": f"No node data provided for new node(s): {e.node_ids}"}, status=400)
-        pipeline.refresh_from_db(fields=["node_set"])
+        # flow_data was read above, off the pre-patch rows, so the response needs it rebuilt.
+        pipeline.clear_node_caches()
 
     return JsonResponse(
         {
