@@ -37,7 +37,10 @@ class TestGetWidgetPageContext:
             assert "position" not in node
             assert "id" in node
             assert "data" in node
-        assert result["pipeline_structure"]["edges"] == [{"id": "e1", "source": "1", "target": "2"}]
+        # Stored edges are normalised by ``Flow`` validation, so the default handles are explicit.
+        assert result["pipeline_structure"]["edges"] == [
+            {"id": "e1", "source": "1", "target": "2", "sourceHandle": "output", "targetHandle": "input"}
+        ]
 
     def test_serializes_static_triggers(self):
         pipeline = PipelineFactory()

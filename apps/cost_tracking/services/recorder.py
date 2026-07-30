@@ -42,7 +42,7 @@ class UsageContext:
 
     `trace_id` is None for callers outside the tracer (evaluator judge calls); it is not a
     proxy for `source`, which the tracer also sets to `EVALUATION` for eval-driven
-    generation (ADR-0049). `source` decides how the rows may be attributed downstream, so
+    generation (ADR-0050). `source` decides how the rows may be attributed downstream, so
     writers set it explicitly rather than leaning on the default.
     """
 

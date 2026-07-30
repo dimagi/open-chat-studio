@@ -356,7 +356,7 @@ class TestCopyExperiment:
                     },
                 },
             ],
-            "errors": {"test": "value"},
+            "errors": {"render": {"template_string": "bad template"}},
             "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
         }
         pipeline = PipelineFactory.create(data=pipeline_data)
@@ -369,34 +369,31 @@ class TestCopyExperiment:
         assert experiment_copy.pipeline.node_set.count() == 3
         node_ids = {node.type: node.flow_id for node in experiment_copy.pipeline.node_set.all()}
         assert experiment_copy.pipeline.data != pipeline_data
-        # The copy's data is layout-only (ADR-0046); node content lives on the Node rows.
+        # The copy's data has no node information beyond edges (ADR-0049); node content and
+        # layout live on the Node rows. Only the edges are remapped to the new ids.
         assert experiment_copy.pipeline.data == {
             "edges": [
                 {
                     "id": "start->render",
                     "source": node_ids["StartNode"],
                     "target": node_ids["RenderTemplate"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
                 },
                 {
                     "id": "render->end",
                     "source": node_ids["RenderTemplate"],
                     "target": node_ids["EndNode"],
+                    "sourceHandle": "output",
+                    "targetHandle": "input",
                 },
             ],
-            "nodes": [
-                {"id": node_ids["StartNode"]},
-                {
-                    "id": node_ids["RenderTemplate"],
-                    "type": "pipelineNode",
-                    "position": {"x": 1086.2033684962435, "y": 91.8445271200375},
-                },
-                {"id": node_ids["EndNode"]},
-            ],
-            "errors": {"test": "value"},
-            "viewport": {"x": 235.23538305148782, "y": 365.64304629840245, "zoom": 0.5570968254096753},
+            "errors": {"render": {"template_string": "bad template"}},
         }
         copied_render = experiment_copy.pipeline.node_set.get(type="RenderTemplate")
         assert copied_render.params == {"name": "render template", "template_string": "{{input}}"}
+        # The render node's layout position is carried on the copied row.
+        assert copied_render.position == {"x": 1086.2033684962435, "y": 91.8445271200375}
 
 
 class TestExperimentFieldClassification:

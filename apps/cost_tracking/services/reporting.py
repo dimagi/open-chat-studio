@@ -171,7 +171,7 @@ def _attributable_records(team: Team, filters: CostFilters | None = None):
     conversation's (ADR-0048), so every read that names an entity goes through here
     (grouping) or gets the same treatment from `_scoped_records` (filtering), while an
     unfiltered team total counts every source. Eval rows do carry an experiment/session —
-    always for generation (ADR-0049), and for the judge calls scoring it — so this filters
+    always for generation (ADR-0050), and for the judge calls scoring it — so this filters
     on `source` rather than on those columns being null.
     """
     return _scoped_records(team, filters).filter(source=UsageSource.CHAT)
@@ -285,7 +285,7 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
     total. Rows are ordered by descending cost. Uses the
     `(team, session, timestamp)` index.
 
-    Chat only, so an eval session totals $0 — since ADR-0049 both halves of its spend
+    Chat only, so an eval session totals $0 — since ADR-0050 both halves of its spend
     (generation and judging) are `source=EVALUATION`.
     """
     rows = (

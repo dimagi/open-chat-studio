@@ -1,12 +1,15 @@
+from importlib import import_module
+
 import pytest
-from django.core.management import CommandError, call_command
+from django.apps import apps as global_apps
 
 from apps.pipelines.migrations.utils.strip_node_data import (
     rebuild_node_data_in_pipelines,
     strip_node_data_from_pipelines,
 )
 from apps.pipelines.models import Node, Pipeline
-from apps.utils.factories.team import TeamFactory
+
+migration_0030 = import_module("apps.pipelines.migrations.0030_strip_node_data")
 
 
 def _old_format_data():
@@ -45,20 +48,27 @@ def _create_old_format_pipeline(team, with_rows=True):
 
 @pytest.mark.django_db()
 class TestStripNodeData:
-    def test_strips_blobs_and_preserves_layout(self, team):
+    def test_drops_legacy_keys_and_preserves_edges(self, team):
         pipeline = _create_old_format_pipeline(team)
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
         pipeline.refresh_from_db()
-        assert pipeline.data["nodes"] == [
-            {"id": "start-1", "type": "startNode", "position": {"x": 0, "y": 0}},
-            {"id": "end-1", "type": "endNode", "position": {"x": 100, "y": 0}},
-        ]
-        assert pipeline.data["edges"] == _old_format_data()["edges"]
-        assert pipeline.data["viewport"] == _old_format_data()["viewport"]
+        assert pipeline.data == {"edges": _old_format_data()["edges"]}
         # rows untouched
         assert pipeline.node_set.get(flow_id="start-1").params == {"name": "start"}
+
+    def test_drops_a_viewport_from_already_stripped_data(self, team):
+        """``viewport`` is modelled nowhere, so a blob that has already lost its ``nodes`` key
+        still gets it removed rather than waiting for the pipeline's next save."""
+        pipeline = Pipeline.objects.create(
+            team=team, name="stripped", data={"edges": [], "viewport": {"x": 9, "y": 9, "zoom": 2}}
+        )
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        pipeline.refresh_from_db()
+        assert pipeline.data == {"edges": []}
 
     def test_is_idempotent(self, team):
         pipeline = _create_old_format_pipeline(team)
@@ -73,7 +83,8 @@ class TestStripNodeData:
 
     def test_skips_pipeline_whose_blob_has_no_matching_row(self, team, caplog):
         """A blob without a backing Node row is the only copy of that node's content —
-        never destroy it; skip and log so it can be healed manually."""
+        never destroy it; skip and log so it can be healed manually. The skip is wholesale, so
+        the pipeline keeps its ``viewport`` too: one flagged for healing is left as found."""
         pipeline = _create_old_format_pipeline(team, with_rows=False)
 
         strip_node_data_from_pipelines(Pipeline, Node)
@@ -89,14 +100,23 @@ class TestStripNodeData:
         strip_node_data_from_pipelines(Pipeline, Node)
 
         pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
+
+    def test_drops_content_less_nodes_without_rows(self, team):
+        """A layout-only node with no backing row (no content blob to lose) is not an
+        orphan; its nodes key is dropped like any other."""
+        pipeline = Pipeline.objects.create(team=team, name="ghost", data={"nodes": [{"id": "a"}], "edges": []})
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        pipeline.refresh_from_db()
+        assert pipeline.data == {"edges": []}
 
     @pytest.mark.parametrize(
         "data",
         [
             pytest.param({}, id="empty-data"),
             pytest.param({"edges": []}, id="no-nodes-key"),
-            pytest.param({"nodes": [{"id": "a"}], "edges": []}, id="node-without-position-or-type"),
             pytest.param({"nodes": [{"data": {"type": "StartNode"}}], "edges": []}, id="blob-node-without-id"),
         ],
     )
@@ -108,28 +128,11 @@ class TestStripNodeData:
         pipeline.refresh_from_db()
         assert pipeline.data == data
 
-    def test_scopes_to_single_team(self, team):
-        other_team = TeamFactory.create()
-        pipeline = _create_old_format_pipeline(team)
-        other_pipeline = _create_old_format_pipeline(other_team)
-
-        strip_node_data_from_pipelines(Pipeline, Node, team=team)
-
-        pipeline.refresh_from_db()
-        other_pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
-        assert all("data" in node for node in other_pipeline.data["nodes"])
-
-    def test_progress_callback_is_optional(self, team):
-        _create_old_format_pipeline(team)
-
-        strip_node_data_from_pipelines(Pipeline, Node)
-
 
 @pytest.mark.django_db()
 class TestBackfillPositions:
     """The strip also mirrors each blob node's position onto the row's position columns,
-    so the follow-up PR can switch layout reads to the rows."""
+    which is what makes the rows a complete layout source for reads (ADR-0049)."""
 
     def test_copies_blob_positions_onto_rows(self, team):
         pipeline = _create_old_format_pipeline(team)
@@ -152,14 +155,62 @@ class TestBackfillPositions:
 
         assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
 
-    def test_overwrites_differing_row_position(self, team):
-        """The blob is authoritative for layout until reads switch to the columns."""
+    def test_reads_serve_backfilled_positions_instead_of_the_origin(self, team):
+        """Why the backfill must ship with the read switch (ADR-0049): until it runs, a row
+        with NULL columns reads back at the origin, and the first save of that pipeline drops
+        the blob holding the only copy of its real layout."""
         pipeline = _create_old_format_pipeline(team)
-        pipeline.node_set.filter(flow_id="start-1").update(position_x=999, position_y=999)
+
+        assert {node["id"]: node["position"] for node in pipeline.flow_data["nodes"]} == {
+            "start-1": {"x": 0, "y": 0},
+            "end-1": {"x": 0, "y": 0},  # really at x=100 in the blob, served as the origin
+        }
 
         strip_node_data_from_pipelines(Pipeline, Node)
 
+        del pipeline.flow_data  # cached off the pre-backfill rows
+        assert {node["id"]: node["position"] for node in pipeline.flow_data["nodes"]} == {
+            "start-1": {"x": 0, "y": 0},
+            "end-1": {"x": 100, "y": 0},
+        }
+
+    @pytest.mark.parametrize(
+        ("position_x", "position_y"),
+        [
+            pytest.param(999, 888, id="off-axis"),
+            pytest.param(0, 50, id="on-the-y-axis"),
+            pytest.param(50, 0, id="on-the-x-axis"),
+            pytest.param(0, 0, id="at-the-origin"),
+        ],
+    )
+    def test_leaves_an_already_positioned_row_alone(self, team, position_x, position_y):
+        """A row with both columns set is the live layout — the shadow-write has been running
+        since the columns shipped, so the blob may predate the last move. Zero is a real
+        coordinate here, not a missing one."""
+        pipeline = _create_old_format_pipeline(team)
+        pipeline.node_set.filter(flow_id="end-1").update(position_x=position_x, position_y=position_y)
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        assert pipeline.node_set.get(flow_id="end-1").position == {"x": position_x, "y": position_y}
+        # its unpositioned sibling is still backfilled from the blob
         assert pipeline.node_set.get(flow_id="start-1").position == {"x": 0, "y": 0}
+
+    @pytest.mark.parametrize(
+        ("position_x", "position_y"),
+        [
+            pytest.param(999, None, id="only-x-set"),
+            pytest.param(None, 888, id="only-y-set"),
+        ],
+    )
+    def test_backfills_a_half_positioned_row(self, team, position_x, position_y):
+        """One NULL column reads back as no position at all, so the blob still fills it."""
+        pipeline = _create_old_format_pipeline(team)
+        pipeline.node_set.filter(flow_id="end-1").update(position_x=position_x, position_y=position_y)
+
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        assert pipeline.node_set.get(flow_id="end-1").position == {"x": 100, "y": 0}
 
     def test_skips_unusable_positions(self, team):
         pipeline = _create_old_format_pipeline(team)
@@ -188,7 +239,7 @@ class TestBackfillPositions:
 @pytest.mark.django_db()
 class TestRebuildNodeData:
     """The reverse of the strip: rebuild the embedded blobs from the Node rows so that
-    pre-ADR-0046 code (which requires them) works again after a code rollback."""
+    pre-ADR-0049 code (which requires them) works again after a code rollback."""
 
     def test_rebuilds_blobs_from_rows(self, team):
         pipeline = _create_old_format_pipeline(team)
@@ -206,7 +257,20 @@ class TestRebuildNodeData:
         }
         assert nodes_by_id["start-1"]["position"] == {"x": 0, "y": 0}
         assert pipeline.data["edges"] == _old_format_data()["edges"]
-        assert pipeline.data["viewport"] == _old_format_data()["viewport"]
+
+    def test_does_not_restore_the_stripped_viewport(self, team):
+        """The forward strip drops ``viewport`` for good. Not a gap in the rollback guarantee:
+        no code on either side of ADR-0049 reads it."""
+        pipeline = _create_old_format_pipeline(team)
+        strip_node_data_from_pipelines(Pipeline, Node)
+
+        rebuild_node_data_in_pipelines(Pipeline, Node)
+
+        pipeline.refresh_from_db()
+        assert "viewport" not in pipeline.data
+        # the graph pre-ADR-0049 code does read is whole again
+        assert len(pipeline.data["nodes"]) == 2
+        assert pipeline.data["edges"] == _old_format_data()["edges"]
 
     def test_leaves_nodes_without_rows_untouched(self, team):
         pipeline = Pipeline.objects.create(
@@ -232,37 +296,30 @@ class TestRebuildNodeData:
 
 
 @pytest.mark.django_db()
-class TestStripNodeDataCommand:
-    def test_strips_blobs(self, team):
+class TestMigration0030:
+    """The migration's own RunPython callables, which is where the rollback guarantee lives.
+
+    Exercises the wiring — model lookups and forward/reverse argument passing — rather than
+    Django's apply/unapply machinery, so it does not touch recorded migration state.
+    """
+
+    def test_forward_then_reverse_round_trips(self, team):
         pipeline = _create_old_format_pipeline(team)
 
-        call_command("strip_node_data")
+        migration_0030.strip_node_data(global_apps, None)
 
         pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
+        assert "nodes" not in pipeline.data
+        assert "viewport" not in pipeline.data
+        assert pipeline.node_set.get(flow_id="end-1").position == {"x": 100, "y": 0}
 
-    def test_rebuild_flag_restores_blobs(self, team):
-        pipeline = _create_old_format_pipeline(team)
-        call_command("strip_node_data")
-
-        call_command("strip_node_data", "--rebuild")
+        migration_0030.rebuild_node_data(global_apps, None)
 
         pipeline.refresh_from_db()
-        nodes_by_id = {node["id"]: node for node in pipeline.data["nodes"]}
-        assert nodes_by_id["start-1"]["data"]["type"] == "StartNode"
-
-    def test_team_option_scopes_to_single_team(self, team):
-        other_team = TeamFactory.create()
-        pipeline = _create_old_format_pipeline(team)
-        other_pipeline = _create_old_format_pipeline(other_team)
-
-        call_command("strip_node_data", "--team", team.slug)
-
-        pipeline.refresh_from_db()
-        other_pipeline.refresh_from_db()
-        assert all("data" not in node for node in pipeline.data["nodes"])
-        assert all("data" in node for node in other_pipeline.data["nodes"])
-
-    def test_team_option_raises_for_unknown_slug(self, team):
-        with pytest.raises(CommandError):
-            call_command("strip_node_data", "--team", "does-not-exist")
+        rebuilt = {node["id"]: node for node in pipeline.data["nodes"]}
+        assert rebuilt["end-1"]["position"] == {"x": 100, "y": 0}
+        assert rebuilt["end-1"]["data"]["params"] == {"name": "end"}
+        assert rebuilt["end-1"]["type"] == "endNode"
+        # the reverse must restore what pre-ADR-0049 code requires: a parseable full graph.
+        # ``viewport`` is not part of that — nothing on either side of ADR-0049 reads it.
+        assert pipeline.data["edges"] == _old_format_data()["edges"]

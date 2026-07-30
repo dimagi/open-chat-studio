@@ -65,7 +65,7 @@ def get_usage_data(start: datetime, end: datetime):
     doesn't make this reconcile with `get_cost_usage_by_team`: tokens come from `Trace`
     and cost from `UsageRecord`, and neither half of an evaluation run writes a `Trace`
     (judge calls bypass tracing, and eval generation is billed by `UsageOnlyTracer`,
-    ADR-0049). So eval runs are cost-only here until token reporting moves onto
+    ADR-0050). So eval runs are cost-only here until token reporting moves onto
     `UsageRecord`. Pre-tracing periods will report lower totals than the legacy
     character-based proxy.
     """

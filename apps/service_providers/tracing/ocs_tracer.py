@@ -181,7 +181,7 @@ class OCSTracer(Tracer):
         )
 
     def _usage_source(self) -> UsageSource:
-        """What the traced spend was for (ADR-0049).
+        """What the traced spend was for (ADR-0050).
 
         Spend on an eval session isn't traffic a participant asked the chatbot to serve, so
         it's the team's spend and not the chatbot's or the conversation's. An eval run's own

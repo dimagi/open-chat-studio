@@ -58,7 +58,7 @@ class EvaluationChannel(ChannelBase):
 
         An eval run leaves no `Trace` behind — one per evaluated message would flood the
         team's trace list and outlive the pruned eval session. The usage tracer is the
-        exception: it records what the run spent without keeping a trace (ADR-0049).
+        exception: it records what the run spent without keeping a trace (ADR-0050).
         """
         if not self._usage_tracer:
             return TracingService.empty()

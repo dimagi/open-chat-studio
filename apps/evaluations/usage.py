@@ -1,6 +1,6 @@
 """Cost tracking for an evaluation run's two halves — the judge calls and the bot
 generation they score. Both are the team's spend and neither is a chatbot's, so both are
-recorded with `source=EVALUATION` (ADR-0048, ADR-0049).
+recorded with `source=EVALUATION` (ADR-0048, ADR-0050).
 
 Judge-model calls run outside the chat/pipeline path, so no tracer would drain their
 token usage: this module attaches a MetricsCollector to the evaluator's own LLM call and

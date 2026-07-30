@@ -1,4 +1,4 @@
-# ADR-0049: Eval-driven generation is evaluation spend, billed without a trace
+# ADR-0050: Eval-driven generation is evaluation spend, billed without a trace
 
 <span class="adr-status adr-status-proposed">PROPOSED</span>
 

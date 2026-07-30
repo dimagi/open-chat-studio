@@ -529,7 +529,7 @@ def run_bot_generation(
     """
     Run the evaluation message through the bot to generate a response.
 
-    `evaluation_run` is what the generation's LLM spend gets billed to (ADR-0049).
+    `evaluation_run` is what the generation's LLM spend gets billed to (ADR-0050).
     """
     try:
         # TODO: Do we get the participant from the EvaluationMessage?

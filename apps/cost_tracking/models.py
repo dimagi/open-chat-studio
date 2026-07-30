@@ -100,7 +100,7 @@ class UsageRecord(BaseTeamModel):
 
     `trace` is null whenever the writer kept no `Trace` — evaluator judge calls, which
     run outside tracing altogether, and eval-driven generation, which is billed by
-    `UsageOnlyTracer` (ADR-0049). It is not a proxy for `source` in either direction:
+    `UsageOnlyTracer` (ADR-0050). It is not a proxy for `source` in either direction:
     use `source` to tell evaluation spend from chat spend.
     """
 

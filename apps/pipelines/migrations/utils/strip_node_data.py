@@ -1,49 +1,42 @@
-"""Strip embedded node content from ``Pipeline.data`` and backfill row positions (ADR-0046).
+"""Drop the legacy keys from ``Pipeline.data`` and backfill row positions (ADR-0049).
 
-Node content (type, label, params) is owned by the ``Node`` rows; the copy that older
-rows embed under ``data.nodes[*].data`` is redundant. Each node's position is also
-copied onto the row's position columns — the blob stays authoritative for layout until
-a follow-up PR switches reads to the columns, so this backfill mirrors, never moves.
-Idempotent and safe to rerun: already-synced rows produce no write.
+Node content (type, label, params) and layout (position) are owned by the ``Node`` rows;
+``Pipeline.data`` keeps only edges. This helper first mirrors each node's position from the
+blob onto the row's position columns — the rows are the authoritative layout source that
+reads now use — then removes the keys the flow models no longer persist. The backfill is
+the load-bearing half: without it a row reads back at the origin and the next save drops the
+blob holding the only copy of its layout. Only rows still missing a position are filled — a row
+that already has one is the live layout and the blob may predate the last move, so it is left
+alone. Idempotent and safe to rerun: rows already positioned produce no write, and data already
+carrying none of the legacy keys is skipped.
 
-Run via the ``strip_node_data`` management command; a data migration in a follow-up PR
-will reuse these helpers with historical models.
+Migration ``pipelines.0030_strip_node_data`` runs ``strip_node_data_from_pipelines``; its
+reverse runs ``rebuild_node_data_in_pipelines``. Both are called with historical models,
+so they stick to ``_base_manager`` and plain column access.
 """
 
 import logging
 
+from apps.pipelines.flow import react_flow_node_type
+
 logger = logging.getLogger(__name__)
 
-LAYOUT_NODE_KEYS = ("id", "type", "position")
 BATCH_SIZE = 500
+LEGACY_DATA_KEYS = ("nodes", "viewport")
 
 
-def strip_node_data_from_pipelines(Pipeline, Node, team=None, progress_callback=None):
-    """`team`, if given, scopes the strip to that team's pipelines only.
-
-    `progress_callback(processed, total)` is invoked every ``BATCH_SIZE`` pipelines
-    and once more on the final pipeline, if given.
-    """
+def strip_node_data_from_pipelines(Pipeline, Node):
     queryset = Pipeline._base_manager.exclude(data__isnull=True)
-    if team is not None:
-        queryset = queryset.filter(team=team)
-    total = queryset.count()
 
     pending = []
-    processed = 0
     for pipeline in queryset.iterator(chunk_size=BATCH_SIZE):
-        rows = []
-        for row in Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"):
-            rows.append(row)
+        rows = list(Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"))
 
         _backfill_positions(pipeline, Node, node_rows=rows)
-        stripped_nodes = _strip_nodes(pipeline, Node, rows)
-        processed += 1
-        if progress_callback and (processed % BATCH_SIZE == 0 or processed == total):
-            progress_callback(processed, total)
-        if stripped_nodes is None:
+        stripped_data = _strip_legacy_keys(pipeline, rows)
+        if stripped_data is None:
             continue
-        pipeline.data = {**pipeline.data, "nodes": stripped_nodes}
+        pipeline.data = stripped_data
         pending.append(pipeline)
         if len(pending) >= BATCH_SIZE:
             Pipeline._base_manager.bulk_update(pending, ["data"])
@@ -69,10 +62,11 @@ def _backfill_positions(pipeline, Node, node_rows):
         position = node.get("position")
         if row is None or not isinstance(position, dict):
             continue
+
+        if row.position_x is not None and row.position_y is not None:
+            continue
         x, y = position.get("x"), position.get("y")
         if not isinstance(x, int | float) or not isinstance(y, int | float):
-            continue
-        if (row.position_x, row.position_y) == (x, y):
             continue
         row.position_x = x
         row.position_y = y
@@ -81,17 +75,20 @@ def _backfill_positions(pipeline, Node, node_rows):
         Node._base_manager.bulk_update(rows_to_update, ["position_x", "position_y"])
 
 
-def _strip_nodes(pipeline, Node, node_rows):
-    """The pipeline's node list with only layout keys kept, or None when nothing to strip.
+def _strip_legacy_keys(pipeline, node_rows):
+    """The pipeline's data with ``LEGACY_DATA_KEYS`` removed, or None when nothing to strip.
 
-    Also None when any blob has no backing Node row (drift, a known bad state): the blob
-    is then the only copy of that node's content, so the pipeline is skipped and logged
-    for manual healing rather than have its content destroyed. Archived rows count —
-    they still hold the content.
+    None when the data carries none of those keys (already stripped — idempotent), and also
+    None when any blob has no backing Node row (drift, a known bad state): the blob is then the
+    only copy of that node's content, so the whole pipeline is skipped and logged for manual
+    healing rather than have its content destroyed — which leaves its ``viewport`` in place too,
+    since a pipeline flagged for healing is left exactly as found. Archived rows count — they
+    still hold the content.
     """
-    nodes = (pipeline.data or {}).get("nodes") or []
-    if not any(set(node) - set(LAYOUT_NODE_KEYS) for node in nodes):
+    data = pipeline.data or {}
+    if not any(key in data for key in LEGACY_DATA_KEYS):
         return None
+    nodes = data.get("nodes") or []
 
     row_flow_ids = set([row.flow_id for row in node_rows])
     orphaned = [node.get("id") for node in nodes if "data" in node and node.get("id") not in row_flow_ids]
@@ -104,44 +101,45 @@ def _strip_nodes(pipeline, Node, node_rows):
         )
         return None
 
-    return [{key: node[key] for key in LAYOUT_NODE_KEYS if key in node} for node in nodes]
+    return {key: value for key, value in data.items() if key not in LEGACY_DATA_KEYS}
 
 
-def rebuild_node_data_in_pipelines(Pipeline, Node, team=None):
-    """Reverse of the strip: rebuild each node's embedded content blob from its Node row.
+def rebuild_node_data_in_pipelines(Pipeline, Node):
+    """Reverse of the strip: rebuild the full ``nodes`` list from the Node rows.
 
-    Exists so the strip is genuinely reversible — pre-ADR-0046 code requires the
-    blob (``FlowNode.data`` was a mandatory field), so a code rollback needs it restored.
-    Nodes without a backing row are left untouched. Idempotent.
+    ``Pipeline.data`` no longer stores nodes, so a code rollback to a version that reads
+    them needs the react-flow nodes — id, react-flow type, position and embedded content
+    blob — reconstructed from the rows. Pipelines that still carry a ``nodes`` key are left
+    untouched (idempotent); pipelines with no backing rows are skipped.
 
-    `team`, if given, scopes the rebuild to that team's pipelines only.
+    ``viewport`` is not restored — the forward strip drops it and nothing rebuilds the canvas
+    position it held. That is not a gap in the rollback guarantee: no code on either side of
+    ADR-0049 reads the key. Pre-ADR-0049 code only carried it along on save and seeded an empty
+    one on create, and the editor stopped writing it long before that.
     """
     queryset = Pipeline._base_manager.exclude(data__isnull=True)
-    if team is not None:
-        queryset = queryset.filter(team=team)
 
     pending = []
     for pipeline in queryset.iterator(chunk_size=BATCH_SIZE):
-        nodes = (pipeline.data or {}).get("nodes") or []
-        if not nodes:
+        data = pipeline.data or {}
+        if data.get("nodes"):
             continue
-        rows = {}
-        # "-is_archived" puts archived rows first so a non-archived row wins on flow_id collision
-        for row in Node._base_manager.filter(pipeline_id=pipeline.id).order_by("-is_archived"):
-            rows[row.flow_id] = row
-        changed = False
-        new_nodes = []
-        for node in nodes:
-            row = rows.get(node.get("id"))
-            blob = row and {"id": row.flow_id, "type": row.type, "label": row.label, "params": row.params}
-            if row is None or node.get("data") == blob:
-                new_nodes.append(node)
-                continue
-            new_nodes.append({**node, "data": blob})
-            changed = True
-        if not changed:
+        rows = list(Node._base_manager.filter(pipeline_id=pipeline.id, is_archived=False))
+        if not rows:
             continue
-        pipeline.data = {**pipeline.data, "nodes": new_nodes}
+        nodes = []
+        for row in rows:
+            node = {
+                "id": row.flow_id,
+                "type": react_flow_node_type(row.type),
+                "data": {"id": row.flow_id, "type": row.type, "label": row.label, "params": row.params},
+            }
+            # Read the columns directly (not the Node.position property) so a future data
+            # migration can reuse this with historical models, which have no properties.
+            if row.position_x is not None and row.position_y is not None:
+                node["position"] = {"x": row.position_x, "y": row.position_y}
+            nodes.append(node)
+        pipeline.data = {**data, "nodes": nodes}
         pending.append(pipeline)
         if len(pending) >= BATCH_SIZE:
             Pipeline._base_manager.bulk_update(pending, ["data"])

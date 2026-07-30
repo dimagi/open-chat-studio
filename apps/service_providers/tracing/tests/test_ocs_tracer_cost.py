@@ -148,7 +148,7 @@ class TestCostRecordingEndToEnd:
 
 @pytest.mark.django_db()
 class TestUsageSourceClassification:
-    """ADR-0049: spend on an eval session is evaluation spend, whichever writer records it.
+    """ADR-0050: spend on an eval session is evaluation spend, whichever writer records it.
 
     An eval run's own generation is billed by `UsageOnlyTracer`, but an eval session can
     still reach this tracer — a static trigger firing on one goes through

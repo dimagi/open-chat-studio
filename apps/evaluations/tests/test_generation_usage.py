@@ -1,4 +1,4 @@
-"""Cost tracking for the bot generation an evaluation run drives — see ADR-0049.
+"""Cost tracking for the bot generation an evaluation run drives — see ADR-0050.
 
 These rows are written by `UsageOnlyTracer` when the generation's trace closes, so they
 land with no `Trace` to point at; what makes them evaluation spend is the `UsageContext`

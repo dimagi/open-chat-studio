@@ -4,7 +4,7 @@ Evaluation runs deliberately produce no `Trace` rows — one per evaluated messa
 flood the team's trace list, and `Trace.session` is `SET_NULL`, so they would outlive the
 eval sessions `cleanup_old_evaluation_data` prunes. The money is real either way, so this
 tracer keeps the half of `OCSTracer` that bills (the `MetricsCollector` and the drain into
-`UsageRecord`) and drops the rest. See ADR-0049.
+`UsageRecord`) and drops the rest. See ADR-0050.
 """
 
 from __future__ import annotations
