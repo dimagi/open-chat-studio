@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, Q, Sum, Value
+from django.db.models import Count, DecimalField, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -16,7 +16,6 @@ from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluat
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
-from apps.trace.models import Trace, TraceStatus
 
 _ZERO = Decimal(0)
 _COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
@@ -49,53 +48,38 @@ def get_participant_stats(start: datetime, end: datetime):
 
 def usage_to_csv(start: datetime, end: datetime):
     metadata_fields = get_team_metadata_fields()
-    headers = ["Team", "Run Count", "Total Tokens"] + [field["label"] for field in metadata_fields]
+    headers = ["Team", "Total Tokens"] + [field["label"] for field in metadata_fields]
     rows = (
-        (team_name, run_count, total_tokens, *(metadata.get(field["key"], "") for field in metadata_fields))
-        for team_name, run_count, total_tokens, metadata in get_usage_data(start, end)
+        (team_name, total_tokens, *(metadata.get(field["key"], "") for field in metadata_fields))
+        for team_name, total_tokens, metadata in get_usage_data(start, end)
     )
     return _write_data_to_csv(headers, rows)
 
 
 def get_usage_data(start: datetime, end: datetime):
-    """Per-team usage from completed trace token counts.
+    """Per-team token totals from UsageRecord, highest first.
 
-    Only includes traces with a settled status (excludes PENDING). No platform is
-    filtered out — spend costs the same money whatever produced it — but that alone
-    doesn't make this reconcile with `get_cost_usage_by_team`: tokens come from `Trace`
-    and cost from `UsageRecord`, and neither half of an evaluation run writes a `Trace`
-    (judge calls bypass tracing, and eval generation is billed by `UsageOnlyTracer`,
-    ADR-0050). So eval runs are cost-only here until token reporting moves onto
-    `UsageRecord`. Pre-tracing periods will report lower totals than the legacy
-    character-based proxy.
+    `UsageRecord` is the single source for both halves of the usage report, so tokens
+    and cost reconcile against the same rows. It also covers writers that have no
+    trace, which a trace-sourced count missed entirely: neither half of an evaluation
+    run writes a `Trace` (judge calls bypass tracing, and eval generation is billed by
+    `UsageOnlyTracer`, ADR-0050), so eval runs used to be cost-only here. Every source
+    counts (ADR-0048): a team-level total is what the team used. `UsageRecord` only
+    goes back to the cost-tracking rollout, so earlier periods report zero.
     """
-    usage_data = (
-        Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
-        .exclude(status=TraceStatus.PENDING)
-        .values("team_id", "team__name", "team__metadata")
-        .annotate(
-            run_count=Count("id"),
-            total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
-        )
-        .order_by("-run_count", "team__name")
+    totals = (
+        UsageRecord.objects.filter(timestamp__gte=start, timestamp__lt=end)
+        .values("team_id")
+        .annotate(total_tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD))
     )
-    for data in usage_data:
-        yield data["team__name"], data["run_count"], data["total_tokens"], data["team__metadata"] or {}
-
-
-def get_token_usage_by_team(start: datetime, end: datetime):
-    """Per-team run count + total tokens from settled traces, unfiltered by platform
-    (see `get_usage_data` for how far these totals track `get_cost_usage_by_team`)."""
-    return (
-        Trace.objects.filter(timestamp__gte=start, timestamp__lt=end)
-        .exclude(status=TraceStatus.PENDING)
-        .values("team_id", "team__name", "team__slug")
-        .annotate(
-            run_count=Count("id"),
-            total_tokens=Coalesce(Sum("n_total_tokens"), Value(0)),
-        )
-        .order_by("-run_count", "team__name")
-    )
+    tokens_by_team = {row["team_id"]: int(row["total_tokens"]) for row in totals}
+    # Name and metadata are fetched by PK rather than grouped on, as in
+    # `get_cost_usage_by_team`: both are per-team so neither affects the grouping, and
+    # the JSON `metadata` column is expensive to GROUP BY. Keeping them out of the
+    # aggregate also keeps the team join off the high-volume UsageRecord scan.
+    teams = Team.objects.filter(id__in=list(tokens_by_team)).values_list("id", "name", "metadata")
+    for team_id, name, metadata in sorted(teams, key=lambda team: (-tokens_by_team[team[0]], team[1] or "")):
+        yield name, tokens_by_team[team_id], metadata or {}
 
 
 def get_cost_usage_by_team(start: datetime, end: datetime):
@@ -117,8 +101,11 @@ def get_cost_usage_by_team(start: datetime, end: datetime):
 
 
 def build_usage_report(start: datetime, end: datetime) -> dict:
-    """Cross-team usage: per-team token totals (always populated) merged with
-    per-model cost detail from recorded UsageRecords.
+    """Cross-team usage: per-team token + cost totals with per-model detail, all from
+    UsageRecord.
+
+    Both halves come from the same rows, so a team's `total_tokens` is exactly the sum
+    of its `models[].tokens` — that is the point of reading one table rather than two.
 
     `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
     records in more than one currency and summing them would be meaningless.
@@ -128,57 +115,44 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
     top level as `metadata_fields` so a consumer can build labelled columns.
     """
     metadata_fields = get_team_metadata_fields()
-    token_rows = list(get_token_usage_by_team(start, end))
     cost_rows = list(get_cost_usage_by_team(start, end))
 
-    team_meta = {row["team_id"]: (row["team__name"], row["team__slug"]) for row in token_rows}
-    missing_ids = {row["team_id"] for row in cost_rows} - team_meta.keys()
-    if missing_ids:
-        missing = Team.objects.filter(id__in=missing_ids).values_list("id", "name", "slug")
-        team_meta.update({tid: (name, slug) for tid, name, slug in missing})
-
-    # Fetch metadata separately (keyed by PK): grouping the aggregate query by
-    # the JSON `metadata` column would be needlessly expensive, and metadata is
-    # per-team so it never affects the grouping anyway.
-    metadata_by_team = dict(Team.objects.filter(id__in=list(team_meta)).values_list("id", "metadata"))
+    team_info = {
+        team_id: (name, slug, metadata or {})
+        for team_id, name, slug, metadata in Team.objects.filter(
+            id__in={row["team_id"] for row in cost_rows}
+        ).values_list("id", "name", "slug", "metadata")
+    }
 
     teams: dict[int, dict] = {}
-
-    def _entry(team_id: int) -> dict:
+    for row in cost_rows:
+        team_id = row["team_id"]
         if team_id not in teams:
-            name, slug = team_meta.get(team_id, (None, None))
-            metadata = metadata_by_team.get(team_id) or {}
+            name, slug, metadata = team_info.get(team_id, (None, None, {}))
             teams[team_id] = {
                 "team_id": team_id,
                 "team_name": name,
                 "team_slug": slug,
                 "metadata": {field["key"]: metadata.get(field["key"], "") for field in metadata_fields},
-                "run_count": 0,
                 "total_tokens": 0,
                 "total_cost": defaultdict(Decimal),  # currency -> amount
                 "models": [],
             }
-        return teams[team_id]
-
-    for row in token_rows:
-        entry = _entry(row["team_id"])
-        entry["run_count"] = row["run_count"]
-        entry["total_tokens"] = row["total_tokens"]
-
-    for row in cost_rows:
-        entry = _entry(row["team_id"])
+        entry = teams[team_id]
+        tokens = int(row["tokens"] or 0)
+        entry["total_tokens"] += tokens
         entry["total_cost"][row["currency"]] += row["cost"]
         entry["models"].append(
             {
                 "provider_type": row["provider_type"],
                 "model_name": row["model_name"],
                 "currency": row["currency"],
-                "tokens": int(row["tokens"] or 0),
+                "tokens": tokens,
                 "cost": str(row["cost"]),
             }
         )
 
-    result = sorted(teams.values(), key=lambda t: (-t["run_count"], t["team_name"] or ""))
+    result = sorted(teams.values(), key=lambda t: (-t["total_tokens"], t["team_name"] or ""))
     for entry in result:
         entry["total_cost"] = {currency: str(amount) for currency, amount in entry["total_cost"].items()}
 

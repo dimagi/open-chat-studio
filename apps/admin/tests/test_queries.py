@@ -19,8 +19,9 @@ from apps.admin.queries import (
 )
 from apps.admin.views import _compute_growth
 from apps.channels.models import ChannelPlatform
-from apps.trace.models import Trace, TraceStatus
+from apps.cost_tracking.models import ServiceKind, UsageSource
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -34,7 +35,6 @@ from apps.utils.factories.experiment import (
     ParticipantFactory,
 )
 from apps.utils.factories.team import MembershipFactory, TeamFactory
-from apps.utils.factories.traces import TraceFactory
 
 
 @pytest.fixture()
@@ -91,20 +91,12 @@ class TestTeamMetadataExports:
         settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
         start, end = date_range
         team = TeamFactory.create(name="Team A", metadata={"team_owner": "Jane Doe"})
-        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
-        TraceFactory.create(
-            team=team,
-            experiment=session.experiment,
-            session=session,
-            participant=session.participant,
-            status=TraceStatus.SUCCESS,
-            n_total_tokens=100,
-        )
+        UsageRecordFactory.create(team=team, quantity=100)
 
         csv_output = usage_to_csv(start, end)
         lines = csv_output.strip().splitlines()
-        assert lines[0] == "Team,Run Count,Total Tokens,Team Owner"
-        assert lines[1] == "Team A,1,100,Jane Doe"
+        assert lines[0] == "Team,Total Tokens,Team Owner"
+        assert lines[1] == "Team A,100,Jane Doe"
 
     def test_team_metadata_csv_lists_all_teams(self, settings):
         settings.TEAM_METADATA_FIELDS = [{"key": "team_owner", "label": "Team Owner"}]
@@ -388,95 +380,53 @@ class TestGetWhatsappNumberData:
 
 @pytest.mark.django_db()
 class TestGetUsageData:
-    def _make_trace(self, *, session, status=TraceStatus.SUCCESS, tokens=0):
-        return TraceFactory.create(
-            team=session.team,
-            experiment=session.experiment,
-            session=session,
-            participant=session.participant,
-            status=status,
-            n_total_tokens=tokens,
-        )
-
-    def test_sums_tokens_and_counts_runs_per_team(self, date_range):
+    def test_sums_tokens_per_team(self, date_range):
         start, end = date_range
         team_a = TeamFactory.create(name="Team A")
         team_b = TeamFactory.create(name="Team B")
-        session_a = ExperimentSessionFactory.create(team=team_a, experiment__team=team_a)
-        session_b = ExperimentSessionFactory.create(team=team_b, experiment__team=team_b)
 
-        self._make_trace(session=session_a, tokens=100)
-        self._make_trace(session=session_a, tokens=50)
-        self._make_trace(session=session_b, tokens=200)
+        UsageRecordFactory.create(team=team_a, quantity=100)
+        UsageRecordFactory.create(team=team_a, quantity=50)
+        UsageRecordFactory.create(team=team_b, quantity=200)
 
-        rows = {team: (run_count, tokens) for team, run_count, tokens, _ in get_usage_data(start, end)}
-        assert rows["Team A"] == (2, 150)
-        assert rows["Team B"] == (1, 200)
+        rows = {team: tokens for team, tokens, _ in get_usage_data(start, end)}
+        assert rows == {"Team A": 150, "Team B": 200}
 
-    def test_orders_by_run_count_descending(self, date_range):
+    def test_sums_across_service_kinds(self, date_range):
+        """One LLM call is split into per-kind rows; the team total is every kind."""
+        start, end = date_range
+        team = TeamFactory.create(name="T")
+        UsageRecordFactory.create(team=team, service_kind=ServiceKind.LLM_INPUT, quantity=90)
+        UsageRecordFactory.create(team=team, service_kind=ServiceKind.LLM_CACHED_INPUT, quantity=10)
+        UsageRecordFactory.create(team=team, service_kind=ServiceKind.LLM_OUTPUT, quantity=25)
+
+        assert list(get_usage_data(start, end)) == [("T", 125, {})]
+
+    def test_orders_by_tokens_descending(self, date_range):
         start, end = date_range
         team_small = TeamFactory.create(name="Small")
         team_big = TeamFactory.create(name="Big")
-        small_session = ExperimentSessionFactory.create(team=team_small, experiment__team=team_small)
-        big_session = ExperimentSessionFactory.create(team=team_big, experiment__team=team_big)
+        UsageRecordFactory.create(team=team_small, quantity=10)
+        UsageRecordFactory.create(team=team_big, quantity=30)
 
-        self._make_trace(session=small_session, tokens=10)
-        for _ in range(3):
-            self._make_trace(session=big_session, tokens=10)
+        assert [row[0] for row in get_usage_data(start, end)] == ["Big", "Small"]
 
-        result = list(get_usage_data(start, end))
-        assert [row[0] for row in result] == ["Big", "Small"]
-
-    def test_includes_evaluations_platform(self, date_range):
-        # Eval traffic bills like any other traffic, and the cost half of the usage
-        # report counts it, so the token half must too.
+    def test_includes_untraced_evaluation_spend(self, date_range):
+        """Judge calls bypass the tracer, so they have no trace to be counted through —
+        reading UsageRecord is what puts their tokens in the report at all (ADR-0048)."""
         start, end = date_range
         team = TeamFactory.create(name="T")
-        web_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.WEB)
-        eval_channel = ExperimentChannelFactory.create(team=team, platform=ChannelPlatform.EVALUATIONS)
-        web_session = ExperimentSessionFactory.create(
-            team=team,
-            experiment=web_channel.experiment,
-            experiment_channel=web_channel,
-            platform=ChannelPlatform.WEB,
-        )
-        eval_session = ExperimentSessionFactory.create(
-            team=team,
-            experiment=eval_channel.experiment,
-            experiment_channel=eval_channel,
-            platform=ChannelPlatform.EVALUATIONS,
-        )
-        self._make_trace(session=web_session, tokens=100)
-        self._make_trace(session=eval_session, tokens=400)
+        UsageRecordFactory.create(team=team, quantity=100)
+        UsageRecordFactory.create(team=team, quantity=400, source=UsageSource.EVALUATION, trace=None)
 
-        rows = list(get_usage_data(start, end))
-        assert rows == [("T", 2, 500, {})]
+        assert list(get_usage_data(start, end)) == [("T", 500, {})]
 
-    def test_excludes_pending_traces_but_includes_errors(self, date_range):
+    def test_handles_null_quantity(self, date_range):
         start, end = date_range
         team = TeamFactory.create(name="T")
-        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
-        self._make_trace(session=session, status=TraceStatus.SUCCESS, tokens=10)
-        self._make_trace(session=session, status=TraceStatus.ERROR, tokens=5)
-        self._make_trace(session=session, status=TraceStatus.PENDING, tokens=99999)
+        UsageRecordFactory.create(team=team, quantity=None)
 
-        rows = list(get_usage_data(start, end))
-        assert rows == [("T", 2, 15, {})]
-
-    def test_handles_null_token_counts(self, date_range):
-        start, end = date_range
-        team = TeamFactory.create(name="T")
-        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
-        TraceFactory.create(
-            team=team,
-            experiment=session.experiment,
-            session=session,
-            status=TraceStatus.SUCCESS,
-            n_total_tokens=None,
-        )
-
-        rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 0, {})]
+        assert list(get_usage_data(start, end)) == [("T", 0, {})]
 
     def test_does_not_merge_teams_sharing_a_display_name(self, date_range):
         # Team.name has no uniqueness constraint, so grouping by name alone would
@@ -484,33 +434,21 @@ class TestGetUsageData:
         start, end = date_range
         team_one = TeamFactory.create(name="Duplicate")
         team_two = TeamFactory.create(name="Duplicate")
-        session_one = ExperimentSessionFactory.create(team=team_one, experiment__team=team_one)
-        session_two = ExperimentSessionFactory.create(team=team_two, experiment__team=team_two)
-
-        self._make_trace(session=session_one, tokens=10)
-        self._make_trace(session=session_two, tokens=20)
-        self._make_trace(session=session_two, tokens=30)
+        UsageRecordFactory.create(team=team_one, quantity=10)
+        UsageRecordFactory.create(team=team_two, quantity=20)
+        UsageRecordFactory.create(team=team_two, quantity=30)
 
         rows = list(get_usage_data(start, end))
-        assert len(rows) == 2
-        token_totals = sorted(row[2] for row in rows)
-        run_counts = sorted(row[1] for row in rows)
-        assert token_totals == [10, 50]
-        assert run_counts == [1, 2]
+        assert sorted(row[1] for row in rows) == [10, 50]
         assert all(row[0] == "Duplicate" for row in rows)
 
     def test_filters_by_date_range(self, date_range):
         start, end = date_range
         team = TeamFactory.create(name="T")
-        session = ExperimentSessionFactory.create(team=team, experiment__team=team)
-        in_window = self._make_trace(session=session, tokens=10)
-        out_of_window = self._make_trace(session=session, tokens=99999)
-        # Trace.timestamp uses auto_now_add; bypass via update()
-        Trace.objects.filter(id=out_of_window.id).update(timestamp=start - timedelta(seconds=1))
-        Trace.objects.filter(id=in_window.id).update(timestamp=start + timedelta(seconds=1))
+        UsageRecordFactory.create(team=team, quantity=10, at=start + timedelta(seconds=1))
+        UsageRecordFactory.create(team=team, quantity=99999, at=start - timedelta(seconds=1))
 
-        rows = list(get_usage_data(start, end))
-        assert rows == [("T", 1, 10, {})]
+        assert list(get_usage_data(start, end)) == [("T", 10, {})]
 
 
 class TestComputeGrowth:

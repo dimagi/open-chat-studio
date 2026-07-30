@@ -17,16 +17,23 @@ from apps.trace.models import Trace, TraceStatus
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
-def _llm_result(input_tokens: int, output_tokens: int, model: str = "test-model") -> LLMResult:
-    message = AIMessage(
-        content="response",
-        usage_metadata={
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "total_tokens": input_tokens + output_tokens,
-        },
-        response_metadata={"model_name": model},
-    )
+def _llm_result(
+    input_tokens: int, output_tokens: int, model: str = "test-model", input_token_details: dict | None = None
+) -> LLMResult:
+    usage_metadata = {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+    }
+    if input_token_details:
+        usage_metadata["input_token_details"] = input_token_details
+    message = AIMessage(content="response", usage_metadata=usage_metadata, response_metadata={"model_name": model})
+    return LLMResult(generations=[[ChatGeneration(message=message, text="response")]], llm_output=None)
+
+
+def _bare_llm_result() -> LLMResult:
+    """A response with no `usage_metadata` — routes to the ESTIMATED fallback."""
+    message = AIMessage(content="response", response_metadata={"model_name": "test-model"})
     return LLMResult(generations=[[ChatGeneration(message=message, text="response")]], llm_output=None)
 
 
@@ -121,6 +128,60 @@ class TestCostRecordingEndToEnd:
         assert by_kind[ServiceKind.LLM_OUTPUT].cost == Decimal("0.00030000")
         assert all(r.trace_id is not None for r in rows)
         assert all(r.session_id == session.id for r in rows)
+
+    def test_usage_record_quantity_matches_trace_token_count(self, experiment):
+        """Both counts come from the same `usage_metadata`, so they agree even with the
+        cache sub-buckets split out: `_split_buckets` subtracts cache_read/cache_creation
+        from the headline input and gives them their own rows, which sum back to it.
+        This is why the admin report can read tokens off UsageRecord.
+        """
+        tracer = OCSTracer(experiment, experiment.team_id)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
+        ctx = TraceContext(id=uuid4(), name="t")
+        run_id = uuid4()
+
+        with tracer.trace(trace_context=ctx, session=session):
+            tracer.metrics_collector.on_llm_start(
+                {},
+                ["hello world"],
+                run_id=run_id,
+                invocation_params={"model": "test-model"},
+                metadata={"ocs_provider_type": "openai"},
+            )
+            tracer.metrics_collector.on_llm_end(
+                _llm_result(1000, 500, input_token_details={"cache_read": 300, "cache_creation": 200}),
+                run_id=run_id,
+            )
+
+        trace_row = Trace.objects.get(team_id=experiment.team_id, trace_id=ctx.id)
+        recorded = sum(row.quantity for row in UsageRecord.objects.filter(trace=trace_row))
+        assert trace_row.n_total_tokens == 1500
+        assert recorded == trace_row.n_total_tokens
+
+    def test_estimated_tokens_are_recorded_but_absent_from_the_trace(self, experiment):
+        """A call with no `usage_metadata` is estimated into UsageRecord, while the trace
+        counter only sums reported usage — the report reads the source that covers a call
+        the trace counter has no number for at all.
+        """
+        tracer = OCSTracer(experiment, experiment.team_id)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=experiment.team)
+        ctx = TraceContext(id=uuid4(), name="t")
+        run_id = uuid4()
+
+        with tracer.trace(trace_context=ctx, session=session):
+            tracer.metrics_collector.on_llm_start(
+                {},
+                ["hello world"],
+                run_id=run_id,
+                invocation_params={"model": "test-model"},
+                metadata={"ocs_provider_type": "openai"},
+            )
+            tracer.metrics_collector.on_llm_end(_bare_llm_result(), run_id=run_id)
+
+        trace_row = Trace.objects.get(team_id=experiment.team_id, trace_id=ctx.id)
+        recorded = sum(row.quantity for row in UsageRecord.objects.filter(trace=trace_row))
+        assert trace_row.n_total_tokens is None
+        assert recorded > 0
 
     def test_trace_finalisation_continues_when_recorder_fails(self, experiment):
         """A cost-recording failure must not block trace_record.save() —
