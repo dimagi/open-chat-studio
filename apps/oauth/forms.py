@@ -2,6 +2,7 @@ from django import forms
 from oauth2_provider.forms import AllowForm
 
 from apps.oauth.models import OAuth2Application
+from apps.teams.models import Membership, Team
 
 
 class AuthorizationForm(AllowForm):
@@ -56,12 +57,34 @@ class RegisterApplicationForm(forms.ModelForm):
             self.fields["authorization_grant_type"].disabled = True
             self.fields["team"].disabled = True
 
+    def _may_pin_team(self, team: Team) -> bool:
+        """Whether the user may pin a client-credentials application to `team`.
+
+        Tokens issued to a client-credentials application are authorized by their OAuth scope
+        alone (apps/api/permissions.py), so registering one hands out team-wide API access:
+        require the same permission the application views require. The permission is read from
+        the user's membership of the *selected* team rather than from the team on the current
+        session, so switching teams cannot widen the choice.
+        """
+        if self.user.is_superuser:
+            return True
+        membership = Membership.objects.filter(team=team, user=self.user).first()
+        return bool(membership and membership.has_perm("oauth.add_oauth2application"))
+
     def clean(self):
         cleaned_data = super().clean()
         grant_type = cleaned_data.get("authorization_grant_type")
         if grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS:
-            if not cleaned_data.get("team"):
+            team = cleaned_data.get("team")
+            if not team:
                 self.add_error("team", "A team is required for client-credentials applications.")
+            elif not self.instance.pk and not self._may_pin_team(team):
+                # Registration only: the grant type and pinned team of an existing application are
+                # immutable (see __init__), so editing one cannot mint access to a new team.
+                self.add_error(
+                    "team",
+                    "You do not have permission to register client-credentials applications for this team.",
+                )
         elif grant_type == OAuth2Application.GRANT_AUTHORIZATION_CODE:
             if not cleaned_data.get("redirect_uris"):
                 self.add_error("redirect_uris", "Redirect URIs are required for authorization-code applications.")
