@@ -36,7 +36,6 @@ from apps.utils.factories.evaluations import (
     EvaluationResultFactory,
     EvaluationRunFactory,
     EvaluatorFactory,
-    configure_evaluator_llm_provider,
 )
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 from apps.utils.factories.user import GroupFactory
@@ -214,8 +213,7 @@ def _make_run(evaluator_count=1, message_count=5, status=EvaluationRunStatus.PEN
     """Build a run with a frozen plan of `message_count` messages and `evaluator_count` evaluators."""
     team = TeamWithUsersFactory.create()
     config = EvaluationConfigFactory.create(team=team)
-    # Configured providers, or the run fails its pre-flight instead of dispatching.
-    evaluators = [configure_evaluator_llm_provider(EvaluatorFactory.create(team=team)) for _ in range(evaluator_count)]
+    evaluators = [EvaluatorFactory.create(team=team) for _ in range(evaluator_count)]
     config.evaluators.set(evaluators)
     messages = [EvaluationMessageFactory.create() for _ in range(message_count)]
     config.dataset.messages.add(*messages)
@@ -238,8 +236,8 @@ def _complete_messages(run, evaluators, messages):
 def test_pending_run_with_an_unconfigured_evaluator_fails_before_dispatching(delay_mock, _publish):
     """One error, not one per message: the pre-flight fails the run instead of dispatching."""
     run, evaluators, _messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
-    evaluators[0].params |= {"llm_provider_id": None}
-    evaluators[0].save(update_fields=["params"])
+    evaluators[0].llm_provider = None
+    evaluators[0].save(update_fields=["llm_provider"])
 
     sweep()
 

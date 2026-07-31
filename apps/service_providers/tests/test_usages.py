@@ -468,18 +468,12 @@ def _add_provider_usage(provider, count: int) -> None:
         pipeline = PipelineFactory(team=provider.team)
         NodeFactory(pipeline=pipeline, type="LLMResponseWithPrompt", params={"llm_provider_id": provider.id})
         ExperimentFactory(team=provider.team, pipeline=pipeline)
-        EvaluatorFactory(team=provider.team, params={"llm_provider_id": provider.id})
+        EvaluatorFactory(team=provider.team, llm_provider=provider)
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("stored_id", [pytest.param(int, id="int"), pytest.param(str, id="str")])
-def test_evaluators_referencing_the_provider_in_params_are_reported(anthropic_provider, stored_id):
-    """The id is submitted inside ``Evaluator.params``; the reported reference is the derived FK."""
-    evaluator = EvaluatorFactory(
-        team=anthropic_provider.team,
-        name="Sentiment",
-        params={"llm_provider_id": stored_id(anthropic_provider.id)},
-    )
+def test_evaluators_referencing_the_provider_are_reported(anthropic_provider):
+    evaluator = EvaluatorFactory(team=anthropic_provider.team, name="Sentiment", llm_provider=anthropic_provider)
 
     usages = get_provider_usages(anthropic_provider)
 
@@ -490,7 +484,7 @@ def test_evaluators_referencing_the_provider_in_params_are_reported(anthropic_pr
 @pytest.mark.django_db()
 def test_evaluators_referencing_a_different_provider_are_not_reported(anthropic_provider):
     other_provider = LlmProviderFactory(team=anthropic_provider.team)
-    EvaluatorFactory(team=anthropic_provider.team, params={"llm_provider_id": other_provider.id})
+    EvaluatorFactory(team=anthropic_provider.team, llm_provider=other_provider)
 
     assert get_provider_usages(anthropic_provider).is_empty()
 

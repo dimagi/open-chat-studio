@@ -38,7 +38,6 @@ from apps.experiments.models import Experiment, ExperimentSession
 from apps.files.models import File
 from apps.human_annotations.models import AnnotationQueue, QueueStatus
 from apps.service_providers.models import LlmProvider, LlmProviderModel, LlmProviderTypes
-from apps.utils.fields import as_int
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
@@ -276,16 +275,25 @@ class EvaluationConfigForm(forms.ModelForm):
 class EvaluatorForm(forms.ModelForm):
     class Meta:
         model = Evaluator
-        fields = ("name", "type", "params", "evaluation_mode")
+        fields = ("name", "type", "params", "evaluation_mode", "llm_provider", "llm_provider_model")
         widgets = {
             "type": forms.HiddenInput(),
             "params": forms.HiddenInput(),
             "evaluation_mode": forms.RadioSelect(choices=EvaluationMode.choices),
         }
+        # The provider picker is rendered by the template rather than by these fields' widgets,
+        # so the team-scoped querysets set in __init__ are what reject another team's provider.
+        # These are the messages the user sees when they do.
+        error_messages = {
+            "llm_provider": {"invalid_choice": "The selected LLM provider is not available to this team"},
+            "llm_provider_model": {"invalid_choice": "The selected LLM model is not available to this team"},
+        }
 
     def __init__(self, team, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.team = team
+        self.fields["llm_provider"].queryset = LlmProvider.objects.filter(team=team)
+        self.fields["llm_provider_model"].queryset = LlmProviderModel.objects.for_team(team)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -302,14 +310,30 @@ class EvaluatorForm(forms.ModelForm):
             except json.JSONDecodeError as err:
                 raise forms.ValidationError("Invalid JSON format for parameters") from err
 
+        evaluators_module = importlib.import_module("apps.evaluations.evaluators")
         try:
-            evaluators_module = importlib.import_module("apps.evaluations.evaluators")
             evaluator_class = getattr(evaluators_module, evaluator_type)
-
-            evaluator_class(**params)
-
         except AttributeError as err:
             raise forms.ValidationError(f"Unknown evaluator type: {evaluator_type}") from err
+
+        # A stale tab may still post the ids inside params; the FK fields are the record now,
+        # so drop them rather than storing a copy that nothing reads.
+        params = {key: value for key, value in params.items() if key not in evaluators_module.LLM_PROVIDER_FIELDS}
+        cleaned_data["params"] = params
+
+        if issubclass(evaluator_class, evaluators_module.LLMResponseMixin):
+            self._validate_llm_provider_selection()
+            if self.errors:
+                # The evaluator cannot be constructed without the ids it takes from the FKs,
+                # so there is nothing more to say until the selection is fixed.
+                return cleaned_data
+            params = params | {
+                "llm_provider_id": self.cleaned_data["llm_provider"].id,
+                "llm_provider_model_id": self.cleaned_data["llm_provider_model"].id,
+            }
+
+        try:
+            evaluator_class(**params)
         except PydanticValidationError as err:
             error_messages = []
             for error in err.errors():
@@ -318,38 +342,26 @@ class EvaluatorForm(forms.ModelForm):
                 error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
             raise forms.ValidationError(f"{', '.join(error_messages)}") from err
 
-        self._validate_llm_provider_selection(params)
-
         return cleaned_data
 
-    def _validate_llm_provider_selection(self, params: dict):
-        """Reject provider ids the team can't use, and pairings the provider can't serve.
+    def _validate_llm_provider_selection(self):
+        """Require a provider and model for an LLM evaluator, and reject pairings it can't serve."""
+        provider = self.cleaned_data.get("llm_provider")
+        provider_model = self.cleaned_data.get("llm_provider_model")
 
-        The ids arrive inside the ``params`` JSON blob, so they never went through a
-        ModelChoiceField queryset, and an id from another team would run this team's
-        evaluations on someone else's credentials.
-        """
-        provider = None
-        provider_id = as_int(params.get("llm_provider_id"))
-        if provider_id is not None:
-            provider = LlmProvider.objects.filter(team=self.team, id=provider_id).first()
-            if provider is None:
-                raise forms.ValidationError("The selected LLM provider is not available to this team")
-
-        provider_model = None
-        provider_model_id = as_int(params.get("llm_provider_model_id"))
-        if provider_model_id is not None:
-            provider_model = LlmProviderModel.objects.for_team(self.team).filter(id=provider_model_id).first()
-            if provider_model is None:
-                raise forms.ValidationError("The selected LLM model is not available to this team")
+        if provider is None and "llm_provider" not in self.errors:
+            self.add_error("llm_provider", "Select an LLM provider for this evaluator")
+        if provider_model is None and "llm_provider_model" not in self.errors:
+            self.add_error("llm_provider_model", "Select an LLM model for this evaluator")
 
         # The picker only offers models matching the chosen provider's type (see
         # ``_evaluator_parameter_values``), so a mismatch means the ids were not submitted
         # through the UI. Left unchecked it fails at run time inside get_llm_service.
         if provider is not None and provider_model is not None and provider.type != provider_model.type:
-            raise forms.ValidationError(
+            self.add_error(
+                "llm_provider_model",
                 f"The selected LLM model is for {_provider_type_label(provider_model.type)} providers, "
-                f"but the selected provider is {_provider_type_label(provider.type)}"
+                f"but the selected provider is {_provider_type_label(provider.type)}",
             )
 
 

@@ -89,7 +89,7 @@ class TestNotifyDeprecatedModelsCommand:
         deprecated_model = LlmProviderModelFactory(
             team=None, type="openai", name="test-deprecated-model", deprecated=True
         )
-        evaluator = EvaluatorFactory.create(params={"llm_provider_model_id": deprecated_model.id})
+        evaluator = EvaluatorFactory.create(llm_provider_model=deprecated_model)
 
         with patch(
             "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",

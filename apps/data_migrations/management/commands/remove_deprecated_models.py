@@ -117,13 +117,8 @@ class Command(IdempotentCommand):
         """Move every reference to ``db_model`` onto ``replacement_model`` (or clear it) before delete."""
         new_value = replacement_model.id if replacement_model else None
 
-        # Evaluators keep a copy of the model id in params for the form UI, so they are
-        # repointed through the model method that moves params and FK together. Has to
-        # happen before the generic FK pass, which would otherwise claim them first.
-        for evaluator in db_model.evaluators.all():
-            evaluator.set_llm_provider_model_id(new_value)
-
-        # Update FK references (assistants, analyses, etc.) to replacement, or let cascade handle them
+        # Update FK references (assistants, analyses, evaluators, etc.) to replacement, or let
+        # cascade handle them
         if replacement_model:
             for obj in get_related_objects(db_model):
                 fields_to_update = [

@@ -110,13 +110,13 @@ class EvaluatorFormsetMixin:
     def get_object_or_none(self):
         return None
 
-    def _get_evaluator_form_context(self):
+    def _get_evaluator_form_context(self, form):
         llm_providers = list(LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type"))
         llm_provider_models = list(LlmProviderModel.objects.for_team(self.request.team))
         return {
             "evaluator_schemas": _evaluator_schemas(),
             "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
-            "default_values": _evaluator_default_values(llm_providers, llm_provider_models),
+            "llm_provider_selection": _initial_llm_provider_selection(form, llm_providers, llm_provider_models),
         }
 
 
@@ -135,7 +135,7 @@ class CreateEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Evalua
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update(self._get_evaluator_form_context())
+        context.update(self._get_evaluator_form_context(context["form"]))
         return context
 
     def get_form_kwargs(self):
@@ -160,7 +160,7 @@ class EditEvaluator(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Evaluato
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update(self._get_evaluator_form_context())
+        context.update(self._get_evaluator_form_context(context["form"]))
         return context
 
     def get_queryset(self):
@@ -234,6 +234,13 @@ def _get_evaluator_schema(evaluator_class):
     schema = resolve_references(evaluator_class.model_json_schema())
     schema.pop("$defs", None)
 
+    # The provider ids are not params — they live on the Evaluator FK columns and the form edits
+    # them through its own fields. The flag is what tells the UI to render that picker.
+    schema["requires_llm_provider"] = issubclass(evaluator_class, evaluators.LLMResponseMixin)
+    for field_name in evaluators.LLM_PROVIDER_FIELDS:
+        schema["properties"].pop(field_name, None)
+    schema["required"] = [name for name in schema.get("required", []) if name not in evaluators.LLM_PROVIDER_FIELDS]
+
     # Remove type ambiguity for optional fields
     for _key, value in schema["properties"].items():
         if "anyOf" in value:
@@ -266,8 +273,25 @@ def _evaluator_parameter_values(team, llm_providers, llm_provider_models):
     }
 
 
-def _evaluator_default_values(llm_providers: list[dict], llm_provider_models):
-    """Returns the default values for evaluator parameters."""
+def _initial_llm_provider_selection(form, llm_providers: list[dict], llm_provider_models) -> dict:
+    """Which provider and model the picker starts on.
+
+    Only a brand new evaluator is given a default. An existing one shows exactly what it has,
+    even when that is nothing (its provider was deleted), and so does a re-rendered submit:
+    a default filled in there reads as answered, and one Update away from silently repointing
+    the evaluator at a provider the user never chose.
+    """
+    selection = {
+        "llm_provider_id": form["llm_provider"].value(),
+        "llm_provider_model_id": form["llm_provider_model"].value(),
+    }
+    if form.is_bound or form.instance.pk:
+        return selection
+    return _default_llm_provider_selection(llm_providers, llm_provider_models)
+
+
+def _default_llm_provider_selection(llm_providers: list[dict], llm_provider_models) -> dict:
+    """The team's first provider and a model it can serve, so the model list has something to filter by."""
     llm_provider_model_id = None
     provider_id = None
     if llm_providers:

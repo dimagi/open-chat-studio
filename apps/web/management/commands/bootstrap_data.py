@@ -605,7 +605,6 @@ class Command(BaseCommand):
 
     def _seed_evaluator(self, team, llm_provider, llm_model) -> Evaluator:
         params = {
-            "llm_provider_id": llm_provider.id,
             "llm_temperature": 0.3,
             "prompt": (
                 "Analyse the sentiment of the user message.\n\nUser: {input.content}\nAssistant: {output.content}"
@@ -626,9 +625,6 @@ class Command(BaseCommand):
                 },
             },
         }
-        if llm_model:
-            params["llm_provider_model_id"] = llm_model.id
-
         evaluator, created = Evaluator.objects.get_or_create(
             team=team,
             name="Sentiment Analyzer",
@@ -636,6 +632,8 @@ class Command(BaseCommand):
                 "type": "LlmEvaluator",
                 "evaluation_mode": EvaluationMode.MESSAGE,
                 "params": params,
+                "llm_provider": llm_provider,
+                "llm_provider_model": llm_model,
             },
         )
         self._log_created("evaluator", evaluator.name, created)

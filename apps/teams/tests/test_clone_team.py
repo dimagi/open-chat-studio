@@ -251,6 +251,14 @@ def test_clone_team_clones_evaluations(source_team):
     target_eval_count = Evaluator.objects.filter(team=target).count()
     assert target_eval_count == source_eval_count
 
+    # The provider selection is FK-only, and must land on the target team's own copies
+    source_evaluator = Evaluator.objects.filter(team=source_team).first()
+    target_evaluator = Evaluator.objects.get(team=target, name=source_evaluator.name)
+    assert target_evaluator.llm_provider.team == target
+    assert target_evaluator.llm_provider.name == source_evaluator.llm_provider.name
+    assert target_evaluator.llm_provider_model.team == target
+    assert target_evaluator.llm_provider_model.name == source_evaluator.llm_provider_model.name
+
     # Verify datasets cloned
     source_ds_count = EvaluationDataset.objects.filter(team=source_team).count()
     target_ds_count = EvaluationDataset.objects.filter(team=target).count()
