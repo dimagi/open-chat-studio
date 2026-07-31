@@ -21,6 +21,7 @@ from waffle.decorators import waffle_flag
 
 from apps.assistants.models import OpenAiAssistant
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
+from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
 from apps.files.forms import get_file_formset
 from apps.files.views import BaseAddFileHtmxView
@@ -133,6 +134,12 @@ def matches_blocking_deletion_condition(obj):
     return (getattr(obj, "working_version_id", None) is None) or (getattr(obj, "is_default_version", False) is True)
 
 
+def _experiment_chip_label(experiment) -> str:
+    if experiment.is_working_version:
+        return f"{experiment.name} [{experiment.get_version_name()}]"
+    return f"{experiment.name} {experiment.get_version_name()} [published]"
+
+
 @require_http_methods(["DELETE"])
 @login_and_team_required
 def delete_service_provider(request, team_slug: str, provider_type: str, pk: int):
@@ -144,27 +151,27 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
 
     if related_objects:
         filtered_objects = [obj for obj in related_objects if matches_blocking_deletion_condition(obj)]
-        related_experiments = [
-            Chip(
-                label=(
-                    f"{experiment.name} [{experiment.get_version_name()}]"
-                    if experiment.is_working_version
-                    else f"{experiment.name} {experiment.get_version_name()} [published]"
-                ),
-                url=experiment.get_absolute_url(),
-            )
-            for experiment in [obj for obj in filtered_objects if isinstance(obj, Experiment)]
-        ]
-        related_assistants = [
-            Chip(label=assistant.name, url=assistant.get_absolute_url())
-            for assistant in [obj for obj in filtered_objects if isinstance(obj, OpenAiAssistant)]
-        ]
-        if related_experiments or related_assistants:
-            return render_referenced_objects_modal(
-                "service provider",
-                experiments=related_experiments,
-                assistants=related_assistants,
-            )
+        chips_by_kind = {
+            "experiments": [
+                Chip(label=_experiment_chip_label(experiment), url=experiment.get_absolute_url())
+                for experiment in filtered_objects
+                if isinstance(experiment, Experiment)
+            ],
+            "assistants": [
+                Chip(label=assistant.name, url=assistant.get_absolute_url())
+                for assistant in filtered_objects
+                if isinstance(assistant, OpenAiAssistant)
+            ],
+            # Evaluators reference the provider by FK. Deleting underneath one leaves it
+            # unrunnable — nulled FK, stale id in params — so it blocks like the rest.
+            "evaluators": [
+                Chip(label=evaluator.name, url=evaluator.get_absolute_url())
+                for evaluator in filtered_objects
+                if isinstance(evaluator, Evaluator)
+            ],
+        }
+        if any(chips_by_kind.values()):
+            return render_referenced_objects_modal("service provider", **chips_by_kind)
     service_config.delete()
     return HttpResponse()
 
@@ -260,22 +267,27 @@ class CreateServiceProvider(
         config_valid = config_form.is_valid()
         file_formset_valid = not file_formset or file_formset.is_valid()
         if primary_valid and config_valid and file_formset_valid:
-            with transaction.atomic():
-                obj = primary_form.save(commit=False)
-                obj.team = request.team
-                config_form.save(obj)
-                obj.save()
-                if file_formset:
-                    files = file_formset.save(request)
-                    obj.add_files(files)
-                if isinstance(obj, VoiceProvider):
-                    for warning in obj.run_post_save_hook():
-                        messages.warning(request, warning)
+            self._save_provider(request, primary_form, config_form, file_formset)
             return HttpResponseRedirect(self.get_success_url())
 
         if file_formset and not file_formset.is_valid():
             messages.error(request, ", ".join(file_formset.non_form_errors()))
         return render(request, self._template(), self._get_context(primary_form, config_form, subtype, instance))
+
+    def _save_provider(self, request, primary_form, config_form, file_formset):
+        with transaction.atomic():
+            obj = primary_form.save(commit=False)
+            obj.team = request.team
+            config_form.save(obj)
+            obj.save()
+            if file_formset:
+                files = file_formset.save(request)
+                obj.add_files(files)
+            if isinstance(obj, VoiceProvider):
+                for warning in obj.run_post_save_hook():
+                    messages.warning(request, warning)
+        for warning in config_form.warnings:
+            messages.warning(request, warning)
 
     def _get_context(self, primary_form, config_form, subtype, instance):
         ctx = {

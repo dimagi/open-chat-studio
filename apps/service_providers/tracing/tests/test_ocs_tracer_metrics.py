@@ -56,7 +56,6 @@ class TestOCSTracerMetrics:
         trace = Trace.objects.get(trace_id=trace_context.id)
         assert trace.n_turns == 1
         assert trace.n_toolcalls == 1
-        assert trace.n_total_tokens == 150
 
     def test_no_llm_calls_metrics_null(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
@@ -70,7 +69,6 @@ class TestOCSTracerMetrics:
         trace = Trace.objects.get(trace_id=trace_context.id)
         assert trace.n_turns is None
         assert trace.n_toolcalls is None
-        assert trace.n_total_tokens is None
 
     def test_metrics_persisted_on_error(self, experiment):
         tracer = OCSTracer(experiment, experiment.team_id)
@@ -89,7 +87,6 @@ class TestOCSTracerMetrics:
         trace = Trace.objects.get(trace_id=trace_context.id)
         assert trace.status == "error"
         assert trace.n_turns == 1
-        assert trace.n_total_tokens == 70
 
 
 class TestOCSCallbackHandlerMetricsDelegation:
@@ -105,11 +102,19 @@ class TestOCSCallbackHandlerMetricsDelegation:
     def test_on_llm_end_delegates_to_collector(self):
         tracer = OCSTracer(Mock(id=1), team_id=1)
         tracer.metrics_collector = MetricsCollector(start_time=0.0)
+        run_id = uuid4()
 
         handler = OCSCallbackHandler(tracer=tracer)
-        handler.on_llm_end(_llm_result(10, 5))
+        handler.on_llm_start(
+            {},
+            ["prompt"],
+            run_id=run_id,
+            invocation_params={"model": "gpt-4.1-mini"},
+            metadata={"ocs_provider_type": "openai"},
+        )
+        handler.on_llm_end(_llm_result(10, 5), run_id=run_id)
 
-        assert tracer.metrics_collector.get_metrics().n_total_tokens == 15
+        assert tracer.metrics_collector._exact_usage[("openai", "gpt-4.1-mini")]["input_tokens"] == 10
 
     def test_on_tool_start_delegates_to_collector(self):
         tracer = OCSTracer(Mock(id=1), team_id=1)

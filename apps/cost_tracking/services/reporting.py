@@ -15,6 +15,7 @@ from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWee
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
+from apps.trace.models import Trace
 
 logger = logging.getLogger("ocs.cost_tracking")
 
@@ -86,6 +87,40 @@ class SessionUsage:
 
     total_cost: Decimal
     by_model: list[ModelSpend]
+
+
+@dataclass(frozen=True)
+class ModelTokens:
+    """One (provider, model) row of a trace's token breakdown. `input_tokens` is fresh input only —
+    `cached_input_tokens` and `cache_write_tokens` are the sub-buckets the recorder peels off it, so
+    the row's input side is the sum of all three."""
+
+    provider_type: str
+    model_name: str
+    input_tokens: int
+    cached_input_tokens: int
+    cache_write_tokens: int
+    output_tokens: int
+
+    @property
+    def total_input_tokens(self) -> int:
+        return self.input_tokens + self.cached_input_tokens + self.cache_write_tokens
+
+
+@dataclass(frozen=True)
+class TraceTokenUsage:
+    """A single trace's token usage: the input/output headline plus a per-model breakdown.
+    An empty `by_model` means no usage was recorded for the trace at all, which the trace
+    detail page renders as "no data" rather than as zero.
+
+    The headline is a two-way split, so unlike the usage API's `TokenCounts` it folds cache-write
+    into `input_tokens`: every kind lands on one side or the other, which keeps
+    `input_tokens + output_tokens == total` and reproduces the provider's headline input count."""
+
+    input_tokens: int
+    output_tokens: int
+    total: int
+    by_model: list[ModelTokens]
 
 
 @dataclass(frozen=True)
@@ -304,6 +339,49 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
     return SessionUsage(total_cost=total_cost, by_model=by_model)
 
 
+def trace_token_usage(trace: Trace) -> TraceTokenUsage:
+    """Token usage for a single trace, grouped by (provider, model).
+
+    This is the source the trace detail page reads now that the counts no longer live on the
+    `Trace` row. It covers more than those counters did — estimated calls are recorded here too
+    — and splits by model, which a per-trace total could not.
+
+    Scoped by `trace` alone (a trace id is unique, and the FK is indexed); the caller has already
+    team-scoped the trace, and `Trace.team` is nullable while `UsageRecord.team` is not, so
+    re-filtering on it would drop rows for a trace whose team was deleted.
+    """
+    rows = (
+        UsageRecord.objects.filter(trace=trace)
+        .values("provider_type", "model_name")
+        .annotate(
+            input_tokens=_kind_quantity(ServiceKind.LLM_INPUT),
+            cached_input_tokens=_kind_quantity(ServiceKind.LLM_CACHED_INPUT),
+            cache_write_tokens=_kind_quantity(ServiceKind.LLM_CACHE_WRITE),
+            output_tokens=_kind_quantity(ServiceKind.LLM_OUTPUT),
+        )
+        .order_by("provider_type", "model_name")
+    )
+    by_model = [
+        ModelTokens(
+            provider_type=row["provider_type"],
+            model_name=row["model_name"],
+            input_tokens=int(row["input_tokens"]),
+            cached_input_tokens=int(row["cached_input_tokens"]),
+            cache_write_tokens=int(row["cache_write_tokens"]),
+            output_tokens=int(row["output_tokens"]),
+        )
+        for row in rows
+    ]
+    input_tokens = sum(row.total_input_tokens for row in by_model)
+    output_tokens = sum(row.output_tokens for row in by_model)
+    return TraceTokenUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total=input_tokens + output_tokens,
+        by_model=by_model,
+    )
+
+
 def coverage_gaps(team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None) -> CoverageGaps:
     """The models behind the period's unpriced / no-usage warnings, so the
     panel can list which models are responsible. Single grouped query over the
@@ -464,6 +542,11 @@ def _single_currency(scoped) -> str:
     a mix — the same single-currency assumption ``cost_total`` makes."""
     currencies = list(scoped.values_list("currency", flat=True).distinct())
     return currencies[0] if len(currencies) == 1 else "USD"
+
+
+def _kind_quantity(kind: ServiceKind):
+    """Summed `quantity` for one service kind, zero when the group has no such rows."""
+    return Coalesce(Sum("quantity", filter=Q(service_kind=kind)), _ZERO, output_field=_QUANTITY_FIELD)
 
 
 def _coverage_gap_from_row(row: dict, call_count: int) -> ModelCoverageGap:

@@ -22,6 +22,8 @@ from apps.teams.models import Team
 logger = logging.getLogger("ocs.notifications")
 
 CACHE_KEY_FORMAT = "{user_id}-{team_slug}-unread-notifications-count"
+# Pseudo team_slug used to cache the unread count aggregated across all of a user's teams.
+ALL_TEAMS_CACHE_KEY = "__all_teams__"
 
 
 class DurationTimeDelta(Enum):
@@ -199,10 +201,13 @@ def bust_unread_notification_cache(user_id: int, team_slug: str):
     """
     Bust the unread notifications count cache for a specific user.
 
+    Also busts the aggregated all-teams cache, since it's derived from the per-team counts.
+
     Args:
         user_id (int): The ID of the user whose cache should be busted.
     """
     cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=team_slug))
+    cache.delete(CACHE_KEY_FORMAT.format(user_id=user_id, team_slug=ALL_TEAMS_CACHE_KEY))
 
 
 def create_identifier(slug: str, data: dict) -> str:

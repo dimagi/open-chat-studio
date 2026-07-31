@@ -2493,6 +2493,11 @@ components:
           maxLength: 255
         is_index:
           type: boolean
+        enable_contextual_retrieval:
+          type: boolean
+          nullable: true
+          description: If enabled, a short context header is generated for each chunk
+            and stored for retrieval.
         create_version_task_id:
           type: string
           maxLength: 128
@@ -2505,6 +2510,16 @@ components:
         embedding_provider_model:
           type: integer
           nullable: true
+        contextualizer_llm_model:
+          type: integer
+          nullable: true
+          description: The chat model used to generate per-chunk context headers when
+            contextual retrieval is enabled.
+        contextualizer_llm_provider:
+          type: integer
+          nullable: true
+          description: The LLM provider used with contextualizer_llm_model to generate
+            context headers.
       required:
       - created_at
       - id
@@ -3562,6 +3577,12 @@ components:
 
             * `message` - Message
             * `session` - Session
+        llm_provider:
+          type: integer
+          nullable: true
+        llm_provider_model:
+          type: integer
+          nullable: true
       required:
       - created_at
       - id
@@ -4102,6 +4123,9 @@ components:
           minimum: 0
         text:
           type: string
+        context:
+          type: string
+          nullable: true
         page_number:
           type: integer
           maximum: 2147483647
@@ -5706,24 +5730,6 @@ components:
           minimum: -2147483648
           nullable: true
           description: Number of tool invocations across all turns
-        n_total_tokens:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-          description: Total tokens (prompt + completion) consumed
-        n_prompt_tokens:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-          description: Total input/prompt tokens consumed
-        n_completion_tokens:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-          description: Total output/completion tokens consumed
         experiment:
           type: integer
           nullable: true
@@ -5794,6 +5800,10 @@ components:
         name:
           type: string
           maxLength: 255
+        metadata:
+          description: Provider-side details fetched from the tracing service (e.g.
+            Langfuse project and organization). Populated on save; unencrypted so
+            usage can be aggregated by project/organization.
       required:
       - config
       - created_at

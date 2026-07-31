@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from datetime import timedelta
 
@@ -14,8 +15,10 @@ from field_audit.models import AuditingManager
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import EmbeddingProviderModel
-from apps.teams.models import BaseTeamModel
+from apps.teams.flags import Flags
+from apps.teams.models import BaseTeamModel, Flag
 from apps.teams.utils import get_slug_for_team
 from apps.utils.conversions import bytes_to_megabytes
 from apps.utils.deletion import (
@@ -24,6 +27,8 @@ from apps.utils.deletion import (
     get_related_pipelines_queryset,
     get_related_pipelines_queryset_for_list_param,
 )
+
+logger = logging.getLogger("ocs.documents")
 
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
@@ -170,6 +175,27 @@ class Collection(BaseTeamModel, VersionsMixin):
     )
     openai_vector_store_id = models.CharField(blank=True, max_length=255)
     is_index = models.BooleanField(default=False)
+    enable_contextual_retrieval = models.BooleanField(
+        blank=True,
+        null=True,
+        help_text="If enabled, a short context header is generated for each chunk and stored for retrieval.",
+    )
+    contextualizer_llm_model = models.ForeignKey(
+        "service_providers.LlmProviderModel",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="+",
+        help_text="The chat model used to generate per-chunk context headers when contextual retrieval is enabled.",
+    )
+    contextualizer_llm_provider = models.ForeignKey(
+        "service_providers.LlmProvider",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="+",
+        help_text="The LLM provider used with contextualizer_llm_model to generate context headers.",
+    )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
@@ -374,7 +400,68 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_index and self.is_remote_index:
             return self.llm_provider.get_remote_index_manager(self.openai_vector_store_id)
         else:
-            return self.llm_provider.get_local_index_manager(embedding_model_name=self.embedding_provider_model.name)
+            return self.llm_provider.get_local_index_manager(
+                embedding_model_name=self.embedding_provider_model.name,
+                contextualizer=self._build_contextualizer(),
+            )
+
+    def _build_contextualizer(self):
+        """Build a contextualizer for this collection's indexing pipeline, or None.
+
+        Returns None (unchanged indexing behaviour) unless contextual retrieval is
+        enabled, the feature flag is active for this collection's team, and a
+        compatible contextualizer provider+model pair is configured. On any failure
+        it returns None (and logs) so indexing continues without contextualization
+        rather than aborting.
+        """
+        from apps.service_providers.llm_service.contextualizer import LLMContextualizer  # noqa: PLC0415
+
+        if not self.enable_contextual_retrieval or not self.contextualizer_llm_model:
+            return None
+        if not self.contextualizer_llm_provider:
+            logger.warning(
+                "Contextual retrieval is enabled but no contextualizer_llm_provider is set; "
+                "skipping contextualization.",
+                extra={"collection_id": self.id},
+            )
+            return None
+        if self.contextualizer_llm_provider.type != self.contextualizer_llm_model.type:
+            logger.warning(
+                "Contextualizer provider and model types do not match; skipping contextualization.",
+                extra={
+                    "collection_id": self.id,
+                    "provider_type": self.contextualizer_llm_provider.type,
+                    "model_type": self.contextualizer_llm_model.type,
+                },
+            )
+            return None
+        if not self._contextual_retrieval_flag_active():
+            return None
+        try:
+            service = self.contextualizer_llm_provider.get_llm_service()
+            chat_model = service.get_chat_model(self.contextualizer_llm_model.name)
+        except (ServiceProviderConfigError, NotImplementedError):
+            logger.warning(
+                "Failed to build the contextualizer chat model; skipping contextualization.",
+                extra={"collection_id": self.id},
+            )
+            return None
+        return LLMContextualizer(chat_model)
+
+    def _contextual_retrieval_flag_active(self) -> bool:
+        """Whether the contextual retrieval flag is active for this collection's team.
+
+        Indexing runs in a Celery task with no request, so this mirrors Waffle's
+        Flag.is_active precedence directly: an explicit `everyone` value wins,
+        otherwise fall back to team membership.
+        """
+
+        flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
+        if not flag:
+            return False
+        if flag.everyone is not None:
+            return flag.everyone
+        return flag.is_active_for_team(self.team)
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""

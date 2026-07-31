@@ -31,7 +31,7 @@ CHUNKS = ["alpha chunk", "beta chunk", "gamma chunk"]
 class LocalIndexManagerMock(LocalIndexManager):
     """A local index manager that chunks and embeds without calling a provider."""
 
-    def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
+    def chunk_file(self, text, chunk_size=None, chunk_overlap=None):
         """Return a fixed set of chunks, so tests control exactly how many embeddings are attempted."""
         return CHUNKS
 

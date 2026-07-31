@@ -82,6 +82,14 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    CONTEXTUAL_RETRIEVAL = (
+        "flag_contextual_retrieval",
+        "Contextual retrieval - generate per-chunk context headers at indexing time (issue #2681)",
+        "",
+        [],
+        True,
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)

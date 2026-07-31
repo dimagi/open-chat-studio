@@ -1,5 +1,5 @@
 from apps.data_migrations.management.commands.base import IdempotentCommand, get_affected_teams_data
-from apps.ocs_notifications.notifications import deprecated_model_notification
+from apps.ocs_notifications.notifications import AffectedResources, deprecated_model_notification
 from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.models import Team
@@ -61,6 +61,7 @@ class Command(IdempotentCommand):
                     self.stdout.write(f"      Chatbots: {sorted(data['chatbots'])}")
                     self.stdout.write(f"      Pipelines: {sorted(data['pipelines'])}")
                     self.stdout.write(f"      Assistants: {sorted(data['assistants'])}")
+                    self.stdout.write(f"      Evaluators: {sorted(data['evaluators'])}")
 
         if dry_run:
             return f"Would notify {total_affected} team(s)"
@@ -76,9 +77,12 @@ class Command(IdempotentCommand):
                     team=teams_objs[team_id],
                     model_name=model_name,
                     replacement_model_name=replacement,
-                    affected_chatbots=data["chatbots"],
-                    affected_pipelines=data["pipelines"],
-                    affected_assistants=data["assistants"],
+                    affected=AffectedResources(
+                        chatbots=data["chatbots"],
+                        pipelines=data["pipelines"],
+                        assistants=data["assistants"],
+                        evaluators=data["evaluators"],
+                    ),
                 )
                 total_notified += 1
 

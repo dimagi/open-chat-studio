@@ -38,7 +38,7 @@ def remote_collection_index(db):
 
 
 class LocalIndexManagerMock(LocalIndexManager):
-    def chunk_file(self, file, chunk_size=None, chunk_overlap=None):
+    def chunk_file(self, text, chunk_size=None, chunk_overlap=None):
         return ["test", "content"]
 
     def get_embedding_vector(self, text, *, input_type):  # ty: ignore[invalid-method-override]
@@ -219,6 +219,74 @@ class TestLocalIndexManager:
 
         with pytest.raises(FileChunkEmbedding.DoesNotExist):
             embedding.refresh_from_db()
+
+
+@pytest.mark.django_db()
+class TestLocalIndexManagerContextualization:
+    """Tests for the contextual retrieval wiring in add_files (issue #2681)."""
+
+    @pytest.fixture()
+    def contextualizing_index_manager(self):
+        contextualizer = mock.Mock()
+        contextualizer.get_context.return_value = "Source document: annual_report.pdf."
+        return LocalIndexManagerMock(
+            api_key="api-123",
+            embedding_model_name="embedding-model",
+            contextualizer=contextualizer,
+        )
+
+    def test_context_stored_when_contextualizer_set(self, local_index_instance, contextualizing_index_manager):
+        file = FileFactory.create(name="annual_report.pdf")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with mock.patch.object(file, "read_content", return_value="full document text"):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            contextualizing_index_manager.add_files(iterator)
+
+        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
+        assert embeddings.count() == 2
+        for embedding in embeddings:
+            assert "annual_report.pdf" in embedding.context
+            assert embedding.contextualized_text.startswith(embedding.context)
+            assert embedding.text in embedding.contextualized_text
+
+    def test_no_context_when_contextualizer_none(self, local_index_instance):
+        manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
+        file = FileFactory.create(name="annual_report.pdf")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with mock.patch.object(file, "read_content", return_value="full document text"):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            manager.add_files(iterator)
+
+        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
+        assert embeddings.count() == 2
+        for embedding in embeddings:
+            assert embedding.context == ""
+            assert embedding.contextualized_text == embedding.text
+
+    def test_embedded_input_includes_context(self, local_index_instance, contextualizing_index_manager):
+        file = FileFactory.create(name="annual_report.pdf")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with (
+            mock.patch.object(file, "read_content", return_value="full document text"),
+            mock.patch.object(
+                contextualizing_index_manager,
+                "get_embedding_vector",
+                wraps=contextualizing_index_manager.get_embedding_vector,
+            ) as spy,
+        ):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            contextualizing_index_manager.add_files(iterator)
+
+        assert spy.call_count > 0
+        for call in spy.call_args_list:
+            embedded_text = call.args[0]
+            assert "annual_report.pdf" in embedded_text
 
 
 @pytest.mark.django_db()
@@ -441,9 +509,7 @@ class TestOpenAILocalIndexManager:
         return OpenAILocalIndexManager(api_key="api-123", embedding_model_name="embedding-model")
 
     def test_chunk_content(self, index_manager):
-        file = mock.Mock()
-        file.read_content = lambda: "This is test content."
-        response = index_manager.chunk_file(file, chunk_size=2, chunk_overlap=0)
+        response = index_manager.chunk_file("This is test content.", chunk_size=2, chunk_overlap=0)
         assert response == ["This is", "test", "c", "on", "te", "nt", "."]
 
     def test_get_embedding_vector_document_calls_embed_documents(self, index_manager):

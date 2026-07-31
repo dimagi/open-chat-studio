@@ -550,8 +550,8 @@ def users_api(request):
 
 @superuser_or_reporting_token
 def provider_usage_api(request):
-    """Cross-team LLM usage over a date range: per-team token totals merged with
-    per-model cost detail where cost tracking is enabled. Requires `range_type`,
+    """Cross-team LLM usage over a date range: per-team token + cost totals with
+    per-model detail, all read from recorded UsageRecords. Requires `range_type`,
     `start`, and `end` query params (as the dashboard date-range form).
     """
     result = _validated_range(request)

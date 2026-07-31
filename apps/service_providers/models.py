@@ -189,11 +189,11 @@ class LlmProvider(BaseTeamModel, ProviderMixin):
     def get_remote_index_manager(self, index_id: str):
         return self.get_llm_service().get_remote_index_manager(index_id)
 
-    def get_local_index_manager(self, embedding_model_name: str):
+    def get_local_index_manager(self, embedding_model_name: str, contextualizer=None):
         """
         Returns a LocalIndexManager for the given embedding model.
         """
-        return self.get_llm_service().get_local_index_manager(embedding_model_name)
+        return self.get_llm_service().get_local_index_manager(embedding_model_name, contextualizer=contextualizer)
 
     def create_remote_index(self, name: str, file_ids: list | None = None) -> str:
         """
@@ -684,6 +684,12 @@ class TraceProvider(BaseTeamModel):
     type = models.CharField(max_length=255, choices=TraceProviderType.choices)
     name = models.CharField(max_length=255)
     config = encrypt(models.JSONField(default=dict))
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Provider-side details fetched from the tracing service (e.g. Langfuse project and organization). "
+        "Populated on save; unencrypted so usage can be aggregated by project/organization.",
+    )
 
     class Meta:
         ordering = ("type", "name")
@@ -694,6 +700,19 @@ class TraceProvider(BaseTeamModel):
     @property
     def type_enum(self):
         return TraceProviderType(self.type)
+
+    @property
+    def project_url(self) -> str | None:
+        """Link to this provider's project in the tracing service's own UI.
+
+        None until `metadata` has been populated (on save, or by the
+        `backfill_langfuse_metadata` command).
+        """
+        project_id = (self.metadata or {}).get("project_id")
+        if self.type_enum != TraceProviderType.langfuse or not project_id:
+            return None
+        host = (self.config.get("host") or "").rstrip("/")
+        return f"{host}/project/{project_id}" if host else None
 
     def get_service(self) -> "tracing.Tracer":
         return self.type_enum.get_service(self.config)

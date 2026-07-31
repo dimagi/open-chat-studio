@@ -64,6 +64,7 @@ STALL_TIMEOUT = timedelta(minutes=12)  # no fresh results for this long => the d
 MAX_STALLS = 3  # consecutive stalls with no progress => run marked FAILED
 BATCH_SOFT_TIME_LIMIT = 240  # seconds; best-effort bound under the 5-min visibility timeout
 TASKBADGER_STALE_TIMEOUT = 300  # seconds; TB alerts if a run's task goes this long without an update
+RUN_CHUNK_SIZE = 500  # active run ids fetched per round trip when fanning out ticks
 
 logger = get_task_logger("ocs.evaluations")
 
@@ -340,11 +341,44 @@ def _redispatch_unfinished(run: EvaluationRun, remaining: set[int]) -> tuple[lis
     return _chunk(unfinished, BATCH_SIZE), False
 
 
-def _finalize_complete(run: EvaluationRun) -> None:
-    """Mark the run complete and run the completion side effects (aggregates, tag reversal)."""
+def _unconfigured_evaluator_names(evaluator_ids: list[int]) -> list[str]:
+    """Names of LLM-backed evaluators in the plan that have no provider to run against.
+
+    ``Evaluator.get_evaluator_params`` raises per message, so without a pre-flight a single
+    unconfigured evaluator writes one error result per message in the dataset instead of
+    failing the run once.
+    """
+    names = []
+    for evaluator in Evaluator.objects.filter(id__in=evaluator_ids):
+        try:
+            requires_provider = evaluator.requires_llm_provider()
+        except AttributeError:
+            # Unknown evaluator type — ``type`` is free-text, so this is possible. Leave it
+            # to the per-message path, which already reports it as a result error.
+            continue
+        if requires_provider and (evaluator.llm_provider_id is None or evaluator.llm_provider_model_id is None):
+            names.append(evaluator.name)
+    return sorted(names)
+
+
+def _fail_run_for_unconfigured_evaluators(run: EvaluationRun, names: list[str]) -> None:
+    run.mark_failed(
+        f"No LLM provider configured for: {', '.join(names)}. "
+        "Edit each evaluator to select a provider and model, then start a new run."
+    )
+
+
+def _complete_run(run: EvaluationRun) -> None:
+    """Flip the run to COMPLETED. The completion side effects run after the tick commits.
+
+    Only the status transition belongs under the coordination lock. Aggregates and tag
+    reversal both sweep the whole run, so running them here held the row lock for the
+    length of that sweep and — because the transition shares this transaction — a crash
+    part-way through rolled the run back to PROCESSING. The next tick then saw the same
+    finished run and re-ran the same doomed sweep, once per beat interval, forever.
+    `finalize_evaluation_run` carries them instead (dispatched from `_drive_run`).
+    """
     run.mark_complete()
-    compute_aggregates_for_run(run)
-    reverse_stale_tags(run)
 
 
 def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
@@ -359,14 +393,22 @@ def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
     evaluator_ids = run.evaluator_ids or []
 
     if total == 0 or not evaluator_ids:
-        _finalize_complete(run)
+        _complete_run(run)
         return _TickResult(batches=[], done=0, total=total, terminal="success")
+
+    # First tick only, to keep the steady-state tick free of this query. A provider deleted
+    # mid-run still nulls the FK, and those messages fall back to the per-message error path.
+    if run.status == EvaluationRunStatus.PENDING:
+        unconfigured = _unconfigured_evaluator_names(evaluator_ids)
+        if unconfigured:
+            _fail_run_for_unconfigured_evaluators(run, unconfigured)
+            return _TickResult(batches=[], done=0, total=total, terminal="error")
 
     remaining = set(plan_ids) - _done_message_ids(run, plan_ids, evaluator_ids)
     done = total - len(remaining)
 
     if not remaining:
-        _finalize_complete(run)
+        _complete_run(run)
         return _TickResult(batches=[], done=total, total=total, terminal="success")
 
     in_flight = set(run.in_flight or [])
@@ -407,29 +449,68 @@ def _drive_run(run_id: int) -> None:
             evaluate_message_batch.delay(run.id, batch)
         _ensure_taskbadger_task(run, result.total)
         _publish_tick(run, result)
+        # Dispatched last on purpose. The run is terminal by now, so no later tick repeats
+        # this block — a broker error here would otherwise cost the run its completion
+        # signal (stopping the UI poll) as well as its aggregates. `done == 0` means there
+        # is nothing to aggregate and no applied tags to reverse against.
+        if result.terminal == "success" and result.done > 0:
+            finalize_evaluation_run.delay(run.id)
 
 
-@shared_task
+@shared_task(ignore_result=True)
+def finalize_evaluation_run(run_id: int) -> None:
+    """Completion side effects for a run already committed as COMPLETED.
+
+    Split out of the coordination tick because both steps sweep the whole run and the
+    tick holds a row lock (see `_complete_run`). Safe to re-run: aggregates are
+    update_or_create'd per evaluator and stale-tag removal is a delete, so a retry after
+    a partial pass converges. A permanent failure here costs the run its aggregates and
+    leaves stale tags in place — it no longer costs the worker its life.
+    """
+    run = EvaluationRun.objects.filter(id=run_id).select_related("team", "config__dataset").first()
+    if run is None:
+        logger.info("Evaluation run %s gone before finalization; nothing to do", run_id)
+        return
+    if run.status != EvaluationRunStatus.COMPLETED:
+        # Only reachable via a dispatch `_drive_run` should never have made: aggregates over a
+        # partial result set would be wrong, and stale-tag reversal would read them as final.
+        logger.warning("Evaluation run %s is %s, not completed; skipping finalization", run_id, run.status)
+        return
+    with current_team(run.team):
+        compute_aggregates_for_run(run)
+        reverse_stale_tags(run)
+
+
+@shared_task(ignore_result=True)
+def drive_evaluation_run(run_id: int) -> None:
+    """One coordination tick for a single run.
+
+    Its own task so that one run's tick cannot take the sweep down with it: driving every
+    run inline meant a tick killed part-way through (an OOM SIGKILL is not catchable) left
+    every run after it in the ordering undriven until the next beat — and if the same run
+    kept dying, undriven indefinitely. `select_for_update(skip_locked)` in `_drive_run`
+    makes a tick that overlaps the previous one a cheap no-op.
+    """
+    try:
+        _drive_run(run_id)
+    except Exception:
+        logger.exception("Coordination tick failed for evaluation run %s", run_id)
+
+
+@shared_task(ignore_result=True)
 def coordinate_evaluation_runs() -> None:
-    """Beat task (every 30s): drive every active evaluation run one tick.
+    """Beat task (every 30s): dispatch one coordination tick per active evaluation run.
 
     The only thing that dispatches evaluation work. `EvaluationConfig.run` just creates
-    a PENDING run; this sweep's PENDING branch starts it, so a newly created run waits
+    a PENDING run; the tick's PENDING branch starts it, so a newly created run waits
     up to one beat interval before its first batch goes out.
 
     Stateless between ticks — any work lost to a deploy is recomputed and repaired
-    on the next tick. Overlapping sweeps partition runs via select_for_update(skip_locked).
+    on the next tick. Overlapping ticks partition runs via select_for_update(skip_locked).
     """
-    run_ids = list(
-        EvaluationRun.objects.filter(status__in=NON_TERMINAL_RUN_STATUSES)
-        .order_by("created_at")
-        .values_list("id", flat=True)
-    )
-    for run_id in run_ids:
-        try:
-            _drive_run(run_id)
-        except Exception:
-            logger.exception("Coordination tick failed for evaluation run %s", run_id)
+    run_ids = EvaluationRun.objects.filter(status__in=NON_TERMINAL_RUN_STATUSES).order_by("created_at")
+    for run_id in run_ids.values_list("id", flat=True).iterator(chunk_size=RUN_CHUNK_SIZE):
+        drive_evaluation_run.delay(run_id)
 
 
 def _publish_progress(job_id: str, current: int, total: int, *, stop: bool = False) -> None:

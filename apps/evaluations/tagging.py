@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("ocs.evaluations.tagging")
 
+TAG_CHUNK_SIZE = 2000  # AppliedTag rows fetched per round trip
+MESSAGE_CHUNK_SIZE = 200  # messages fetched per round trip; each carries its joined chat objects
+
 
 def matches(condition_type: str, condition_value: dict, field_value: Any) -> bool:
     """Return True if field_value satisfies the condition. Raises on unknown type."""
@@ -146,8 +149,9 @@ def _get_possible_tags(evaluators: list[Evaluator]) -> frozenset[int]:
 def _build_applied_by_message(run: EvaluationRun) -> defaultdict[int, set[int]]:
     """Batch all AppliedTag lookups for this run to avoid an O(N) query per message."""
     applied: defaultdict[int, set[int]] = defaultdict(set)
-    for row in AppliedTag.objects.filter(evaluation_result__run=run).values("evaluation_result__message_id", "tag_id"):
-        applied[row["evaluation_result__message_id"]].add(row["tag_id"])
+    rows = AppliedTag.objects.filter(evaluation_result__run=run).values_list("evaluation_result__message_id", "tag_id")
+    for message_id, tag_id in rows.iterator(chunk_size=TAG_CHUNK_SIZE):
+        applied[message_id].add(tag_id)
     return applied
 
 
@@ -160,7 +164,10 @@ def _compute_stale_by_target(
     content_type = None
     stale_by_target: defaultdict[int, set[int]] = defaultdict(set)
     messages_qs = run.scoped_messages if run.type == EvaluationRunType.DELTA else run.config.dataset.messages
-    for message in messages_qs.select_related("session__chat", "expected_output_chat_message"):
+    # Streamed: only `stale_by_target` is retained, so a dataset of any size costs a
+    # bounded amount of memory here rather than being materialised in the result cache.
+    messages = messages_qs.select_related("session__chat", "expected_output_chat_message")
+    for message in messages.iterator(chunk_size=MESSAGE_CHUNK_SIZE):
         target = resolve_target(representative_evaluator, message)
         if target is None:
             continue

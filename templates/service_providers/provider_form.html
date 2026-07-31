@@ -27,6 +27,9 @@
         </a>
       {% endif %}
     </div>
+    {% if object.id and provider.slug == 'tracing' %}
+      {% include "service_providers/components/trace_project.html" %}
+    {% endif %}
     {% block pre_form %}{% endblock %}
     <form method="post" class="my-2" enctype="multipart/form-data">
       {% csrf_token %}

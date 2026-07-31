@@ -8,6 +8,7 @@ from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import CustomTaggedItem
+from apps.cost_tracking.services.reporting import trace_token_usage
 from apps.service_providers.tracing.langfuse import get_langfuse_api_client
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.filters import TraceFilter, get_trace_filter_context_data
@@ -72,6 +73,11 @@ class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Detail
             )
             .filter(team=self.request.team)
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["token_usage"] = trace_token_usage(self.object)
+        return context
 
 
 class TraceLangfuseSpansView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, DetailView):

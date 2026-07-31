@@ -1,5 +1,5 @@
 from apps.data_migrations.management.commands.base import IdempotentCommand, get_affected_teams_data
-from apps.ocs_notifications.notifications import deleted_model_notification
+from apps.ocs_notifications.notifications import AffectedResources, deleted_model_notification
 from apps.service_providers.llm_service.default_models import DELETED_MODELS, _update_pipeline_node_param
 from apps.service_providers.models import LlmProviderModel
 from apps.teams.models import Team
@@ -77,6 +77,7 @@ class Command(IdempotentCommand):
                     self.stdout.write(f"      Chatbots: {sorted(data['chatbots'])}")
                     self.stdout.write(f"      Pipelines: {sorted(data['pipelines'])}")
                     self.stdout.write(f"      Assistants: {sorted(data['assistants'])}")
+                    self.stdout.write(f"      Evaluators: {sorted(data['evaluators'])}")
 
         if dry_run:
             return f"Would remove {len(models_to_delete)} models"
@@ -89,24 +90,7 @@ class Command(IdempotentCommand):
         for db_model, replacement_name, replacement_model in models_to_delete:
             db_model_id = db_model.id  # Capture before delete sets pk to None
 
-            # Update FK references (assistants, analyses, etc.) to replacement, or let cascade handle them
-            if replacement_model:
-                for obj in get_related_objects(db_model):
-                    fields_to_update = [
-                        f
-                        for f in obj._meta.fields
-                        if f.related_model == LlmProviderModel and getattr(obj, f.attname) == db_model.id
-                    ]
-                    for field in fields_to_update:
-                        setattr(obj, field.attname, replacement_model.id)
-                    if fields_to_update:
-                        obj.save(update_fields=[f.name for f in fields_to_update])
-
-            # Update pipeline node references (stored as JSON params, not DB FKs)
-            related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
-            new_value = replacement_model.id if replacement_model else None
-            for node in related_pipeline_nodes.all():
-                _update_pipeline_node_param(node, "llm_provider_model_id", new_value)
+            self._repoint_references(db_model, replacement_model)
 
             # Delete the model (bypass custom delete to avoid related-object pre-checks)
             super(LlmProviderModel, db_model).delete()
@@ -118,10 +102,41 @@ class Command(IdempotentCommand):
                     team=teams_objs[team_id],
                     model_name=f"{db_model.type}/{db_model.name}",
                     replacement_model_name=replacement_name if replacement_model else None,
-                    affected_chatbots=data["chatbots"],
-                    affected_pipelines=data["pipelines"],
-                    affected_assistants=data["assistants"],
+                    affected=AffectedResources(
+                        chatbots=data["chatbots"],
+                        pipelines=data["pipelines"],
+                        assistants=data["assistants"],
+                        evaluators=data["evaluators"],
+                    ),
                 )
 
         self.stdout.write(self.style.SUCCESS(f"Removed {total_deleted} models"))
         return f"Removed {total_deleted} models, notified {total_teams} teams"
+
+    def _repoint_references(self, db_model, replacement_model):
+        """Move every reference to ``db_model`` onto ``replacement_model`` (or clear it) before delete."""
+        new_value = replacement_model.id if replacement_model else None
+
+        # Evaluators keep a copy of the model id in params for the form UI, so they are
+        # repointed through the model method that moves params and FK together. Has to
+        # happen before the generic FK pass, which would otherwise claim them first.
+        for evaluator in db_model.evaluators.all():
+            evaluator.set_llm_provider_model_id(new_value)
+
+        # Update FK references (assistants, analyses, etc.) to replacement, or let cascade handle them
+        if replacement_model:
+            for obj in get_related_objects(db_model):
+                fields_to_update = [
+                    f
+                    for f in obj._meta.fields
+                    if f.related_model == LlmProviderModel and getattr(obj, f.attname) == db_model.id
+                ]
+                for field in fields_to_update:
+                    setattr(obj, field.attname, replacement_model.id)
+                if fields_to_update:
+                    obj.save(update_fields=[f.name for f in fields_to_update])
+
+        # Update pipeline node references (stored as JSON params, not DB FKs)
+        related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
+        for node in related_pipeline_nodes.all():
+            _update_pipeline_node_param(node, "llm_provider_model_id", new_value)

@@ -1,1 +1,4 @@
-<div clickable class="{% if record.read %}opacity-50{% endif %}">{{ record.latest_event.title }}</div>
+<div clickable class="{% if record.read %}opacity-50{% endif %}">
+  <span class="badge badge-ghost badge-xs align-middle mr-1">{{ record.team.name }}</span>
+  {{ record.latest_event.title }}
+</div>

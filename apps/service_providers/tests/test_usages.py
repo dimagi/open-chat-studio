@@ -474,7 +474,7 @@ def _add_provider_usage(provider, count: int) -> None:
 @pytest.mark.django_db()
 @pytest.mark.parametrize("stored_id", [pytest.param(int, id="int"), pytest.param(str, id="str")])
 def test_evaluators_referencing_the_provider_in_params_are_reported(anthropic_provider, stored_id):
-    """``Evaluator.params`` holds ``llm_provider_id`` as JSON, not an FK."""
+    """The id is submitted inside ``Evaluator.params``; the reported reference is the derived FK."""
     evaluator = EvaluatorFactory(
         team=anthropic_provider.team,
         name="Sentiment",

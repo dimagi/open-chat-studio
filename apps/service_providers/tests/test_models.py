@@ -77,20 +77,20 @@ class TestServiceProviderModel:
             provider_model.delete()
 
     @pytest.mark.django_db()
-    def test_evaluator_params_do_not_block_provider_model_deletion(self):
-        """Deletion deliberately ignores evaluator params.
+    def test_cannot_delete_provider_models_used_by_an_evaluator(self):
+        """Evaluators reference the model by FK, so they block deletion like any other user.
 
-        Nothing repoints evaluator params when a custom model is replaced by a global one
-        (see ``_replace_custom_model_with_global``), so blocking here would break that
-        sync instead of orphaning a reference. The usages page reports these separately.
+        The flows that legitimately need the model gone (``_replace_custom_model_with_global``,
+        the remove_deprecated_models command) repoint evaluators first.
         """
         provider_model = LlmProviderModelFactory.create()
-        EvaluatorFactory(
+        evaluator = EvaluatorFactory(
             team=provider_model.team,
             params={"llm_provider_model_id": provider_model.id},
         )
 
-        provider_model.delete()
+        with pytest.raises(ValidationError, match=evaluator.name):
+            provider_model.delete()
 
     @pytest.mark.django_db()
     def test_can_delete_unassociated_provider_models(self):
