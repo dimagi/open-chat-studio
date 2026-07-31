@@ -76,21 +76,38 @@
         <div class="card card-border bg-base-100">
           <div class="card-body p-4">
             <span class="text-xs uppercase tracking-wide text-base-content/60">Tokens</span>
-            {% if trace.n_total_tokens is not None %}
+            {% if token_usage.by_model %}
               <div class="mt-2">
-                <span class="text-3xl font-bold">{{ trace.n_total_tokens|intcomma }}</span>
+                <span class="text-3xl font-bold">{{ token_usage.total|intcomma }}</span>
                 <span class="text-sm text-base-content/60 ml-1">total</span>
               </div>
-              {% if trace.n_total_tokens %}
+              {% if token_usage.total %}
                 <div class="flex h-1.5 rounded-full overflow-hidden mt-3 bg-base-200" aria-hidden="true">
-                  <div class="bg-primary" style="flex: {{ trace.n_prompt_tokens|default:0 }};"></div>
-                  <div class="bg-primary/30" style="flex: {{ trace.n_completion_tokens|default:0 }};"></div>
+                  <div class="bg-primary" style="flex: {{ token_usage.input_tokens }};"></div>
+                  <div class="bg-primary/30" style="flex: {{ token_usage.output_tokens }};"></div>
                 </div>
                 <div class="flex justify-between text-xs text-base-content/60 mt-2">
-                  <span>{{ trace.n_prompt_tokens|default:0|intcomma }} in</span>
-                  <span>{{ trace.n_completion_tokens|default:0|intcomma }} out</span>
+                  <span>{{ token_usage.input_tokens|intcomma }} in</span>
+                  <span>{{ token_usage.output_tokens|intcomma }} out</span>
                 </div>
               {% endif %}
+              <div class="mt-3 pt-3 border-t border-base-200 space-y-1">
+                {% for model in token_usage.by_model %}
+                  <div class="flex justify-between gap-2 text-xs">
+                    <span class="truncate text-base-content/80"
+                          title="{{ model.provider_type }} / {{ model.model_name }}">{{ model.model_name }}</span>
+                    <span class="whitespace-nowrap text-base-content/60">
+                      {{ model.total_input_tokens|intcomma }} in / {{ model.output_tokens|intcomma }} out
+                      {% if model.cached_input_tokens %}
+                        <span class="text-base-content/40">· {{ model.cached_input_tokens|intcomma }} cached</span>
+                      {% endif %}
+                      {% if model.cache_write_tokens %}
+                        <span class="text-base-content/40">· {{ model.cache_write_tokens|intcomma }} cache write</span>
+                      {% endif %}
+                    </span>
+                  </div>
+                {% endfor %}
+              </div>
             {% else %}
               <div class="text-3xl font-bold mt-2">—</div>
             {% endif %}

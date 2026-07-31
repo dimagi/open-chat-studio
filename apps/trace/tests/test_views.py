@@ -5,7 +5,9 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from django.urls import reverse
 
+from apps.cost_tracking.models import ServiceKind
 from apps.trace.models import TraceStatus
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -56,6 +58,49 @@ def test_trace_detail_view_renders_filter_links(client, team_with_users):
     participant_link = links["participant"]
     assert participant_link["op_participant"] == ["equals"]
     assert participant_link["f_participant"] == [trace.participant.identifier]
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_reads_tokens_from_usage_records(client, team_with_users):
+    """The token card is fed by UsageRecord rows for the trace, not by counters on the row."""
+    team = team_with_users
+    user = team.members.first()
+    trace = _make_trace(team)
+    UsageRecordFactory.create(
+        team=team, trace=trace, service_kind=ServiceKind.LLM_INPUT, model_name="gpt-4o", quantity=1000
+    )
+    UsageRecordFactory.create(
+        team=team, trace=trace, service_kind=ServiceKind.LLM_CACHED_INPUT, model_name="gpt-4o", quantity=200
+    )
+    UsageRecordFactory.create(
+        team=team, trace=trace, service_kind=ServiceKind.LLM_OUTPUT, model_name="gpt-4o", quantity=500
+    )
+    UsageRecordFactory.create(team=team, trace=_make_trace(team), service_kind=ServiceKind.LLM_INPUT, quantity=999)
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    usage = response.context_data["token_usage"]
+    assert (usage.input_tokens, usage.output_tokens, usage.total) == (1200, 500, 1700)
+    content = response.content.decode()
+    assert "1,700" in content
+    assert "gpt-4o" in content
+    assert "200 cached" in content
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_without_usage_records(client, team_with_users):
+    """No recorded usage renders the card's em dash rather than a zero total."""
+    team = team_with_users
+    user = team.members.first()
+    trace = _make_trace(team)
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    assert response.context_data["token_usage"].by_model == []
 
 
 @pytest.mark.django_db()
