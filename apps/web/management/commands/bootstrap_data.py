@@ -408,33 +408,7 @@ class Command(BaseCommand):
         priced_model = priced_rule.model_name
         now = timezone.now()
 
-        created = 0
-        # Priced, exact spend: each session bills a little every day, with a
-        # per-session multiplier so bots differ in the Bot Performance table.
-        # Input and output are separate rows, as the recorder writes them.
-        for day in range(_USAGE_DAYS):
-            timestamp = now - timedelta(days=day, hours=3)
-            for idx, session in enumerate(sessions):
-                cost = Decimal("0.02") * (idx + 1) * (1 + day % 3)
-                # Only the latest day belongs to the seeded trace — a trace is one request.
-                trace = None if day else traces.get(session.id)
-                for service_kind, quantity, share in (
-                    (ServiceKind.LLM_INPUT, 400 + 50 * idx, Decimal("0.8")),
-                    (ServiceKind.LLM_OUTPUT, 100 + 20 * idx, Decimal("0.2")),
-                ):
-                    created += self._create_usage_record(
-                        team,
-                        session,
-                        provider_type,
-                        priced_model,
-                        service_kind=service_kind,
-                        quantity=quantity,
-                        cost=cost * share,
-                        confidence=Confidence.EXACT,
-                        pricing_rule=priced_rule,
-                        timestamp=timestamp,
-                        trace=trace,
-                    )
+        created = self._seed_daily_priced_usage(team, sessions, traces, provider_type, priced_rule, now)
 
         # A couple of estimated rows so the Exact/Estimated split shows.
         for session in sessions[:2]:
@@ -479,6 +453,46 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"  Created {created} usage record(s)"))
         self._enable_cost_tracking_flag(team)
+
+    def _seed_daily_priced_usage(
+        self,
+        team,
+        sessions: list[ExperimentSession],
+        traces: dict[int, Trace],
+        provider_type,
+        priced_rule: PricingRule,
+        now,
+    ) -> int:
+        """Priced, exact spend: each session bills a little every day, with a
+        per-session multiplier so bots differ in the Bot Performance table. Input
+        and output are separate rows, as the recorder writes them. Returns the
+        number of records created.
+        """
+        created = 0
+        for day in range(_USAGE_DAYS):
+            timestamp = now - timedelta(days=day, hours=3)
+            for idx, session in enumerate(sessions):
+                cost = Decimal("0.02") * (idx + 1) * (1 + day % 3)
+                # Only the latest day belongs to the seeded trace — a trace is one request.
+                trace = None if day else traces.get(session.id)
+                for service_kind, quantity, share in (
+                    (ServiceKind.LLM_INPUT, 400 + 50 * idx, Decimal("0.8")),
+                    (ServiceKind.LLM_OUTPUT, 100 + 20 * idx, Decimal("0.2")),
+                ):
+                    created += self._create_usage_record(
+                        team,
+                        session,
+                        provider_type,
+                        priced_rule.model_name,
+                        service_kind=service_kind,
+                        quantity=quantity,
+                        cost=cost * share,
+                        confidence=Confidence.EXACT,
+                        pricing_rule=priced_rule,
+                        timestamp=timestamp,
+                        trace=trace,
+                    )
+        return created
 
     def _create_usage_record(
         self,
