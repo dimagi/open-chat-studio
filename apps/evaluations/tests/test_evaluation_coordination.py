@@ -384,8 +384,80 @@ def test_beat_fans_out_one_tick_per_active_run(delay_mock):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("message_count", "clear_evaluators"),
+    [
+        pytest.param(0, False, id="empty-plan"),
+        pytest.param(3, True, id="no-evaluators"),
+    ],
+)
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.delay")
+def test_completion_with_nothing_evaluated_skips_finalization(
+    finalize_mock, _delay, _publish, message_count, clear_evaluators
+):
+    """A run that completes without evaluating anything has nothing to finalize.
+
+    Beyond saving the pointless sweep: `reverse_stale_tags` reads the live config rather
+    than the run's frozen evaluator snapshot, so finalizing the no-evaluators branch would
+    walk the whole dataset with an empty applied-tag map and treat every managed tag as
+    stale.
+    """
+    run, _evaluators, _messages = _make_run(message_count=message_count, status=EvaluationRunStatus.PENDING)
+    if clear_evaluators:
+        run.evaluator_ids = []
+        run.save(update_fields=["evaluator_ids"])
+
+    drive_evaluation_run(run.id)
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    finalize_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.delay", side_effect=RuntimeError("broker down"))
+def test_failed_finalize_dispatch_still_publishes_completion(finalize_mock, publish_mock, _delay):
+    """The run is terminal by the time finalization is dispatched, so no later tick would
+    retry the publish. A broker error dispatching it must not strand the UI poller."""
+    run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    _complete_messages(run, evaluators, messages)
+
+    drive_evaluation_run(run.id)  # the dispatch error is logged by its broad handler
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    finalize_mock.assert_called_once_with(run.id)
+    publish_mock.assert_called_once()
+    assert publish_mock.call_args.args[1].terminal == "success"
+
+
+@pytest.mark.django_db()
 def test_finalization_is_a_noop_for_a_deleted_run():
     finalize_evaluation_run(-1)  # must not raise
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "status",
+    [EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING, EvaluationRunStatus.FAILED],
+)
+def test_finalization_is_a_noop_for_a_run_that_is_not_completed(status):
+    """Only a COMPLETED run has a full result set to aggregate, and the results UI only
+    ever shows a COMPLETED run's aggregates — a stray dispatch must not write partial ones.
+    """
+    run, evaluators, messages = _make_run(message_count=2, status=status)
+    _complete_messages(run, evaluators, messages)
+
+    finalize_evaluation_run(run.id)
+
+    assert not run.aggregates.exists()
 
 
 @pytest.mark.django_db()
