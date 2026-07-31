@@ -44,7 +44,7 @@ Two invariants come out of that:
 
 Both completion sweeps also now stream (`.iterator()`) and retain only what they aggregate, so their memory is bounded by distinct result fields rather than by run size.
 
-The trade this accepts: a crash in the window between the tick's commit and `finalize_evaluation_run.delay` leaves a COMPLETED run unfinalized for good, where the old coupling would have retried it. The dispatch is the first thing after commit and a completing tick has no batches to dispatch ahead of it, so the window is small — but it is not zero, and no sweep repairs it. Runs with only error results legitimately produce no aggregates, so "COMPLETED with no aggregates" cannot be used as the repair signal; a `finalized_at` marker would be needed to close this properly.
+The trade this accepts: a crash in the window between the tick's commit and `finalize_evaluation_run.delay` leaves a COMPLETED run unfinalized for good, where the old coupling would have retried it. The dispatch is deliberately *last* after commit, behind the progress publish and the Taskbadger update (see the decision above), so the window holds a result-backend write and a blocking Taskbadger HTTP call — wider than a bare `.delay()`, and no sweep repairs a run stranded in it. Runs with only error results legitimately produce no aggregates, so "COMPLETED with no aggregates" cannot be used as the repair signal; a `finalized_at` marker would be needed to close this properly.
 
 ## Alternatives considered
 
