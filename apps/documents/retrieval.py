@@ -54,7 +54,11 @@ def search_collection(
     if not collection.hybrid_search_enabled:
         return list(_dense_queryset(collection, query_vector, top_k))
 
-    fetch_k = collection.search_fetch_k_or_default
+    # fetch_k widens the candidate pool for fusion; it must never narrow the result set below
+    # what the caller asked for, which a per-collection override lower than top_k would do.
+    fetch_k = max(top_k, collection.search_fetch_k_or_default)
+    # `values_list` drops the select_related/only from the shared dense queryset, so this
+    # fetches ids alone -- no join -- while keeping one definition of the dense ranking.
     dense_ids = list(_dense_queryset(collection, query_vector, fetch_k).values_list("id", flat=True))
     lexical_ids = _lexical_candidate_ids(collection, query, fetch_k)
 

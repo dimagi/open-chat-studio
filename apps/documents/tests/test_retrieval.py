@@ -232,6 +232,22 @@ class TestSearchCollection:
 
         assert len(results) == 2
 
+    def test_fetch_k_below_top_k_still_returns_top_k(self):
+        """A per-collection fetch_k smaller than top_k must not truncate the result set.
+
+        fetch_k widens the candidate pool for fusion; it is not a cap on what the caller asked
+        for. The node's max_results (top_k) is what controls the final count.
+        """
+        collection, file = _make_indexed_collection(search_fetch_k=2)
+        for index in range(5):
+            _add_chunk(collection, file, f"quokka chunk {index}", _unit_vector(index))
+
+        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+            with override_flag(HYBRID_FLAG, active=True):
+                results = search_collection(collection, "quokka", top_k=5)
+
+        assert len(results) == 5
+
     def test_remote_index_never_uses_hybrid(self):
         """Remote index chunks live at the provider, so there is no local lexical index."""
         collection = CollectionFactory.create(is_index=True, is_remote_index=True)

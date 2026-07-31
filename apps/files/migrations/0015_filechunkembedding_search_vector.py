@@ -25,9 +25,7 @@ class Migration(migrations.Migration):
     atomic = False
 
     dependencies = [
-        ("documents", "0019_collection_contextualizer_llm_model_and_more"),
         ("files", "0014_filechunkembedding_context"),
-        ("teams", "0014_team_is_migrating"),
     ]
 
     operations = [
