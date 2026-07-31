@@ -1,0 +1,91 @@
+{% load static %}
+{% load render_table from django_tables2 %}
+{% render_table table "table/tailwind_js_pagination.html" %}
+{% block modal %}
+{% endblock modal %}
+
+<script>
+(function () {
+  const POLL_INTERVAL = 2000;
+  const RETRY_INTERVAL = 5000;
+  const START_DELAY = 1000;
+
+  // HTMX re-executes this script every time the table fragment is swapped in
+  // (sorting, pagination, or the refresh below). Claim a new generation so any
+  // chain started by an earlier execution retires itself instead of stacking
+  // another poll loop on top of this one.
+  const generation = (window.evaluationRunPollGeneration || 0) + 1;
+  window.evaluationRunPollGeneration = generation;
+  clearTimeout(window.evaluationRunPollTimeout);
+
+  function isCurrentChain() {
+    return window.evaluationRunPollGeneration === generation;
+  }
+
+  function scheduleNextPoll(delay) {
+    window.evaluationRunPollTimeout = setTimeout(pollAll, delay);
+  }
+
+  function getProcessingElements() {
+    return Array.from(document.querySelectorAll('[data-job-id]'));
+  }
+
+  function pollAll() {
+    if (!isCurrentChain()) return;
+
+    const elements = getProcessingElements();
+    if (!elements.length) return;
+
+    let anyComplete = false;
+    let anyError = false;
+    let pending = elements.length;
+
+    function onAllSettled() {
+      if (!isCurrentChain()) return;
+      if (anyComplete) {
+        // Reload only the runs table fragment. `#runs-table` listens for this
+        // event; it cannot listen for `load`, which HTMX fires once at init
+        // time rather than registering a DOM listener.
+        htmx.trigger(document.body, 'refreshRuns');
+      } else {
+        scheduleNextPoll(anyError ? RETRY_INTERVAL : POLL_INTERVAL);
+      }
+    }
+
+    elements.forEach(function (el) {
+      const progressBar = el.querySelector('.progress-fill');
+      const progressText = el.querySelector('.progress-text');
+      const badge = el.querySelector('.badge');
+
+      fetch(el.dataset.progressUrl)
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          if (data.complete) {
+            anyComplete = true;
+          } else {
+            const percent = (data.progress && data.progress.percent) ? data.progress.percent : 0;
+            if (progressBar) progressBar.style.width = percent + '%';
+            if (progressText) progressText.textContent = percent + '%';
+            if (badge && data.progress && data.progress.description) {
+              badge.textContent = data.progress.description;
+            }
+          }
+        })
+        .catch(function () {
+          anyError = true;
+        })
+        .finally(function () {
+          pending -= 1;
+          if (pending === 0) {
+            onAllSettled();
+          }
+        });
+    });
+  }
+
+  // Kick off after a short delay to let the page settle
+  if (getProcessingElements().length > 0) {
+    scheduleNextPoll(START_DELAY);
+  }
+})();
+</script>
