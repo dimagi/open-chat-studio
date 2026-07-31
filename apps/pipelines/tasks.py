@@ -3,7 +3,12 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from apps.chat.bots import PipelineTestBot
-from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import (
+    PipelineBuildError,
+    PipelineNodeBuildError,
+    PipelineNodeRunError,
+    has_errors,
+)
 from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.runnables import GenerationError
 
@@ -26,8 +31,7 @@ def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, 
     Attempts to invoke a pipeline with a given message and user, handling potential pipeline build errors.
     """
     pipeline = Pipeline.objects.get(id=pipeline_id)
-    errors = pipeline.validate(full=False)
-    if errors:
+    if has_errors(pipeline.validate(full=False)):
         return {"error": "There are errors in the pipeline configuration. Please correct those before running a test."}
     bot = PipelineTestBot(pipeline=pipeline, user_id=user_id)
     try:
