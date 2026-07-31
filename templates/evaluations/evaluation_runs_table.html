@@ -23,13 +23,10 @@
 
     function onAllSettled() {
       if (anyComplete) {
-        // Reload only the runs table fragment via HTMX
-        const runsTable = document.getElementById('runs-table');
-        if (runsTable) {
-          htmx.trigger(runsTable, 'load');
-        } else {
-          location.reload();
-        }
+        // Reload only the runs table fragment. `#runs-table` listens for this
+        // event; it cannot listen for `load`, which HTMX fires once at init
+        // time rather than registering a DOM listener.
+        htmx.trigger(document.body, 'refreshRuns');
       } else {
         setTimeout(pollAll, anyError ? RETRY_INTERVAL : POLL_INTERVAL);
       }
