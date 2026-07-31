@@ -47,7 +47,10 @@ class Edge(pydantic.BaseModel):
     sourceHandle: str | None = STANDARD_OUTPUT_NAME
 
     def is_conditional(self):
-        return self.sourceHandle != STANDARD_OUTPUT_NAME
+        # An explicit null handle means the default output — it is this field's own default, and
+        # unwired_handles reads it that way too. Treating it as conditional would report the edge
+        # stranded (no node offers a "None" handle) and drop it from the wired graph.
+        return (self.sourceHandle or STANDARD_OUTPUT_NAME) != STANDARD_OUTPUT_NAME
 
 
 class PipelineGraph(pydantic.BaseModel):

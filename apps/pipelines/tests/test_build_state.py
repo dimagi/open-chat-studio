@@ -306,6 +306,25 @@ class TestPipelineBuildState:
             "There should be exactly 1 End node",
         ]
 
+    def test_null_source_handle_is_the_standard_output_not_a_stranded_handle(self):
+        """``sourceHandle: null`` is what a non-editor write produces for the default output — it is
+        the field's own default and how ``unwired_handles`` reads it. Mistaking it for a named handle
+        would report the edge stranded (no node offers a ``None`` handle) and block the publish."""
+        start, plain, end = start_node(), passthrough_node(name="plain"), end_node()
+        edges = [
+            {"id": "e-start-plain", "source": start["id"], "target": plain["id"]},
+            {"id": "e-plain-end", "source": plain["id"], "target": end["id"], "sourceHandle": None},
+        ]
+        pipeline = create_pipeline_model([start, plain, end], edges)
+
+        state = pipeline_build_state(pipeline)
+
+        assert state == {
+            "pipeline_valid": True,
+            "errors": {"node": {}, "edge": [], "pipeline": []},
+            "unwired_handles": {},
+        }
+
     def test_invalid_router_does_not_have_its_edges_called_stranded(self):
         """A router whose params don't validate can't report its branches, so its handles are
         unknown — not empty. Its edges must not be reported stranded on the strength of that."""
