@@ -3,6 +3,7 @@ import re
 from io import BytesIO
 
 import httpx
+import openai
 from django.conf import settings
 from langchain_core.messages import HumanMessage
 
@@ -180,6 +181,29 @@ def format_multimodal_input(
     if not parts:
         parts.append({"type": "text", "text": "[empty message]"})
     return HumanMessage(content=parts)
+
+
+# OpenAI error codes indicating the model rejected an attached image.
+INVALID_IMAGE_ERROR_CODES = {"invalid_image_format", "invalid_image", "image_parse_error"}
+
+
+def invoke_with_image_error_translation(agent, inputs, supported_image_content_types: frozenset[str]):
+    """Invoke the agent, translating provider invalid-image errors for the participant.
+
+    Backstop for images the upload sniffer cannot identify (e.g. HEIC renamed to
+    .jpg sniffs as image/jpeg and passes the allowlist in format_multimodal_input).
+    OpenAI/Azure only: other providers' invalid-image errors carry no stable codes
+    and keep the generic error path.
+    """
+    try:
+        return agent.invoke(inputs)
+    except openai.BadRequestError as e:
+        if e.code in INVALID_IMAGE_ERROR_CODES:
+            raise UserReportableError(
+                "An attached image could not be processed. "
+                f"Supported types: {image_type_names(supported_image_content_types)}."
+            ) from e
+        raise
 
 
 def _convert_attachment_to_text(attachment) -> str | None:
