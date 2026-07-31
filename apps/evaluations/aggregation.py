@@ -45,15 +45,3 @@ def _collect_aggregatable_values(result: dict, field_values: defaultdict[str, li
 
 def _aggregate_fields(field_values: defaultdict[str, list]) -> dict:
     return {field_name: aggregate_field(values) for field_name, values in field_values.items()}
-
-
-def compute_evaluator_aggregates(results: list[dict]) -> dict:
-    """Compute aggregates for a single evaluator's results."""
-    if not results:
-        return {}
-
-    field_values: defaultdict[str, list] = defaultdict(list)
-    for result in results:
-        _collect_aggregatable_values(result, field_values)
-
-    return _aggregate_fields(field_values)
