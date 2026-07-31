@@ -158,3 +158,66 @@ class TestFileValidationAPI:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Total file size exceeds maximum" in response.json()["error"]
+
+    SVG_BYTES = b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect/></svg>'
+
+    def test_bmp_upload_rejected(self, api_client, session):
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file("image.bmp", b"BM" + bytes(60), content_type="image/bmp")
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "'.bmp' is not supported" in response.json()["error"]
+
+    def test_svg_upload_rejected_even_with_text_claim(self, api_client, session):
+        """The deny-set fires on extension alone; a forged text/* content type must not bypass it."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file("image.svg", self.SVG_BYTES, content_type="text/plain")
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "'.svg' is not supported" in response.json()["error"]
+
+    def test_unsupported_image_disguised_with_allowed_extension_rejected(self, api_client, session):
+        """A mismatched file (SVG bytes named .jpg) is caught by content sniffing."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file("photo.jpg", self.SVG_BYTES, content_type="image/jpeg")
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "`photo.jpg`" in response.json()["error"]
+        assert "GIF, HEIC, HEIF, JPEG, PNG, WEBP" in response.json()["error"]
+
+    def test_supported_image_upload_still_accepted(self, api_client, session):
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_uploaded_file_from_fixture("image.jpg")
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_second_bad_file_rejects_whole_upload(self, api_client, session):
+        """Validation covers every file; no File rows are created on rejection."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        good = create_uploaded_file_from_fixture("image.jpg")
+        bad = create_test_file("image.bmp", b"BM" + bytes(60), content_type="image/bmp")
+
+        response = api_client.post(url, {"files": [good, bad]}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert File.objects.count() == 0
+
+    def test_rejection_message_lists_whole_extensions(self, api_client, session):
+        """Regression: the allowed-types list must join extensions, not characters."""
+        url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
+        test_file = create_test_file("data.zip", b"PK\x03\x04", content_type="application/zip")
+
+        response = api_client.post(url, {"files": test_file}, format="multipart")
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        error = response.json()["error"]
+        assert ".txt, .pdf" in error
+        assert ", t, " not in error
