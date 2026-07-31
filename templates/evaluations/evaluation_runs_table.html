@@ -8,12 +8,31 @@
 (function () {
   const POLL_INTERVAL = 2000;
   const RETRY_INTERVAL = 5000;
+  const START_DELAY = 1000;
+
+  // HTMX re-executes this script every time the table fragment is swapped in
+  // (sorting, pagination, or the refresh below). Claim a new generation so any
+  // chain started by an earlier execution retires itself instead of stacking
+  // another poll loop on top of this one.
+  const generation = (window.evaluationRunPollGeneration || 0) + 1;
+  window.evaluationRunPollGeneration = generation;
+  clearTimeout(window.evaluationRunPollTimeout);
+
+  function isCurrentChain() {
+    return window.evaluationRunPollGeneration === generation;
+  }
+
+  function scheduleNextPoll(delay) {
+    window.evaluationRunPollTimeout = setTimeout(pollAll, delay);
+  }
 
   function getProcessingElements() {
     return Array.from(document.querySelectorAll('[data-job-id]'));
   }
 
   function pollAll() {
+    if (!isCurrentChain()) return;
+
     const elements = getProcessingElements();
     if (!elements.length) return;
 
@@ -22,13 +41,14 @@
     let pending = elements.length;
 
     function onAllSettled() {
+      if (!isCurrentChain()) return;
       if (anyComplete) {
         // Reload only the runs table fragment. `#runs-table` listens for this
         // event; it cannot listen for `load`, which HTMX fires once at init
         // time rather than registering a DOM listener.
         htmx.trigger(document.body, 'refreshRuns');
       } else {
-        setTimeout(pollAll, anyError ? RETRY_INTERVAL : POLL_INTERVAL);
+        scheduleNextPoll(anyError ? RETRY_INTERVAL : POLL_INTERVAL);
       }
     }
 
@@ -66,7 +86,7 @@
 
   // Kick off after a short delay to let the page settle
   if (getProcessingElements().length > 0) {
-    setTimeout(pollAll, 1000);
+    scheduleNextPoll(START_DELAY);
   }
 })();
 </script>
