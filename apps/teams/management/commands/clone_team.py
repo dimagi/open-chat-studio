@@ -466,6 +466,7 @@ class Command(BaseCommand):
                 team=ctx.target_team,
                 name=evaluator.name,
                 type=evaluator.type,
+                evaluation_mode=evaluator.evaluation_mode,
                 params=dict(evaluator.params),
                 llm_provider_id=self._remap_evaluator_llm_id(ctx, evaluator, "llm_provider_id"),
                 llm_provider_model_id=self._remap_evaluator_llm_id(ctx, evaluator, "llm_provider_model_id"),
