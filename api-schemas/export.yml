@@ -3467,6 +3467,13 @@ components:
           type: string
           format: date-time
           nullable: true
+        finalized_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the run's completion side effects (aggregates, stale-tag
+            reversal) landed. Set as soon as the run completes if it has nothing to
+            finalize.
         status:
           $ref: '#/components/schemas/StatusA8fEnum'
         type:
@@ -5730,24 +5737,6 @@ components:
           minimum: -2147483648
           nullable: true
           description: Number of tool invocations across all turns
-        n_total_tokens:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-          description: Total tokens (prompt + completion) consumed
-        n_prompt_tokens:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-          description: Total input/prompt tokens consumed
-        n_completion_tokens:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          nullable: true
-          description: Total output/completion tokens consumed
         experiment:
           type: integer
           nullable: true

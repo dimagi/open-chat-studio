@@ -237,7 +237,7 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
     permission_required = "evaluations.view_evaluationrun"
     model = EvaluationRun
     table_class = EvaluationRunTable
-    template_name = "table/single_table.html"
+    template_name = "evaluations/evaluation_runs_table.html"
 
     def get_queryset(self):
         return (
@@ -290,10 +290,38 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             # Add total results count
             context["total_results"] = evaluation_run.results.count()
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
-                aggregates = evaluation_run.aggregates.select_related("evaluator").all()
-                context["aggregates"] = filter_aggregates_for_display(aggregates)
+                context.update(_aggregates_context(evaluation_run, team_slug))
 
         return context
+
+
+def _aggregates_context(evaluation_run: EvaluationRun, team_slug: str) -> dict[str, Any]:
+    """Context for the aggregates partial, shared by the results page and its poll endpoint."""
+    aggregates = filter_aggregates_for_display(evaluation_run.aggregates.select_related("evaluator").all())
+    return {
+        "aggregates": aggregates,
+        # What the run has beats what the marker claims. A finalization that computed the aggregates
+        # but died before stamping `finalized_at`, or an old-code worker mid-deploy that never stamps
+        # it at all, would otherwise hide real results behind the spinner for the whole grace window.
+        "finalizing": evaluation_run.is_finalizing and not aggregates,
+        "aggregates_url": reverse(
+            "evaluations:evaluation_run_aggregates",
+            args=[team_slug, evaluation_run.config_id, evaluation_run.id],
+        ),
+    }
+
+
+class EvaluationRunAggregatesView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
+    """Poll target for the aggregates block while a completed run is still being finalized."""
+
+    permission_required = "evaluations.view_evaluationrun"
+    template_name = "evaluations/components/aggregates.html"
+
+    def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
+        evaluation_run = get_object_or_404(
+            EvaluationRun, id=kwargs["evaluation_run_pk"], config_id=kwargs["evaluation_pk"], team=self.request.team
+        )
+        return _aggregates_context(evaluation_run, team_slug)
 
 
 class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]

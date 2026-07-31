@@ -19,12 +19,14 @@ from apps.cost_tracking.services.reporting import (
     coverage_gaps,
     session_usage,
     token_counts,
+    trace_token_usage,
     usage_by_group,
     usage_timeseries,
 )
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.traces import TraceFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 # The 30-day window most tests read over, named where a test needs it inside a lambda.
@@ -230,6 +232,106 @@ class TestSessionUsage:
         usage = session_usage(session)
 
         assert usage.total_cost == Decimal("1.00000000")
+        assert len(usage.by_model) == 1
+
+
+@pytest.mark.django_db()
+class TestTraceTokenUsage:
+    """Per-trace token breakdown — the trace detail page's token card."""
+
+    def test_empty_when_no_records(self):
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+
+        usage = trace_token_usage(trace)
+
+        assert usage.by_model == []
+        assert usage.total == 0
+
+    def test_splits_input_and_output(self):
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        _usage(team, cost="0", when=_NOW, trace=trace, quantity=1000, service_kind=ServiceKind.LLM_INPUT)
+        _usage(team, cost="0", when=_NOW, trace=trace, quantity=500, service_kind=ServiceKind.LLM_OUTPUT)
+
+        usage = trace_token_usage(trace)
+
+        assert usage.input_tokens == 1000
+        assert usage.output_tokens == 500
+        assert usage.total == 1500
+
+    def test_cache_kinds_count_as_input(self):
+        """The card's two-way split folds both cache buckets into input, so the headline
+        total matches what the provider reported for the call."""
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        _usage(team, cost="0", when=_NOW, trace=trace, quantity=500, service_kind=ServiceKind.LLM_INPUT)
+        _usage(team, cost="0", when=_NOW, trace=trace, quantity=300, service_kind=ServiceKind.LLM_CACHED_INPUT)
+        _usage(team, cost="0", when=_NOW, trace=trace, quantity=200, service_kind=ServiceKind.LLM_CACHE_WRITE)
+        _usage(team, cost="0", when=_NOW, trace=trace, quantity=400, service_kind=ServiceKind.LLM_OUTPUT)
+
+        usage = trace_token_usage(trace)
+
+        assert usage.input_tokens == 1000
+        assert usage.output_tokens == 400
+        assert usage.total == 1400
+        row = usage.by_model[0]
+        assert (row.input_tokens, row.cached_input_tokens, row.cache_write_tokens) == (500, 300, 200)
+
+    def test_groups_by_provider_and_model(self):
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        for provider, model, kind, qty in [
+            ("openai", "gpt-4o", ServiceKind.LLM_INPUT, 100),
+            ("openai", "gpt-4o", ServiceKind.LLM_OUTPUT, 40),
+            ("anthropic", "claude-haiku-4-5", ServiceKind.LLM_INPUT, 70),
+        ]:
+            _usage(
+                team,
+                cost="0",
+                when=_NOW,
+                trace=trace,
+                provider_type=provider,
+                model_name=model,
+                service_kind=kind,
+                quantity=qty,
+            )
+
+        usage = trace_token_usage(trace)
+
+        assert [(m.provider_type, m.model_name, m.total_input_tokens, m.output_tokens) for m in usage.by_model] == [
+            ("anthropic", "claude-haiku-4-5", 70, 0),
+            ("openai", "gpt-4o", 100, 40),
+        ]
+
+    def test_scoped_to_trace(self):
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        other = TraceFactory.create(team=team)
+        _usage(team, cost="0", when=_NOW, trace=trace, quantity=100, service_kind=ServiceKind.LLM_INPUT)
+        _usage(team, cost="0", when=_NOW, trace=other, quantity=900, service_kind=ServiceKind.LLM_INPUT)
+        _usage(team, cost="0", when=_NOW, quantity=900, service_kind=ServiceKind.LLM_INPUT)  # untraced
+
+        assert trace_token_usage(trace).total == 100
+
+    def test_unknown_confidence_rows_count_as_zero(self):
+        """A call with no usage data is recorded with `quantity=None`; it must not
+        blow up the sum or make the card claim tokens it doesn't have."""
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        _usage(
+            team,
+            cost="0",
+            when=_NOW,
+            trace=trace,
+            quantity=None,
+            confidence=Confidence.UNKNOWN,
+            service_kind=ServiceKind.LLM_INPUT,
+        )
+
+        usage = trace_token_usage(trace)
+
+        assert usage.total == 0
         assert len(usage.by_model) == 1
 
 

@@ -52,7 +52,7 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
         notification_url = absolute_url(
             reverse(
                 "ocs_notifications:notification_event_home",
-                args=[notification_event.team.slug, notification_event.event_type_id],
+                args=[notification_event.event_type_id],
             )
         )
 

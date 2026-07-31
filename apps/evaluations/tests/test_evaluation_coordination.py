@@ -12,15 +12,24 @@ from django.utils import timezone
 from taskbadger import StatusEnum
 
 from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
-from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
+from apps.evaluations.models import (
+    NON_TERMINAL_RUN_STATUSES,
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationRunStatus,
+    EvaluationRunType,
+)
 from apps.evaluations.tasks import (
     _ensure_taskbadger_task,
     _publish_tick,
     _TickResult,
     coordinate_evaluation_runs,
+    drive_evaluation_run,
     evaluate_message,
     evaluate_message_batch,
+    finalize_evaluation_run,
 )
+from apps.evaluations.tests.coordination import sweep
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -232,7 +241,7 @@ def test_pending_run_with_an_unconfigured_evaluator_fails_before_dispatching(del
     evaluators[0].params |= {"llm_provider_id": None}
     evaluators[0].save(update_fields=["params"])
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.FAILED
@@ -259,7 +268,7 @@ def test_pending_run_with_a_python_evaluator_needs_no_provider(delay_mock, _publ
     )
     run.scoped_messages.add(message)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
@@ -272,7 +281,7 @@ def test_pending_run_with_a_python_evaluator_needs_no_provider(delay_mock, _publ
 def test_sweep_pending_dispatches_first_batch(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
@@ -289,7 +298,7 @@ def test_sweep_dispatch_size_capped(delay_mock, _publish):
     # 40 messages, dispatch caps at BATCHES_PER_TICK*BATCH_SIZE = 30 => 10 batches
     run, evaluators, messages = _make_run(message_count=40, status=EvaluationRunStatus.PENDING)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert len(run.in_flight) == 30
@@ -307,7 +316,7 @@ def test_sweep_dispatches_next_batch_when_current_done(delay_mock, _publish):
     run.save(update_fields=["in_flight", "batch_dispatched_at"])
     _complete_messages(run, evaluators, batch1)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert set(run.in_flight) == {m.id for m in messages[30:]}  # remaining 10
@@ -324,7 +333,7 @@ def test_sweep_completes_when_nothing_remains(delay_mock, _publish):
     run.save(update_fields=["in_flight", "batch_dispatched_at"])
     _complete_messages(run, evaluators, messages)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
@@ -336,10 +345,166 @@ def test_sweep_completes_when_nothing_remains(delay_mock, _publish):
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+def test_completion_survives_a_failing_finalization(delay_mock, _publish):
+    """A crash in the completion side effects must not rewind the run to PROCESSING.
+
+    When the transition shared the tick's transaction, a side effect that died took the
+    COMPLETED status down with it, so the next tick saw the same finished run and re-ran
+    the same failing work every beat interval — the OOM restart loop this guards against.
+    """
+    run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    _complete_messages(run, evaluators, messages)
+
+    run_ids = list(EvaluationRun.objects.filter(status__in=NON_TERMINAL_RUN_STATUSES).values_list("id", flat=True))
+    with patch("apps.evaluations.tasks.compute_aggregates_for_run", side_effect=MemoryError):
+        for run_id in run_ids:
+            drive_evaluation_run(run_id)
+        with pytest.raises(MemoryError):
+            finalize_evaluation_run(run.id)
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED  # terminal, so no later tick picks it up
+    assert not run.aggregates.exists()  # the side effect really did fail
+    assert run.finalized_at is None  # ...and the run does not claim otherwise
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.drive_evaluation_run.delay")
+def test_beat_fans_out_one_tick_per_active_run(delay_mock):
+    """One task per run, so a tick killed mid-flight cannot starve the runs behind it."""
+    active = [_make_run(message_count=1, status=EvaluationRunStatus.PENDING)[0] for _ in range(3)]
+    done, _evaluators, _messages = _make_run(message_count=1, status=EvaluationRunStatus.PROCESSING)
+    done.mark_complete()
+
+    coordinate_evaluation_runs()
+
+    assert {call.args[0] for call in delay_mock.call_args_list} == {run.id for run in active}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("message_count", "clear_evaluators"),
+    [
+        pytest.param(0, False, id="empty-plan"),
+        pytest.param(3, True, id="no-evaluators"),
+    ],
+)
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.delay")
+def test_completion_with_nothing_evaluated_skips_finalization(
+    finalize_mock, _delay, _publish, message_count, clear_evaluators
+):
+    """A run that completes without evaluating anything has nothing to finalize.
+
+    Beyond saving the pointless sweep: `reverse_stale_tags` reads the live config rather
+    than the run's frozen evaluator snapshot, so finalizing the no-evaluators branch would
+    walk the whole dataset with an empty applied-tag map and treat every managed tag as
+    stale.
+    """
+    run, _evaluators, _messages = _make_run(message_count=message_count, status=EvaluationRunStatus.PENDING)
+    if clear_evaluators:
+        run.evaluator_ids = []
+        run.save(update_fields=["evaluator_ids"])
+
+    drive_evaluation_run(run.id)
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    finalize_mock.assert_not_called()
+    # Nothing will finalize it, so it must not read as "aggregates still coming" either.
+    assert run.finalized_at is not None
+    assert not run.is_finalizing
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.delay", side_effect=RuntimeError("broker down"))
+def test_failed_finalize_dispatch_still_publishes_completion(finalize_mock, publish_mock, _delay):
+    """The run is terminal by the time finalization is dispatched, so no later tick would
+    retry the publish. A broker error dispatching it must not strand the UI poller."""
+    run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    _complete_messages(run, evaluators, messages)
+
+    drive_evaluation_run(run.id)  # the dispatch error is logged by its broad handler
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    finalize_mock.assert_called_once_with(run.id)
+    publish_mock.assert_called_once()
+    assert publish_mock.call_args.args[1].terminal == "success"
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.delay")
+def test_run_stays_unfinalized_until_finalization_runs(finalize_mock, _delay, _publish):
+    """The completing tick must leave `finalized_at` unset.
+
+    That tick also publishes the UI stop signal, so the results page reloads before
+    `finalize_evaluation_run` has necessarily run. `finalized_at` is what lets the reloaded
+    page tell "aggregates still coming" apart from "this run produced none", instead of
+    rendering a completed run with a silently empty Aggregates section.
+    """
+    run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    _complete_messages(run, evaluators, messages)
+
+    drive_evaluation_run(run.id)
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    finalize_mock.assert_called_once_with(run.id)
+    assert run.finalized_at is None
+    assert run.is_finalizing
+
+    finalize_evaluation_run(run.id)
+
+    run.refresh_from_db()
+    assert run.aggregates.exists()
+    assert run.finalized_at is not None
+    assert not run.is_finalizing
+
+
+@pytest.mark.django_db()
+def test_finalization_is_a_noop_for_a_deleted_run():
+    finalize_evaluation_run(-1)  # must not raise
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "status",
+    [EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING, EvaluationRunStatus.FAILED],
+)
+def test_finalization_is_a_noop_for_a_run_that_is_not_completed(status):
+    """Only a COMPLETED run has a full result set to aggregate, and the results UI only
+    ever shows a COMPLETED run's aggregates — a stray dispatch must not write partial ones.
+    """
+    run, evaluators, messages = _make_run(message_count=2, status=status)
+    _complete_messages(run, evaluators, messages)
+
+    finalize_evaluation_run(run.id)
+
+    assert not run.aggregates.exists()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
 def test_sweep_empty_plan_completes_immediately(delay_mock, _publish):
     run, evaluators, messages = _make_run(message_count=0, status=EvaluationRunStatus.PENDING)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
@@ -356,7 +521,7 @@ def test_sweep_fresh_batch_in_progress_is_noop(delay_mock, _publish):
     run.save(update_fields=["in_flight", "batch_dispatched_at"])
     # no results yet, batch just dispatched => not done, not stalled
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
@@ -376,7 +541,7 @@ def test_sweep_stalled_redispatches_unfinished(delay_mock, _publish):
     with time_machine.travel(timezone.now() - timedelta(hours=1)):
         _complete_messages(run, evaluators, messages[:2])  # 2 done, 3 unfinished
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert set(run.in_flight) == {m.id for m in messages[2:]}
@@ -398,7 +563,7 @@ def test_sweep_old_batch_with_fresh_results_is_not_stalled(delay_mock, _publish)
     # carry created_at = now (auto_now_add), so the newest-result signal is fresh.
     _complete_messages(run, [evaluators[0]], messages)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
@@ -421,7 +586,7 @@ def test_sweep_counts_partially_evaluated_message_as_remaining(delay_mock, _publ
     _complete_messages(run, evaluators, [fully_done])  # both evaluators done
     _complete_messages(run, [evaluators[0]], [partial])  # only one of the two
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING  # not COMPLETED
@@ -439,7 +604,7 @@ def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
     run.save(update_fields=["in_flight", "batch_dispatched_at", "stall_count"])
     # no results at all => no progress
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.FAILED
@@ -472,7 +637,7 @@ def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _pu
         if run.status == EvaluationRunStatus.COMPLETED:
             break
         with patch("apps.evaluations.tasks.evaluate_message_batch.delay", side_effect=capture):
-            coordinate_evaluation_runs()
+            sweep()
         # a "worker" drains everything dispatched this tick
         pending, dispatched = dispatched, []
         for batch in pending:

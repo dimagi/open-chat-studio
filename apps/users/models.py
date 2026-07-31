@@ -6,7 +6,11 @@ from field_audit import audit_fields
 from field_audit.models import AuditingManager
 
 from apps.ocs_notifications.models import EventUser, LevelChoices, UserNotificationPreferences
-from apps.ocs_notifications.utils import get_user_notification_cache_value, set_user_notification_cache
+from apps.ocs_notifications.utils import (
+    ALL_TEAMS_CACHE_KEY,
+    get_user_notification_cache_value,
+    set_user_notification_cache,
+)
 from apps.teams.models import Team
 from apps.users.model_audit_fields import CUSTOM_USER_FIELDS
 from apps.web.storage_backends import get_public_media_storage
@@ -84,4 +88,23 @@ class CustomUser(AbstractUser):
 
         # This cache gets busted when an error happens or when the user changes preferences
         set_user_notification_cache(self.id, team_slug=team.slug, count=count)
+        return count
+
+    def unread_notifications_count_all_teams(self) -> int:
+        """
+        Get the count of unread notifications for the user across every team they belong to.
+
+        Sums the (individually cached) per-team counts and caches the aggregate, so repeat
+        calls are cheap regardless of how many teams the user belongs to.
+
+        Returns:
+            int: The number of unread notifications for this user across all their teams.
+        """
+        count = get_user_notification_cache_value(self.id, team_slug=ALL_TEAMS_CACHE_KEY)
+        if count is not None:
+            return count
+
+        count = sum(self.unread_notifications_count(team) for team in self.teams.all())
+
+        set_user_notification_cache(self.id, team_slug=ALL_TEAMS_CACHE_KEY, count=count)
         return count

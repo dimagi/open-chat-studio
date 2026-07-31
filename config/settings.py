@@ -733,6 +733,8 @@ if TASKBADGER_API_KEY:
                     "apps.events.tasks.enqueue_timed_out_events",
                     # evaluation coordination manages one Taskbadger task per run itself
                     "apps.evaluations.tasks.coordinate_evaluation_runs",
+                    "apps.evaluations.tasks.drive_evaluation_run",
+                    "apps.evaluations.tasks.finalize_evaluation_run",
                     "apps.evaluations.tasks.evaluate_message_batch",
                 ],
                 record_task_args=True,
