@@ -237,7 +237,7 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
     permission_required = "evaluations.view_evaluationrun"
     model = EvaluationRun
     table_class = EvaluationRunTable
-    template_name = "table/single_table.html"
+    template_name = "evaluations/evaluation_runs_table.html"
 
     def get_queryset(self):
         return (

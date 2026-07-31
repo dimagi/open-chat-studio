@@ -204,8 +204,8 @@ class Command(BaseCommand):
         experiments = self._seed_experiments(user, team, pipelines)
         tags = self._seed_tags(user, team)
         sessions = self._seed_participants_and_sessions(user, team, experiments, tags)
-        self._seed_traces(team, sessions)
-        self._seed_usage_records(team, sessions, llm_provider)
+        traces = self._seed_traces(team, sessions)
+        self._seed_usage_records(team, sessions, llm_provider, traces)
         files = self._seed_files(team)
         self._seed_collection(team, files)
         self._seed_evaluation(team, llm_provider, llm_model)
@@ -346,16 +346,20 @@ class Command(BaseCommand):
         session.chat.add_tag(tag, team=team, added_by=user)
         return session
 
-    def _seed_traces(self, team, sessions: list[ExperimentSession]) -> None:
+    def _seed_traces(self, team, sessions: list[ExperimentSession]) -> dict[int, Trace]:
+        """Seed one trace per session, returned keyed by session id so the usage
+        records can hang off them — the trace detail page reads its token counts
+        from `UsageRecord`, so an unlinked record leaves that card empty."""
         if not sessions:
-            return
+            return {}
         self.stdout.write("")
         self.stdout.write("--- Creating Traces ---")
+        traces = {}
         for session in sessions:
             messages = list(session.chat.messages.order_by("created_at"))
             input_msg = next((m for m in messages if m.message_type == ChatMessageType.HUMAN), None)
             output_msg = next((m for m in messages if m.message_type == ChatMessageType.AI), None)
-            Trace.objects.create(
+            traces[session.id] = Trace.objects.create(
                 team=team,
                 experiment=session.experiment,
                 session=session,
@@ -366,17 +370,20 @@ class Command(BaseCommand):
                 duration=1234,
                 n_turns=1,
                 n_toolcalls=0,
-                n_total_tokens=250,
-                n_prompt_tokens=200,
-                n_completion_tokens=50,
             )
         self.stdout.write(self.style.SUCCESS(f"  Created {len(sessions)} trace(s)"))
+        return traces
 
-    def _seed_usage_records(self, team, sessions: list[ExperimentSession], llm_provider) -> None:
+    def _seed_usage_records(
+        self, team, sessions: list[ExperimentSession], llm_provider, traces: dict[int, Trace]
+    ) -> None:
         """Seed cost-tracking UsageRecords so the dashboard's Cost Tracking panel
         has data: priced spend spread over the last two weeks (for the daily-spend
         chart and per-bot costs), plus a few estimated / unpriced / no-usage rows
         so the confidence split and coverage-gap warnings render.
+
+        The most recent day's rows are attached to the session's trace, which is what
+        the trace detail page's token card reads.
         """
         # Rerun-safe: an already-seeded team yields no new sessions upstream, so
         # rehydrate from the DB rather than skipping usage seeding and the flag.
@@ -386,6 +393,8 @@ class Command(BaseCommand):
             )
         if not sessions:
             return
+        if not traces:
+            traces = {trace.session_id: trace for trace in Trace.objects.filter(team=team)}
         self.stdout.write("")
         self.stdout.write("--- Creating Usage Records ---")
 
@@ -399,24 +408,7 @@ class Command(BaseCommand):
         priced_model = priced_rule.model_name
         now = timezone.now()
 
-        created = 0
-        # Priced, exact spend: each session bills a little every day, with a
-        # per-session multiplier so bots differ in the Bot Performance table.
-        for day in range(_USAGE_DAYS):
-            timestamp = now - timedelta(days=day, hours=3)
-            for idx, session in enumerate(sessions):
-                cost = Decimal("0.02") * (idx + 1) * (1 + day % 3)
-                created += self._create_usage_record(
-                    team,
-                    session,
-                    provider_type,
-                    priced_model,
-                    quantity=400 + 50 * idx,
-                    cost=cost,
-                    confidence=Confidence.EXACT,
-                    pricing_rule=priced_rule,
-                    timestamp=timestamp,
-                )
+        created = self._seed_daily_priced_usage(team, sessions, traces, provider_type, priced_rule, now)
 
         # A couple of estimated rows so the Exact/Estimated split shows.
         for session in sessions[:2]:
@@ -462,8 +454,60 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"  Created {created} usage record(s)"))
         self._enable_cost_tracking_flag(team)
 
+    def _seed_daily_priced_usage(
+        self,
+        team,
+        sessions: list[ExperimentSession],
+        traces: dict[int, Trace],
+        provider_type,
+        priced_rule: PricingRule,
+        now,
+    ) -> int:
+        """Priced, exact spend: each session bills a little every day, with a
+        per-session multiplier so bots differ in the Bot Performance table. Input
+        and output are separate rows, as the recorder writes them. Returns the
+        number of records created.
+        """
+        created = 0
+        for day in range(_USAGE_DAYS):
+            timestamp = now - timedelta(days=day, hours=3)
+            for idx, session in enumerate(sessions):
+                cost = Decimal("0.02") * (idx + 1) * (1 + day % 3)
+                # Only the latest day belongs to the seeded trace — a trace is one request.
+                trace = None if day else traces.get(session.id)
+                for service_kind, quantity, share in (
+                    (ServiceKind.LLM_INPUT, 400 + 50 * idx, Decimal("0.8")),
+                    (ServiceKind.LLM_OUTPUT, 100 + 20 * idx, Decimal("0.2")),
+                ):
+                    created += self._create_usage_record(
+                        team,
+                        session,
+                        provider_type,
+                        priced_rule.model_name,
+                        service_kind=service_kind,
+                        quantity=quantity,
+                        cost=cost * share,
+                        confidence=Confidence.EXACT,
+                        pricing_rule=priced_rule,
+                        timestamp=timestamp,
+                        trace=trace,
+                    )
+        return created
+
     def _create_usage_record(
-        self, team, session, provider_type, model_name, *, quantity, cost, confidence, pricing_rule, timestamp
+        self,
+        team,
+        session,
+        provider_type,
+        model_name,
+        *,
+        quantity,
+        cost,
+        confidence,
+        pricing_rule,
+        timestamp,
+        service_kind=ServiceKind.LLM_INPUT,
+        trace=None,
     ) -> int:
         """Create one UsageRecord and stamp its timestamp (auto_now_add can't be
         set on create). Returns 1 so callers can tally."""
@@ -472,7 +516,8 @@ class Command(BaseCommand):
             experiment=session.experiment,
             session=session,
             participant=session.participant,
-            service_kind=ServiceKind.LLM_INPUT,
+            trace=trace,
+            service_kind=service_kind,
             provider_type=provider_type,
             model_name=model_name,
             quantity=quantity,

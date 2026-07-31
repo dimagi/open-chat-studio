@@ -149,9 +149,6 @@ class OCSTracer(Tracer):
         metrics = self.metrics_collector.get_metrics()
         self.trace_record.n_turns = metrics.n_turns
         self.trace_record.n_toolcalls = metrics.n_toolcalls
-        self.trace_record.n_total_tokens = metrics.n_total_tokens
-        self.trace_record.n_prompt_tokens = metrics.n_prompt_tokens
-        self.trace_record.n_completion_tokens = metrics.n_completion_tokens
 
     def _record_costs(self) -> None:
         """Drain the collector's accumulated usage into UsageRecord rows.
