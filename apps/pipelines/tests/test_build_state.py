@@ -1,15 +1,9 @@
-"""Tests for the pipeline build-state helpers: the normalized three-bucket errors report,
-``pipeline_valid``, the advisory ``unwired_handles`` map, and the stranded-router-edge guard."""
+"""Tests for the pipeline build-state helpers: the three-bucket errors report, ``pipeline_valid``,
+the advisory ``unwired_handles`` map, and the stranded-router-edge guard."""
 
 import pytest
 
-from apps.pipelines.build_state import (
-    node_output_handles,
-    normalize_errors,
-    pipeline_build_state,
-    unwired_handles,
-)
-from apps.pipelines.exceptions import PipelineBuildError
+from apps.pipelines.build_state import node_output_handles, pipeline_build_state, unwired_handles
 from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import (
     create_pipeline_model,
@@ -18,44 +12,6 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
-
-
-class TestNormalizeErrors:
-    """Every partial shape ``Pipeline.validate()`` can return folds into the three-bucket report."""
-
-    @pytest.mark.parametrize(
-        ("raw", "expected"),
-        [
-            pytest.param({}, {"node": {}, "edge": [], "pipeline": None}, id="empty-report"),
-            pytest.param(None, {"node": {}, "edge": [], "pipeline": None}, id="none-report"),
-            pytest.param(
-                {"node": {"llm-1": {"llm_provider_id": "This field is required."}}},
-                {
-                    "node": {"llm-1": {"llm_provider_id": "This field is required."}},
-                    "edge": [],
-                    "pipeline": None,
-                },
-                id="node-errors",
-            ),
-            pytest.param(
-                PipelineBuildError("boom", node_id="n1").to_json(),
-                {"node": {"n1": {"root": "boom"}}, "edge": [], "pipeline": None},
-                id="build-error-with-node-id-keeps-root-sentinel-and-null-edge",
-            ),
-            pytest.param(
-                PipelineBuildError("A cycle was detected").to_json(),
-                {"node": {}, "edge": [], "pipeline": "A cycle was detected"},
-                id="build-error-graph-level",
-            ),
-            pytest.param(
-                PipelineBuildError("stranded", edge_ids=["edge-1", "edge-2"]).to_json(),
-                {"node": {}, "edge": ["edge-1", "edge-2"], "pipeline": "stranded"},
-                id="build-error-with-edge-ids",
-            ),
-        ],
-    )
-    def test_normalize(self, raw, expected):
-        assert normalize_errors(raw) == expected
 
 
 class TestNodeOutputHandles:
@@ -133,7 +89,7 @@ class TestPipelineBuildState:
 
         assert state == {
             "pipeline_valid": True,
-            "errors": {"node": {}, "edge": [], "pipeline": None},
+            "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {},
         }
 
@@ -151,7 +107,7 @@ class TestPipelineBuildState:
 
         assert state == {
             "pipeline_valid": True,
-            "errors": {"node": {}, "edge": [], "pipeline": None},
+            "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {router["id"]: [{"handle": "output_1", "label": "B"}]},
         }
 
@@ -164,7 +120,7 @@ class TestPipelineBuildState:
 
         assert state == {
             "pipeline_valid": True,
-            "errors": {"node": {}, "edge": [], "pipeline": None},
+            "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {
                 island["id"]: [{"handle": "input", "label": None}, {"handle": "output", "label": None}]
             },
@@ -200,7 +156,7 @@ class TestPipelineBuildState:
                     }
                 },
                 "edge": [],
-                "pipeline": None,
+                "pipeline": [],
             },
             "unwired_handles": {},
         }
@@ -232,12 +188,14 @@ class TestPipelineBuildState:
             "errors": {
                 "node": {"llm-1": {"root": "LLM provider model with id 999999 does not exist"}},
                 "edge": [],
-                "pipeline": None,
+                "pipeline": [],
             },
             "unwired_handles": {},
         }
 
     def test_unknown_node_type_reports_node_error_instead_of_raising(self):
+        """The unknown type is a node error; with no edges at all the End node is also unreachable.
+        Both are reported together — a broken node no longer hides the graph's own problems."""
         start, end = start_node(), end_node()
         ghost = {"id": "ghost-1", "type": "GhostNode", "params": {"name": "ghost"}}
         pipeline = create_pipeline_model([start, ghost, end], edges=[])
@@ -247,9 +205,12 @@ class TestPipelineBuildState:
         assert state == {
             "pipeline_valid": False,
             "errors": {
-                "node": {"ghost-1": {"root": "Unknown node type: GhostNode"}},
+                "node": {
+                    "ghost-1": {"root": "Unknown node type: GhostNode"},
+                    end["id"]: {"root": "End node is not reachable from Start node"},
+                },
                 "edge": [],
-                "pipeline": None,
+                "pipeline": [],
             },
             "unwired_handles": {
                 start["id"]: [{"handle": "output", "label": None}],
@@ -279,7 +240,7 @@ class TestPipelineBuildState:
             "errors": {
                 "node": {},
                 "edge": ["e-router-end"],
-                "pipeline": "One or more edges reference a router output that no longer exists",
+                "pipeline": ["One or more edges reference a router output that no longer exists"],
             },
             "unwired_handles": {router["id"]: [{"handle": "output_0", "label": "A"}]},
         }
@@ -309,7 +270,7 @@ class TestPipelineBuildState:
 
         assert state == {
             "pipeline_valid": True,
-            "errors": {"node": {}, "edge": [], "pipeline": None},
+            "errors": {"node": {}, "edge": [], "pipeline": []},
             "unwired_handles": {
                 island_router["id"]: [
                     {"handle": "input", "label": None},
@@ -318,6 +279,50 @@ class TestPipelineBuildState:
                 island_target["id"]: [{"handle": "output", "label": None}],
             },
         }
+
+    def test_node_and_graph_errors_are_reported_together(self):
+        """A bad node param no longer hides the graph's own problems: the missing provider id and
+        the missing Start node arrive in the same report, so the client sees both in one read."""
+        end = end_node()
+        llm = {"id": "llm-1", "type": "LLMResponseWithPrompt", "params": {"name": "llm-1"}}
+        edges = [{"id": "e-llm-end", "source": llm["id"], "target": end["id"]}]
+        pipeline = create_pipeline_model([llm, end], edges)
+
+        state = pipeline_build_state(pipeline)
+
+        assert state["pipeline_valid"] is False
+        assert "llm_provider_id" in state["errors"]["node"]["llm-1"]
+        assert state["errors"]["pipeline"] == ["There should be exactly 1 Start node"]
+
+    def test_every_graph_level_error_is_reported_not_just_the_first(self):
+        """Independent structural checks accumulate rather than short-circuiting."""
+        plain = passthrough_node(name="plain")
+        pipeline = create_pipeline_model([plain], edges=[])
+
+        state = pipeline_build_state(pipeline)
+
+        assert state["errors"]["pipeline"] == [
+            "There should be exactly 1 Start node",
+            "There should be exactly 1 End node",
+        ]
+
+    def test_invalid_router_does_not_have_its_edges_called_stranded(self):
+        """A router whose params don't validate can't report its branches, so its handles are
+        unknown — not empty. Its edges must not be reported stranded on the strength of that."""
+        start, end = start_node(), end_node()
+        router = state_key_router_node("k", ["A", "B"], name="router")
+        del router["params"]["route_key"]  # required, so the node no longer validates
+        edges = [
+            {"id": "e-start-router", "source": start["id"], "target": router["id"]},
+            {"id": "e-router-end", "source": router["id"], "target": end["id"], "sourceHandle": "output_0"},
+        ]
+        pipeline = create_pipeline_model([start, router, end], edges)
+
+        state = pipeline_build_state(pipeline)
+
+        assert state["pipeline_valid"] is False
+        assert "route_key" in state["errors"]["node"][router["id"]]
+        assert state["errors"]["edge"] == []
 
     def test_unreachable_end_is_an_error_but_still_reports_unwired_map(self):
         # The build raises this one with the End node's id, so it normalizes into the node bucket
@@ -333,7 +338,7 @@ class TestPipelineBuildState:
             "errors": {
                 "node": {end["id"]: {"root": "End node is not reachable from Start node"}},
                 "edge": [],
-                "pipeline": None,
+                "pipeline": [],
             },
             "unwired_handles": {
                 island["id"]: [{"handle": "output", "label": None}],

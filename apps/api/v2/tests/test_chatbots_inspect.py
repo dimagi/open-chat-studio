@@ -416,7 +416,7 @@ def test_build_state_valid_and_fully_wired():
     experiment = _build_state_bot()  # default pipeline: start -> end, fully wired
     payload = _client(experiment).get(_inspect_url(experiment)).json()
     assert payload["pipeline_valid"] is True
-    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": None}
+    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": []}
     assert payload["unwired_handles"] == {}
 
 
@@ -451,7 +451,7 @@ def test_build_state_present_on_version_reads():
     payload = _client(experiment).get(f"{url}?version={version.version_number}").json()
 
     assert payload["pipeline_valid"] is True
-    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": None}
+    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": []}
     assert payload["unwired_handles"] == {}
 
 
@@ -842,7 +842,12 @@ def _expected_full_response(bot):
         # The pipeline has no Start/End nodes, so it is reported invalid (a graph-level error), and
         # the unwired sides of its two nodes land in the advisory map. Neither blocked the read.
         "pipeline_valid": False,
-        "errors": {"node": {}, "edge": [], "pipeline": "There should be exactly 1 Start node"},
+        "errors": {
+            "node": {},
+            "edge": [],
+            # Both terminals are missing and both are reported; neither hides the other.
+            "pipeline": ["There should be exactly 1 Start node", "There should be exactly 1 End node"],
+        },
         "unwired_handles": {
             "llm": [{"handle": "input", "label": None}],
             "assist": [{"handle": "output", "label": None}],

@@ -725,8 +725,7 @@ components:
         pipeline_valid:
           type: boolean
           readOnly: true
-          description: Whether this chatbot's pipeline validates cleanly (all three
-            ``errors`` buckets empty). Unwired handles never affect it.
+          description: Whether this chatbot's pipeline validates cleanly
         errors:
           allOf:
           - $ref: '#/components/schemas/PipelineBuildErrors'
@@ -1707,9 +1706,11 @@ components:
           description: Ids of edges stranded on a handle their source node no longer
             offers.
         pipeline:
-          type: string
-          nullable: true
-          description: A single graph-level error message, or null.
+          type: array
+          items:
+            type: string
+          description: Graph-level error messages that name no single node or edge
+            (e.g. 'A cycle was detected').
       required:
       - edge
       - node

@@ -1,12 +1,9 @@
-"""Build-state reporting for a pipeline: the normalized errors report and the advisory
-unwired-handles map.
+"""Build-state reporting for a pipeline: the errors report and the advisory unwired-handles map.
 
-``Pipeline.validate()`` returns partial shapes — ``{}``, ``{"node": {...}}``, or a
-``PipelineBuildError.to_json()`` graph error whose ``edge`` may be null and whose node errors use
-the ``"root"`` field sentinel. :func:`normalize_errors` folds all of them into one always-present
-three-bucket report::
+``Pipeline.validate()`` returns a complete :class:`~apps.pipelines.exceptions.ErrorReport`, which
+this passes through unchanged::
 
-    {"node": {<node_id>: {<field>: <message>}}, "edge": [<edge_id>], "pipeline": <message or None>}
+    {"node": {<node_id>: {<field>: <message>}}, "edge": [<edge_id>], "pipeline": [<message>]}
 
 ``pipeline_valid`` is exactly "all three buckets empty" — nothing more.
 
@@ -18,7 +15,7 @@ never blocks anything.
 import pydantic
 
 from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
-from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.exceptions import PipelineNodeBuildError, has_errors
 from apps.pipelines.flow import Flow
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes import nodes as pipeline_nodes
@@ -27,22 +24,12 @@ from apps.pipelines.nodes.nodes import EndNode, StartNode
 
 
 def pipeline_build_state(pipeline: Pipeline) -> dict:
-    """``pipeline_valid`` + normalized ``errors`` + advisory ``unwired_handles`` for a pipeline."""
-    errors = normalize_errors(pipeline.validate())
+    """``pipeline_valid`` + ``errors`` + advisory ``unwired_handles`` for a pipeline."""
+    errors = pipeline.validate()
     return {
-        "pipeline_valid": not (errors["node"] or errors["edge"] or errors["pipeline"]),
+        "pipeline_valid": not has_errors(errors),
         "errors": errors,
         "unwired_handles": unwired_handles(pipeline),
-    }
-
-
-def normalize_errors(raw: dict | None) -> dict:
-    """Normalize a ``Pipeline.validate()`` result into the three-bucket errors report."""
-    raw = raw or {}
-    return {
-        "node": {node_id: dict(fields) for node_id, fields in (raw.get("node") or {}).items()},
-        "edge": list(raw.get("edge") or []),
-        "pipeline": raw.get("pipeline"),
     }
 
 

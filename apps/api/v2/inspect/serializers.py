@@ -742,7 +742,10 @@ class PipelineBuildErrorsSerializer(serializers.Serializer):
         child=serializers.CharField(),
         help_text="Ids of edges stranded on a handle their source node no longer offers.",
     )
-    pipeline = serializers.CharField(allow_null=True, help_text="A single graph-level error message, or null.")
+    pipeline = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Graph-level error messages that name no single node or edge (e.g. 'A cycle was detected').",
+    )
 
 
 class ChatbotInspectSerializer(serializers.ModelSerializer):
@@ -771,12 +774,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     voice = serializers.SerializerMethodField()
     channels = serializers.SerializerMethodField()
     pipeline = InspectPipelineSerializer(read_only=True)
-    pipeline_valid = serializers.SerializerMethodField(
-        help_text=(
-            "Whether this chatbot's pipeline validates cleanly (all three ``errors`` buckets empty). "
-            "Unwired handles never affect it."
-        )
-    )
+    pipeline_valid = serializers.SerializerMethodField(help_text=("Whether this chatbot's pipeline validates cleanly"))
     errors = serializers.SerializerMethodField()
     unwired_handles = serializers.SerializerMethodField()
     events = InspectEventsSerializer(source="*")
