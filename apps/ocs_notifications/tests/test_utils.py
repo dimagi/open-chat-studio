@@ -3,24 +3,30 @@ from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.models import Group
+from django.core.cache import cache
 from django.utils import timezone
 from time_machine import travel
 
 from apps.ocs_notifications.models import EventType, EventUser, LevelChoices, UserNotificationPreferences
 from apps.ocs_notifications.utils import (
+    ALL_TEAMS_CACHE_KEY,
+    CACHE_KEY_FORMAT,
     DurationTimeDelta,
+    bust_unread_notification_cache,
     create_identifier,
     create_notification,
     get_users_to_be_notified,
     is_notification_muted,
     mute_notification,
     send_notification_email_async,
+    set_user_notification_cache,
     should_send_email,
     toggle_notification_read,
 )
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.notifications import EventTypeFactory, EventUserFactory, NotificationEventFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.user import UserFactory
 
 
 @pytest.mark.django_db()
@@ -359,3 +365,17 @@ class TestNotificationMuting:
                 is_notification_muted(EventUser.objects.get(user=user, team=team_with_users, event_type=event_type))
                 is True
             )
+
+
+@pytest.mark.django_db()
+class TestBustUnreadNotificationCache:
+    def test_busts_both_the_team_specific_and_all_teams_cache(self):
+        user = UserFactory.create()
+        team_slug = "some-team"
+        set_user_notification_cache(user.id, team_slug=team_slug, count=3)
+        set_user_notification_cache(user.id, team_slug=ALL_TEAMS_CACHE_KEY, count=7)
+
+        bust_unread_notification_cache(user.id, team_slug=team_slug)
+
+        assert cache.get(CACHE_KEY_FORMAT.format(user_id=user.id, team_slug=team_slug)) is None
+        assert cache.get(CACHE_KEY_FORMAT.format(user_id=user.id, team_slug=ALL_TEAMS_CACHE_KEY)) is None
