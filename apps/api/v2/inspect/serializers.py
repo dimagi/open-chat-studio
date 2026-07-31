@@ -775,7 +775,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     channels = serializers.SerializerMethodField()
     pipeline = InspectPipelineSerializer(read_only=True)
     pipeline_valid = serializers.SerializerMethodField(help_text=("Whether this chatbot's pipeline validates cleanly"))
-    errors = serializers.SerializerMethodField()
+    pipeline_errors = serializers.SerializerMethodField()
     unwired_handles = serializers.SerializerMethodField()
     events = InspectEventsSerializer(source="*")
 
@@ -797,7 +797,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "channels",
             "pipeline",
             "pipeline_valid",
-            "errors",
+            "pipeline_errors",
             "unwired_handles",
             "events",
         ]
@@ -825,7 +825,7 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
         return self._build_state(experiment)["pipeline_valid"]
 
     @extend_schema_field(PipelineBuildErrorsSerializer())
-    def get_errors(self, experiment) -> dict:
+    def get_pipeline_errors(self, experiment) -> dict:
         return self._build_state(experiment)["errors"]
 
     @extend_schema_field(

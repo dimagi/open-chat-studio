@@ -416,7 +416,7 @@ def test_build_state_valid_and_fully_wired():
     experiment = _build_state_bot()  # default pipeline: start -> end, fully wired
     payload = _client(experiment).get(_inspect_url(experiment)).json()
     assert payload["pipeline_valid"] is True
-    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": []}
+    assert payload["pipeline_errors"] == {"node": {}, "edge": [], "pipeline": []}
     assert payload["unwired_handles"] == {}
 
 
@@ -436,7 +436,7 @@ def test_build_state_reports_node_errors_and_unwired_handles_together():
     payload = _client(experiment).get(_inspect_url(experiment)).json()
 
     assert payload["pipeline_valid"] is False
-    assert "llm_provider_id" in payload["errors"]["node"]["island-1"]
+    assert "llm_provider_id" in payload["pipeline_errors"]["node"]["island-1"]
     assert payload["unwired_handles"] == {
         "island-1": [{"handle": "input", "label": None}, {"handle": "output", "label": None}]
     }
@@ -451,7 +451,7 @@ def test_build_state_present_on_version_reads():
     payload = _client(experiment).get(f"{url}?version={version.version_number}").json()
 
     assert payload["pipeline_valid"] is True
-    assert payload["errors"] == {"node": {}, "edge": [], "pipeline": []}
+    assert payload["pipeline_errors"] == {"node": {}, "edge": [], "pipeline": []}
     assert payload["unwired_handles"] == {}
 
 
@@ -842,7 +842,7 @@ def _expected_full_response(bot):
         # The pipeline has no Start/End nodes, so it is reported invalid (a graph-level error), and
         # the unwired sides of its two nodes land in the advisory map. Neither blocked the read.
         "pipeline_valid": False,
-        "errors": {
+        "pipeline_errors": {
             "node": {},
             "edge": [],
             # Both terminals are missing and both are reported; neither hides the other.

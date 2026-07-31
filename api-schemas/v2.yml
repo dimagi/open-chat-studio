@@ -726,7 +726,7 @@ components:
           type: boolean
           readOnly: true
           description: Whether this chatbot's pipeline validates cleanly
-        errors:
+        pipeline_errors:
           allOf:
           - $ref: '#/components/schemas/PipelineBuildErrors'
           readOnly: true
@@ -745,13 +745,13 @@ components:
       required:
       - channels
       - consent_form
-      - errors
       - events
       - id
       - is_published_version
       - is_unreleased
       - name
       - pipeline
+      - pipeline_errors
       - pipeline_valid
       - settings
       - team_slug
