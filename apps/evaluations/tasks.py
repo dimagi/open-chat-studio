@@ -447,10 +447,14 @@ def _drive_run(run_id: int) -> None:
     with current_team(run.team):
         for batch in result.batches:
             evaluate_message_batch.delay(run.id, batch)
-        if result.terminal == "success":
-            finalize_evaluation_run.delay(run.id)
         _ensure_taskbadger_task(run, result.total)
         _publish_tick(run, result)
+        # Dispatched last on purpose. The run is terminal by now, so no later tick repeats
+        # this block — a broker error here would otherwise cost the run its completion
+        # signal (stopping the UI poll) as well as its aggregates. `done == 0` means there
+        # is nothing to aggregate and no applied tags to reverse against.
+        if result.terminal == "success" and result.done > 0:
+            finalize_evaluation_run.delay(run.id)
 
 
 @shared_task(ignore_result=True)
@@ -466,6 +470,11 @@ def finalize_evaluation_run(run_id: int) -> None:
     run = EvaluationRun.objects.filter(id=run_id).select_related("team", "config__dataset").first()
     if run is None:
         logger.info("Evaluation run %s gone before finalization; nothing to do", run_id)
+        return
+    if run.status != EvaluationRunStatus.COMPLETED:
+        # Only reachable via a dispatch `_drive_run` should never have made: aggregates over a
+        # partial result set would be wrong, and stale-tag reversal would read them as final.
+        logger.warning("Evaluation run %s is %s, not completed; skipping finalization", run_id, run.status)
         return
     with current_team(run.team):
         compute_aggregates_for_run(run)
