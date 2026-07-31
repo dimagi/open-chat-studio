@@ -227,7 +227,20 @@ class Collection(BaseTeamModel, VersionsMixin):
             models.UniqueConstraint(
                 fields=["team", "name", "version_number", "working_version_id"],
                 name="unique_collection_version_per_team",
-            )
+            ),
+            # The hybrid search knobs are deliberately absent from every form, so `full_clean()`
+            # never runs and their field validators never fire. The database is therefore the only
+            # place a bad value can actually be stopped. An out-of-range weight would hand the
+            # lexical ranking a negative weight, silently penalising the chunks it matched.
+            models.CheckConstraint(
+                condition=models.Q(search_dense_weight__isnull=True)
+                | models.Q(search_dense_weight__gte=0, search_dense_weight__lte=1),
+                name="collection_search_dense_weight_between_0_and_1",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(search_fetch_k__isnull=True) | models.Q(search_fetch_k__gte=1),
+                name="collection_search_fetch_k_at_least_1",
+            ),
         ]
 
     def __str__(self) -> str:

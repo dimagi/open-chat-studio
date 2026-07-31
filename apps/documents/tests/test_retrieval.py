@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from waffle.testutils import override_flag
 
 from apps.documents.models import CollectionFile, FileStatus
@@ -275,3 +276,46 @@ class TestSearchCollection:
         collection = CollectionFactory.create()
         assert collection.search_dense_weight_or_default == settings.DOCUMENT_SEARCH_DENSE_WEIGHT
         assert collection.search_fetch_k_or_default == settings.DOCUMENT_SEARCH_FETCH_K
+
+
+@pytest.mark.django_db()
+class TestHybridSearchOverrideConstraints:
+    """The knobs are absent from every form, so `full_clean()` never runs and the field
+    validators never fire. These constraints are the only thing actually stopping a bad value,
+    so they are asserted against the database rather than through a form.
+    """
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            pytest.param("search_dense_weight", -0.1, id="weight-below-zero"),
+            pytest.param("search_dense_weight", 1.1, id="weight-above-one"),
+            pytest.param("search_fetch_k", 0, id="fetch-k-zero"),
+        ],
+    )
+    def test_out_of_range_values_are_rejected(self, field, value):
+        collection = CollectionFactory.create()
+        setattr(collection, field, value)
+        # `save()` deliberately skips `full_clean()`, so this reaches the database the same way
+        # application code would. The write is wrapped in a nested atomic() so the aborted
+        # transaction rolls back to a savepoint and the surrounding test transaction stays usable.
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                collection.save()
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            pytest.param("search_dense_weight", 0.0, id="weight-zero"),
+            pytest.param("search_dense_weight", 1.0, id="weight-one"),
+            pytest.param("search_dense_weight", None, id="weight-null-uses-default"),
+            pytest.param("search_fetch_k", 1, id="fetch-k-one"),
+            pytest.param("search_fetch_k", None, id="fetch-k-null-uses-default"),
+        ],
+    )
+    def test_valid_boundary_values_are_accepted(self, field, value):
+        collection = CollectionFactory.create()
+        setattr(collection, field, value)
+        collection.save()
+        collection.refresh_from_db()
+        assert getattr(collection, field) == value
