@@ -139,48 +139,45 @@ def format_multimodal_input(
     if stripped:
         parts.append({"type": "text", "text": stripped})
     for att in attachments:
-        if att.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-            raise ValueError(f"File {att.name} exceeds maximum size")
-
-        mime_type = att.content_type or ""
-        if mime_type.startswith("image/"):
-            if mime_type not in supported_image_content_types:
-                raise UserReportableError(
-                    f"The image `{att.name}` is not a supported image type. "
-                    f"Supported types: {image_type_names(supported_image_content_types)}."
-                )
-            parts.append(
-                {
-                    "type": "image",
-                    "source_type": "url",
-                    "url": att.download_link,
-                    "mime_type": mime_type,
-                }
-            )
-        elif mime_type == "application/pdf":
-            parts.append(
-                {
-                    "type": "file",
-                    "source_type": "base64",
-                    "data": att.read_base64(),
-                    "mime_type": mime_type,
-                    "filename": att.name,
-                }
-            )
-        else:
-            # Attempt to convert other doc types to text since LLM APIs
-            # do not natively support these formats
-            text_content = _convert_attachment_to_text(att)
-            if text_content:
-                parts.append(
-                    {
-                        "type": "text",
-                        "text": f'<document filename="{att.name}">\n{text_content}\n</document>',
-                    }
-                )
+        block = _attachment_content_block(att, supported_image_content_types)
+        if block:
+            parts.append(block)
     if not parts:
         parts.append({"type": "text", "text": "[empty message]"})
     return HumanMessage(content=parts)
+
+
+def _attachment_content_block(att, supported_image_content_types: frozenset[str]) -> dict | None:
+    if att.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise ValueError(f"File {att.name} exceeds maximum size")
+
+    content_type = att.content_type or ""
+    if content_type.startswith("image/"):
+        if content_type not in supported_image_content_types:
+            raise UserReportableError(
+                f"The image `{att.name}` is not a supported image type. "
+                f"Supported types: {image_type_names(supported_image_content_types)}."
+            )
+        return {
+            "type": "image",
+            "source_type": "url",
+            "url": att.download_link,
+            "mime_type": content_type,
+        }
+    if content_type == "application/pdf":
+        return {
+            "type": "file",
+            "source_type": "base64",
+            "data": att.read_base64(),
+            "mime_type": content_type,
+            "filename": att.name,
+        }
+    # Attempt to convert other doc types to text since LLM APIs
+    # do not natively support these formats
+    text_content = _convert_attachment_to_text(att)
+    if text_content:
+        return {"type": "text", "text": f'<document filename="{att.name}">\n{text_content}\n</document>'}
+    return None
 
 
 # OpenAI error codes indicating the model rejected an attached image.
