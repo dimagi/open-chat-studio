@@ -70,7 +70,10 @@ def validate_file_upload(file):
     # Image formats no LLM provider accepts are rejected regardless of the
     # claimed content type; content sniffing below is best-effort only.
     if file_ext in DENIED_IMAGE_EXTENSIONS:
-        return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
+        return False, (
+            f"The image `{file.name}` is not a supported image type. "
+            f"Supported types: {image_type_names(ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES)}."
+        )
     mime_type = file.content_type or ""
     content_type = mime_type.split("/")[0]
     # All text files are allowed

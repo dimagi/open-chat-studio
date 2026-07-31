@@ -168,7 +168,8 @@ class TestFileValidationAPI:
         response = api_client.post(url, {"files": test_file}, format="multipart")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "'.bmp' is not supported" in response.json()["error"]
+        assert "`image.bmp`" in response.json()["error"]
+        assert "GIF, HEIC, HEIF, JPEG, PNG, WEBP" in response.json()["error"]
 
     @pytest.mark.parametrize(
         "ext",
@@ -185,7 +186,8 @@ class TestFileValidationAPI:
         response = api_client.post(url, {"files": test_file}, format="multipart")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert f"'{ext}' is not supported" in response.json()["error"]
+        assert f"`image{ext}`" in response.json()["error"]
+        assert "GIF, HEIC, HEIF, JPEG, PNG, WEBP" in response.json()["error"]
 
     def test_unsupported_image_disguised_with_allowed_extension_rejected(self, api_client, session):
         """A mismatched file (SVG bytes named .jpg) is caught by content sniffing."""
