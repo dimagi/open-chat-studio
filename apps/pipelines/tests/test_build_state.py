@@ -220,6 +220,29 @@ class TestPipelineBuildState:
             },
         }
 
+    def test_removed_node_type_with_a_named_handle_edge_does_not_raise(self):
+        """A removed node type can't report its branches, so a named handle on it is unknowable
+        rather than stranded. Reaching its output map must not raise on the missing node class."""
+        start, end = start_node(), end_node()
+        ghost = {"id": "ghost-1", "type": "GhostNode", "params": {"name": "ghost"}}
+        edges = [
+            {"id": "e-start-ghost", "source": start["id"], "target": ghost["id"]},
+            {"id": "e-ghost-end", "source": ghost["id"], "target": end["id"], "sourceHandle": "output_0"},
+        ]
+        pipeline = create_pipeline_model([start, ghost, end], edges)
+
+        state = pipeline_build_state(pipeline)
+
+        assert state == {
+            "pipeline_valid": False,
+            "errors": {
+                "node": {"ghost-1": {"root": "Unknown node type: GhostNode"}},
+                "edge": [],
+                "pipeline": [],
+            },
+            "unwired_handles": {},
+        }
+
     def test_stranded_router_edge_lands_in_edge_bucket_without_raising(self):
         """Removing a router keyword strands the edge wired to its handle: the build must report
         the edge id in errors.edge (not raise a KeyError) and flip pipeline_valid."""
