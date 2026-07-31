@@ -368,7 +368,7 @@ def _fail_run_for_unconfigured_evaluators(run: EvaluationRun, names: list[str]) 
     )
 
 
-def _complete_run(run: EvaluationRun) -> None:
+def _complete_run(run: EvaluationRun, *, nothing_to_finalize: bool = False) -> None:
     """Flip the run to COMPLETED. The completion side effects run after the tick commits.
 
     Only the status transition belongs under the coordination lock. Aggregates and tag
@@ -377,8 +377,14 @@ def _complete_run(run: EvaluationRun) -> None:
     part-way through rolled the run back to PROCESSING. The next tick then saw the same
     finished run and re-ran the same doomed sweep, once per beat interval, forever.
     `finalize_evaluation_run` carries them instead (dispatched from `_drive_run`).
+
+    `nothing_to_finalize` marks the run finalized in the same write: no finalization is
+    dispatched for it, so the results page must not sit waiting for one.
     """
-    run.mark_complete()
+    run.mark_complete(save=False)
+    if nothing_to_finalize:
+        run.finalized_at = run.finished_at
+    run.save(update_fields=["finished_at", "status", "finalized_at"])
 
 
 def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
@@ -393,7 +399,7 @@ def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
     evaluator_ids = run.evaluator_ids or []
 
     if total == 0 or not evaluator_ids:
-        _complete_run(run)
+        _complete_run(run, nothing_to_finalize=True)
         return _TickResult(batches=[], done=0, total=total, terminal="success")
 
     # First tick only, to keep the steady-state tick free of this query. A provider deleted
@@ -479,6 +485,10 @@ def finalize_evaluation_run(run_id: int) -> None:
     with current_team(run.team):
         compute_aggregates_for_run(run)
         reverse_stale_tags(run)
+    # Stamped last: until it is set, the results page treats missing aggregates as "still
+    # coming" rather than as this run having none (see `EvaluationRun.is_finalizing`).
+    run.finalized_at = timezone.now()
+    run.save(update_fields=["finalized_at"])
 
 
 @shared_task(ignore_result=True)

@@ -368,6 +368,7 @@ def test_completion_survives_a_failing_finalization(delay_mock, _publish):
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED  # terminal, so no later tick picks it up
     assert not run.aggregates.exists()  # the side effect really did fail
+    assert run.finalized_at is None  # ...and the run does not claim otherwise
 
 
 @pytest.mark.django_db()
@@ -414,6 +415,9 @@ def test_completion_with_nothing_evaluated_skips_finalization(
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
     finalize_mock.assert_not_called()
+    # Nothing will finalize it, so it must not read as "aggregates still coming" either.
+    assert run.finalized_at is not None
+    assert not run.is_finalizing
 
 
 @pytest.mark.django_db()
@@ -436,6 +440,40 @@ def test_failed_finalize_dispatch_still_publishes_completion(finalize_mock, publ
     finalize_mock.assert_called_once_with(run.id)
     publish_mock.assert_called_once()
     assert publish_mock.call_args.args[1].terminal == "success"
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.delay")
+def test_run_stays_unfinalized_until_finalization_runs(finalize_mock, _delay, _publish):
+    """The completing tick must leave `finalized_at` unset.
+
+    That tick also publishes the UI stop signal, so the results page reloads before
+    `finalize_evaluation_run` has necessarily run. `finalized_at` is what lets the reloaded
+    page tell "aggregates still coming" apart from "this run produced none", instead of
+    rendering a completed run with a silently empty Aggregates section.
+    """
+    run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
+    run.in_flight = [m.id for m in messages]
+    run.batch_dispatched_at = timezone.now()
+    run.save(update_fields=["in_flight", "batch_dispatched_at"])
+    _complete_messages(run, evaluators, messages)
+
+    drive_evaluation_run(run.id)
+
+    run.refresh_from_db()
+    assert run.status == EvaluationRunStatus.COMPLETED
+    finalize_mock.assert_called_once_with(run.id)
+    assert run.finalized_at is None
+    assert run.is_finalizing
+
+    finalize_evaluation_run(run.id)
+
+    run.refresh_from_db()
+    assert run.aggregates.exists()
+    assert run.finalized_at is not None
+    assert not run.is_finalizing
 
 
 @pytest.mark.django_db()
