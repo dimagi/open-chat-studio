@@ -57,7 +57,6 @@ team_urlpatterns = [
     path("evaluations/", include("apps.evaluations.urls")),
     path("traces/", include("apps.trace.urls")),
     path("filters/", include("apps.filters.urls")),
-    path("notifications/", include("apps.ocs_notifications.urls")),
     path("human-annotations/", include("apps.human_annotations.urls")),
 ]
 urlpatterns = [
@@ -76,6 +75,7 @@ urlpatterns = [
         name="django.contrib.sitemaps.views.sitemap",
     ),
     path("a/<slug:team_slug>/", include(team_urlpatterns)),
+    path("notifications/", include("apps.ocs_notifications.urls")),
     path("", include("apps.sso.urls")),  # must be before allauth urls since it uses the same paths
     path("accounts/", include("allauth.urls")),  # MFA URLs included automatically
     path("users/", include("apps.users.urls")),

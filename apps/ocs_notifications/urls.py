@@ -33,11 +33,6 @@ urlpatterns = [
         name="unmute_notification",
     ),
     path(
-        "toggle-do-not-disturb/",
-        views.ToggleDoNotDisturbView.as_view(),
-        name="toggle_do_not_disturb",
-    ),
-    path(
         "mark-all-read/",
         views.MarkAllNotificationsReadView.as_view(),
         name="mark_all_notifications_read",
