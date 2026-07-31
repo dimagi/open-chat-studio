@@ -297,10 +297,13 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
 
 def _aggregates_context(evaluation_run: EvaluationRun, team_slug: str) -> dict[str, Any]:
     """Context for the aggregates partial, shared by the results page and its poll endpoint."""
-    aggregates = evaluation_run.aggregates.select_related("evaluator").all()
+    aggregates = filter_aggregates_for_display(evaluation_run.aggregates.select_related("evaluator").all())
     return {
-        "aggregates": filter_aggregates_for_display(aggregates),
-        "finalizing": evaluation_run.is_finalizing,
+        "aggregates": aggregates,
+        # What the run has beats what the marker claims. A finalization that computed the aggregates
+        # but died before stamping `finalized_at`, or an old-code worker mid-deploy that never stamps
+        # it at all, would otherwise hide real results behind the spinner for the whole grace window.
+        "finalizing": evaluation_run.is_finalizing and not aggregates,
         "aggregates_url": reverse(
             "evaluations:evaluation_run_aggregates",
             args=[team_slug, evaluation_run.config_id, evaluation_run.id],

@@ -3,7 +3,8 @@
 A run's completion side effects run as their own task after the status commits (ADR-0047),
 so the page can load — and does, because the completing tick publishes the poller's stop
 signal — before the aggregates exist. `finalized_at` is what separates "still coming" from
-"this run produced none", and the aggregates block polls itself until it is set.
+"this run produced none", and the aggregates block polls itself until it is set — or until the
+aggregates themselves show up, whichever comes first.
 """
 
 from datetime import timedelta
@@ -103,8 +104,18 @@ def test_unfinalized_run_shows_a_computing_state_that_polls(client_with_user, me
 
 
 @pytest.mark.django_db()
-def test_finalized_run_renders_its_aggregates_and_stops_polling(client_with_user, membership):
-    run = _completed_run(membership.team, finalized=True)
+@pytest.mark.parametrize(
+    "finalized",
+    [
+        pytest.param(True, id="finalized"),
+        # A finalization that computed the aggregates and then died before stamping, or an old-code
+        # worker that never stamps at all. Nothing retries either, so waiting on the marker would
+        # spin over results the run already has.
+        pytest.param(False, id="unstamped-but-aggregates-landed"),
+    ],
+)
+def test_run_with_aggregates_renders_them_and_stops_polling(client_with_user, membership, finalized):
+    run = _completed_run(membership.team, finalized=finalized)
     EvaluationRunAggregateFactory.create(
         run=run,
         evaluator=EvaluatorFactory.create(team=membership.team, name="Sentiment"),
