@@ -90,6 +90,14 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    HYBRID_SEARCH = (
+        "flag_hybrid_search",
+        "Hybrid search - fuse dense and lexical collection retrieval with RRF (issue #2681)",
+        "",
+        [],
+        True,
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)

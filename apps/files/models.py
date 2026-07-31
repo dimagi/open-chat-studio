@@ -3,6 +3,8 @@ import pathlib
 from datetime import datetime
 
 from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
@@ -265,6 +267,15 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     context = models.TextField(blank=True, null=True)  # noqa: DJ001
     page_number = models.PositiveIntegerField(blank=True)
     embedding = HalfVectorField(dimensions=settings.EMBEDDING_VECTOR_SIZE)
+    # Lexical half of hybrid search. Generated (not trigger-maintained) so existing rows are
+    # backfilled by the migration and future writes stay consistent with no application code.
+    # The FTS config is baked into the column DDL, so changing DOCUMENT_SEARCH_FTS_CONFIG
+    # requires a migration -- the same trade-off `embedding`/EMBEDDING_VECTOR_SIZE already makes.
+    search_vector = models.GeneratedField(
+        expression=SearchVector("context", "text", config=settings.DOCUMENT_SEARCH_FTS_CONFIG),
+        output_field=SearchVectorField(),
+        db_persist=True,
+    )
     working_version = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -275,6 +286,9 @@ class FileChunkEmbedding(BaseTeamModel, VersionsMixin):
     is_archived = models.BooleanField(default=False)
 
     objects = FileChunkEmbeddingObjectManager()
+
+    class Meta:
+        indexes = [GinIndex(fields=["search_vector"], name="file_chunk_search_vector_idx")]
 
     @property
     def contextualized_text(self) -> str:

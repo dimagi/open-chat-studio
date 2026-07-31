@@ -16,14 +16,14 @@ from langchain_community.utilities.openapi import OpenAPISpec
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.types import Command
-from pgvector.django import CosineDistance
 
 from apps.channels.models import ChannelPlatform
 from apps.chat.agent import schemas
 from apps.chat.agent.calculator import calculate
 from apps.chat.agent.openapi_tool import openapi_spec_op_to_function_def
 from apps.chat.models import ChatAttachment
-from apps.documents.models import Collection, chunk_from_indexed_file
+from apps.documents.models import Collection
+from apps.documents.retrieval import search_collection
 from apps.events.forms import ScheduledMessageConfigForm
 from apps.events.models import ScheduledMessage, TimePeriod
 from apps.experiments.models import AgentTools, Experiment, ExperimentSession
@@ -166,17 +166,7 @@ def _perform_collection_search(
     Returns:
         Formatted search results string
     """
-    query_vector = collection.get_query_vector(query)
-
-    # Get embeddings for this collection
-    embeddings = list(
-        FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
-        .filter(collection_id=collection.id)
-        .filter(chunk_from_indexed_file())
-        .order_by("distance")
-        .select_related("file")
-        .only("text", "file__name", "file__metadata")[:max_results]
-    )
+    embeddings = search_collection(collection=collection, query=query, top_k=max_results)
 
     if not embeddings:
         if include_collection_info:
