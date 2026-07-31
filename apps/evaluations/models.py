@@ -19,7 +19,7 @@ from pydantic import BaseModel as PydanticBaseModel
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import VersionSelectionRule, resolve_chatbot_version
-from apps.evaluations.const import PREVIEW_SAMPLE_SIZE
+from apps.evaluations.const import FINALIZATION_GRACE, PREVIEW_SAMPLE_SIZE
 from apps.evaluations.exceptions import EvaluationRunException, InFlightRunsError
 from apps.evaluations.export import build_evaluation_table_data
 from apps.evaluations.rule_validation import (
@@ -734,6 +734,14 @@ class EvaluationRun(BaseTeamModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    finalized_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the run's completion side effects (aggregates, stale-tag reversal) landed. "
+            "Set as soon as the run completes if it has nothing to finalize."
+        ),
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )  # if manually triggered, who did it
@@ -772,6 +780,20 @@ class EvaluationRun(BaseTeamModel):
         self.status = EvaluationRunStatus.COMPLETED
         if save:
             self.save(update_fields=["finished_at", "status"])
+
+    @property
+    def is_finalizing(self) -> bool:
+        """The run is complete but its aggregates have not landed yet.
+
+        The completion side effects run as their own task after the status commits
+        (ADR-0047), so a COMPLETED run can legitimately have no aggregates for as long as
+        that task is queued. `finalized_at` distinguishes that from a run whose results
+        were all errors, which produces no aggregates at all. Bounded by
+        ``FINALIZATION_GRACE`` because nothing retries a lost finalization.
+        """
+        if self.status != EvaluationRunStatus.COMPLETED or self.finalized_at is not None:
+            return False
+        return bool(self.finished_at) and timezone.now() - self.finished_at < FINALIZATION_GRACE
 
     def mark_failed(self, error_message: str, save=True):
         """Terminate the run with an error, stamping ``finished_at`` like ``mark_complete``.
