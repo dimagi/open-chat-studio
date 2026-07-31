@@ -170,15 +170,22 @@ class TestFileValidationAPI:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "'.bmp' is not supported" in response.json()["error"]
 
-    def test_svg_upload_rejected_even_with_text_claim(self, api_client, session):
+    @pytest.mark.parametrize(
+        "ext",
+        [
+            pytest.param(".svg", id="svg"),
+            pytest.param(".svgz", id="svgz"),
+        ],
+    )
+    def test_svg_upload_rejected_even_with_text_claim(self, api_client, session, ext):
         """The deny-set fires on extension alone; a forged text/* content type must not bypass it."""
         url = reverse("api:chat:upload-file", kwargs={"session_id": session.external_id})
-        test_file = create_test_file("image.svg", self.SVG_BYTES, content_type="text/plain")
+        test_file = create_test_file(f"image{ext}", self.SVG_BYTES, content_type="text/plain")
 
         response = api_client.post(url, {"files": test_file}, format="multipart")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "'.svg' is not supported" in response.json()["error"]
+        assert f"'{ext}' is not supported" in response.json()["error"]
 
     def test_unsupported_image_disguised_with_allowed_extension_rejected(self, api_client, session):
         """A mismatched file (SVG bytes named .jpg) is caught by content sniffing."""

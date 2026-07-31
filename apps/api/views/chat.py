@@ -76,8 +76,11 @@ def validate_file_upload(file):
     # All text files are allowed
     if content_type != "text" and file_ext not in SUPPORTED_FILE_EXTENSIONS:
         return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
-    sniffed_type = detect_content_type_from_file(file)
-    if sniffed_type.startswith("image/") and sniffed_type not in ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES:
+    sniffed_content_type = detect_content_type_from_file(file)
+    if (
+        sniffed_content_type.startswith("image/")
+        and sniffed_content_type not in ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES
+    ):
         return False, (
             f"The image `{file.name}` is not a supported image type. "
             f"Supported types: {image_type_names(ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES)}."
