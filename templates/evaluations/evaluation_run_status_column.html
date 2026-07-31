@@ -1,5 +1,7 @@
 {% if record.status == "processing" and record.job_id %}
-  <div class="evaluation-run-progress" data-job-id="{{ record.job_id }}">
+  <div class="evaluation-run-progress"
+       data-job-id="{{ record.job_id }}"
+       data-progress-url="{% url 'celery_progress:task_status' record.job_id %}">
     <div class="flex items-center space-x-2">
       <span class="badge badge-info">Processing</span>
       <div class="progress-bar w-24 h-2 bg-gray-200 rounded-full">
