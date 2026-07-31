@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from apps.evaluations.models import EvaluationResult, EvaluationRun, EvaluationRunStatus, EvaluationRunType
-from apps.evaluations.tasks import coordinate_evaluation_runs
+from apps.evaluations.tests.coordination import sweep
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
@@ -54,7 +54,7 @@ def test_coordinator_dispatches_only_scoped_messages_for_delta(delay_mock, _publ
     )
     run.scoped_messages.add(in_scope)
 
-    coordinate_evaluation_runs()
+    sweep()
 
     dispatched = [message_id for call in delay_mock.call_args_list for message_id in call.args[1]]
     assert dispatched == [in_scope.id]

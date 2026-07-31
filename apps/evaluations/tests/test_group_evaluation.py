@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from apps.evaluations.models import EvaluationConfig, EvaluationRunStatus, EvaluationRunType
-from apps.evaluations.tasks import coordinate_evaluation_runs
+from apps.evaluations.tests.coordination import sweep
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationDatasetFactory,
@@ -92,7 +92,7 @@ def test_sweep_marks_run_complete_when_all_results_present(delay_mock, _publish,
         team=team_with_users, run=run, evaluator=evaluator, message=message, output={"result": {"ok": 1}}
     )
 
-    coordinate_evaluation_runs()
+    sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
