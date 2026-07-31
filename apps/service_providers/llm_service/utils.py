@@ -7,8 +7,10 @@ from django.conf import settings
 from langchain_core.messages import HumanMessage
 
 from apps.chat.agent.constants import OCS_CITATION_PATTERN
+from apps.chat.exceptions import UserReportableError
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+from apps.service_providers.llm_service.image_types import DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES, image_type_names
 
 logger = logging.getLogger("ocs.llm_service")
 
@@ -125,7 +127,11 @@ def get_openai_container_file_contents(
         return BytesIO(response.read())
 
 
-def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
+def format_multimodal_input(
+    message: str,
+    attachments: list,
+    supported_image_content_types: frozenset[str] = DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES,
+) -> HumanMessage:
     attachments = [a for a in attachments if getattr(a, "send_to_llm", True)]
     stripped = message.strip()
     parts = []
@@ -137,6 +143,11 @@ def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
 
         mime_type = att.content_type or ""
         if mime_type.startswith("image/"):
+            if mime_type not in supported_image_content_types:
+                raise UserReportableError(
+                    f"The image `{att.name}` is not a supported image type. "
+                    f"Supported types: {image_type_names(supported_image_content_types)}."
+                )
             parts.append(
                 {
                     "type": "image",

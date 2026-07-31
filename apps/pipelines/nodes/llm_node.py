@@ -43,7 +43,10 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
     agent = build_node_agent(node, context, session, tool_callbacks, prompt_context=prompt_context)
 
     attachments = list(context.attachments)
-    formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
+    supported_image_types = node.get_llm_service().supported_image_content_types
+    formatted_input = format_multimodal_input(
+        message=user_input, attachments=attachments, supported_image_content_types=supported_image_types
+    )
     _add_current_datetime_to_turn(node, prompt_context, formatted_input)
 
     inputs = StateSchema(
