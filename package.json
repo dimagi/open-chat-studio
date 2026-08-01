@@ -62,7 +62,7 @@
     "@codemirror/lint": "^6.9.5",
     "@codemirror/merge": "^6.11.1",
     "@codemirror/state": "^6.7.1",
-    "@codemirror/view": "^6.43.6",
+    "@codemirror/view": "^6.43.7",
     "codemirror": "^6.0.2",
     "@sentry/webpack-plugin": "^5.3.0",
     "@tailwindcss/postcss": "^4.3.2",
