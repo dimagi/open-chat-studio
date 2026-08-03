@@ -252,11 +252,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
     @staticmethod
     def _node_validation_errors(node) -> dict:
         """Field -> message errors for one node's params; non-field failures land under "root"."""
-        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
+        from apps.pipelines.nodes.base import resolve_node_class  # noqa: PLC0415 - heavy: nodes→langgraph
 
-        node_class = getattr(pipeline_nodes, node.type, None)
+        node_class = resolve_node_class(node.type)
         if node_class is None:
-            # A node whose class has since been removed must be reported, not crash validation.
+            # A type naming no node class — removed since, or never one — must be reported, not crash
+            # validation.
             return {"root": f"Unknown node type: {node.type}"}
         try:
             node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
@@ -518,9 +519,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def has_parameter(self, param_name: str) -> bool:
         """True if this node's type declares ``param_name`` as a param. Unknown types have none."""
-        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
+        from apps.pipelines.nodes.base import resolve_node_class  # noqa: PLC0415 - heavy: nodes→langgraph
 
-        node_class = getattr(pipeline_nodes, self.type, None)
+        node_class = resolve_node_class(self.type)
         return node_class is not None and param_name in node_class.model_fields
 
     def create_new_version(self, is_copy=False, new_flow_id=None, pipeline=None):  # ty: ignore[invalid-method-override]

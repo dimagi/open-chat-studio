@@ -18,8 +18,7 @@ from apps.pipelines.const import STANDARD_INPUT_NAME, STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineNodeBuildError, has_errors
 from apps.pipelines.flow import Flow
 from apps.pipelines.models import Node, Pipeline
-from apps.pipelines.nodes import nodes as pipeline_nodes
-from apps.pipelines.nodes.base import PipelineRouterNode
+from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.nodes import EndNode, StartNode
 
 
@@ -75,9 +74,10 @@ def node_output_handles(node: Node) -> list[dict]:
     """
     if node.type == EndNode.__name__:
         return []
-    node_class = getattr(pipeline_nodes, node.type, None)
+    node_class = resolve_node_class(node.type)
     if node_class is None:
-        # A node whose class was removed: validation reports it; we can't know its handles.
+        # A type naming no node class (removed since, or never one): validation reports it; we can't
+        # know its handles.
         return []
     if issubclass(node_class, PipelineRouterNode):
         output_map = _router_output_map(node_class, node)

@@ -443,6 +443,23 @@ def test_build_state_reports_node_errors_and_unwired_handles_together():
 
 
 @pytest.mark.django_db()
+def test_build_state_reports_a_node_type_that_is_not_a_node_class():
+    """``Node.type`` is unvalidated graph data, so it can name any attribute of the nodes module —
+    here a logger. The read must report it as an unknown type, not 500 on what it resolved to."""
+    experiment = _build_state_bot()
+    _make_node(pipeline=experiment.pipeline, flow_id="odd-1", type="logger", label="Odd", params={"name": "Odd"})
+
+    response = _client(experiment).get(_inspect_url(experiment))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pipeline_valid"] is False
+    assert payload["pipeline_errors"]["node"]["odd-1"] == {"root": "Unknown node type: logger"}
+    # Its outputs are unknowable, so only the implicit input is reported.
+    assert payload["unwired_handles"] == {"odd-1": [{"handle": "input", "label": None}]}
+
+
+@pytest.mark.django_db()
 def test_build_state_present_on_version_reads():
     experiment = _build_state_bot()
     version = experiment.create_new_version()

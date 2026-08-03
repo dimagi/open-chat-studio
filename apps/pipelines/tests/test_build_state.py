@@ -15,6 +15,18 @@ from apps.pipelines.tests.utils import (
     state_key_router_node,
 )
 
+# ``Node.type`` is graph data, so it can name any module-level attribute of
+# ``apps.pipelines.nodes.nodes`` — not just a node class. None of these are usable node types, so
+# each must be reported like a removed type rather than crashing whatever the resolved object is
+# then handed to.
+NON_NODE_ATTRIBUTES = [
+    pytest.param("logger", id="module-level-instance"),
+    pytest.param("json", id="imported-module"),
+    pytest.param("send_email_from_pipeline", id="module-level-function"),
+    pytest.param("BaseModel", id="class-that-is-not-a-node"),
+    pytest.param("END", id="string-constant"),
+]
+
 
 class TestNodeValidationErrors:
     """How one node's pydantic errors are keyed by field."""
@@ -36,6 +48,11 @@ class TestNodeValidationErrors:
         node = Node(flow_id="bare-1", type="BareValueErrorNode", params={"name": "bare"})
 
         assert Pipeline._node_validation_errors(node) == {"root": "Value error, boom"}
+
+    @pytest.mark.parametrize("node_type", NON_NODE_ATTRIBUTES)
+    def test_node_type_naming_a_non_node_attribute_is_reported_as_unknown(self, node_type):
+        node = Node(flow_id="odd-1", type=node_type, params={"name": "odd"})
+        assert Pipeline._node_validation_errors(node) == {"root": f"Unknown node type: {node_type}"}
 
 
 class TestNodeOutputHandles:
@@ -93,6 +110,11 @@ class TestNodeOutputHandles:
 
     def test_unknown_node_type_has_no_output_handles(self):
         node = Node(flow_id="ghost-1", type="GhostNode", params={"name": "ghost"})
+        assert node_output_handles(node) == []
+
+    @pytest.mark.parametrize("node_type", NON_NODE_ATTRIBUTES)
+    def test_node_type_naming_a_non_node_attribute_has_no_output_handles(self, node_type):
+        node = Node(flow_id="odd-1", type=node_type, params={"name": "odd"})
         assert node_output_handles(node) == []
 
     def test_boolean_node_handles_are_static(self):
@@ -261,6 +283,31 @@ class TestPipelineBuildState:
             "pipeline_valid": False,
             "errors": {
                 "node": {"ghost-1": {"root": "Unknown node type: GhostNode"}},
+                "edge": [],
+                "pipeline": [],
+            },
+            "unwired_handles": {},
+        }
+
+    @pytest.mark.parametrize("node_type", NON_NODE_ATTRIBUTES)
+    def test_node_type_naming_a_non_node_attribute_does_not_raise(self, node_type):
+        """A node type that resolves to something other than a node class must travel the same
+        reported-error path as a removed type — through node validation, the graph's output-map
+        lookup and the build — instead of raising on the object it resolved to."""
+        start, end = start_node(), end_node()
+        odd = {"id": "odd-1", "type": node_type, "params": {"name": "odd"}}
+        edges = [
+            {"id": "e-start-odd", "source": start["id"], "target": odd["id"]},
+            {"id": "e-odd-end", "source": odd["id"], "target": end["id"], "sourceHandle": "output_0"},
+        ]
+        pipeline = create_pipeline_model([start, odd, end], edges)
+
+        state = pipeline_build_state(pipeline)
+
+        assert state == {
+            "pipeline_valid": False,
+            "errors": {
+                "node": {"odd-1": {"root": f"Unknown node type: {node_type}"}},
                 "edge": [],
                 "pipeline": [],
             },

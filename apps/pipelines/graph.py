@@ -10,8 +10,7 @@ from pydantic_core import ValidationError
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes import nodes as pipeline_nodes_module
-from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState
+from apps.pipelines.nodes.base import PipelineRouterNode, PipelineState, resolve_node_class
 from apps.pipelines.nodes.nodes import CodeNode, EndNode, StartNode
 from apps.service_providers.llm_service.retry import get_retry_policy
 
@@ -25,7 +24,12 @@ class Node(pydantic.BaseModel):
 
     @property
     def pipeline_node_class(self):
-        return getattr(pipeline_nodes_module, self.type)
+        """This node's class. Raises for a type that names no node class, which is what a removed
+        type has always done — so a caller guarding against one guards against both."""
+        node_class = resolve_node_class(self.type)
+        if node_class is None:
+            raise AttributeError(f"Unknown pipeline node type: {self.type}")
+        return node_class
 
     @cached_property
     def pipeline_node_instance(self):
@@ -118,15 +122,15 @@ class PipelineGraph(pydantic.BaseModel):
         Memoized because building the node instance runs its validators, which query the provider
         model for an LLM-backed router — and every conditional edge out of one asks the same question.
 
-        Only the failures the node stage itself reports are treated as "unknown": a removed node
-        type, and the two ways a validator declines its params. Anything else a validator raises —
-        a ``DatabaseError`` above all, which would poison an enclosing ``transaction.atomic()`` if
-        swallowed here — propagates.
+        Only the failures the node stage itself reports are treated as "unknown": a type naming no
+        node class, and the two ways a validator declines its params. Anything else a validator
+        raises — a ``DatabaseError`` above all, which would poison an enclosing
+        ``transaction.atomic()`` if swallowed here — propagates.
         """
         if node_id not in self._output_maps:
             node = self.nodes_by_id[node_id]
-            if getattr(pipeline_nodes_module, node.type, None) is None:
-                self._output_maps[node_id] = None  # removed node type; the node stage names it
+            if resolve_node_class(node.type) is None:
+                self._output_maps[node_id] = None  # unknown node type; the node stage names it
                 return self._output_maps[node_id]
             try:
                 node_instance = node.pipeline_node_instance
