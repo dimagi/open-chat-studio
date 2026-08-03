@@ -34,6 +34,9 @@ def test_inspect_component_documents_the_payload_envelope(api_schema):
         "trace_provider",
         "channels",
         "pipeline",
+        "pipeline_valid",
+        "pipeline_errors",
+        "unwired_handles",
         "events",
     }
 

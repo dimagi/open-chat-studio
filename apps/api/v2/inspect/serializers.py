@@ -35,7 +35,7 @@ from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
-from apps.pipelines.build_state import node_output_handles
+from apps.pipelines.build_state import node_output_handles, pipeline_build_state
 from apps.pipelines.models import Node, Pipeline
 from apps.utils.fields import as_int
 
@@ -728,6 +728,26 @@ class InspectEventsSerializer(serializers.Serializer):
 
 
 # ── Root (ADR-0024) ──────────────────────────────────────────────────────────────────────────────
+class PipelineBuildErrorsSerializer(serializers.Serializer):
+    """The normalized three-bucket errors report the publish gate rejects on."""
+
+    node = serializers.DictField(
+        child=serializers.DictField(child=serializers.CharField()),
+        help_text=(
+            "Per-field error messages keyed by ``node_id``. Node-level errors that aren't about a "
+            "single field (e.g. 'End node is not reachable') appear under the ``root`` key."
+        ),
+    )
+    edge = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Ids of edges stranded on a handle their source node no longer offers.",
+    )
+    pipeline = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Graph-level error messages that name no single node or edge (e.g. 'A cycle was detected').",
+    )
+
+
 class ChatbotInspectSerializer(serializers.ModelSerializer):
     """The whole chatbot configuration in one read-only response (ADR-0024).
 
@@ -753,7 +773,10 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     trace_provider = ProviderSerializer(allow_null=True)
     voice = serializers.SerializerMethodField()
     channels = serializers.SerializerMethodField()
-    pipeline = InspectPipelineSerializer(allow_null=True, read_only=True)
+    pipeline = InspectPipelineSerializer(read_only=True)
+    pipeline_valid = serializers.SerializerMethodField(help_text=("Whether this chatbot's pipeline validates cleanly"))
+    pipeline_errors = serializers.SerializerMethodField()
+    unwired_handles = serializers.SerializerMethodField()
     events = InspectEventsSerializer(source="*")
 
     class Meta:
@@ -773,6 +796,9 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
             "trace_provider",
             "channels",
             "pipeline",
+            "pipeline_valid",
+            "pipeline_errors",
+            "unwired_handles",
             "events",
         ]
 
@@ -784,6 +810,36 @@ class ChatbotInspectSerializer(serializers.ModelSerializer):
     @extend_schema_field(ChannelSerializer(many=True))
     def get_channels(self, experiment) -> list:
         return ChannelSerializer(get_channels(experiment), many=True).data
+
+    def _build_state(self, experiment) -> dict:
+        # Computed once per instance (validate() builds the whole graph) and shared by the three
+        # build-state fields below. Keyed by pk because DRF reuses one serializer instance across
+        # items under many=True.
+        cached = getattr(self, "_build_state_cache", None)
+        if cached is None or cached[0] != experiment.pk:
+            self._build_state_cache = (experiment.pk, pipeline_build_state(experiment.pipeline))
+        return self._build_state_cache[1]
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_pipeline_valid(self, experiment) -> bool:
+        return self._build_state(experiment)["pipeline_valid"]
+
+    @extend_schema_field(PipelineBuildErrorsSerializer())
+    def get_pipeline_errors(self, experiment) -> dict:
+        return self._build_state(experiment)["errors"]
+
+    @extend_schema_field(
+        serializers.DictField(
+            child=serializers.ListField(child=OutputHandleSerializer()),
+            help_text=(
+                "Advisory 'what still needs wiring' map, keyed by ``node_id``: every output handle "
+                "with no outgoing edge and every implicit ``input`` handle with no incoming edge. "
+                "Never an error and never blocks a publish."
+            ),
+        )
+    )
+    def get_unwired_handles(self, experiment) -> dict:
+        return self._build_state(experiment)["unwired_handles"]
 
 
 # ── Schema extensions ──────────────────────────────────────────────────────────────────────────
