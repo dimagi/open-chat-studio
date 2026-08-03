@@ -24,13 +24,13 @@ repos:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
+    rev: v0.16.1
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
       - id: ruff-format
   - repo: https://github.com/djlint/djLint
-    rev: v1.42.3
+    rev: v1.43.2
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
@@ -54,7 +54,7 @@ repos:
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.63
+    rev: v0.0.65
     hooks:
       # Run the type checker.
       - id: ty-check
