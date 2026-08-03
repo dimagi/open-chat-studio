@@ -127,9 +127,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     "deepseek": [
         # llm-stats lists this model under its open-weights name (deepseek-v4-flash-0731), but
         # api.deepseek.com only serves the undated alias, which is what we have to send.
-        Model("deepseek-v4-flash", 1000000),
-        Model("deepseek-chat", 128000, is_default=True),
-        Model("deepseek-reasoner", 128000, is_translation_default=True),
+        Model("deepseek-v4-flash", 1000000, is_default=True, is_translation_default=True),
     ],
     "minimax": [
         Model("MiniMax-M3", k(1000), is_default=True),
