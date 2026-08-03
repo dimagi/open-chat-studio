@@ -23,6 +23,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
+from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
@@ -47,6 +48,7 @@ team_urlpatterns = [
     path("annotations/", include("apps.annotations.urls")),
     path("participants/", include("apps.participants.urls")),
     path("mcp_integrations/", include("apps.mcp_integrations.urls")),
+    path("oauth/applications/", include(oauth_team_urls)),
     path("slack/", include("apps.slack.urls")),
     path("help/", include("apps.help.urls")),
     path("documents/", include("apps.documents.urls")),

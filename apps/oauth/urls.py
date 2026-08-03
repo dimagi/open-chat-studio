@@ -19,6 +19,21 @@ urlpatterns = [
     path(".well-known/jwks.json", oauth2_views.JwksInfoView.as_view(), name="jwks-info"),
     path("o/userinfo/", oauth2_views.UserInfoView.as_view(), name="user-info"),
     path("o/", include(oauth2_urls.base_urlpatterns)),
+    # Global (team-less) applications are superuser-only and so live outside the team URL space.
+    path("o/global-applications/", views.GlobalApplicationHome.as_view(), name="global_application_home"),
+    path(
+        "o/global-applications/table/",
+        views.GlobalApplicationTableView.as_view(),
+        name="global_application_table",
+    ),
+    path("o/global-applications/new/", views.CreateGlobalApplication.as_view(), name="global_application_new"),
+    path("o/global-applications/<int:pk>/", views.EditGlobalApplication.as_view(), name="global_application_edit"),
+    path(
+        "o/global-applications/<int:pk>/delete/",
+        views.DeleteGlobalApplication.as_view(),
+        name="global_application_delete",
+    ),
 ]
 
-urlpatterns.extend(make_crud_urls(views, "Application", "application"))
+# Team-scoped application management, mounted under `/a/<team_slug>/` by the root URLconf.
+team_urlpatterns = (make_crud_urls(views, "Application"), "oauth_apps")

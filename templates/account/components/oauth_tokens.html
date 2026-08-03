@@ -1,10 +1,13 @@
-{% load i18n %}
+{% load i18n team_tags %}
 <section class="app-card">
   <div class="flex w-full justify-between">
     <h2 class="pg-subtitle">{% translate "OAuth Access Tokens" %}</h2>
-    <a href="{% url 'oauth2_provider:application_home' %}" class="btn btn-outline btn-sm">
-      {% translate "Manage OAuth Applications" %}
-    </a>
+    {% has_perm "oauth" "view_oauth2application" as can_view_oauth_apps %}
+    {% if can_view_oauth_apps and request.team %}
+      <a href="{% url 'oauth_apps:home' request.team.slug %}" class="btn btn-outline btn-sm">
+        {% translate "Manage OAuth Applications" %}
+      </a>
+    {% endif %}
   </div>
   {% for token in oauth_tokens %}
     {% if forloop.first %}

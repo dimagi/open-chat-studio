@@ -60,6 +60,16 @@
       {% include "generic/object_home_content.html" with new_object_url=mcp_new_url title="MCP Integrations" table_url=mcp_table_url allow_new=allow_new_mcp subtitle=mcp_subtitle data_cy_title="title-mcp" %}
     {% endwith %}
   {% endflag %}
+  {% has_perm "oauth" "view_oauth2application" as can_view_oauth_apps %}
+  {% if can_view_oauth_apps %}
+    {% has_perm "oauth" "add_oauth2application" as allow_new_oauth_app %}
+    {% url "oauth_apps:table" request.team.slug as oauth_apps_table_url %}
+    {% url "oauth_apps:new" request.team.slug as oauth_apps_new_url %}
+    {% translate "Applications that access this team's data over the API" as oauth_apps_subtitle %}
+    {% with button_style="btn-outline" title_class="pg-subtitle" %}
+      {% include "generic/object_home_content.html" with new_object_url=oauth_apps_new_url title="OAuth Applications" table_url=oauth_apps_table_url allow_new=allow_new_oauth_app subtitle=oauth_apps_subtitle data_cy_title="title-oauth-apps" %}
+    {% endwith %}
+  {% endif %}
   {% translate "Record trace details of bot activity" as trace_subtitle %}
   {% include "service_providers/service_provider_home.html" with provider_type="tracing" subtitle=trace_subtitle perm="add_traceprovider" %}
   <section class="app-card">
