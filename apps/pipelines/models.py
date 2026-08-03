@@ -19,6 +19,7 @@ from apps.pipelines.exceptions import (
     ErrorReport,
     MissingNodeDataError,
     PipelineBuildError,
+    PipelineNodeBuildError,
     error_report,
     has_errors,
 )
@@ -242,21 +243,35 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 graph.build_runnable()
             except PipelineBuildError as e:
                 report = error_report(errors, [e])
+            except PipelineNodeBuildError as e:
+                # Not a PipelineBuildError subclass, and carries no node id of its own.
+                report["pipeline"].append(str(e))
 
         return report
 
     @staticmethod
     def _node_validation_errors(node) -> dict:
-        """Field -> message errors for one node's params."""
+        """Field -> message errors for one node's params; non-field failures land under "root"."""
         from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
-        node_class = getattr(pipeline_nodes, node.type)
+        node_class = getattr(pipeline_nodes, node.type, None)
+        if node_class is None:
+            # A node whose class has since been removed must be reported, not crash validation.
+            return {"root": f"Unknown node type: {node.type}"}
         try:
             node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
         except pydantic.ValidationError as e:
             # A model-level error carries no ``loc`` and names its field in ``ctx`` instead (see the
-            # PydanticCustomError raises under apps/pipelines/nodes).
-            return {(error["loc"][0] if error["loc"] else error["ctx"]["field"]): error["msg"] for error in e.errors()}
+            # PydanticCustomError raises under apps/pipelines/nodes). A validator raising a plain
+            # ValueError has neither, so that error lands on the node as a whole.
+            return {
+                (error["loc"][0] if error["loc"] else error.get("ctx", {}).get("field", "root")): error["msg"]
+                for error in e.errors()
+            }
+        except PipelineNodeBuildError as e:
+            # Raised from inside a validator for a broken resource reference (e.g. a deleted
+            # provider model); pydantic doesn't wrap it, so fold it into the report here.
+            return {"root": str(e)}
         return {}
 
     @property
