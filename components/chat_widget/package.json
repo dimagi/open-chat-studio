@@ -54,7 +54,7 @@
     "jsdom": "^29.1.1",
     "postcss-import": "^16.1.0",
     "prettier": "^3.9.6",
-    "puppeteer": "^24.2.0",
+    "puppeteer": "^25.4.0",
     "stencil-tailwind-plugin": "^2.0.5",
     "tailwindcss": "^4.1.12",
     "typescript": "^5.7.3"
