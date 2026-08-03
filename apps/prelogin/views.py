@@ -25,12 +25,15 @@ def home(request):
 
 
 def applications(request):
+    # A bot missing either required field can't drive a widget, so treat it as unconfigured
+    # and let its card render static rather than emitting empty widget attributes.
+    demo_bots = {key: bot for key, bot in settings.PRELOGIN_DEMO_BOTS.items() if bot.get("id") and bot.get("embed_key")}
     return render(
         request,
         "prelogin/applications.html",
         {
             "active_nav": "applications",
-            "demo_bots": settings.PRELOGIN_DEMO_BOTS,
+            "demo_bots": demo_bots,
         },
     )
 

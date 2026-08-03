@@ -61,6 +61,16 @@ def test_applications_page_embeds_widget_for_configured_demo_bots(client, settin
 
 
 @pytest.mark.django_db()
+def test_applications_page_ignores_demo_bot_missing_required_config(client, settings):
+    settings.PRELOGIN_DEMO_BOTS = {"nanibot": {"id": "6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"}}  # no embed_key
+    response = client.get(reverse("prelogin:applications"))
+    content = response.content.decode()
+    assert "<open-chat-studio-widget" not in content
+    assert "data-demo-bot-trigger" not in content
+    assert "Try this bot" not in content
+
+
+@pytest.mark.django_db()
 def test_applications_page_cards_are_inert_without_demo_bot_config(client, settings):
     settings.PRELOGIN_DEMO_BOTS = {}
     response = client.get(reverse("prelogin:applications"))
