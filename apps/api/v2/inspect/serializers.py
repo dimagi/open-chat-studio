@@ -35,6 +35,7 @@ from apps.documents.models import Collection
 from apps.events.models import EventAction, EventActionType, StaticTrigger, TimeoutTrigger
 from apps.experiments.models import ConsentForm, Experiment, SourceMaterial
 from apps.files.models import File
+from apps.pipelines.build_state import node_output_handles
 from apps.pipelines.models import Node, Pipeline
 from apps.utils.fields import as_int
 
@@ -473,6 +474,17 @@ class GraphSerializer(serializers.Serializer):
 
 
 # ── Node (ADR-0025) ──────────────────────────────────────────────────────────────────────────────
+@extend_schema_serializer(component_name="InspectOutputHandle")
+class OutputHandleSerializer(serializers.Serializer):
+    """One output handle a node offers, for wiring edges from it."""
+
+    handle = serializers.CharField(help_text="Handle name to copy verbatim into an edge's ``source_handle``.")
+    label = serializers.CharField(
+        allow_null=True,
+        help_text="The router branch keyword this handle routes; null for a plain node's single output.",
+    )
+
+
 class InspectNodeSerializer(serializers.ModelSerializer):
     """One pipeline node, with the resources it references inlined.
 
@@ -510,6 +522,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     params = serializers.SerializerMethodField(
         help_text="The node's non-resource configuration, verbatim; keys vary by node type."
     )
+    output_handles = serializers.SerializerMethodField()
     llm = serializers.SerializerMethodField()
     voice = serializers.SerializerMethodField()
     custom_actions = serializers.SerializerMethodField()
@@ -527,6 +540,7 @@ class InspectNodeSerializer(serializers.ModelSerializer):
             "type",
             "label",
             "params",
+            "output_handles",
             "llm",
             "voice",
             "source_material",
@@ -554,6 +568,12 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         if "max_results" in params:
             params["max_indexed_collection_search_results"] = params.pop("max_results")
         return params
+
+    @extend_schema_field(OutputHandleSerializer(many=True))
+    def get_output_handles(self, node) -> list:
+        # Server-derived (W5): routers get one handle per branch keyword, plain nodes the single
+        # standard output, End none — so a caller can wire edges from any node it reads back.
+        return node_output_handles(node)
 
     @extend_schema_field(FlattenedLlmSerializer(allow_null=True))
     def get_llm(self, node):

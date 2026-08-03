@@ -567,6 +567,7 @@ def _expected_pipeline_nodes(bot):
             "type": "LLMResponseWithPrompt",
             "label": "Answer",
             "params": {"prompt": "Answer the user"},
+            "output_handles": [{"handle": "output", "label": None}],
             "llm": {
                 "model_id": bot.llm_model.id,
                 "provider_id": bot.llm_provider.id,
@@ -649,6 +650,7 @@ def _expected_pipeline_nodes(bot):
             "type": "AssistantNode",
             "label": "Assistant",
             "params": {"citations_enabled": True},
+            "output_handles": [{"handle": "output", "label": None}],
             "assistant": {
                 "id": bot.assistant.id,
                 "name": "Helper",
@@ -869,8 +871,10 @@ def _adversarial_bot():
 # Empirically derived. The SAME number must hold for every version mode, because resolve_inspect_version
 # resolves AND prefetches the target with a fixed prefetch set — including each node's resource FK/M2M
 # relations (inspect_node_queryset) — so node fan-out adds no queries. Resolution costs one query in
-# every mode, so folding it into the measured block keeps the count constant.
-EXPECTED_RENDER_QUERIES = 13
+# every mode, so folding it into the measured block keeps the count constant. Deriving output_handles
+# validates each router node, whose LLM-backed variant looks its provider model up through ORMRepository
+# (not the prefetched relation) — one query for this bot's single router.
+EXPECTED_RENDER_QUERIES = 14
 
 
 @pytest.mark.django_db()
