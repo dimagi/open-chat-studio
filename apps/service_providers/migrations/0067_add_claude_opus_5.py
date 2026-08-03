@@ -1,7 +1,6 @@
 from django.db import migrations
 
 from apps.cost_tracking.migration_utils import load_pricing_data
-from apps.service_providers.migration_utils import llm_model_migration
 
 
 class Migration(migrations.Migration):
@@ -12,7 +11,7 @@ class Migration(migrations.Migration):
 
     operations = [
         # Add claude-opus-5 for the `anthropic` provider (1M context, 128k max output).
-        llm_model_migration(),
+        # llm_model_migration() moved to 0069_add_deepseek_v4_flash
         # Seed pricing for claude-opus-5 ($5 / $25 per MTok).
         load_pricing_data(),
     ]

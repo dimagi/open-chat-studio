@@ -125,6 +125,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-70b-instruct", 131072),
     ],
     "deepseek": [
+        # llm-stats lists this model under its open-weights name (deepseek-v4-flash-0731), but
+        # api.deepseek.com only serves the undated alias, which is what we have to send.
+        Model("deepseek-v4-flash", 1000000),
         Model("deepseek-chat", 128000, is_default=True),
         Model("deepseek-reasoner", 128000, is_translation_default=True),
     ],
