@@ -261,7 +261,13 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         try:
             node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
         except pydantic.ValidationError as e:
-            return {(error["loc"][0] if error["loc"] else error["ctx"]["field"]): error["msg"] for error in e.errors()}
+            # A model-level error carries no ``loc`` and names its field in ``ctx`` instead (see the
+            # PydanticCustomError raises under apps/pipelines/nodes). A validator raising a plain
+            # ValueError has neither, so that error lands on the node as a whole.
+            return {
+                (error["loc"][0] if error["loc"] else error.get("ctx", {}).get("field", "root")): error["msg"]
+                for error in e.errors()
+            }
         except PipelineNodeBuildError as e:
             # Raised from inside a validator for a broken resource reference (e.g. a deleted
             # provider model); pydantic doesn't wrap it, so fold it into the report here.

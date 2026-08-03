@@ -2,9 +2,11 @@
 the advisory ``unwired_handles`` map, and the stranded-router-edge guard."""
 
 import pytest
+from pydantic import model_validator
 
 from apps.pipelines.build_state import node_output_handles, pipeline_build_state, unwired_handles
-from apps.pipelines.models import Node
+from apps.pipelines.models import Node, Pipeline
+from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.tests.utils import (
     create_pipeline_model,
     end_node,
@@ -12,6 +14,28 @@ from apps.pipelines.tests.utils import (
     start_node,
     state_key_router_node,
 )
+
+
+class TestNodeValidationErrors:
+    """How one node's pydantic errors are keyed by field."""
+
+    def test_field_error_is_keyed_by_its_field(self):
+        node = Node(flow_id="router-1", type="StaticRouterNode", params={"name": "router", "keywords": ["a"]})
+        assert "route_key" in Pipeline._node_validation_errors(node)
+
+    def test_model_level_error_naming_no_field_lands_on_the_node(self, monkeypatch):
+        """A model validator raising a plain ValueError has neither a ``loc`` nor a ``ctx["field"]``.
+        Reading the field must fall back to "root", not raise a KeyError out of validation."""
+
+        class BareValueErrorNode(pipeline_nodes.Passthrough):
+            @model_validator(mode="after")
+            def always_fails(self):
+                raise ValueError("boom")
+
+        monkeypatch.setattr(pipeline_nodes, "BareValueErrorNode", BareValueErrorNode, raising=False)
+        node = Node(flow_id="bare-1", type="BareValueErrorNode", params={"name": "bare"})
+
+        assert Pipeline._node_validation_errors(node) == {"root": "Value error, boom"}
 
 
 class TestNodeOutputHandles:
