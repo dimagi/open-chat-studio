@@ -400,6 +400,90 @@
     ]
   },
   {
+    "provider_type": "deepseek",
+    "model_name": "deepseek-v4-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00014"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00028"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.0000028"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0"
+      }
+    ]
+  },
+  {
+    "provider_type": "deepseek",
+    "model_name": "deepseek-v4-pro",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.000435"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00087"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.00000363"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0"
+      }
+    ]
+  },
+  {
+    "provider_type": "deepseek",
+    "model_name": "deepseek-chat",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00028"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00042"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000028"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0"
+      }
+    ]
+  },
+  {
+    "provider_type": "deepseek",
+    "model_name": "deepseek-reasoner",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00028"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00042"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000028"
+      }
+    ]
+  },
+  {
     "provider_type": "google",
     "model_name": "gemini-2.5-flash",
     "rules": [
