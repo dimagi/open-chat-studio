@@ -178,6 +178,27 @@ class TestAddCollectionFiles:
         file = File.objects.get(name="notes.txt", team=team)
         assert file.purpose == FilePurpose.COLLECTION
 
+    def test_single_character_extension_rejected(self, client):
+        """Regression: extension validation matched against the raw comma-joined
+        settings string via substring containment, so a single-character extension
+        such as '.p' was wrongly accepted because it is a substring of '.pdf'.
+        A '.p' upload must be rejected while a '.pdf' upload is still accepted."""
+        team = TeamWithUsersFactory.create()
+        collection = CollectionFactory.create(team=team, is_index=False)
+        client.force_login(team.members.first())
+        url = reverse("documents:add_collection_files", args=[team.slug, collection.id])
+
+        invalid_upload = SimpleUploadedFile("script.p", b"print('hi')", content_type="text/plain")
+        response = client.post(url, {"files": [invalid_upload]})
+
+        assert response.status_code == 302
+        assert not File.objects.filter(name="script.p", team=team).exists()
+
+        valid_upload = SimpleUploadedFile("notes.pdf", b"%PDF-1.4", content_type="application/pdf")
+        client.post(url, {"files": [valid_upload], "notes.pdf": "a summary"})
+
+        assert File.objects.filter(name="notes.pdf", team=team).exists()
+
 
 @pytest.mark.django_db()
 class TestDeleteCollectionFile:

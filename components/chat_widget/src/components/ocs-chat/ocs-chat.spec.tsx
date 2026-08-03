@@ -876,4 +876,17 @@ describe('ocs-chat', () => {
       expect(inputArea?.querySelector('.message-textarea')?.hasAttribute('disabled')).toBe(true);
     });
   });
+
+  describe('File attachment allowlist', () => {
+    const extensions = (OcsChat as unknown as { SUPPORTED_FILE_EXTENSIONS: string[] }).SUPPORTED_FILE_EXTENSIONS;
+
+    it('excludes image formats the LLM providers reject', () => {
+      expect(extensions).not.toContain('.bmp');
+      expect(extensions).not.toContain('.svg');
+    });
+
+    it('keeps the supported image formats', () => {
+      expect(extensions).toEqual(expect.arrayContaining(['.jpg', '.jpeg', '.png', '.gif', '.webp']));
+    });
+  });
 });

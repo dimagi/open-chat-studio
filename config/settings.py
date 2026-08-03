@@ -972,6 +972,13 @@ SUPPORTED_FILE_TYPES = {
     ),
 }
 
+# Chat attachments accept the collections set minus image formats no LLM provider
+# supports (see apps/service_providers/llm_service/image_types.py).
+_CHAT_ATTACHMENT_EXCLUDED_EXTENSIONS = {".bmp", ".svg"}
+SUPPORTED_FILE_TYPES["chat_attachments"] = ",".join(
+    ext for ext in SUPPORTED_FILE_TYPES["collections"].split(",") if ext not in _CHAT_ATTACHMENT_EXCLUDED_EXTENSIONS
+)
+
 # CORS configuration for chat widget
 # Use URL regex to allow CORS only for specific endpoints (chat API)
 CORS_URLS_REGEX = r"^/api/chat/.*$"

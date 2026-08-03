@@ -39,15 +39,21 @@ from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.files.content_type import detect_content_type_from_file
 from apps.files.models import File, FilePurpose
 from apps.help.agents.progress_messages import ProgressMessagesAgent, ProgressMessagesInput
+from apps.service_providers.llm_service.image_types import (
+    ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES,
+    DENIED_IMAGE_EXTENSIONS,
+    image_type_names,
+)
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
 SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
 MAX_TOTAL_SIZE_MB = 50
-SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["collections"]
+SUPPORTED_FILE_EXTENSIONS = settings.SUPPORTED_FILE_TYPES["chat_attachments"].split(",")
 
 logger = logging.getLogger("ocs.api_chat")
 
@@ -61,11 +67,27 @@ def validate_file_upload(file):
     if file_size_mb > MAX_FILE_SIZE_MB:
         return False, f"File '{file.name}' exceeds maximum size of {MAX_FILE_SIZE_MB}MB"
     file_ext = pathlib.Path(file.name).suffix.lower()
+    # Image formats no LLM provider accepts are rejected regardless of the
+    # claimed content type; content sniffing below is best-effort only.
+    if file_ext in DENIED_IMAGE_EXTENSIONS:
+        return False, (
+            f"The image `{file.name}` is not a supported image type. "
+            f"Supported types: {image_type_names(ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES)}."
+        )
     mime_type = file.content_type or ""
     content_type = mime_type.split("/")[0]
     # All text files are allowed
     if content_type != "text" and file_ext not in SUPPORTED_FILE_EXTENSIONS:
         return False, f"File type '{file_ext}' is not supported. Allowed types: {', '.join(SUPPORTED_FILE_EXTENSIONS)}"
+    sniffed_content_type = detect_content_type_from_file(file)
+    if (
+        sniffed_content_type.startswith("image/")
+        and sniffed_content_type not in ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES
+    ):
+        return False, (
+            f"The image `{file.name}` is not a supported image type. "
+            f"Supported types: {image_type_names(ANY_PROVIDER_SUPPORTED_IMAGE_CONTENT_TYPES)}."
+        )
     return True, None
 
 

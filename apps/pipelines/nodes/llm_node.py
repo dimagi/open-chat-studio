@@ -20,6 +20,7 @@ from apps.service_providers.llm_service.main import OpenAIBuiltinTool
 from apps.service_providers.llm_service.prompt_context import PromptTemplateContext
 from apps.service_providers.llm_service.utils import (
     format_multimodal_input,
+    invoke_with_image_error_translation,
     populate_reference_section_from_citations,
     remove_citations_from_text,
 )
@@ -43,7 +44,10 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
     agent = build_node_agent(node, context, session, tool_callbacks, prompt_context=prompt_context)
 
     attachments = list(context.attachments)
-    formatted_input = format_multimodal_input(message=user_input, attachments=attachments)
+    supported_image_types = node.get_llm_service().supported_image_content_types
+    formatted_input = format_multimodal_input(
+        message=user_input, attachments=attachments, supported_image_content_types=supported_image_types
+    )
     _add_current_datetime_to_turn(node, prompt_context, formatted_input)
 
     inputs = StateSchema(
@@ -52,7 +56,7 @@ def execute_sub_agent(node: PipelineNode, context: NodeContext):
         session_state=context.state.session_state or {},
         input_message_id=context.input_message_id,
     )
-    result = agent.invoke(inputs)
+    result = invoke_with_image_error_translation(agent, inputs, supported_image_content_types=supported_image_types)
     final_message = _get_final_ai_message(result["messages"])
 
     ai_message, ai_message_metadata = _process_agent_output(node, session, final_message)

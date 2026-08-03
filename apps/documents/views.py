@@ -406,7 +406,7 @@ def add_collection_files(request, team_slug: str, pk: int):
         settings.SUPPORTED_FILE_TYPES["file_search"]
         if collection.is_index
         else settings.SUPPORTED_FILE_TYPES["collections"]
-    )
+    ).split(",")
     files = []
     invalid_files = []
 
