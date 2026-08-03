@@ -1,5 +1,5 @@
 {% extends "prelogin/base.html" %}
-{% load static %}
+{% load chat_widget_tags static %}
 
 {% block title %}Use Cases | Open Chat Studio{% endblock %}
 
@@ -97,7 +97,19 @@
     overflow:hidden; box-shadow:0 12px 32px -14px rgba(22,0,109,0.28);
     transition:box-shadow 220ms ease,transform 220ms ease,border-color 220ms ease;
   }
-  .bot-card:hover { box-shadow:0 28px 60px -18px rgba(22,0,109,0.45); transform:translateY(-7px); border-color:rgba(22,0,109,0.3); color:inherit; }
+  /* The widget host ships without a z-index, so its chat window paints at the host's own
+     stacking level and page content wins. Lift it above the page chrome (sticky nav is 50,
+     jump nav 40, skip link 100) but below the mobile nav menu (200), which should stay on top. */
+  open-chat-studio-widget {
+    z-index: 150;
+    /* The widget places the window using --chat-window-width but renders it at least 300px wide,
+       so the default 25% hangs off the right edge below ~1200px. A fixed width keeps them agreed. */
+    --chat-window-width: 380px;
+  }
+  /* Only cards wired to a chat widget react to the pointer — the rest are static. */
+  .bot-card-interactive { cursor:pointer; }
+  .bot-card-interactive:hover { box-shadow:0 28px 60px -18px rgba(22,0,109,0.45); transform:translateY(-7px); border-color:rgba(22,0,109,0.3); color:inherit; }
+  .bot-card-interactive:focus-visible { outline:2px solid #16006D; outline-offset:3px; }
   .bot-card-head { padding:18px 22px; display:flex; align-items:center; gap:12px; }
   .bot-card-head svg { width:22px; height:22px; flex-shrink:0; }
   .bot-card-head-label { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:rgba(255,255,255,0.8); }
@@ -106,7 +118,7 @@
   .bot-card p { font-size:0.88rem; color:var(--muted); line-height:1.65; flex:1; margin:0; }
   .bot-card-footer { padding-top:14px; border-top:1px solid rgba(184,164,255,0.14); }
   .bot-card-link { font-size:0.74rem; font-weight:700; color:#fff; background:#16006D; display:inline-flex; align-items:center; gap:7px; font-family:'JetBrains Mono',monospace; letter-spacing:0.08em; text-transform:uppercase; transition:gap 150ms, background 150ms; padding:9px 18px; border-radius:100px; }
-  .bot-card:hover .bot-card-link { gap:11px; background:#2a1488; }
+  .bot-card-interactive:hover .bot-card-link { gap:11px; background:#2a1488; }
   .bot-disclaimer-sm { font-size:0.75rem; color:var(--muted); opacity:0.6; line-height:1.5; margin-top:10px; }
   .uc-bot-label {
     font-family:'JetBrains Mono',monospace; font-size:9.5px; font-weight:700;
@@ -265,7 +277,8 @@
             <p class="uc-panel-desc">Chatbots for behavior change communication, health coaching, and personal wellbeing, reaching people in their own language on the platforms they already use.</p>
             <div style="margin-top:32px;">
               <div class="uc-bot-label">Example Bot: For Demonstration &amp; Research Purposes Only</div>
-              <a class="bot-card bot-card-h" href="https://www.openchatstudio.com/a/dimagi/experiments/e/6d5abc50-167d-4e78-a2a1-6ff6d3cb229c/start/" target="_blank" rel="noopener">
+              <div class="bot-card bot-card-h{% if demo_bots.nanibot %} bot-card-interactive{% endif %}"
+                   {% if demo_bots.nanibot %}data-demo-bot-trigger="nanibot" role="button" tabindex="0"{% endif %}>
                 <div class="bot-card-head" style="background:linear-gradient(135deg,#16006D 0%,#16006D 100%);">
                   <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
@@ -275,10 +288,11 @@
                 <div class="bot-card-inner">
                   <h3>NaniBot</h3>
                   <p>Counselling expectant mothers to prepare for birth</p>
-                  <div class="bot-card-footer"><span class="bot-card-link">Try this bot →</span></div>
-
+                  {% if demo_bots.nanibot %}
+                    <div class="bot-card-footer"><span class="bot-card-link">Try this bot →</span></div>
+                  {% endif %}
                 </div>
-              </a>
+              </div>
             </div>
 
           </div>
@@ -339,7 +353,8 @@
             <p class="uc-panel-desc">Personal coaches that help community health workers build capability through role-play, case-based learning, and structured feedback, deployed on the messaging apps they already use.</p>
             <div style="margin-top:32px;">
               <div class="uc-bot-label">Example Bot: For Demonstration &amp; Research Purposes Only</div>
-              <a class="bot-card bot-card-h" href="https://www.openchatstudio.com/a/dimagi/experiments/e/d61f49c1-ebea-4d1e-98ec-d0b5cb111c10/start/" target="_blank" rel="noopener">
+              <div class="bot-card bot-card-h{% if demo_bots.fp_coach %} bot-card-interactive{% endif %}"
+                   {% if demo_bots.fp_coach %}data-demo-bot-trigger="fp_coach" role="button" tabindex="0"{% endif %}>
                 <div class="bot-card-head" style="background:linear-gradient(135deg,#16006D 0%,#16006D 100%);">
                   <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -351,10 +366,11 @@
                 <div class="bot-card-inner">
                   <h3>Family Planning Coach</h3>
                   <p>Coaching for community health workers on holistic growth (available in French)</p>
-                  <div class="bot-card-footer"><span class="bot-card-link">Try this bot →</span></div>
-
+                  {% if demo_bots.fp_coach %}
+                    <div class="bot-card-footer"><span class="bot-card-link">Try this bot →</span></div>
+                  {% endif %}
                 </div>
-              </a>
+              </div>
             </div>
           </div>
         </div>
@@ -414,7 +430,8 @@
             <p class="uc-panel-desc">Tools for multilateral agencies, funders, and implementing partners to improve knowledge navigation, data access, and program management at the systems level.</p>
             <div style="margin-top:32px;">
               <div class="uc-bot-label">Example Bot: For Demonstration &amp; Research Purposes Only</div>
-              <a class="bot-card bot-card-h" href="https://www.openchatstudio.com/a/dimagi/experiments/e/f4219b24-3f35-45c3-91e8-60949439ce3a/start/" target="_blank" rel="noopener">
+              <div class="bot-card bot-card-h{% if demo_bots.program_dashboard %} bot-card-interactive{% endif %}"
+                   {% if demo_bots.program_dashboard %}data-demo-bot-trigger="program_dashboard" role="button" tabindex="0"{% endif %}>
                 <div class="bot-card-head" style="background:linear-gradient(135deg,#16006D 0%,#16006D 100%);">
                   <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
@@ -426,10 +443,11 @@
                 <div class="bot-card-inner">
                   <h3>Program Dashboard Assistant</h3>
                   <p>AI for navigating multilateral program data and reports</p>
-                  <div class="bot-card-footer"><span class="bot-card-link">Try this bot →</span></div>
-
+                  {% if demo_bots.program_dashboard %}
+                    <div class="bot-card-footer"><span class="bot-card-link">Try this bot →</span></div>
+                  {% endif %}
                 </div>
-              </a>
+              </div>
             </div>
           </div>
         </div>
@@ -491,4 +509,52 @@
 </section>
 {% endblock content %}
 
-{# No page_scripts block — the hamburger toggle lives in base.html #}
+{# The hamburger toggle lives in base.html; this block only wires up the demo bot chat widgets. #}
+{% block page_scripts %}
+  {% if demo_bots %}
+    <script type="module" src="{% widget_script_url %}"></script>
+    {# Widgets are position:fixed, so they take no space where they are declared. #}
+    {% for key, bot in demo_bots.items %}
+      <open-chat-studio-widget data-demo-bot="{{ key }}"
+                               chatbot-id="{{ bot.id }}"
+                               embed-key="{{ bot.embed_key }}"
+                               header-text="{{ bot.header_text|default:'' }}"
+                               banner-message="Example bot: for demonstration and research purposes only."
+                               banner-style="info"
+                               {% if bot.api_base_url %}api-base-url="{{ bot.api_base_url }}"{% endif %}
+                               show-button="false"
+                               visible="false"
+                               position="right"></open-chat-studio-widget>
+    {% endfor %}
+    <script>
+      // Bot cards open their chatbot in the widget. The template only marks a card as a trigger
+      // when its bot has widget config, so unconfigured cards are inert and get no handlers.
+      (function () {
+        const widgets = new Map();
+        document.querySelectorAll("open-chat-studio-widget[data-demo-bot]").forEach(function (widget) {
+          widgets.set(widget.dataset.demoBot, widget);
+        });
+        document.querySelectorAll("[data-demo-bot-trigger]").forEach(function (trigger) {
+          const widget = widgets.get(trigger.dataset.demoBotTrigger);
+          if (!widget) {
+            return;
+          }
+          function open() {
+            // Only one chat window at a time, so the others don't overlap it.
+            widgets.forEach(function (other) {
+              other.setAttribute("visible", other === widget ? "true" : "false");
+            });
+          }
+          trigger.addEventListener("click", open);
+          // The cards are divs rather than links, so they need their own keyboard activation.
+          trigger.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              open();
+            }
+          });
+        });
+      })();
+    </script>
+  {% endif %}
+{% endblock page_scripts %}

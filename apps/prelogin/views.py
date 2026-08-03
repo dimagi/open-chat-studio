@@ -24,6 +24,17 @@ def home(request):
         return render(request, "prelogin/home.html", {"active_nav": "home"})
 
 
+def applications(request):
+    return render(
+        request,
+        "prelogin/applications.html",
+        {
+            "active_nav": "applications",
+            "demo_bots": settings.PRELOGIN_DEMO_BOTS,
+        },
+    )
+
+
 def contact(request):
     hubspot_form = None
     if settings.HUBSPOT_FORM_PORTAL_ID and settings.HUBSPOT_FORM_ID:

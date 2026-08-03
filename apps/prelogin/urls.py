@@ -12,11 +12,7 @@ urlpatterns = [
         name="about",
     ),
     path("contact/", views.contact, name="contact"),
-    path(
-        "applications/",
-        TemplateView.as_view(template_name="prelogin/applications.html", extra_context={"active_nav": "applications"}),
-        name="applications",
-    ),
+    path("applications/", views.applications, name="applications"),
     path(
         "open-opportunities/",
         TemplateView.as_view(template_name="prelogin/open_opportunities.html"),
