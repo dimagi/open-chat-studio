@@ -396,7 +396,9 @@
           // Initialize JSON editor for manual message form after DOM is ready
           this.$nextTick(() => {
             const form = document.getElementById('manual-message-form');
-            window.SiteJS.editors.initJsonEditors(form);
+            if (window.SiteJS && window.SiteJS.editors) {
+              window.SiteJS.editors.initJsonEditors(form);
+            }
           });
 
           // Track evaluation mode
@@ -528,7 +530,9 @@
           this.$nextTick(() => {
             let modal = document.getElementById('editMessageModal');
             modal.showModal();
-            window.SiteJS.editors.initJsonEditors(modal);
+            if (window.SiteJS && window.SiteJS.editors) {
+              window.SiteJS.editors.initJsonEditors(modal);
+            }
           });
         },
 
