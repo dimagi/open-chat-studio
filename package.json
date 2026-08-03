@@ -50,7 +50,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.46.1",
     "webpack": "^5.109.2",
-    "webpack-cli": "^7.0.3"
+    "webpack-cli": "^7.2.2"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
