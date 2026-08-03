@@ -170,7 +170,7 @@ importers:
         version: 8.65.0(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
       autoprefixer:
         specifier: ^10.4.20
-        version: 10.5.4(postcss@8.5.22)
+        version: 10.5.4(postcss@8.5.25)
       babel-loader:
         specifier: ^10.0.0
         version: 10.1.1(@babel/core@7.29.7)(webpack@5.109.2)
@@ -196,23 +196,23 @@ importers:
         specifier: ^2.10.2
         version: 2.10.2(webpack@5.109.2)
       postcss:
-        specifier: ^8.5.10
-        version: 8.5.22
+        specifier: ^8.5.25
+        version: 8.5.25
       postcss-import:
         specifier: ^16.1.1
-        version: 16.1.1(postcss@8.5.22)
+        version: 16.1.1(postcss@8.5.25)
       postcss-loader:
         specifier: ^8.2.0
-        version: 8.2.1(postcss@8.5.22)(typescript@6.0.3)(webpack@5.109.2)
+        version: 8.2.1(postcss@8.5.25)(typescript@6.0.3)(webpack@5.109.2)
       postcss-nested:
         specifier: ^7.0.1
-        version: 7.0.2(postcss@8.5.22)
+        version: 7.0.2(postcss@8.5.25)
       style-loader:
         specifier: ^4.0.0
         version: 4.0.0(webpack@5.109.2)
       terser-webpack-plugin:
         specifier: ^5.3.14
-        version: 5.6.1(postcss@8.5.22)(webpack@5.109.2)
+        version: 5.6.1(postcss@8.5.25)(webpack@5.109.2)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -221,7 +221,7 @@ importers:
         version: 8.65.0(eslint@9.39.5(jiti@2.7.0))(typescript@6.0.3)
       webpack:
         specifier: ^5.109.2
-        version: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+        version: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
       webpack-cli:
         specifier: ^7.0.3
         version: 7.2.1(js-yaml@4.3.0)(json5@2.2.3)(webpack@5.109.2)
@@ -3214,8 +3214,8 @@ packages:
   postcss-value-parser@4.2.0:
     resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
 
-  postcss@8.5.22:
-    resolution: {integrity: sha512-KBDEIpLrvpv16pp3K0Fw+UCoZfopFjjgeB+0tA/aaThfEE74kKDLrgg603YvOWJyg3+WYtyq3xYsQWsIyZlPqQ==}
+  postcss@8.5.25:
+    resolution: {integrity: sha512-DTPx3RWSSnWyzLxQnlH0rJP+EW5ekl16ZU4/psbIhA0e53kJfdgaN5vKM+xP7yJtXVu+nfdVFmlgFDEKAe4Pyw==}
     engines: {node: ^10 || ^12 || >=14}
 
   prelude-ls@1.2.1:
@@ -5140,7 +5140,7 @@ snapshots:
       glob: 13.0.6
       magic-string: 0.30.21
     optionalDependencies:
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
     transitivePeerDependencies:
       - encoding
       - supports-color
@@ -5198,7 +5198,7 @@ snapshots:
   '@sentry/webpack-plugin@5.4.0(webpack@5.109.2)':
     dependencies:
       '@sentry/bundler-plugins': 10.67.0(webpack@5.109.2)
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
     transitivePeerDependencies:
       - encoding
       - rollup
@@ -5281,7 +5281,7 @@ snapshots:
       '@alloc/quick-lru': 5.2.0
       '@tailwindcss/node': 4.3.3
       '@tailwindcss/oxide': 4.3.3
-      postcss: 8.5.22
+      postcss: 8.5.25
       tailwindcss: 4.3.3
 
   '@tailwindcss/typography@0.5.20(tailwindcss@4.3.3)':
@@ -5807,13 +5807,13 @@ snapshots:
   at-least-node@1.0.0:
     optional: true
 
-  autoprefixer@10.5.4(postcss@8.5.22):
+  autoprefixer@10.5.4(postcss@8.5.25):
     dependencies:
       browserslist: 4.28.7
       caniuse-lite: 1.0.30001806
       fraction.js: 5.3.4
       picocolors: 1.1.1
-      postcss: 8.5.22
+      postcss: 8.5.25
       postcss-value-parser: 4.2.0
 
   available-typed-arrays@1.0.7:
@@ -5841,7 +5841,7 @@ snapshots:
       '@babel/core': 7.29.7
       find-up: 5.0.0
     optionalDependencies:
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
 
   babel-plugin-macros@3.1.0:
     dependencies:
@@ -6085,16 +6085,16 @@ snapshots:
 
   css-loader@7.1.4(webpack@5.109.2):
     dependencies:
-      icss-utils: 5.1.0(postcss@8.5.22)
-      postcss: 8.5.22
-      postcss-modules-extract-imports: 3.1.0(postcss@8.5.22)
-      postcss-modules-local-by-default: 4.2.0(postcss@8.5.22)
-      postcss-modules-scope: 3.2.1(postcss@8.5.22)
-      postcss-modules-values: 4.0.0(postcss@8.5.22)
+      icss-utils: 5.1.0(postcss@8.5.25)
+      postcss: 8.5.25
+      postcss-modules-extract-imports: 3.1.0(postcss@8.5.25)
+      postcss-modules-local-by-default: 4.2.0(postcss@8.5.25)
+      postcss-modules-scope: 3.2.1(postcss@8.5.25)
+      postcss-modules-values: 4.0.0(postcss@8.5.25)
       postcss-value-parser: 4.2.0
       semver: 7.8.5
     optionalDependencies:
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
 
   cssesc@3.0.0: {}
 
@@ -6775,9 +6775,9 @@ snapshots:
   human-signals@1.1.1:
     optional: true
 
-  icss-utils@5.1.0(postcss@8.5.22):
+  icss-utils@5.1.0(postcss@8.5.25):
     dependencies:
-      postcss: 8.5.22
+      postcss: 8.5.25
 
   ieee754@1.2.1:
     optional: true
@@ -7200,7 +7200,7 @@ snapshots:
     dependencies:
       schema-utils: 4.3.3
       tapable: 2.3.3
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
 
   minimatch@10.2.5:
     dependencies:
@@ -7213,15 +7213,15 @@ snapshots:
   minimist@1.2.8:
     optional: true
 
-  minimizer-webpack-plugin@5.6.1(postcss@8.5.22)(webpack@5.109.2):
+  minimizer-webpack-plugin@5.6.1(postcss@8.5.25)(webpack@5.109.2):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.49.0
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
     optionalDependencies:
-      postcss: 8.5.22
+      postcss: 8.5.25
 
   minipass@7.1.3: {}
 
@@ -7400,48 +7400,48 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
-  postcss-import@16.1.1(postcss@8.5.22):
+  postcss-import@16.1.1(postcss@8.5.25):
     dependencies:
-      postcss: 8.5.22
+      postcss: 8.5.25
       postcss-value-parser: 4.2.0
       read-cache: 1.0.0
       resolve: 1.22.12
 
-  postcss-loader@8.2.1(postcss@8.5.22)(typescript@6.0.3)(webpack@5.109.2):
+  postcss-loader@8.2.1(postcss@8.5.25)(typescript@6.0.3)(webpack@5.109.2):
     dependencies:
       cosmiconfig: 9.0.2(typescript@6.0.3)
       jiti: 2.7.0
-      postcss: 8.5.22
+      postcss: 8.5.25
       semver: 7.8.5
     optionalDependencies:
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
     transitivePeerDependencies:
       - typescript
 
-  postcss-modules-extract-imports@3.1.0(postcss@8.5.22):
+  postcss-modules-extract-imports@3.1.0(postcss@8.5.25):
     dependencies:
-      postcss: 8.5.22
+      postcss: 8.5.25
 
-  postcss-modules-local-by-default@4.2.0(postcss@8.5.22):
+  postcss-modules-local-by-default@4.2.0(postcss@8.5.25):
     dependencies:
-      icss-utils: 5.1.0(postcss@8.5.22)
-      postcss: 8.5.22
+      icss-utils: 5.1.0(postcss@8.5.25)
+      postcss: 8.5.25
       postcss-selector-parser: 7.1.4
       postcss-value-parser: 4.2.0
 
-  postcss-modules-scope@3.2.1(postcss@8.5.22):
+  postcss-modules-scope@3.2.1(postcss@8.5.25):
     dependencies:
-      postcss: 8.5.22
+      postcss: 8.5.25
       postcss-selector-parser: 7.1.4
 
-  postcss-modules-values@4.0.0(postcss@8.5.22):
+  postcss-modules-values@4.0.0(postcss@8.5.25):
     dependencies:
-      icss-utils: 5.1.0(postcss@8.5.22)
-      postcss: 8.5.22
+      icss-utils: 5.1.0(postcss@8.5.25)
+      postcss: 8.5.25
 
-  postcss-nested@7.0.2(postcss@8.5.22):
+  postcss-nested@7.0.2(postcss@8.5.25):
     dependencies:
-      postcss: 8.5.22
+      postcss: 8.5.25
       postcss-selector-parser: 7.1.4
 
   postcss-selector-parser@6.0.10:
@@ -7456,7 +7456,7 @@ snapshots:
 
   postcss-value-parser@4.2.0: {}
 
-  postcss@8.5.22:
+  postcss@8.5.25:
     dependencies:
       nanoid: 3.3.16
       picocolors: 1.1.1
@@ -7883,7 +7883,7 @@ snapshots:
 
   style-loader@4.0.0(webpack@5.109.2):
     dependencies:
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
 
   style-mod@4.1.3: {}
 
@@ -7906,15 +7906,15 @@ snapshots:
 
   tapable@2.3.3: {}
 
-  terser-webpack-plugin@5.6.1(postcss@8.5.22)(webpack@5.109.2):
+  terser-webpack-plugin@5.6.1(postcss@8.5.25)(webpack@5.109.2):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.49.0
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
     optionalDependencies:
-      postcss: 8.5.22
+      postcss: 8.5.25
 
   terser@5.49.0:
     dependencies:
@@ -8102,7 +8102,7 @@ snapshots:
       import-local: 3.2.0
       interpret: 3.1.1
       rechoir: 0.8.0
-      webpack: 5.109.2(postcss@8.5.22)(webpack-cli@7.2.1)
+      webpack: 5.109.2(postcss@8.5.25)(webpack-cli@7.2.1)
       webpack-merge: 6.0.1
     optionalDependencies:
       js-yaml: 4.3.0
@@ -8116,7 +8116,7 @@ snapshots:
 
   webpack-sources@3.5.1: {}
 
-  webpack@5.109.2(postcss@8.5.22)(webpack-cli@7.2.1):
+  webpack@5.109.2(postcss@8.5.25)(webpack-cli@7.2.1):
     dependencies:
       '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
@@ -8132,7 +8132,7 @@ snapshots:
       events: 3.3.0
       graceful-fs: 4.2.11
       mime-db: 1.54.0
-      minimizer-webpack-plugin: 5.6.1(postcss@8.5.22)(webpack@5.109.2)
+      minimizer-webpack-plugin: 5.6.1(postcss@8.5.25)(webpack@5.109.2)
       neo-async: 2.6.2
       schema-utils: 4.3.3
       tapable: 2.3.3
