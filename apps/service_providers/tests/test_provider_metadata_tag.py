@@ -88,7 +88,7 @@ class TestTagChatModel:
                 deepseek_api_base="https://api.deepseek.com",
             ),
             "deepseek",
-            "deepseek-chat",
+            "deepseek-v4-flash",
             id="deepseek",
         ),
         pytest.param(

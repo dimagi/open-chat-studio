@@ -642,7 +642,7 @@ def test_diffable_models_skips_non_upstream_providers():
         ("openai", "gpt-4o"): {},
         ("azure", "gpt-4o"): {},
         ("groq", "llama-3.3-70b-versatile"): {},
-        ("deepseek", "deepseek-chat"): {},
+        ("deepseek", "deepseek-v4-flash"): {},
     }
     assert diffable_models(index) == {"gpt-4o"}
 
