@@ -9,5 +9,5 @@ class Migration(migrations.Migration):
 
     operations = [
         # Add deepseek-v4-flash for the `deepseek` provider (1M context, 384k max output).
-        # llm_model_migration() moved to 0070_deprecate_deepseek_chat_reasoner
+        # llm_model_migration() moved to 0070_deepseek_model_updates
     ]
