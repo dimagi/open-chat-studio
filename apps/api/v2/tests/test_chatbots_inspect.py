@@ -169,6 +169,7 @@ def _node(payload, label):
 
 def _expected_llm(bot):
     return {
+        "model_id": bot.model.id,
         "provider_id": bot.provider.id,
         "provider_name": "Prod OpenAI",
         "type": "openai",
@@ -222,6 +223,7 @@ def test_acceptance_3_rag_collection_files(inspect_bot):
             "id": inspect_bot.collection.id,
             "name": "Policy index",
             "embedding": {
+                "model_id": inspect_bot.collection.embedding_provider_model_id,
                 "provider_id": inspect_bot.collection.llm_provider_id,
                 "provider_name": inspect_bot.collection.llm_provider.name,
                 "type": inspect_bot.collection.llm_provider.type,
@@ -566,6 +568,7 @@ def _expected_pipeline_nodes(bot):
             "label": "Answer",
             "params": {"prompt": "Answer the user"},
             "llm": {
+                "model_id": bot.llm_model.id,
                 "provider_id": bot.llm_provider.id,
                 "provider_name": "Prod OpenAI",
                 "type": "openai",
@@ -598,6 +601,7 @@ def _expected_pipeline_nodes(bot):
                     "id": bot.index_collection.id,
                     "name": "Policy index",
                     "embedding": {
+                        "model_id": bot.index_collection.embedding_provider_model_id,
                         "provider_id": bot.llm_provider.id,
                         "provider_name": "Prod OpenAI",
                         "type": "openai",
@@ -631,6 +635,7 @@ def _expected_pipeline_nodes(bot):
                 }
             ],
             "voice": {
+                "synthetic_voice_id": bot.synthetic_voice.id,
                 "provider_id": bot.voice_provider.id,
                 "provider_name": "ElevenLabs Prod",
                 "type": bot.voice_provider.type,
@@ -726,6 +731,7 @@ def _expected_full_response(bot):
             "identifier_type": "email",
         },
         "voice": {
+            "synthetic_voice_id": bot.synthetic_voice.id,
             "provider_id": bot.voice_provider.id,
             "provider_name": "ElevenLabs Prod",
             "type": bot.voice_provider.type,
@@ -756,7 +762,15 @@ def _expected_full_response(bot):
                     {"node_id": "llm", "type": "LLMResponseWithPrompt", "label": "Answer"},
                     {"node_id": "assist", "type": "AssistantNode", "label": "Assistant"},
                 ],
-                "edges": [{"source": "llm", "target": "assist", "source_handle": "output", "target_handle": "input"}],
+                "edges": [
+                    {
+                        "id": "e1",
+                        "source": "llm",
+                        "target": "assist",
+                        "source_handle": "output",
+                        "target_handle": "input",
+                    }
+                ],
             },
             "nodes": _expected_pipeline_nodes(bot),
         },

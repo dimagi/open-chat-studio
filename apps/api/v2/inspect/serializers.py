@@ -262,6 +262,12 @@ class FlattenedModelProviderSerializer(FlattenedProviderSerializer):
     Expects a :class:`ProviderModelPair`; a missing provider or model renders its fields as null.
     """
 
+    model_id = serializers.IntegerField(
+        source="model.id",
+        default=None,
+        allow_null=True,
+        help_text="The model's id — the value to write back as the node's model reference.",
+    )
     # ``ProviderModelPair.type`` — provider type with model-type fallback.
     type = serializers.CharField(allow_null=True)
     model = serializers.CharField(source="model.name", default=None, allow_null=True)
@@ -290,6 +296,12 @@ class FlattenedVoiceSerializer(FlattenedProviderSerializer):
     Expects a :class:`VoicePair`.
     """
 
+    synthetic_voice_id = serializers.IntegerField(
+        source="voice.id",
+        default=None,
+        allow_null=True,
+        help_text="The synthetic voice's id — the value to write back to set the voice.",
+    )
     # Unlike the llm/embedding pairs, ``type`` has no fallback to the voice half — a provider-less
     # voice renders ``type: null`` (matches the pre-refactor shape).
     type = serializers.CharField(
@@ -427,6 +439,10 @@ class GraphNodeSerializer(serializers.Serializer):
 
 @extend_schema_serializer(component_name="InspectGraphEdge")
 class GraphEdgeSerializer(serializers.Serializer):
+    id = serializers.CharField(
+        allow_null=True,
+        help_text="The edge's identity — the address a write-API caller uses to delete this edge.",
+    )
     source = serializers.CharField(help_text="``node_id`` the edge leaves from.")
     target = serializers.CharField(help_text="``node_id`` the edge points to.")
     source_handle = serializers.CharField(

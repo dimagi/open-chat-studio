@@ -57,6 +57,7 @@ def test_voice_not_dropped_when_only_synthetic_voice_field_set():
     data = _render("LLMResponseWithPrompt", {"synthetic_voice_id": voice.id})
 
     assert data["voice"] == {
+        "synthetic_voice_id": voice.id,
         "provider_id": provider.id,
         "provider_name": provider.name,
         "type": provider.type,
