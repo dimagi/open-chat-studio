@@ -2,6 +2,7 @@
      {% if collection.create_version_task_id %}
        hx-get="{% url 'documents:collection_snapshots' request.team.slug collection.id %}"
        hx-trigger="every 2s"
+       hx-target="this"
        hx-swap="outerHTML"
      {% endif %}
 >
