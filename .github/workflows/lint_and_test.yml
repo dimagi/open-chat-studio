@@ -157,7 +157,7 @@ jobs:
           files=$(printf '%s' "$CHANGED_FILES" | jq -r '.[]' | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
       - name: Run pre-commit hooks
-        uses: j178/prek-action@v2.0.6
+        uses: j178/prek-action@v3.0.0
         with:
           extra-args: --files ${{ steps.changed_files.outputs.files }}
 
