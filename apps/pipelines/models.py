@@ -15,7 +15,13 @@ from apps.custom_actions.form_utils import set_custom_actions
 from apps.custom_actions.mixins import CustomActionOperationMixin
 from apps.experiments.models import ExperimentSession, VersionFieldDisplayFormatters
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.pipelines.exceptions import MissingNodeDataError, PipelineBuildError
+from apps.pipelines.exceptions import (
+    ErrorReport,
+    MissingNodeDataError,
+    PipelineBuildError,
+    error_report,
+    has_errors,
+)
 from apps.pipelines.flow import (
     Flow,
     FlowNode,
@@ -198,21 +204,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         with contextlib.suppress(AttributeError):  # nothing cached if flow_data was never read
             del self.flow_data
 
-    def validate(self, full=True) -> dict:
-        """Validate the pipeline nodes and return a dictionary of errors"""
+    def validate(self, full=True) -> ErrorReport:
+        """Every problem with this pipeline. All three buckets empty means it is valid.
+
+        Callers should test the result with :func:`~apps.pipelines.exceptions.has_errors` rather than
+        for truthiness — the report is always fully populated, so an error-free one is still a dict
+        with three empty values.
+        """
         from apps.pipelines.graph import PipelineGraph  # noqa: PLC0415 - circular: graph.py imports models
-        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
 
         errors = defaultdict(dict)
         nodes = self.node_set.all()
         for node in nodes:
-            node_class = getattr(pipeline_nodes, node.type)
-            try:
-                node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
-            except pydantic.ValidationError as e:
-                for error in e.errors():
-                    field = error["loc"][0] if error["loc"] else error["ctx"]["field"]
-                    errors[node.flow_id][field] = error["msg"]
+            if node_errors := self._node_validation_errors(node):
+                errors[node.flow_id].update(node_errors)
 
         name_to_flow_id = defaultdict(list)
         for node in nodes:
@@ -223,15 +228,35 @@ class Pipeline(BaseTeamModel, VersionsMixin):
                 for flow_id in flow_ids:
                     errors[flow_id].update({"name": "All node names must be unique"})
 
-        if errors:
-            return {"node": errors}
+        if not full:
+            return error_report(errors, [])
 
-        if full:
+        graph = PipelineGraph.build_from_pipeline(self)
+        report = error_report(errors, graph.build_errors)
+
+        # The remaining checks — building each node instance, then compiling — genuinely require
+        # everything above to pass, so they stay staged behind it. Skipping them when the report is
+        # already non-empty also means an invalid pipeline no longer pays for a doomed build.
+        if not has_errors(report):
             try:
-                PipelineGraph.build_runnable_from_pipeline(self)
+                graph.build_runnable()
             except PipelineBuildError as e:
-                return e.to_json()
+                report = error_report(errors, [e])
 
+        return report
+
+    @staticmethod
+    def _node_validation_errors(node) -> dict:
+        """Field -> message errors for one node's params."""
+        from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→models
+
+        node_class = getattr(pipeline_nodes, node.type)
+        try:
+            node_class.model_validate({**node.params, "node_id": node.flow_id, "django_node": node})
+        except pydantic.ValidationError as e:
+            # A model-level error carries no ``loc`` and names its field in ``ctx`` instead (see the
+            # PydanticCustomError raises under apps/pipelines/nodes).
+            return {(error["loc"][0] if error["loc"] else error["ctx"]["field"]): error["msg"] for error in e.errors()}
         return {}
 
     @property

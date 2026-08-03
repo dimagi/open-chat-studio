@@ -92,6 +92,15 @@ class PipelineGraph(pydantic.BaseModel):
         return end_nodes[0]
 
     @cached_property
+    def reachable_nodes(self) -> list[Node]:
+        """The nodes the build actually wires. Requires exactly one Start node and no cycle."""
+        return self._get_reachable_nodes(self.start_node)
+
+    @cached_property
+    def reachable_ids(self) -> set[str]:
+        return {node.id for node in self.reachable_nodes}
+
+    @cached_property
     def conditional_edge_map(self) -> dict[str, dict[str, str]]:
         conditional_edge_map = defaultdict(dict)
         for edge in self.conditional_edges:
@@ -119,23 +128,53 @@ class PipelineGraph(pydantic.BaseModel):
         edge_data = [Edge(**edge) for edge in pipeline.data["edges"]]
         return cls(nodes=node_data, edges=edge_data)
 
-    def build_runnable(self) -> CompiledStateGraph:
+    @cached_property
+    def build_errors(self) -> list[PipelineBuildError]:
+        """Every structural problem with this graph that is checkable, not just the first.
 
+        The checks tier, because later ones presuppose earlier ones: reachability needs exactly one
+        Start node. So a failing tier suppresses the tiers below it — those answers don't exist yet,
+        rather than being withheld for brevity.
+
+        Node params are *not* checked here; ``Pipeline._node_validation_errors`` owns that and merges
+        its results with these. This avoids building node instances wherever it can, so an invalid
+        node doesn't stop it reporting what it can.
+        """
         if not self.nodes:
-            raise PipelineBuildError("There are no nodes in the graph")
+            return [PipelineBuildError("There are no nodes in the graph")]
 
-        self._validate_start_end_nodes()
+        # Tier 1 — needs nothing.
+        errors = self._start_end_node_errors()
         if self._check_for_cycles():
-            raise PipelineBuildError("A cycle was detected")
+            errors.append(PipelineBuildError("A cycle was detected"))
+
+        # Tier 2 — needs exactly one Start/End node.
+        if errors:
+            return errors
+        if self.end_node not in self.reachable_nodes:
+            errors.append(
+                PipelineBuildError(
+                    f"{EndNode.model_config['json_schema_extra'].label} node is not reachable "
+                    f"from {StartNode.model_config['json_schema_extra'].label} node",
+                    node_id=self.end_node.id,
+                )
+            )
+        return errors
+
+    def build_runnable(self) -> CompiledStateGraph:
+        # build_errors is the single source of truth for what's wrong with the graph; the runtime
+        # still fails fast, on the first problem in dependency order. Cached, so a caller that has
+        # already read it (Pipeline.validate) doesn't pay for it twice.
+        if errors := self.build_errors:
+            raise errors[0]
 
         state_graph = StateGraph(PipelineState)
 
         state_graph.set_entry_point(self.start_node.id)
         state_graph.set_finish_point(self.end_node.id)
 
-        reachable_nodes = self._get_reachable_nodes(self.start_node)
-        self._add_nodes_to_graph(state_graph, reachable_nodes)
-        self._add_edges_to_graph(state_graph, reachable_nodes)
+        self._add_nodes_to_graph(state_graph, self.reachable_nodes)
+        self._add_edges_to_graph(state_graph, self.reachable_nodes)
 
         try:
             compiled_graph = state_graph.compile()
@@ -182,13 +221,7 @@ class PipelineGraph(pydantic.BaseModel):
         return list(self.nodes_by_id[node_id] for node_id in visited)
 
     def _add_nodes_to_graph(self, state_graph: StateGraph, nodes: list[Node]):
-        if self.end_node not in nodes:
-            raise PipelineBuildError(
-                f"{EndNode.model_config['json_schema_extra'].label} node is not reachable "
-                f"from {StartNode.model_config['json_schema_extra'].label} node",
-                node_id=self.end_node.id,
-            )
-
+        # End-reachability is checked by build_errors, which build_runnable reads first.
         retry_policy = get_retry_policy()
 
         for node in nodes:
@@ -219,14 +252,12 @@ class PipelineGraph(pydantic.BaseModel):
                     # conditional edges are handled by router node outputs
                     state_graph.add_edge(edge.source, edge.target)
 
-    def _validate_start_end_nodes(self):
-        start_nodes = [node for node in self.nodes if node.type == StartNode.__name__]
-        if len(start_nodes) != 1:
-            raise PipelineBuildError(
-                f"There should be exactly 1 {StartNode.model_config['json_schema_extra'].label} node"
-            )
-        end_nodes = [node for node in self.nodes if node.type == EndNode.__name__]
-        if len(end_nodes) != 1:
-            raise PipelineBuildError(
-                f"There should be exactly 1 {EndNode.model_config['json_schema_extra'].label} node"
-            )
+    def _start_end_node_errors(self) -> list[PipelineBuildError]:
+        """Both counts, reported together — one missing terminal shouldn't hide the other."""
+        errors = []
+        for node_class in (StartNode, EndNode):
+            matching = [node for node in self.nodes if node.type == node_class.__name__]
+            if len(matching) != 1:
+                label = node_class.model_config["json_schema_extra"].label
+                errors.append(PipelineBuildError(f"There should be exactly 1 {label} node"))
+        return errors

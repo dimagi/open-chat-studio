@@ -8,6 +8,7 @@ from apps.chat.bots import PipelineTestBot
 from apps.documents.models import CollectionFile
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.pipelines.exceptions import has_errors
 from apps.pipelines.flow import Flow, FlowNode, split_flow_data
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes.nodes import AssistantNode, LLMResponseWithPrompt
@@ -879,8 +880,7 @@ class TestPipelineValidation:
         layout, node_data = split_flow_data(Flow(edges=edges, nodes=flow_nodes))
         pipeline.data = layout.model_dump()
         pipeline.update_nodes_from_data(node_data)
-        errors = pipeline.validate()
-        assert not errors
+        assert not has_errors(pipeline.validate())
 
 
 @pytest.mark.parametrize(
