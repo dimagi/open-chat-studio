@@ -103,9 +103,9 @@ def pdf_read(file_obj) -> Document:
     so a thread cannot be cancelled, and a SIGALRM budget fires only on the main thread,
     which is not where our gevent or threaded workers run requests.
 
-    PDFium itself is not thread-safe, and both the Celery workers (--pool threads) and
-    gunicorn (--threads) parse PDFs concurrently in one process, so a module lock serialises
-    every parse: unsynchronised concurrent use corrupts library state and fails valid PDFs.
+    PDFium itself is not thread-safe and we parse PDFs from threaded workers, so a module lock
+    serialises every parse: unsynchronised concurrent use corrupts library state and fails
+    valid PDFs.
     """
     import pypdfium2  # noqa: PLC0415 - TID253: loads a shared library, keep off the import path
 

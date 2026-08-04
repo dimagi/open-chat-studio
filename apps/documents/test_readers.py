@@ -89,9 +89,9 @@ class TestPdfRead:
         assert doc.get_contents_as_string() == "line one\nline two\n"
 
     def test_concurrent_reads_do_not_corrupt_pdfium(self):
-        """PDFium is not thread-safe and both the Celery workers (--pool threads) and gunicorn
-        (--threads 8) parse PDFs concurrently in one process. Without serialisation, concurrent
-        parses corrupt library state and valid PDFs fail with 'Data format error'."""
+        """PDFium is not thread-safe and we parse PDFs from threaded workers. Without
+        serialisation, concurrent parses corrupt library state and valid PDFs fail with
+        'Data format error'."""
         pdf_bytes = TEST_PDF.read_bytes()
         errors = []
 
