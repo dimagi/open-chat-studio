@@ -17,6 +17,11 @@ import {ErrorsType, PipelineManagerStoreType} from "../types/pipelineManagerStor
 import {apiClient} from "../api/api";
 import {PipelineDiffPayload, PipelineType, PipelineSaveResponse} from "../types/pipeline";
 import {computePipelineDiff} from "../diffPipeline";
+// Returned whenever there are no graph-level errors. Must be a single shared instance: the store is
+// read via useSyncExternalStore, which compares snapshots by identity, so handing back a fresh []
+// each call makes every render look like a change and loops until React bails out.
+const NO_PIPELINE_ERRORS: string[] = [];
+
 let saveTimeoutId: NodeJS.Timeout | null = null;
 // Serialization guard for autosave (see issue #3895). While a PATCH is in-flight
 // its response has not yet bumped `currentRevision`, so firing a second PATCH would
@@ -455,7 +460,7 @@ const createPipelineManagerStore: StateCreator<
     return !!get().errors["edge"] && get().errors["edge"]!.includes(edgeId);
   },
   getPipelineError: () => {
-    return get().errors["pipeline"];
+    return get().errors["pipeline"] ?? NO_PIPELINE_ERRORS;
   },
 })
 

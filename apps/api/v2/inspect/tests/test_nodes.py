@@ -42,10 +42,10 @@ def test_nodes_in_render_order_is_stable_whatever_order_the_db_returns():
 
 def test_graph_digest_strips_positions_and_normalises_handles():
     nodes = [SimpleNamespace(flow_id="a", type="StartNode", label="Start")]
-    data = {"edges": [{"source": "a", "target": "b", "sourceHandle": "out", "targetHandle": "in", "x": 1}]}
+    data = {"edges": [{"id": "e1", "source": "a", "target": "b", "sourceHandle": "out", "targetHandle": "in", "x": 1}]}
     assert graph_digest(nodes, data) == {
         "nodes": [{"flow_id": "a", "type": "StartNode", "label": "Start"}],
-        "edges": [{"source": "a", "target": "b", "source_handle": "out", "target_handle": "in"}],
+        "edges": [{"id": "e1", "source": "a", "target": "b", "source_handle": "out", "target_handle": "in"}],
     }
 
 

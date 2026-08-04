@@ -13,6 +13,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.events.models import EventActionType
 from apps.experiments.models import Experiment
 from apps.files.models import File
+from apps.pipelines.tests.utils import create_pipeline_model, end_node, start_node
 from apps.teams.utils import current_team
 from apps.utils.deletion import delete_object_with_auditing_of_related_objects
 from apps.utils.factories.assistants import OpenAiAssistantFactory
@@ -169,6 +170,7 @@ def _node(payload, label):
 
 def _expected_llm(bot):
     return {
+        "model_id": bot.model.id,
         "provider_id": bot.provider.id,
         "provider_name": "Prod OpenAI",
         "type": "openai",
@@ -222,6 +224,7 @@ def test_acceptance_3_rag_collection_files(inspect_bot):
             "id": inspect_bot.collection.id,
             "name": "Policy index",
             "embedding": {
+                "model_id": inspect_bot.collection.embedding_provider_model_id,
                 "provider_id": inspect_bot.collection.llm_provider_id,
                 "provider_name": inspect_bot.collection.llm_provider.name,
                 "type": inspect_bot.collection.llm_provider.type,
@@ -393,6 +396,82 @@ def test_unknown_version_404(inspect_bot):
     assert _client(inspect_bot.experiment).get(f"{url}?version=999").status_code == 404
 
 
+# ── Top-level build state (pipeline_valid / errors / unwired_handles) ────────────────────────────
+def _build_state_bot():
+    """A bot with a valid, fully wired start -> end pipeline.
+
+    ``PipelineFactory``'s default data seeds start/end nodes without a ``name`` param, which
+    ``Pipeline.validate()`` flags, so build the pipeline through the same helper the pipeline
+    validation tests use (it names every node).
+    """
+    team = TeamWithUsersFactory.create()
+    pipeline = PipelineFactory.create(team=team)
+    create_pipeline_model([start_node(), end_node()], pipeline=pipeline)
+    pipeline.save()  # create_pipeline_model mutates pipeline.data without persisting it
+    return ExperimentFactory.create(team=team, pipeline=pipeline)
+
+
+@pytest.mark.django_db()
+def test_build_state_valid_and_fully_wired():
+    experiment = _build_state_bot()  # default pipeline: start -> end, fully wired
+    payload = _client(experiment).get(_inspect_url(experiment)).json()
+    assert payload["pipeline_valid"] is True
+    assert payload["pipeline_errors"] == {"node": {}, "edge": [], "pipeline": []}
+    assert payload["unwired_handles"] == {}
+
+
+@pytest.mark.django_db()
+def test_build_state_reports_node_errors_and_unwired_handles_together():
+    """An off-graph node missing a required param: the param error lands in errors.node, while its
+    dangling input/output land in the advisory unwired_handles map."""
+    experiment = _build_state_bot()
+    _make_node(
+        pipeline=experiment.pipeline,
+        flow_id="island-1",
+        type="LLMResponseWithPrompt",
+        label="Island",
+        params={"name": "Island", "prompt": "hi"},
+    )
+
+    payload = _client(experiment).get(_inspect_url(experiment)).json()
+
+    assert payload["pipeline_valid"] is False
+    assert "llm_provider_id" in payload["pipeline_errors"]["node"]["island-1"]
+    assert payload["unwired_handles"] == {
+        "island-1": [{"handle": "input", "label": None}, {"handle": "output", "label": None}]
+    }
+
+
+@pytest.mark.django_db()
+def test_build_state_reports_a_node_type_that_is_not_a_node_class():
+    """``Node.type`` is unvalidated graph data, so it can name any attribute of the nodes module —
+    here a logger. The read must report it as an unknown type, not 500 on what it resolved to."""
+    experiment = _build_state_bot()
+    _make_node(pipeline=experiment.pipeline, flow_id="odd-1", type="logger", label="Odd", params={"name": "Odd"})
+
+    response = _client(experiment).get(_inspect_url(experiment))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["pipeline_valid"] is False
+    assert payload["pipeline_errors"]["node"]["odd-1"] == {"root": "Unknown node type: logger"}
+    # Its outputs are unknowable, so only the implicit input is reported.
+    assert payload["unwired_handles"] == {"odd-1": [{"handle": "input", "label": None}]}
+
+
+@pytest.mark.django_db()
+def test_build_state_present_on_version_reads():
+    experiment = _build_state_bot()
+    version = experiment.create_new_version()
+    url = _inspect_url(experiment)
+
+    payload = _client(experiment).get(f"{url}?version={version.version_number}").json()
+
+    assert payload["pipeline_valid"] is True
+    assert payload["pipeline_errors"] == {"node": {}, "edge": [], "pipeline": []}
+    assert payload["unwired_handles"] == {}
+
+
 # ── Full response body ───────────────────────────────────────────────────────────────────────────
 def _full_bot():
     """A fully populated bot whose response has no null fields, so every serializer runs.
@@ -466,6 +545,7 @@ def _full_bot():
                         "label": "Answer",
                         # the react FE persists ids as strings
                         "params": {
+                            "name": "Answer",
                             "llm_provider_id": str(llm_provider.id),
                             "llm_provider_model_id": str(llm_model.id),
                             "source_material_id": str(source.id),
@@ -473,7 +553,9 @@ def _full_bot():
                             "collection_index_ids": [str(index_collection.id)],
                             "custom_actions": [f"{action.id}:weather_get", f"{action.id}:pollen_get"],
                             "synthetic_voice_id": str(synthetic_voice.id),
-                            "prompt": "Answer the user",
+                            # source_material_id is set, so the prompt must reference the variable
+                            # or node validation flags it.
+                            "prompt": "Answer the user using {source_material} and {media}",
                         },
                     },
                 },
@@ -483,7 +565,7 @@ def _full_bot():
                         "id": "assist",
                         "type": "AssistantNode",
                         "label": "Assistant",
-                        "params": {"assistant_id": str(assistant.id), "citations_enabled": True},
+                        "params": {"name": "Assistant", "assistant_id": str(assistant.id), "citations_enabled": True},
                     },
                 },
             ],
@@ -557,14 +639,154 @@ def _full_bot():
     )
 
 
-@pytest.mark.django_db()
-def test_full_response_body():
-    """A fully populated bot whose response has no null fields, so every serializer runs."""
-    bot = _full_bot()
+def _expected_pipeline_nodes(bot):
+    """The two fully-populated node objects in ``_full_bot()``'s pipeline."""
+    return [
+        {
+            "node_id": "llm",
+            "type": "LLMResponseWithPrompt",
+            "label": "Answer",
+            "params": {"prompt": "Answer the user using {source_material} and {media}"},
+            "output_handles": [{"handle": "output", "label": None}],
+            "llm": {
+                "model_id": bot.llm_model.id,
+                "provider_id": bot.llm_provider.id,
+                "provider_name": "Prod OpenAI",
+                "type": "openai",
+                "model": "gpt-4o",
+                "max_token_limit": 128000,
+                "deprecated": False,
+            },
+            "source_material": {
+                "id": bot.source.id,
+                "topic": "Returns",
+                "description": "Returns policy",
+                "material": "# Returns",
+            },
+            "media_collection": {
+                "id": bot.media_collection.id,
+                "name": "Media docs",
+                "files": [
+                    {
+                        "id": bot.media_file.id,
+                        "name": "guide.pdf",
+                        "content_type": "application/pdf",
+                        "content_size": 50321,
+                        "external_source": "",
+                        "external_id": "",
+                    }
+                ],
+            },
+            "indexed_collections": [
+                {
+                    "id": bot.index_collection.id,
+                    "name": "Policy index",
+                    "embedding": {
+                        "model_id": bot.index_collection.embedding_provider_model_id,
+                        "provider_id": bot.llm_provider.id,
+                        "provider_name": "Prod OpenAI",
+                        "type": "openai",
+                        "model": "text-embedding-3-small",
+                    },
+                    "files": [
+                        {
+                            "id": bot.index_file.id,
+                            "name": "policy.pdf",
+                            "content_type": "application/pdf",
+                            "content_size": 40112,
+                            "external_source": "",
+                            "external_id": "",
+                        }
+                    ],
+                }
+            ],
+            "custom_actions": [
+                {
+                    "id": bot.action.id,
+                    "name": "Session Completion",
+                    "description": "Custom action description",
+                    "server_url": "https://api.weather.com",
+                    "allowed_operations": ["weather_get", "pollen_get"],
+                    "api_schema": {"paths": ["/pollen", "/weather"]},
+                    "auth_provider": {
+                        "id": bot.auth_provider.id,
+                        "type": bot.auth_provider.type,
+                        "name": "Partner Auth",
+                    },
+                }
+            ],
+            "voice": {
+                "synthetic_voice_id": bot.synthetic_voice.id,
+                "provider_id": bot.voice_provider.id,
+                "provider_name": "ElevenLabs Prod",
+                "type": bot.voice_provider.type,
+                "voice_name": "Rachel",
+                "language": "English",
+                "neural": True,
+            },
+        },
+        {
+            "node_id": "assist",
+            "type": "AssistantNode",
+            "label": "Assistant",
+            "params": {"citations_enabled": True},
+            "output_handles": [{"handle": "output", "label": None}],
+            "assistant": {
+                "id": bot.assistant.id,
+                "name": "Helper",
+                "assistant_id": "asst_123",
+                "instructions": "Be helpful",
+                "builtin_tools": [],
+                "tools": [],
+                "temperature": 1.0,
+                "top_p": 1.0,
+            },
+        },
+    ]
 
-    payload = _get(bot)
 
-    assert payload == {
+def _expected_events(bot):
+    """``_full_bot()``'s schedule and timeout triggers as rendered."""
+    return {
+        "static_triggers": [
+            {
+                "id": bot.schedule_trigger.id,
+                "type": "conversation_start",
+                "is_active": True,
+                "action": {
+                    "type": "schedule_trigger",
+                    "params": {
+                        "scheduled_message": {
+                            "name": "Daily nudge",
+                            "frequency": 1,
+                            "time_period": "days",
+                            "repetitions": 3,
+                            "prompt_text": "Hi",
+                        },
+                    },
+                },
+            }
+        ],
+        "timeout_triggers": [
+            {
+                "id": bot.timeout_trigger.id,
+                "delay_seconds": 86400,
+                "total_num_triggers": 1,
+                "trigger_from_first_message": False,
+                "is_active": True,
+                "action": {"type": "send_message_to_bot", "params": {"message_to_bot": "Still there?"}},
+            }
+        ],
+    }
+
+
+def _expected_full_response(bot):
+    """The complete inspect response for ``_full_bot()``.
+
+    Split across three builders only to keep each one readable; the test still asserts the whole
+    payload in one equality, so any contract change shows up as a diff.
+    """
+    return {
         "id": str(bot.experiment.public_id),
         "name": "Support Bot",
         "description": "Customer support bot",
@@ -591,6 +813,7 @@ def test_full_response_body():
             "identifier_type": "email",
         },
         "voice": {
+            "synthetic_voice_id": bot.synthetic_voice.id,
             "provider_id": bot.voice_provider.id,
             "provider_name": "ElevenLabs Prod",
             "type": bot.voice_provider.type,
@@ -621,138 +844,41 @@ def test_full_response_body():
                     {"node_id": "llm", "type": "LLMResponseWithPrompt", "label": "Answer"},
                     {"node_id": "assist", "type": "AssistantNode", "label": "Assistant"},
                 ],
-                "edges": [{"source": "llm", "target": "assist", "source_handle": "output", "target_handle": "input"}],
+                "edges": [
+                    {
+                        "id": "e1",
+                        "source": "llm",
+                        "target": "assist",
+                        "source_handle": "output",
+                        "target_handle": "input",
+                    }
+                ],
             },
-            "nodes": [
-                {
-                    "node_id": "llm",
-                    "type": "LLMResponseWithPrompt",
-                    "label": "Answer",
-                    "params": {"prompt": "Answer the user"},
-                    "llm": {
-                        "provider_id": bot.llm_provider.id,
-                        "provider_name": "Prod OpenAI",
-                        "type": "openai",
-                        "model": "gpt-4o",
-                        "max_token_limit": 128000,
-                        "deprecated": False,
-                    },
-                    "source_material": {
-                        "id": bot.source.id,
-                        "topic": "Returns",
-                        "description": "Returns policy",
-                        "material": "# Returns",
-                    },
-                    "media_collection": {
-                        "id": bot.media_collection.id,
-                        "name": "Media docs",
-                        "files": [
-                            {
-                                "id": bot.media_file.id,
-                                "name": "guide.pdf",
-                                "content_type": "application/pdf",
-                                "content_size": 50321,
-                                "external_source": "",
-                                "external_id": "",
-                            }
-                        ],
-                    },
-                    "indexed_collections": [
-                        {
-                            "id": bot.index_collection.id,
-                            "name": "Policy index",
-                            "embedding": {
-                                "provider_id": bot.llm_provider.id,
-                                "provider_name": "Prod OpenAI",
-                                "type": "openai",
-                                "model": "text-embedding-3-small",
-                            },
-                            "files": [
-                                {
-                                    "id": bot.index_file.id,
-                                    "name": "policy.pdf",
-                                    "content_type": "application/pdf",
-                                    "content_size": 40112,
-                                    "external_source": "",
-                                    "external_id": "",
-                                }
-                            ],
-                        }
-                    ],
-                    "custom_actions": [
-                        {
-                            "id": bot.action.id,
-                            "name": "Session Completion",
-                            "description": "Custom action description",
-                            "server_url": "https://api.weather.com",
-                            "allowed_operations": ["weather_get", "pollen_get"],
-                            "api_schema": {"paths": ["/pollen", "/weather"]},
-                            "auth_provider": {
-                                "id": bot.auth_provider.id,
-                                "type": bot.auth_provider.type,
-                                "name": "Partner Auth",
-                            },
-                        }
-                    ],
-                    "voice": {
-                        "provider_id": bot.voice_provider.id,
-                        "provider_name": "ElevenLabs Prod",
-                        "type": bot.voice_provider.type,
-                        "voice_name": "Rachel",
-                        "language": "English",
-                        "neural": True,
-                    },
-                },
-                {
-                    "node_id": "assist",
-                    "type": "AssistantNode",
-                    "label": "Assistant",
-                    "params": {"citations_enabled": True},
-                    "assistant": {
-                        "id": bot.assistant.id,
-                        "name": "Helper",
-                        "assistant_id": "asst_123",
-                        "instructions": "Be helpful",
-                        "builtin_tools": [],
-                        "tools": [],
-                        "temperature": 1.0,
-                        "top_p": 1.0,
-                    },
-                },
-            ],
+            "nodes": _expected_pipeline_nodes(bot),
         },
-        "events": {
-            "static_triggers": [
-                {
-                    "id": bot.schedule_trigger.id,
-                    "type": "conversation_start",
-                    "is_active": True,
-                    "action": {
-                        "type": "schedule_trigger",
-                        "params": {
-                            "scheduled_message": {
-                                "name": "Daily nudge",
-                                "frequency": 1,
-                                "time_period": "days",
-                                "repetitions": 3,
-                                "prompt_text": "Hi",
-                            },
-                        },
-                    },
-                }
-            ],
-            "timeout_triggers": [
-                {
-                    "id": bot.timeout_trigger.id,
-                    "delay_seconds": 86400,
-                    "total_num_triggers": 1,
-                    "trigger_from_first_message": False,
-                    "is_active": True,
-                    "action": {"type": "send_message_to_bot", "params": {"message_to_bot": "Still there?"}},
-                }
-            ],
+        # The pipeline has no Start/End nodes, so it is reported invalid (a graph-level error), and
+        # the unwired sides of its two nodes land in the advisory map. Neither blocked the read.
+        "pipeline_valid": False,
+        "pipeline_errors": {
+            "node": {},
+            "edge": [],
+            # Both terminals are missing and both are reported; neither hides the other.
+            "pipeline": ["There should be exactly 1 Start node", "There should be exactly 1 End node"],
         },
+        "unwired_handles": {
+            "llm": [{"handle": "input", "label": None}],
+            "assist": [{"handle": "output", "label": None}],
+        },
+        "events": _expected_events(bot),
     }
+
+
+@pytest.mark.django_db()
+def test_full_response_body():
+    """A fully populated bot whose response has no null fields, so every serializer runs."""
+    bot = _full_bot()
+
+    assert _get(bot) == _expected_full_response(bot)
 
 
 # ── Embedded pipeline (pipeline_start) + context propagation (review issue #6) ──────────────────
@@ -838,8 +964,11 @@ def _adversarial_bot():
 # Empirically derived. The SAME number must hold for every version mode, because resolve_inspect_version
 # resolves AND prefetches the target with a fixed prefetch set — including each node's resource FK/M2M
 # relations (inspect_node_queryset) — so node fan-out adds no queries. Resolution costs one query in
-# every mode, so folding it into the measured block keeps the count constant.
-EXPECTED_RENDER_QUERIES = 13
+# every mode, so folding it into the measured block keeps the count constant. The top-level build-state
+# fields run Pipeline.validate(), whose LLM-node validators each look the provider model up through
+# ORMRepository (not the prefetched relation) — the same cost the builder pays on save; that adds a
+# fixed number of queries for this bot's two LLM-bearing nodes.
+EXPECTED_RENDER_QUERIES = 17
 
 
 @pytest.mark.django_db()
