@@ -82,6 +82,33 @@ def test_evaluators_without_provider_params_are_untouched():
     assert evaluator.params == {"code": "def main(**kwargs): pass"}
 
 
+@pytest.mark.parametrize(
+    ("null_field", "set_field"),
+    [
+        pytest.param("llm_provider", "llm_provider_model", id="only_the_model_survived"),
+        pytest.param("llm_provider_model", "llm_provider", id="only_the_provider_survived"),
+    ],
+)
+@pytest.mark.django_db()
+def test_reverse_leaves_a_partially_configured_evaluator_alone(null_field, set_field):
+    """A half-set pair is not restorable, so the reverse must not write a null id back.
+
+    0019 nulls only the FK whose id stopped resolving, so an evaluator naming one deleted
+    provider comes out of it with exactly one FK set. ``LLMResponseMixin`` takes both ids as
+    plain ``int``, so a ``None`` in params is a value the pre-#3995 form cannot build an
+    evaluator from — worse than the key simply being absent.
+    """
+    evaluator = EvaluatorFactory.create(params={"prompt": "p"})
+    Evaluator.objects.filter(pk=evaluator.pk).update(**{f"{null_field}_id": None})
+
+    _run(restore_llm_provider_params)
+
+    evaluator.refresh_from_db()
+    assert evaluator.params == {"prompt": "p"}
+    assert getattr(evaluator, f"{null_field}_id") is None
+    assert getattr(evaluator, f"{set_field}_id") is not None
+
+
 @pytest.mark.django_db()
 def test_reverse_writes_the_fk_ids_back_into_params():
     provider = LlmProviderFactory.create()
