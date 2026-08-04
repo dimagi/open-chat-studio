@@ -610,7 +610,10 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
         Scalar ids are only returned for params the row already carries: a node type that
         references no resource must not grow a null param for one. ``collection_index_ids`` is
-        returned whenever the M2M holds anything, whether or not params carries it.
+        returned whenever the M2M holds anything — the M2M is the reference, so what it holds is
+        served whether or not the params copy was ever written — and also whenever params carries
+        the key, so that a params copy left behind by a deleted index is corrected to ``[]``
+        rather than served as-is. A node with neither grows no empty list.
         """
         params = self.params or {}
         resource_params = {
@@ -621,7 +624,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         # ``all()`` rather than values_list so a prefetched M2M is reused; sorted because the
         # through rows have no ordering of their own and the read must be stable.
         collection_index_ids = sorted(collection.id for collection in self.collection_indexes.all())
-        if collection_index_ids:
+        if collection_index_ids or "collection_index_ids" in params:
             resource_params["collection_index_ids"] = collection_index_ids
         return resource_params
 

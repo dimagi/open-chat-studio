@@ -223,6 +223,21 @@ class TestFlowNodeReadsResourceFKs:
 
         assert node.to_flow_node().data.params["collection_index_ids"] == [index.id]
 
+    def test_deleted_collection_index_reads_as_empty(self):
+        """Deleting a Collection cascades the M2M through row away while the id lingers in params.
+        The params copy must not be served — the same correction the scalar FKs get."""
+        index = CollectionFactory.create(is_index=True)
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"collection_index_ids": [index.id]},
+        )
+        node.collection_indexes.set([index])
+        index.delete()
+        node.refresh_from_db()
+        assert node.params["collection_index_ids"] != []
+
+        assert node.to_flow_node().data.params["collection_index_ids"] == []
+
     def test_params_the_node_does_not_carry_are_not_added(self):
         """A node type that references no resource must not grow a null param for one, and an
         empty collection_indexes M2M adds no empty list."""
@@ -281,14 +296,23 @@ class TestFlowDataReadsResourceFKs:
         assert params["llm_provider_model_id"] == model.id
         assert params["collection_index_ids"] == [index.id]
 
-    def test_collection_indexes_are_prefetched(self, django_assert_num_queries):
+    @pytest.mark.parametrize(
+        "llm_node_count",
+        [
+            pytest.param(1, id="one_node"),
+            pytest.param(3, id="three_nodes"),
+            pytest.param(8, id="eight_nodes"),
+        ],
+    )
+    def test_collection_indexes_are_prefetched(self, llm_node_count, django_assert_num_queries):
         """One query for the rows and one for their collection_indexes, however many nodes there
         are — reading the M2M per node would be an N+1 on every editor load."""
         index = CollectionFactory.create(is_index=True)
-        pipeline = self._pipeline_with_llm_nodes(3, {"collection_index_ids": [index.id]})
+        pipeline = self._pipeline_with_llm_nodes(llm_node_count, {"collection_index_ids": [index.id]})
 
         with django_assert_num_queries(2):
-            assert len(pipeline.flow_data["nodes"]) == 5  # start, end and the three LLM nodes
+            # start, end and the LLM nodes
+            assert len(pipeline.flow_data["nodes"]) == llm_node_count + 2
 
     def test_prefetched_node_set_is_reused(self, django_assert_num_queries):
         index = CollectionFactory.create(is_index=True)
