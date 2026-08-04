@@ -240,7 +240,12 @@ def get_model_parameters(model_name: str, **param_overrides) -> dict:
 
 
 def get_default_model(provider_type: str) -> Model | None:
-    return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_default), None)
+    """The provider's default model, or None if it has no default.
+
+    Not every ``LlmProviderTypes`` member has chat models here (``voyage`` is embeddings
+    only), so a missing provider is a legitimate miss rather than a programming error.
+    """
+    return next((m for m in DEFAULT_LLM_PROVIDER_MODELS.get(provider_type, ()) if m.is_default), None)
 
 
 def get_default_translation_models_by_provider() -> dict:

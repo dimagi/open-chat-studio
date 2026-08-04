@@ -18,6 +18,7 @@ from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
 from apps.evaluations.models import Evaluator
 from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.web.waf import WafRule, waf_allow
 
@@ -116,7 +117,7 @@ class EvaluatorFormsetMixin:
         return {
             "evaluator_schemas": _evaluator_schemas(),
             "parameter_values": _evaluator_parameter_values(self.request.team, llm_providers, llm_provider_models),
-            "llm_provider_selection": _initial_llm_provider_selection(form, llm_providers, llm_provider_models),
+            "llm_provider_selection": _initial_llm_provider_selection(form, self.request.team),
         }
 
 
@@ -273,7 +274,7 @@ def _evaluator_parameter_values(team, llm_providers, llm_provider_models):
     }
 
 
-def _initial_llm_provider_selection(form, llm_providers: list[dict], llm_provider_models) -> dict:
+def _initial_llm_provider_selection(form, team) -> dict:
     """Which provider and model the picker starts on.
 
     Only a brand new evaluator is given a default. An existing one shows exactly what it has,
@@ -287,21 +288,14 @@ def _initial_llm_provider_selection(form, llm_providers: list[dict], llm_provide
     }
     if form.is_bound or form.instance.pk:
         return selection
-    return _default_llm_provider_selection(llm_providers, llm_provider_models)
+    return _default_llm_provider_selection(team)
 
 
-def _default_llm_provider_selection(llm_providers: list[dict], llm_provider_models) -> dict:
-    """The team's first provider and a model it can serve, so the model list has something to filter by."""
-    llm_provider_model_id = None
-    provider_id = None
-    if llm_providers:
-        provider = llm_providers[0]
-        provider_id = provider["id"]
-        first_model = next((m for m in llm_provider_models if m.type == provider["type"]), None)
-        if first_model:
-            llm_provider_model_id = first_model.id
-
+def _default_llm_provider_selection(team) -> dict:
+    """The team's first provider and that provider's default model, seeded the same way a new chatbot is."""
+    provider = get_first_llm_provider_by_team(team.id)
+    model = get_first_llm_provider_model(provider, team.id) if provider else None
     return {
-        "llm_provider_id": provider_id,
-        "llm_provider_model_id": llm_provider_model_id,
+        "llm_provider_id": provider.id if provider else None,
+        "llm_provider_model_id": model.id if model else None,
     }

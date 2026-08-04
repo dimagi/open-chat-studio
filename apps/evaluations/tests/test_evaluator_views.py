@@ -10,7 +10,8 @@ from django.urls import reverse
 from apps.evaluations import evaluators
 from apps.evaluations.models import ConditionType
 from apps.evaluations.views.evaluator_views import _get_evaluator_schema
-from apps.service_providers.models import LlmProviderTypes
+from apps.service_providers.llm_service.default_models import get_default_model
+from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
 from apps.utils.factories.evaluations import EvaluatorFactory, EvaluatorTagRuleFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -174,14 +175,27 @@ class TestEvaluatorPickerInitialState:
         }
 
     def test_creating_starts_on_the_teams_first_provider(self, client_with_user, team):
+        """The pair has to be one the form accepts, so the model must be one this provider can serve."""
         provider = LlmProviderFactory.create(team=team)
-        model = LlmProviderModelFactory.create(team=team, type=provider.type)
+        # Don't lean on the seeded global models: they are absent under --no-migrations.
+        LlmProviderModelFactory.create(team=team, type=provider.type, name=get_default_model(provider.type).name)
+
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        selection = response.context_data["llm_provider_selection"]
+        assert selection["llm_provider_id"] == provider.id
+        model = LlmProviderModel.objects.get(id=selection["llm_provider_model_id"])
+        assert (model.type, model.name) == (provider.type, get_default_model(provider.type).name)
+
+    def test_creating_with_an_embedding_only_provider_starts_on_no_model(self, client_with_user, team):
+        """Voyage has no chat models to default to, and that must leave the page renderable."""
+        provider = LlmProviderFactory.create(team=team, type=str(LlmProviderTypes.voyage))
 
         response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
 
         assert response.context_data["llm_provider_selection"] == {
             "llm_provider_id": provider.id,
-            "llm_provider_model_id": model.id,
+            "llm_provider_model_id": None,
         }
 
     def test_editing_an_evaluator_whose_provider_was_deleted_starts_on_nothing(self, client_with_user, team, evaluator):

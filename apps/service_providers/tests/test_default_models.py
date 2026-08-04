@@ -27,6 +27,12 @@ def test_all_providers_have_default_models():
         assert get_default_model(provider_type) is not None
 
 
+def test_a_provider_with_no_chat_models_has_no_default():
+    """``voyage`` is an embedding-only provider, so callers get a miss rather than a KeyError."""
+    assert "voyage" not in DEFAULT_LLM_PROVIDER_MODELS
+    assert get_default_model("voyage") is None
+
+
 @pytest.mark.django_db()
 def test_updates_existing_models():
     candidate = DEFAULT_LLM_PROVIDER_MODELS["openai"][0]
