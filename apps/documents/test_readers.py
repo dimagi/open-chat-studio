@@ -160,7 +160,14 @@ class TestDefaultRead:
 
 
 class TestBinaryIsNeverDecodedAsText:
-    def test_unreadable_pdf_fails_instead_of_being_decoded(self):
+    @pytest.mark.parametrize(
+        "content",
+        [
+            pytest.param(b"%PDF-1.4 binary junk", id="header-at-start"),
+            pytest.param(b"junk prefix %PDF-1.4 then binary junk", id="header-with-prefix"),
+        ],
+    )
+    def test_unreadable_pdf_fails_instead_of_being_decoded(self, content):
         """markitdown falls back to a plaintext decode when no converter can read a file. For a
         PDF that puts ~4MB of the raw file into the index as 'text', which is worse than
         failing: mean word length of that output is 158 characters."""
@@ -168,14 +175,7 @@ class TestBinaryIsNeverDecodedAsText:
             markitdown.return_value.convert.side_effect = FileConversionException(attempts=[])
 
             with pytest.raises(FileReadException, match="Could not extract text"):
-                markitdown_read(BytesIO(b"%PDF-1.4 binary junk"))
-
-    def test_unreadable_pdf_with_offset_header_fails_instead_of_being_decoded(self):
-        with mock.patch("markitdown.MarkItDown") as markitdown:
-            markitdown.return_value.convert.side_effect = FileConversionException(attempts=[])
-
-            with pytest.raises(FileReadException, match="Could not extract text"):
-                markitdown_read(BytesIO(b"junk prefix %PDF-1.4 then binary junk"))
+                markitdown_read(BytesIO(content))
 
     def test_undecodable_non_pdf_still_falls_back_to_plaintext(self):
         """The fallback is useful for genuinely textual files with an unknown extension."""
