@@ -17,6 +17,11 @@ from apps.web.waf import WafRule
 
 LOG_GROUP_PREFIX = "aws-waf-logs-"
 
+# Insights queries over a week of WAF logs take tens of seconds; the ceiling is there to fail with
+# advice instead of hanging.
+QUERY_TIMEOUT_SECONDS = 300
+QUERY_POLL_SECONDS = 1.0
+
 # ocs-deploy names its pattern sets "<env>-LargeBodyPaths<n>" / "<env>-NoUserAgentPaths<n>",
 # one set per rule per group of compacted regexes.
 PATTERN_SET_RULES = {
@@ -164,7 +169,7 @@ def find_log_group(session) -> str:
     return names[0]
 
 
-def run_insights_query(session, log_group, query, start, end, limit=5000, timeout=300, poll_interval=1.0):
+def run_insights_query(session, log_group, query, start, end, limit=5000):
     """Run a Logs Insights query to completion and return its rows as dicts."""
     client = session.client("logs")
     query_id = client.start_query(
@@ -175,7 +180,7 @@ def run_insights_query(session, log_group, query, start, end, limit=5000, timeou
         limit=limit,
     )["queryId"]
 
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + QUERY_TIMEOUT_SECONDS
     while True:
         result = client.get_query_results(queryId=query_id)
         status = result["status"]
@@ -186,9 +191,10 @@ def run_insights_query(session, log_group, query, start, end, limit=5000, timeou
         if time.monotonic() > deadline:
             client.stop_query(queryId=query_id)
             raise WafLogsError(
-                f"Query did not finish within {timeout}s. Try a shorter --since window or a lower --limit."
+                f"Query did not finish within {QUERY_TIMEOUT_SECONDS}s. "
+                f"Try a shorter --since window or a lower --limit."
             )
-        time.sleep(poll_interval)
+        time.sleep(QUERY_POLL_SECONDS)
 
 
 def fetch_events(session, log_group, start, end, limit=5000) -> list[LogRow]:
