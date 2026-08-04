@@ -138,6 +138,7 @@ nav:
       - Feature Deprecation: developer_guides/feature_deprecation.md
       - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
+      - Upgrading django-allauth: developer_guides/allauth_upgrades.md
     - Code Systems:
       - Common Practises: developer_guides/code_systems/common_practises.md
       - Object Versioning: developer_guides/code_systems/versioning.md

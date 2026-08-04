@@ -315,6 +315,7 @@ SOCIALACCOUNT_PROVIDERS = {
 # Multi-Factor Authentication
 MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
 MFA_RECOVERY_CODE_COUNT = 10
+MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "Open Chat Studio"
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
