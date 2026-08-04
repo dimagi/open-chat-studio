@@ -21,7 +21,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 # don't log task result
-trace.LOG_SUCCESS = "Task %(name)s[%(id)s] succeeded in %(runtime)ss"  # type: ignore[assignment]
+trace.LOG_SUCCESS = "Task %(name)s[%(id)s] succeeded in %(runtime)ss"  # ty: ignore[invalid-assignment]
 
 worker_max_tasks_per_child = 100  # Restart worker periodically
 task_acks_late = True
