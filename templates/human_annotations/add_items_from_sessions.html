@@ -127,8 +127,7 @@
       <input type="hidden" name="session_ids" x-model="sessionIdsString">
       <input type="hidden" name="mode" :value="mode">
       <input type="hidden" name="sample_percent" :value="samplePercent">
-      <!-- Pass filter params so server can reconstruct the queryset for all_matching/sample -->
-      <template x-for="param in filterParams" :key="param.name">
+      <template x-for="(param, index) in filterParams" :key="index">
         <input type="hidden" :name="param.name" :value="param.value">
       </template>
     </form>
