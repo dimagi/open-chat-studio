@@ -43,11 +43,12 @@ class BaseEvaluator(BaseModel):
 
 
 class LLMResponseMixin(BaseModel):
-    # These two ids drive the form UI (which is generated from this schema) but the stored
-    # reference lives on the ``Evaluator.llm_provider``/``llm_provider_model`` FKs.
-    # ``Evaluator.get_evaluator_params`` resolves them from there, not from the params JSON.
-    llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
-    llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
+    # Supplied by ``Evaluator.get_evaluator_params`` from the
+    # ``Evaluator.llm_provider``/``llm_provider_model`` FKs, which are where the selection is
+    # stored. They are not part of ``params`` and are not rendered from this schema — the
+    # evaluator form edits the FKs through its own fields (see ``LLM_PROVIDER_FIELDS``).
+    llm_provider_id: int
+    llm_provider_model_id: int
     llm_temperature: float = Field(
         default=0.7, ge=0.0, le=2.0, title="Temperature", json_schema_extra=UiSchema(widget=Widgets.range)
     )
@@ -71,6 +72,11 @@ class LLMResponseMixin(BaseModel):
         model_name = self.get_llm_provider_model().name
         params = get_model_parameters(model_name, temperature=self.llm_temperature)
         return self.get_llm_service().get_chat_model(model_name, **params)
+
+
+# The ``LLMResponseMixin`` fields that are stored as FK columns on ``Evaluator`` instead of in
+# ``params``. Kept out of the form-rendering schema and injected when the evaluator is built.
+LLM_PROVIDER_FIELDS = ("llm_provider_id", "llm_provider_model_id")
 
 
 class LlmEvaluator(LLMResponseMixin, BaseEvaluator):

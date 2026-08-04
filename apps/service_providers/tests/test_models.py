@@ -84,10 +84,7 @@ class TestServiceProviderModel:
         the remove_deprecated_models command) repoint evaluators first.
         """
         provider_model = LlmProviderModelFactory.create()
-        evaluator = EvaluatorFactory(
-            team=provider_model.team,
-            params={"llm_provider_model_id": provider_model.id},
-        )
+        evaluator = EvaluatorFactory(team=provider_model.team, llm_provider_model=provider_model)
 
         with pytest.raises(ValidationError, match=evaluator.name):
             provider_model.delete()

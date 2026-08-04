@@ -29,50 +29,58 @@
     <!-- Dynamic Parameter Fields -->
     <div x-show="selectedSchema" class="mt-4">
       <h3 class="text-lg font-medium mb-3">{% translate "Evaluator Parameters" %}</h3>
+
+      {# The provider selection is stored on the Evaluator FK columns, not in params, so these #}
+      {# two are real form fields rather than schema-driven parameters. x-if rather than x-show: #}
+      {# an evaluator type with no LLM must not post a provider at all. #}
+      <template x-if="selectedSchema?.requires_llm_provider">
+        <div>
+          <div class="fieldset w-full">
+            <label class="label font-bold" for="id_llm_provider">
+              <div>{% translate "LLM Provider" %}</div>
+            </label>
+            <select id="id_llm_provider"
+                    name="{{ form.llm_provider.html_name }}"
+                    x-model="llmProviderId"
+                    @change="onLlmProviderChange()"
+                    class="select w-full">
+              <option value="">{% translate "Select LLM Provider..." %}</option>
+              {# :selected as well as x-model — the options are rendered after the select's own #}
+              {# bindings run, so x-model alone cannot select one that does not exist yet. #}
+              <template x-for="option in parameterValues.LlmProviderId || []" :key="option.value">
+                <option :value="option.value" :selected="option.value == llmProviderId" x-text="option.label"></option>
+              </template>
+            </select>
+            {{ form.llm_provider.errors }}
+          </div>
+
+          {# Outside the x-show below: with no provider chosen the model select is hidden, and an #}
+          {# error rendered inside it would be invisible to the user it is meant for. #}
+          {% if form.llm_provider_model.errors %}
+            <div class="fieldset w-full">{{ form.llm_provider_model.errors }}</div>
+          {% endif %}
+
+          <div class="fieldset w-full" x-show="llmProviderId">
+            <label class="label font-bold" for="id_llm_provider_model">
+              <div>{% translate "LLM Model" %}</div>
+            </label>
+            <select id="id_llm_provider_model"
+                    name="{{ form.llm_provider_model.html_name }}"
+                    x-model="llmProviderModelId"
+                    class="select w-full">
+              <option value="">{% translate "Select Model..." %}</option>
+              <template x-for="model in getAvailableModels()" :key="model.value">
+                <option :value="model.value" :selected="model.value == llmProviderModelId" x-text="model.label"></option>
+              </template>
+            </select>
+            <small class="form-text text-muted">{% translate "Select the specific model to use for evaluation" %}</small>
+          </div>
+        </div>
+      </template>
+
       <div id="dynamic-params">
         <template x-for="(field, fieldName) in selectedSchema?.properties || {}" :key="fieldName">
           <div x-show="fieldName !== 'type'" class="fieldset w-full">
-
-            <!-- LLM Provider Widget -->
-            <template x-if="getWidget(field) === 'llm_provider_model'">
-              <div>
-                <label :for="'param_' + fieldName" class="label font-bold">
-                  <div x-text="field.title || fieldName"></div>
-                </label>
-                <select :id="'param_' + fieldName"
-                        :name="'param_' + fieldName"
-                        x-model="params[fieldName]"
-                        @change="updateLlmProviderModel(fieldName)"
-                        class="select w-full"
-                        :required="isRequired(fieldName)">
-                  <option value="">{% translate "Select LLM Provider..." %}</option>
-                  <template x-for="option in parameterValues.LlmProviderId || []" :key="option.value">
-                    <option :value="option.value" x-text="option.label"></option>
-                  </template>
-                </select>
-                <small class="form-text text-muted" x-show="field.description" x-text="field.description"></small>
-              </div>
-            </template>
-
-            <!-- LLM Provider Model Selection (show after provider selected) -->
-            <template x-if="fieldName === 'llm_provider_model_id' && params.llm_provider_id && getWidget(field) === 'none'">
-              <div>
-                <label :for="'param_' + fieldName" class="label font-bold">
-                  <div>{% translate "LLM Model" %}</div>
-                </label>
-                <select :id="'param_' + fieldName"
-                        :name="'param_' + fieldName"
-                        x-model="params[fieldName]"
-                        class="select w-full"
-                        :required="isRequired(fieldName)">
-                  <option value="">{% translate "Select Model..." %}</option>
-                  <template x-for="model in getAvailableModels()" :key="model.value">
-                    <option :value="model.value" x-text="model.label"></option>
-                  </template>
-                </select>
-                <small class="form-text text-muted">{% translate "Select the specific model to use for evaluation" %}</small>
-              </div>
-            </template>
 
             <!-- Range Widget (for temperature) -->
             <template x-if="getWidget(field) === 'range'">
@@ -508,16 +516,16 @@
           onload="SiteJS.tagRuleSelect.bootstrapTagRuleSelects();"></script>
   {{ evaluator_schemas|json_script:"evaluator-schemas" }}
   {{ parameter_values|json_script:"parameter-values" }}
-  {{ default_values|json_script:"default-values" }}
   {% if object.params %}{{ object.params|json_script:"existing-params" }}{% elif form.params.value %}{{ form.params.value|json_script:"existing-params" }}{% endif %}
   <script>
     document.addEventListener('alpine:init', () => {
       Alpine.data('evaluatorForm', () => ({
         evaluatorSchemas: JSON.parse(document.getElementById("evaluator-schemas").textContent),
         parameterValues: JSON.parse(document.getElementById("parameter-values").textContent),
-        defaultValues: JSON.parse(document.getElementById("default-values").textContent),
         selectedType: '{% if object.type %}{{ object.type|escapejs }}{% else %}{{ form.type.value|default:"" }}{% endif %}',
         evaluationMode: '{{ form.evaluation_mode.value|default:"message" }}',
+        llmProviderId: '{{ llm_provider_selection.llm_provider_id|default_if_none:""|escapejs }}',
+        llmProviderModelId: '{{ llm_provider_selection.llm_provider_model_id|default_if_none:""|escapejs }}',
         selectedSchema: null,
         params: {},
         keyValuePairs: {},
@@ -542,15 +550,13 @@
 
             if (existingParams) {
               try {
-                this.params = { ...this.defaultValues, ...existingParams };
+                this.params = { ...this.params, ...existingParams };
                 // Initialize key-value pairs for all key_value_pairs widgets
                 this.initializeKeyValuePairs();
               } catch(e) {
                 console.error('Error parsing existing params:', e);
-                this.params = { ...this.defaultValues };
+                this.params = {};
               }
-            } else {
-              this.params = { ...this.defaultValues };
             }
           }
         },
@@ -564,15 +570,8 @@
 
             // Only add default values for fields that exist in this evaluator's schema
             Object.keys(this.selectedSchema.properties).forEach(key => {
-              if (key !== 'type') {
-                // Check if this field exists in defaultValues and add it
-                if (this.defaultValues[key] !== undefined) {
-                  newParams[key] = this.defaultValues[key];
-                }
-                // Override with schema-specific defaults if they exist
-                if (this.selectedSchema.properties[key].default !== undefined) {
-                  newParams[key] = this.selectedSchema.properties[key].default;
-                }
+              if (key !== 'type' && this.selectedSchema.properties[key].default !== undefined) {
+                newParams[key] = this.selectedSchema.properties[key].default;
               }
             });
 
@@ -623,24 +622,19 @@
           this.selectedSchema.required.includes(fieldName);
         },
 
-        updateLlmProviderModel(fieldName) {
-          // When LLM provider changes, update the model options
-          const providerId = this.params[fieldName];
+        onLlmProviderChange() {
+          // The model list is filtered by the provider's type, so the previous choice may no
+          // longer be on offer: fall back to the first model this provider can serve.
           const availableModels = this.getAvailableModels();
-
-          // Set the first available model as default
-          if (availableModels.length > 0) {
-            this.params.llm_provider_model_id = availableModels[0].value;
-          } else {
-            this.params.llm_provider_model_id = null;
+          if (!availableModels.some(model => model.value == this.llmProviderModelId)) {
+            this.llmProviderModelId = availableModels.length > 0 ? availableModels[0].value : '';
           }
         },
 
         getAvailableModels() {
-          const providerId = this.params.llm_provider_id;
-          if (!providerId) return [];
+          if (!this.llmProviderId) return [];
 
-          const provider = this.parameterValues.LlmProviderId.find(p => p.value == providerId);
+          const provider = this.parameterValues.LlmProviderId.find(p => p.value == this.llmProviderId);
           if (!provider) return [];
 
           return this.parameterValues.LlmProviderModelId.filter(model => model.type === provider.type);

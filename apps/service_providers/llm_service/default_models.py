@@ -338,12 +338,12 @@ def _evaluator_provider_model_fk_in_db() -> bool:
 
 
 def _repoint_evaluators(custom_model, global_model) -> None:
-    """Move every evaluator on ``custom_model`` to ``global_model``, ``params`` and FK together.
+    """Move every evaluator on ``custom_model`` to ``global_model``.
 
-    Written out here rather than calling ``Evaluator.set_llm_provider_model_id`` because
-    this also runs from migrations (``migration_utils.llm_model_migration``), where these
-    are historical models: they carry no custom methods, and in states older than
-    ``evaluations.0018`` the ``evaluators`` accessor does not exist at all.
+    The caller's generic FK pass would repoint them too. This exists for the guard below:
+    it also runs from migrations (``migration_utils.llm_model_migration``), where in states
+    older than ``evaluations.0018`` the ``evaluators`` accessor does not exist at all, and
+    the generic pass cannot tell that apart from having nothing to repoint.
     """
     evaluators = getattr(custom_model, "evaluators", None)
     if evaluators is None:
@@ -361,16 +361,13 @@ def _repoint_evaluators(custom_model, global_model) -> None:
             )
         return
 
-    for evaluator in evaluators.all():
-        evaluator.params["llm_provider_model_id"] = global_model.id
-        evaluator.llm_provider_model_id = global_model.id
-        evaluator.save(update_fields=["params", "llm_provider_model_id"])
+    evaluators.update(llm_provider_model_id=global_model.id)
 
 
 def _replace_custom_model_with_global(custom_model, global_model, LlmProviderModel):
     """Repoint everything referencing ``custom_model`` at ``global_model``, then delete it."""
-    # Evaluators first: they keep a copy of the model id in ``params`` alongside the FK, so
-    # both have to move together. Once done they drop out of get_related_objects below.
+    # Evaluators first: the generic pass below cannot tell an absent relation (an old
+    # migration state) from one with nothing to repoint. Once done they drop out of it.
     _repoint_evaluators(custom_model, global_model)
 
     for obj in get_related_objects(custom_model):

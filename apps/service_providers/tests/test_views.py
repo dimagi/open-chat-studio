@@ -164,11 +164,10 @@ def test_delete_llm_provider_blocked_by_an_evaluator(team_with_users, authed_cli
     """Evaluators reference the provider by FK, so deleting underneath one is blocked.
 
     Previously they were collected by get_related_objects but silently dropped, leaving the
-    evaluator with a nulled FK and a stale id in params — unrunnable, with no warning.
+    evaluator with a nulled FK and nothing to run against — with no warning.
     """
     provider = LlmProviderFactory(team=team_with_users)
-    evaluator = EvaluatorFactory.create(team=team_with_users, params={"llm_provider_id": provider.id})
-    assert evaluator.llm_provider_id == provider.id
+    evaluator = EvaluatorFactory.create(team=team_with_users, llm_provider=provider)
 
     response = authed_client.delete(
         reverse(
