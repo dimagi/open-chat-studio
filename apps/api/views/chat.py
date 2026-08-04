@@ -429,6 +429,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
     )
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @extend_schema(
     operation_id="chat_send_message",
     summary="Send a message to a chat session",
