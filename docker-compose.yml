@@ -54,7 +54,7 @@ services:
 
   celery_worker:
     <<: *app
-    command: celery -A config.celery worker -l info
+    command: celery -A config.celery worker -l info --pool threads
     depends_on:
       migrate:
         condition: service_completed_successfully
