@@ -102,6 +102,46 @@ def context_vars(text: str) -> set[str]:
     return roots - assigned - loop_targets - NOT_CONTEXT_VARS
 
 
+def find_templates(root: Path) -> list[Path]:
+    """Every allauth-owned template under ``root``, relative to it."""
+    return sorted(
+        path.relative_to(root)
+        for template_root in TEMPLATE_ROOTS
+        for path in (root / template_root).rglob("*")
+        if path.is_file()
+    )
+
+
+def drift_between(ocs_text: str, up_text: str) -> dict[str, list[str]]:
+    """What upstream uses and the override does not, plus what only the override reads."""
+    ocs_signals = functional_signals(ocs_text)
+    drift = {kind: sorted(up_values - ocs_signals[kind]) for kind, up_values in functional_signals(up_text).items()}
+    drift = {f"upstream-only {kind}": values for kind, values in drift.items() if values}
+    if extra_vars := sorted(context_vars(ocs_text) - context_vars(up_text)):
+        drift["OCS-only context variables"] = extra_vars
+    return drift
+
+
+def report_drift(templates: Path, upstream: Path) -> tuple[int, list[Path]]:
+    ocs_only: list[Path] = []
+    findings = 0
+
+    for rel in find_templates(templates):
+        up = upstream / rel
+        if not up.exists():
+            ocs_only.append(rel)
+            continue
+
+        if drift := drift_between((templates / rel).read_text(), up.read_text()):
+            findings += 1
+            print(f"## {rel}")
+            for kind, values in drift.items():
+                print(f"   {kind}: {', '.join(values)}")
+            print()
+
+    return findings, ocs_only
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
@@ -113,43 +153,16 @@ def main() -> int:
         print(f"upstream allauth templates not found at {upstream}", file=sys.stderr)
         return 1
 
-    overrides = sorted(path for root in TEMPLATE_ROOTS for path in (templates / root).rglob("*") if path.is_file())
-    ocs_only: list[Path] = []
-    findings = 0
-
     print(f"# allauth template drift (upstream: {upstream})\n")
-    for path in overrides:
-        rel = path.relative_to(templates)
-        up = upstream / rel
-        if not up.exists():
-            ocs_only.append(rel)
-            continue
-
-        ocs_text, up_text = path.read_text(), up.read_text()
-        drift = {
-            kind: sorted(up_values - functional_signals(ocs_text)[kind])
-            for kind, up_values in functional_signals(up_text).items()
-        }
-        drift = {kind: values for kind, values in drift.items() if values}
-        extra_vars = sorted(context_vars(ocs_text) - context_vars(up_text))
-
-        if drift or extra_vars:
-            findings += 1
-            print(f"## {rel}")
-            for kind, values in drift.items():
-                print(f"   upstream-only {kind}: {', '.join(values)}")
-            if extra_vars:
-                print(f"   OCS-only context variables: {', '.join(extra_vars)}")
-            print()
+    findings, ocs_only = report_drift(templates, upstream)
 
     print("## OCS-only templates (no upstream counterpart, nothing to compare)")
     for rel in ocs_only:
         print(f"   {rel}")
 
     print("\n## Upstream templates NOT overridden (OCS inherits allauth's markup)")
-    for up in sorted(upstream.rglob("*")):
-        rel = up.relative_to(upstream)
-        if up.is_file() and rel.parts[0] in TEMPLATE_ROOTS and not (templates / rel).exists():
+    for rel in find_templates(upstream):
+        if not (templates / rel).exists():
             print(f"   {rel}")
 
     print(f"\n{findings} override(s) with drift to review.")
