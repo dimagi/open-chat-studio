@@ -11,6 +11,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils.functional import cached_property
 
 from apps.web.waf import WafRule
 from apps.web.waf_analysis import Finding, Fix, classify, classify_row, deduplicate_endpoints
@@ -85,39 +86,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------ analysis
 
     def _analyze(self):
-        deployed_patterns = None
-        totals = []
-
-        if self.options["from_json"]:
-            with open(self.options["from_json"]) as fh:
-                payload = json.load(fh)
-            rows = [LogRow(**row) for row in payload["rows"]]
-            totals = payload.get("totals", [])
-            self.stdout.write(f"Re-analysing {len(rows)} rows from {self.options['from_json']}")
-            if not self.options["no_drift"]:
-                deployed_patterns = self._load_deployed_patterns(self._session())
-        else:
-            session = self._session()
-            log_group = self.options["log_group"] or find_log_group(session)
-            end = datetime.now(tz=UTC)
-            start = end - self.window
-
-            self.stdout.write(f"Log group: {log_group}")
-            self.stdout.write(f"Window:    {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M} UTC")
-            self.stdout.write("Querying CloudWatch Logs Insights...")
-
-            rows = fetch_events(session, log_group, start, end, limit=self.options["limit"])
-            totals = fetch_totals(session, log_group, start, end)
-
-            if self.options["dump_json"]:
-                payload = {"rows": [row.as_dict() for row in rows], "totals": totals}
-                with open(self.options["dump_json"], "w") as fh:
-                    json.dump(payload, fh, indent=2)
-                self.stdout.write(f"Raw results saved to {self.options['dump_json']}")
-
-            if not self.options["no_drift"]:
-                deployed_patterns = self._load_deployed_patterns(session)
-
+        rows, totals = self._load_rows()
         if not rows:
             self.stdout.write(self.style.SUCCESS("\nNo WAF rule matches in this window."))
             return
@@ -129,6 +98,7 @@ class Command(BaseCommand):
                 )
             )
 
+        deployed_patterns = None if self.options["no_drift"] else self._load_deployed_patterns(self.session)
         rows = [row for row in rows if row.hits >= self.options["min_hits"]]
         findings = classify(rows, deployed_patterns)
         # Endpoints collapse by route; noise stays per-URI so the attack summary can count paths.
@@ -142,7 +112,41 @@ class Command(BaseCommand):
         if self.options["csv_path"]:
             self._write_csv(endpoints)
 
-    def _session(self):
+    def _load_rows(self) -> tuple[list[LogRow], list[dict]]:
+        if self.options["from_json"]:
+            return self._rows_from_dump()
+        return self._rows_from_aws()
+
+    def _rows_from_dump(self) -> tuple[list[LogRow], list[dict]]:
+        path = self.options["from_json"]
+        with open(path) as fh:
+            payload = json.load(fh)
+        rows = [LogRow(**row) for row in payload["rows"]]
+        self.stdout.write(f"Re-analysing {len(rows)} rows from {path}")
+        return rows, payload.get("totals", [])
+
+    def _rows_from_aws(self) -> tuple[list[LogRow], list[dict]]:
+        log_group = self.options["log_group"] or find_log_group(self.session)
+        end = datetime.now(tz=UTC)
+        start = end - self.window
+
+        self.stdout.write(f"Log group: {log_group}")
+        self.stdout.write(f"Window:    {start:%Y-%m-%d %H:%M} to {end:%Y-%m-%d %H:%M} UTC")
+        self.stdout.write("Querying CloudWatch Logs Insights...")
+
+        rows = fetch_events(self.session, log_group, start, end, limit=self.options["limit"])
+        totals = fetch_totals(self.session, log_group, start, end)
+
+        if self.options["dump_json"]:
+            payload = {"rows": [row.as_dict() for row in rows], "totals": totals}
+            with open(self.options["dump_json"], "w") as fh:
+                json.dump(payload, fh, indent=2)
+            self.stdout.write(f"Raw results saved to {self.options['dump_json']}")
+
+        return rows, totals
+
+    @cached_property
+    def session(self):
         return get_session(self.options["profile"], self.options["region"])
 
     def _load_deployed_patterns(self, session):
@@ -199,7 +203,7 @@ class Command(BaseCommand):
             self.stdout.write(f"             -> no WafRule for '{row.rule}'; needs a WAF rule change in ocs-deploy")
 
     def _report_noise(self, noise: list[Finding], totals: list[dict]):
-        self._heading("BLOCKED TRAFFIC THAT ISN'T A DJANGO ENDPOINT")
+        self._heading("WAF MATCHES THAT AREN'T A DJANGO ENDPOINT")
         if not noise:
             self.stdout.write("  None.")
             return
@@ -209,18 +213,13 @@ class Command(BaseCommand):
             by_rule[finding.row.rule].append(finding)
 
         total_hits = sum(f.row.hits for f in noise)
-        self.stdout.write(f"  {total_hits:,} requests across {len(noise):,} distinct paths — the WAF working.\n")
+        self.stdout.write(
+            f"  {total_hits:,} requests across {len(noise):,} distinct paths — scanner and exploit traffic.\n"
+        )
 
         ranked = sorted(by_rule.items(), key=lambda item: sum(f.row.hits for f in item[1]), reverse=True)
         for rule, group in ranked[: self.options["attacks"]]:
-            hits = sum(f.row.hits for f in group)
-            ips = max((f.row.unique_ips for f in group), default=0)
-            countries = max((f.row.unique_countries for f in group), default=0)
-            self.stdout.write(
-                f"    {hits:>7,}  {rule:<28}  {len(group):>5} paths  {ips:>4} IPs  {countries:>3} countries"
-            )
-            for finding in sorted(group, key=lambda f: f.row.hits, reverse=True)[:3]:
-                self.stdout.write(f"             {finding.row.uri[:100]}")
+            self._write_rule_summary(rule, group)
 
         if len(ranked) > self.options["attacks"]:
             self.stdout.write(f"    ... and {len(ranked) - self.options['attacks']} more rules (raise --attacks)")
@@ -232,6 +231,15 @@ class Command(BaseCommand):
                     f"\n  Note: {len(capped)} rule(s) saw more distinct paths than --limit allowed us to fetch."
                 )
             )
+
+    def _write_rule_summary(self, rule: str, group: list[Finding]):
+        hits = sum(f.row.hits for f in group)
+        # Per-URI rows can't be summed into a distinct-IP count, so report the widest single path.
+        ips = max((f.row.unique_ips for f in group), default=0)
+        countries = max((f.row.unique_countries for f in group), default=0)
+        self.stdout.write(f"    {hits:>7,}  {rule:<28}  {len(group):>5} paths  {ips:>4} IPs  {countries:>3} countries")
+        for finding in sorted(group, key=lambda f: f.row.hits, reverse=True)[:3]:
+            self.stdout.write(f"             {finding.row.uri[:100]}")
 
     def _report_next_steps(self, endpoints: list[Finding]):
         needs_decorator = [f for f in endpoints if f.fix is Fix.ADD_DECORATOR]
@@ -268,7 +276,7 @@ class Command(BaseCommand):
     def _check_path(self, path):
         deployed_patterns = None
         if not self.options["no_drift"]:
-            deployed_patterns = self._load_deployed_patterns(self._session())
+            deployed_patterns = self._load_deployed_patterns(self.session)
 
         self.stdout.write(f"\nPath: {path}")
         findings = [classify_row(_blank_row(path, rule.name), deployed_patterns) for rule in WafRule]
