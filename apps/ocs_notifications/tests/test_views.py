@@ -3,6 +3,8 @@ from urllib.parse import urlencode
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
+from time_machine import travel
 
 from apps.ocs_notifications.models import EventUser, UserNotificationPreferences
 from apps.utils.factories.notifications import EventUserFactory, NotificationEventFactory
@@ -457,3 +459,149 @@ class TestMuteNotificationView:
         assert response.status_code == 200
         event_user.refresh_from_db()
         assert event_user.muted_until is not None
+
+
+@pytest.mark.django_db()
+class TestNotificationHome:
+    def test_renders_the_do_not_disturb_widget_with_teams_and_silenced_preferences(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+        UserNotificationPreferences.objects.create(
+            user=user, team=team_with_users, do_not_disturb_until=timezone.now() + timezone.timedelta(hours=8)
+        )
+
+        client.force_login(user)
+        session = client.session
+        session["team"] = team_with_users.id
+        session.save()
+
+        response = client.get(reverse("ocs_notifications:notifications_home"))
+
+        assert response.status_code == 200
+        dnd_action = next(
+            a for a in response.context["actions"] if a.url_name == "ocs_notifications:set_do_not_disturb"
+        )
+        assert {t.id for t in dnd_action.extra_context["teams"]} == {team_with_users.id, other_team.id}
+        assert [p.team_id for p in dnd_action.extra_context["silenced_preferences"]] == [team_with_users.id]
+
+
+@pytest.mark.django_db()
+class TestSetDoNotDisturbView:
+    def test_silences_only_the_selected_teams(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+
+        client.force_login(user)
+        with travel("2025-01-01 10:00:00+00:00", tick=False):
+            url = reverse("ocs_notifications:set_do_not_disturb")
+            response = client.post(url, data={"teams": [team_with_users.id], "duration": "8h"})
+
+            assert response.status_code == 200
+            pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
+            assert pref.do_not_disturb_until is not None
+            assert pref.do_not_disturb_until - timezone.now() == timezone.timedelta(hours=8)
+            assert not UserNotificationPreferences.objects.filter(user=user, team=other_team).exists()
+
+    def test_all_teams_flag_silences_every_team_the_user_belongs_to(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+
+        client.force_login(user)
+        url = reverse("ocs_notifications:set_do_not_disturb")
+        response = client.post(url, data={"all_teams": "on", "duration": "1d"})
+
+        assert response.status_code == 200
+        assert UserNotificationPreferences.objects.get(user=user, team=team_with_users).do_not_disturb_until
+        assert UserNotificationPreferences.objects.get(user=user, team=other_team).do_not_disturb_until
+
+    def test_cannot_silence_a_team_the_user_is_not_a_member_of(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+
+        client.force_login(user)
+        url = reverse("ocs_notifications:set_do_not_disturb")
+        response = client.post(url, data={"teams": [other_team.id], "duration": "8h"})
+
+        assert response.status_code == 200
+        assert not UserNotificationPreferences.objects.filter(user=user, team=other_team).exists()
+
+    def test_invalid_duration_makes_no_changes(self, client, team_with_users):
+        user = team_with_users.members.first()
+        client.force_login(user)
+
+        url = reverse("ocs_notifications:set_do_not_disturb")
+        response = client.post(url, data={"teams": [team_with_users.id], "duration": "not-a-real-duration"})
+
+        assert response.status_code == 200
+        assert not UserNotificationPreferences.objects.filter(user=user, team=team_with_users).exists()
+
+    def test_no_teams_selected_makes_no_changes(self, client, team_with_users):
+        user = team_with_users.members.first()
+        client.force_login(user)
+
+        url = reverse("ocs_notifications:set_do_not_disturb")
+        response = client.post(url, data={"duration": "8h"})
+
+        assert response.status_code == 200
+        assert not UserNotificationPreferences.objects.filter(user=user).exists()
+
+    def test_silencing_again_overwrites_the_existing_duration(self, client, team_with_users):
+        user = team_with_users.members.first()
+        UserNotificationPreferences.objects.create(
+            user=user, team=team_with_users, do_not_disturb_until=timezone.now() + timezone.timedelta(hours=1)
+        )
+        client.force_login(user)
+
+        with travel("2025-01-01 10:00:00+00:00", tick=False):
+            url = reverse("ocs_notifications:set_do_not_disturb")
+            response = client.post(url, data={"teams": [team_with_users.id], "duration": "1w"})
+
+            assert response.status_code == 200
+            pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
+            assert pref.do_not_disturb_until is not None
+            assert pref.do_not_disturb_until - timezone.now() == timezone.timedelta(weeks=1)
+
+
+@pytest.mark.django_db()
+class TestCancelDoNotDisturbView:
+    def test_cancels_do_not_disturb_for_the_given_team(self, client, team_with_users):
+        user = team_with_users.members.first()
+        UserNotificationPreferences.objects.create(
+            user=user, team=team_with_users, do_not_disturb_until=timezone.now() + timezone.timedelta(hours=8)
+        )
+        client.force_login(user)
+
+        url = reverse("ocs_notifications:cancel_do_not_disturb", args=[team_with_users.id])
+        response = client.post(url)
+
+        assert response.status_code == 200
+        pref = UserNotificationPreferences.objects.get(user=user, team=team_with_users)
+        assert pref.do_not_disturb_until is None
+
+    def test_does_not_affect_do_not_disturb_on_other_teams(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        MembershipFactory.create(user=user, team=other_team)
+        until = timezone.now() + timezone.timedelta(hours=8)
+        UserNotificationPreferences.objects.create(user=user, team=team_with_users, do_not_disturb_until=until)
+        UserNotificationPreferences.objects.create(user=user, team=other_team, do_not_disturb_until=until)
+        client.force_login(user)
+
+        url = reverse("ocs_notifications:cancel_do_not_disturb", args=[team_with_users.id])
+        response = client.post(url)
+
+        assert response.status_code == 200
+        assert UserNotificationPreferences.objects.get(user=user, team=other_team).do_not_disturb_until == until
+
+    def test_404s_for_a_team_the_user_is_not_a_member_of(self, client, team_with_users):
+        user = team_with_users.members.first()
+        other_team = TeamFactory.create()
+        client.force_login(user)
+
+        url = reverse("ocs_notifications:cancel_do_not_disturb", args=[other_team.id])
+        response = client.post(url)
+
+        assert response.status_code == 404

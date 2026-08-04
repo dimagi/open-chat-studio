@@ -1,0 +1,56 @@
+<button type="button" class="btn btn-sm join-item" title="Silence notifications" onclick="doNotDisturbModal.showModal()">
+  <i class="fa fa-bell-slash"></i> Silence
+</button>
+
+<dialog id="doNotDisturbModal" class="modal">
+  <div class="modal-box">
+    <form method="dialog">
+      <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+    </form>
+
+    <h3 class="font-bold text-lg mb-4">Silence Notifications</h3>
+
+    <form
+      hx-post="{% url 'ocs_notifications:set_do_not_disturb' %}"
+      hx-target="#do-not-disturb-container"
+      hx-swap="outerHTML"
+      hx-on::after-request="doNotDisturbModal.close()"
+      x-data="{ allTeams: false }">
+      {% csrf_token %}
+
+      <div class="mb-4">
+        <label class="label cursor-pointer justify-start gap-2">
+          <input type="checkbox" name="all_teams" class="checkbox checkbox-sm" x-model="allTeams">
+          <span class="label-text font-medium">All Teams</span>
+        </label>
+        <div class="ml-6 flex flex-col gap-1 max-h-48 overflow-y-auto" :class="{ 'opacity-50': allTeams }">
+          {% for team in teams %}
+            <label class="label cursor-pointer justify-start gap-2">
+              <input type="checkbox" name="teams" value="{{ team.id }}" class="checkbox checkbox-sm" :disabled="allTeams">
+              <span class="label-text">{{ team.name }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="label-text block mb-1" for="dnd-duration">Duration</label>
+        <select name="duration" id="dnd-duration" class="select select-bordered select-sm w-full">
+          <option value="8h">8 hours</option>
+          <option value="1d">1 day</option>
+          <option value="1w">1 week</option>
+          <option value="1m">1 month</option>
+          <option value="forever">Forever</option>
+        </select>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" onclick="doNotDisturbModal.close()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Silence</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
