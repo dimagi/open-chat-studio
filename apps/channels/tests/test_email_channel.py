@@ -35,15 +35,12 @@ from apps.utils.factories.team import TeamFactory
 
 
 @contextmanager
-def _esp_rejecting(exc: Exception, *, only_with_attachments: bool = False):
+def _esp_rejecting(exc: Exception):
     """Make the test email backend raise `exc` instead of delivering, mimicking an
-    ESP that rejects the message (optionally only when it carries attachments)."""
-    real_send_messages = locmem.EmailBackend.send_messages
+    ESP that rejects the message."""
 
     def send_messages(self, messages):
-        if not only_with_attachments or any(m.attachments for m in messages):
-            raise exc
-        return real_send_messages(self, messages)
+        raise exc
 
     with patch.object(locmem.EmailBackend, "send_messages", send_messages):
         yield
@@ -499,8 +496,8 @@ class TestEmailSender:
 
 
 class TestEmailSenderSendFailures:
-    """ESP-level rejections on flush(): the text reply survives when it can, and the
-    buffer is always reset so nothing is silently re-sent on the next flush."""
+    """ESP-level rejections on flush(): the failure surfaces as a delivery failure and
+    the buffer is always reset so nothing is silently re-sent on the next flush."""
 
     def _sender(self, thread_context=None) -> EmailSender:
         return EmailSender(
@@ -520,50 +517,14 @@ class TestEmailSenderSendFailures:
         sender.send_file(file, "user@example.com", session_id=1)
 
     @pytest.mark.django_db()
-    def test_refused_attachment_falls_back_to_text_only(self, team_with_users):
-        """An attachment the ESP won't accept must not take the reply down with it."""
-        sender = self._sender(
-            thread_context=EmailThreadContext(
-                subject="Re: docs",
-                in_reply_to="<orig@example.com>",
-                references=["<orig@example.com>"],
-            )
-        )
-        sender.send_text("Here are the docs.", "user@example.com")
-        self._attach(sender, team_with_users)
-
-        with _esp_rejecting(AnymailUnsupportedFeature("attachments"), only_with_attachments=True):
-            sender.flush()
-
-        assert len(mail.outbox) == 1
-        sent = mail.outbox[0]
-        assert sent.attachments == []
-        assert "Here are the docs." in sent.body
-        assert "'report.pdf' could not be sent" in sent.body
-        # Threading and Message-ID are unaffected by the retry
-        assert sent.extra_headers["In-Reply-To"] == "<orig@example.com>"
-        assert sent.extra_headers["Message-ID"] == sender.last_message_id
-
-    @pytest.mark.django_db()
-    def test_refused_attachment_fallback_keeps_attachment_free_flush_working(self, team_with_users):
-        """After a fallback the buffer is clean: the next reply is not polluted."""
-        sender = self._sender(thread_context=EmailThreadContext(subject="Re: docs"))
-        sender.send_text("First", "user@example.com")
-        self._attach(sender, team_with_users)
-        with _esp_rejecting(AnymailUnsupportedFeature("attachments"), only_with_attachments=True):
-            sender.flush()
-
-        sender.send_text("Second", "user@example.com")
-        sender.flush()
-
-        assert len(mail.outbox) == 2
-        assert mail.outbox[1].body == "Second"
-        assert mail.outbox[1].attachments == []
-
-    def test_unsupported_feature_without_attachments_propagates(self):
-        """Nothing to drop -- the failure must surface as a delivery failure."""
+    @pytest.mark.parametrize("with_attachment", [True, False], ids=["with-attachment", "text-only"])
+    def test_unsupported_feature_propagates(self, team_with_users, with_attachment):
+        """AnymailUnsupportedFeature covers ~20 unrelated features, so staged
+        attachments are no reason to assume they caused it -- surface it either way."""
         sender = self._sender()
         sender.send_text("Hello", "user@example.com")
+        if with_attachment:
+            self._attach(sender, team_with_users)
 
         with _esp_rejecting(AnymailUnsupportedFeature("extra_headers")), pytest.raises(AnymailUnsupportedFeature):
             sender.flush()

@@ -8,7 +8,7 @@ from email.utils import make_msgid
 from io import BytesIO
 from typing import TYPE_CHECKING
 
-from anymail.exceptions import AnymailInvalidAddress, AnymailUnsupportedFeature
+from anymail.exceptions import AnymailInvalidAddress
 from django.core.mail import EmailMessage as DjangoEmailMessage
 from django.db import IntegrityError
 
@@ -231,13 +231,6 @@ def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tupl
     return accepted_ids, skipped
 
 
-def _append_dropped_attachment_notes(body: str, filenames: list[str]) -> str:
-    """Append one bracketed line per attachment the ESP refused, so the participant
-    knows the reply is missing files."""
-    lines = [f"[Attachment {name!r} could not be sent by the email provider and was removed.]" for name in filenames]
-    return ((body or "").rstrip() + "\n\n" + "\n".join(lines)).lstrip()
-
-
 class EmailSender(ChannelSender):
     """Sends threaded email replies via django.core.mail.
 
@@ -294,19 +287,6 @@ class EmailSender(ChannelSender):
         msg_id = make_msgid(domain=self.domain)
         try:
             self._build_message(msg_id, self._body, self._attachments).send()
-        except AnymailUnsupportedFeature:
-            if not self._attachments:
-                raise
-            # An attachment the ESP refuses must not take the text reply down with
-            # it. Retry text-only (same Message-ID, so threading is unaffected) and
-            # tell the participant which files were dropped.
-            logger.exception(
-                "ESP refused email attachments (%s) for %s; retrying without them",
-                ", ".join(filename for filename, _, _ in self._attachments),
-                self._recipient,
-            )
-            body = _append_dropped_attachment_notes(self._body, [f for f, _, _ in self._attachments])
-            self._build_message(msg_id, body, []).send()
         except AnymailInvalidAddress:
             # Nothing to fall back to: with an unusable from/to address there is
             # nowhere to deliver this reply. Log the addresses (the ESP error only
