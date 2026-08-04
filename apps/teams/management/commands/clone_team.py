@@ -262,9 +262,14 @@ class Command(BaseCommand):
             flag.save()
 
     def _clone_providers(self, ctx: CloneContext):
-        """Clone LLM, Voice, and Trace providers."""
+        """Clone LLM, Voice, and Trace providers.
+
+        Each source queryset is ordered so the clones are created in a fixed order: without it
+        the target rows' ids follow whatever order the database happens to return, which makes
+        the clone unreproducible.
+        """
         # LLM Providers
-        for provider in LlmProvider.objects.filter(team=ctx.source_team):
+        for provider in LlmProvider.objects.filter(team=ctx.source_team).order_by("id"):
             new_provider = LlmProvider.objects.create(
                 team=ctx.target_team,
                 type=provider.type,
@@ -274,7 +279,7 @@ class Command(BaseCommand):
             ctx.llm_providers[provider.id] = new_provider
 
         # LLM Provider Models (team-scoped only)
-        for model in LlmProviderModel.objects.filter(team=ctx.source_team):
+        for model in LlmProviderModel.objects.filter(team=ctx.source_team).order_by("id"):
             new_model = LlmProviderModel.objects.create(
                 team=ctx.target_team,
                 type=model.type,
@@ -284,7 +289,7 @@ class Command(BaseCommand):
             ctx.llm_provider_models[model.id] = new_model
 
         # Voice Providers
-        for provider in VoiceProvider.objects.filter(team=ctx.source_team):
+        for provider in VoiceProvider.objects.filter(team=ctx.source_team).order_by("id"):
             new_provider = VoiceProvider.objects.create(
                 team=ctx.target_team,
                 type=provider.type,
@@ -294,7 +299,7 @@ class Command(BaseCommand):
             ctx.voice_providers[provider.id] = new_provider
 
         # Trace Providers
-        for provider in TraceProvider.objects.filter(team=ctx.source_team):
+        for provider in TraceProvider.objects.filter(team=ctx.source_team).order_by("id"):
             new_provider = TraceProvider.objects.create(
                 team=ctx.target_team,
                 type=provider.type,
