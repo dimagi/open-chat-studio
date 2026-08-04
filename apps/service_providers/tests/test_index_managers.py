@@ -648,6 +648,15 @@ class TestVoyageAILocalIndexManager:
             with pytest.raises(ValueError, match="Unknown input_type"):
                 index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
 
+    @pytest.mark.parametrize("input_type", ["document", "query"])
+    def test_get_embedding_vector_rejects_contextual_models(self, input_type):
+        index_manager = VoyageAILocalIndexManager(api_key="test-api-key", embedding_model_name="voyage-context-4")
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_embeddings_cls:
+            with pytest.raises(ValueError, match="Contextual Voyage models are not supported"):
+                index_manager.get_embedding_vector("some text", input_type=input_type)
+
+        mock_embeddings_cls.assert_not_called()
+
 
 class TestOpenAILlmServiceLocalIndexManager:
     def test_get_local_index_manager_threads_openai_api_base(self):
