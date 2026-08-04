@@ -187,6 +187,17 @@ class TestEvaluatorPickerInitialState:
         model = LlmProviderModel.objects.get(id=selection["llm_provider_model_id"])
         assert (model.type, model.name) == (provider.type, get_default_model(provider.type).name)
 
+    def test_creating_with_an_embedding_only_provider_starts_on_no_model(self, client_with_user, team):
+        """Voyage has no chat models to default to, and that must leave the page renderable."""
+        provider = LlmProviderFactory.create(team=team, type=str(LlmProviderTypes.voyage))
+
+        response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
+
+        assert response.context_data["llm_provider_selection"] == {
+            "llm_provider_id": provider.id,
+            "llm_provider_model_id": None,
+        }
+
     def test_editing_an_evaluator_whose_provider_was_deleted_starts_on_nothing(self, client_with_user, team, evaluator):
         """Defaulting here would repoint the evaluator at an unchosen provider on the next Update."""
         evaluator.llm_provider.delete()
