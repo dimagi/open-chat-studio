@@ -260,7 +260,12 @@ def deprecated_model_notification(
     replacement_model_name: str | None,
     affected: AffectedResources,
 ) -> None:
-    """Notify a team that a model they use has been deprecated."""
+    """Notify a team that a model they use has been deprecated.
+
+    Announced once per team per model: the notification command re-scans every deprecated
+    model on each run, so without this a model deprecated in an earlier release would be
+    re-announced every time a later release deprecates something else.
+    """
     message = (
         f"The model '{model_name}' has been deprecated and will be removed soon. "
         f"{affected.summary_text()} are still using it."
@@ -277,6 +282,7 @@ def deprecated_model_notification(
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
         links=affected.links(),
+        once_per_event_type=True,
     )
 
 
@@ -377,7 +383,13 @@ def deleted_model_notification(
     replacement_model_name: str | None,
     affected: AffectedResources,
 ) -> None:
-    """Notify a team that a model has been removed from the platform."""
+    """Notify a team that a model has been removed from the platform.
+
+    Announced once per team per model. Belt and braces rather than load-bearing: the removal
+    command deletes the model row before notifying, so a re-run finds nothing to report and
+    never reaches here. The guard keeps that from being the only thing standing between a
+    caller and a duplicate.
+    """
     if replacement_model_name:
         action_text = f"References have been automatically updated to use '{replacement_model_name}'."
     else:
@@ -396,4 +408,5 @@ def deleted_model_notification(
         event_data={"model_name": model_name},
         permissions=["service_providers.change_llmprovidermodel"],
         links=affected.links(),
+        once_per_event_type=True,
     )

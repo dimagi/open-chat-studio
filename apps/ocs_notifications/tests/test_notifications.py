@@ -436,6 +436,7 @@ class TestDeprecatedModelNotification:
             event_data={"model_name": "gpt-4"},
             permissions=["service_providers.change_llmprovidermodel"],
             links={"My Bot": "/chatbots/my-bot/"},
+            once_per_event_type=True,
         )
 
     @pytest.mark.django_db()
@@ -463,6 +464,7 @@ class TestDeprecatedModelNotification:
             event_data={"model_name": "gpt-4"},
             permissions=["service_providers.change_llmprovidermodel"],
             links={"My Pipeline": "/pipelines/1/", "My Assistant": "/assistants/1/"},
+            once_per_event_type=True,
         )
 
 
@@ -490,6 +492,7 @@ class TestDeletedModelNotification:
             event_data={"model_name": "claude-2.0"},
             permissions=["service_providers.change_llmprovidermodel"],
             links={"Bot A": "/chatbots/a/", "Bot B": "/chatbots/b/"},
+            once_per_event_type=True,
         )
 
     @pytest.mark.django_db()
@@ -518,6 +521,7 @@ class TestDeletedModelNotification:
             event_data={"model_name": "claude-2.0"},
             permissions=["service_providers.change_llmprovidermodel"],
             links={"Pipeline X": "/pipelines/1/", "Assistant Y": "/assistants/1/"},
+            once_per_event_type=True,
         )
 
     @pytest.mark.django_db()
