@@ -27,8 +27,6 @@ app.conf.update(
     worker_hijack_root_logger=False,
     worker_log_format="%(message)s",
     worker_task_log_format="%(message)s",
-    # ack tasks after execution so they're redelivered if the worker dies mid-task
-    task_acks_late=True,
 )
 
 
