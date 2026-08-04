@@ -2,7 +2,6 @@ import os
 
 from celery import Celery, signals
 from celery.app import trace
-from django import db
 
 from apps.utils.logging import CeleryContextFilter
 
@@ -45,25 +44,3 @@ def on_task_postrun(sender, **_):
 
     CeleryContextFilter.clear_task_context()
     unset_current_team()
-
-
-def close_db_connection(sender, **kwargs):
-    if getattr(sender.request, "is_eager", False):
-        return
-
-    # Copied from https://github.com/celery/celery/blob/main/celery/fixups/django.py
-    # Can be removed when upgrading Celery > 5.5.3
-    # (once https://github.com/celery/celery/commit/da4a80dc449301fde4355153b47af8c42caed37c is released)
-    for conn in db.connections.all(initialized_only=True):
-        try:
-            conn.close()
-        except db.InterfaceError:
-            pass
-        except db.DatabaseError as exc:
-            str_exc = str(exc)
-            if "closed" not in str_exc and "not connected" not in str_exc:
-                raise
-
-
-signals.task_prerun.connect(close_db_connection)
-signals.task_postrun.connect(close_db_connection)
