@@ -38,11 +38,11 @@ repos:
     rev: 'v10.8.0'
     hooks:
       - id: eslint
+        # Keep these in sync with the matching devDependencies in package.json.
         additional_dependencies:
           - eslint@10.8.0
-          - '@eslint/js@9.39.2'
-          - eslint-plugin-react@7.37.5
-          - typescript-eslint@8.46.1
+          - '@eslint/js@10.0.1'
+          - typescript-eslint@8.65.0
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
@@ -73,6 +73,15 @@ repos:
         pass_filenames: false
         always_run: true
         fail_fast: true
+      - id: eslint-versions-in-sync
+        name: eslint pins in .pre-commit-config.yaml must match pnpm-lock.yaml
+        # package.json and .pre-commit-config.yaml are bumped by different
+        # Dependabot ecosystems, so they drift apart silently.
+        entry: python scripts/check_eslint_versions.py
+        language: python
+        additional_dependencies: [pyyaml]
+        pass_filenames: false
+        files: ^(\.pre-commit-config\.yaml|package\.json|pnpm-lock\.yaml)$
       - id: atomic-exception-handling
         name: database exceptions must not be caught inside transaction.atomic()
         # Stdlib-only AST check, so it needs no virtualenv of its own. The repo-wide
