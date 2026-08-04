@@ -226,15 +226,31 @@ def fetch_totals(session, log_group, start, end) -> list[dict]:
     ]
 
 
-def fetch_deployed_patterns(session) -> dict[WafRule, list[str]]:
-    """Return the regex strings currently deployed in each of the WAF's scope-down pattern sets."""
-    client = session.client("wafv2")
-    deployed: dict[WafRule, list[str]] = {}
+def fetch_deployed_patterns(session, env: str | None = None) -> dict[WafRule, list[str]]:
+    """Return the regex strings currently deployed in each of the WAF's scope-down pattern sets.
 
+    One account can host several environments, whose pattern sets differ only by the ``<env>``
+    prefix. Merging them would report a pattern as deployed here when it is only deployed next
+    door, turning a DEPLOY finding into INVESTIGATE, so an ambiguous account is refused rather
+    than guessed at — the same call ``find_log_group`` makes.
+    """
+    client = session.client("wafv2")
+    matched = []
     for summary in _list_regex_pattern_sets(client):
         rule = _rule_for_pattern_set(summary["Name"])
         if rule is None:
             continue
+        set_env = _env_for_pattern_set(summary["Name"])
+        if env is None or set_env == env:
+            matched.append((set_env, rule, summary))
+
+    environments = {set_env for set_env, _, _ in matched}
+    if len(environments) > 1:
+        joined = ", ".join(sorted(environments))
+        raise WafLogsError(f"WAF pattern sets for more than one environment here: {joined}. Pass --waf-env.")
+
+    deployed: dict[WafRule, list[str]] = {}
+    for _, rule, summary in matched:
         detail = client.get_regex_pattern_set(Name=summary["Name"], Scope="REGIONAL", Id=summary["Id"])
         regexes = [entry["RegexString"] for entry in detail["RegexPatternSet"]["RegularExpressionList"]]
         deployed.setdefault(rule, []).extend(regexes)
@@ -260,6 +276,15 @@ def _rule_for_pattern_set(name: str) -> WafRule | None:
         if fragment in name:
             return rule
     return None
+
+
+def _env_for_pattern_set(name: str) -> str:
+    """``chatbots-prod-LargeBodyPaths0`` -> ``chatbots-prod``; empty when there is no prefix."""
+    for fragment in PATTERN_SET_RULES:
+        prefix, separator, _ = name.partition(fragment)
+        if separator:
+            return prefix.rstrip("-")
+    return ""
 
 
 def compile_deployed_patterns(deployed: dict[WafRule, list[str]]) -> tuple[dict[WafRule, list], list[str]]:

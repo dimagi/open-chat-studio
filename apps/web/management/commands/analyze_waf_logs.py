@@ -61,6 +61,7 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=5000, help="Max aggregated rows to fetch (default: 5000)")
         parser.add_argument("--min-hits", type=int, default=1, help="Ignore rows below this hit count")
         parser.add_argument("--no-drift", action="store_true", help="Skip the deployed WAF pattern set check")
+        parser.add_argument("--waf-env", help="Environment prefix of the pattern sets to check (e.g. chatbots-prod)")
         parser.add_argument("--attacks", type=int, default=10, help="Blocked-scanner rules to summarise (default: 10)")
         parser.add_argument("--csv", dest="csv_path", help="Write the endpoint findings to this CSV file")
         parser.add_argument("--dump-json", help="Save raw query results here for offline re-analysis")
@@ -150,7 +151,13 @@ class Command(BaseCommand):
         return get_session(self.options["profile"], self.options["region"])
 
     def _load_deployed_patterns(self, session):
-        deployed = fetch_deployed_patterns(session)
+        try:
+            deployed = fetch_deployed_patterns(session, env=self.options["waf_env"])
+        except WafLogsError as exc:
+            # Losing the drift check only downgrades the fix advice, so warn rather than abort an
+            # analysis whose Insights queries have already run.
+            self.stdout.write(self.style.WARNING(f"{exc} Skipping the deployed-coverage check."))
+            return None
         if not deployed:
             self.stdout.write(
                 self.style.WARNING("No WAF regex pattern sets found — skipping the deployed-coverage check.")

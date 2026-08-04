@@ -16,7 +16,14 @@ from apps.web.waf import (
     waf_allow,
 )
 from apps.web.waf_analysis import Fix, classify_row, deduplicate_endpoints, rule_to_waf_rule, view_name
-from apps.web.waf_logs import LogRow, _rule_for_pattern_set, compile_deployed_patterns
+from apps.web.waf_logs import (
+    LogRow,
+    WafLogsError,
+    _env_for_pattern_set,
+    _rule_for_pattern_set,
+    compile_deployed_patterns,
+    fetch_deployed_patterns,
+)
 
 
 def make_row(uri, rule="NoUserAgent_HEADER", **kwargs):
@@ -209,6 +216,53 @@ def test_compile_deployed_patterns_reports_bad_regexes():
 )
 def test_rule_for_pattern_set(name, expected):
     assert _rule_for_pattern_set(name) is expected
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        pytest.param("chatbots-prod-LargeBodyPaths0", "chatbots-prod", id="prefixed"),
+        pytest.param("chatbots-staging-NoUserAgentPaths1", "chatbots-staging", id="other-env"),
+        pytest.param("LargeBodyPaths0", "", id="no-prefix"),
+        pytest.param("some-other-set", "", id="not-a-pattern-set"),
+    ],
+)
+def test_env_for_pattern_set(name, expected):
+    assert _env_for_pattern_set(name) == expected
+
+
+class _FakeWafv2:
+    """Just enough of the wafv2 client for the pattern-set lookup."""
+
+    def __init__(self, names):
+        self.names = names
+
+    def list_regex_pattern_sets(self, **kwargs):
+        return {"RegexPatternSets": [{"Name": name, "Id": name} for name in self.names]}
+
+    def get_regex_pattern_set(self, Name, Scope, Id):  # noqa: N803 - boto3's casing
+        return {"RegexPatternSet": {"RegularExpressionList": [{"RegexString": f"^/{Name}$"}]}}
+
+
+class _FakeSession:
+    def __init__(self, names):
+        self.names = names
+
+    def client(self, name):
+        return _FakeWafv2(self.names)
+
+
+def test_fetch_deployed_patterns_refuses_to_merge_environments():
+    """A pattern set from another environment would report as deployed here, hiding a DEPLOY fix."""
+    session = _FakeSession(["chatbots-prod-LargeBodyPaths0", "chatbots-staging-LargeBodyPaths0"])
+    with pytest.raises(WafLogsError, match="more than one environment"):
+        fetch_deployed_patterns(session)
+
+
+def test_fetch_deployed_patterns_scopes_to_the_requested_environment():
+    session = _FakeSession(["chatbots-prod-LargeBodyPaths0", "chatbots-staging-LargeBodyPaths0"])
+    deployed = fetch_deployed_patterns(session, env="chatbots-prod")
+    assert deployed == {WafRule.SizeRestrictions_BODY: ["^/chatbots-prod-LargeBodyPaths0$"]}
 
 
 def test_deployed_patterns_cover_the_exported_allow_list():

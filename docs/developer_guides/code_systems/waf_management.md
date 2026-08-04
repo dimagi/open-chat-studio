@@ -142,6 +142,7 @@ You still need to review the results — a matched endpoint isn't automatically 
 --profile / --region     # AWS credentials (defaults to the ambient profile)
 --log-group NAME         # skip auto-discovery
 --no-drift               # skip the wafv2 lookup (fewer permissions needed)
+--waf-env chatbots-prod  # pick an environment when the account holds more than one
 --csv findings.csv       # write the endpoint findings out
 --dump-json raw.json     # save raw results, then re-run offline with --from-json
 --check-path /some/path  # diagnose a single path: view, decorator, deployed state
