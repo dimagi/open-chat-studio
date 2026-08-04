@@ -670,6 +670,13 @@ PRELOGIN_CONTACT_EMAIL = env("PRELOGIN_CONTACT_EMAIL", default="")
 HUBSPOT_FORM_REGION = env("HUBSPOT_FORM_REGION", default="na1")
 HUBSPOT_FORM_PORTAL_ID = env("HUBSPOT_FORM_PORTAL_ID", default="")
 HUBSPOT_FORM_ID = env("HUBSPOT_FORM_ID", default="")
+# Chat widget config for the demo bots on the use cases page, keyed by the bot keys used in
+# templates/prelogin/applications.html. A bot without an entry renders as a static card with no chat.
+# The bots live on production, so the widget talks to production regardless of which deploy serves
+# the page, unless a bot sets "api_base_url" to test against another deploy. Format:
+# {"<bot key>": {"id": "<chatbot public id>", "embed_key": "<widget channel token>",
+#                "header_text": "<chat window title>", "api_base_url": "<optional other deploy>"}}
+PRELOGIN_DEMO_BOTS = env.json("PRELOGIN_DEMO_BOTS", default={})
 
 # Sentry setup
 
