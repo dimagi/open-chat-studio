@@ -5,6 +5,7 @@ import pytest
 from django.core.management.base import CommandError
 from django.urls import resolve
 
+from apps.api.views.chat import chat_upload_file
 from apps.web.management.commands.analyze_waf_logs import parse_duration
 from apps.web.waf import (
     WafRule,
@@ -14,7 +15,7 @@ from apps.web.waf import (
     get_waf_patterns,
     waf_allow,
 )
-from apps.web.waf_analysis import Fix, classify_row, deduplicate_endpoints, rule_to_waf_rule
+from apps.web.waf_analysis import Fix, classify_row, deduplicate_endpoints, rule_to_waf_rule, view_name
 from apps.web.waf_logs import LogRow, _rule_for_pattern_set, compile_deployed_patterns
 
 
@@ -184,6 +185,11 @@ def test_drf_viewsets_are_matched_by_cls():
 
     as_view_wrapper.cls = FakeViewSet
     assert get_registration_key(as_view_wrapper) is FakeViewSet
+
+
+def test_drf_function_views_report_the_wrapped_function_name():
+    """``@api_view`` registers a type()-built WrappedAPIView; that name identifies nothing."""
+    assert view_name(chat_upload_file) == "chat_upload_file"
 
 
 def test_compile_deployed_patterns_reports_bad_regexes():

@@ -31,6 +31,12 @@ NON_PATH_RULES = {
     "BlockPermanentIPs": "IP blocklist match — managed via the AWS console",
 }
 
+# Qualnames that name the machinery instead of the view. DRF builds its wrapper with a three-arg
+# ``type()`` call, so the qualname is the literal string "WrappedAPIView" while ``__name__`` is
+# copied from the decorated function — the latter is what you'd actually grep for. A view defined
+# inside a closure carries a ``<locals>`` qualname, which is noise for the same reason.
+_QUALNAME_NOISE = ("<locals>", "WrappedAPIView")
+
 
 class Fix(Enum):
     """What needs to happen for a blocked endpoint to stop being blocked."""
@@ -167,15 +173,20 @@ def is_covered(raw_path: str, waf_rule: WafRule, deployed_patterns: dict[WafRule
     return any(pattern.search(raw_path) for pattern in deployed_patterns.get(waf_rule, []))
 
 
+def _informative_qualname(view) -> str:
+    """The view's qualname, or "" when it says less about the view than ``__name__`` does."""
+    qualname = getattr(view, "__qualname__", "")
+    if any(noise in qualname for noise in _QUALNAME_NOISE):
+        return ""
+    return qualname
+
+
 def view_name(view_func) -> str:
     view = get_registration_key(view_func)
-    qualname = getattr(view, "__qualname__", "")
-    # DRF builds WrappedAPIView via type(), so its __qualname__ is that literal name while __name__
-    # is copied from the wrapped function — the __name__ is what you'd actually grep for. Views
-    # defined inside a closure carry a <locals> qualname, which is equally noise.
-    if qualname and "<locals>" not in qualname and qualname != "WrappedAPIView":
-        return qualname
-    return getattr(view, "__name__", None) or repr(view)
+    for name in (_informative_qualname(view), getattr(view, "__name__", "")):
+        if name:
+            return name
+    return repr(view)
 
 
 def view_source(view_func) -> str | None:
