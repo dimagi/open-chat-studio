@@ -107,7 +107,7 @@ export default function TestMessageBox({
           throw error;
         } else {
           console.error("Unexpected error", error);
-          throw new Error("Unexpected error occurred");
+          throw new Error("Unexpected error occurred", { cause: error });
         }
       }
     }
