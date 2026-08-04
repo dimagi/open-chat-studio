@@ -1,4 +1,5 @@
 import json
+import logging
 from contextlib import contextmanager
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -531,6 +532,32 @@ class TestEmailSenderSendFailures:
 
         assert mail.outbox == []
         assert sender.last_message_id is None
+
+    @override_settings(
+        EMAIL_BACKEND="anymail.backends.mailgun.EmailBackend",
+        ANYMAIL={"MAILGUN_API_KEY": "test-key"},
+    )
+    @pytest.mark.django_db()
+    def test_eai_from_address_is_not_blamed_on_the_attachment(self, team_with_users, caplog):
+        """Mailgun rejects a non-ASCII from_address with AnymailUnsupportedFeature while
+        building the payload. Asserted against the real backend rather than a stub, so
+        anymail's semantics are pinned instead of assumed.
+
+        The staged attachment is the point: it must not be reported as the cause. The
+        propagation assertion alone does not catch that -- a text-only retry raises the
+        same EAI error -- so the log is what pins it.
+        """
+        sender = EmailSender(from_address="bøt@chat.openchatstudio.com", domain="chat.openchatstudio.com")
+        sender.send_text("Hello", "user@example.com")
+        self._attach(sender, team_with_users)
+
+        with caplog.at_level(logging.WARNING, logger="ocs.channels"):
+            with pytest.raises(AnymailUnsupportedFeature, match="EAI in from_email"):
+                sender.flush()
+
+        assert sender.last_message_id is None
+        assert "report.pdf" not in caplog.text
+        assert "attachment" not in caplog.text.lower()
 
     @pytest.mark.django_db()
     def test_invalid_address_propagates(self, team_with_users):
