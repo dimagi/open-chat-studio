@@ -120,7 +120,7 @@ class TestLoadDocumentsAttachments:
         )
 
         loader = _make_loader(json_config, collection_id=42)
-        with mock.patch("apps.documents.source_loaders.json_collection.markitdown_read") as md:
+        with mock.patch("apps.documents.source_loaders.json_collection.read_file_content") as md:
             md.side_effect = [
                 _stub_doc("text from pdf 1"),
                 _stub_doc("text from pdf 2"),
@@ -207,7 +207,7 @@ class TestItemMetadataPropagation:
         httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
         loader = _make_loader(json_config)
         with mock.patch(
-            "apps.documents.source_loaders.json_collection.markitdown_read",
+            "apps.documents.source_loaders.json_collection.read_file_content",
             return_value=_stub_doc("body"),
         ):
             docs = list(loader.load_documents())
@@ -228,7 +228,7 @@ class TestItemMetadataPropagation:
         httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
         loader = _make_loader(json_config)
         with mock.patch(
-            "apps.documents.source_loaders.json_collection.markitdown_read",
+            "apps.documents.source_loaders.json_collection.read_file_content",
             return_value=_stub_doc("body"),
         ):
             meta = list(loader.load_documents())[0].metadata
@@ -243,7 +243,7 @@ class TestItemMetadataPropagation:
 
         with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
             with mock.patch(
-                "apps.documents.source_loaders.json_collection.markitdown_read",
+                "apps.documents.source_loaders.json_collection.read_file_content",
                 return_value=_stub_doc("body"),
             ):
                 docs = list(loader.load_documents())
@@ -332,7 +332,7 @@ class TestMetadataFilters:
             httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
         loader = _make_loader(config)
         with mock.patch(
-            "apps.documents.source_loaders.json_collection.markitdown_read",
+            "apps.documents.source_loaders.json_collection.read_file_content",
             return_value=_stub_doc("body"),
         ):
             docs = list(loader.load_documents())
@@ -371,7 +371,7 @@ class TestUnsupportedFileTypes:
         loader = _make_loader(json_config)
         with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
             with mock.patch(
-                "apps.documents.source_loaders.json_collection.markitdown_read",
+                "apps.documents.source_loaders.json_collection.read_file_content",
                 return_value=_stub_doc("body"),
             ):
                 docs = list(loader.load_documents())
@@ -417,7 +417,7 @@ class TestLoadDocumentsAttachmentFailures:
 
         loader = _make_loader(json_config)
         with mock.patch(
-            "apps.documents.source_loaders.json_collection.markitdown_read",
+            "apps.documents.source_loaders.json_collection.read_file_content",
             return_value=_stub_doc("good text"),
         ):
             docs = list(loader.load_documents())
@@ -443,7 +443,7 @@ class TestLoadDocumentsAttachmentFailures:
 
         loader = _make_loader(json_config)
         with mock.patch(
-            "apps.documents.source_loaders.json_collection.markitdown_read",
+            "apps.documents.source_loaders.json_collection.read_file_content",
             side_effect=[RuntimeError("boom"), _stub_doc("ok text")],
         ):
             docs = list(loader.load_documents())
@@ -614,7 +614,7 @@ class TestAuthHeadersPropagation:
         )
         loader = _loader_with_fake_auth(json_config)
         with mock.patch(
-            "apps.documents.source_loaders.json_collection.markitdown_read",
+            "apps.documents.source_loaders.json_collection.read_file_content",
             return_value=_stub_doc("body"),
         ):
             docs = list(loader.load_documents())

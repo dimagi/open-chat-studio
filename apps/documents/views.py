@@ -344,11 +344,14 @@ def sync_document_source(request, team_slug: str, collection_id: int, pk: int):
     """Trigger manual sync of a document source"""
     document_source = get_object_or_404(DocumentSource, id=pk, collection_id=collection_id, team=request.team)
 
-    if not _queue_document_source_sync(document_source):
+    if _queue_document_source_sync(document_source):
+        messages.success(request, "Document source sync has been queued. This may take a few minutes.")
+    else:
+        # Still re-render: the caller swaps #document_source_<id> outerHTML, so an empty body
+        # would delete the source (and its file list) from the page. Repainting instead brings
+        # the stale page that offered the button back in line with the running sync.
         messages.warning(request, "This document source is already syncing.")
-        return HttpResponse()
 
-    messages.success(request, "Document source sync has been queued. This may take a few minutes.")
     return render(
         request,
         "documents/partials/document_source.html",
