@@ -298,27 +298,14 @@ class EvaluatorForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
-        params = self.cleaned_data.get("params")
         evaluator_type = self.cleaned_data.get("type")
-
         if not evaluator_type:
             raise forms.ValidationError("Missing evaluator type")
 
-        if isinstance(params, str):
-            try:
-                params = json.loads(params) or {}
-            except json.JSONDecodeError as err:
-                raise forms.ValidationError("Invalid JSON format for parameters") from err
-
         evaluators_module = importlib.import_module("apps.evaluations.evaluators")
-        try:
-            evaluator_class = getattr(evaluators_module, evaluator_type)
-        except AttributeError as err:
-            raise forms.ValidationError(f"Unknown evaluator type: {evaluator_type}") from err
+        evaluator_class = _get_evaluator_class(evaluators_module, evaluator_type)
 
-        # A stale tab may still post the ids inside params; the FK fields are the record now,
-        # so drop them rather than storing a copy that nothing reads.
-        params = {key: value for key, value in params.items() if key not in evaluators_module.LLM_PROVIDER_FIELDS}
+        params = _clean_params(self.cleaned_data.get("params"), evaluators_module.LLM_PROVIDER_FIELDS)
         cleaned_data["params"] = params
 
         if issubclass(evaluator_class, evaluators_module.LLMResponseMixin):
@@ -332,16 +319,7 @@ class EvaluatorForm(forms.ModelForm):
                 "llm_provider_model_id": self.cleaned_data["llm_provider_model"].id,
             }
 
-        try:
-            evaluator_class(**params)
-        except PydanticValidationError as err:
-            error_messages = []
-            for error in err.errors():
-                field_name = error["loc"][0] if error["loc"] else "unknown"
-                message = error["msg"]
-                error_messages.append(f"{field_name.replace('_', ' ').title()}: {message}")
-            raise forms.ValidationError(f"{', '.join(error_messages)}") from err
-
+        _validate_evaluator_params(evaluator_class, params)
         return cleaned_data
 
     def _validate_llm_provider_selection(self):
@@ -363,6 +341,40 @@ class EvaluatorForm(forms.ModelForm):
                 f"The selected LLM model is for {_provider_type_label(provider_model.type)} providers, "
                 f"but the selected provider is {_provider_type_label(provider.type)}",
             )
+
+
+def _get_evaluator_class(evaluators_module, evaluator_type: str):
+    """The evaluator class named by the form's hidden ``type`` field."""
+    try:
+        return getattr(evaluators_module, evaluator_type)
+    except AttributeError as err:
+        raise forms.ValidationError(f"Unknown evaluator type: {evaluator_type}") from err
+
+
+def _clean_params(params, provider_field_names) -> dict:
+    """Parse the hidden params JSON.
+
+    A stale tab may still post the provider ids inside params; the FK fields are the record
+    now, so drop them rather than storing a copy that nothing reads.
+    """
+    if isinstance(params, str):
+        try:
+            params = json.loads(params) or {}
+        except json.JSONDecodeError as err:
+            raise forms.ValidationError("Invalid JSON format for parameters") from err
+    return {key: value for key, value in params.items() if key not in provider_field_names}
+
+
+def _validate_evaluator_params(evaluator_class, params: dict) -> None:
+    """Report pydantic's complaints about the params as a form error."""
+    try:
+        evaluator_class(**params)
+    except PydanticValidationError as err:
+        error_messages = []
+        for error in err.errors():
+            field_name = error["loc"][0] if error["loc"] else "unknown"
+            error_messages.append(f"{str(field_name).replace('_', ' ').title()}: {error['msg']}")
+        raise forms.ValidationError(", ".join(error_messages)) from err
 
 
 def _provider_type_label(provider_type: str) -> str:
