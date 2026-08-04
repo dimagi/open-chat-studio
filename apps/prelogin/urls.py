@@ -1,5 +1,4 @@
 from django.urls import path
-from django.views.generic import RedirectView, TemplateView
 
 from . import views
 
@@ -8,15 +7,15 @@ urlpatterns = [
     path("", views.home, name="home"),
     path(
         "about/",
-        TemplateView.as_view(template_name="prelogin/about.html", extra_context={"active_nav": "about"}),
+        views.PreloginTemplateView.as_view(template_name="prelogin/about.html", extra_context={"active_nav": "about"}),
         name="about",
     ),
     path("contact/", views.contact, name="contact"),
     path("applications/", views.applications, name="applications"),
     path(
         "open-opportunities/",
-        TemplateView.as_view(template_name="prelogin/open_opportunities.html"),
+        views.PreloginTemplateView.as_view(template_name="prelogin/open_opportunities.html"),
         name="open_opportunities",
     ),
-    path("platform/", RedirectView.as_view(url="/#how-it-works", permanent=True), name="platform"),
+    path("platform/", views.PreloginRedirectView.as_view(url="/#how-it-works", permanent=True), name="platform"),
 ]
