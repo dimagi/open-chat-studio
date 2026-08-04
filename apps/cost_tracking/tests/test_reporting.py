@@ -405,7 +405,7 @@ class TestCoverageGaps:
 
 @pytest.mark.django_db()
 class TestCostTimeseries:
-    """Per-bucket spend for the panel's daily-spend chart."""
+    """Per-bucket spend for the panel's daily-spend chart, split by source."""
 
     def test_buckets_by_day_ordered(self):
         team = TeamFactory.create()
@@ -415,7 +415,7 @@ class TestCostTimeseries:
 
         series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
 
-        assert [point["cost"] for point in series] == [1.5, 2.0]
+        assert [point["chat"] for point in series] == [1.5, 2.0]
 
     def test_costs_are_floats(self):
         team = TeamFactory.create()
@@ -423,7 +423,31 @@ class TestCostTimeseries:
 
         series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
 
-        assert isinstance(series[0]["cost"], float)
+        assert isinstance(series[0]["chat"], float)
+
+    def test_sources_are_separate_series_in_one_bucket(self):
+        team = TeamFactory.create()
+        when = _NOW - timedelta(days=1)
+        _usage(team, cost="1.00", when=when)
+        _usage(team, cost="0.25", when=when, source=UsageSource.EVALUATION)
+
+        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert len(series) == 1
+        assert series[0]["chat"] == 1.0
+        assert series[0]["evaluation"] == 0.25
+
+    def test_buckets_zero_fill_missing_sources(self):
+        """Stacked series have to line up bucket for bucket, so a bucket with only
+        eval spend still reports a chat figure."""
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=2))
+        _usage(team, cost="0.25", when=_NOW - timedelta(days=1), source=UsageSource.EVALUATION)
+
+        series = cost_timeseries(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert series[0] == {"date": series[0]["date"], "chat": 1.0, "evaluation": 0.0}
+        assert series[1] == {"date": series[1]["date"], "chat": 0.0, "evaluation": 0.25}
 
     def test_team_scoped(self):
         team = TeamFactory.create()
@@ -653,7 +677,7 @@ class TestCostFilters:
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(participant_ids=[keep.participant_id])
         )
 
-        assert [point["cost"] for point in series] == [1.0]
+        assert [point["chat"] for point in series] == [1.0]
 
     def test_timeseries_filters_by_platform_via_session(self):
         team = TeamFactory.create()
@@ -667,7 +691,7 @@ class TestCostFilters:
             team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(platform_names=["web"])
         )
 
-        assert [point["cost"] for point in series] == [1.0]
+        assert [point["chat"] for point in series] == [1.0]
 
     def test_costs_by_experiment_filters_by_experiment(self):
         team = TeamFactory.create()
@@ -771,6 +795,22 @@ class TestEvaluationSourceRule:
         team, experiment, _ = spend
 
         assert read(team, CostFilters(experiment_ids=[experiment.id])) == Decimal("1.00")
+
+    def test_timeseries_splits_both_sources_when_unfiltered(self, spend):
+        team, _, _ = spend
+
+        series = cost_timeseries(team, start=_START, end=_NOW)
+
+        assert [(point["chat"], point["evaluation"]) for point in series] == [(1.0, 0.25)]
+
+    def test_timeseries_filtered_to_one_chatbot_drops_the_evaluation_series(self, spend):
+        """Filtering makes it per-entity attribution, so eval spend isn't counted — and the
+        chart omits the series rather than showing a zero that reads as "no eval spend"."""
+        team, experiment, _ = spend
+
+        series = cost_timeseries(team, start=_START, end=_NOW, filters=CostFilters(experiment_ids=[experiment.id]))
+
+        assert series == [{"date": series[0]["date"], "chat": 1.0}]
 
     def test_unfiltered_read_stays_a_team_total(self, spend):
         """The flip side: with no filter the same read is a team total, so it counts

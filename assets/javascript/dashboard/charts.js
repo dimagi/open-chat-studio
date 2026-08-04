@@ -412,15 +412,24 @@ class ChartManager {
 
         this.destroyChart('costTimeseries');
 
+        const points = data || [];
+        // One stacked series per UsageRecord.source the backend reported. A read filtered to
+        // particular chatbots/participants/platforms counts chat only (ADR-0048), so the
+        // evaluation key is absent there and we drop the series rather than plot a zero.
+        const series = [
+            {key: 'chat', label: 'Chat', color: this.colorPalette.primary},
+            {key: 'evaluation', label: 'Evaluations', color: this.colorPalette.secondary}
+        ].filter(spend => points.some(item => item[spend.key] !== undefined));
+
         const chartData = {
-            labels: (data || []).map(item => this.formatDateLabel(item.date)),
-            datasets: [{
-                label: 'Spend',
-                data: (data || []).map(item => item.cost),
-                backgroundColor: this.colorPalette.primary + '80',
-                borderColor: this.colorPalette.primary,
+            labels: points.map(item => this.formatDateLabel(item.date)),
+            datasets: series.map(spend => ({
+                label: spend.label,
+                data: points.map(item => item[spend.key] || 0),
+                backgroundColor: spend.color + '80',
+                borderColor: spend.color,
                 borderWidth: 1
-            }]
+            }))
         };
 
         // Mirror main.js's formatCurrency: 4 decimals below $0.01 so sub-cent
@@ -431,23 +440,36 @@ class ChartManager {
             return `$${num.toFixed(decimals)}`;
         };
 
+        const tooltipCallbacks = {
+            label: (context) => `${context.dataset.label}: ${formatCost(context.parsed.y)}`
+        };
+        if (series.length > 1) {
+            tooltipCallbacks.footer = (items) =>
+                `Total: ${formatCost(items.reduce((total, item) => total + item.parsed.y, 0))}`;
+        }
+
         const options = {
             ...this.defaultOptions,
             plugins: {
                 ...this.defaultOptions.plugins,
                 legend: {
-                    display: false
+                    ...this.defaultOptions.plugins.legend,
+                    display: series.length > 1
                 },
                 tooltip: {
-                    callbacks: {
-                        label: (context) => `Spend: ${formatCost(context.parsed.y)}`
-                    }
+                    ...this.defaultOptions.plugins.tooltip,
+                    callbacks: tooltipCallbacks
                 }
             },
             scales: {
                 ...this.defaultOptions.scales,
+                x: {
+                    ...this.defaultOptions.scales.x,
+                    stacked: true
+                },
                 y: {
                     ...this.defaultOptions.scales.y,
+                    stacked: true,
                     ticks: {
                         callback: (value) => formatCost(value)
                     }
