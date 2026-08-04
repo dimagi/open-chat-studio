@@ -170,9 +170,10 @@ def is_covered(raw_path: str, waf_rule: WafRule, deployed_patterns: dict[WafRule
 def view_name(view_func) -> str:
     view = get_registration_key(view_func)
     qualname = getattr(view, "__qualname__", "")
-    # DRF builds a WrappedAPIView class inside a closure, so its qualname is noise; the __name__
-    # it copies from the wrapped function is what you'd actually grep for.
-    if qualname and "<locals>" not in qualname:
+    # DRF builds WrappedAPIView via type(), so its __qualname__ is that literal name while __name__
+    # is copied from the wrapped function — the __name__ is what you'd actually grep for. Views
+    # defined inside a closure carry a <locals> qualname, which is equally noise.
+    if qualname and "<locals>" not in qualname and qualname != "WrappedAPIView":
         return qualname
     return getattr(view, "__name__", None) or repr(view)
 
