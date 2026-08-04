@@ -70,5 +70,3 @@ DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", default="noreply@dimagi.co
 # get executed more than once at a time. The higher the number,
 # the longer it will take for a lost task to get rescheduled.
 CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 60 * 5}
-# Reschedule un-acked tasks on worker failure (ie SIGKILL)
-CELERY_TASK_REJECT_ON_WORKER_LOST = True
