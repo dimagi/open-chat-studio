@@ -177,6 +177,8 @@ class TestEvaluatorPickerInitialState:
     def test_creating_starts_on_the_teams_first_provider(self, client_with_user, team):
         """The pair has to be one the form accepts, so the model must be one this provider can serve."""
         provider = LlmProviderFactory.create(team=team)
+        # Don't lean on the seeded global models: they are absent under --no-migrations.
+        LlmProviderModelFactory.create(team=team, type=provider.type, name=get_default_model(provider.type).name)
 
         response = client_with_user.get(reverse("evaluations:evaluator_new", args=[team.slug]))
 
