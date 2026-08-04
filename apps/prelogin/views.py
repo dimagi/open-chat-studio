@@ -6,10 +6,30 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+from django.views.generic import RedirectView, TemplateView
 
 from apps.web.waf import WafRule, waf_allow
 
 logger = logging.getLogger(__name__)
+
+
+@waf_allow(WafRule.NoUserAgent_HEADER)
+class PreloginTemplateView(TemplateView):
+    """A static prelogin page, excluded from the NoUserAgent_HEADER WAF rule.
+
+    Prelogin pages are public and get hit by clients that don't send a User-Agent. `waf_allow`
+    keys class-based views on the class, so this subclass exists to scope the exception to the
+    prelogin URLs — decorating `TemplateView` itself would pull every other use of it in the
+    project into the exception list too.
+    """
+
+
+@waf_allow(WafRule.NoUserAgent_HEADER)
+class PreloginRedirectView(RedirectView):
+    """A prelogin redirect, excluded from the NoUserAgent_HEADER WAF rule.
+
+    Subclassed for the same reason as `PreloginTemplateView`.
+    """
 
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
@@ -52,6 +72,7 @@ def _configured_demo_bots() -> dict:
     return configured
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 def applications(request):
     return render(
         request,
@@ -63,6 +84,7 @@ def applications(request):
     )
 
 
+@waf_allow(WafRule.NoUserAgent_HEADER)
 def contact(request):
     hubspot_form = None
     if settings.HUBSPOT_FORM_PORTAL_ID and settings.HUBSPOT_FORM_ID:
