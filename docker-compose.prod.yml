@@ -63,6 +63,7 @@ services:
         --workers ${WEB_WORKERS:-2}
         --threads 8
         --timeout 0
+        --no-control-socket
         config.wsgi:application
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
