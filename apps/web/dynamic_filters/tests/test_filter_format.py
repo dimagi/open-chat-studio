@@ -75,3 +75,70 @@ def test_convert_saved_filter_data_leaves_new_format_unchanged():
     """Already-converted strings (even when leading with a non-filter param) are untouched."""
     already_new = "page=2&f_tags=x&op_tags=any+of"
     assert convert_saved_filter_data(already_new) == already_new
+
+
+def test_convert_saved_filter_data_preserves_two_filters_on_one_column():
+    """Regression test: a date range is two filters on one column and both bounds must survive.
+
+    The legacy format keyed filters by position, so the same column could appear twice. The new
+    format keys by column, which only expresses two filters as a repeated key -- a plain dict
+    keyed by column would keep the last bound and silently widen the range.
+    """
+    legacy_query_string = urlencode(
+        {
+            "filter_0_column": "first_message",
+            "filter_0_operator": "after",
+            "filter_0_value": "2026-01-01",
+            "filter_1_column": "first_message",
+            "filter_1_operator": "before",
+            "filter_1_value": "2026-02-01",
+        }
+    )
+
+    converted = QueryDict(convert_saved_filter_data(legacy_query_string))
+
+    assert converted.getlist("f_first_message") == ["2026-01-01", "2026-02-01"]
+    assert converted.getlist("op_first_message") == ["after", "before"]
+
+    # And both bounds survive as distinct filters once parsed.
+    assert [(f.operator, f.value) for f in FilterParams(converted).get_all("first_message")] == [
+        ("after", "2026-01-01"),
+        ("before", "2026-02-01"),
+    ]
+
+
+def test_convert_saved_filter_data_dict_form_preserves_repeated_column():
+    """The dict form lists the values of a repeated column rather than collapsing them."""
+    legacy_filter_data = {
+        "filter_0_column": "first_message",
+        "filter_0_operator": "after",
+        "filter_0_value": "2026-01-01",
+        "filter_1_column": "first_message",
+        "filter_1_operator": "before",
+        "filter_1_value": "2026-02-01",
+    }
+
+    assert convert_saved_filter_data(legacy_filter_data) == {
+        "f_first_message": ["2026-01-01", "2026-02-01"],
+        "op_first_message": ["after", "before"],
+    }
+
+
+def test_convert_saved_filter_data_skips_filter_missing_its_operator():
+    """A filter without an operator is dropped so the f_/op_ lists cannot fall out of step.
+
+    The pair of lists is zipped positionally when parsed, so emitting a value with no matching
+    operator would pair every later value with the wrong operator.
+    """
+    legacy_filter_data = {
+        "filter_0_column": "first_message",
+        "filter_0_value": "2026-01-01",
+        "filter_1_column": "first_message",
+        "filter_1_operator": "before",
+        "filter_1_value": "2026-02-01",
+    }
+
+    assert convert_saved_filter_data(legacy_filter_data) == {
+        "f_first_message": "2026-02-01",
+        "op_first_message": "before",
+    }

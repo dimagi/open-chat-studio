@@ -209,26 +209,11 @@
       },
 
       loadFiltersFromQueryString(queryString) {
-        const urlParams = new URLSearchParams(queryString);
-        const columns = new Set();
-
-        // Detect columns using the new format (f_* parameters)
-        for (const [key] of urlParams.entries()) {
-          if (key.startsWith('f_')) {
-            columns.add(key.substring(2));
-          }
-        }
-
-        // Keep only columns that have both a value (f_*) and an operator (op_*)
-        const validColumns = Array.from(columns)
-          .filter(columnName => urlParams.has(`f_${columnName}`) && urlParams.has(`op_${columnName}`));
-
-        const filters = validColumns.map(columnName => {
-          const valueParam = urlParams.get(`f_${columnName}`);
-          const operatorParam = urlParams.get(`op_${columnName}`);
-
+        // parseFilterParams zips each column's repeated f_/op_ values, so a column carrying more
+        // than one filter (a date range is `after X` AND `before Y`) yields one row per filter.
+        const filters = SiteJS.app.parseFilterParams(queryString).map(({column, operator, value}) => {
           const filter = {
-            column: columnName,
+            column: column,
             operator: '',
             value: '',
             selectedValues: [],
@@ -238,21 +223,21 @@
             filteredOptions: []
           };
 
-          const columnConfig = this.filterData.columns[columnName];
+          const columnConfig = this.filterData.columns[column];
           if (!columnConfig) {
             return filter;
           }
 
           filter.availableOperators = columnConfig.operators;
-          filter.operator = operatorParam;
+          filter.operator = operator;
 
-          if (operatorParam === 'range' && valueParam) {
+          if (operator === 'range') {
             filter.options = columnConfig.options || this.dateRangeOptions;
-            const matchedOption = filter.options.find(opt => opt.label === valueParam || opt.value === valueParam);
-            filter.value = matchedOption ? matchedOption.value.toString() : valueParam;
-          } else if (['any of', 'all of', 'excludes'].includes(operatorParam) && valueParam) {
+            const matchedOption = filter.options.find(opt => opt.label === value || opt.value === value);
+            filter.value = matchedOption ? matchedOption.value.toString() : value;
+          } else if (this.isListOperator(operator)) {
             // Parse CSV with tilde separator
-            const parsedValues = this.parseCSVTildeValue(valueParam);
+            const parsedValues = this.parseCSVTildeValue(value);
             if (this.isObjectChoiceFilter(filter)) {
               filter.selectedValues = parsedValues.filter(id =>
                 columnConfig.options.findIndex(exp => String(exp.id) === String(id)) >= 0
@@ -263,8 +248,8 @@
             if (columnConfig.options) {
               filter.filteredOptions = [...columnConfig.options];
             }
-          } else if (valueParam) {
-            filter.value = valueParam;
+          } else {
+            filter.value = value;
           }
 
           return filter;
@@ -285,61 +270,52 @@
         return SiteJS.app.serializeCSVTildeValues(values);
       },
 
-      updateUrlWithFilters() {
-        let activeFilters = this.getActiveFilters(this.filterData.filters);
-        const params = new URLSearchParams(window.location.search);
+      isListOperator(operator) {
+        return SiteJS.app.LIST_OPERATORS.has(operator);
+      },
 
-        // Remove old format new parameters
-        [...params.keys()].forEach(key => {
-          if (key.startsWith('f_') || key.startsWith('op_')) {
-            params.delete(key);
-          }
-        });
-
-        activeFilters.forEach((filter) => {
-          if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
-            if (filter.selectedValues && filter.selectedValues.length > 0) {
-              let valuesToSerialize = filter.selectedValues;
-              if (this.isObjectChoiceFilter(filter)) {
-                valuesToSerialize = filter.selectedValues.map(label => {
-                  const option = this.filterData.columns[filter.column].options.find(exp => exp.label === label);
-                  return option ? option.id : label;
-                });
-              }
-              params.set(`f_${filter.column}`, this.serializeCSVTildeValues(valuesToSerialize));
+      toWireFilters(filters) {
+        // Map the UI's filter rows onto the {column, operator, value} triples the wire format
+        // takes. Object-choice columns show labels but travel as ids.
+        return filters.map((filter) => {
+          let value = filter.value;
+          if (this.isListOperator(filter.operator)) {
+            let values = filter.selectedValues || [];
+            if (this.isObjectChoiceFilter(filter)) {
+              // selectedValues holds ids (the option checkboxes bind option.id), so resolve by id
+              // first. The label lookup is only a fallback for older stored UI state -- matching it
+              // first would mistranslate an id that happens to equal another option's label.
+              values = values.map(selectedValue => {
+                const options = this.filterData.columns[filter.column].options;
+                const option =
+                  options.find(exp => String(exp.id) === String(selectedValue)) ||
+                  options.find(exp => exp.label === selectedValue);
+                return option ? option.id : selectedValue;
+              });
             }
-          } else {
-            params.set(`f_${filter.column}`, filter.value);
+            value = values.length > 0 ? this.serializeCSVTildeValues(values) : '';
           }
-          params.set(`op_${filter.column}`, filter.operator);
+          return {column: filter.column, operator: filter.operator, value: value};
         });
+      },
 
-        const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+      updateUrlWithFilters() {
+        // replaceFilterParams drops the existing f_/op_ params and rebuilds them by appending, so
+        // two filters on one column both survive; non-filter params such as pagination stay intact.
+        const wireFilters = this.toWireFilters(this.getActiveFilters(this.filterData.filters));
+        const params = SiteJS.app.replaceFilterParams(window.location.search, wireFilters);
+        const query = params.toString();
+        const newUrl = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
         window.history.replaceState({}, '', newUrl);
       },
 
       triggerFilterChange(updateUrl = true) {
         this.filterData.loading = true;
 
-        let filterParams = {};
         let activeFilters = this.getActiveFilters(this.filterData.filters);
-        activeFilters.forEach((filter) => {
-          if (['any of', 'all of', 'excludes'].includes(filter.operator)) {
-            if (filter.selectedValues && filter.selectedValues.length > 0) {
-              let valuesToSend = filter.selectedValues;
-              if (this.isObjectChoiceFilter(filter)) {
-                valuesToSend = filter.selectedValues.map(label => {
-                  const option = this.filterData.columns[filter.column].options.find(exp => exp.label === label);
-                  return option ? option.id : label;
-                });
-              }
-              filterParams[`f_${filter.column}`] = this.serializeCSVTildeValues(valuesToSend);
-            }
-          } else {
-            filterParams[`f_${filter.column}`] = filter.value;
-          }
-          filterParams[`op_${filter.column}`] = filter.operator;
-        });
+        // Each key maps to an array of values; htmx appends one param per element, so a column
+        // carrying more than one filter is not flattened into a single param.
+        const filterParams = SiteJS.app.filterParamsToRequestValues(this.toWireFilters(activeFilters));
 
         this.syncChatbotVersionsField(activeFilters);
 
@@ -710,11 +686,10 @@
             this.nlError = "Couldn't understand that query. Try rephrasing it.";
             return;
           }
-          const listOperators = new Set(['any of', 'all of', 'excludes']);
           const newFilters = (data.response?.filters || [])
             .filter(item => this.filterData.columns[item.column])
             .map(item => {
-              const isList = listOperators.has(item.operator);
+              const isList = this.isListOperator(item.operator);
               let selectedValues = [];
               let value = item.value;
               if (isList) {

@@ -45,6 +45,27 @@ Filter values are passed through URL query parameters using a modern format that
 - Multiple values (separated by `~`): `?f_tags=tag1~tag2&op_tags=any%20of`
 - Values containing `~` are quoted: `?f_tags=tag1~"tag~2"~tag3&op_tags=any%20of`
 
+#### Several filters on one column
+
+Because the key holds the column rather than a position, a column carrying more than one filter is
+expressed by **repeating the key**. The UI allows this — a date range is `after X` AND `before Y` on
+the same column — and every filter is applied, combined with AND.
+
+- Date range: `?f_first_message=2026-01-01&op_first_message=after&f_first_message=2026-02-01&op_first_message=before`
+
+The `f_` and `op_` lists are zipped positionally, so the *n*th value pairs with the *n*th operator.
+Anything reading or writing these params must therefore use list semantics — `getlist`/`append`, never
+`get`/`set`, which would keep just one of the two and silently widen the filter. Both sides of the
+wire have a single source of truth for this:
+
+| Side | Module | Read | Write |
+| --- | --- | --- | --- |
+| Python | `apps/web/dynamic_filters/datastructures.py` | `FilterParams` | `FilterParams.to_query` |
+| JavaScript | `assets/javascript/filters/wireFormat.js` | `parseFilterParams` | `buildFilterParams` / `replaceFilterParams` |
+
+Use those helpers rather than hand-rolling the format. The JS module is covered by
+`assets/javascript/filters/wireFormat.test.js` (`pnpm test`).
+
 #### Legacy Format (Deprecated)
 The old `filter_{i}_column` / `filter_{i}_operator` / `filter_{i}_value` query-string format is deprecated. The UI no longer produces it, and it is rejected when *saving* new filter sets. However, existing legacy URLs (bookmarks or externally-generated links) keep working on *read*: `FilterParams.from_request` transparently translates them to the new `f_*`/`op_*` format via `convert_saved_filter_data`. Stored filter values are migrated to the new format by data migrations.
 

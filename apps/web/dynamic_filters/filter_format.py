@@ -55,30 +55,45 @@ def convert_saved_filter_data(filter_data):
 
         legacy_filters[index][field] = value
 
-    converted = {}
+    # The legacy format keyed filters by position, so one column could carry several filters
+    # (a date range is `after X` AND `before Y`). The new format keys by column and expresses
+    # that as a repeated key, so values accumulate per key rather than overwriting. A filter
+    # contributes to both the f_ and op_ list or to neither, which keeps the two lists
+    # positionally aligned for the zip in FilterParams.
+    converted: dict[str, list] = {}
     for legacy_filter in legacy_filters:
         column_name = legacy_filter.get("column")
-        if not column_name:
+        operator = legacy_filter.get("operator")
+        if not column_name or not operator or "value" not in legacy_filter:
             continue
 
-        if "value" in legacy_filter:
-            value = legacy_filter["value"]
-            if isinstance(value, str):
-                try:
-                    parsed = json.loads(value)
-                except (TypeError, json.JSONDecodeError):
-                    parsed = None
+        converted.setdefault(f"f_{column_name}", []).append(_convert_legacy_value(legacy_filter["value"]))
+        converted.setdefault(f"op_{column_name}", []).append(operator)
 
-                if isinstance(parsed, list):
-                    value = serialize_csv_tilde_values(parsed)
-            elif isinstance(value, list):
-                value = serialize_csv_tilde_values(value)
-            elif value is not None:
-                value = str(value)
+    # Collapse single-element lists back to scalars, matching how the legacy input is read above.
+    return {key: values[0] if len(values) == 1 else values for key, values in converted.items()}
 
-            converted[f"f_{column_name}"] = value
 
-        if "operator" in legacy_filter:
-            converted[f"op_{column_name}"] = legacy_filter["operator"]
+def _convert_legacy_value(value):
+    """Render one legacy filter value in the new wire format.
 
-    return converted
+    List values (stored as JSON in the legacy format) become tilde-delimited CSV; everything
+    else is passed through as a string.
+    """
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            parsed = None
+
+        if isinstance(parsed, list):
+            return serialize_csv_tilde_values(parsed)
+        return value
+
+    if isinstance(value, list):
+        return serialize_csv_tilde_values(value)
+
+    if value is not None:
+        return str(value)
+
+    return value
