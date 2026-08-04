@@ -608,8 +608,9 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         ``to_flow_node`` serves, so a dangling reference reads as unset rather than as an id that
         no longer resolves, and the ids come out as ints — the form the columns store them in.
 
-        Only params the row already carries are returned: a node type that references no resource
-        must not grow a null param for one.
+        Scalar ids are only returned for params the row already carries: a node type that
+        references no resource must not grow a null param for one. ``collection_index_ids`` is
+        returned whenever the M2M holds anything, whether or not params carries it.
         """
         params = self.params or {}
         resource_params = {
@@ -617,12 +618,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             for field_name in self.resource_fk_fields()
             if f"{field_name}_id" in params
         }
-        if "collection_index_ids" in params:
-            # ``all()`` rather than values_list so a prefetched M2M is reused; sorted because the
-            # through rows have no ordering of their own and the read must be stable.
-            resource_params["collection_index_ids"] = sorted(
-                collection.id for collection in self.collection_indexes.all()
-            )
+        # ``all()`` rather than values_list so a prefetched M2M is reused; sorted because the
+        # through rows have no ordering of their own and the read must be stable.
+        collection_index_ids = sorted(collection.id for collection in self.collection_indexes.all())
+        if collection_index_ids:
+            resource_params["collection_index_ids"] = collection_index_ids
         return resource_params
 
     def _sync_resource_fk_fields(self):

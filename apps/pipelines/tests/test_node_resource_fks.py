@@ -214,8 +214,18 @@ class TestFlowNodeReadsResourceFKs:
 
         assert node.to_flow_node().data.params["collection_index_ids"] == sorted([first.id, second.id])
 
+    def test_collection_index_ids_are_served_even_when_params_omit_them(self):
+        """The M2M is the reference: whatever it holds is served, whether or not the params copy
+        was ever written."""
+        index = CollectionFactory.create(is_index=True)
+        node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm"})
+        node.collection_indexes.set([index])
+
+        assert node.to_flow_node().data.params["collection_index_ids"] == [index.id]
+
     def test_params_the_node_does_not_carry_are_not_added(self):
-        """A node type that references no resource must not grow a null param for one."""
+        """A node type that references no resource must not grow a null param for one, and an
+        empty collection_indexes M2M adds no empty list."""
         node = NodeFactory.create(type="StartNode", params={"name": "start"})
 
         assert node.to_flow_node().data.params == {"name": "start"}
