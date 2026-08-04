@@ -8,7 +8,7 @@ The WAF management system consists of three components:
 
 1. **`@waf_allow` decorator** - Marks views that need WAF rule exceptions
 2. **`export_waf_allow_list` command** - Generates WAF rule configurations
-3. **`analyze_waf_logs` command** - Queries CloudWatch and reports what the WAF is blocking
+3. **`analyze_waf_logs` command** - Queries CloudWatch and reports WAF matches with their actual or projected outcome
 
 ## WAF Rules
 
@@ -159,5 +159,6 @@ happened rather than what the rule claims:
 | `BLOCKED` | The request was genuinely rejected. |
 | `counted` | A Count-mode rule (e.g. `RateLimitRule`) matched; the request was served. |
 
-Today essentially everything is `would-block` — the managed group blocks nothing. That makes the
-report a safe way to see what enforcing the rules *would* cost before flipping the override.
+While the managed group runs with the Count override it blocks nothing, so its matches all report as
+`would-block`. That makes the report a safe way to see what enforcing the rules *would* cost before
+flipping the override.
