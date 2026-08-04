@@ -7,7 +7,13 @@ from django.core.cache import cache
 from django.utils import timezone
 from time_machine import travel
 
-from apps.ocs_notifications.models import EventType, EventUser, LevelChoices, UserNotificationPreferences
+from apps.ocs_notifications.models import (
+    EventType,
+    EventUser,
+    LevelChoices,
+    NotificationEvent,
+    UserNotificationPreferences,
+)
 from apps.ocs_notifications.utils import (
     ALL_TEAMS_CACHE_KEY,
     CACHE_KEY_FORMAT,
@@ -182,6 +188,83 @@ class TestCreateNotification:
         assert user.unread_notifications_count(team_with_users) == 1
         event_user.refresh_from_db()
         assert event_user.read is False, "EventUser should be marked as unread again"
+
+    def test_once_per_event_type_skips_repeat_announcements(self, team_with_users):
+        """
+        Test that `once_per_event_type` suppresses a second notification for the same event type.
+
+        Verifies that:
+        1. The repeat call creates no new NotificationEvent
+        2. A user who read the first notification is not flipped back to unread
+        """
+        user = team_with_users.members.first()
+        kwargs = {
+            "title": "Model Deprecated",
+            "message": "Test message",
+            "level": LevelChoices.WARNING,
+            "team": team_with_users,
+            "slug": "llm-model-deprecated",
+            "event_data": {"model_name": "openai/gpt-4"},
+            "once_per_event_type": True,
+        }
+
+        assert create_notification(**kwargs) is not None
+        event_type = EventType.objects.get(
+            team=team_with_users, identifier=create_identifier("llm-model-deprecated", kwargs["event_data"])
+        )
+        for event_user in EventUser.objects.filter(event_type=event_type):
+            toggle_notification_read(event_user.user, event_user=event_user, read=True)
+
+        assert create_notification(**kwargs) is None
+
+        assert NotificationEvent.objects.filter(event_type=event_type).count() == 1
+        assert user.unread_notifications_count(team_with_users) == 0
+
+    def test_repeat_announcement_is_scoped_to_the_team(self, team_with_users):
+        """A different team still gets told, even though the event type exists elsewhere."""
+        other_team = TeamFactory()
+        add_user_to_team(other_team, UserFactory())
+        kwargs = {
+            "title": "Model Deprecated",
+            "message": "Test message",
+            "level": LevelChoices.WARNING,
+            "slug": "llm-model-deprecated",
+            "event_data": {"model_name": "openai/gpt-4"},
+            "once_per_event_type": True,
+        }
+
+        assert create_notification(team=team_with_users, **kwargs) is not None
+        assert create_notification(team=other_team, **kwargs) is not None
+
+    def test_announcement_that_reached_nobody_is_retried(self, team_with_users):
+        """A first attempt that notified no one must not permanently suppress the announcement.
+
+        The event type is created even when there are no recipients, so keying the skip on it
+        would silence a team whose only eligible member was on Do Not Disturb at the time.
+        """
+        kwargs = {
+            "title": "Model Deprecated",
+            "message": "Test message",
+            "level": LevelChoices.WARNING,
+            "team": team_with_users,
+            "slug": "llm-model-deprecated",
+            "event_data": {"model_name": "openai/gpt-4"},
+            "once_per_event_type": True,
+        }
+        identifier = create_identifier("llm-model-deprecated", kwargs["event_data"])
+
+        dnd_until = timezone.now() + datetime.timedelta(days=1)
+        for member in team_with_users.members.all():
+            UserNotificationPreferences.objects.create(
+                user=member, team=team_with_users, do_not_disturb_until=dnd_until
+            )
+
+        assert create_notification(**kwargs) is not None
+        assert not EventUser.objects.filter(team=team_with_users, event_type__identifier=identifier).exists()
+
+        with travel(dnd_until + datetime.timedelta(days=1)):
+            assert create_notification(**kwargs) is not None
+        assert EventUser.objects.filter(team=team_with_users, event_type__identifier=identifier).exists()
 
     def test_create_identifier(self):
         """
