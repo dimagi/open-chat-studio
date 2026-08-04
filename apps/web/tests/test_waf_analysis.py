@@ -73,9 +73,17 @@ def test_scanner_traffic_is_not_an_endpoint():
     assert finding.route is None
 
 
-def test_malformed_uri_does_not_raise():
-    for uri in ["/%zz", "/\x00", "/../../etc/passwd", "/" + "a" * 5000]:
-        assert classify_row(make_row(uri)).is_endpoint in (True, False)
+@pytest.mark.parametrize(
+    "uri",
+    [
+        pytest.param("/%zz", id="invalid-percent-escape"),
+        pytest.param("/\x00", id="null-byte"),
+        pytest.param("/../../etc/passwd", id="path-traversal"),
+        pytest.param("/" + "a" * 5000, id="over-long-path"),
+    ],
+)
+def test_malformed_uri_does_not_raise(uri):
+    assert classify_row(make_row(uri)).is_endpoint in (True, False)
 
 
 def test_query_string_is_stripped_before_resolving():
