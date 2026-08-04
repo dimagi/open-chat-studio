@@ -22,14 +22,13 @@ app.autodiscover_tasks()
 # don't log task result
 trace.LOG_SUCCESS = "Task %(name)s[%(id)s] succeeded in %(runtime)ss"  # ty: ignore[invalid-assignment]
 
-worker_max_tasks_per_child = 100  # Restart worker periodically
-task_acks_late = True
-
 app.conf.update(
     result_expires=86400,  # expire results in redis in 1 day
     worker_hijack_root_logger=False,
     worker_log_format="%(message)s",
     worker_task_log_format="%(message)s",
+    # ack tasks after execution so they're redelivered if the worker dies mid-task
+    task_acks_late=True,
 )
 
 
