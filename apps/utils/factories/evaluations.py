@@ -17,6 +17,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
@@ -34,13 +35,12 @@ class EvaluatorFactory(DjangoModelFactory):
     # ``llm_provider=None, llm_provider_model=None`` for an evaluator with nothing selected.
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
     # The model's type has to match the provider's or the pair is one the evaluator form rejects,
-    # so follow the provider rather than defaulting both to OpenAI independently.
-    llm_provider_model = factory.LazyAttribute(
-        lambda evaluator: (
-            LlmProviderModelFactory(team=evaluator.team, type=evaluator.llm_provider.type)
-            if evaluator.llm_provider
-            else None
-        )
+    # so follow the provider rather than defaulting both to OpenAI independently. This stays a
+    # SubFactory so ``build()`` builds the model instead of saving it against an unsaved team.
+    llm_provider_model = factory.SubFactory(
+        LlmProviderModelFactory,
+        team=factory.SelfAttribute("..team"),
+        type=factory.SelfAttribute("..llm_provider.type", default=str(LlmProviderTypes.openai)),
     )
     params = factory.LazyFunction(
         lambda: {
