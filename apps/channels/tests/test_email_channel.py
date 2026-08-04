@@ -1,9 +1,12 @@
 import json
+from contextlib import contextmanager
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from anymail.exceptions import AnymailInvalidAddress, AnymailUnsupportedFeature
 from django.core import mail
+from django.core.mail.backends import locmem
 from django.db import IntegrityError  # noqa: F811 - used at runtime in test
 from django.test import override_settings
 
@@ -29,6 +32,21 @@ from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
+
+
+@contextmanager
+def _esp_rejecting(exc: Exception, *, only_with_attachments: bool = False):
+    """Make the test email backend raise `exc` instead of delivering, mimicking an
+    ESP that rejects the message (optionally only when it carries attachments)."""
+    real_send_messages = locmem.EmailBackend.send_messages
+
+    def send_messages(self, messages):
+        if not only_with_attachments or any(m.attachments for m in messages):
+            raise exc
+        return real_send_messages(self, messages)
+
+    with patch.object(locmem.EmailBackend, "send_messages", send_messages):
+        yield
 
 
 def _make_inbound_message(
@@ -478,6 +496,117 @@ class TestEmailSender:
         assert len(mail.outbox) == before + 2
         assert mail.outbox[before].body == "First"
         assert mail.outbox[before + 1].body == "Second"
+
+
+class TestEmailSenderSendFailures:
+    """ESP-level rejections on flush(): the text reply survives when it can, and the
+    buffer is always reset so nothing is silently re-sent on the next flush."""
+
+    def _sender(self, thread_context=None) -> EmailSender:
+        return EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=thread_context,
+        )
+
+    def _attach(self, sender: EmailSender, team, filename="report.pdf") -> None:
+        file = File.create(
+            filename=filename,
+            file_obj=BytesIO(b"%PDF-A"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="application/pdf",
+        )
+        sender.send_file(file, "user@example.com", session_id=1)
+
+    @pytest.mark.django_db()
+    def test_refused_attachment_falls_back_to_text_only(self, team_with_users):
+        """An attachment the ESP won't accept must not take the reply down with it."""
+        sender = self._sender(
+            thread_context=EmailThreadContext(
+                subject="Re: docs",
+                in_reply_to="<orig@example.com>",
+                references=["<orig@example.com>"],
+            )
+        )
+        sender.send_text("Here are the docs.", "user@example.com")
+        self._attach(sender, team_with_users)
+
+        with _esp_rejecting(AnymailUnsupportedFeature("attachments"), only_with_attachments=True):
+            sender.flush()
+
+        assert len(mail.outbox) == 1
+        sent = mail.outbox[0]
+        assert sent.attachments == []
+        assert "Here are the docs." in sent.body
+        assert "'report.pdf' could not be sent" in sent.body
+        # Threading and Message-ID are unaffected by the retry
+        assert sent.extra_headers["In-Reply-To"] == "<orig@example.com>"
+        assert sent.extra_headers["Message-ID"] == sender.last_message_id
+
+    @pytest.mark.django_db()
+    def test_refused_attachment_fallback_keeps_attachment_free_flush_working(self, team_with_users):
+        """After a fallback the buffer is clean: the next reply is not polluted."""
+        sender = self._sender(thread_context=EmailThreadContext(subject="Re: docs"))
+        sender.send_text("First", "user@example.com")
+        self._attach(sender, team_with_users)
+        with _esp_rejecting(AnymailUnsupportedFeature("attachments"), only_with_attachments=True):
+            sender.flush()
+
+        sender.send_text("Second", "user@example.com")
+        sender.flush()
+
+        assert len(mail.outbox) == 2
+        assert mail.outbox[1].body == "Second"
+        assert mail.outbox[1].attachments == []
+
+    def test_unsupported_feature_without_attachments_propagates(self):
+        """Nothing to drop -- the failure must surface as a delivery failure."""
+        sender = self._sender()
+        sender.send_text("Hello", "user@example.com")
+
+        with _esp_rejecting(AnymailUnsupportedFeature("extra_headers")), pytest.raises(AnymailUnsupportedFeature):
+            sender.flush()
+
+        assert mail.outbox == []
+        assert sender.last_message_id is None
+
+    @pytest.mark.django_db()
+    def test_invalid_address_propagates(self, team_with_users):
+        """An unusable address has no fallback -- surface it instead of pretending the
+        reply was sent, so ResponseSendingStage notifies the team."""
+        sender = self._sender()
+        sender.send_text("Hello", "user@example.com")
+        self._attach(sender, team_with_users)
+
+        with _esp_rejecting(AnymailInvalidAddress("invalid to address")), pytest.raises(AnymailInvalidAddress):
+            sender.flush()
+
+        assert mail.outbox == []
+        assert sender.last_message_id is None
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(AnymailInvalidAddress("bad address"), id="invalid-address"),
+            pytest.param(AnymailUnsupportedFeature("unsupported"), id="unsupported-feature"),
+            pytest.param(RuntimeError("connection reset"), id="unexpected-error"),
+        ],
+    )
+    def test_buffer_is_reset_after_failed_send(self, exc):
+        sender = self._sender()
+        sender.send_text("Dropped", "user@example.com")
+
+        with _esp_rejecting(exc), pytest.raises(type(exc)):
+            sender.flush()
+
+        # A second flush must not re-send the rejected body
+        sender.flush()
+        assert mail.outbox == []
+
+        sender.send_text("Fresh", "user@example.com")
+        sender.flush()
+        assert [m.body for m in mail.outbox] == ["Fresh"]
 
 
 class TestEmailChannel:

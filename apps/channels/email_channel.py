@@ -8,6 +8,7 @@ from email.utils import make_msgid
 from io import BytesIO
 from typing import TYPE_CHECKING
 
+from anymail.exceptions import AnymailInvalidAddress, AnymailUnsupportedFeature
 from django.core.mail import EmailMessage as DjangoEmailMessage
 from django.db import IntegrityError
 
@@ -230,6 +231,13 @@ def _persist_inbound_attachments(raw: list[RawAttachment], team_id: int) -> tupl
     return accepted_ids, skipped
 
 
+def _append_dropped_attachment_notes(body: str, filenames: list[str]) -> str:
+    """Append one bracketed line per attachment the ESP refused, so the participant
+    knows the reply is missing files."""
+    lines = [f"[Attachment {name!r} could not be sent by the email provider and was removed.]" for name in filenames]
+    return ((body or "").rstrip() + "\n\n" + "\n".join(lines)).lstrip()
+
+
 class EmailSender(ChannelSender):
     """Sends threaded email replies via django.core.mail.
 
@@ -272,12 +280,52 @@ class EmailSender(ChannelSender):
         if not self._body and not self._attachments:
             return
 
-        ctx = self.thread_context
-        msg_id = make_msgid(domain=self.domain)
+        try:
+            self._send_buffered()
+        finally:
+            # Reset buffer so a subsequent flush() after more sends produces a new
+            # email -- including when this send failed, so a rejected body or
+            # attachment is never silently re-sent on the next flush.
+            self._body = ""
+            self._recipient = ""
+            self._attachments = []
 
+    def _send_buffered(self) -> None:
+        msg_id = make_msgid(domain=self.domain)
+        try:
+            self._build_message(msg_id, self._body, self._attachments).send()
+        except AnymailUnsupportedFeature:
+            if not self._attachments:
+                raise
+            # An attachment the ESP refuses must not take the text reply down with
+            # it. Retry text-only (same Message-ID, so threading is unaffected) and
+            # tell the participant which files were dropped.
+            logger.exception(
+                "ESP refused email attachments (%s) for %s; retrying without them",
+                ", ".join(filename for filename, _, _ in self._attachments),
+                self._recipient,
+            )
+            body = _append_dropped_attachment_notes(self._body, [f for f, _, _ in self._attachments])
+            self._build_message(msg_id, body, []).send()
+        except AnymailInvalidAddress:
+            # Nothing to fall back to: with an unusable from/to address there is
+            # nowhere to deliver this reply. Log the addresses (the ESP error only
+            # names the offending one) and let ResponseSendingStage turn this into a
+            # message delivery failure notification for the team.
+            logger.warning(
+                "Email reply is undeliverable: invalid address (from=%s, to=%s)",
+                self.from_address,
+                self._recipient,
+            )
+            raise
+
+        self.last_message_id = msg_id
+
+    def _build_message(self, msg_id: str, body: str, attachments: list[tuple[str, bytes, str]]) -> DjangoEmailMessage:
+        ctx = self.thread_context
         msg = DjangoEmailMessage(
             subject=ctx.subject or "New message",
-            body=self._body,
+            body=body,
             from_email=self.from_address,
             to=[self._recipient],
         )
@@ -287,16 +335,10 @@ class EmailSender(ChannelSender):
             msg.extra_headers["In-Reply-To"] = ctx.in_reply_to
             msg.extra_headers["References"] = " ".join(ctx.references)
 
-        for filename, content, mimetype in self._attachments:
+        for filename, content, mimetype in attachments:
             msg.attach(filename, content, mimetype)
 
-        msg.send()
-        self.last_message_id = msg_id
-
-        # Reset buffer so subsequent flush() after more sends produces a new email.
-        self._body = ""
-        self._recipient = ""
-        self._attachments = []
+        return msg
 
 
 class EmailChannel(ChannelBase):
