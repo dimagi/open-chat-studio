@@ -76,7 +76,7 @@ grep -rl "llm_model_migration\|notify_deprecated_models\|remove_deprecated_model
 
 For each migration in that list (except your new one), remove the call and its import, leaving `operations = []` if nothing else remains.
 
-> **Why?** Data migrations like `notify_deprecated_models` and `remove_deprecated_models` would fire multiple times, sending duplicate notifications to teams.
+> **Why?** Data migrations like `notify_deprecated_models` and `remove_deprecated_models` would otherwise do the same work repeatedly on every deploy. The notifications themselves are [announced once per team per model](#each-model-is-announced-once-per-team), so a slip here no longer spams teams — but the redundant scans still cost time on every migrate.
 
 ### Step 5: Seed pricing for the model
 
@@ -254,6 +254,16 @@ Notifications include:
 |---|---|
 | Deprecated model (user action needed) | `llm-model-deprecated` |
 | Deleted model references cleared/migrated | `llm-model-deleted` |
+
+### Each model is announced once per team
+
+`notify_deprecated_models` re-scans **every** model marked `deprecated=True` on each run, not just the ones your migration deprecated. So a release that deprecates one model would otherwise re-announce every model deprecated before it — a team that had already read the earlier notice would see it marked unread again and get a second email.
+
+Both model notifications therefore pass `once_per_event_type=True` to `create_notification`, which skips the notification if a member of the team has already been notified about that slug + model name. Nothing extra is needed in your migration; keep passing `force=True`.
+
+The check is keyed on the recipients (`EventUser`), not on the `EventType`, because the event type is created even when the run reaches nobody — if no team member held `service_providers.change_llmprovidermodel` at the time, or every eligible member was on Do Not Disturb, the next run still announces it.
+
+The consequence to be aware of: a team is told about a given model exactly once. If you need to re-announce the same model (say the recommended replacement changed), change the `event_data` so the identifier differs, or clear the team's existing `EventType` for it.
 
 ---
 

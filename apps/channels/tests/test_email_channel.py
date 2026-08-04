@@ -1,9 +1,13 @@
 import json
+import logging
+from contextlib import contextmanager
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from anymail.exceptions import AnymailInvalidAddress, AnymailUnsupportedFeature
 from django.core import mail
+from django.core.mail.backends import locmem
 from django.db import IntegrityError  # noqa: F811 - used at runtime in test
 from django.test import override_settings
 
@@ -29,6 +33,18 @@ from apps.files.models import File
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
+
+
+@contextmanager
+def _esp_rejecting(exc: Exception):
+    """Make the test email backend raise `exc` instead of delivering, mimicking an
+    ESP that rejects the message."""
+
+    def send_messages(self, messages):
+        raise exc
+
+    with patch.object(locmem.EmailBackend, "send_messages", send_messages):
+        yield
 
 
 def _make_inbound_message(
@@ -478,6 +494,107 @@ class TestEmailSender:
         assert len(mail.outbox) == before + 2
         assert mail.outbox[before].body == "First"
         assert mail.outbox[before + 1].body == "Second"
+
+
+class TestEmailSenderSendFailures:
+    """ESP-level rejections on flush(): the failure surfaces as a delivery failure and
+    the buffer is always reset so nothing is silently re-sent on the next flush."""
+
+    def _sender(self, thread_context=None) -> EmailSender:
+        return EmailSender(
+            from_address="bot@chat.openchatstudio.com",
+            domain="chat.openchatstudio.com",
+            thread_context=thread_context,
+        )
+
+    def _attach(self, sender: EmailSender, team, filename="report.pdf") -> None:
+        file = File.create(
+            filename=filename,
+            file_obj=BytesIO(b"%PDF-A"),
+            team_id=team.id,
+            purpose="message_media",
+            content_type="application/pdf",
+        )
+        sender.send_file(file, "user@example.com", session_id=1)
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize("with_attachment", [True, False], ids=["with-attachment", "text-only"])
+    def test_unsupported_feature_propagates(self, team_with_users, with_attachment):
+        """AnymailUnsupportedFeature covers ~20 unrelated features, so staged
+        attachments are no reason to assume they caused it -- surface it either way."""
+        sender = self._sender()
+        sender.send_text("Hello", "user@example.com")
+        if with_attachment:
+            self._attach(sender, team_with_users)
+
+        with _esp_rejecting(AnymailUnsupportedFeature("extra_headers")), pytest.raises(AnymailUnsupportedFeature):
+            sender.flush()
+
+        assert mail.outbox == []
+        assert sender.last_message_id is None
+
+    @override_settings(
+        EMAIL_BACKEND="anymail.backends.mailgun.EmailBackend",
+        ANYMAIL={"MAILGUN_API_KEY": "test-key"},
+    )
+    @pytest.mark.django_db()
+    def test_eai_from_address_is_not_blamed_on_the_attachment(self, team_with_users, caplog):
+        """Mailgun rejects a non-ASCII from_address with AnymailUnsupportedFeature while
+        building the payload. Asserted against the real backend rather than a stub, so
+        anymail's semantics are pinned instead of assumed.
+
+        The staged attachment is the point: it must not be reported as the cause. The
+        propagation assertion alone does not catch that -- a text-only retry raises the
+        same EAI error -- so the log is what pins it.
+        """
+        sender = EmailSender(from_address="bøt@chat.openchatstudio.com", domain="chat.openchatstudio.com")
+        sender.send_text("Hello", "user@example.com")
+        self._attach(sender, team_with_users)
+
+        with caplog.at_level(logging.WARNING, logger="ocs.channels"):
+            with pytest.raises(AnymailUnsupportedFeature, match="EAI in from_email"):
+                sender.flush()
+
+        assert sender.last_message_id is None
+        assert "report.pdf" not in caplog.text
+        assert "attachment" not in caplog.text.lower()
+
+    @pytest.mark.django_db()
+    def test_invalid_address_propagates(self, team_with_users):
+        """An unusable address has no fallback -- surface it instead of pretending the
+        reply was sent, so ResponseSendingStage notifies the team."""
+        sender = self._sender()
+        sender.send_text("Hello", "user@example.com")
+        self._attach(sender, team_with_users)
+
+        with _esp_rejecting(AnymailInvalidAddress("invalid to address")), pytest.raises(AnymailInvalidAddress):
+            sender.flush()
+
+        assert mail.outbox == []
+        assert sender.last_message_id is None
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            pytest.param(AnymailInvalidAddress("bad address"), id="invalid-address"),
+            pytest.param(AnymailUnsupportedFeature("unsupported"), id="unsupported-feature"),
+            pytest.param(RuntimeError("connection reset"), id="unexpected-error"),
+        ],
+    )
+    def test_buffer_is_reset_after_failed_send(self, exc):
+        sender = self._sender()
+        sender.send_text("Dropped", "user@example.com")
+
+        with _esp_rejecting(exc), pytest.raises(type(exc)):
+            sender.flush()
+
+        # A second flush must not re-send the rejected body
+        sender.flush()
+        assert mail.outbox == []
+
+        sender.send_text("Fresh", "user@example.com")
+        sender.flush()
+        assert [m.body for m in mail.outbox] == ["Fresh"]
 
 
 class TestEmailChannel:
