@@ -1,10 +1,13 @@
+import json
 from io import StringIO
 from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import call_command
+from django.test import Client
+from django.urls import reverse
 
-from apps.pipelines.models import Node
+from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.tests.utils import content_flow_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -151,6 +154,199 @@ class TestNodeResourceFKSync:
         node = pipeline.node_set.get(flow_id="llm1")
         assert node.llm_provider_id == provider.id
         assert node.llm_provider_model_id == model.id
+
+
+@pytest.mark.django_db()
+class TestFlowNodeReadsResourceFKs:
+    """to_flow_node() serves the resource ids from the FK columns, not from the copies in params."""
+
+    def test_scalar_ids_come_from_the_fk_columns(self):
+        """The editor posts (and params therefore store) the ids as strings; the flow node serves
+        the ints held by the columns."""
+        provider = LlmProviderFactory.create()
+        model = LlmProviderModelFactory.create()
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"llm_provider_id": str(provider.id), "llm_provider_model_id": str(model.id)},
+            llm_provider=provider,
+            llm_provider_model=model,
+        )
+
+        params = node.to_flow_node().data.params
+
+        assert params["llm_provider_id"] == provider.id
+        assert params["llm_provider_model_id"] == model.id
+
+    def test_fk_column_wins_over_a_drifted_params_copy(self):
+        provider = LlmProviderFactory.create()
+        other_provider = LlmProviderFactory.create()
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"llm_provider_id": other_provider.id},
+            llm_provider=provider,
+        )
+
+        assert node.to_flow_node().data.params["llm_provider_id"] == provider.id
+
+    def test_reference_to_deleted_resource_reads_as_unset(self):
+        """SET_NULL nulls the column when the resource goes, but the id lingers in params. The
+        flow node must not resurrect it — an id that no longer resolves reads as unset."""
+        provider = LlmProviderFactory.create()
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"llm_provider_id": provider.id},
+            llm_provider=provider,
+        )
+        provider.delete()
+        node.refresh_from_db()
+        assert node.params["llm_provider_id"] is not None
+
+        assert node.to_flow_node().data.params["llm_provider_id"] is None
+
+    def test_collection_index_ids_come_from_the_m2m(self):
+        first = CollectionFactory.create(is_index=True)
+        second = CollectionFactory.create(is_index=True)
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"collection_index_ids": [str(second.id)]},
+        )
+        node.collection_indexes.set([second, first])
+
+        assert node.to_flow_node().data.params["collection_index_ids"] == sorted([first.id, second.id])
+
+    def test_params_the_node_does_not_carry_are_not_added(self):
+        """A node type that references no resource must not grow a null param for one."""
+        node = NodeFactory.create(type="StartNode", params={"name": "start"})
+
+        assert node.to_flow_node().data.params == {"name": "start"}
+
+    def test_stored_params_are_left_alone(self):
+        provider = LlmProviderFactory.create()
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"llm_provider_id": str(provider.id)},
+            llm_provider=provider,
+        )
+
+        node.to_flow_node()
+
+        node.refresh_from_db()
+        assert node.params == {"llm_provider_id": str(provider.id)}
+
+
+@pytest.mark.django_db()
+class TestFlowDataReadsResourceFKs:
+    @staticmethod
+    def _pipeline_with_llm_nodes(count: int, params: dict):
+        pipeline = PipelineFactory.create()
+        node_data = {node.flow_id: None for node in pipeline.node_set.all()}
+        for index in range(count):
+            flow_id = f"llm{index}"
+            node_data[flow_id] = content_flow_node(
+                flow_id,
+                "LLMResponseWithPrompt",
+                label="LLM",
+                params={"name": flow_id, **params},
+            )
+        pipeline.update_nodes_from_data(node_data)
+        pipeline.clear_node_caches()
+        return pipeline
+
+    def test_resource_ids_served_from_fk_columns(self):
+        provider = LlmProviderFactory.create()
+        model = LlmProviderModelFactory.create()
+        index = CollectionFactory.create(is_index=True)
+        pipeline = self._pipeline_with_llm_nodes(
+            1,
+            {
+                "llm_provider_id": str(provider.id),
+                "llm_provider_model_id": str(model.id),
+                "collection_index_ids": [str(index.id)],
+            },
+        )
+
+        params = next(node["data"]["params"] for node in pipeline.flow_data["nodes"] if node["id"] == "llm0")
+
+        assert params["llm_provider_id"] == provider.id
+        assert params["llm_provider_model_id"] == model.id
+        assert params["collection_index_ids"] == [index.id]
+
+    def test_collection_indexes_are_prefetched(self, django_assert_num_queries):
+        """One query for the rows and one for their collection_indexes, however many nodes there
+        are — reading the M2M per node would be an N+1 on every editor load."""
+        index = CollectionFactory.create(is_index=True)
+        pipeline = self._pipeline_with_llm_nodes(3, {"collection_index_ids": [index.id]})
+
+        with django_assert_num_queries(2):
+            assert len(pipeline.flow_data["nodes"]) == 5  # start, end and the three LLM nodes
+
+    def test_prefetched_node_set_is_reused(self, django_assert_num_queries):
+        index = CollectionFactory.create(is_index=True)
+        pipeline = self._pipeline_with_llm_nodes(3, {"collection_index_ids": [index.id]})
+        pipeline = Pipeline.objects.prefetch_related("node_set__collection_indexes").get(pk=pipeline.pk)
+
+        with django_assert_num_queries(0):
+            assert len(pipeline.flow_data["nodes"]) == 5
+
+
+@pytest.mark.django_db()
+class TestEditorEndpointServesResourceFKs:
+    """End-to-end over the editor's own endpoint: what the editor posts, what it gets back."""
+
+    @pytest.fixture()
+    def authed_client(self, team_with_users):
+        client = Client()
+        client.force_login(team_with_users.members.first())
+        return client
+
+    def _url(self, team_slug, pk):
+        return reverse("pipelines:pipeline_data", kwargs={"team_slug": team_slug, "pk": pk})
+
+    def test_deleted_provider_reads_as_unset_after_a_save(self, authed_client, team_with_users):
+        provider = LlmProviderFactory.create(team=team_with_users)
+        model = LlmProviderModelFactory.create(team=team_with_users)
+        pipeline = PipelineFactory.create(team=team_with_users)
+        url = self._url(team_with_users.slug, pipeline.id)
+        # The editor posts the ids as strings, the form the selects write.
+        patch_data = {
+            "base_revision": pipeline.edit_revision,
+            "nodes": {
+                "add": [
+                    {
+                        "id": "llm-1",
+                        "type": "pipelineNode",
+                        "position": {"x": 100, "y": 100},
+                        "data": {
+                            "id": "llm-1",
+                            "type": "LLMResponseWithPrompt",
+                            "label": "LLM",
+                            "params": {
+                                "name": "llm-1",
+                                "llm_provider_id": str(provider.id),
+                                "llm_provider_model_id": str(model.id),
+                            },
+                        },
+                    }
+                ],
+                "update": [],
+                "delete": [],
+            },
+            "edges": {"add": [], "update": [], "delete": []},
+        }
+        response = authed_client.patch(url, data=json.dumps(patch_data), content_type="application/json")
+        assert response.status_code == 200
+        saved = next(node for node in response.json()["data"]["nodes"] if node["id"] == "llm-1")
+        assert saved["data"]["params"]["llm_provider_id"] == provider.id
+
+        provider_id = provider.id  # delete() clears it off the instance
+        provider.delete()
+
+        response = authed_client.get(url)
+        assert response.status_code == 200
+        served = next(node for node in response.json()["pipeline"]["data"]["nodes"] if node["id"] == "llm-1")
+        assert served["data"]["params"]["llm_provider_id"] is None
+        # The row still carries the stale id; only the read is corrected.
+        assert pipeline.node_set.get(flow_id="llm-1").params["llm_provider_id"] == str(provider_id)
 
 
 @pytest.mark.django_db()

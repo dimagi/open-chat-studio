@@ -296,7 +296,12 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
         # different fallback: that one returns the empty data as-is rather than rebuilding.
         flow = Flow(**(self.data or {"edges": []}))
-        flow.nodes = [node.to_flow_node() for node in self.node_set.all()]
+        nodes = list(self.node_set.all())
+        # Each node reads its collection_indexes M2M (Node.resource_params); prefetch them in one
+        # query. prefetch_related_objects works off the list, so a prefetched node_set is still
+        # reused, and it no-ops when the M2M was prefetched along with it.
+        models.prefetch_related_objects(nodes, "collection_indexes")
+        flow.nodes = [node.to_flow_node() for node in nodes]
         return flow.model_dump()
 
     @property
@@ -338,7 +343,8 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         The version's stored ``data`` supplies the edges only.
         """
         node_data: dict[str, FlowNode | None] = {}
-        for version_node in version.node_set.all():
+        # to_flow_node reads each node's collection_indexes M2M — prefetch rather than query per row.
+        for version_node in version.node_set.prefetch_related("collection_indexes"):
             flow_node = version_node.to_flow_node()
             for spec in get_versioned_param_specs(version_node.type):
                 spec.revert_referenced_record(version_node, flow_node.data.params)
@@ -503,8 +509,11 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         """This row as a react-flow node, content included.
 
         ``params`` is deep-copied so a caller that rewrites the returned node's params
-        (``Pipeline.revert_to_version``) cannot reach back into this row's stored dict.
+        (``Pipeline.revert_to_version``) cannot reach back into this row's stored dict, and the
+        resource ids it duplicates are re-read from the FK columns (see ``resource_params``).
         """
+        params = copy.deepcopy(self.params or {})
+        params.update(self.resource_params())
         return FlowNode(
             id=self.flow_id,
             position=self.position or {"x": 0, "y": 0},
@@ -512,7 +521,7 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             data=FlowNodeData(
                 id=self.flow_id,
                 type=self.type,
-                params=copy.deepcopy(self.params),
+                params=params,
                 label=self.label,
             ),
         )
@@ -588,6 +597,33 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
             for field in cls._meta.get_fields()
             if isinstance(field, models.ForeignKey) and field.remote_field.on_delete is models.SET_NULL
         ]
+
+    def resource_params(self) -> dict:
+        """The ids of the resources this node references, read off its FK columns.
+
+        ``params`` duplicates these ids — it is what the editor posts and what the node classes
+        validate — but the FK columns are the constraint-backed mirror of them (see
+        ``_sync_resource_fk_fields``): when a referenced resource is deleted the column is nulled
+        while the stale id lingers in params. Reading them back from the columns is what
+        ``to_flow_node`` serves, so a dangling reference reads as unset rather than as an id that
+        no longer resolves, and the ids come out as ints — the form the columns store them in.
+
+        Only params the row already carries are returned: a node type that references no resource
+        must not grow a null param for one.
+        """
+        params = self.params or {}
+        resource_params = {
+            f"{field_name}_id": getattr(self, f"{field_name}_id")
+            for field_name in self.resource_fk_fields()
+            if f"{field_name}_id" in params
+        }
+        if "collection_index_ids" in params:
+            # ``all()`` rather than values_list so a prefetched M2M is reused; sorted because the
+            # through rows have no ordering of their own and the read must be stable.
+            resource_params["collection_index_ids"] = sorted(
+                collection.id for collection in self.collection_indexes.all()
+            )
+        return resource_params
 
     def _sync_resource_fk_fields(self):
         """Populate FK/M2M fields from the params JSON.
