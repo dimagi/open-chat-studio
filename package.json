@@ -44,7 +44,7 @@
     "postcss": "^8.5.25",
     "postcss-import": "^16.1.1",
     "postcss-loader": "^8.2.0",
-    "postcss-nested": "^7.0.1",
+    "postcss-nested": "^8.0.0",
     "style-loader": "^4.0.0",
     "terser-webpack-plugin": "^5.3.14",
     "typescript": "^6.0.3",
