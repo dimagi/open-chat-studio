@@ -32,18 +32,29 @@
         </p>
 
         <div class="space-x-2">
-          <a href="{% url 'mfa_view_recovery_codes' %}" class="btn btn-outline">
-            {% translate "View codes" %}
-          </a>
+          {% if not MFA_RECOVERY_CODES_SHOW_ONCE %}
+            <a href="{% url 'mfa_view_recovery_codes' %}" class="btn btn-outline">
+              {% translate "View codes" %}
+            </a>
+            <a href="{% url 'mfa_download_recovery_codes' %}" class="btn btn-outline">
+              {% translate "Download codes" %}
+            </a>
+          {% endif %}
           <a href="{% url 'mfa_generate_recovery_codes' %}" class="btn btn-outline">
             {% translate "Generate new codes" %}
           </a>
         </div>
       {% else %}
         <p class="mb-3">{% translate "No recovery codes set up." %}</p>
-        <a href="{% url 'mfa_generate_recovery_codes' %}" class="btn btn-primary">
-          {% translate "Generate recovery codes" %}
-        </a>
+        {% if is_mfa_enabled %}
+          <a href="{% url 'mfa_generate_recovery_codes' %}" class="btn btn-primary">
+            {% translate "Generate recovery codes" %}
+          </a>
+        {% else %}
+          <p class="text-sm">
+            {% translate "Recovery codes are generated automatically when you activate an authenticator app." %}
+          </p>
+        {% endif %}
       {% endif %}
     </section>
   </div>
