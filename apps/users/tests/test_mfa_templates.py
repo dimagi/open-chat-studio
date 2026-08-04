@@ -53,6 +53,18 @@ def test_recovery_codes_are_only_rendered_when_viewable(logged_in_client, user, 
     assert (reverse("mfa_download_recovery_codes") in second) is not show_once
 
 
+def test_masked_codes_page_reports_both_counts(logged_in_client, user, settings):
+    """`total_count` comes from the view, so the count sentence must not render half-empty."""
+    settings.MFA_RECOVERY_CODES_SHOW_ONCE = True
+    totp_auth.TOTP.activate(user, totp_auth.generate_totp_secret())
+    total = len(RecoveryCodes.activate(user).get_unused_codes())
+
+    logged_in_client.get(reverse("mfa_view_recovery_codes"))  # first view consumes the one look
+    masked = logged_in_client.get(reverse("mfa_view_recovery_codes"))
+
+    assert f"{total} out of {total} recovery codes available" in " ".join(masked.content.decode().split())
+
+
 def test_download_link_hidden_when_no_unused_codes(logged_in_client, user, settings):
     settings.MFA_RECOVERY_CODES_SHOW_ONCE = False
     totp_auth.TOTP.activate(user, totp_auth.generate_totp_secret())
