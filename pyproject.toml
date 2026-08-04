@@ -14,6 +14,10 @@ dependencies = [
     "celery",
     "celery-progress",
     "celery[redis]",
+    # Imported directly by apps/teams/export/seal.py and apps/teams/forms.py, so it is declared
+    # explicitly rather than relied on transitively (django-cryptography-django5, pyjwt[crypto],
+    # google-auth, fido2, ...). Keeps major bumps a deliberate choice instead of a side effect.
+    "cryptography>=50.0.0",
     "django-allauth[mfa]>=65.18.0",
     "django-anymail",
     "django-cleanup",
