@@ -29,17 +29,25 @@ PATTERN_SET_RULES = {
     "NoUserAgentPaths": WafRule.NoUserAgent_HEADER,
 }
 
-# A rule can fire in three places: inside a managed rule group, as a Count-mode rule on the
-# web ACL itself, or as the terminating rule. Coalesce them so one row shape covers all three.
-# ALLOW is dropped: those rows are the scope-down allow rules doing their job, not blocks.
+# A rule can fire in four places: as the rule a managed group would have terminated on (what the
+# group-level Count override in ocs-deploy produces), as a Count-overridden rule inside a group, as a
+# Count-mode rule on the web ACL itself, or as the terminating rule. Coalesce them so one row shape
+# covers all four. ALLOW is dropped: those rows are the scope-down allow rules doing their job.
+#
+# Only the first entry of each list is read. Logs Insights can flatten arrays with jsonParse/unnest,
+# but a query that unnests one list drops the requests whose match sits in another, and there is no
+# union to put them back. So a request matching several rules at once is attributed to the first one
+# in the order below; per-rule totals are floors, not exact counts.
 _RULE_FIELDS = """
 fields httpRequest.uri as uri,
        httpRequest.httpMethod as method,
        action as effectiveAction,
        coalesce(ruleGroupList.0.terminatingRule.ruleId,
+                ruleGroupList.0.nonTerminatingMatchingRules.0.ruleId,
                 nonTerminatingMatchingRules.0.ruleId,
                 terminatingRuleId) as rule,
        coalesce(ruleGroupList.0.terminatingRule.action,
+                ruleGroupList.0.nonTerminatingMatchingRules.0.action,
                 nonTerminatingMatchingRules.0.action,
                 action) as ruleAction
 | filter ispresent(rule) and rule != 'Default_Action'
