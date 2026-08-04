@@ -15,6 +15,11 @@ updates:
     open-pull-requests-limit: 5
     schedule:
       interval: "monthly"
+    # Only touch pyproject.toml when the new version falls outside the declared
+    # constraint (e.g. pinned or capped deps). Otherwise update uv.lock alone,
+    # so floors stay at the version we actually need rather than ratcheting to
+    # the latest release and needlessly narrowing the resolver's options.
+    versioning-strategy: "increase-if-necessary"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
