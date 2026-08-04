@@ -2659,9 +2659,6 @@ docx = [
 outlook = [
     { name = "olefile" },
 ]
-pdf = [
-    { name = "pdfminer-six" },
-]
 pptx = [
     { name = "python-pptx" },
 ]
@@ -3036,7 +3033,7 @@ dependencies = [
     { name = "loguru" },
     { name = "mail-parser-reply" },
     { name = "markdown" },
-    { name = "markitdown", extra = ["docx", "outlook", "pdf", "pptx", "xls", "xlsx"] },
+    { name = "markitdown", extra = ["docx", "outlook", "pptx", "xls", "xlsx"] },
     { name = "nh3" },
     { name = "oauthlib" },
     { name = "openai" },
@@ -3156,7 +3153,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "mail-parser-reply", specifier = ">=0.20" },
     { name = "markdown" },
-    { name = "markitdown", extras = ["pdf", "docx", "xlsx", "xls", "outlook", "pptx"] },
+    { name = "markitdown", extras = ["docx", "xlsx", "xls", "outlook", "pptx"] },
     { name = "nh3" },
     { name = "oauthlib", specifier = ">=3.3.1" },
     { name = "openai" },
@@ -3465,19 +3462,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
-]
-
-[[package]]
-name = "pdfminer-six"
-version = "20250506"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "charset-normalizer" },
-    { name = "cryptography" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/78/46/5223d613ac4963e1f7c07b2660fe0e9e770102ec6bda8c038400113fb215/pdfminer_six-20250506.tar.gz", hash = "sha256:b03cc8df09cf3c7aba8246deae52e0bca7ebb112a38895b5e1d4f5dd2b8ca2e7", size = 7387678, upload-time = "2025-05-06T16:17:00.787Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/73/16/7a432c0101fa87457e75cb12c879e1749c5870a786525e2e0f42871d6462/pdfminer_six-20250506-py3-none-any.whl", hash = "sha256:d81ad173f62e5f841b53a8ba63af1a4a355933cfc0ffabd608e568b9193909e3", size = 5620187, upload-time = "2025-05-06T16:16:58.669Z" },
 ]
 
 [[package]]
