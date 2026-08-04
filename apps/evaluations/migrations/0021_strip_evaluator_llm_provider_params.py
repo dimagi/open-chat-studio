@@ -49,6 +49,6 @@ def restore_llm_provider_params(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("evaluations", "0019_backfill_evaluator_llm_provider_fks")]
+    dependencies = [("evaluations", "0020_evaluationrun_finalized_at")]
 
     operations = [migrations.RunPython(strip_llm_provider_params, restore_llm_provider_params)]

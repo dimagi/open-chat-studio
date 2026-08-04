@@ -8,7 +8,7 @@ from apps.evaluations.models import Evaluator
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 
-_migration = importlib.import_module("apps.evaluations.migrations.0020_strip_evaluator_llm_provider_params")
+_migration = importlib.import_module("apps.evaluations.migrations.0021_strip_evaluator_llm_provider_params")
 strip_llm_provider_params = _migration.strip_llm_provider_params
 restore_llm_provider_params = _migration.restore_llm_provider_params
 
@@ -24,7 +24,7 @@ def _requires_migrations(requires_migrations):
 
 def _run(migration_function):
     """Run against the app state the migration actually receives, not the live registry."""
-    state = MigrationLoader(None).project_state([("evaluations", "0019_backfill_evaluator_llm_provider_fks")])
+    state = MigrationLoader(None).project_state([("evaluations", "0020_evaluationrun_finalized_at")])
     migration_function(state.apps, FakeSchemaEditor())
 
 
