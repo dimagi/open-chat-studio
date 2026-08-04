@@ -33,7 +33,15 @@ class EvaluatorFactory(DjangoModelFactory):
     # An LlmEvaluator needs both to be runnable, so the default is a valid one. Pass
     # ``llm_provider=None, llm_provider_model=None`` for an evaluator with nothing selected.
     llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
-    llm_provider_model = factory.SubFactory(LlmProviderModelFactory, team=factory.SelfAttribute("..team"))
+    # The model's type has to match the provider's or the pair is one the evaluator form rejects,
+    # so follow the provider rather than defaulting both to OpenAI independently.
+    llm_provider_model = factory.LazyAttribute(
+        lambda evaluator: (
+            LlmProviderModelFactory(team=evaluator.team, type=evaluator.llm_provider.type)
+            if evaluator.llm_provider
+            else None
+        )
+    )
     params = factory.LazyFunction(
         lambda: {
             "llm_prompt": "give me the sentiment of the user messages",
