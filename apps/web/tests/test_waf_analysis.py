@@ -22,6 +22,7 @@ def make_row(uri, rule="NoUserAgent_HEADER", **kwargs):
     defaults = {
         "method": "GET",
         "action": "BLOCK",
+        "effective_action": "ALLOW",
         "hits": 1,
         "unique_ips": 1,
         "unique_countries": 1,
@@ -43,6 +44,20 @@ def test_parse_duration(value, expected):
 def test_parse_duration_rejects_bad_input(value):
     with pytest.raises(CommandError):
         parse_duration(value)
+
+
+@pytest.mark.parametrize(
+    ("action", "effective", "expected"),
+    [
+        # The managed group runs with a Count override, so its rules report BLOCK on requests
+        # that were actually let through. Saying "BLOCK" there would be plainly wrong.
+        ("BLOCK", "ALLOW", "would-block"),
+        ("BLOCK", "BLOCK", "BLOCKED"),
+        ("COUNT", "ALLOW", "counted"),
+    ],
+)
+def test_outcome_distinguishes_would_block_from_blocked(action, effective, expected):
+    assert make_row("/", action=action, effective_action=effective).outcome == expected
 
 
 def test_rule_to_waf_rule():

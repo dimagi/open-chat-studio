@@ -84,6 +84,7 @@ class Finding:
     def as_dict(self) -> dict:
         return {
             **self.row.as_dict(),
+            "outcome": self.row.outcome,
             "uri_count": self.uri_count,
             "route": self.route or "",
             "view": self.view_name or "",
@@ -105,7 +106,7 @@ def deduplicate_endpoints(findings: list[Finding]) -> list[Finding]:
     """
     merged: dict[tuple, Finding] = {}
     for finding in findings:
-        key = (finding.route, finding.row.method, finding.row.rule, finding.row.action)
+        key = (finding.route, finding.row.method, finding.row.rule, finding.row.outcome)
         existing = merged.get(key)
         if existing is None:
             merged[key] = replace(finding, row=replace(finding.row), uri_count=1)

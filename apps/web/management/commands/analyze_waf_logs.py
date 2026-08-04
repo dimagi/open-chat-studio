@@ -31,7 +31,9 @@ UNIT_SECONDS = {"m": 60, "h": 3600, "d": 86400}
 
 CSV_FIELDS = [
     "hits",
+    "outcome",
     "action",
+    "effective_action",
     "rule",
     "method",
     "uri",
@@ -183,7 +185,7 @@ class Command(BaseCommand):
     def _write_finding(self, finding: Finding):
         row = finding.row
         self.stdout.write(
-            f"    {row.hits:>7,}  {row.action:<5}  {row.rule:<28}  {row.method:<6}  {finding.route or row.uri}"
+            f"    {row.hits:>7,}  {row.outcome:<11}  {row.rule:<28}  {row.method:<7}  {finding.route or row.uri}"
         )
         detail = f"             {finding.source or '?'}  {finding.view_name or ''}"
         if finding.uri_count > 1:
@@ -288,6 +290,7 @@ def _blank_row(uri: str, rule: str) -> LogRow:
         method="",
         rule=rule,
         action="",
+        effective_action="",
         hits=0,
         unique_ips=0,
         unique_countries=0,

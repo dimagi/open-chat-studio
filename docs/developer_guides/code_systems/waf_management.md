@@ -147,5 +147,17 @@ You still need to review the results — a matched endpoint isn't automatically 
 --check-path /some/path  # diagnose a single path: view, decorator, deployed state
 ```
 
-Note that the managed rule group runs in **Count** mode, so most rows show `COUNT` rather than
-`BLOCK` — those requests were allowed through but *would* be blocked if the rule were enforced.
+### Reading the outcome column
+
+The managed rule group runs with a **Count override** (`waf.py`, `AWSManagedCommonRuleSet`), so its
+rules record `BLOCK` in the logs on requests that were actually let through. The report shows what
+happened rather than what the rule claims:
+
+| Outcome | Meaning |
+|---|---|
+| `would-block` | The rule matched and says BLOCK, but the Count override let the request through. Enforcing that rule would start rejecting this traffic. |
+| `BLOCKED` | The request was genuinely rejected. |
+| `counted` | A Count-mode rule (e.g. `RateLimitRule`) matched; the request was served. |
+
+Today essentially everything is `would-block` — the managed group blocks nothing. That makes the
+report a safe way to see what enforcing the rules *would* cost before flipping the override.

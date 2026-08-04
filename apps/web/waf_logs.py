@@ -30,6 +30,7 @@ PATTERN_SET_RULES = {
 _RULE_FIELDS = """
 fields httpRequest.uri as uri,
        httpRequest.httpMethod as method,
+       action as effectiveAction,
        coalesce(ruleGroupList.0.terminatingRule.ruleId,
                 nonTerminatingMatchingRules.0.ruleId,
                 terminatingRuleId) as rule,
@@ -48,7 +49,7 @@ DETAIL_QUERY = (
         count_distinct(httpRequest.country) as uniqueCountries,
         fromMillis(earliest(@timestamp)) as firstSeen,
         fromMillis(latest(@timestamp)) as lastSeen
-    by uri, method, rule, ruleAction
+    by uri, method, rule, ruleAction, effectiveAction
 | sort hits desc
 """
 )
@@ -59,7 +60,7 @@ TOTALS_QUERY = (
 | stats count(*) as hits,
         count_distinct(httpRequest.uri) as uniquePaths,
         count_distinct(httpRequest.clientIp) as uniqueIPs
-    by rule, ruleAction
+    by rule, ruleAction, effectiveAction
 | sort hits desc
 """
 )
@@ -76,7 +77,11 @@ class LogRow:
     uri: str
     method: str
     rule: str
+    # What the matching rule says it does. Not what happened: ocs-deploy runs the managed rule
+    # group with an override of Count, so its rules report BLOCK while the request is let through.
     action: str
+    # The web ACL's actual verdict on the request (ALLOW / BLOCK / CAPTCHA).
+    effective_action: str
     hits: int
     unique_ips: int
     unique_countries: int
@@ -90,12 +95,29 @@ class LogRow:
             method=row.get("method", ""),
             rule=row.get("rule", ""),
             action=row.get("ruleAction", ""),
+            effective_action=row.get("effectiveAction", ""),
             hits=_to_int(row.get("hits")),
             unique_ips=_to_int(row.get("uniqueIPs")),
             unique_countries=_to_int(row.get("uniqueCountries")),
             first_seen=row.get("firstSeen", ""),
             last_seen=row.get("lastSeen", ""),
         )
+
+    @property
+    def outcome(self) -> str:
+        """What actually happened to the request, in the rule's terms.
+
+        ``would-block`` is the interesting state: the rule matched and says BLOCK, but the group's
+        Count override let the request through. Flipping that override to enforcing would start
+        rejecting this traffic for real.
+        """
+        if self.effective_action == "BLOCK":
+            return "BLOCKED"
+        if self.action == "BLOCK":
+            return "would-block"
+        if self.action == "COUNT":
+            return "counted"
+        return (self.action or self.effective_action).lower()
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
@@ -181,6 +203,7 @@ def fetch_totals(session, log_group, start, end) -> list[dict]:
         {
             "rule": row.get("rule", ""),
             "action": row.get("ruleAction", ""),
+            "effective_action": row.get("effectiveAction", ""),
             "hits": _to_int(row.get("hits")),
             "unique_paths": _to_int(row.get("uniquePaths")),
             "unique_ips": _to_int(row.get("uniqueIPs")),
