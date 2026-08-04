@@ -282,9 +282,15 @@
           if (this.isListOperator(filter.operator)) {
             let values = filter.selectedValues || [];
             if (this.isObjectChoiceFilter(filter)) {
-              values = values.map(label => {
-                const option = this.filterData.columns[filter.column].options.find(exp => exp.label === label);
-                return option ? option.id : label;
+              // selectedValues holds ids (the option checkboxes bind option.id), so resolve by id
+              // first. The label lookup is only a fallback for older stored UI state -- matching it
+              // first would mistranslate an id that happens to equal another option's label.
+              values = values.map(selectedValue => {
+                const options = this.filterData.columns[filter.column].options;
+                const option =
+                  options.find(exp => String(exp.id) === String(selectedValue)) ||
+                  options.find(exp => exp.label === selectedValue);
+                return option ? option.id : selectedValue;
               });
             }
             value = values.length > 0 ? this.serializeCSVTildeValues(values) : '';
