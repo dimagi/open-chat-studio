@@ -94,6 +94,7 @@ dependencies = [
     "djlint>=1.42.3",
     "transformers",
     "packaging>=23.2",
+    "pypdfium2>=5.12.1",
 ]
 
 [project.urls]
