@@ -154,15 +154,18 @@ class Command(BaseCommand):
         try:
             deployed = fetch_deployed_patterns(session, env=self.options["waf_env"])
         except WafLogsError as exc:
-            # Losing the drift check only downgrades the fix advice, so warn rather than abort an
-            # analysis whose Insights queries have already run.
-            self.stdout.write(self.style.WARNING(f"{exc} Skipping the deployed-coverage check."))
-            return None
+            return self._skip_drift_check(str(exc))
         if not deployed:
-            self.stdout.write(
-                self.style.WARNING("No WAF regex pattern sets found — skipping the deployed-coverage check.")
-            )
-            return None
+            return self._skip_drift_check("No WAF regex pattern sets found.")
+        return self._compile_deployed_patterns(deployed)
+
+    def _skip_drift_check(self, reason: str) -> None:
+        """Report why coverage could not be checked. Losing it only downgrades the fix advice, so it
+        is not worth aborting an analysis whose Insights queries have already run."""
+        self.stdout.write(self.style.WARNING(f"{reason} Skipping the deployed-coverage check."))
+        return None
+
+    def _compile_deployed_patterns(self, deployed):
         compiled, errors = compile_deployed_patterns(deployed)
         for error in errors:
             self.stdout.write(self.style.WARNING(f"Could not compile deployed pattern {error}"))
