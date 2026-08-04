@@ -146,13 +146,16 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
-        Model("gemini-3.6-flash", 1048576),
-        Model("gemini-3.5-flash", 1048576),
+        Model("gemini-3.6-flash", 1048576, is_translation_default=True),
+        Model("gemini-3.5-flash", 1048576, is_default=True),
         Model("gemini-3.5-flash-lite", 1048576),
         Model("gemini-3.1-pro-preview", 1048576),
-        Model("gemini-2.5-pro", 1048576, is_translation_default=True),
-        Model("gemini-2.5-flash", 1048576, is_default=True),
-        Model("gemini-2.5-flash-lite", 1048576),
+        Model("gemini-3.1-flash-lite", 1048576),
+        # Google is retiring the 2.5 models on the Gemini Enterprise Agent Platform: they enter
+        # Extended Lifecycle Access on 2026-10-20 and lose ELA pricing on 2027-01-28.
+        Model("gemini-2.5-pro", 1048576, deprecated=True, replacement="gemini-3.6-flash"),
+        Model("gemini-2.5-flash", 1048576, deprecated=True, replacement="gemini-3.5-flash"),
+        Model("gemini-2.5-flash-lite", 1048576, deprecated=True, replacement="gemini-3.1-flash-lite"),
     ],
 }
 
