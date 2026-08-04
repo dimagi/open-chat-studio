@@ -12,7 +12,7 @@ Two questions matter when reading WAF logs:
 import contextlib
 import inspect
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -23,6 +23,14 @@ from django.urls import Resolver404, resolve
 from apps.web.waf import WafRule, get_allowed_rules, get_registration_key
 from apps.web.waf_logs import LogRow
 
+# Rules the WebACL defines itself that fire on something other than the request path, so no
+# per-view exemption can address them. Keyed by rule id, valued by what to do instead.
+NON_PATH_RULES = {
+    "RateLimitRule": "rate limit on the client IP — raise the limit in ocs-deploy if this traffic is legitimate",
+    "BlockTempIPs": "IP blocklist match — manage the IP set in ocs-deploy",
+    "BlockPermanentIPs": "IP blocklist match — managed via the AWS console",
+}
+
 
 class Fix(Enum):
     """What needs to happen for a blocked endpoint to stop being blocked."""
@@ -31,11 +39,14 @@ class Fix(Enum):
     DEPLOY = "Decorated in code but not deployed — export and deploy"
     INVESTIGATE = "Decorated and deployed, yet still matched"
     UNSUPPORTED = "No @waf_allow rule covers this WAF rule"
+    NOT_PATH_BASED = "Not a path-based rule — no per-view exemption applies"
 
 
 @dataclass
 class Finding:
     row: LogRow
+    # How many distinct URIs collapsed into this finding (see ``deduplicate_endpoints``).
+    uri_count: int = 1
     route: str | None = None
     view_name: str | None = None
     source: str | None = None
@@ -50,6 +61,8 @@ class Finding:
 
     @property
     def fix(self) -> Fix:
+        if self.row.rule in NON_PATH_RULES:
+            return Fix.NOT_PATH_BASED
         if self.waf_rule is None:
             return Fix.UNSUPPORTED
         if not self.decorated:
@@ -62,6 +75,8 @@ class Finding:
     def remedy(self) -> str:
         if self.fix is Fix.ADD_DECORATOR:
             return f"@waf_allow(WafRule.{self.waf_rule.name})"
+        if self.fix is Fix.NOT_PATH_BASED:
+            return NON_PATH_RULES[self.row.rule]
         if self.fix is Fix.INVESTIGATE and self.deployed is None:
             return "decorated (deployed state not checked)"
         return self.fix.value
@@ -69,6 +84,7 @@ class Finding:
     def as_dict(self) -> dict:
         return {
             **self.row.as_dict(),
+            "uri_count": self.uri_count,
             "route": self.route or "",
             "view": self.view_name or "",
             "source": self.source or "",
@@ -78,6 +94,37 @@ class Finding:
 
 def classify(rows: list[LogRow], deployed_patterns: dict[WafRule, list] | None = None) -> list[Finding]:
     return [classify_row(row, deployed_patterns) for row in rows]
+
+
+def deduplicate_endpoints(findings: list[Finding]) -> list[Finding]:
+    """Collapse findings that share a Django route, rule and method.
+
+    Logs Insights aggregates by URI, so a route with a variable segment produces one row per
+    session id or UUID seen. They all resolve to the same view and need the same fix, so
+    reporting them separately just buries the finding under its own repetitions.
+    """
+    merged: dict[tuple, Finding] = {}
+    for finding in findings:
+        key = (finding.route, finding.row.method, finding.row.rule, finding.row.action)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = replace(finding, row=replace(finding.row), uri_count=1)
+        else:
+            _absorb(existing, finding)
+    return list(merged.values())
+
+
+def _absorb(target: Finding, other: Finding) -> None:
+    into, extra = target.row, other.row
+    if extra.hits > into.hits:
+        into.uri = extra.uri  # keep the busiest URI as the worked example
+    into.hits += extra.hits
+    # Distinct-IP counts can overlap between URIs, so the max is a lower bound rather than a sum.
+    into.unique_ips = max(into.unique_ips, extra.unique_ips)
+    into.unique_countries = max(into.unique_countries, extra.unique_countries)
+    into.first_seen = min(filter(None, (into.first_seen, extra.first_seen)), default="")
+    into.last_seen = max(filter(None, (into.last_seen, extra.last_seen)), default="")
+    target.uri_count += 1
 
 
 def classify_row(row: LogRow, deployed_patterns: dict[WafRule, list] | None = None) -> Finding:

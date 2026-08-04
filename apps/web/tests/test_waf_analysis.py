@@ -6,8 +6,15 @@ from django.core.management.base import CommandError
 from django.urls import resolve
 
 from apps.web.management.commands.analyze_waf_logs import parse_duration
-from apps.web.waf import WafRule, get_all_waf_patterns, get_allowed_rules, get_waf_patterns, waf_allow
-from apps.web.waf_analysis import Fix, classify_row, rule_to_waf_rule
+from apps.web.waf import (
+    WafRule,
+    get_all_waf_patterns,
+    get_allowed_rules,
+    get_registration_key,
+    get_waf_patterns,
+    waf_allow,
+)
+from apps.web.waf_analysis import Fix, classify_row, deduplicate_endpoints, rule_to_waf_rule
 from apps.web.waf_logs import LogRow, _rule_for_pattern_set, compile_deployed_patterns
 
 
@@ -21,7 +28,7 @@ def make_row(uri, rule="NoUserAgent_HEADER", **kwargs):
         "first_seen": "",
         "last_seen": "",
     }
-    return LogRow(uri=uri, rule=rule, **{**defaults, **kwargs})
+    return LogRow(uri=uri, rule=rule, **(defaults | kwargs))
 
 
 @pytest.mark.parametrize(
@@ -99,10 +106,61 @@ def test_unsupported_rule_reports_unsupported():
     assert finding.fix is Fix.UNSUPPORTED
 
 
+@pytest.mark.parametrize("rule", ["RateLimitRule", "BlockTempIPs", "BlockPermanentIPs"])
+def test_non_path_rules_do_not_suggest_a_decorator(rule):
+    """These fire on the client IP, not the request path, so no per-view exemption applies."""
+    finding = classify_row(make_row("/robots.txt", rule=rule))
+    assert finding.fix is Fix.NOT_PATH_BASED
+    assert "@waf_allow" not in finding.remedy
+
+
 def test_deployed_state_is_unknown_when_patterns_not_fetched():
     finding = classify_row(make_row("/robots.txt"), deployed_patterns=None)
     assert finding.deployed is None
     assert "not checked" in finding.remedy
+
+
+def test_findings_sharing_a_route_are_collapsed():
+    """Logs Insights aggregates by URI, so one route yields a row per session id seen."""
+    findings = [
+        classify_row(make_row("/robots.txt", hits=5, unique_ips=3, first_seen="2026-08-04 05:00", last_seen="")),
+        classify_row(make_row("/robots.txt?a=1", hits=7, unique_ips=2, first_seen="2026-08-04 04:00", last_seen="")),
+    ]
+    merged = deduplicate_endpoints(findings)
+    assert len(merged) == 1
+    assert merged[0].uri_count == 2
+    assert merged[0].row.hits == 12
+    assert merged[0].row.uri == "/robots.txt?a=1"  # the busiest one is kept as the example
+    assert merged[0].row.unique_ips == 3  # a lower bound: distinct IPs can overlap between URIs
+    assert merged[0].row.first_seen == "2026-08-04 04:00"
+
+
+def test_deduplication_keeps_different_rules_and_methods_apart():
+    findings = [
+        classify_row(make_row("/robots.txt", rule="NoUserAgent_HEADER")),
+        classify_row(make_row("/robots.txt", rule="SizeRestrictions_BODY")),
+        classify_row(make_row("/robots.txt", rule="NoUserAgent_HEADER", method="POST")),
+    ]
+    assert len(deduplicate_endpoints(findings)) == 3
+
+
+def test_deduplication_does_not_mutate_its_input():
+    original = classify_row(make_row("/robots.txt", hits=5))
+    deduplicate_endpoints([original, classify_row(make_row("/robots.txt", hits=7))])
+    assert original.row.hits == 5
+
+
+def test_drf_viewsets_are_matched_by_cls():
+    """DRF's ViewSets set ``cls`` rather than Django's ``view_class``."""
+
+    class FakeViewSet:
+        pass
+
+    def as_view_wrapper():
+        pass
+
+    as_view_wrapper.cls = FakeViewSet
+    assert get_registration_key(as_view_wrapper) is FakeViewSet
 
 
 def test_compile_deployed_patterns_reports_bad_regexes():

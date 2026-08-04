@@ -26,6 +26,7 @@ PATTERN_SET_RULES = {
 
 # A rule can fire in three places: inside a managed rule group, as a Count-mode rule on the
 # web ACL itself, or as the terminating rule. Coalesce them so one row shape covers all three.
+# ALLOW is dropped: those rows are the scope-down allow rules doing their job, not blocks.
 _RULE_FIELDS = """
 fields httpRequest.uri as uri,
        httpRequest.httpMethod as method,
@@ -36,6 +37,7 @@ fields httpRequest.uri as uri,
                 nonTerminatingMatchingRules.0.action,
                 action) as ruleAction
 | filter ispresent(rule) and rule != 'Default_Action'
+| filter ruleAction != 'ALLOW'
 """
 
 DETAIL_QUERY = (

@@ -47,6 +47,7 @@ from apps.service_providers.llm_service.image_types import (
     DENIED_IMAGE_EXTENSIONS,
     image_type_names,
 )
+from apps.web.waf import WafRule, waf_allow
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
 SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
@@ -91,6 +92,7 @@ def validate_file_upload(file):
     return True, None
 
 
+@waf_allow(WafRule.SizeRestrictions_BODY)
 @extend_schema(
     operation_id="chat_upload_file",
     summary="Upload files for a chat message",

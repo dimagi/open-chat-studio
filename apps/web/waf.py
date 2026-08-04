@@ -55,9 +55,14 @@ def get_registration_key(view_func):
     """Return the object that ``@waf_allow`` registered for a resolved view callable.
 
     ``resolve()`` hands back the ``as_view()`` wrapper for class-based views, but the decorator
-    registers the class itself, so the two need to be reconciled before any lookup.
+    registers the class itself, so the two need to be reconciled before any lookup. Django sets
+    ``view_class``; DRF's ViewSets set ``cls`` instead and would otherwise never match.
     """
-    return getattr(view_func, "view_class", view_func)
+    for attr in ("view_class", "cls"):
+        view_class = getattr(view_func, attr, None)
+        if view_class is not None:
+            return view_class
+    return view_func
 
 
 def get_allowed_rules(view_func) -> set[WafRule]:

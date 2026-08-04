@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.web.waf import WafRule
-from apps.web.waf_analysis import Finding, Fix, classify, classify_row
+from apps.web.waf_analysis import Finding, Fix, classify, classify_row, deduplicate_endpoints
 from apps.web.waf_logs import (
     LogRow,
     WafLogsError,
@@ -35,6 +35,7 @@ CSV_FIELDS = [
     "rule",
     "method",
     "uri",
+    "uri_count",
     "route",
     "view",
     "source",
@@ -128,7 +129,8 @@ class Command(BaseCommand):
 
         rows = [row for row in rows if row.hits >= self.options["min_hits"]]
         findings = classify(rows, deployed_patterns)
-        endpoints = [f for f in findings if f.is_endpoint]
+        # Endpoints collapse by route; noise stays per-URI so the attack summary can count paths.
+        endpoints = deduplicate_endpoints([f for f in findings if f.is_endpoint])
         noise = [f for f in findings if not f.is_endpoint]
 
         self._report_endpoints(endpoints)
@@ -168,7 +170,7 @@ class Command(BaseCommand):
         for finding in endpoints:
             by_fix[finding.fix].append(finding)
 
-        for fix in (Fix.ADD_DECORATOR, Fix.DEPLOY, Fix.INVESTIGATE, Fix.UNSUPPORTED):
+        for fix in (Fix.ADD_DECORATOR, Fix.DEPLOY, Fix.INVESTIGATE, Fix.UNSUPPORTED, Fix.NOT_PATH_BASED):
             group = sorted(by_fix.get(fix, []), key=lambda f: f.row.hits, reverse=True)
             if not group:
                 continue
@@ -184,8 +186,10 @@ class Command(BaseCommand):
             f"    {row.hits:>7,}  {row.action:<5}  {row.rule:<28}  {row.method:<6}  {finding.route or row.uri}"
         )
         detail = f"             {finding.source or '?'}  {finding.view_name or ''}"
+        if finding.uri_count > 1:
+            detail += f"  ({finding.uri_count} URIs, e.g. {row.uri})"
         self.stdout.write(detail)
-        if finding.fix is Fix.ADD_DECORATOR:
+        if finding.fix in (Fix.ADD_DECORATOR, Fix.NOT_PATH_BASED):
             self.stdout.write(f"             -> {finding.remedy}")
         elif finding.fix is Fix.INVESTIGATE:
             self.stdout.write(f"             -> last seen {row.last_seen} — check this postdates the last deploy")
