@@ -547,30 +547,8 @@ class ChatMessageCreationStage(ProcessingStage):
         is_voice = ctx.message.content_type == MESSAGE_TYPES.VOICE
 
         # Save voice note as attachment
-        if is_voice and ctx.message.cached_media_data:
-            # Guard against zero-byte / exhausted audio streams. Persisting a
-            # File row without storage leads to ValueError later when the
-            # attachment is downloaded (see OPEN-CHAT-STUDIO-248).
-            ctx.message.cached_media_data.data.seek(0)
-            audio_bytes = ctx.message.cached_media_data.data.read()
-            if not audio_bytes:
-                logger.warning(
-                    "Skipping voice_note attachment for experiment=%s session=%s: empty audio stream",
-                    ctx.experiment.id,
-                    getattr(ctx.experiment_session, "id", None),
-                )
-            else:
-                ctx.message.cached_media_data.data.seek(0)
-                ext = ctx.message.cached_media_data.content_type.split("/")[1]
-                file = File.create(
-                    f"voice_note.{ext}",
-                    ctx.message.cached_media_data.data,
-                    ctx.experiment.team_id,
-                    purpose=FilePurpose.MESSAGE_MEDIA,
-                    content_type=ctx.message.cached_media_data.content_type,
-                )
-                ctx.experiment_session.chat.attach_files("voice_message", [file])
-                metadata[attachments_key].append(file.id)
+        if is_voice:
+            metadata[attachments_key].extend(self._save_voice_note(ctx))
 
         # Record attachment IDs
         if ctx.message.attachments:
@@ -607,6 +585,36 @@ class ChatMessageCreationStage(ProcessingStage):
         # Fire NEW_HUMAN_MESSAGE trigger (gated by capability)
         if ctx.capabilities.supports_static_triggers:
             enqueue_static_triggers.delay(ctx.experiment_session.id, StaticTriggerType.NEW_HUMAN_MESSAGE)
+
+    def _save_voice_note(self, ctx: MessageProcessingContext) -> list[int]:
+        """Persist the voice note as a chat attachment, returning the file IDs to record."""
+        if not ctx.message.cached_media_data:
+            return []
+
+        # Guard against zero-byte / exhausted audio streams. Persisting a
+        # File row without storage leads to ValueError later when the
+        # attachment is downloaded (see OPEN-CHAT-STUDIO-248).
+        ctx.message.cached_media_data.data.seek(0)
+        audio_bytes = ctx.message.cached_media_data.data.read()
+        if not audio_bytes:
+            logger.warning(
+                "Skipping voice_note attachment for experiment=%s session=%s: empty audio stream",
+                ctx.experiment.id,
+                getattr(ctx.experiment_session, "id", None),
+            )
+            return []
+
+        ctx.message.cached_media_data.data.seek(0)
+        ext = ctx.message.cached_media_data.content_type.split("/")[1]
+        file = File.create(
+            f"voice_note.{ext}",
+            ctx.message.cached_media_data.data,
+            ctx.experiment.team_id,
+            purpose=FilePurpose.MESSAGE_MEDIA,
+            content_type=ctx.message.cached_media_data.content_type,
+        )
+        ctx.experiment_session.chat.attach_files("voice_message", [file])
+        return [file.id]
 
 
 # ---------------------------------------------------------------------------
