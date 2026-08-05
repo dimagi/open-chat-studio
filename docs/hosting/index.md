@@ -68,9 +68,9 @@ celery -A config worker -l INFO --pool threads --concurrency 20 -Q evaluations
 !!! warning "Every queue needs a consumer"
 
     Once you pass `-Q`, each queue needs at least one running worker or its tasks will sit
-    unprocessed. The `/status/` healthcheck reports `No worker for Celery task queue <name>` when
-    one is unconsumed. To roll back, drop the `-Q` flags — workers go straight back to consuming
-    everything.
+    unprocessed. The `/status/celery/` healthcheck (or a per-queue `/status/queue-<name>/`
+    subset) reports `No worker for Celery queue '<name>' (<queue>)` when one is unconsumed. To
+    roll back, drop the `-Q` flags — workers go straight back to consuming everything.
 
 ## Docker Image
 
@@ -88,7 +88,10 @@ docker build -t open-chat-studio:latest .
 
 ## Health Check
 
-The app exposes a `/status` endpoint. Secure it by setting `HEALTH_CHECK_TOKENS` to a comma-separated list of secret tokens. Requests must include the token as a query parameter (`?token=...`).
+The app exposes a `/status/` endpoint (database, cache, and Redis checks) plus named subsets: `/status/celery/`
+checks every Celery queue, and `/status/queue-<name>/` checks a single queue. Secure them by setting
+`HEALTH_CHECK_TOKENS` to a comma-separated list of secret tokens. Requests must include the token as a query
+parameter (`?token=...`).
 
 ## Deployment Options
 
