@@ -4,11 +4,10 @@ from collections.abc import Iterator
 from typing import Self
 
 from langchain_community.document_loaders.github import GithubFileLoader
-from langchain_core.documents import Document
 
 from apps.documents.datamodels import GitHubSourceConfig
 from apps.documents.models import Collection, CollectionFile, DocumentSource
-from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.documents.source_loaders.base import BaseDocumentLoader, SourceDocument
 from apps.service_providers.models import AuthProviderType
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
             raise ValueError("GitHub authentication token is missing")
         return cls(collection, document_source.config.github, auth_provider)
 
-    def load_documents(self) -> Iterator[Document]:
+    def load_documents(self) -> Iterator[SourceDocument]:
         """Load documents from GitHub repository"""
         try:
             owner, repo = self.config.extract_repo_info()
@@ -52,7 +51,8 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
                         "source": f"{self.config.repo_url}/blob/{self.config.branch}/{document.metadata['path']}",
                     }
                 )
-                yield document
+                # The GitHub API hands back decoded text, so this is the file's content as served.
+                yield SourceDocument(content=document.page_content.encode("utf-8"), metadata=document.metadata)
 
         except Exception as e:
             logger.error(f"Error loading documents from GitHub: {str(e)}")
@@ -69,7 +69,7 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
             fnmatch.fnmatch(file_path, pattern) for pattern in exclude_patterns
         )
 
-    def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
+    def should_update_document(self, document: SourceDocument, existing_file: CollectionFile) -> bool:
         """
         Determine if document should be updated.
         For GitHub, we can use commit hash or last modified time if available.

@@ -3,9 +3,19 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, Self, TypeVar
 
-from langchain_core.documents import Document
-
 from apps.documents.models import Collection, CollectionFile
+
+
+@dataclass
+class SourceDocument:
+    """A document as its source served it: the original bytes, plus metadata about them.
+
+    Deliberately not text. Extraction happens at index time (see ADR-0051), so a loader
+    that fetches a PDF hands on the PDF.
+    """
+
+    content: bytes
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -43,7 +53,7 @@ class BaseDocumentLoader[ConfigType](ABC):
         pass
 
     @abstractmethod
-    def load_documents(self) -> Iterator[Document]:
+    def load_documents(self) -> Iterator[SourceDocument]:
         """
         Load documents from the external source.
 
@@ -54,24 +64,24 @@ class BaseDocumentLoader[ConfigType](ABC):
             * citation_url: (optional) Custom URL to use when citing the document as a source.
 
         Returns:
-            List of LangChain Document objects
+            Iterator of SourceDocument objects carrying the source's own bytes
         """
         pass
 
-    def get_document_identifier(self, document: Document) -> str:
+    def get_document_identifier(self, document: SourceDocument) -> str:
         """
         Get a unique identifier for a document to track changes.
         By default, use the source metadata 'source' field.
 
         Args:
-            document: LangChain Document object
+            document: SourceDocument object
 
         Returns:
             Unique identifier string
         """
         return document.metadata.get("source", "")
 
-    def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
+    def should_update_document(self, document: SourceDocument, existing_file: CollectionFile) -> bool:
         """
         Determine if a document should be updated based on metadata comparison.
 

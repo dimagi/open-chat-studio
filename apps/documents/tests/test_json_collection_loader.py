@@ -4,19 +4,19 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
-from langchain_core.documents import Document as LCDocument
 
 from apps.documents.datamodels import (
     DocumentSourceConfig,
     JSONCollectionSourceConfig,
 )
 from apps.documents.models import SourceType
-from apps.documents.readers import Document as ReaderDocument
-from apps.documents.readers import DocumentPart
 from apps.documents.source_loaders import json_collection as jc
+from apps.documents.source_loaders.base import SourceDocument
 from apps.documents.source_loaders.json_collection import JSONCollectionLoader
 from apps.documents.source_loaders.registry import LOADERS
 from apps.utils.urlvalidate import InvalidURL
+
+PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
 
 
 @pytest.fixture()
@@ -28,10 +28,6 @@ def _make_loader(json_config, collection_id=42):
     collection = Mock()
     collection.id = collection_id
     return JSONCollectionLoader(collection=collection, config=json_config, auth_provider=None)
-
-
-def _stub_doc(text: str) -> ReaderDocument:
-    return ReaderDocument(parts=[DocumentPart(content=text)])
 
 
 class TestJSONCollectionLoaderConstruction:
@@ -82,6 +78,38 @@ class TestLoadDocumentsRoot:
         assert list(loader.load_documents()) == []
 
 
+class TestAttachmentBytes:
+    """The loader hands on what the source served, byte for byte."""
+
+    def test_attachment_bytes_are_yielded_verbatim(self, json_config, httpx_mock):
+        feed = [_single_attachment_item()]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(
+            url="https://example.com/file.pdf",
+            content=PDF_BYTES,
+            headers={"content-type": "application/pdf"},
+        )
+
+        loader = _make_loader(json_config)
+        docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        assert docs[0].content == PDF_BYTES
+
+    def test_load_does_not_extract_text(self, json_config, httpx_mock):
+        """Extraction belongs to indexing; loading a document must not parse it."""
+        feed = [_single_attachment_item()]
+        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=PDF_BYTES)
+
+        loader = _make_loader(json_config)
+        with mock.patch("apps.documents.readers.read_file_content") as read_file_content:
+            docs = list(loader.load_documents())
+
+        assert len(docs) == 1
+        read_file_content.assert_not_called()
+
+
 class TestLoadDocumentsAttachments:
     def test_multi_attachment_yields_one_doc_per_attachment(self, json_config, httpx_mock):
         feed = [
@@ -120,15 +148,10 @@ class TestLoadDocumentsAttachments:
         )
 
         loader = _make_loader(json_config, collection_id=42)
-        with mock.patch("apps.documents.source_loaders.json_collection.read_file_content") as md:
-            md.side_effect = [
-                _stub_doc("text from pdf 1"),
-                _stub_doc("text from pdf 2"),
-            ]
-            docs = list(loader.load_documents())
+        docs = list(loader.load_documents())
 
         assert len(docs) == 2
-        assert docs[0].page_content == "text from pdf 1"
+        assert docs[0].content == b"%PDF-content-1"
         assert docs[0].metadata["source"] == "https://example.com/a-1.pdf"
         assert docs[0].metadata["link"] == "https://example.com/a-1.pdf"
         assert docs[0].metadata["file_type"] == "pdf"
@@ -144,7 +167,7 @@ class TestLoadDocumentsAttachments:
         assert docs[0].metadata["citation_text"] == "Doc A"
         assert docs[0].metadata["citation_url"] == "https://example.com/a"
 
-        assert docs[1].page_content == "text from pdf 2"
+        assert docs[1].content == b"%PDF-content-2"
         assert docs[1].metadata["source"] == "https://example.com/a-2.pdf"
 
 
@@ -204,13 +227,9 @@ class TestItemMetadataPropagation:
             )
         ]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
-        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=PDF_BYTES)
         loader = _make_loader(json_config)
-        with mock.patch(
-            "apps.documents.source_loaders.json_collection.read_file_content",
-            return_value=_stub_doc("body"),
-        ):
-            docs = list(loader.load_documents())
+        docs = list(loader.load_documents())
         meta = docs[0].metadata
         for k, v in [
             ("authors", "Alice"),
@@ -225,28 +244,20 @@ class TestItemMetadataPropagation:
     def test_optional_metadata_fields_absent_when_missing(self, json_config, httpx_mock):
         feed = [_single_attachment_item()]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
-        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=PDF_BYTES)
         loader = _make_loader(json_config)
-        with mock.patch(
-            "apps.documents.source_loaders.json_collection.read_file_content",
-            return_value=_stub_doc("body"),
-        ):
-            meta = list(loader.load_documents())[0].metadata
+        meta = list(loader.load_documents())[0].metadata
         for k in ("authors", "publisher", "countries", "diseases", "tags", "regions"):
             assert k not in meta
 
     def test_item_missing_title_and_uri_is_skipped(self, json_config, httpx_mock, caplog):
         feed = [{"date": "01/01/2025"}, _single_attachment_item(title="OK")]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
-        httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+        httpx_mock.add_response(url="https://example.com/file.pdf", content=PDF_BYTES)
         loader = _make_loader(json_config)
 
         with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
-            with mock.patch(
-                "apps.documents.source_loaders.json_collection.read_file_content",
-                return_value=_stub_doc("body"),
-            ):
-                docs = list(loader.load_documents())
+            docs = list(loader.load_documents())
 
         assert len(docs) == 1
         assert docs[0].metadata["title"] == "OK"
@@ -329,13 +340,9 @@ class TestMetadataFilters:
         config = JSONCollectionSourceConfig(json_url="https://example.com/feed.json", metadata_filters=filters)
         httpx_mock.add_response(url="https://example.com/feed.json", json=[self._feed_item(**item_fields)])
         if expected_count:
-            httpx_mock.add_response(url="https://example.com/file.pdf", content=b"PDF")
+            httpx_mock.add_response(url="https://example.com/file.pdf", content=PDF_BYTES)
         loader = _make_loader(config)
-        with mock.patch(
-            "apps.documents.source_loaders.json_collection.read_file_content",
-            return_value=_stub_doc("body"),
-        ):
-            docs = list(loader.load_documents())
+        docs = list(loader.load_documents())
         assert len(docs) == expected_count
 
     def test_filtered_item_is_not_fetched(self, httpx_mock, caplog):
@@ -367,14 +374,10 @@ class TestUnsupportedFileTypes:
         ]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
         # Only the pdf is fetched; no response is registered for the mp3.
-        httpx_mock.add_response(url="https://example.com/b.pdf", content=b"PDF")
+        httpx_mock.add_response(url="https://example.com/b.pdf", content=PDF_BYTES)
         loader = _make_loader(json_config)
         with caplog.at_level(logging.WARNING, logger="apps.documents.source_loaders.json_collection"):
-            with mock.patch(
-                "apps.documents.source_loaders.json_collection.read_file_content",
-                return_value=_stub_doc("body"),
-            ):
-                docs = list(loader.load_documents())
+            docs = list(loader.load_documents())
         assert len(docs) == 1
         assert docs[0].metadata["link"] == "https://example.com/b.pdf"
         assert any("unsupported file type" in record.message for record in caplog.records)
@@ -413,44 +416,14 @@ class TestLoadDocumentsAttachmentFailures:
         ]
         httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
         httpx_mock.add_response(url="https://example.com/bad.pdf", status_code=404, content=b"")
-        httpx_mock.add_response(url="https://example.com/good.pdf", content=b"PDF")
+        httpx_mock.add_response(url="https://example.com/good.pdf", content=b"good bytes")
 
         loader = _make_loader(json_config)
-        with mock.patch(
-            "apps.documents.source_loaders.json_collection.read_file_content",
-            return_value=_stub_doc("good text"),
-        ):
-            docs = list(loader.load_documents())
+        docs = list(loader.load_documents())
 
         assert len(docs) == 1
-        assert docs[0].page_content == "good text"
+        assert docs[0].content == b"good bytes"
         assert docs[0].metadata["link"] == "https://example.com/good.pdf"
-
-    def test_extraction_error_skips_attachment(self, json_config, httpx_mock):
-        feed = [
-            {
-                "title": "T",
-                "URI": "https://example.com/page",
-                "attachments": [
-                    {"file_type": "pdf", "title": "broken", "link": "https://example.com/x.pdf"},
-                    {"file_type": "pdf", "title": "ok", "link": "https://example.com/y.pdf"},
-                ],
-            }
-        ]
-        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
-        httpx_mock.add_response(url="https://example.com/x.pdf", content=b"junk")
-        httpx_mock.add_response(url="https://example.com/y.pdf", content=b"ok")
-
-        loader = _make_loader(json_config)
-        with mock.patch(
-            "apps.documents.source_loaders.json_collection.read_file_content",
-            side_effect=[RuntimeError("boom"), _stub_doc("ok text")],
-        ):
-            docs = list(loader.load_documents())
-
-        assert len(docs) == 1
-        assert docs[0].page_content == "ok text"
-        assert docs[0].metadata["link"] == "https://example.com/y.pdf"
 
     def test_all_attachments_fail_yields_zero_documents_no_fallback(self, json_config, httpx_mock):
         """Transient failures must NOT produce a URI-keyed fallback that races
@@ -477,15 +450,15 @@ class TestLoadDocumentsAttachmentFailures:
 class TestGetDocumentIdentifier:
     def test_attachment_doc_identifier_is_link(self, json_config):
         loader = _make_loader(json_config)
-        doc = LCDocument(
-            page_content="x",
+        doc = SourceDocument(
+            content=PDF_BYTES,
             metadata={"link": "https://example.com/file.pdf", "source": "https://example.com/file.pdf"},
         )
         assert loader.get_document_identifier(doc) == "https://example.com/file.pdf"
 
     def test_fallback_doc_identifier_is_source(self, json_config):
         loader = _make_loader(json_config)
-        doc = LCDocument(page_content="t", metadata={"source": "https://example.com/page"})
+        doc = SourceDocument(content=b"t", metadata={"source": "https://example.com/page"})
         assert loader.get_document_identifier(doc) == "https://example.com/page"
 
 
@@ -498,19 +471,19 @@ class TestShouldUpdateDocument:
 
     def test_same_date_means_no_update(self, json_config):
         loader = _make_loader(json_config)
-        new_doc = LCDocument(page_content="x", metadata={"date": "01/01/2025"})
+        new_doc = SourceDocument(content=b"x", metadata={"date": "01/01/2025"})
         existing = self._make_existing_file({"date": "01/01/2025"})
         assert loader.should_update_document(new_doc, existing) is False
 
     def test_different_date_means_update(self, json_config):
         loader = _make_loader(json_config)
-        new_doc = LCDocument(page_content="x", metadata={"date": "02/01/2025"})
+        new_doc = SourceDocument(content=b"x", metadata={"date": "02/01/2025"})
         existing = self._make_existing_file({"date": "01/01/2025"})
         assert loader.should_update_document(new_doc, existing) is True
 
     def test_missing_date_defers_to_base(self, json_config):
         loader = _make_loader(json_config)
-        new_doc = LCDocument(page_content="x", metadata={})
+        new_doc = SourceDocument(content=b"x", metadata={})
         existing = self._make_existing_file({})
         # base class returns True (always update)
         assert loader.should_update_document(new_doc, existing) is True
@@ -609,14 +582,10 @@ class TestAuthHeadersPropagation:
         )
         httpx_mock.add_response(
             url="https://example.com/file.pdf",
-            content=b"PDF",
+            content=PDF_BYTES,
             match_headers={"Authorization": "Bearer secret"},
         )
         loader = _loader_with_fake_auth(json_config)
-        with mock.patch(
-            "apps.documents.source_loaders.json_collection.read_file_content",
-            return_value=_stub_doc("body"),
-        ):
-            docs = list(loader.load_documents())
+        docs = list(loader.load_documents())
         assert len(docs) == 1
-        assert docs[0].page_content == "body"
+        assert docs[0].content == PDF_BYTES

@@ -5,7 +5,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from field_audit.models import AuditAction
-from langchain_core.documents import Document
 
 from apps.documents.datamodels import DocumentSourceConfig, GitHubSourceConfig, JSONCollectionSourceConfig
 from apps.documents.document_source_service import (
@@ -23,9 +22,11 @@ from apps.documents.models import (
     SourceType,
     SyncStatus,
 )
-from apps.documents.source_loaders.base import BaseDocumentLoader, SyncResult
+from apps.documents.source_loaders.base import BaseDocumentLoader, SourceDocument, SyncResult
 from apps.documents.source_loaders.json_collection import JSONCollectionLoader
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
+
+PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
 
 
 @pytest.fixture()
@@ -61,8 +62,8 @@ class MockLoader(BaseDocumentLoader):
         return cls(
             collection,
             [
-                Mock(
-                    page_content="# Test Document",
+                SourceDocument(
+                    content=b"# Test Document",
                     metadata={
                         "source": "test.md",
                         "sha": "abc123",
@@ -72,10 +73,10 @@ class MockLoader(BaseDocumentLoader):
             ],
         )
 
-    def load_documents(self) -> Iterator[Document]:
+    def load_documents(self) -> Iterator[SourceDocument]:
         return iter(self.mock_documents)
 
-    def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
+    def should_update_document(self, document: SourceDocument, existing_file: CollectionFile) -> bool:
         new_sha = document.metadata.get("sha")
         old_sha = existing_file.file.metadata.get("sha")
         return new_sha != old_sha
@@ -106,6 +107,78 @@ class TestDocumentSourceManager:
         manager._index_files.assert_called_once()
 
     @patch("apps.documents.document_source_service.create_loader")
+    def test_sync_stores_source_bytes_and_sniffed_content_type(self, create_loader, collection, document_source):
+        """A synced PDF is stored as the PDF the source served, not as extracted text.
+
+        The filename keeps the source's extension either way, so storing text under a .pdf
+        name produced a download that no PDF reader could open.
+        """
+        docs = [
+            SourceDocument(
+                content=PDF_BYTES,
+                metadata={"source": "https://example.com/report.pdf", "sha": "1", "source_type": "test"},
+            )
+        ]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+
+        result = manager.sync_collection()
+
+        assert result.success
+        file = CollectionFile.objects.get(collection=collection).file
+        assert file.name == "report.pdf"
+        assert file.file.read() == PDF_BYTES
+        assert file.content_type == "application/pdf"
+        assert file.content_size == len(PDF_BYTES)
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_update_refreshes_content_type(self, create_loader, collection, document_source):
+        """An update rewrites the bytes, so a stale content type would misdescribe them."""
+        url = "https://example.com/doc.pdf"
+        create_loader.return_value = MockLoader(
+            collection,
+            [SourceDocument(content=b"just text", metadata={"source": url, "sha": "v1", "source_type": "test"})],
+        )
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+        manager.sync_collection()
+
+        file = CollectionFile.objects.get(collection=collection).file
+        assert file.content_type == "text/plain"
+
+        create_loader.return_value = MockLoader(
+            collection,
+            [SourceDocument(content=PDF_BYTES, metadata={"source": url, "sha": "v2", "source_type": "test"})],
+        )
+        result = manager.sync_collection()
+
+        assert result.files_updated == 1
+        file.refresh_from_db()
+        assert file.file.read() == PDF_BYTES
+        assert file.content_type == "application/pdf"
+        assert file.content_size == len(PDF_BYTES)
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_empty_payload_is_recorded_as_failed(self, create_loader, collection, document_source):
+        """A source that serves nothing has nothing to index; record it and carry on."""
+        docs = [
+            SourceDocument(content=b"", metadata={"source": "empty.pdf", "sha": "1", "source_type": "test"}),
+            SourceDocument(content=b"real content", metadata={"source": "ok.md", "sha": "2", "source_type": "test"}),
+        ]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+
+        result = manager.sync_collection()
+
+        assert result.files_added == 1
+        assert result.files_failed == 1
+        assert any("empty.pdf" in failure for failure in result.failures)
+        names = set(CollectionFile.objects.filter(collection=collection).values_list("file__name", flat=True))
+        assert names == {"ok.md"}
+
+    @patch("apps.documents.document_source_service.create_loader")
     def test_sync_collection_update_existing(self, create_loader, collection, document_source):
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 
@@ -130,8 +203,8 @@ class TestDocumentSourceManager:
         manager._index_files.assert_not_called()
 
         mock_docs = [
-            Mock(
-                page_content="# Test Document updated",
+            SourceDocument(
+                content=b"# Test Document updated",
                 metadata={"source": "test.md", "sha": "abc1234", "source_type": "test"},
             )
         ]
@@ -179,8 +252,8 @@ class TestDocumentSourceManager:
         """A >255-char identifier is truncated on store and matches on re-sync (no DataError, no churn)."""
         long_source = "https://example.com/" + "a" * 300
         docs = [
-            Mock(
-                page_content="content",
+            SourceDocument(
+                content=b"content",
                 metadata={"path": "doc.md", "source": long_source, "sha": "1", "source_type": "test"},
             )
         ]
@@ -209,9 +282,9 @@ class TestDocumentSourceManager:
     def test_sync_continues_when_a_file_fails(self, create_loader, collection, document_source):
         """A single document that fails to process is recorded but does not abort the sync."""
         docs = [
-            Mock(page_content="doc1", metadata={"source": "a.md", "sha": "1", "source_type": "test"}),
-            Mock(page_content="doc2", metadata={"source": "b.md", "sha": "2", "source_type": "test"}),
-            Mock(page_content="doc3", metadata={"source": "c.md", "sha": "3", "source_type": "test"}),
+            SourceDocument(content=b"doc1", metadata={"source": "a.md", "sha": "1", "source_type": "test"}),
+            SourceDocument(content=b"doc2", metadata={"source": "b.md", "sha": "2", "source_type": "test"}),
+            SourceDocument(content=b"doc3", metadata={"source": "c.md", "sha": "3", "source_type": "test"}),
         ]
         create_loader.return_value = MockLoader(collection, docs)
         manager = DocumentSourceManager(document_source)
@@ -278,19 +351,19 @@ class TestDocumentSourceManager:
     )
     def test_extract_filename_url_decodes_source(self, document_source, source, expected):
         manager = DocumentSourceManager(document_source)
-        document = Document(page_content="x", metadata={"source": source})
+        document = SourceDocument(content=b"x", metadata={"source": source})
         assert manager._extract_filename(document, source) == expected
 
     @patch("apps.documents.document_source_service.create_loader")
     def test_update_file_refreshes_decoded_name(self, create_loader, collection, document_source):
         url = "https://example.com/files/My%20Doc.pdf"
-        docs = [Mock(page_content="v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
+        docs = [SourceDocument(content=b"v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
         create_loader.return_value = MockLoader(collection, docs)
         manager = DocumentSourceManager(document_source)
         manager._index_files = Mock()
         manager.sync_collection()
 
-        updated_docs = [Mock(page_content="v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
+        updated_docs = [SourceDocument(content=b"v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
         create_loader.return_value = MockLoader(collection, updated_docs)
         manager.sync_collection()
 
@@ -305,7 +378,7 @@ class TestDocumentSourceManager:
         indexing task eventually clears it.
         """
         url = "https://example.com/files/doc.pdf"
-        docs = [Mock(page_content="v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
+        docs = [SourceDocument(content=b"v1", metadata={"source": url, "sha": "v1", "source_type": "test"})]
         create_loader.return_value = MockLoader(collection, docs)
         manager = DocumentSourceManager(document_source)
         manager._index_files = Mock()
@@ -316,7 +389,7 @@ class TestDocumentSourceManager:
         collection_file.failure_reason = "ValueError: old error"
         collection_file.save(update_fields=["status", "failure_reason"])
 
-        updated_docs = [Mock(page_content="v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
+        updated_docs = [SourceDocument(content=b"v2", metadata={"source": url, "sha": "v2", "source_type": "test"})]
         create_loader.return_value = MockLoader(collection, updated_docs)
         manager.sync_collection()
 
@@ -356,10 +429,12 @@ class TestDocumentSourceManager:
         source_id = document_source.id
 
         class _DeletingLoader(MockLoader):
-            def load_documents(self) -> Iterator[Document]:
+            def load_documents(self) -> Iterator[SourceDocument]:
                 # Simulate a user deleting the source while documents are being loaded.
                 DocumentSource.objects.filter(id=source_id).delete(audit_action=AuditAction.AUDIT)
-                yield Mock(page_content="# Doc", metadata={"source": "test.md", "sha": "abc", "source_type": "test"})
+                yield SourceDocument(
+                    content=b"# Doc", metadata={"source": "test.md", "sha": "abc", "source_type": "test"}
+                )
 
         loader = _DeletingLoader(collection, [])
         create_loader.return_value = loader
@@ -397,8 +472,8 @@ class TestJSONCollectionEndToEnd:
         document_source.save()
 
         fake_docs = [
-            Document(
-                page_content="text 1",
+            SourceDocument(
+                content=b"text 1",
                 metadata={
                     "source": "https://example.com/1.pdf",
                     "link": "https://example.com/1.pdf",
@@ -407,8 +482,8 @@ class TestJSONCollectionEndToEnd:
                     "date": "01/01/2025",
                 },
             ),
-            Document(
-                page_content="text 2",
+            SourceDocument(
+                content=b"text 2",
                 metadata={
                     "source": "https://example.com/2.pdf",
                     "link": "https://example.com/2.pdf",

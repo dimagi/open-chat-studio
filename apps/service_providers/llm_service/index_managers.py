@@ -13,6 +13,7 @@ from pgvector.django import CosineDistance
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
 from apps.documents.models import CollectionFile, FileStatus, chunk_from_indexed_file, format_failure_reason
+from apps.documents.readers import FileReadException
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
@@ -283,6 +284,12 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             embeddings = []
             try:
                 document_text = file.read_content()
+                if not document_text.strip():
+                    # Source files are stored unparsed (ADR-0051), so a scanned or image-only
+                    # document reaches indexing and yields nothing. Without this, it would be
+                    # marked COMPLETED with no embeddings -- indistinguishable from a file that
+                    # actually indexed.
+                    raise FileReadException("No text could be extracted from this file")
                 text_chunks = self.chunk_file(document_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
