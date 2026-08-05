@@ -42,7 +42,7 @@ def bulk_delete_collection_files(
 
     files_in_use = get_related_m2m_objects(files)
 
-    index_manager = collection.get_index_manager()
+    index_manager = collection.get_index_manager() if collection.is_index else None
     index_only_delete = [file for file in files if file in files_in_use]
     full_delete = [file for file in files if file not in files_in_use]
     if index_only_delete and collection.is_index:

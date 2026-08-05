@@ -96,3 +96,18 @@ class TestBulkDeleteCollectionFiles:
 
         assert CollectionFile.objects.filter(collection=collection).count() == 0
         assert not File.objects.filter(id=file1.id).exists()
+
+    def test_delete_files_non_index_collection_with_no_llm_provider(self, team_with_users):
+        """Non-indexed collections have llm_provider=None (forms.py clears it on save), so
+        get_index_manager() must never be called for them. Regression: it was called
+        unconditionally, raising AttributeError on the None llm_provider."""
+        collection = CollectionFactory.create(team=team_with_users, is_index=False, llm_provider=None)
+        file1 = FileFactory.create(team=team_with_users)
+
+        collection.files.add(file1)
+        collection_files = list(CollectionFile.objects.filter(collection=collection))
+
+        bulk_delete_collection_files(collection, collection_files)
+
+        assert CollectionFile.objects.filter(collection=collection).count() == 0
+        assert not File.objects.filter(id=file1.id).exists()
