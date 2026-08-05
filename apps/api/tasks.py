@@ -1,10 +1,7 @@
 import httpx
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
-from django.db.models import Subquery
 
-from apps.channels.clients.connect_client import CommCareConnectClient
-from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.tracing import TraceInfo
@@ -41,69 +38,6 @@ def connect_channel_error_details(error: Exception, identifier: str) -> tuple[in
         return 400, f"Failed to create channel: {error.response.text}"
     logger.error("Failed to create CommCare Connect channel for participant %s: %s", identifier, str(error))
     return 503, "Failed to create channel: Unable to connect to CommCare Connect service"
-
-
-@shared_task(
-    bind=True,
-    acks_late=True,
-    ignore_result=True,
-    max_retries=3,
-)
-def setup_connect_channels_for_bots(self, connect_id: str, experiment_data_map: dict):
-    """
-    DEPRECATED: no longer queued; channels are created synchronously in the update-participant API
-    view. Kept so in-flight tasks survive deploy. Remove in a follow-up.
-
-    Set up Connect channels for experiments that are using the ConnectMessaging channel
-
-    experiment_data_map: {experiment_id: participant_data_id}
-    """
-
-    experiment_ids = list(experiment_data_map.keys())
-    participant_data_ids = list(experiment_data_map.values())
-
-    # Only create channels for experiments that are using the ConnectMessaging channel
-    experiments_using_connect = ExperimentChannel.objects.filter(
-        platform=ChannelPlatform.COMMCARE_CONNECT,
-        experiment__id__in=experiment_ids,
-    ).values_list("experiment_id", flat=True)
-
-    participant_data = (
-        ParticipantData.objects.filter(
-            id__in=participant_data_ids,
-            experiment_id__in=Subquery(experiments_using_connect),
-        )
-        .exclude(system_metadata__has_key="commcare_connect_channel_id")
-        .prefetch_related("experiment")
-        .all()
-    )
-
-    connect_client = CommCareConnectClient()
-
-    channels = ExperimentChannel.objects.filter(
-        platform=ChannelPlatform.COMMCARE_CONNECT,
-        experiment_id__in=[participant_data.experiment_id for participant_data in participant_data],
-    )
-
-    channels = {ch.experiment_id: ch for ch in channels}
-
-    successful_ids = set()
-    for participant_datum in participant_data:
-        try:
-            experiment = participant_datum.experiment
-            channel = channels[experiment.id]
-            create_connect_channel_for_participant(channel, connect_client, connect_id, participant_datum)
-            successful_ids.add(experiment.id)
-        except DuplicateConnectChannelError:
-            # Deterministic conflict, already logged — retrying will not resolve it.
-            continue
-        except Exception as e:
-            if self.request.retries == self.max_retries:
-                failed_ids = set(experiment_ids) - successful_ids
-                logger.exception(
-                    "Failed to create channel for participant '%s' and experiments '{}'", connect_id, failed_ids
-                )
-            raise self.retry(exc=e, countdown=60) from None
 
 
 def create_connect_channel_for_participant(channel, connect_client, connect_id, participant_data):
