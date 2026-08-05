@@ -6,6 +6,7 @@ from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.service_providers.tracing import TraceInfo
 from apps.teams.utils import current_team
+from apps.utils.celery import Queues
 
 logger = get_task_logger("ocs.api")
 
@@ -88,7 +89,7 @@ def create_connect_channel_for_participant(channel, connect_client, connect_id, 
         participant_data.generate_encryption_key()
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def trigger_bot_message_task(session_external_id: str, prompt_text: str | None, message_text: str | None):
     """
     Trigger a bot message for a participant on a specific platform.

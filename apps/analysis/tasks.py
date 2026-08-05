@@ -10,6 +10,7 @@ from django.core.files.base import ContentFile
 from apps.service_providers.llm_service.default_models import get_model_parameters
 from apps.service_providers.llm_service.retry import with_llm_retry
 from apps.teams.utils import current_team
+from apps.utils.celery import Queues
 
 from .models import AnalysisStatus, TranscriptAnalysis
 from .translation import get_message_content, translate_messages_with_llm
@@ -17,7 +18,7 @@ from .translation import get_message_content, translate_messages_with_llm
 logger = get_task_logger("ocs.analysis")
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def process_transcript_analysis(self, analysis_id):
     progress_recorder = ProgressRecorder(self)
 

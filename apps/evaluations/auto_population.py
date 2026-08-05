@@ -20,6 +20,7 @@ from apps.evaluations.notifications import auto_population_rule_disabled_notific
 from apps.evaluations.utils import iter_session_evaluation_messages_for_sessions
 from apps.experiments.filters import ExperimentSessionFilter
 from apps.experiments.models import ExperimentSession
+from apps.utils.celery import Queues
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 logger = get_task_logger("ocs.evaluations")
@@ -111,7 +112,7 @@ def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[int]:
     return appended
 
 
-@shared_task(base=TaskbadgerTask)
+@shared_task(base=TaskbadgerTask, queue=Queues.BACKGROUND)
 def auto_populate_eval_datasets():
     """Periodic task: walk enabled DatasetAutoPopulationRules and ingest matches.
 

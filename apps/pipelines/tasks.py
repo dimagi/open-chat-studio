@@ -11,9 +11,10 @@ from apps.pipelines.exceptions import (
 )
 from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.runnables import GenerationError
+from apps.utils.celery import Queues
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def send_email_from_pipeline(recipient_list, subject, message):
     send_mail(
         subject=subject,
@@ -24,7 +25,7 @@ def send_email_from_pipeline(recipient_list, subject, message):
     )
 
 
-@shared_task
+@shared_task(queue=Queues.CHAT)
 def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, user_id: int):
     """
     Retrieve a response from a pipeline for a test message.

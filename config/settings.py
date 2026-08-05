@@ -19,7 +19,10 @@ from pathlib import Path
 import environ
 from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
+from kombu import Queue
 from pythonjsonlogger.json import JsonFormatter
+
+from apps.utils.celery import Queues
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -567,6 +570,13 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 # see https://docs.celeryq.dev/en/stable/userguide/workers.html#soft-shutdown
 CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = 10
 CELERY_WORKER_ENABLE_SOFT_SHUTDOWN_ON_IDLE = True
+
+# Declaring the queues is what keeps single-worker deployments working: a worker started without
+# `-Q` consumes every queue listed here. Only production splits them out with a worker per queue.
+# It also extends the `/status/` celery healthcheck, which reports any declared queue that has no
+# active consumer. `task_default_queue` is left at its default ("celery" == Queues.CHAT) so
+# third-party tasks land on a queue that is always consumed.
+CELERY_TASK_QUEUES = tuple(Queue(queue.value) for queue in Queues)
 
 SCHEDULED_TASKS = {
     "files.tasks.clean_up_expired_files": {

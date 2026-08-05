@@ -14,6 +14,7 @@ from apps.files.models import File, FilePurpose
 from apps.teams.invitations import send_invitation_accepted
 from apps.teams.models import Invitation, Membership, Team
 from apps.teams.utils import current_team
+from apps.utils.celery import Queues
 from apps.utils.deletion import (
     chunk_list,
     delete_object_with_auditing_of_related_objects,
@@ -26,13 +27,13 @@ logger = logging.getLogger("ocs.teams")
 CHUNK_SIZE = 64 * 1024
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def send_invitation_accepted_notification(invitation_id):
     invitation = Invitation.objects.get(id=invitation_id)
     send_invitation_accepted(invitation)
 
 
-@shared_task
+@shared_task(queue=Queues.BACKGROUND)
 def delete_team_async(team_id, user_email, notify_recipients="self"):
     team = Team.objects.get(id=team_id)
     emails = [user_email]  # default case: user sends email just to themselves
@@ -74,7 +75,7 @@ def _export_arcname(file: File) -> str:
     return name
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=False)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=False, queue=Queues.BACKGROUND)
 def create_team_files_zip_task(self, team_id: int) -> int:
     """Build a zip of the team's current files and store it as a DATA_EXPORT file.
 

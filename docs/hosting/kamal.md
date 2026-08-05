@@ -40,6 +40,9 @@ servers:
       - your-server-ip
     options:
       expose: "8000"
+  # Consumes all three task queues. To isolate chat latency from evaluation and background
+  # load, split this into one role per queue with `-Q celery` / `-Q background` /
+  # `-Q evaluations`. See docs/hosting/index.md#task-queues.
   workers:
     hosts:
       - your-server-ip

@@ -4,11 +4,12 @@ from celery.utils.log import get_task_logger
 from apps.events.models import ScheduledMessage, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.experiments.models import ExperimentSession
 from apps.teams.export_service import migrating_team_ids
+from apps.utils.celery import Queues
 
 logger = get_task_logger("ocs.events")
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def enqueue_static_triggers(session_id, trigger_type):
     trigger_ids = _get_static_triggers_to_fire(session_id, trigger_type)
     for trigger_id in trigger_ids:
@@ -31,7 +32,7 @@ def _get_static_triggers_to_fire(session_id: int, trigger_type: StaticTrigger):
     return queryset.values_list("id", flat=True)
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def fire_static_trigger(trigger_id, session_id):
     trigger = StaticTrigger.objects.get(id=trigger_id)
     session = ExperimentSession.objects.get(id=session_id)
@@ -39,7 +40,7 @@ def fire_static_trigger(trigger_id, session_id):
     return triggered
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def enqueue_timed_out_events():
     active_triggers = (
         TimeoutTrigger.objects.published_versions()
@@ -59,7 +60,7 @@ def enqueue_timed_out_events():
                 fire_trigger.delay(trigger.id, session.id)
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def fire_trigger(trigger_id, session_id):
     trigger = TimeoutTrigger.objects.get(id=trigger_id)
     session = ExperimentSession.objects.get(id=session_id)
@@ -67,7 +68,7 @@ def fire_trigger(trigger_id, session_id):
     return triggered
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def poll_scheduled_messages():
     """Polls scheduled messages and triggers those that are due. After triggering, it updates the database with the
     new trigger details for each message."""
@@ -76,7 +77,7 @@ def poll_scheduled_messages():
         message.safe_trigger()
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def retry_scheduled_message(scheduled_message_id: int, attempt_number: int):
     try:
         message = ScheduledMessage.objects.get(id=scheduled_message_id)

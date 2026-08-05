@@ -95,6 +95,10 @@ The `heroku.yml` defines three process types:
 | `worker` | `celery -A config worker -l INFO --pool threads --concurrency 20` | Scale as needed |
 | `beat` | `celery -A config beat -l INFO` | **Always exactly 1** |
 
+The `worker` process consumes all three [task queues](index.md#task-queues). To stop evaluation
+load from delaying chat responses, add dedicated process types with `-Q` and scale them
+independently.
+
 Scale dynos:
 
 ```bash
