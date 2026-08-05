@@ -42,7 +42,10 @@ def clear_expired_sessions():
         )
         if not expired_ids:
             break
-        deleted_count, _ = Session.objects.filter(session_key__in=expired_ids).delete()
+        deleted_count, _ = Session.objects.filter(
+            session_key__in=expired_ids,
+            expire_date__lt=now,
+        ).delete()
         deleted_total += deleted_count
 
     if deleted_total:
