@@ -57,7 +57,9 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
                         "citation_url": document.metadata.get("source"),
                     }
                 )
-                # Confluence serves pages as text, so this is the page as served.
+                # Confluence serves pages as HTML and ConfluenceLoader converts them to
+                # text, so unlike the other loaders these are not the source's own bytes.
+                # There is no rawer representation to hand on: the API has no file to serve.
                 yield SourceDocument(content=document.page_content.encode("utf-8"), metadata=document.metadata)
 
         except Exception as e:
