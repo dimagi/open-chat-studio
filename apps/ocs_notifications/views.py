@@ -13,7 +13,7 @@ from apps.experiments.filters import get_filter_context_data
 from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.ocs_notifications.filters import UserNotificationFilter
-from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent
+from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent, UserNotificationPreferences
 from apps.ocs_notifications.tables import NotificationEventTable, UserNotificationTable
 from apps.ocs_notifications.utils import (
     TIMEDELTA_MAP,
@@ -26,25 +26,46 @@ from apps.utils.tables import render_table_row
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 
+def get_do_not_disturb_context(user) -> dict:
+    """Build the context needed to render the Do Not Disturb widget: the user's teams (for
+    the "silence" modal's team picker) and which of those teams are currently silenced.
+
+    Shared by ``NotificationHome`` and the set/cancel views so all three render the widget
+    from the same up-to-date data after every change.
+    """
+    teams = list(user.teams.all().order_by("name"))
+    silenced_preferences = list(
+        UserNotificationPreferences.objects.filter(user=user, team__in=teams, do_not_disturb_until__gt=timezone.now())
+        .select_related("team")
+        .order_by("team__name")
+    )
+    return {"teams": teams, "silenced_preferences": silenced_preferences}
+
+
 class NotificationHome(LoginRequiredMixin, TemplateView):
     template_name = "generic/object_home.html"
 
     def get_context_data(self, **kwargs):
         table_url = reverse("ocs_notifications:notifications_table")
+        do_not_disturb_context = get_do_not_disturb_context(self.request.user)
 
-        # NOTE: the "Do Not Disturb" toggle was removed from this (now cross-team) page.
-        # UserNotificationPreferences.do_not_disturb_until is per-team, so a single on/off
-        # button no longer makes sense here. Follow-up PR: a modal to set DND for a chosen
-        # set of teams (or "All Teams") + duration, plus a list of currently-silenced teams
-        # with per-team cancel buttons.
         context = {
             "active_tab": "notifications",
             "title": "Notifications",
             "table_url": table_url,
             "enable_search": False,
-            "filter_bar_action": "ocs_notifications/components/mark_all_read_button.html",
+            # Currently-silenced teams can grow to any number/length, so they're rendered in
+            # the (full-width) filter bar row rather than the cramped top-right toolbar --
+            # see notification_filter_bar_actions.html.
+            "filter_bar_action": "ocs_notifications/components/notification_filter_bar_actions.html",
             "mark_all_read_url": reverse("ocs_notifications:mark_all_notifications_read"),
             "actions": [
+                actions.Action(
+                    url_name="ocs_notifications:set_do_not_disturb",
+                    url_factory=lambda url_name, _request, _record, _value: reverse(url_name),
+                    template="ocs_notifications/components/do_not_disturb_button.html",
+                    extra_context=do_not_disturb_context,
+                ),
                 actions.Action(
                     url_name="users:user_profile",
                     url_factory=lambda url_name, _request, _record, _value: reverse(url_name),
@@ -53,6 +74,7 @@ class NotificationHome(LoginRequiredMixin, TemplateView):
                 ),
             ],
         }
+        context.update(do_not_disturb_context)
 
         # Add filter context
         columns = UserNotificationFilter.columns(team=self.request.team, user=self.request.user)
@@ -173,6 +195,49 @@ class UnmuteNotificationView(LoginRequiredMixin, View):
             request,
             "ocs_notifications/components/mute_button.html",
             context={"record": user_notification, "is_muted": False, "muted_until": None},
+        )
+
+
+class SetDoNotDisturbView(LoginRequiredMixin, View):
+    """Silence notifications for a chosen set of the user's teams (or all of them)."""
+
+    def post(self, request, *args, **kwargs):
+        duration_param = request.POST.get("duration")
+        if request.POST.get("all_teams"):
+            teams = list(request.user.teams.all())
+        else:
+            team_ids = request.POST.getlist("teams")
+            teams = list(request.user.teams.filter(id__in=team_ids))
+
+        if duration_param not in TIMEDELTA_MAP:
+            messages.error(request, "Invalid duration for Do Not Disturb")
+        elif not teams:
+            messages.error(request, "Select at least one team, or All Teams, to silence")
+        else:
+            until = timezone.now() + TIMEDELTA_MAP[duration_param].value
+            for team in teams:
+                UserNotificationPreferences.objects.update_or_create(
+                    user=request.user, team=team, defaults={"do_not_disturb_until": until}
+                )
+
+        return render(
+            request,
+            "ocs_notifications/components/do_not_disturb_pills.html",
+            get_do_not_disturb_context(request.user),
+        )
+
+
+class CancelDoNotDisturbView(LoginRequiredMixin, View):
+    """Cancel Do Not Disturb for a single one of the user's teams."""
+
+    def post(self, request, team_id: int, *args, **kwargs):
+        team = get_object_or_404(request.user.teams, id=team_id)
+        UserNotificationPreferences.objects.filter(user=request.user, team=team).update(do_not_disturb_until=None)
+
+        return render(
+            request,
+            "ocs_notifications/components/do_not_disturb_pills.html",
+            get_do_not_disturb_context(request.user),
         )
 
 
