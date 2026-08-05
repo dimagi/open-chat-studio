@@ -444,6 +444,32 @@ def test_create_collection_zip_task_celery_retries_on_zip_creation_error(progres
     retry_mock.assert_called_once()
 
 
+def _dispatched_source_ids(mock_sync_task) -> set[int]:
+    """The source ids the scheduler dispatched, one task message per source."""
+    return {call.args[0] for call in mock_sync_task.delay.call_args_list}
+
+
+@pytest.mark.django_db()
+@patch("apps.documents.tasks.sync_document_source_task")
+def test_auto_sync_dispatches_one_task_per_source(mock_sync_task):
+    """Each source gets its own task message.
+
+    Regression: ``sync_document_source_task.map(...)`` sent a single ``celery.map`` message that
+    synced every source serially in one execution — no parallelism, no per-source isolation, and
+    no real task backing each item's retry/lock semantics.
+    """
+    index = CollectionFactory.create(is_index=True)
+    sources = [
+        DocumentSourceFactory.create(collection=index, source_type="github", auto_sync_enabled=True) for _ in range(3)
+    ]
+
+    sync_all_document_sources_task()
+
+    mock_sync_task.map.assert_not_called()
+    assert mock_sync_task.delay.call_count == 3
+    assert _dispatched_source_ids(mock_sync_task) == {source.id for source in sources}
+
+
 @pytest.mark.django_db()
 @patch("apps.documents.tasks.sync_document_source_task")
 def test_auto_sync_excludes_versioned_collections(mock_sync_task):
@@ -466,8 +492,7 @@ def test_auto_sync_excludes_versioned_collections(mock_sync_task):
 
     sync_all_document_sources_task()
 
-    dispatched_ids = set(mock_sync_task.map.call_args.args[0])
-    assert dispatched_ids == {working_source.id}
+    assert _dispatched_source_ids(mock_sync_task) == {working_source.id}
 
 
 # ---------------------------------------------------------------------------
@@ -607,8 +632,7 @@ def test_auto_sync_skips_fresh_lock_but_includes_stale(mock_sync_task):
 
     sync_all_document_sources_task()
 
-    dispatched_ids = set(mock_sync_task.map.call_args.args[0])
-    assert dispatched_ids == {unlocked.id, stale.id, no_start_time.id}
+    assert _dispatched_source_ids(mock_sync_task) == {unlocked.id, stale.id, no_start_time.id}
 
 
 @pytest.mark.django_db()
