@@ -58,7 +58,7 @@ As an alternative to running Django and Celery on the host, you can run the full
 | `redis` | Redis (used as Celery broker and result backend) |
 | `migrate` | Runs `manage.py migrate` on startup, then exits |
 | `web` | Django dev server with auto-reload (`runserver`) |
-| `celery_worker` | Celery worker for background tasks |
+| `celery_worker` | Celery worker for background tasks (consumes all [task queues](../hosting/index.md#task-queues)) |
 | `celery_beat` | Celery Beat scheduler (uses `django_celery_beat` database scheduler) |
 
 ## Useful commands

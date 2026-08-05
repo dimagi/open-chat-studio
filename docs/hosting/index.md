@@ -42,6 +42,36 @@ flowchart TD
 | `celery_worker` | `celery -A config worker -l INFO --pool threads --concurrency 20` | Handles all async tasks (LLM calls, messaging, evaluations). |
 | `celery_beat` | `celery -A config beat -l INFO` | Scheduled/periodic tasks. **Run exactly one instance.** |
 
+## Task Queues
+
+Tasks are routed to one of three queues:
+
+| Queue | Contents |
+|-------|----------|
+| `celery` | Latency-sensitive chat path — inbound message handlers, event triggers, outbound bot messages. Also the default queue. |
+| `background` | Long-running work — document indexing, exports, CSV imports, cleanup jobs, and evaluation coordination. |
+| `evaluations` | Evaluation fan-out, which can run hundreds of LLM calls per run. |
+
+**The single `celery_worker` command above consumes all three**, so a deployment needs no changes
+to keep working. A worker started without `-Q` consumes every declared queue.
+
+Splitting them is an optional scaling step. It's worth doing once evaluation or indexing load
+starts delaying chat responses, because it stops a backed-up evaluation run from occupying every
+worker thread. Replace the single worker with one process per queue:
+
+```bash
+celery -A config worker -l INFO --pool threads --concurrency 20 -Q celery
+celery -A config worker -l INFO --pool threads --concurrency 10 -Q background
+celery -A config worker -l INFO --pool threads --concurrency 20 -Q evaluations
+```
+
+!!! warning "Every queue needs a consumer"
+
+    Once you pass `-Q`, each queue needs at least one running worker or its tasks will sit
+    unprocessed. The `/status/` healthcheck reports `No worker for Celery task queue <name>` when
+    one is unconsumed. To roll back, drop the `-Q` flags — workers go straight back to consuming
+    everything.
+
 ## Docker Image
 
 The production Dockerfile is a multi-stage build:
