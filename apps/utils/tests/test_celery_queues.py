@@ -49,6 +49,20 @@ def _declared_queue(decorator: ast.expr) -> str | None:
     return None
 
 
+def _tasks_in_module(path: Path) -> list[tuple[str, str, str | None]]:
+    """Every task-decorated function defined in a single module."""
+    found = []
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if _is_task_decorator(decorator):
+                location = f"{path.relative_to(APPS_DIR.parent)}:{node.lineno}"
+                found.append((location, node.name, _declared_queue(decorator)))
+    return found
+
+
 @cache
 def _source_tasks() -> list[tuple[str, str, str | None]]:
     """Every task defined under ``apps/`` as ``(location, function name, declared queue)``.
@@ -60,14 +74,7 @@ def _source_tasks() -> list[tuple[str, str, str | None]]:
     for path in sorted(APPS_DIR.rglob("*.py")):
         if "migrations" in path.parts:
             continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
-            for decorator in node.decorator_list:
-                if _is_task_decorator(decorator):
-                    location = f"{path.relative_to(APPS_DIR.parent)}:{node.lineno}"
-                    found.append((location, node.name, _declared_queue(decorator)))
+        found.extend(_tasks_in_module(path))
     return found
 
 
