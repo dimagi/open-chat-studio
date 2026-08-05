@@ -258,7 +258,10 @@ def sync_all_document_sources_task():
         .values_list("id", flat=True)
     )
 
-    sync_document_source_task.map(auto_sources).delay()
+    # `.map()` builds a `celery.map` builtin task whose own routing options are used, not
+    # `sync_document_source_task`'s decorator — pass `queue=` explicitly or this silently
+    # falls through to the default (chat) queue instead of Queues.BACKGROUND.
+    sync_document_source_task.map(auto_sources).apply_async(queue=Queues.BACKGROUND)
 
 
 @shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)

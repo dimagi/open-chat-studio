@@ -17,6 +17,7 @@ Two complementary checks:
 """
 
 import ast
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -48,8 +49,13 @@ def _declared_queue(decorator: ast.expr) -> str | None:
     return None
 
 
+@cache
 def _source_tasks() -> list[tuple[str, str, str | None]]:
-    """Every task defined under ``apps/`` as ``(location, function name, declared queue)``."""
+    """Every task defined under ``apps/`` as ``(location, function name, declared queue)``.
+
+    Cached: several tests below each need this, and re-parsing the whole ``apps/`` tree per
+    test is pure waste since the source doesn't change within a test run.
+    """
     found = []
     for path in sorted(APPS_DIR.rglob("*.py")):
         if "migrations" in path.parts:
@@ -65,7 +71,11 @@ def _source_tasks() -> list[tuple[str, str, str | None]]:
     return found
 
 
+@cache
 def _registered_tasks() -> dict[str, object]:
+    """Cached for the same reason as ``_source_tasks``: rebuilt on every call otherwise,
+    including once per parametrized case in ``test_router_sends_task_to_expected_queue``.
+    """
     current_app.loader.import_default_modules()
     return {name: task for name, task in current_app.tasks.items() if name.startswith("apps.")}
 
@@ -123,6 +133,7 @@ def test_all_queues_are_declared_in_settings():
         # can never block the tasks responsible for draining it.
         pytest.param("apps.evaluations.tasks.coordinate_evaluation_runs", Queues.BACKGROUND, id="eval-coordinator"),
         pytest.param("apps.evaluations.tasks.drive_evaluation_run", Queues.BACKGROUND, id="eval-driver"),
+        pytest.param("apps.evaluations.tasks.finalize_evaluation_run", Queues.BACKGROUND, id="eval-finalizer"),
     ],
 )
 def test_router_sends_task_to_expected_queue(task_name, expected_queue):
