@@ -12,12 +12,12 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from health_check.views import HealthCheckView
-from redis.asyncio import Redis as RedisClient
 
 from apps.teams.decorators import check_superuser_team_access, login_and_team_required
 from apps.teams.models import Membership, Team
 from apps.teams.roles import is_member
 from apps.web.admin import ADMIN_SLUG
+from apps.web.health_checks import CHECK_SUBSETS
 from apps.web.search import get_searchable_models
 from apps.web.superuser_utils import apply_temporary_superuser_access, remove_temporary_superuser_access
 
@@ -30,17 +30,17 @@ def team_home(request, team_slug):
 
 
 class HealthCheck(HealthCheckView):
-    checks = [
-        "health_check.checks.Database",
-        "health_check.checks.Cache",
-        "health_check.contrib.celery.Ping",
-        ("health_check.contrib.redis.Redis", {"client_factory": lambda: RedisClient.from_url(settings.REDIS_URL)}),
-    ]
+    checks = CHECK_SUBSETS["general"]
 
-    async def get(self, request, *args, **kwargs):
+    async def get(self, request, *args, subset=None, **kwargs):
         tokens = settings.HEALTH_CHECK_TOKENS
         if tokens and request.GET.get("token") not in tokens:
             raise Http404
+        if subset is not None:
+            try:
+                self.checks = CHECK_SUBSETS[subset]
+            except KeyError:
+                raise Http404 from None
         return await super().get(request, *args, **kwargs)
 
 

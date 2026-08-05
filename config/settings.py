@@ -934,16 +934,6 @@ SLACK_ENABLED = SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET
 # Health checks
 # Tokens used to secure the /status endpoint. These should be kept secret
 HEALTH_CHECK_TOKENS = env.list("HEALTH_CHECK_TOKENS", default=[])
-HEALTH_CHECK = {
-    "SUBSETS": {
-        "general": ["Cache backend: default", "DatabaseBackend", "RedisHealthCheck"],
-        "celery": ["CeleryHealthCheckCelery"],
-    },
-}
-
-# increase from default (3)
-HEALTHCHECK_CELERY_QUEUE_TIMEOUT = 10
-HEALTHCHECK_CELERY_RESULT_TIMEOUT = 10
 
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default="")
 
