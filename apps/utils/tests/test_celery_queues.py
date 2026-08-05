@@ -49,6 +49,11 @@ def _declared_queue(decorator: ast.expr) -> str | None:
     return None
 
 
+def _task_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.expr | None:
+    """The task decorator on this function definition, if it has one."""
+    return next((decorator for decorator in node.decorator_list if _is_task_decorator(decorator)), None)
+
+
 def _tasks_in_module(path: Path) -> list[tuple[str, str, str | None]]:
     """Every task-decorated function defined in a single module."""
     found = []
@@ -56,10 +61,11 @@ def _tasks_in_module(path: Path) -> list[tuple[str, str, str | None]]:
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        for decorator in node.decorator_list:
-            if _is_task_decorator(decorator):
-                location = f"{path.relative_to(APPS_DIR.parent)}:{node.lineno}"
-                found.append((location, node.name, _declared_queue(decorator)))
+        decorator = _task_decorator(node)
+        if decorator is None:
+            continue
+        location = f"{path.relative_to(APPS_DIR.parent)}:{node.lineno}"
+        found.append((location, node.name, _declared_queue(decorator)))
     return found
 
 
