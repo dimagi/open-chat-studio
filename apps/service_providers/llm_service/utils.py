@@ -12,6 +12,7 @@ from apps.chat.exceptions import UserReportableError
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
 from apps.service_providers.llm_service.image_types import DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES, image_type_names
+from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 logger = logging.getLogger("ocs.llm_service")
 
@@ -143,7 +144,7 @@ def format_multimodal_input(
         if block:
             parts.append(block)
     if not parts:
-        parts.append({"type": "text", "text": "[empty message]"})
+        parts.append({"type": "text", "text": EMPTY_MESSAGE_PLACEHOLDER})
     return HumanMessage(content=parts)
 
 
