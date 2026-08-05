@@ -258,10 +258,17 @@ def sync_all_document_sources_task():
         .values_list("id", flat=True)
     )
 
-    # `.map()` builds a `celery.map` builtin task whose own routing options are used, not
-    # `sync_document_source_task`'s decorator — pass `queue=` explicitly or this silently
-    # falls through to the default (chat) queue instead of Queues.BACKGROUND.
-    sync_document_source_task.map(auto_sources).apply_async(queue=Queues.BACKGROUND)
+    # Dispatch one message per source rather than `sync_document_source_task.map(...)`: the
+    # `celery.map` builtin calls the task inline in a list comprehension, so every source would
+    # be synced serially inside a single task execution — no parallelism across the worker pool,
+    # no isolation (one source raising aborts every source after it), and no real per-item task
+    # backing the retry/timeout and `self.request.id` sync lock.
+    dispatched = 0
+    for source_id in auto_sources.iterator(100):
+        sync_document_source_task.delay(source_id)
+        dispatched += 1
+
+    logger.info("Dispatched auto-sync for %s document sources", dispatched)
 
 
 @shared_task(queue=Queues.BACKGROUND)
