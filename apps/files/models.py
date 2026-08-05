@@ -1,5 +1,3 @@
-import mimetypes
-import pathlib
 from datetime import datetime
 
 from django.conf import settings
@@ -9,7 +7,7 @@ from django.urls import reverse
 from pgvector.django import HalfVectorField
 
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.files.content_type import detect_content_type, detect_content_type_from_file
+from apps.files.content_type import detect_content_type, detect_content_type_from_file, ensure_extension
 from apps.generics.chips import Chip
 from apps.service_providers.file_limits import FILE_SENDABILITY_CHECKERS
 from apps.teams.models import BaseTeamModel
@@ -107,10 +105,7 @@ class File(BaseTeamModel, VersionsMixin):
         if not content_type:
             content_type = detect_content_type(content or b"", filename=filename)
 
-        if content_type and not pathlib.Path(filename).suffix:
-            extension = mimetypes.guess_extension(content_type)
-            if extension:
-                filename = f"{filename}{extension}"
+        filename = ensure_extension(filename, content_type)
 
         new_file = File(
             name=filename,
