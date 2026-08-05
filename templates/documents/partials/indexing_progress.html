@@ -13,7 +13,19 @@
        hx-swap="outerHTML"
      {% endif %}>
   {% if progress_total %}
-    <div class="flex items-center gap-2 text-sm text-base-content/70" role="status" aria-live="polite">
+    {% comment %}
+      progressbar rather than a live region: this element is what gets replaced on every
+      poll, and a live region has to already be in the DOM when its content changes to be
+      announced at all -- so announcements would be unreliable, and the ones that did fire
+      would repeat the same unchanged count every 5s. A progressbar carries its value in
+      aria-valuenow/aria-valuetext, which assistive tech reports on demand instead.
+    {% endcomment %}
+    <div class="flex items-center gap-2 text-sm text-base-content/70"
+         role="progressbar"
+         aria-valuemin="0"
+         aria-valuemax="{{ progress_total }}"
+         aria-valuenow="{{ progress_indexed }}"
+         aria-valuetext="{{ progress_indexed }} of {{ progress_total }} files indexed{% if progress_failed %}, {{ progress_failed }} failed{% endif %}">
       {% if progress_outstanding %}
         <span class="loading loading-spinner loading-xs"></span>
       {% endif %}
