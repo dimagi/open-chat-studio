@@ -19,7 +19,7 @@ from apps.documents.models import (
 from apps.documents.source_loaders.base import SourceDocument, SyncResult
 from apps.documents.source_loaders.registry import create_loader
 from apps.documents.utils import bulk_delete_collection_files
-from apps.files.content_type import detect_content_type
+from apps.files.content_type import detect_content_type, ensure_extension
 from apps.files.models import File, FilePurpose
 
 _EXTERNAL_ID_MAX_LENGTH = 255
@@ -303,13 +303,22 @@ class DocumentSourceManager:
         what is stored.
         """
         filename = self._extract_filename(document, identifier)
+        content_type = detect_content_type(document.content, filename=filename)
+        # Match what ``File.create`` does for a new file, or a source document with no
+        # extension would gain one on create and lose it again on the next update.
+        filename = ensure_extension(filename, content_type)
         content_file = ContentFile(document.content, name=filename)
         existing_file = collection_file.file
         existing_file.name = filename
         existing_file.file = content_file
         existing_file.content_size = content_file.size
-        existing_file.content_type = detect_content_type(document.content, filename=filename)
+        existing_file.content_type = content_type
         existing_file.metadata = document.metadata
+        # Whatever was uploaded to a remote index describes the old bytes -- a different
+        # format entirely, now that the source's own file is what gets stored. Clearing the
+        # id makes the next index run re-upload rather than trust the stale copy.
+        existing_file.external_id = ""
+        existing_file.external_source = ""
         existing_file.save()
 
         collection_file.status = FileStatus.PENDING

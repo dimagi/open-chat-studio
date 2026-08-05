@@ -24,6 +24,7 @@ from apps.documents.models import (
 )
 from apps.documents.source_loaders.base import BaseDocumentLoader, SourceDocument, SyncResult
 from apps.documents.source_loaders.json_collection import JSONCollectionLoader
+from apps.files.models import File
 from apps.utils.factories.documents import CollectionFactory, DocumentSourceFactory
 
 PDF_BYTES = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
@@ -158,6 +159,60 @@ class TestDocumentSourceManager:
         assert file.file.read() == PDF_BYTES
         assert file.content_type == "application/pdf"
         assert file.content_size == len(PDF_BYTES)
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_update_discards_the_remote_copy_of_the_old_bytes(self, create_loader, collection, document_source):
+        """An update can change the format outright, not just the text.
+
+        The remote index skips re-uploading a file whose external id still resolves, so
+        keeping the id would leave the previous bytes indexed under the new content type.
+        """
+        url = "https://example.com/doc.pdf"
+        create_loader.return_value = MockLoader(
+            collection,
+            [SourceDocument(content=b"just text", metadata={"source": url, "sha": "v1", "source_type": "test"})],
+        )
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+        manager.sync_collection()
+
+        file = CollectionFile.objects.get(collection=collection).file
+        File.objects.filter(id=file.id).update(external_id="openai-file-123", external_source="openai")
+
+        create_loader.return_value = MockLoader(
+            collection,
+            [SourceDocument(content=PDF_BYTES, metadata={"source": url, "sha": "v2", "source_type": "test"})],
+        )
+        manager.sync_collection()
+
+        file.refresh_from_db()
+        assert file.external_id == ""
+        assert file.external_source == ""
+
+    @patch("apps.documents.document_source_service.create_loader")
+    def test_update_keeps_the_extension_create_added(self, create_loader, collection, document_source):
+        """``File.create`` appends an extension when the source gives none, and the reader
+        and download paths fall back on it. An update must not strip it back off."""
+        url = "https://example.com/files/report"
+        create_loader.return_value = MockLoader(
+            collection,
+            [SourceDocument(content=PDF_BYTES, metadata={"source": url, "sha": "v1", "source_type": "test"})],
+        )
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+        manager.sync_collection()
+
+        file = CollectionFile.objects.get(collection=collection).file
+        assert file.name == "report.pdf"
+
+        create_loader.return_value = MockLoader(
+            collection,
+            [SourceDocument(content=PDF_BYTES, metadata={"source": url, "sha": "v2", "source_type": "test"})],
+        )
+        manager.sync_collection()
+
+        file.refresh_from_db()
+        assert file.name == "report.pdf"
 
     @patch("apps.documents.document_source_service.create_loader")
     def test_empty_payload_is_recorded_as_failed(self, create_loader, collection, document_source):
