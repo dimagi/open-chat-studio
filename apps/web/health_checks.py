@@ -24,25 +24,26 @@ class CeleryQueueCheck(HealthCheck):
     timeout: datetime.timedelta = dataclasses.field(default=datetime.timedelta(seconds=1), repr=False)
 
     def run(self):
+        timeout = self.timeout.total_seconds()
+
         try:
-            ping_result = self.app.control.ping(timeout=self.timeout.total_seconds())
+            active_queues = self.app.control.inspect(timeout=timeout).active_queues() or {}
         except OSError as e:
             raise ServiceUnavailable("IOError") from e
 
-        if not ping_result:
-            raise ServiceUnavailable("Celery workers unavailable")
-
-        active_queues = self.app.control.inspect(list(self._active_workers(ping_result))).active_queues() or {}
-        queue_names = {queue["name"] for queues in active_queues.values() for queue in queues}
-        if self.queue not in queue_names:
+        workers_on_queue = [
+            worker for worker, queues in active_queues.items() if any(queue["name"] == self.queue for queue in queues)
+        ]
+        if not workers_on_queue:
             raise ServiceUnavailable(f"No worker for Celery queue {self.label!r} ({self.queue})")
 
-    def _active_workers(self, ping_result):
-        for result in ping_result:
-            worker, response = next(iter(result.items()))
-            if response != self.CORRECT_PING_RESPONSE:
-                raise ServiceUnavailable(f"Celery worker {worker} response was incorrect")
-            yield worker
+        try:
+            ping_result = self.app.control.ping(destination=workers_on_queue, timeout=timeout) or []
+        except OSError as e:
+            raise ServiceUnavailable("IOError") from e
+
+        if not any(response == self.CORRECT_PING_RESPONSE for reply in ping_result for response in reply.values()):
+            raise ServiceUnavailable(f"No worker for Celery queue {self.label!r} ({self.queue})")
 
 
 def _general_checks():

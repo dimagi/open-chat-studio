@@ -11,61 +11,82 @@ from apps.web import views
 from apps.web.health_checks import CHECK_SUBSETS, CeleryQueueCheck, _queue_check
 
 
-def _make_check(ping_result=None, active_queues=None, ping_side_effect=None):
+def _make_check(ping_result=None, active_queues=None, ping_side_effect=None, active_queues_side_effect=None):
     app = MagicMock()
     if ping_side_effect is not None:
         app.control.ping.side_effect = ping_side_effect
     else:
         app.control.ping.return_value = ping_result
-    app.control.inspect.return_value.active_queues.return_value = active_queues
+    if active_queues_side_effect is not None:
+        app.control.inspect.return_value.active_queues.side_effect = active_queues_side_effect
+    else:
+        app.control.inspect.return_value.active_queues.return_value = active_queues
     return CeleryQueueCheck(label="chat", queue="celery", app=app)
 
 
 class TestCeleryQueueCheck:
-    def test_passes_when_worker_consumes_the_queue(self):
-        check = _make_check(
-            ping_result=[{"worker1": {"ok": "pong"}}],
-            active_queues={"worker1": [{"name": "celery"}]},
-        )
+    @pytest.mark.parametrize(
+        "active_queues",
+        [
+            pytest.param({"worker1": [{"name": "celery"}]}, id="single_worker_on_queue"),
+            pytest.param(
+                {"worker1": [{"name": "celery"}], "worker2": [{"name": "some-other-queue"}]},
+                id="ping_ignores_worker_not_on_queue",
+            ),
+        ],
+    )
+    def test_passes_and_scopes_ping_to_workers_on_the_queue(self, active_queues):
+        check = _make_check(ping_result=[{"worker1": {"ok": "pong"}}], active_queues=active_queues)
 
         check.run()
 
-        check.app.control.inspect.assert_called_once_with(["worker1"])
+        check.app.control.ping.assert_called_once_with(destination=["worker1"], timeout=1.0)
 
-    def test_raises_when_ping_returns_no_workers(self):
-        check = _make_check(ping_result=[])
+    @pytest.mark.parametrize(
+        ("check_kwargs", "match"),
+        [
+            pytest.param(
+                {"active_queues_side_effect": OSError("boom")},
+                "IOError",
+                id="active_queues_lookup_raises_oserror",
+            ),
+            pytest.param(
+                {"active_queues": None},
+                "No worker for Celery queue",
+                id="active_queues_is_empty",
+            ),
+            pytest.param(
+                {
+                    "active_queues": {"worker1": [{"name": "some-other-queue"}]},
+                    "ping_result": [{"worker1": {"ok": "pong"}}],
+                },
+                r"No worker for Celery queue 'chat' \(celery\)",
+                id="no_worker_consumes_the_queue",
+            ),
+            pytest.param(
+                {"active_queues": {"worker1": [{"name": "celery"}]}, "ping_side_effect": OSError("boom")},
+                "IOError",
+                id="ping_raises_oserror",
+            ),
+            pytest.param(
+                {"active_queues": {"worker1": [{"name": "celery"}]}, "ping_result": []},
+                r"No worker for Celery queue 'chat' \(celery\)",
+                id="no_worker_responds_to_ping",
+            ),
+            pytest.param(
+                {
+                    "active_queues": {"worker1": [{"name": "celery"}]},
+                    "ping_result": [{"worker1": {"unexpected": "value"}}],
+                },
+                r"No worker for Celery queue 'chat' \(celery\)",
+                id="worker_on_queue_ping_response_incorrect",
+            ),
+        ],
+    )
+    def test_raises_when_unhealthy(self, check_kwargs, match):
+        check = _make_check(**check_kwargs)
 
-        with pytest.raises(ServiceUnavailable, match="Celery workers unavailable"):
-            check.run()
-
-    def test_raises_when_ping_raises_oserror(self):
-        check = _make_check(ping_side_effect=OSError("boom"))
-
-        with pytest.raises(ServiceUnavailable, match="IOError"):
-            check.run()
-
-    def test_raises_when_worker_ping_response_is_incorrect(self):
-        check = _make_check(ping_result=[{"worker1": {"unexpected": "value"}}])
-
-        with pytest.raises(ServiceUnavailable, match="worker1.*response was incorrect"):
-            check.run()
-
-    def test_raises_when_no_worker_consumes_the_queue(self):
-        check = _make_check(
-            ping_result=[{"worker1": {"ok": "pong"}}],
-            active_queues={"worker1": [{"name": "some-other-queue"}]},
-        )
-
-        with pytest.raises(ServiceUnavailable, match=r"No worker for Celery queue 'chat' \(celery\)"):
-            check.run()
-
-    def test_raises_when_active_queues_is_empty(self):
-        check = _make_check(
-            ping_result=[{"worker1": {"ok": "pong"}}],
-            active_queues=None,
-        )
-
-        with pytest.raises(ServiceUnavailable, match="No worker for Celery queue"):
+        with pytest.raises(ServiceUnavailable, match=match):
             check.run()
 
 
