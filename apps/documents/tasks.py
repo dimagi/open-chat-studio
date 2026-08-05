@@ -264,8 +264,8 @@ def sync_all_document_sources_task():
     sync_document_source_task.map(auto_sources).apply_async(queue=Queues.BACKGROUND)
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
-def async_create_collection_version(self, collection_id: int):
+@shared_task(queue=Queues.BACKGROUND)
+def async_create_collection_version(collection_id: int):
     try:
         collection = Collection.objects.get(id=collection_id)
         with current_team(collection.team):
@@ -404,7 +404,6 @@ _ZIP_MAX_RETRIES = 3
 
 @shared_task(
     bind=True,
-    base=TaskbadgerTask,
     acks_late=True,
     ignore_result=False,
     max_retries=_ZIP_MAX_RETRIES,

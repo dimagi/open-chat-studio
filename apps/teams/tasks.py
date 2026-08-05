@@ -8,7 +8,6 @@ from celery import shared_task
 from celery_progress.backend import ProgressRecorder
 from django.core.files import File as DjangoFile
 from django.utils import timezone
-from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.files.models import File, FilePurpose
 from apps.teams.invitations import send_invitation_accepted
@@ -75,7 +74,7 @@ def _export_arcname(file: File) -> str:
     return name
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=False, queue=Queues.BACKGROUND)
+@shared_task(bind=True, ignore_result=False, queue=Queues.BACKGROUND)
 def create_team_files_zip_task(self, team_id: int) -> int:
     """Build a zip of the team's current files and store it as a DATA_EXPORT file.
 

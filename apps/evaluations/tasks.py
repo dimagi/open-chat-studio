@@ -15,7 +15,6 @@ from django.db.models import Count, Exists, Max, OuterRef, Prefetch, QuerySet
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger import StatusEnum
-from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assessments.score_writers import write_scores_from_evaluation_result
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -697,7 +696,7 @@ def _create_message_history(chat: Chat, history: list[dict]) -> None:
     ChatMessage.objects.bulk_create(history_messages)
 
 
-@shared_task(base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(queue=Queues.BACKGROUND)
 def cleanup_old_evaluation_data() -> None:
     """Delete ExperimentSessions that were created during evaluation runs and
     are older than one week.
@@ -720,7 +719,7 @@ def cleanup_old_evaluation_data() -> None:
     logger.info(f"Cleanup completed: deleted {deleted_chats[0]} chat records and associated evaluation sessions")
 
 
-@shared_task(base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(queue=Queues.BACKGROUND)
 def cleanup_old_preview_evaluation_runs() -> None:
     """Delete preview evaluation runs older than 1 day"""
     one_day_ago = timezone.now() - timedelta(days=1)
@@ -735,7 +734,7 @@ def cleanup_old_preview_evaluation_runs() -> None:
     logger.info(f"Cleanup completed: deleted {deleted_preview_runs[0]} preview evaluation runs")
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: int) -> dict:
     """
     Process CSV upload for dataset asynchronously with progress tracking.
@@ -777,7 +776,7 @@ def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: i
         return {"success": False, "error": str(e)}
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def create_dataset_from_csv_task(
     self,
     dataset_id: int,
@@ -1112,7 +1111,7 @@ def process_csv_rows(
     return stats
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def upload_evaluation_run_results_task(
     self, evaluation_run_id: int, csv_data: list[dict], team_id: int, column_mappings: dict | None = None
 ) -> dict:
@@ -1265,7 +1264,7 @@ def process_evaluation_results_csv_rows(
     return stats
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def create_dataset_from_session_messages_task(
     self,
     dataset_id: int,
@@ -1369,7 +1368,7 @@ def _sessions_for_session_mode_clone(
     return ExperimentSession.objects.filter(team=dataset.team, external_id__in=session_ids)
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def create_dataset_from_sessions_task(
     self,
     dataset_id: int,
@@ -1477,7 +1476,7 @@ def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet
     )
 
 
-@shared_task(base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(queue=Queues.BACKGROUND)
 def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int) -> dict:
     """
     Async export of the most recent evaluation result for each dataset item,

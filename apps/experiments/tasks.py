@@ -28,7 +28,7 @@ from apps.utils.taskbadger import update_taskbadger_data
 logger = get_task_logger("ocs.experiments")
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def async_export_chat(self, experiment_id: int, query_params: str, time_zone) -> dict:
     # The filters need a QueryDict (multi-value params, `.getlist()`), but Celery's JSON
     # serializer would flatten one into a plain dict, so the caller passes the raw query
@@ -61,9 +61,9 @@ def async_export_chat(self, experiment_id: int, query_params: str, time_zone) ->
     return {"file_id": file_obj.id}
 
 
-@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(queue=Queues.BACKGROUND)
 def async_create_experiment_version(
-    self, experiment_id: int, version_description: str | None = None, make_default: bool = False
+    experiment_id: int, version_description: str | None = None, make_default: bool = False
 ):
     try:
         experiment = Experiment.objects.prefetch_related("pipeline").get(id=experiment_id)

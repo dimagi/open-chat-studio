@@ -7,7 +7,6 @@ from django.db import transaction
 from django.db.models import F
 from django.http import QueryDict
 from django.utils import timezone
-from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.evaluations.models import (
     AutoPopulationRunStatus,
@@ -112,7 +111,7 @@ def _ingest_rule(rule: DatasetAutoPopulationRule) -> list[int]:
     return appended
 
 
-@shared_task(base=TaskbadgerTask, queue=Queues.BACKGROUND)
+@shared_task(queue=Queues.BACKGROUND)
 def auto_populate_eval_datasets():
     """Periodic task: walk enabled DatasetAutoPopulationRules and ingest matches.
 
