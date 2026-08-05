@@ -22,6 +22,25 @@ logger = logging.getLogger("ocs.index_manager")
 Vector = list[float]
 EmbeddingInputType = Literal["document", "query"]
 
+NO_EXTRACTABLE_TEXT = "No text could be extracted from this file"
+
+
+def _reads_as_empty(file: File) -> bool:
+    """True only when the file was read successfully and yielded no text.
+
+    A read that raises counts as *unknown*, not empty: a remote provider indexes formats
+    our readers do not, so an unreadable file is left for it to judge rather than failed
+    here on our own inability to parse it.
+    """
+    try:
+        return not file.read_content().strip()
+    except Exception:
+        logger.info(
+            "Could not read file locally; deferring to the remote index",
+            extra={"file_id": file.id},
+        )
+        return False
+
 
 class IndexManager(metaclass=ABCMeta):
     @abstractmethod
@@ -122,12 +141,18 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
         uploaded_files: list[File] = []
         for collection_file in collection_files:
             file = collection_file.file
+            if _reads_as_empty(file):
+                # Linking succeeds for a file with no text in it, so the provider's verdict
+                # alone would leave this COMPLETED with nothing indexed -- indistinguishable
+                # from a file that indexed cleanly. Source files are stored unparsed
+                # (ADR-0051), so a scanned or image-only document reaches this point.
+                self._fail(collection_file, FileReadException(NO_EXTRACTABLE_TEXT))
+                continue
             try:
                 self._ensure_remote_file_exists(file)
                 uploaded_files.append(file)
-            except FileUploadError:
-                collection_file.status = FileStatus.FAILED
-                collection_file.save(update_fields=["status"])
+            except FileUploadError as e:
+                self._fail(collection_file, e)
 
         try:
             self.link_files_to_remote_index(
@@ -136,13 +161,21 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
                 chunk_overlap=chunk_overlap,
             )
             CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.COMPLETED
+                # A reason left by an earlier attempt describes an outcome that no longer holds.
+                status=FileStatus.COMPLETED,
+                failure_reason="",
             )
-        except UnableToLinkFileException:
+        except UnableToLinkFileException as e:
             logger.exception("Failed to link files to remote index")
             CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.FAILED
+                status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
             )
+
+    @staticmethod
+    def _fail(collection_file: CollectionFile, exc: Exception):
+        collection_file.status = FileStatus.FAILED
+        collection_file.failure_reason = format_failure_reason(exc)
+        collection_file.save(update_fields=["status", "failure_reason"])
 
     def _ensure_remote_file_exists(self, file: File):
         try:
@@ -289,7 +322,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                     # document reaches indexing and yields nothing. Without this, it would be
                     # marked COMPLETED with no embeddings -- indistinguishable from a file that
                     # actually indexed.
-                    raise FileReadException("No text could be extracted from this file")
+                    raise FileReadException(NO_EXTRACTABLE_TEXT)
                 text_chunks = self.chunk_file(document_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 for idx, chunk in enumerate(text_chunks):
                     safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility

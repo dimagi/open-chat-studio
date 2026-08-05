@@ -327,10 +327,11 @@ class TestRemoteIndexManager:
             yield manager
 
     def test_add_files_success(self, remote_collection_index, index_manager):
-        file = FileFactory.create(external_id="test_file_id_3")
+        file = FileFactory.create(external_id="test_file_id_3", file__data=b"test content")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
+        collection_file.status = FileStatus.FAILED
+        collection_file.failure_reason = "ValueError: stale reason from the previous attempt"
         collection_file.save()
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
@@ -338,9 +339,63 @@ class TestRemoteIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
+        # A reason left by an earlier attempt describes an outcome that no longer holds.
+        assert collection_file.failure_reason == ""
+
+    def test_file_with_no_extractable_text_is_failed_without_uploading(self, remote_collection_index, index_manager):
+        """The provider accepts a text-free file and reports nothing wrong.
+
+        Source files are stored unparsed, so an image-only PDF reaches indexing. Linking it
+        would leave it COMPLETED with nothing indexed, which no one can tell apart from a
+        file that indexed cleanly.
+        """
+        file = FileFactory.create(file__data=b"   \n  ")
+        remote_collection_index.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        collection_file.status = FileStatus.PENDING
+        collection_file.save()
+
+        with mock.patch.object(index_manager, "upload_file_to_remote") as upload:
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+        assert "no text" in collection_file.failure_reason.lower()
+        upload.assert_not_called()
+
+    def test_unreadable_file_is_left_for_the_remote_index_to_judge(self, remote_collection_index, index_manager):
+        """The provider indexes formats our readers do not, so a failed local read is not a
+        verdict on the file -- only an empty successful read is."""
+        file = FileFactory.create(file__data=b"content", external_id="test_file_id_4")
+        remote_collection_index.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        collection_file.status = FileStatus.PENDING
+        collection_file.save()
+
+        with mock.patch.object(type(file), "read_content", side_effect=Exception("no reader for this type")):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.COMPLETED
+
+    def test_one_text_free_file_does_not_stop_the_batch(self, remote_collection_index, index_manager):
+        good = FileFactory.create(file__data=b"real content", external_id="good-id")
+        text_free = FileFactory.create(file__data=b"")
+        for file in (good, text_free):
+            remote_collection_index.files.add(file)
+        collection_files = CollectionFile.objects.filter(collection=remote_collection_index, file__in=[good, text_free])
+        collection_files.update(status=FileStatus.PENDING)
+
+        index_manager.add_files(collection_files.order_by("file_id").iterator(1))
+
+        statuses = {cf.file_id: cf.status for cf in collection_files}
+        assert statuses[good.id] == FileStatus.COMPLETED
+        assert statuses[text_free.id] == FileStatus.FAILED
 
     def test_add_files_with_file_upload_failures(self, remote_collection_index, index_manager):
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"test content")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
         collection_file.status = FileStatus.PENDING
@@ -357,7 +412,7 @@ class TestRemoteIndexManager:
         assert collection_file.status == FileStatus.FAILED
 
     def test_add_files_with_linking_failures(self, remote_collection_index, index_manager):
-        file = FileFactory.create(external_id="test_file_id")
+        file = FileFactory.create(external_id="test_file_id", file__data=b"test content")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
         collection_file.status = FileStatus.PENDING
