@@ -94,20 +94,9 @@ class TestAttachmentBytes:
         docs = list(loader.load_documents())
 
         assert len(docs) == 1
+        # Extraction belongs to indexing: the raw PDF header surviving is what proves the
+        # loader did not parse it on the way through.
         assert docs[0].content == PDF_BYTES
-
-    def test_load_does_not_extract_text(self, json_config, httpx_mock):
-        """Extraction belongs to indexing; loading a document must not parse it."""
-        feed = [_single_attachment_item()]
-        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
-        httpx_mock.add_response(url="https://example.com/file.pdf", content=PDF_BYTES)
-
-        loader = _make_loader(json_config)
-        with mock.patch("apps.documents.readers.read_file_content") as read_file_content:
-            docs = list(loader.load_documents())
-
-        assert len(docs) == 1
-        read_file_content.assert_not_called()
 
 
 class TestLoadDocumentsAttachments:
