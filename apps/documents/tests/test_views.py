@@ -760,3 +760,88 @@ class TestIndexFailureReason:
         assert f'data-tip="{long_reason}"' in content
         assert f'aria-label="{long_reason}"' not in content
         assert 'aria-label="AuthenticationError: ' in content
+
+
+@pytest.mark.django_db()
+class TestCollectionIndexingProgress:
+    """The per-file badges each poll themselves; this is the aggregate 'X of Y' at the top."""
+
+    @pytest.fixture()
+    def collection(self):
+        team = TeamWithUsersFactory.create()
+        return CollectionFactory.create(team=team, is_index=True, is_remote_index=False)
+
+    def _url(self, collection):
+        return reverse("documents:collection_indexing_progress", args=[collection.team.slug, collection.id])
+
+    def _make_files(self, collection, **counts):
+        for status, count in counts.items():
+            for _ in range(count):
+                CollectionFileFactory.create(collection=collection, status=getattr(FileStatus, status.upper()))
+
+    def test_counts_indexed_out_of_total(self, collection, client):
+        self._make_files(collection, completed=2, in_progress=3, pending=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "2 of 6 files indexed" in content
+
+    def test_failures_are_reported_alongside_the_count(self, collection, client):
+        """A failed file will never complete, so it must not read as still-pending work."""
+        self._make_files(collection, completed=2, failed=1, pending=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "2 of 4 files indexed" in content
+        assert "1 failed" in content
+
+    def test_polls_while_work_is_outstanding(self, collection, client):
+        self._make_files(collection, completed=1, in_progress=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "hx-trigger" in content
+
+    def test_stops_polling_once_nothing_is_pending(self, collection, client):
+        """Left polling, every open collection page would hit the server forever."""
+        self._make_files(collection, completed=2, failed=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "hx-trigger" not in content
+        # A failed file never becomes indexed, so the line settles below the total.
+        assert "2 of 3 files indexed" in content
+        assert "1 failed" in content
+
+    def test_no_counter_for_a_collection_that_is_not_an_index(self, client):
+        """Files in a media collection are never indexed, so there is nothing to count."""
+        team = TeamWithUsersFactory.create()
+        media_collection = CollectionFactory.create(team=team, is_index=False)
+        CollectionFileFactory.create(collection=media_collection, status="")
+        client.force_login(team.members.first())
+
+        content = client.get(self._url(media_collection)).content.decode()
+
+        assert "files indexed" not in content
+
+    def test_another_teams_collection_is_not_visible(self, collection, client):
+        other_team = TeamWithUsersFactory.create()
+        client.force_login(other_team.members.first())
+
+        response = client.get(self._url(collection))
+
+        assert response.status_code == 404
+
+    def test_collection_page_shows_the_counter_on_load(self, collection, client):
+        """The counter has to be there before the first poll fires, or it appears 5s late."""
+        self._make_files(collection, completed=1, pending=2)
+        client.force_login(collection.team.members.first())
+
+        url = reverse("documents:single_collection_home", args=[collection.team.slug, collection.id])
+        content = client.get(url).content.decode()
+
+        assert "1 of 3 files indexed" in content

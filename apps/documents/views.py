@@ -122,6 +122,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "document_source_types": _visible_source_types(request),
         "read_only": collection.is_a_version,
+        **_indexing_progress(collection),
     }
     return render(request, "documents/single_collection_home.html", context)
 
@@ -517,6 +518,41 @@ def get_collection_file_status(request, team_slug: str, collection_id: int, pk: 
             "collection": collection_file.collection,
             "team": request.team,
         },
+    )
+
+
+def _indexing_progress(collection: Collection) -> dict:
+    """Counts behind the "X of Y files indexed" line.
+
+    Failed files are counted separately: they will never complete, so folding them into the
+    outstanding total would leave the line stuck short of the total with nothing running.
+    Only index collections index their files, so anything else has nothing to report.
+    """
+    if not collection.is_index:
+        return {}
+
+    stats = CollectionFile.objects.filter(collection=collection).aggregate(
+        total=Count("id"),
+        indexed=Count("id", filter=Q(status=FileStatus.COMPLETED)),
+        failed=Count("id", filter=Q(status=FileStatus.FAILED)),
+    )
+    return {
+        "progress_total": stats["total"],
+        "progress_indexed": stats["indexed"],
+        "progress_failed": stats["failed"],
+        "progress_outstanding": stats["total"] - stats["indexed"] - stats["failed"],
+    }
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def collection_indexing_progress(request, team_slug: str, collection_id: int):
+    """Aggregate indexing progress for a collection, polled while work is outstanding."""
+    collection = get_object_or_404(Collection, id=collection_id, team=request.team)
+    return render(
+        request,
+        "documents/partials/indexing_progress.html",
+        {"collection": collection, **_indexing_progress(collection)},
     )
 
 

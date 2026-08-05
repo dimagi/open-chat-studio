@@ -1,0 +1,26 @@
+{% comment %}
+  Aggregate "X of Y files indexed" for an index collection.
+
+  Polls only while files are still outstanding: the per-file status badges each poll
+  themselves, and once everything has settled there is nothing left to report, so the
+  swapped-in markup drops the trigger and the page goes quiet.
+{% endcomment %}
+<div id="collection-indexing-progress"
+     {% if progress_outstanding %}
+       hx-get="{% url 'documents:collection_indexing_progress' request.team.slug collection.id %}"
+       hx-trigger="every 5s"
+       hx-target="this"
+       hx-swap="outerHTML"
+     {% endif %}>
+  {% if progress_total %}
+    <div class="flex items-center gap-2 text-sm text-base-content/70" role="status" aria-live="polite">
+      {% if progress_outstanding %}
+        <span class="loading loading-spinner loading-xs"></span>
+      {% endif %}
+      <span>{{ progress_indexed }} of {{ progress_total }} files indexed</span>
+      {% if progress_failed %}
+        <span class="text-error">· {{ progress_failed }} failed</span>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
