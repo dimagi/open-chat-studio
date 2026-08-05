@@ -165,3 +165,40 @@ class TestHealthCheckView:
             response = client.get("/status/")
 
         assert response.status_code == 200
+
+
+@pytest.mark.django_db()
+class TestCeleryQueueCheckThroughView:
+    """CeleryQueueCheck.run() is synchronous, unlike the async ``run`` used elsewhere in this file.
+
+    HealthCheckView.get is an async view, so it's easy to end up awaiting a sync method directly
+    (`await None` raises `TypeError`). The base `HealthCheck.get_result()` guards against this via
+    `asyncio.to_thread`, but that guarantee lives in a third-party dependency, so exercise the real
+    `CeleryQueueCheck` through the actual view dispatch (not just by calling `run()` in isolation)
+    to catch a regression if that dispatch ever changes.
+    """
+
+    def _subset(self, ping_result, active_queues):
+        app = MagicMock()
+        app.control.ping.return_value = ping_result
+        app.control.inspect.return_value.active_queues.return_value = active_queues
+        return [(CeleryQueueCheck, {"label": "chat", "queue": "celery", "app": app})]
+
+    def test_healthy_queue_returns_200(self, client, monkeypatch):
+        subset = self._subset(
+            ping_result=[{"worker1": {"ok": "pong"}}],
+            active_queues={"worker1": [{"name": "celery"}]},
+        )
+        monkeypatch.setattr(views, "CHECK_SUBSETS", {"queue-chat": subset})
+
+        response = client.get("/status/queue-chat/")
+
+        assert response.status_code == 200
+
+    def test_unhealthy_queue_returns_500(self, client, monkeypatch):
+        subset = self._subset(ping_result=[], active_queues=None)
+        monkeypatch.setattr(views, "CHECK_SUBSETS", {"queue-chat": subset})
+
+        response = client.get("/status/queue-chat/")
+
+        assert response.status_code == 500
