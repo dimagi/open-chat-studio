@@ -4,7 +4,7 @@ import pytest
 
 from apps.chat.bots import PipelineBot
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.pipelines.models import PipelineChatHistory
+from apps.pipelines.models import PipelineChatHistory, PipelineChatHistoryTypes
 from apps.pipelines.nodes.base import PipelineState
 from apps.pipelines.repository import ORMRepository
 from apps.pipelines.tests.utils import create_runnable, end_node, llm_response_with_prompt_node, start_node
@@ -14,6 +14,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
+from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 from apps.utils.tests.langchain import (
     FakeLlmEcho,
     build_fake_llm_service,
@@ -395,3 +396,26 @@ def test_llm_with_no_history(get_llm_service, provider, pipeline, experiment_ses
     assert [
         [(message.type, message.text()) for message in call] for call in llm.get_call_messages()
     ] == expected_call_messages
+
+
+@pytest.mark.django_db()
+class TestEmptyNodeHistoryReplay:
+    """A node history row stored with an empty human message must not replay as an empty text block."""
+
+    @pytest.mark.parametrize(
+        ("human_message", "expected"),
+        [
+            pytest.param("", EMPTY_MESSAGE_PLACEHOLDER, id="empty"),
+            pytest.param("  ", EMPTY_MESSAGE_PLACEHOLDER, id="spaces"),
+            pytest.param("Hi", "Hi", id="normal-content-untouched"),
+        ],
+    )
+    def test_human_message_content(self, experiment_session, human_message, expected):
+        history = PipelineChatHistory.objects.create(
+            session=experiment_session, type=PipelineChatHistoryTypes.NODE, name="node-1"
+        )
+        message = history.messages.create(node_id="node-1", human_message=human_message, ai_message="Response")
+
+        ai_message, human = message.as_langchain_messages()
+        assert human.content == expected
+        assert ai_message.content == "Response"
