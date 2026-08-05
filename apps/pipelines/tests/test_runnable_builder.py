@@ -53,6 +53,7 @@ from apps.utils.factories.experiment import (
 )
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
+from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 from apps.utils.tests.langchain import (
     FakeLlmEcho,
     FakeLlmService,
@@ -490,6 +491,51 @@ class TestRouterNode:
         assert output["messages"][-1] == "Template D: d"
         output = runnable.invoke(PipelineState(messages=["z"], experiment_session=experiment_session), config=config)
         assert output["messages"][-1] == "Template A: z"
+
+    @pytest.mark.django_db()
+    @pytest.mark.parametrize(
+        ("node_input", "expected"),
+        [
+            pytest.param("", EMPTY_MESSAGE_PLACEHOLDER, id="empty"),
+            pytest.param("  \n", EMPTY_MESSAGE_PLACEHOLDER, id="whitespace"),
+            pytest.param("a", "a", id="normal-input-untouched"),
+        ],
+    )
+    @mock.patch("apps.service_providers.models.LlmProvider.get_llm_service")
+    @mock.patch("apps.pipelines.nodes.nodes.create_agent")
+    def test_router_node_never_sends_empty_text(
+        self, create_agent_mock, get_llm_service, provider, provider_model, experiment_session, node_input, expected
+    ):
+        """An upstream node can hand the router nothing, and an empty text block is a provider 400."""
+        get_llm_service.return_value = build_fake_llm_echo_service()
+
+        mock_agent = mock.Mock()
+        RouterOutput = create_model("RouterOutput", route=(Literal["A"], Field(description="Route")))
+        mock_agent.invoke.return_value = {"structured_response": RouterOutput(route="A")}
+        create_agent_mock.return_value = mock_agent
+
+        node = RouterNode(
+            node_id="test",
+            django_node=None,
+            name="test router",
+            prompt="You are a router",
+            keywords=["A"],
+            llm_provider_id=provider.id,
+            llm_provider_model_id=provider_model.id,
+        )
+        node._repo = ORMRepository(session=experiment_session)
+        state = PipelineState(
+            outputs={"123": {"message": node_input}},
+            messages=[node_input],
+            experiment_session=experiment_session,
+            node_inputs=[node_input],
+            last_node_input=node_input,
+        )
+
+        node._process_conditional(NodeContext(state))
+
+        sent_messages = mock_agent.invoke.call_args[0][0]["messages"]
+        assert [m.content for m in sent_messages] == [expected]
 
     @pytest.mark.django_db()
     def test_router_node_output_structure(self, provider, provider_model, pipeline, experiment_session):

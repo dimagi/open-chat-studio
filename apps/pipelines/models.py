@@ -36,6 +36,7 @@ from apps.pipelines.versioning import get_versioned_param_specs
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
+from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
 
@@ -785,7 +786,12 @@ class PipelineChatMessages(BaseModel):
         """
         langchain_messages: list[BaseMessage] = [
             AIMessage(content=self.ai_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
-            HumanMessage(content=self.human_message, additional_kwargs={"id": self.id, "node_id": self.node_id}),
+            # An empty human message replays as an empty text content block, which Anthropic
+            # rejects with a 400. See `ensure_non_empty_text`.
+            HumanMessage(
+                content=ensure_non_empty_text(self.human_message),
+                additional_kwargs={"id": self.id, "node_id": self.node_id},
+            ),
         ]
         if include_summary and self.summary:
             langchain_messages.append(

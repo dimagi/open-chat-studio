@@ -34,6 +34,7 @@ from apps.experiments.models import ExperimentSession
 from apps.teams.models import BaseTeamModel, Team
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
+from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
 if TYPE_CHECKING:
@@ -280,7 +281,9 @@ class EvaluationMessage(BaseModel):
 
     def as_human_langchain_message(self) -> BaseMessage:
         return HumanMessage(
-            content=self.input["content"],
+            # Dataset rows cloned from a session can carry an empty human message, which
+            # Anthropic rejects as an empty text content block. See `ensure_non_empty_text`.
+            content=ensure_non_empty_text(self.input.get("content")),
             additional_kwargs={"id": self.id, "chat_message_id": self.input_chat_message_id},
         )
 

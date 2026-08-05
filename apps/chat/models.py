@@ -14,6 +14,7 @@ from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField
+from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
 
 
@@ -254,7 +255,13 @@ class ChatMessage(BaseModel, TaggedModelMixin, UserCommentsMixin):
         return ChatMessage.make_summary_message(self)
 
     def to_langchain_dict(self) -> dict:
-        return self._get_langchain_dict(self.content, self.message_type)
+        content = self.content
+        if self.is_human_message:
+            # Messages stored before the placeholder was persisted (and attachment-only
+            # messages, whose text is legitimately empty) would otherwise replay as an empty
+            # text content block, which Anthropic rejects with a 400.
+            content = ensure_non_empty_text(content)
+        return self._get_langchain_dict(content, self.message_type)
 
     def to_langchain_message(self) -> BaseMessage:
         return messages_from_dict([self.to_langchain_dict()])[0]

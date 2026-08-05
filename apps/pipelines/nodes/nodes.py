@@ -71,6 +71,7 @@ from apps.service_providers.llm_service.runnables import (
     AssistantChat,
     ChainOutput,
 )
+from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.prompt import PromptVars, validate_prompt_variables
 from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code_error_message
 from apps.utils.restricted_http import RestrictedHttpClient
@@ -694,7 +695,9 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
 
         is_default_keyword = False
         try:
-            agent_input = {"messages": [HumanMessage(content=node_input)]}
+            # An upstream node can hand this node an empty output; an empty text content
+            # block is rejected by Anthropic. See `ensure_non_empty_text`.
+            agent_input = {"messages": [HumanMessage(content=ensure_non_empty_text(node_input))]}
             result = agent.invoke(agent_input, config=self._config)
             structured_response = result["structured_response"]
             keyword = structured_response.route.upper()  # ensure case-insensitive matching
