@@ -2,11 +2,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from apps.channels.datamodels import Attachment
 from apps.channels.stages.core import ChatMessageCreationStage
 from apps.channels.tests.channels.conftest import make_capabilities, make_context
 from apps.channels.tests.message_examples.base_messages import audio_message, text_message
 from apps.chat.models import ChatMessageType
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 
 @pytest.mark.django_db()
@@ -34,6 +36,61 @@ class TestChatMessageCreationStage:
         assert ctx.human_message is not None
         assert ctx.human_message.message_type == ChatMessageType.HUMAN
         assert ctx.human_message.content == "Hello"
+
+    @pytest.mark.parametrize(
+        "user_query",
+        [
+            pytest.param("", id="empty"),
+            pytest.param("   ", id="spaces"),
+            pytest.param("\n\n", id="newlines"),
+        ],
+    )
+    def test_empty_query_persists_placeholder(self, user_query):
+        """An empty message must be stored as the placeholder the LLM is given.
+
+        Persisting the raw empty string makes every later turn in the session replay an
+        empty text content block, which Anthropic rejects with a 400.
+        """
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        ctx = make_context(
+            experiment=experiment,
+            experiment_session=session,
+            message=text_message(message_text=user_query),
+            user_query=user_query,
+        )
+
+        self.stage(ctx)
+
+        assert ctx.human_message.content == EMPTY_MESSAGE_PLACEHOLDER
+        assert ctx.user_query == EMPTY_MESSAGE_PLACEHOLDER
+
+    def test_empty_query_with_attachment_is_left_empty(self):
+        """Attachment-only messages carry their content in the attachments, not the text."""
+        experiment = ExperimentFactory()
+        session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
+        msg = text_message(message_text="")
+        msg.attachments = [
+            Attachment(
+                file_id=1,
+                type="code_interpreter",
+                name="thing.png",
+                size=10,
+                content_type="image/png",
+                download_link="http://example.com/thing.png",
+            )
+        ]
+        ctx = make_context(
+            experiment=experiment,
+            experiment_session=session,
+            message=msg,
+            user_query="",
+        )
+
+        self.stage(ctx)
+
+        assert ctx.human_message.content == ""
+        assert ctx.user_query == ""
 
     def test_voice_message_tagged(self):
         experiment = ExperimentFactory()

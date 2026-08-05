@@ -36,6 +36,7 @@ from apps.ocs_notifications.notifications import (
 from apps.service_providers.llm_service.history_managers import ExperimentHistoryManager
 from apps.service_providers.tracing import TraceInfo
 from apps.service_providers.tracing.base import SpanNotificationConfig
+from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 if TYPE_CHECKING:
     from apps.users.models import CustomUser
@@ -578,6 +579,14 @@ class ChatMessageCreationStage(ProcessingStage):
         # Add trace metadata
         if ctx.trace_service:
             metadata.update(ctx.trace_service.get_trace_metadata())
+
+        # A message with nothing in it at all is sent to the LLM as a placeholder
+        # (see `format_multimodal_input`), so store that same placeholder -- persisting the
+        # raw empty string makes every later turn replay an empty text content block, which
+        # Anthropic rejects. Attachment-only messages keep their empty text: the content is
+        # in the attachments, which the UI renders.
+        if not ctx.user_query.strip() and not metadata[attachments_key]:
+            ctx.user_query = EMPTY_MESSAGE_PLACEHOLDER
 
         # Create the DB record
         ctx.human_message = ChatMessage.objects.create(
