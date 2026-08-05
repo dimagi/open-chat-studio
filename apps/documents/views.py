@@ -524,23 +524,36 @@ def get_collection_file_status(request, team_slug: str, collection_id: int, pk: 
 def _indexing_progress(collection: Collection) -> dict:
     """Counts behind the "X of Y files indexed" line.
 
-    Failed files are counted separately: they will never complete, so folding them into the
-    outstanding total would leave the line stuck short of the total with nothing running.
-    Only index collections index their files, so anything else has nothing to report.
+    Only index collections index their files, so anything else has nothing to report. Failed
+    files are reported separately from the indexed count, since they will never complete.
+
+    Rows with a blank status are excluded outright: they were never put through indexing, so
+    they are neither work in progress nor part of the total. A local index version is where
+    they come from -- it copies its chunks across wholesale rather than re-indexing (see
+    ``Collection.create_new_version``) -- and counting them would report a fully indexed
+    version as "0 of N" and poll every 5s for work that is never coming.
+
+    Outstanding is counted positively rather than derived as ``total - indexed - failed``, so
+    a status that is neither terminal nor pending can never read as work in progress.
     """
     if not collection.is_index:
         return {}
 
-    stats = CollectionFile.objects.filter(collection=collection).aggregate(
-        total=Count("id"),
-        indexed=Count("id", filter=Q(status=FileStatus.COMPLETED)),
-        failed=Count("id", filter=Q(status=FileStatus.FAILED)),
+    stats = (
+        CollectionFile.objects.filter(collection=collection)
+        .exclude(status="")
+        .aggregate(
+            total=Count("id"),
+            indexed=Count("id", filter=Q(status=FileStatus.COMPLETED)),
+            failed=Count("id", filter=Q(status=FileStatus.FAILED)),
+            outstanding=Count("id", filter=Q(status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS])),
+        )
     )
     return {
         "progress_total": stats["total"],
         "progress_indexed": stats["indexed"],
         "progress_failed": stats["failed"],
-        "progress_outstanding": stats["total"] - stats["indexed"] - stats["failed"],
+        "progress_outstanding": stats["outstanding"],
     }
 
 

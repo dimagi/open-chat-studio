@@ -845,3 +845,19 @@ class TestCollectionIndexingProgress:
         content = client.get(url).content.decode()
 
         assert "1 of 3 files indexed" in content
+
+    def test_untracked_files_are_not_counted(self, collection, client):
+        """A local index version copies its chunks across instead of re-indexing, leaving its
+        CollectionFile rows with a blank status. Counting those would report a fully indexed
+        version as "0 of N" and poll every 5s for work that is never coming."""
+        self._make_files(collection, completed=2)
+        version = collection.create_new_version()
+        assert set(CollectionFile.objects.filter(collection=version).values_list("status", flat=True)) == {""}
+        client.force_login(collection.team.members.first())
+
+        partial = client.get(self._url(version)).content.decode()
+        assert "files indexed" not in partial
+        assert "hx-trigger" not in partial
+
+        page = reverse("documents:single_collection_home", args=[version.team.slug, version.id])
+        assert "files indexed" not in client.get(page).content.decode()
