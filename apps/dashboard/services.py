@@ -5,16 +5,15 @@ from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Subquery
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
-from django.utils import timezone
 
 from apps.annotations.models import CustomTaggedItem, TagCategories
-from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.channels.models import ExperimentChannel
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.usage_metrics.dashboard_querysets import filtered_querysets
 
 from ..trace.models import Trace
 from .models import DashboardCache
@@ -53,150 +52,18 @@ class DashboardService:
         participant_ids: list[int] | None = None,
         tag_ids: list[int] | None = None,
     ) -> dict[str, Any]:
-        """Get base querysets with common filters applied"""
-
-        # Default date range (last 30 days)
-        if not end_date:
-            end_date = timezone.now()
-        if not start_date:
-            start_date = end_date - timedelta(days=30)
-
-        base_filters = {"created_at__gte": start_date, "created_at__lte": end_date}
-
-        # Base querysets
-        experiments = Experiment.objects.filter(team=self.team, is_archived=False, working_version=None)
-        # Use Exists() to avoid join+distinct - prevents row explosion upfront for better performance
-        msg_exists = Exists(
-            ChatMessage.objects.filter(
-                chat=OuterRef("chat"),
-                created_at__gte=start_date,
-                created_at__lte=end_date,
-            )
+        """Base querysets with common filters applied. The builder lives in
+        apps.usage_metrics (#3905); this delegation keeps the service API
+        stable for the dashboard's charts and tests."""
+        return filtered_querysets(
+            self.team,
+            start_date=start_date,
+            end_date=end_date,
+            experiment_ids=experiment_ids,
+            platform_names=platform_names,
+            participant_ids=participant_ids,
+            tag_ids=tag_ids,
         )
-        sessions = (
-            ExperimentSession.objects.filter(team=self.team)
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
-            .annotate(_has_msgs=msg_exists)
-            .filter(_has_msgs=True)
-        )
-        messages = ChatMessage.objects.filter(chat__team=self.team, **base_filters).exclude(
-            chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
-        )
-        participants = Participant.objects.filter(team=self.team).exclude(platform=ChannelPlatform.EVALUATIONS)
-
-        # Apply experiment filter
-        if experiment_ids:
-            experiments = experiments.filter(id__in=experiment_ids)
-            sessions = sessions.filter(experiment_id__in=experiment_ids)
-            messages = messages.filter(chat__experiment_session__experiment_id__in=experiment_ids)
-            participants = participants.filter(experimentsession__experiment_id__in=experiment_ids).distinct()
-
-        # Apply platform filter
-        if platform_names:
-            global_platforms = ChannelPlatform.team_global_platforms()
-            if not any(p in global_platforms for p in platform_names):
-                # only filter experiments if we're filtering by non-global platforms since all experiments
-                # will match the global platforms
-                experiments = experiments.filter(
-                    Exists(
-                        ExperimentChannel.objects.filter(
-                            experiment=OuterRef("pk"),
-                            platform__in=platform_names,
-                            deleted=False,
-                        )
-                    )
-                )
-            sessions = sessions.filter(platform__in=platform_names)
-            messages = messages.filter(chat__experiment_session__platform__in=platform_names)
-            participants = participants.filter(platform__in=platform_names)
-
-        if participant_ids:
-            experiments = experiments.filter(sessions__participant__id__in=participant_ids).distinct()
-            sessions = sessions.filter(participant__id__in=participant_ids)
-            messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
-            participants = participants.filter(id__in=participant_ids)
-
-        if tag_ids:
-            # Use Exists() to avoid join+distinct - better performance for tag filtering
-            chat_content_type = ContentType.objects.get_for_model(Chat)
-            message_content_type = ContentType.objects.get_for_model(ChatMessage)
-
-            # Sessions: check if chat or any message has tags
-            tag_on_chat = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=chat_content_type, object_id=OuterRef("chat_id"), tag_id__in=tag_ids
-                )
-            )
-            tag_on_msg = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=message_content_type,
-                    object_id__in=Subquery(ChatMessage.objects.filter(chat=OuterRef(OuterRef("chat_id"))).values("id")),
-                    tag_id__in=tag_ids,
-                )
-            )
-            sessions = sessions.annotate(_tchat=tag_on_chat, _tmsg=tag_on_msg).filter(Q(_tchat=True) | Q(_tmsg=True))
-
-            # Experiments: check if any session's chat or messages have tags
-            exp_tag_on_chat = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=chat_content_type,
-                    object_id__in=Subquery(
-                        Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            exp_tag_on_msg = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=message_content_type,
-                    object_id__in=Subquery(
-                        ChatMessage.objects.filter(
-                            chat__experiment_session__experiment=OuterRef(OuterRef("id"))
-                        ).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            experiments = experiments.annotate(_exp_tchat=exp_tag_on_chat, _exp_tmsg=exp_tag_on_msg).filter(
-                Q(_exp_tchat=True) | Q(_exp_tmsg=True)
-            )
-
-            # Participants: check if any of their session's chats or messages have tags
-            part_tag_on_chat = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=chat_content_type,
-                    object_id__in=Subquery(
-                        Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            part_tag_on_msg = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=message_content_type,
-                    object_id__in=Subquery(
-                        ChatMessage.objects.filter(
-                            chat__experiment_session__participant=OuterRef(OuterRef("id"))
-                        ).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            participants = participants.annotate(_part_tchat=part_tag_on_chat, _part_tmsg=part_tag_on_msg).filter(
-                Q(_part_tchat=True) | Q(_part_tmsg=True)
-            )
-
-            # Messages can still use the simple filter since we're already on the message model
-            messages = messages.filter(tags__id__in=tag_ids)
-
-        return {
-            "experiments": experiments,
-            "sessions": sessions,
-            "messages": messages,
-            "participants": participants,
-            "start_date": start_date,
-            "end_date": end_date,
-        }
 
     def get_active_participants_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
         """Get active participants chart data"""
