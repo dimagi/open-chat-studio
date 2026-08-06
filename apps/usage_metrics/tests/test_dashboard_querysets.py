@@ -147,3 +147,81 @@ class TestTagFilterTeamScoping:
         assert [s.id for s in querysets["sessions"]] == [session.id]
         assert [e.id for e in querysets["experiments"]] == [experiment.id]
         assert [p.id for p in querysets["participants"]] == [session.participant_id]
+
+
+class TestMessageTagFilterTeamScoping:
+    """The 9th tag-link site: the `messages` leg used to use a plain
+    `tags__id__in` M2M filter, which - unlike the other seven tag sites in
+    this module - carried neither the `team_id` nor the `tag__team_id`
+    predicate. It now uses a team-scoped `Exists` against `CustomTaggedItem`
+    for the message's own tags, matching the other sites' shape."""
+
+    def test_cross_team_link_with_local_tag_on_a_local_message_does_not_qualify(self):
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        message = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+        )
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=message)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+
+        assert list(querysets["messages"]) == []
+
+    def test_local_link_with_foreign_team_tag_on_a_local_message_does_not_qualify(self):
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        message = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+        )
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[foreign_tag.id])
+
+        assert list(querysets["messages"]) == []
+
+    def test_own_teams_link_on_a_message_matches(self):
+        """Positive control: the reading team's own link on its own tag,
+        targeting a message, must qualify - otherwise the two negative
+        assertions above prove nothing."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        message = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+        )
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+
+        assert [m.id for m in querysets["messages"]] == [message.id]
+
+    def test_tag_on_the_chat_does_not_pull_its_messages_into_the_messages_leg(self):
+        """Message-only semantics control: the sessions/experiments/
+        participants legs use the broader chat-or-message match
+        (`chat_tag_exists_pair`), but the messages leg must not - a tag
+        recorded on the chat rather than on a message must not make that
+        chat's messages match here. Widening to chat-or-message would be an
+        unrequested behaviour change."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="untagged", created_at=_MID
+        )
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=session.chat)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+
+        assert list(querysets["messages"]) == []
+        # sanity: the chat-level tag does still qualify the session, so the empty messages
+        # result above is the message-only leg behaving correctly, not a broken fixture.
+        assert [s.id for s in querysets["sessions"]] == [session.id]

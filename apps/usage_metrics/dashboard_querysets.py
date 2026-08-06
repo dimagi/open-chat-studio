@@ -5,6 +5,13 @@ window, sessions = any message in window, message totals include SYSTEM,
 evaluation activity excluded - which differ from the v2 usage API semantics in
 metrics.py. The definition-switch PR converges the two; until then both live
 here side by side.
+
+One deliberate exception: tag-link matching here is narrower than the
+dashboard's original (unscoped) match. Every `CustomTaggedItem` lookup in this
+module is constrained to the reading team's own rows (`team_id` and
+`tag__team_id` both equal to `team.id`), so a link recorded under another team
+never qualifies a chat, message, session, experiment, or participant - see the
+CodeRabbit finding on PR #4132.
 """
 
 from datetime import datetime, timedelta
@@ -163,8 +170,21 @@ def filtered_querysets(
             Q(_part_tchat=True) | Q(_part_tmsg=True)
         )
 
-        # Messages can still use the simple filter since we're already on the message model
-        messages = messages.filter(tags__id__in=tag_ids)
+        # Messages: the message's own tags carry the tag (both the link row and its tag must
+        # belong to the reading team). Message-only match - a tag on the chat (rather than the
+        # message itself) does not pull the chat's messages in here; that broader chat-or-message
+        # match is what the sessions/experiments/participants legs above use via
+        # `chat_tag_exists_pair`, not this one.
+        msg_tag_on_msg = Exists(
+            CustomTaggedItem.objects.filter(
+                team_id=team.id,
+                tag__team_id=team.id,
+                content_type=message_content_type,
+                object_id=OuterRef("id"),
+                tag_id__in=tag_ids,
+            )
+        )
+        messages = messages.filter(msg_tag_on_msg)
 
     return {
         "experiments": experiments,
