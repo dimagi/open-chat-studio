@@ -93,6 +93,7 @@ Consult these guides when working in the relevant area:
 * `docs/developer_guides/code_systems/feature_flags.md` — when adding, using, or removing feature flags
 * `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature
 * `docs/developer_guides/testing/help_agent_evals.md` — when adding or modifying help agents or their eval tests
+* `docs/agents/adr_process.md` — when brainstorming or designing new work, to check for related past ADRs before finalizing a design
 
 ## Agent skills
 
