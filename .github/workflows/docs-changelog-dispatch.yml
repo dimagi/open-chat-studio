@@ -23,6 +23,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - name: Checkout repository
         uses: actions/checkout@v7
         with:

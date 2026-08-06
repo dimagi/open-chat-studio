@@ -44,6 +44,13 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
+    # Audit only: records egress without blocking. Flip to `block` plus an
+    # `allowed-endpoints` list once the recorded traffic looks stable.
+    - name: Harden the runner
+      uses: step-security/harden-runner@v2
+      with:
+        egress-policy: audit
+
     - name: Checkout
       uses: actions/checkout@v7
 

@@ -35,6 +35,12 @@ jobs:
       id-token: write
 
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - name: Resolve PR ref
         id: pr
         env:

@@ -63,6 +63,12 @@ jobs:
       id-token: write
       contents: read
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -109,6 +115,12 @@ jobs:
   build-frontend:
     runs-on: ubuntu-latest
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6.0.9
       - name: Use Node.js
@@ -129,6 +141,12 @@ jobs:
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -168,6 +186,12 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -188,6 +212,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - id: file_changes
         uses: trilom/file-changes-action@v1.2.4
@@ -224,6 +254,12 @@ jobs:
   check-uv-lock:
     runs-on: ubuntu-latest
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -261,6 +297,12 @@ jobs:
         ports:
           - 6379:6379
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - name: Set up Python
         uses: actions/setup-python@v7

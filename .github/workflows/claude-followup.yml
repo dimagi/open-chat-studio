@@ -54,6 +54,12 @@ jobs:
       DJANGO_DATABASE_PASSWORD: postgres_password
       SECRET_KEY: secret-test-key
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - name: Find PR and check for followup label
         id: check
         env:
