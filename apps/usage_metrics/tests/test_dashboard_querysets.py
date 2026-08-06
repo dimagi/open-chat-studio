@@ -45,12 +45,14 @@ class TestTagFilterTeamScoping:
         querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
 
         assert [s.id for s in querysets["sessions"]] == [session.id]
+        assert [e.id for e in querysets["experiments"]] == [experiment.id]
+        assert [p.id for p in querysets["participants"]] == [session.participant_id]
 
     def test_cross_team_tag_link_does_not_qualify_a_local_chat(self):
         """The inconsistent-link shape: a CustomTaggedItem row carrying a
         FOREIGN team_id, whose tag is a local tag and whose object_id targets
         a local chat. The link is not the reading team's, so it must not make
-        the session match."""
+        the session, experiment, or participant match."""
         team = TeamFactory.create()
         foreign_team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
@@ -61,3 +63,5 @@ class TestTagFilterTeamScoping:
         querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
 
         assert list(querysets["sessions"]) == []
+        assert list(querysets["experiments"]) == []
+        assert list(querysets["participants"]) == []
