@@ -185,6 +185,23 @@ class TestCostFilters:
 
         assert summary.total_cost == Decimal(0)
 
+    def test_tag_filter_ignores_cross_team_tag_links(self):
+        """The inconsistent-link shape: a CustomTaggedItem row carrying a
+        FOREIGN team_id whose tag is a local tag and whose object_id targets a
+        local chat. The link is not the reading team's, so it must not pull
+        the record into a tag-filtered read."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=session.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
     def test_tag_filter_counts_chat_spend_only(self):
         """A tag-filtered read is per-entity attribution, so evaluation spend on
         the tagged session is excluded (ADR-0048)."""
