@@ -61,12 +61,16 @@ class TestSessionWindowDivergence:
     the window (design section 2, row 1)."""
 
     def _team(self):
+        # status=ACTIVE on every session here: the factory default is SETUP, which the API excludes for a
+        # different reason (TestSetupSessionDivergence). Without pinning ACTIVE, `old_but_active` would be
+        # dropped by the status exclusion regardless of its created_at, and this class's API assertion would
+        # pass without actually exercising the created_at window filter it exists to pin.
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        old_but_active = _backdate(ExperimentSessionFactory.create(team=team, experiment=experiment), _BEFORE)
+        old_but_active = _backdate(
+            ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE), _BEFORE
+        )
         _message(old_but_active)
-        # status=ACTIVE: the factory default is SETUP, which the API excludes for a different reason
-        # (TestSetupSessionDivergence); pinning ACTIVE here isolates the window divergence this class exists to show.
         ExperimentSessionFactory.create(
             team=team, experiment=experiment, status=SessionStatus.ACTIVE
         )  # created in window, silent
@@ -109,7 +113,9 @@ class TestEvaluationMessageDivergence:
         eval_session = ExperimentSessionFactory.create(
             team=team,
             experiment=experiment,
-            experiment_channel=ExperimentChannelFactory(team=team, platform=ChannelPlatform.EVALUATIONS),
+            experiment_channel=ExperimentChannelFactory(
+                team=team, experiment=experiment, platform=ChannelPlatform.EVALUATIONS
+            ),
         )
         _message(eval_session)
         return team
@@ -178,11 +184,14 @@ class TestWindowBoundaryDivergence:
 
 
 class TestActiveParticipantsFourImplementations:
-    """The four current implementations disagree (design section 2, row 4):
-    the dashboard chart counts HUMAN-message authors only; the dashboard
-    session-analytics series counts participants with any message type; the
-    overview stat counts participants of any session active in the window;
-    the API counts HUMAN+AI. One participant per activity shape pins all four."""
+    """The four current implementations define "active participant" differently
+    (design section 2, row 4): the dashboard chart counts HUMAN-message authors
+    only; the dashboard session-analytics series and overview stat count
+    participants with any message type (including SYSTEM-only sessions); the API
+    counts HUMAN+AI. One participant per activity shape (human, AI-only,
+    system-only) pins all four definitions, though this fixture only separates
+    the chart and the API from the other two — session-analytics and overview
+    agree here and diverge only in edge cases this fixture doesn't construct."""
 
     def _team(self):
         team = TeamFactory.create()
