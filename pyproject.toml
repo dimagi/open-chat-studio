@@ -178,7 +178,7 @@ dev = [
     "pytest-cov",
     "pytest-xdist",
     "django-debug-toolbar>=7.0.0",
-    "prek>=0.3.2",
+    "prek>=0.4.11",
     "django-types",
     "ty>=0.0.65",
     "honcho>=2.0.0",
