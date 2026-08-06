@@ -719,6 +719,10 @@ class TestCostFilters:
 
         assert [g.model_name for g in gaps.unpriced] == ["keep-model"]
 
+    def test_tag_filter_narrows_to_entities(self):
+        assert CostFilters().narrows_to_entities is False
+        assert CostFilters(tag_ids=[1]).narrows_to_entities is True
+
 
 @pytest.mark.django_db()
 class TestEvaluationSourceRule:

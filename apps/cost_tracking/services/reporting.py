@@ -147,20 +147,23 @@ class CoverageGaps:
 @dataclass(frozen=True)
 class CostFilters:
     """The dashboard filters the cost read path honours, bundled so the
-    reporting functions take one argument instead of three parallel lists.
-    Tags are intentionally absent - usage records aren't tagged directly.
+    reporting functions take one argument instead of four parallel lists.
+    Tags match via the record's session's chat - a record counts when the
+    chat or any of its messages carries one of the tags - so records with
+    no session are excluded under a tag filter.
     """
 
     experiment_ids: list[int] | None = None
     platform_names: list[str] | None = None
     participant_ids: list[int] | None = None
+    tag_ids: list[int] | None = None
 
     @property
     def narrows_to_entities(self) -> bool:
         """True when any filter restricts the read to particular chatbots, participants
         or conversations — which makes the result per-entity attribution, not a team
         total, and so subject to the chat-only rule (ADR-0048)."""
-        return bool(self.experiment_ids or self.platform_names or self.participant_ids)
+        return bool(self.experiment_ids or self.platform_names or self.participant_ids or self.tag_ids)
 
 
 @dataclass(frozen=True)
