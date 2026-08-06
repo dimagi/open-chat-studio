@@ -112,6 +112,11 @@ markers = [
     "integration: marks tests as integration tests (deselected by default)",
     "eval: marks tests as LLM evaluation tests (deselected by default, requires API keys)",
 ]
+filterwarnings = [
+    # pytest 10 turns these into hard errors. Fail on them now so they get fixed as they appear,
+    # rather than as a wall of breakage at upgrade time.
+    "error::pytest.PytestRemovedIn10Warning",
+]
 
 [tool.ruff]
 exclude = [

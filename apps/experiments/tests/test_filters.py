@@ -584,19 +584,20 @@ class TestExperimentSessionFilters:
         assert target not in filtered
 
 
+@pytest.fixture(scope="class")
+def participant_session(django_db_setup, django_db_blocker):
+    """Create a base experiment session with participant"""
+    with django_db_blocker.unblock():
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(
+            team=team, participant__name="Jeremy Fisher", participant__identifier="test.user@example.com"
+        )
+        yield session
+        delete_object_with_auditing_of_related_objects(team)
+
+
 @pytest.mark.django_db()
 class TestParticipantFilter:
-    @pytest.fixture(scope="class")
-    def session(self, django_db_setup, django_db_blocker):
-        """Create a base experiment session with participant"""
-        with django_db_blocker.unblock():
-            team = TeamFactory.create()
-            session = ExperimentSessionFactory.create(
-                team=team, participant__name="Jeremy Fisher", participant__identifier="test.user@example.com"
-            )
-            yield session
-            delete_object_with_auditing_of_related_objects(team)
-
     @pytest.mark.parametrize(
         ("operator", "value", "count"),
         [
@@ -623,7 +624,7 @@ class TestParticipantFilter:
             (Operators.ANY_OF, json.dumps(["jeremy fisher"]), 0),  # case-sensitive
         ],
     )
-    def test_participant_filters(self, session, operator, value, count):
+    def test_participant_filters(self, participant_session, operator, value, count):
         """Test all participant filter operators"""
 
         params = _get_querydict(
@@ -633,12 +634,12 @@ class TestParticipantFilter:
             }
         )
 
-        queryset = session.experiment.sessions.all()
+        queryset = participant_session.experiment.sessions.all()
         session_filter = ExperimentSessionFilter()
         filtered = session_filter.apply(queryset, FilterParams(params))
         assert filtered.count() == count
         if count == 1:
-            assert filtered.first() == session
+            assert filtered.first() == participant_session
 
 
 @pytest.mark.django_db()
