@@ -284,3 +284,14 @@ class TestBotPerformanceCostColumns:
 
         row = next(r for r in response.json()["results"] if r["experiment_id"] == experiment.id)
         assert row["cost"] == 1.0
+
+    def test_cost_column_respects_tag_filter(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        tagged, tag = _tagged_session(team, experiment)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=experiment)
+
+        response = authenticated_client.get(self._url(team) + self._RANGE + f"&tags={tag.id}")
+
+        row = next(r for r in response.json()["results"] if r["experiment_id"] == experiment.id)
+        assert row["cost"] == 1.0
