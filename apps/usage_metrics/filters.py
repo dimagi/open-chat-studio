@@ -43,17 +43,19 @@ def chat_tag_exists_pair(team: Team, tag_ids: list[int], chat_id_ref: str) -> tu
     """The (tag-on-chat, tag-on-message) `Exists` pair behind the session tag
     filter: a conversation matches when its chat, or any message in that chat,
     carries one of `tag_ids`. `chat_id_ref` is the outer queryset's path to
-    the chat id (`"chat_id"` on sessions and messages). Tag links are
-    constrained to the reading team's own (`team_id`), so a `CustomTaggedItem`
-    row recorded under another team never qualifies a chat even if its tag and
-    target are local. `Exists()` rather than join+distinct, matching the
-    dashboard's tag filter.
+    the chat id (`"chat_id"` on sessions and messages). Both the link row and
+    its tag are constrained to the reading team (`team_id` and
+    `tag__team_id`), so a `CustomTaggedItem` row recorded under another team
+    never qualifies a chat, and neither does a locally-recorded link whose tag
+    belongs to another team. `Exists()` rather than join+distinct, matching
+    the dashboard's tag filter.
     """
     chat_content_type = ContentType.objects.get_for_model(Chat)
     message_content_type = ContentType.objects.get_for_model(ChatMessage)
     tag_on_chat = Exists(
         CustomTaggedItem.objects.filter(
             team_id=team.id,
+            tag__team_id=team.id,
             content_type=chat_content_type,
             object_id=OuterRef(chat_id_ref),
             tag_id__in=tag_ids,
@@ -62,6 +64,7 @@ def chat_tag_exists_pair(team: Team, tag_ids: list[int], chat_id_ref: str) -> tu
     tag_on_msg = Exists(
         CustomTaggedItem.objects.filter(
             team_id=team.id,
+            tag__team_id=team.id,
             content_type=message_content_type,
             object_id__in=Subquery(ChatMessage.objects.filter(chat=OuterRef(OuterRef(chat_id_ref))).values("id")),
             tag_id__in=tag_ids,

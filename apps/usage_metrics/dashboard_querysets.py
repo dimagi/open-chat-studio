@@ -98,14 +98,17 @@ def filtered_querysets(
         chat_content_type = ContentType.objects.get_for_model(Chat)
         message_content_type = ContentType.objects.get_for_model(ChatMessage)
 
-        # Sessions: chat or any message in it carries the tag (team's own links only)
+        # Sessions: chat or any message in it carries the tag (both the link row and its tag
+        # must belong to the reading team)
         tag_on_chat, tag_on_msg = chat_tag_exists_pair(team, tag_ids, "chat_id")
         sessions = sessions.annotate(_tchat=tag_on_chat, _tmsg=tag_on_msg).filter(Q(_tchat=True) | Q(_tmsg=True))
 
-        # Experiments: any session's chat or messages carry the tag
+        # Experiments: any session's chat or messages carry the tag (both the link row and
+        # its tag must belong to the reading team)
         exp_tag_on_chat = Exists(
             CustomTaggedItem.objects.filter(
                 team_id=team.id,
+                tag__team_id=team.id,
                 content_type=chat_content_type,
                 object_id__in=Subquery(
                     Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values("id")
@@ -116,6 +119,7 @@ def filtered_querysets(
         exp_tag_on_msg = Exists(
             CustomTaggedItem.objects.filter(
                 team_id=team.id,
+                tag__team_id=team.id,
                 content_type=message_content_type,
                 object_id__in=Subquery(
                     ChatMessage.objects.filter(chat__experiment_session__experiment=OuterRef(OuterRef("id"))).values(
@@ -129,10 +133,12 @@ def filtered_querysets(
             Q(_exp_tchat=True) | Q(_exp_tmsg=True)
         )
 
-        # Participants: any of their sessions' chats or messages carry the tag
+        # Participants: any of their sessions' chats or messages carry the tag (both the
+        # link row and its tag must belong to the reading team)
         part_tag_on_chat = Exists(
             CustomTaggedItem.objects.filter(
                 team_id=team.id,
+                tag__team_id=team.id,
                 content_type=chat_content_type,
                 object_id__in=Subquery(
                     Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values("id")
@@ -143,6 +149,7 @@ def filtered_querysets(
         part_tag_on_msg = Exists(
             CustomTaggedItem.objects.filter(
                 team_id=team.id,
+                tag__team_id=team.id,
                 content_type=message_content_type,
                 object_id__in=Subquery(
                     ChatMessage.objects.filter(chat__experiment_session__participant=OuterRef(OuterRef("id"))).values(

@@ -188,8 +188,9 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
     session are excluded when either filter is set. A tag matches when the
     session's chat or any message in it carries the tag - the same semantics
     as the dashboard's session tag filter (`apps/usage_metrics/dashboard_querysets.py`).
-    Only the team's own tag links count, so a cross-team `CustomTaggedItem` row
-    never widens the read.
+    Both the link row and its tag must belong to the reading team, so a
+    cross-team `CustomTaggedItem` row - whether its own `team_id` is foreign or
+    its `tag` belongs to another team - never widens the read.
 
     A filtered read is per-entity attribution, so it counts chat only; only an
     unfiltered read is a team total and counts every source (ADR-0048). Without that,
@@ -211,6 +212,7 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
         tag_on_chat = Exists(
             CustomTaggedItem.objects.filter(
                 team_id=team.id,
+                tag__team_id=team.id,
                 content_type=chat_content_type,
                 object_id=OuterRef("session__chat_id"),
                 tag_id__in=filters.tag_ids,
@@ -219,6 +221,7 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
         tag_on_msg = Exists(
             CustomTaggedItem.objects.filter(
                 team_id=team.id,
+                tag__team_id=team.id,
                 content_type=message_content_type,
                 object_id__in=Subquery(
                     ChatMessage.objects.filter(chat=OuterRef(OuterRef("session__chat_id"))).values("id")
