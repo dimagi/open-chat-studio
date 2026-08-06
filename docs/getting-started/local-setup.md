@@ -44,8 +44,17 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
         ### Install the pre-commit hooks
 
         ```shell
-        prek install --install-hooks
+        prek install --prepare-hooks
         ```
+
+        !!! tip
+
+            Add `--fail-fast` to `prek run` to stop at the first failing hook instead of
+            waiting for the whole suite:
+
+            ```shell
+            prek run --fail-fast --all-files
+            ```
 
         ### Set up database
 
