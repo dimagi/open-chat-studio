@@ -413,10 +413,18 @@ class DashboardService:
         # Get tags used in messages within the date range
         message_ct = ContentType.objects.get_for_model(ChatMessage)
 
-        # Get tagged messages
+        # Get tagged messages. Both the link row and its tag are constrained to
+        # the reading team (`team_id` and `tag__team_id`), so a `CustomTaggedItem`
+        # row recorded under another team never contributes to this team's
+        # analytics, even when it points at one of this team's own messages.
         tagged_messages = (
             CustomTaggedItem.objects.exclude(tag__category=TagCategories.EXPERIMENT_VERSION)
-            .filter(content_type=message_ct, object_id__in=querysets["messages"].values_list("id", flat=True))
+            .filter(
+                team_id=self.team.id,
+                tag__team_id=self.team.id,
+                content_type=message_ct,
+                object_id__in=querysets["messages"].values_list("id", flat=True),
+            )
             .select_related("tag")
         )
 
