@@ -861,3 +861,31 @@ class TestCollectionIndexingProgress:
 
         page = reverse("documents:single_collection_home", args=[version.team.slug, version.id])
         assert "files indexed" not in client.get(page).content.decode()
+
+    def test_files_of_a_removed_source_are_not_counted(self, collection, client):
+        """Removing a source archives it and deletes its files in the background. Until that
+        task runs the rows are still there, mid-index -- and counting them leaves the page
+        spinning on a total made up of files the page no longer shows anywhere."""
+        removed = DocumentSourceFactory.create(collection=collection, team=collection.team, is_archived=True)
+        for status in (FileStatus.COMPLETED, FileStatus.IN_PROGRESS, FileStatus.PENDING, FileStatus.FAILED):
+            CollectionFileFactory.create(collection=collection, document_source=removed, status=status)
+        self._make_files(collection, completed=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "1 of 1 files indexed" in content
+        assert "failed" not in content
+        assert "hx-trigger" not in content
+
+    def test_files_of_a_live_source_are_counted(self, collection, client):
+        """The counter's whole job is reporting a source's files as they index."""
+        source = DocumentSourceFactory.create(collection=collection, team=collection.team)
+        CollectionFileFactory.create(collection=collection, document_source=source, status=FileStatus.COMPLETED)
+        CollectionFileFactory.create(collection=collection, document_source=source, status=FileStatus.IN_PROGRESS)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "1 of 2 files indexed" in content
+        assert "hx-trigger" in content

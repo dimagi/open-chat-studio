@@ -533,6 +533,13 @@ def _indexing_progress(collection: Collection) -> dict:
     ``Collection.create_new_version``) -- and counting them would report a fully indexed
     version as "0 of N" and poll every 5s for work that is never coming.
 
+    Files of a removed document source are excluded for the same reason. Removal archives the
+    source and hands the file deletion to ``delete_document_source_task``, so until that task
+    runs the rows are still here -- typically mid-index, since removal does not stop the index
+    run it just made pointless, and the deletion queues up behind it. The page has already
+    dropped the source's card and never listed its files, so counting them leaves a spinner
+    running against a total the user cannot account for.
+
     Outstanding is counted positively rather than derived as ``total - indexed - failed``, so
     a status that is neither terminal nor pending can never read as work in progress.
     """
@@ -542,6 +549,7 @@ def _indexing_progress(collection: Collection) -> dict:
     stats = (
         CollectionFile.objects.filter(collection=collection)
         .exclude(status="")
+        .exclude(document_source__is_archived=True)
         .aggregate(
             total=Count("id"),
             indexed=Count("id", filter=Q(status=FileStatus.COMPLETED)),
