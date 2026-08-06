@@ -762,6 +762,25 @@ class TestCostFilters:
 
         assert summary.total_cost == Decimal(0)
 
+    def test_tag_filter_ignores_other_teams_tag_links(self):
+        """Filtering by a foreign team's tag id matches nothing: the outer
+        queryset is team-scoped, and a generic tag link only references the
+        chat it was created for, so it can never point at this team's chats."""
+        team = TeamFactory.create()
+        other_team = TeamFactory.create()
+        other_exp = ExperimentFactory.create(team=other_team)
+        other_session = ExperimentSessionFactory.create(team=other_team, experiment=other_exp)
+        other_tag = TagFactory.create(team=other_team)
+        CustomTaggedItemFactory.create(team=other_team, tag=other_tag, target=other_session.chat)
+        _usage(other_team, cost="9.00", when=_NOW - timedelta(days=1), experiment=other_exp, session=other_session)
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[other_tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
     def test_tag_filter_counts_chat_spend_only(self):
         """A tag-filtered read is per-entity attribution, so evaluation spend on
         the tagged session is excluded (ADR-0048)."""
