@@ -70,3 +70,7 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0048](0048-evaluation-spend-is-team-spend-not-entity-spend.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Evaluation spend is team spend, never entity spend |
 | [0049](0049-node-rows-own-pipeline-layout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Node rows own pipeline layout; `Pipeline.data` keeps only edges |
 | [0050](0050-eval-driven-generation-is-evaluation-spend.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Eval-driven generation is evaluation spend, billed without a trace |
+| [0051](0051-beat-coordinator-owns-index-dispatch.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Beat coordinator owns all index dispatch |
+| [0052](0052-manifest-first-change-detection.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Manifest-first change detection |
+| [0053](0053-detect-interrupted-sync-with-heartbeat.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Detect an interrupted sync with a heartbeat, not a lock timeout |
+| [0054](0054-stale-in-progress-log-is-the-restart-ticket.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | A stale in-progress log is the restart ticket |
