@@ -17,15 +17,18 @@ from typing import TypedDict
 from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Count, F, Q, QuerySet
+from django.db.models import Count, F, QuerySet
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
 from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import ChatMessage
 from apps.cost_tracking.services import reporting
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.models import Team
+from apps.usage_metrics import metrics as usage_metrics
+from apps.usage_metrics.filters import UsageFilters
+from apps.usage_metrics.metrics import MESSAGE_ANNOTATIONS, MessageCounts, message_counts_from_row
 
 # Metric identifiers. Later slices extend SUPPORTED_METRICS; the param serializer validates against it.
 METRIC_MESSAGES = "messages"
@@ -72,12 +75,6 @@ _STEP = {
     GRANULARITY_WEEKLY: relativedelta(weeks=1),
     GRANULARITY_MONTHLY: relativedelta(months=1),
 }
-
-
-class MessageCounts(TypedDict):
-    human: int
-    ai: int
-    total: int
 
 
 class CostBlock(TypedDict):
@@ -346,19 +343,6 @@ def _bucket_key(bucket: datetime | None, tz: ZoneInfo):
     return None if bucket is None else _bucket_date(bucket, tz)
 
 
-# Human/AI message-count annotations, shared by the total, bucketed, and grouped message reads so the
-# split is defined in one place.
-_MESSAGE_ANNOTATIONS = {
-    "human": Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
-    "ai": Count("id", filter=Q(message_type=ChatMessageType.AI)),
-}
-
-
-def _message_counts_from_row(row: dict) -> MessageCounts:
-    """Build a :class:`MessageCounts` from a row/aggregate carrying ``human``/``ai`` counts."""
-    return MessageCounts(human=row["human"], ai=row["ai"], total=row["human"] + row["ai"])
-
-
 def _grouped_rows(queryset: QuerySet, *, group_field: str | None, trunc, tz: ZoneInfo, **annotations):
     """Aggregate ``queryset`` by an optional dimension ``group_field`` and an optional tz time bucket
     (``trunc``), applying ``annotations``. Yields ``(group_key, bucket_key, row)`` where each key is
@@ -409,8 +393,8 @@ def _grouped_non_cost_metric_rows(query: UsageQuery, keys: list) -> list:
 
     metric_rows = []
     if METRIC_MESSAGES in query.metrics:
-        rows = by_group(_message_queryset(query), spec.message_field, **_MESSAGE_ANNOTATIONS)
-        metric_rows.append((METRIC_MESSAGES, ((gk, bk, _message_counts_from_row(row)) for gk, bk, row in rows)))
+        rows = by_group(_message_queryset(query), spec.message_field, **MESSAGE_ANNOTATIONS)
+        metric_rows.append((METRIC_MESSAGES, ((gk, bk, message_counts_from_row(row)) for gk, bk, row in rows)))
     if METRIC_SESSIONS in query.metrics:
         rows = by_group(_session_queryset(query), spec.session_field, n=Count("id"))
         metric_rows.append((METRIC_SESSIONS, ((gk, bk, row["n"]) for gk, bk, row in rows)))
@@ -490,7 +474,6 @@ def _bucketed(query: UsageQuery) -> list[dict]:
     """One row per time bucket in ``[start, end)``, zero-filled so every bucket in the window appears
     (the max-window guard in the param serializer bounds how many that can be). Each metric runs a
     single grouped query truncated in ``tz``; results are keyed back onto the buckets by local date."""
-    trunc = _TRUNC[query.granularity]
     starts = list(_iter_bucket_starts(query.start, query.end, query.granularity, query.tz))
     rows: list[dict] = [{"bucket_start": bucket} for bucket in starts]
 
@@ -502,7 +485,7 @@ def _bucketed(query: UsageQuery) -> list[dict]:
     for metric, counts_by_bucket in metric_specs:
         if metric not in query.metrics:
             continue
-        by_date = counts_by_bucket(query, trunc)
+        by_date = counts_by_bucket(query)
         for row in rows:
             # _EMPTY_METRIC factory (not a shared value) so each empty bucket gets its own object.
             row[metric] = by_date.get(row["bucket_start"].date(), _EMPTY_METRIC[metric]())
@@ -583,96 +566,85 @@ def _cost_filter(query: UsageQuery) -> _CostFilter:
     return _CostFilter(filters=reporting.CostFilters(**kwargs), is_empty=query.filter_is_empty)
 
 
-def _session_queryset(query: UsageQuery) -> QuerySet[ExperimentSession]:
-    """Team-scoped ``ExperimentSession`` *started* (``created_at``) within the window. Evaluation-harness
-    sessions and sessions still in ``SETUP`` (created but never engaged) are excluded so the count
-    reflects real participant usage, matching the dashboard's session definition."""
-    queryset = (
-        ExperimentSession.objects.filter(team=query.team, created_at__gte=query.start, created_at__lt=query.end)
-        .exclude(platform=ChannelPlatform.EVALUATIONS)
-        .exclude(status=SessionStatus.SETUP)
+def _usage_filters(query: UsageQuery) -> UsageFilters:
+    """Map the query's already-resolved ids onto the shared activity-filter
+    shape. `None` vs `[]` carries through unchanged: an empty resolved list
+    means "requested but matched nobody" on both sides."""
+    return UsageFilters(
+        experiment_ids=query.experiment_ids,
+        participant_ids=query.participant_ids,
+        platform=query.platform,
     )
-    # Filter on the session's own FK columns (resolved ids), so no join to experiment/participant.
-    if query.participant_ids is not None:
-        queryset = queryset.filter(participant_id__in=query.participant_ids)
-    if query.experiment_ids is not None:
-        queryset = queryset.filter(experiment_id__in=query.experiment_ids)
-    if query.platform:
-        queryset = queryset.filter(platform=query.platform)
-    return queryset
+
+
+def _session_queryset(query: UsageQuery) -> QuerySet[ExperimentSession]:
+    """The `sessions` metric universe - sessions started in the window,
+    SETUP and evaluation-harness sessions excluded (apps.usage_metrics)."""
+    return usage_metrics.sessions_started_queryset(
+        query.team, start=query.start, end=query.end, filters=_usage_filters(query)
+    )
 
 
 def _session_count(query: UsageQuery) -> int:
-    return _session_queryset(query).count()
+    return usage_metrics.sessions_started(query.team, start=query.start, end=query.end, filters=_usage_filters(query))
 
 
 def _active_participant_count(query: UsageQuery) -> int:
-    """Distinct participants *active* in the window — those with at least one human/AI message in it.
-    Keyed off message activity (not session creation) so a participant active in a session started
-    earlier is still counted, and restricted to the same human/AI categories the ``messages`` metric
-    surfaces so the two metrics agree on who counts as active (internal ``system`` messages excluded)."""
-    return _active_participant_queryset(query).aggregate(
-        n=Count("chat__experiment_session__participant", distinct=True)
-    )["n"]
-
-
-def _message_counts(query: UsageQuery) -> MessageCounts:
-    """Human/AI/total message counts for the window. ``total`` is ``human + ai`` (the two surfaced
-    categories); system messages are internal and excluded so the parts always sum to the total."""
-    # Filtered Count aggregates return 0 for no matches, never None.
-    return _message_counts_from_row(_message_queryset(query).aggregate(**_MESSAGE_ANNOTATIONS))
-
-
-def _message_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
-    """Team-scoped ``ChatMessage`` in the window. ``ChatMessage`` has no direct team FK, so scope via
-    ``chat__team``; the participant lives two relations away, at
-    ``chat__experiment_session__participant``. Backed by the ``(chat, message_type, created_at)`` index.
-    """
-    queryset = ChatMessage.objects.filter(chat__team=query.team, created_at__gte=query.start, created_at__lt=query.end)
-    # Filter on the session's FK-id columns (resolved ids), so the message query joins through the chat
-    # and session it needs anyway but not the experiment/participant tables.
-    if query.participant_ids is not None:
-        queryset = queryset.filter(chat__experiment_session__participant_id__in=query.participant_ids)
-    if query.experiment_ids is not None:
-        queryset = queryset.filter(chat__experiment_session__experiment_id__in=query.experiment_ids)
-    if query.platform:
-        queryset = queryset.filter(chat__experiment_session__platform=query.platform)
-    return queryset
-
-
-def _active_participant_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
-    return _message_queryset(query).filter(message_type__in=(ChatMessageType.HUMAN, ChatMessageType.AI))
-
-
-def _message_counts_by_bucket(query: UsageQuery, trunc) -> dict:
-    return {
-        bucket_key: _message_counts_from_row(row)
-        for _, bucket_key, row in _grouped_rows(
-            _message_queryset(query), group_field=None, trunc=trunc, tz=query.tz, **_MESSAGE_ANNOTATIONS
-        )
-    }
-
-
-def _session_counts_by_bucket(query: UsageQuery, trunc) -> dict:
-    return _scalar_by_bucket(_session_queryset(query), trunc, query.tz, Count("id"))
-
-
-def _participant_counts_by_bucket(query: UsageQuery, trunc) -> dict:
-    return _scalar_by_bucket(
-        _active_participant_queryset(query),
-        trunc,
-        query.tz,
-        Count("chat__experiment_session__participant", distinct=True),
+    """Distinct participants *active* in the window - those with at least one
+    human/AI message in it, keyed off message activity (not session creation)."""
+    return usage_metrics.active_participants(
+        query.team, start=query.start, end=query.end, filters=_usage_filters(query)
     )
 
 
-def _scalar_by_bucket(queryset: QuerySet, trunc, tz: ZoneInfo, aggregate) -> dict:
-    """Group ``queryset`` into ``tz``-truncated buckets and reduce each to a single integer via
-    ``aggregate``, keyed by local calendar date. Shared by the session and participant metrics."""
-    return {
-        bucket_key: row["n"]
-        for _, bucket_key, row in _grouped_rows(queryset, group_field=None, trunc=trunc, tz=tz, n=aggregate)
-    }
+def _message_counts(query: UsageQuery) -> MessageCounts:
+    """Human/AI/total message counts for the window; ``total`` is ``human + ai``."""
+    return usage_metrics.messages(query.team, start=query.start, end=query.end, filters=_usage_filters(query))
+
+
+def _message_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
+    """The `messages` metric universe - every message type, evaluation
+    sessions included (apps.usage_metrics)."""
+    return usage_metrics.messages_queryset(query.team, start=query.start, end=query.end, filters=_usage_filters(query))
+
+
+def _active_participant_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
+    return usage_metrics.active_participants_queryset(
+        query.team, start=query.start, end=query.end, filters=_usage_filters(query)
+    )
+
+
+def _message_counts_by_bucket(query: UsageQuery) -> dict:
+    return usage_metrics.messages_timeseries(
+        query.team,
+        start=query.start,
+        end=query.end,
+        granularity=query.granularity,
+        tz=query.tz,
+        filters=_usage_filters(query),
+    )
+
+
+def _session_counts_by_bucket(query: UsageQuery) -> dict:
+    return usage_metrics.sessions_started_timeseries(
+        query.team,
+        start=query.start,
+        end=query.end,
+        granularity=query.granularity,
+        tz=query.tz,
+        filters=_usage_filters(query),
+    )
+
+
+def _participant_counts_by_bucket(query: UsageQuery) -> dict:
+    return usage_metrics.active_participants_timeseries(
+        query.team,
+        start=query.start,
+        end=query.end,
+        granularity=query.granularity,
+        tz=query.tz,
+        filters=_usage_filters(query),
+    )
 
 
 def _iter_bucket_starts(start: datetime, end: datetime, granularity: str, tz: ZoneInfo):
