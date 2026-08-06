@@ -195,6 +195,37 @@ class TestMessages:
 
         assert counts["total"] == 0
 
+    def test_tag_filter_ignores_foreign_team_link_with_local_tag_on_message(self):
+        """The remaining inconsistent-link shape: a CustomTaggedItem row with
+        a FOREIGN team_id, whose tag IS local, attached to a MESSAGE rather
+        than the chat. `test_tag_filter_ignores_cross_team_tag_links` targets
+        the chat and so never reaches `tag_on_msg`; this is the test that
+        does."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        message = _message(session)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=message)
+
+        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
+
+        assert counts["total"] == 0
+
+    def test_tag_filter_matches_own_team_link_on_message(self):
+        """Positive control for the test above: the same message-targeted
+        link, but with a LOCAL team_id, must still match - otherwise the
+        negative assertion above proves nothing."""
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        message = _message(session)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
+
+        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
+
+        assert counts["total"] == 1
+
 
 @pytest.mark.django_db()
 @pytest.mark.usefixtures("frozen_time")

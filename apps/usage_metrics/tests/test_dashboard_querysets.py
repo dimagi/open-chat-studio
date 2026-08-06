@@ -104,3 +104,46 @@ class TestTagFilterTeamScoping:
         assert list(querysets["sessions"]) == []
         assert list(querysets["experiments"]) == []
         assert list(querysets["participants"]) == []
+
+    def test_foreign_team_link_with_local_tag_does_not_qualify_via_a_message(self):
+        """The remaining inconsistent-link shape: a CustomTaggedItem row with
+        a FOREIGN team_id, whose tag IS local, attached to a MESSAGE rather
+        than the chat. A chat-targeted foreign-team_id link (see
+        `test_cross_team_tag_link_does_not_qualify_a_local_chat`) never
+        reaches `tag_on_msg`/`exp_tag_on_msg`/`part_tag_on_msg`, since those
+        subqueries filter on `content_type=message_content_type` - this is
+        the test that does."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        message = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+        )
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=message)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+
+        assert list(querysets["sessions"]) == []
+        assert list(querysets["experiments"]) == []
+        assert list(querysets["participants"]) == []
+
+    def test_own_team_link_on_a_message_matches(self):
+        """Positive control for the test above: the same message-targeted
+        link, but with a LOCAL team_id, must still match - otherwise the
+        negative assertion above proves nothing."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        message = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+        )
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
+
+        assert [s.id for s in querysets["sessions"]] == [session.id]
+        assert [e.id for e in querysets["experiments"]] == [experiment.id]
+        assert [p.id for p in querysets["participants"]] == [session.participant_id]
