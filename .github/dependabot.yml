@@ -5,8 +5,10 @@ version: 2
 # It deliberately does not apply to Dependabot *security* updates, so advisory
 # fixes still land immediately. The npm ecosystems are additionally floored by
 # `minimumReleaseAge` in pnpm-workspace.yaml, which catches transitive bumps
-# that Dependabot never opens a PR for; uv, actions and pre-commit have no
-# client-side equivalent, so cooldown is the only lever there.
+# that Dependabot never opens a PR for. uv has a client-side equivalent
+# (`tool.uv.exclude-newer` in pyproject.toml) that we don't currently set;
+# actions and pre-commit have no such lever, so cooldown is the only guard
+# there.
 updates:
   - package-ecosystem: "npm"
     directory: "/"
