@@ -9,8 +9,9 @@ from time_machine import travel
 
 from apps.cost_tracking.models import Confidence, UsageSource
 from apps.teams.models import Flag
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
@@ -33,6 +34,14 @@ def _enable_flag_for(team):
 
 def _usage(team, *, cost, when, **kwargs):
     return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
+
+
+def _tagged_session(team, experiment):
+    """A session whose chat carries a team tag; returns (session, tag)."""
+    session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+    tag = TagFactory.create(team=team)
+    CustomTaggedItemFactory.create(team=team, tag=tag, target=session.chat)
+    return session, tag
 
 
 @pytest.mark.django_db()
@@ -168,6 +177,18 @@ class TestCostTrackingPanelEndpoint:
 
         assert b"999" not in response.content
 
+    def test_respects_tag_filter(self, authenticated_client, team):
+        _enable_flag_for(team)
+        experiment = ExperimentFactory.create(team=team)
+        tagged, tag = _tagged_session(team, experiment)
+        _usage(team, cost="3.00", when=_NOW - timedelta(days=1), experiment=experiment, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=experiment)
+
+        response = authenticated_client.get(self._url(team) + f"?tags={tag.id}")
+
+        assert b"3.00" in response.content
+        assert b"12.00" not in response.content
+
 
 @pytest.mark.django_db()
 class TestCostTimeseriesEndpoint:
@@ -220,6 +241,21 @@ class TestCostTimeseriesEndpoint:
 
         assert matching.json()[0]["chat"] == 1.0
         assert other.json() == []
+
+    def test_respects_tag_filter(self, authenticated_client, team):
+        _enable_flag_for(team)
+        experiment = ExperimentFactory.create(team=team)
+        tagged, tag = _tagged_session(team, experiment)
+        _usage(team, cost="3.00", when=_NOW - timedelta(days=1), experiment=experiment, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=experiment)
+
+        response = authenticated_client.get(
+            self._url(team) + f"?date_range=custom&start_date=2026-06-01&end_date=2026-06-20&tags={tag.id}"
+        )
+
+        payload = response.json()
+        assert len(payload) == 1
+        assert payload[0]["chat"] == 3.0
 
 
 @pytest.mark.django_db()
