@@ -23,8 +23,9 @@ from apps.cost_tracking.services.reporting import (
     usage_by_group,
     usage_timeseries,
 )
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
 
@@ -636,7 +637,7 @@ class TestCostTotal:
 @pytest.mark.django_db()
 class TestCostFilters:
     """The cost read path honours the dashboard's chatbot / participant /
-    platform filters (but not tags). Verified across the four public functions.
+    platform / tag filters. Verified across the public functions.
     """
 
     def test_cost_summary_filters_by_experiment(self):
@@ -722,6 +723,81 @@ class TestCostFilters:
     def test_tag_filter_narrows_to_entities(self):
         assert CostFilters().narrows_to_entities is False
         assert CostFilters(tag_ids=[1]).narrows_to_entities is True
+
+    def test_cost_summary_filters_by_tag_on_chat(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_cost_summary_filters_by_tag_on_message(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        message = ChatMessageFactory.create(chat=tagged.chat)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_tag_filter_excludes_records_without_session(self):
+        team = TeamFactory.create()
+        tag = TagFactory.create(team=team)
+        _usage(team, cost="5.00", when=_NOW - timedelta(days=1))
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    def test_tag_filter_counts_chat_spend_only(self):
+        """A tag-filtered read is per-entity attribution, so evaluation spend on
+        the tagged session is excluded (ADR-0048)."""
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(
+            team,
+            cost="0.25",
+            when=_NOW - timedelta(days=1),
+            experiment=exp,
+            session=tagged,
+            source=UsageSource.EVALUATION,
+        )
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_timeseries_filters_by_tag(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+
+        series = cost_timeseries(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert [point["chat"] for point in series] == [1.0]
+        assert "evaluation" not in series[0]
 
 
 @pytest.mark.django_db()

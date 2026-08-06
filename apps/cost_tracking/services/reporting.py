@@ -9,9 +9,12 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from django.db.models import Count, DecimalField, F, Q, Sum
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
 
+from apps.annotations.models import CustomTaggedItem
+from apps.chat.models import Chat, ChatMessage
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
@@ -180,9 +183,11 @@ class GroupBreakdown:
 
 def _scoped_records(team: Team, filters: CostFilters | None = None):
     """Team-scoped UsageRecords with the dashboard's chatbot / participant /
-    platform filters applied (mirrors the cost panel's other charts). Platform
-    is matched via the record's session, so records with no session are excluded
-    when a platform filter is set.
+    platform / tag filters applied (mirrors the cost panel's other charts).
+    Platform and tags are matched via the record's session, so records with no
+    session are excluded when either filter is set. A tag matches when the
+    session's chat or any message in it carries the tag - the same semantics
+    as the dashboard's session tag filter (`apps/dashboard/services.py`).
 
     A filtered read is per-entity attribution, so it counts chat only; only an
     unfiltered read is a team total and counts every source (ADR-0048). Without that,
@@ -197,6 +202,29 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
         qs = qs.filter(participant_id__in=filters.participant_ids)
     if filters.platform_names:
         qs = qs.filter(session__platform__in=filters.platform_names)
+    if filters.tag_ids:
+        # Exists() rather than join+distinct, matching the dashboard's tag filter.
+        chat_content_type = ContentType.objects.get_for_model(Chat)
+        message_content_type = ContentType.objects.get_for_model(ChatMessage)
+        tag_on_chat = Exists(
+            CustomTaggedItem.objects.filter(
+                content_type=chat_content_type,
+                object_id=OuterRef("session__chat_id"),
+                tag_id__in=filters.tag_ids,
+            )
+        )
+        tag_on_msg = Exists(
+            CustomTaggedItem.objects.filter(
+                content_type=message_content_type,
+                object_id__in=Subquery(
+                    ChatMessage.objects.filter(chat=OuterRef(OuterRef("session__chat_id"))).values("id")
+                ),
+                tag_id__in=filters.tag_ids,
+            )
+        )
+        qs = qs.annotate(_tag_on_chat=tag_on_chat, _tag_on_msg=tag_on_msg).filter(
+            Q(_tag_on_chat=True) | Q(_tag_on_msg=True)
+        )
     if filters.narrows_to_entities:
         qs = qs.filter(source=UsageSource.CHAT)
     return qs
