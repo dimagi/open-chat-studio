@@ -1,0 +1,3 @@
+# See the root pnpm-workspace.yaml. The widget resolves against its own lockfile,
+# so it needs its own copy of the cooldown setting.
+minimumReleaseAge: 4320

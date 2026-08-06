@@ -7,6 +7,7 @@
     {% if document_source and document_source.sync_task_id %}
       hx-get="{% url "documents:document_source_files_list" request.team.slug collection.id document_source.id %}"
       hx-trigger="every 5s"
+      hx-target="this"
       hx-swap="outerHTML"
       hx-include="#search-input"
     {% endif %}

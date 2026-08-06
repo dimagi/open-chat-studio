@@ -12,7 +12,9 @@ BASE_PATH = pathlib.Path(__file__).parent / "data"
 @pytest.mark.parametrize(
     ("filename", "expected_content", "part_count"),
     [
-        pytest.param("test.pdf", "PDF documents can be\n\n\x0chard to read 🫠\n\n", 1, id="pdf"),
+        # PDFs are read by PDFium, one part per page. pdfminer used to return a single part
+        # separated by a form feed (\x0c) with doubled newlines around it.
+        pytest.param("test.pdf", "PDF documents can be\nhard to read 🫠\n", 2, id="pdf"),
         pytest.param("test.txt", "Hi\n\nHere is a text file with 🥰 emoji.\n", 1, id="txt"),
         pytest.param("test.docx", "doc, but with an x 😊", 1, id="docx"),
     ],

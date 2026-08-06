@@ -21,7 +21,13 @@
           {% endblock sidebar-nav %}
         </div>
       {% endif %}
-      <div class="w-full">
+      {% comment %}
+        min-w-0 lets this column shrink below its content's intrinsic width. Without it a flex item's
+        automatic minimum size pins the column to its widest child, so a wide table or a rendered chart
+        canvas pushes the whole page into horizontal overflow instead of scrolling/resizing within the
+        column.
+      {% endcomment %}
+      <div class="w-full min-w-0">
         {% include "banners/banner.html" %}
         {% if request.team.is_migrating %}
           {% include "teams/migration_lock_banner.html" %}

@@ -1,3 +1,20 @@
+from typing import TypedDict
+
+
+class ErrorReport(TypedDict):
+    """Everything wrong with a pipeline, bucketed by what the problem is attached to.
+
+    ``node`` maps a node's flow id to its ``{field: message}`` errors, with non-field problems under
+    the ``"root"`` sentinel. ``edge`` holds the ids of offending edges. ``pipeline`` holds messages
+    that name no single node or edge. All three keys are always present; a report with all three
+    empty means the pipeline is valid.
+    """
+
+    node: dict[str, dict[str, str]]
+    edge: list[str]
+    pipeline: list[str]
+
+
 class MissingNodeDataError(ValueError):
     """A saved graph contains node ids with no provided content and no existing Node row."""
 
@@ -25,6 +42,33 @@ class PipelineBuildError(Exception):
         if self.node_id:
             return {"node": {self.node_id: {"root": self.message}}, "edge": self.edge_ids}
         return {"pipeline": self.message, "edge": self.edge_ids}
+
+
+def has_errors(report: ErrorReport) -> bool:
+    """Whether a report holds anything. All three buckets empty means the pipeline is valid."""
+    return any(report.values())
+
+
+def error_report(node_errors: dict, build_errors: list["PipelineBuildError"]) -> ErrorReport:
+    """The three-bucket report: per-node field errors merged with graph-level build errors.
+
+    A build error carrying a ``node_id`` is attributed to that node under the ``root`` sentinel,
+    alongside any field errors it already has; the rest are graph-level and collect in ``pipeline``.
+    ``edge_ids`` accumulate from every error, since an edge id identifies the offending edge whichever
+    check produced it.
+    """
+    node = {flow_id: dict(fields) for flow_id, fields in node_errors.items()}
+    edge: list[str] = []
+    pipeline: list[str] = []
+    for error in build_errors:
+        if error.node_id:
+            # One "root" per node: two graph-level errors naming the same node isn't a shape the
+            # checks produce today.
+            node.setdefault(error.node_id, {})["root"] = error.message
+        else:
+            pipeline.append(error.message)
+        edge.extend(error.edge_ids or [])
+    return {"node": node, "edge": edge, "pipeline": pipeline}
 
 
 class PipelineNodeBuildError(Exception):

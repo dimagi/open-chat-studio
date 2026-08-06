@@ -18,6 +18,10 @@ from apps.experiments.models import ExperimentSession
 from apps.files.models import File, FilePurpose
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.llm_service.datamodels import LlmChatResponse
+from apps.service_providers.llm_service.image_types import (
+    DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES,
+    GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES,
+)
 from apps.service_providers.llm_service.index_managers import (
     GoogleLocalIndexManager,
     IndexManager,
@@ -58,6 +62,7 @@ class LlmService(pydantic.BaseModel):
     _type: str = "unknown"
     supports_transcription: bool = False
     supports_assistants: bool = False
+    supported_image_content_types: ClassVar[frozenset[str]] = DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
 
     def get_raw_client(self) -> SyncAPIClient:
         raise NotImplementedError
@@ -462,6 +467,7 @@ class DeepSeekLlmService(LlmService):
 
 class GoogleLlmService(LlmService):
     google_api_key: str
+    supported_image_content_types: ClassVar[frozenset[str]] = GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
 
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_genai import ChatGoogleGenerativeAI  # noqa: PLC0415 - TID253: heavy lib, slow startup
@@ -511,6 +517,7 @@ class GoogleVertexAILlmService(LlmService):
     credentials_json: dict
     location: str = "global"
     api_transport: Literal["grpc", "rest"] = "grpc"
+    supported_image_content_types: ClassVar[frozenset[str]] = GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
 
     def _chat_model(self, llm_model: str, **kwargs) -> BaseChatModel:
         from langchain_google_vertexai import ChatVertexAI  # noqa: PLC0415 - TID253: heavy lib, slow startup

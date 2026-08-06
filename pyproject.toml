@@ -14,7 +14,7 @@ dependencies = [
     "celery",
     "celery-progress",
     "celery[redis]",
-    "django-allauth[mfa]>=0.56.0",
+    "django-allauth[mfa]>=65.18.0",
     "django-anymail",
     "django-cleanup",
     "django-cryptography-django5",
@@ -44,7 +44,7 @@ dependencies = [
     "langchain_google_genai",
     "langchain-voyageai",
     "langchain-community>=0.4.2",
-    "langfuse>=4.5.0",
+    "langfuse>=4.14.1",
     "langgraph>=1.2.9",
     "loguru",
     "mail-parser-reply>=0.20",
@@ -76,7 +76,7 @@ dependencies = [
     "pgvector",
     "backoff",
     "django-cors-headers>=4.7.0",
-    "markitdown[pdf, docx, xlsx, xls, outlook, pptx]",
+    "markitdown[docx, xlsx, xls, outlook, pptx]",
     "langchain-mcp-adapters",
     "atlassian-python-api>=4.0.7",
     "audioop-lts>=0.2.2",
@@ -94,6 +94,7 @@ dependencies = [
     "djlint>=1.42.3",
     "transformers",
     "packaging>=23.2",
+    "pypdfium2>=5.12.1",
 ]
 
 [project.urls]
@@ -176,10 +177,10 @@ dev = [
     "pytest-httpx",
     "pytest-cov",
     "pytest-xdist",
-    "django-debug-toolbar>=5.2.0",
-    "prek>=0.3.2",
+    "django-debug-toolbar>=7.0.0",
+    "prek>=0.4.11",
     "django-types",
-    "ty>=0.0.63",
+    "ty>=0.0.65",
     "honcho>=2.0.0",
     # Used only by scripts/mock_connect_server.py — a dev tool that impersonates
     # the CommCare Connect backend for local development.

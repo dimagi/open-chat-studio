@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 
 from apps.documents.datamodels import JSONCollectionSourceConfig
 from apps.documents.models import Collection, DocumentSource
-from apps.documents.readers import markitdown_read
+from apps.documents.readers import read_file_content
 from apps.documents.source_loaders.base import BaseDocumentLoader
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
@@ -155,8 +155,10 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
         except InvalidURL as exc:
             raise ValueError(f"Refusing to fetch attachment URL: {exc}") from exc
         content = self._read_with_size_limit(url)
-        doc = markitdown_read(BytesIO(content))
-        return doc.get_contents_as_string()
+        # No trustworthy content type here -- the feed's `file_type` is a third party's claim --
+        # so let the bytes pick the reader. A damaged PDF is refused in milliseconds instead of
+        # occupying the worker for minutes; the caller records it as failed and moves on.
+        return read_file_content(BytesIO(content)).get_contents_as_string()
 
     def _read_with_size_limit(self, url: str) -> bytes:
         """GET `url` and return the body, raising ValueError if it exceeds the size cap.

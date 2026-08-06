@@ -152,6 +152,32 @@ def test_from_request_translates_legacy_url_params():
     assert json.loads(matches[0].value) == ["tag1", "tag2"]
 
 
+def test_from_request_translates_legacy_repeated_column():
+    """A bookmarked legacy date range must keep both bounds, not just the last one.
+
+    The legacy format keyed filters by position, so a range is two filters on one column.
+    Translating that to the f_/op_ format means repeated keys.
+    """
+    request = RequestFactory().get(
+        "/",
+        data={
+            "filter_0_column": "first_message",
+            "filter_0_operator": "after",
+            "filter_0_value": "2026-04-30",
+            "filter_1_column": "first_message",
+            "filter_1_operator": "before",
+            "filter_1_value": "2026-06-01",
+        },
+    )
+
+    params = FilterParams.from_request(request)
+
+    assert [(f.operator, f.value) for f in params.get_all("first_message")] == [
+        ("after", "2026-04-30"),
+        ("before", "2026-06-01"),
+    ]
+
+
 def test_from_request_header_translates_legacy_url_params():
     """The HX-Current-URL fallback path must translate legacy params too."""
     legacy_url = "http://testserver/sessions/?filter_0_column=experiment&filter_0_operator=any+of&filter_0_value=5"

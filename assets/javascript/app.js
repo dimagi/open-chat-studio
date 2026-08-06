@@ -7,6 +7,16 @@ export const Cookies = JsCookie.default;
 // (e.g. the Alpine filter component). Webpack modules should import from ./filters/csvTilde.js.
 export {serializeCSVTildeValues, parseCSVTildeValue} from "./filters/csvTilde.js";
 
+// Shared read/write for the f_/op_ filter query-param format, exposed for the same reason.
+// Webpack modules should import from ./filters/wireFormat.js.
+export {
+  LIST_OPERATORS,
+  buildFilterParams,
+  filterParamsToRequestValues,
+  parseFilterParams,
+  replaceFilterParams,
+} from "./filters/wireFormat.js";
+
 export async function copyToClipboard (callee, elementId) {
   const element = document.getElementById(elementId)
   if (!element) return;

@@ -37,12 +37,18 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
 
       - name: Configure AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v6.2.1
+        uses: aws-actions/configure-aws-credentials@v6.2.3
         with:
           role-to-assume: ${{ vars.DORA_AWS_ROLE_ARN }}
           role-session-name: DoraReport

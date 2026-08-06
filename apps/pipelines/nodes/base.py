@@ -415,6 +415,27 @@ class PipelineRouterNode(BasePipelineNode):
         raise NotImplementedError()
 
 
+def resolve_node_class(node_type: str) -> type[BasePipelineNode] | None:
+    """The node class a stored ``Node.type`` names, or ``None`` if it names no usable node type.
+
+    ``Node.type`` is graph data with nothing validating it against the node classes, so it can name
+    any module-level attribute of ``apps.pipelines.nodes.nodes`` — a logger, an imported module, a
+    helper function, a class that isn't a node. A bare ``getattr`` would hand one of those to
+    ``issubclass``/``model_validate``/instantiation and raise; here they all collapse to ``None``,
+    which callers already report as an unknown type. The accepted set is exactly the one the editor
+    offers (see ``apps.pipelines.views._pipeline_node_schemas``): concrete node classes only, so the
+    two abstract bases are rejected as well.
+    """
+    from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→base
+
+    node_class = getattr(pipeline_nodes, node_type, None)
+    if not isinstance(node_class, type) or not issubclass(node_class, PipelineNode | PipelineRouterNode):
+        return None
+    if node_class in (PipelineNode, PipelineRouterNode):
+        return None
+    return node_class
+
+
 class Widgets(StrEnum):
     expandable_text = "expandable_text"
     code = "code"

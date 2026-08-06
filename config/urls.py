@@ -14,6 +14,8 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from anymail.webhooks.amazon_ses import AmazonSESInboundWebhookView
+from anymail.webhooks.mailgun import MailgunInboundWebhookView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -23,6 +25,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 
+from apps.oauth.urls import team_urlpatterns as oauth_team_urls
 from apps.oauth.views import TeamScopedAuthorizationView
 from apps.slack.urls import slack_global_urls
 from apps.teams.urls import team_urlpatterns as single_team_urls
@@ -33,6 +36,13 @@ from apps.web.waf import WafRule, waf_allow
 sitemaps = {
     "static": StaticViewSitemap(),
 }
+
+# Inbound email webhooks receive the full message body, which routinely exceeds the WAF's 8KB
+# limit. These views come from anymail's own URLconf, so the exemption is registered against the
+# classes rather than applied as a decorator. Both backends settings_production accepts are listed,
+# so the exemption survives a DJANGO_EMAIL_BACKEND switch.
+waf_allow(WafRule.SizeRestrictions_BODY)(AmazonSESInboundWebhookView)
+waf_allow(WafRule.SizeRestrictions_BODY)(MailgunInboundWebhookView)
 
 # urls that are unique to using a team should go here
 team_urlpatterns = [
@@ -47,6 +57,7 @@ team_urlpatterns = [
     path("annotations/", include("apps.annotations.urls")),
     path("participants/", include("apps.participants.urls")),
     path("mcp_integrations/", include("apps.mcp_integrations.urls")),
+    path("oauth/applications/", include(oauth_team_urls)),
     path("slack/", include("apps.slack.urls")),
     path("help/", include("apps.help.urls")),
     path("documents/", include("apps.documents.urls")),

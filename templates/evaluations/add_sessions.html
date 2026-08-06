@@ -152,7 +152,7 @@
       <input type="hidden" name="mode" :value="mode">
       <input type="hidden" name="sample_percent" :value="samplePercent">
       <input type="hidden" name="message_scope" :value="messageScope">
-      <template x-for="param in filterParams" :key="param.name">
+      <template x-for="(param, index) in filterParams" :key="index">
         <input type="hidden" :name="param.name" :value="param.value">
       </template>
     </form>

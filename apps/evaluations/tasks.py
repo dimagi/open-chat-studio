@@ -15,7 +15,6 @@ from django.db.models import Count, Exists, Max, OuterRef, Prefetch, QuerySet
 from django.http import QueryDict
 from django.utils import timezone
 from taskbadger import StatusEnum
-from taskbadger.celery import Task as TaskbadgerTask
 
 from apps.assessments.score_writers import write_scores_from_evaluation_result
 from apps.channels.models import ChannelPlatform, ExperimentChannel
@@ -53,6 +52,7 @@ from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.files.models import File, FilePurpose
 from apps.teams.models import Team
 from apps.teams.utils import current_team
+from apps.utils.celery import Queues
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 EVAL_SESSIONS_TTL_DAYS = 30
@@ -235,7 +235,7 @@ def evaluate_message(evaluation_run_id: int, evaluator_ids: list[int], message_i
             _run_evaluator_on_message(evaluation_run, evaluator, message, bot_response, session_id)
 
 
-@shared_task(acks_late=True, soft_time_limit=BATCH_SOFT_TIME_LIMIT)
+@shared_task(acks_late=True, soft_time_limit=BATCH_SOFT_TIME_LIMIT, queue=Queues.EVALUATIONS)
 def evaluate_message_batch(evaluation_run_id: int, message_ids: list[int]) -> None:
     """Evaluate a small batch of messages in-process, then exit.
 
@@ -368,7 +368,7 @@ def _fail_run_for_unconfigured_evaluators(run: EvaluationRun, names: list[str]) 
     )
 
 
-def _complete_run(run: EvaluationRun) -> None:
+def _complete_run(run: EvaluationRun, *, nothing_to_finalize: bool = False) -> None:
     """Flip the run to COMPLETED. The completion side effects run after the tick commits.
 
     Only the status transition belongs under the coordination lock. Aggregates and tag
@@ -377,8 +377,14 @@ def _complete_run(run: EvaluationRun) -> None:
     part-way through rolled the run back to PROCESSING. The next tick then saw the same
     finished run and re-ran the same doomed sweep, once per beat interval, forever.
     `finalize_evaluation_run` carries them instead (dispatched from `_drive_run`).
+
+    `nothing_to_finalize` marks the run finalized in the same write: no finalization is
+    dispatched for it, so the results page must not sit waiting for one.
     """
-    run.mark_complete()
+    run.mark_complete(save=False)
+    if nothing_to_finalize:
+        run.finalized_at = run.finished_at
+    run.save(update_fields=["finished_at", "status", "finalized_at"])
 
 
 def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
@@ -393,7 +399,7 @@ def _coordinate_locked_run(run: EvaluationRun) -> _TickResult:
     evaluator_ids = run.evaluator_ids or []
 
     if total == 0 or not evaluator_ids:
-        _complete_run(run)
+        _complete_run(run, nothing_to_finalize=True)
         return _TickResult(batches=[], done=0, total=total, terminal="success")
 
     # First tick only, to keep the steady-state tick free of this query. A provider deleted
@@ -457,7 +463,7 @@ def _drive_run(run_id: int) -> None:
             finalize_evaluation_run.delay(run.id)
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def finalize_evaluation_run(run_id: int) -> None:
     """Completion side effects for a run already committed as COMPLETED.
 
@@ -479,9 +485,13 @@ def finalize_evaluation_run(run_id: int) -> None:
     with current_team(run.team):
         compute_aggregates_for_run(run)
         reverse_stale_tags(run)
+    # Stamped last: until it is set, the results page treats missing aggregates as "still
+    # coming" rather than as this run having none (see `EvaluationRun.is_finalizing`).
+    run.finalized_at = timezone.now()
+    run.save(update_fields=["finalized_at"])
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def drive_evaluation_run(run_id: int) -> None:
     """One coordination tick for a single run.
 
@@ -497,7 +507,7 @@ def drive_evaluation_run(run_id: int) -> None:
         logger.exception("Coordination tick failed for evaluation run %s", run_id)
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def coordinate_evaluation_runs() -> None:
     """Beat task (every 30s): dispatch one coordination tick per active evaluation run.
 
@@ -686,7 +696,7 @@ def _create_message_history(chat: Chat, history: list[dict]) -> None:
     ChatMessage.objects.bulk_create(history_messages)
 
 
-@shared_task(base=TaskbadgerTask)
+@shared_task(queue=Queues.BACKGROUND)
 def cleanup_old_evaluation_data() -> None:
     """Delete ExperimentSessions that were created during evaluation runs and
     are older than one week.
@@ -709,7 +719,7 @@ def cleanup_old_evaluation_data() -> None:
     logger.info(f"Cleanup completed: deleted {deleted_chats[0]} chat records and associated evaluation sessions")
 
 
-@shared_task(base=TaskbadgerTask)
+@shared_task(queue=Queues.BACKGROUND)
 def cleanup_old_preview_evaluation_runs() -> None:
     """Delete preview evaluation runs older than 1 day"""
     one_day_ago = timezone.now() - timedelta(days=1)
@@ -724,7 +734,7 @@ def cleanup_old_preview_evaluation_runs() -> None:
     logger.info(f"Cleanup completed: deleted {deleted_preview_runs[0]} preview evaluation runs")
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: int) -> dict:
     """
     Process CSV upload for dataset asynchronously with progress tracking.
@@ -766,7 +776,7 @@ def update_dataset_from_csv_task(self, dataset_id: int, file_id: int, team_id: i
         return {"success": False, "error": str(e)}
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def create_dataset_from_csv_task(
     self,
     dataset_id: int,
@@ -1101,7 +1111,7 @@ def process_csv_rows(
     return stats
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def upload_evaluation_run_results_task(
     self, evaluation_run_id: int, csv_data: list[dict], team_id: int, column_mappings: dict | None = None
 ) -> dict:
@@ -1254,7 +1264,7 @@ def process_evaluation_results_csv_rows(
     return stats
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def create_dataset_from_session_messages_task(
     self,
     dataset_id: int,
@@ -1358,7 +1368,7 @@ def _sessions_for_session_mode_clone(
     return ExperimentSession.objects.filter(team=dataset.team, external_id__in=session_ids)
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, queue=Queues.BACKGROUND)
 def create_dataset_from_sessions_task(
     self,
     dataset_id: int,
@@ -1466,7 +1476,7 @@ def _get_bulk_results_queryset(config: EvaluationConfig, team: Team) -> QuerySet
     )
 
 
-@shared_task(base=TaskbadgerTask)
+@shared_task(queue=Queues.BACKGROUND)
 def export_evaluation_bulk_results_task(evaluation_config_id: int, team_id: int) -> dict:
     """
     Async export of the most recent evaluation result for each dataset item,

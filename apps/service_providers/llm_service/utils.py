@@ -3,12 +3,16 @@ import re
 from io import BytesIO
 
 import httpx
+import openai
 from django.conf import settings
 from langchain_core.messages import HumanMessage
 
 from apps.chat.agent.constants import OCS_CITATION_PATTERN
+from apps.chat.exceptions import UserReportableError
 from apps.experiments.models import ExperimentSession
 from apps.files.models import File
+from apps.service_providers.llm_service.image_types import DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES, image_type_names
+from apps.utils.llm_messages import EMPTY_MESSAGE_PLACEHOLDER
 
 logger = logging.getLogger("ocs.llm_service")
 
@@ -125,50 +129,79 @@ def get_openai_container_file_contents(
         return BytesIO(response.read())
 
 
-def format_multimodal_input(message: str, attachments: list) -> HumanMessage:
+def format_multimodal_input(
+    message: str,
+    attachments: list,
+    supported_image_content_types: frozenset[str] = DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES,
+) -> HumanMessage:
     attachments = [a for a in attachments if getattr(a, "send_to_llm", True)]
     stripped = message.strip()
     parts = []
     if stripped:
         parts.append({"type": "text", "text": stripped})
     for att in attachments:
-        if att.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-            raise ValueError(f"File {att.name} exceeds maximum size")
-
-        mime_type = att.content_type or ""
-        if mime_type.startswith("image/"):
-            parts.append(
-                {
-                    "type": "image",
-                    "source_type": "url",
-                    "url": att.download_link,
-                    "mime_type": mime_type,
-                }
-            )
-        elif mime_type == "application/pdf":
-            parts.append(
-                {
-                    "type": "file",
-                    "source_type": "base64",
-                    "data": att.read_base64(),
-                    "mime_type": mime_type,
-                    "filename": att.name,
-                }
-            )
-        else:
-            # Attempt to convert other doc types to text since LLM APIs
-            # do not natively support these formats
-            text_content = _convert_attachment_to_text(att)
-            if text_content:
-                parts.append(
-                    {
-                        "type": "text",
-                        "text": f'<document filename="{att.name}">\n{text_content}\n</document>',
-                    }
-                )
+        block = _attachment_content_block(att, supported_image_content_types)
+        if block:
+            parts.append(block)
     if not parts:
-        parts.append({"type": "text", "text": "[empty message]"})
+        parts.append({"type": "text", "text": EMPTY_MESSAGE_PLACEHOLDER})
     return HumanMessage(content=parts)
+
+
+def _attachment_content_block(att, supported_image_content_types: frozenset[str]) -> dict | None:
+    if att.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise ValueError(f"File {att.name} exceeds maximum size")
+
+    content_type = att.content_type or ""
+    if content_type.startswith("image/"):
+        if content_type not in supported_image_content_types:
+            raise UserReportableError(
+                f"The image `{att.name}` is not a supported image type. "
+                f"Supported types: {image_type_names(supported_image_content_types)}."
+            )
+        return {
+            "type": "image",
+            "source_type": "url",
+            "url": att.download_link,
+            "mime_type": content_type,
+        }
+    if content_type == "application/pdf":
+        return {
+            "type": "file",
+            "source_type": "base64",
+            "data": att.read_base64(),
+            "mime_type": content_type,
+            "filename": att.name,
+        }
+    # Attempt to convert other doc types to text since LLM APIs
+    # do not natively support these formats
+    text_content = _convert_attachment_to_text(att)
+    if text_content:
+        return {"type": "text", "text": f'<document filename="{att.name}">\n{text_content}\n</document>'}
+    return None
+
+
+# OpenAI error codes indicating the model rejected an attached image.
+INVALID_IMAGE_ERROR_CODES = {"invalid_image_format", "invalid_image", "image_parse_error"}
+
+
+def invoke_with_image_error_translation(agent, inputs, supported_image_content_types: frozenset[str]):
+    """Invoke the agent, translating provider invalid-image errors for the participant.
+
+    Backstop for images the upload sniffer cannot identify (e.g. HEIC renamed to
+    .jpg sniffs as image/jpeg and passes the allowlist in format_multimodal_input).
+    OpenAI/Azure only: other providers' invalid-image errors carry no stable codes
+    and keep the generic error path.
+    """
+    try:
+        return agent.invoke(inputs)
+    except openai.BadRequestError as e:
+        if e.code in INVALID_IMAGE_ERROR_CODES:
+            raise UserReportableError(
+                "An attached image could not be processed. "
+                f"Supported types: {image_type_names(supported_image_content_types)}."
+            ) from e
+        raise
 
 
 def _convert_attachment_to_text(attachment) -> str | None:

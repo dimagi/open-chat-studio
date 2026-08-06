@@ -3,12 +3,18 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from apps.chat.bots import PipelineTestBot
-from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError, PipelineNodeRunError
+from apps.pipelines.exceptions import (
+    PipelineBuildError,
+    PipelineNodeBuildError,
+    PipelineNodeRunError,
+    has_errors,
+)
 from apps.pipelines.models import Pipeline
 from apps.service_providers.llm_service.runnables import GenerationError
+from apps.utils.celery import Queues
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.CHAT)
 def send_email_from_pipeline(recipient_list, subject, message):
     send_mail(
         subject=subject,
@@ -19,15 +25,14 @@ def send_email_from_pipeline(recipient_list, subject, message):
     )
 
 
-@shared_task
+@shared_task(queue=Queues.CHAT)
 def get_response_for_pipeline_test_message(pipeline_id: int, message_text: str, user_id: int):
     """
     Retrieve a response from a pipeline for a test message.
     Attempts to invoke a pipeline with a given message and user, handling potential pipeline build errors.
     """
     pipeline = Pipeline.objects.get(id=pipeline_id)
-    errors = pipeline.validate(full=False)
-    if errors:
+    if has_errors(pipeline.validate(full=False)):
         return {"error": "There are errors in the pipeline configuration. Please correct those before running a test."}
     bot = PipelineTestBot(pipeline=pipeline, user_id=user_id)
     try:

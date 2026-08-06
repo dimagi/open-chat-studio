@@ -413,20 +413,31 @@ def coverage_gaps(team: Team, *, start: datetime, end: datetime, filters: CostFi
 def cost_timeseries(
     team: Team, *, start: datetime, end: datetime, granularity: str = "daily", filters: CostFilters | None = None
 ) -> list[dict]:
-    """Spend per time bucket in [start, end), ordered chronologically. Costs
-    are returned as floats for direct JSON/Chart.js consumption. Empty buckets
-    (no usage) are absent - the chart plots what's recorded.
+    """Spend per time bucket in [start, end), split by source, ordered chronologically.
+
+    One row per non-empty bucket: ``{'date': bucket, <source>: float, ...}``, carrying a
+    key for every source the read counts, zero-filled so the chart's stacked series stay
+    aligned. An unfiltered read is a team total and so carries every source; a filtered one
+    is per-entity attribution and so carries `chat` alone (ADR-0048) - the evaluation key is
+    absent there rather than a misleading zero. Costs are floats for direct JSON/Chart.js
+    consumption. Empty buckets (no usage) are absent - the chart plots what's recorded.
     """
+    filters = filters or CostFilters()
+    sources = [UsageSource.CHAT.value] if filters.narrows_to_entities else [source.value for source in UsageSource]
     trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
     rows = (
         _scoped_records(team, filters)
         .filter(timestamp__gte=start, timestamp__lt=end)
         .annotate(bucket=trunc("timestamp"))
-        .values("bucket")
+        .values("bucket", "source")
         .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
         .order_by("bucket")
     )
-    return [{"date": row["bucket"], "cost": float(row["cost"])} for row in rows]
+    buckets: dict = {}
+    for row in rows:
+        point = buckets.setdefault(row["bucket"], {"date": row["bucket"], **dict.fromkeys(sources, 0.0)})
+        point[row["source"]] = float(row["cost"])
+    return list(buckets.values())
 
 
 def usage_timeseries(
@@ -442,7 +453,7 @@ def usage_timeseries(
     bucket: ``{'bucket', 'cost' (Decimal), 'currency', 'prompt', 'completion', 'total'}``. Empty buckets
     are absent (the caller zero-fills). Shares the scoped-record path with ``cost_total``/``token_counts``
     so a bucketed usage response reconciles with the same window's totals. This is the API read; the
-    dashboard's Chart.js series is ``cost_timeseries`` (float, UTC-bucketed).
+    dashboard's Chart.js series is ``cost_timeseries`` (float, UTC-bucketed, split by source).
     """
     trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
     scoped = _scoped_records(team, filters).filter(timestamp__gte=start, timestamp__lt=end)

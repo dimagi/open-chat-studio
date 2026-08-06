@@ -1,13 +1,18 @@
 from unittest.mock import Mock
 
+import httpx
+import openai
 import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from apps.chat.exceptions import UserReportableError
+from apps.pipelines.nodes import llm_node
 from apps.pipelines.nodes.helpers import get_system_message, prompt_uses_current_datetime
 from apps.pipelines.nodes.llm_node import (
     _add_current_datetime_to_turn,
     build_node_agent,
 )
+from apps.service_providers.llm_service.image_types import DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
 from apps.service_providers.llm_service.main import AnthropicLlmService, OpenAILlmService
 
 
@@ -103,3 +108,28 @@ class TestCurrentDatetimeCachePreservation:
 
         assert message.content == [{"type": "text", "text": "hi"}]
         prompt_context.get_current_datetime.assert_not_called()
+
+
+class TestExecuteSubAgentImageErrorWiring:
+    def test_provider_invalid_image_error_surfaces_as_user_reportable(self, monkeypatch):
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        error = openai.BadRequestError(
+            "bad image", response=httpx.Response(400, request=request), body={"code": "invalid_image_format"}
+        )
+        agent = Mock()
+        agent.invoke.side_effect = error
+        monkeypatch.setattr(llm_node, "build_node_agent", Mock(return_value=agent))
+        monkeypatch.setattr(llm_node, "_get_prompt_context", Mock())
+        monkeypatch.setattr(llm_node, "_add_current_datetime_to_turn", Mock())
+
+        node = Mock()
+        node.get_llm_service.return_value.supported_image_content_types = DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
+        context = Mock()
+        context.input = "hello"
+        context.attachments = []
+        context.input_message_id = None
+        context.state.participant_data = {}
+        context.state.session_state = {}
+
+        with pytest.raises(UserReportableError):
+            llm_node.execute_sub_agent(node, context)

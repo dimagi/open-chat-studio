@@ -125,8 +125,12 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-70b-instruct", 131072),
     ],
     "deepseek": [
-        Model("deepseek-chat", 128000, is_default=True),
-        Model("deepseek-reasoner", 128000, is_translation_default=True),
+        # llm-stats lists this model under its open-weights name (deepseek-v4-flash-0731), but
+        # api.deepseek.com only serves the undated alias, which is what we have to send.
+        Model("deepseek-v4-flash", 1000000, is_default=True),
+        Model("deepseek-v4-pro", 1000000, is_translation_default=True),
+        Model("deepseek-chat", 128000, deprecated=True, replacement="deepseek-v4-flash"),
+        Model("deepseek-reasoner", 128000, deprecated=True, replacement="deepseek-v4-flash"),
     ],
     "minimax": [
         Model("MiniMax-M3", k(1000), is_default=True),
@@ -142,13 +146,16 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
-        Model("gemini-3.6-flash", 1048576),
-        Model("gemini-3.5-flash", 1048576),
+        Model("gemini-3.6-flash", 1048576, is_translation_default=True),
+        Model("gemini-3.5-flash", 1048576, is_default=True),
         Model("gemini-3.5-flash-lite", 1048576),
         Model("gemini-3.1-pro-preview", 1048576),
-        Model("gemini-2.5-pro", 1048576, is_translation_default=True),
-        Model("gemini-2.5-flash", 1048576, is_default=True),
-        Model("gemini-2.5-flash-lite", 1048576),
+        Model("gemini-3.1-flash-lite", 1048576),
+        # Google is retiring the 2.5 models on the Gemini Enterprise Agent Platform: they enter
+        # Extended Lifecycle Access on 2026-10-20 and lose ELA pricing on 2027-01-28.
+        Model("gemini-2.5-pro", 1048576, deprecated=True, replacement="gemini-3.6-flash"),
+        Model("gemini-2.5-flash", 1048576, deprecated=True, replacement="gemini-3.5-flash"),
+        Model("gemini-2.5-flash-lite", 1048576, deprecated=True, replacement="gemini-3.1-flash-lite"),
     ],
 }
 
@@ -233,7 +240,12 @@ def get_model_parameters(model_name: str, **param_overrides) -> dict:
 
 
 def get_default_model(provider_type: str) -> Model | None:
-    return next((m for m in DEFAULT_LLM_PROVIDER_MODELS[provider_type] if m.is_default), None)
+    """The provider's default model, or None if it has no default.
+
+    Not every ``LlmProviderTypes`` member has chat models here (``voyage`` is embeddings
+    only), so a missing provider is a legitimate miss rather than a programming error.
+    """
+    return next((m for m in DEFAULT_LLM_PROVIDER_MODELS.get(provider_type, ()) if m.is_default), None)
 
 
 def get_default_translation_models_by_provider() -> dict:
@@ -331,12 +343,12 @@ def _evaluator_provider_model_fk_in_db() -> bool:
 
 
 def _repoint_evaluators(custom_model, global_model) -> None:
-    """Move every evaluator on ``custom_model`` to ``global_model``, ``params`` and FK together.
+    """Move every evaluator on ``custom_model`` to ``global_model``.
 
-    Written out here rather than calling ``Evaluator.set_llm_provider_model_id`` because
-    this also runs from migrations (``migration_utils.llm_model_migration``), where these
-    are historical models: they carry no custom methods, and in states older than
-    ``evaluations.0018`` the ``evaluators`` accessor does not exist at all.
+    The caller's generic FK pass would repoint them too. This exists for the guard below:
+    it also runs from migrations (``migration_utils.llm_model_migration``), where in states
+    older than ``evaluations.0018`` the ``evaluators`` accessor does not exist at all, and
+    the generic pass cannot tell that apart from having nothing to repoint.
     """
     evaluators = getattr(custom_model, "evaluators", None)
     if evaluators is None:
@@ -354,16 +366,13 @@ def _repoint_evaluators(custom_model, global_model) -> None:
             )
         return
 
-    for evaluator in evaluators.all():
-        evaluator.params["llm_provider_model_id"] = global_model.id
-        evaluator.llm_provider_model_id = global_model.id
-        evaluator.save(update_fields=["params", "llm_provider_model_id"])
+    evaluators.update(llm_provider_model_id=global_model.id)
 
 
 def _replace_custom_model_with_global(custom_model, global_model, LlmProviderModel):
     """Repoint everything referencing ``custom_model`` at ``global_model``, then delete it."""
-    # Evaluators first: they keep a copy of the model id in ``params`` alongside the FK, so
-    # both have to move together. Once done they drop out of get_related_objects below.
+    # Evaluators first: the generic pass below cannot tell an absent relation (an old
+    # migration state) from one with nothing to repoint. Once done they drop out of it.
     _repoint_evaluators(custom_model, global_model)
 
     for obj in get_related_objects(custom_model):

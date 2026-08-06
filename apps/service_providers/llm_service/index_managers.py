@@ -485,7 +485,17 @@ class VoyageAILocalIndexManager(LocalIndexManager):
         The langchain wrapper maps `embed_documents` and `embed_query` to
         Voyage's `input_type=document` and `input_type=query` API params
         respectively, which return different vectors for documents vs queries.
+
+        Contextual models are rejected: they route through Voyage's
+        `contextualized_embed` API with auto-chunking, which can return several
+        embeddings for a single input. This method returns one vector per chunk we
+        send, so the extra embeddings would be dropped and the tail of the chunk
+        silently lost from the index. Detection matches langchain-voyageai's own
+        `_is_context_model`, which is a substring check on the model name.
         """
+        if "context" in self.embedding_model_name:
+            raise ValueError(f"Contextual Voyage models are not supported: {self.embedding_model_name}")
+
         if not content:
             raise ValueError("Cannot embed empty string")
 

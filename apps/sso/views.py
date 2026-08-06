@@ -38,17 +38,13 @@ class LoginEmailForm(BaseLoginForm):
 
 class LoginPasswordForm(BaseLoginForm):
     login = forms.EmailField(widget=forms.HiddenInput())
-    password = PasswordField(
-        label=_("Password"),
-        widget=forms.PasswordInput(
-            render_value=False,
-            attrs={
-                "placeholder": _("Password"),
-                "autocomplete": "current-password",
-                "autofocus": True,
-            },
-        ),
-    )
+    # `PasswordField` builds its own widget, so `autocomplete` must be passed as a field kwarg
+    # and any other attrs set on the widget afterwards.
+    password = PasswordField(label=_("Password"), autocomplete="current-password")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["password"].widget.attrs["autofocus"] = True
 
 
 class CustomLoginView(LoginView):

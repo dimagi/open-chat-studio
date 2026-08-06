@@ -11,7 +11,7 @@ export default function Page() {
   const savePipeline = usePipelineStore((state) => state.savePipeline);
   const dirty = usePipelineStore((state) => state.dirty);
   const isSaving = usePipelineStore((state) => state.isSaving);
-  const error = usePipelineStore((state) => state.getPipelineError());
+  const errors = usePipelineStore((state) => state.getPipelineError());
   const conflictDetected = usePipelineStore((state) => state.conflictDetected);
   const dismissConflict = usePipelineStore((state) => state.dismissConflict);
   const loadPipeline = usePipelineStore((state) => state.loadPipeline);
@@ -74,10 +74,12 @@ export default function Page() {
                 }
               </button>
             </div>
-            {!isSaving && error && (
+            {!isSaving && errors.length > 0 && (
               <div className="content-center">
                 <i className="fa fa-exclamation-triangle text-red-500 mr-2"></i>
-                <small className="text-red-500">{error}</small>
+                {errors.map((error, index) => (
+                  <small key={index} className="text-red-500 mr-2">{error}</small>
+                ))}
               </div>
             )}
             {readOnly &&  (

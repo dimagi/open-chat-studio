@@ -3,13 +3,17 @@ from unittest.mock import patch
 import pytest
 from django.core.management import call_command
 
+from apps.ocs_notifications.models import EventType, EventUser, NotificationEvent
+from apps.ocs_notifications.utils import toggle_notification_read
 from apps.pipelines.models import Pipeline
 from apps.pipelines.tests.utils import content_flow_node
 from apps.service_providers.llm_service.default_models import Model
+from apps.teams.backends import get_team_owner_groups
 from apps.utils.factories.evaluations import EvaluatorFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderModelFactory
+from apps.utils.factories.team import MembershipFactory
 
 FAKE_DEPRECATED_MODELS = {
     "openai": [
@@ -89,7 +93,7 @@ class TestNotifyDeprecatedModelsCommand:
         deprecated_model = LlmProviderModelFactory(
             team=None, type="openai", name="test-deprecated-model", deprecated=True
         )
-        evaluator = EvaluatorFactory.create(params={"llm_provider_model_id": deprecated_model.id})
+        evaluator = EvaluatorFactory.create(llm_provider_model=deprecated_model)
 
         with patch(
             "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
@@ -118,6 +122,34 @@ class TestNotifyDeprecatedModelsCommand:
             call_command("notify_deprecated_models", dry_run=True)
 
         mock_notify.assert_not_called()
+
+    def test_a_second_run_does_not_re_announce_the_same_model(self):
+        """A later migration deprecating a different model must not re-notify about this one.
+
+        The command re-scans every deprecated model on each run, so the guard against
+        duplicates has to live in the notification itself.
+        """
+        deprecated_model = LlmProviderModelFactory(
+            team=None, type="openai", name="test-deprecated-model", deprecated=True
+        )
+        experiment = ExperimentFactory(pipeline=_make_pipeline_referencing(deprecated_model))
+        user = MembershipFactory(team=experiment.team, groups=get_team_owner_groups).user
+
+        with patch(
+            "apps.data_migrations.management.commands.notify_deprecated_models.DEFAULT_LLM_PROVIDER_MODELS",
+            FAKE_DEPRECATED_MODELS,
+        ):
+            call_command("notify_deprecated_models", force=True)
+
+            event_type = EventType.objects.get(team=experiment.team)
+            event_user = EventUser.objects.get(event_type=event_type, user=user)
+            toggle_notification_read(user, event_user=event_user, read=True)
+
+            call_command("notify_deprecated_models", force=True)
+
+        assert NotificationEvent.objects.filter(event_type=event_type).count() == 1
+        event_user.refresh_from_db()
+        assert event_user.read is True, "The team should not be re-notified about a model already announced"
 
     @patch("apps.data_migrations.management.commands.notify_deprecated_models.deprecated_model_notification")
     def test_skips_teams_with_no_active_references(self, mock_notify):

@@ -45,6 +45,12 @@ jobs:
       issue_body: ${{ steps.find.outputs.issue_body }}
       issue_title: ${{ steps.find.outputs.issue_title }}
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
       - name: Find oldest labeled issue without an open PR
         id: find
         env:
@@ -136,6 +142,12 @@ jobs:
       DJANGO_DATABASE_PASSWORD: postgres_password
       SECRET_KEY: secret-test-key
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -158,7 +170,7 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.9
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -178,7 +190,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@v1.0.183
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -250,6 +262,12 @@ jobs:
       DJANGO_DATABASE_PASSWORD: postgres_password
       SECRET_KEY: secret-test-key
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -272,7 +290,7 @@ jobs:
           uv sync --locked --dev
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.9
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -285,7 +303,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@v1.0.183
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           branch_prefix: "claude/"

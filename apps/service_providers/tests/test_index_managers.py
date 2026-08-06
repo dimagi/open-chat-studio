@@ -648,6 +648,38 @@ class TestVoyageAILocalIndexManager:
             with pytest.raises(ValueError, match="Unknown input_type"):
                 index_manager.get_embedding_vector("some text", input_type="documents")  # type: ignore[arg-type]
 
+    @pytest.mark.parametrize("input_type", ["document", "query"])
+    def test_get_embedding_vector_rejects_contextual_models(self, input_type):
+        index_manager = VoyageAILocalIndexManager(api_key="test-api-key", embedding_model_name="voyage-context-4")
+        with mock.patch("langchain_voyageai.VoyageAIEmbeddings") as mock_embeddings_cls:
+            with pytest.raises(ValueError, match="Contextual Voyage models are not supported"):
+                index_manager.get_embedding_vector("some text", input_type=input_type)
+
+        mock_embeddings_cls.assert_not_called()
+
+    def test_embeddings_constructor_kwargs_are_accepted_by_the_installed_client(self):
+        """Construct `VoyageAIEmbeddings` for real, unlike every other test in this class.
+
+        The mocked tests would keep passing if a langchain-voyageai bump renamed or removed
+        one of the kwargs we pass. `VoyageAIEmbeddings` sets `extra="forbid"` and constrains
+        `output_dimension` to a literal set, so this fails on that drift. Nothing is embedded,
+        so no network call is made.
+        """
+        from langchain_voyageai import VoyageAIEmbeddings  # noqa: PLC0415 - TID253: heavy lib, slow startup
+
+        embeddings = VoyageAIEmbeddings(
+            voyage_api_key="test-api-key",
+            model="voyage-4-large",
+            output_dimension=settings.EMBEDDING_VECTOR_SIZE,
+        )
+
+        assert embeddings.model == "voyage-4-large"
+        assert embeddings.output_dimension == settings.EMBEDDING_VECTOR_SIZE
+        # The contextual guard in `get_embedding_vector` reimplements this check; if the
+        # upstream detection changes, the guard needs to change with it.
+        assert VoyageAIEmbeddings(voyage_api_key="k", model="voyage-context-4")._is_context_model()
+        assert not embeddings._is_context_model()
+
 
 class TestOpenAILlmServiceLocalIndexManager:
     def test_get_local_index_manager_threads_openai_api_base(self):

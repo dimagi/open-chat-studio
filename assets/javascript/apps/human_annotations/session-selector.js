@@ -9,6 +9,8 @@
  * Usage:
  *   x-data="annotationQueueSessionSelector({ sessionCountUrl: '...' })"
  */
+import {parseFilterParams} from '../../filters/wireFormat.js';
+
 window.annotationQueueSessionSelector = function (options = {}) {
   return {
     selectedSessionIds: new Set(),
@@ -56,7 +58,12 @@ window.annotationQueueSessionSelector = function (options = {}) {
     },
 
     get hasActiveFilters() {
-      return this.filterParams.some((p) => p.name.startsWith('filter_'));
+      // Counted with the shared parser rather than by sniffing param names -- a bare prefix test
+      // silently broke when the format moved from the legacy `filter_<n>_*` params to `f_`/`op_`.
+      // Reads filterParams, not window.location, so the value stays reactive: x-show and the
+      // $watch in add_sessions.html only re-run when a tracked property changes.
+      const search = new URLSearchParams(this.filterParams.map(({name, value}) => [name, value]));
+      return parseFilterParams(search.toString()).length > 0;
     },
 
     get pillClass() {

@@ -220,12 +220,21 @@ def runserver(c: Context, public=False):
     help={
         "threads": "Use thread pool for async tasks (disables beat scheduler)",
         "beat": "Include beat scheduler for periodic tasks (default: False)",
+        "queues": "Comma-separated queues to consume (default: all of them). "
+        "Use this to reproduce the production split locally, e.g. --queues=celery",
     }
 )
-def celery(c: Context, threads=False, beat=False):
-    """Start Celery worker with auto-reload on code changes."""
+def celery(c: Context, threads=False, beat=False, queues=""):
+    """Start Celery worker with auto-reload on code changes.
+
+    Without --queues the worker consumes every queue in settings.CELERY_TASK_QUEUES, which is the
+    normal way to run this locally. Production instead runs one worker per queue so that
+    evaluation and background load can't starve the chat queue.
+    """
     _disable_stdin_forwarding(c)
     cmd = "celery -A config worker -l INFO"
+    if queues:
+        cmd += f" -Q {queues}"
     if threads:
         cmd += " --pool threads --concurrency 10"
     else:

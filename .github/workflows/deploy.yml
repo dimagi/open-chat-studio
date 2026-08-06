@@ -44,6 +44,13 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
+    # Audit only: records egress without blocking. Flip to `block` plus an
+    # `allowed-endpoints` list once the recorded traffic looks stable.
+    - name: Harden the runner
+      uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+      with:
+        egress-policy: audit
+
     - name: Checkout
       uses: actions/checkout@v7
 
@@ -87,7 +94,7 @@ jobs:
         description: "Deploying ${{ github.head_ref || github.ref }} to AWS ${{ env.DEPLOY_ENV }}"
 
     - name: configure aws credentials
-      uses: aws-actions/configure-aws-credentials@v6.2.1
+      uses: aws-actions/configure-aws-credentials@v6.2.3
       with:
         role-to-assume: "arn:aws:iam::${{ fromJSON(vars.AWS_ACCOUNT)[env.DEPLOY_ENV] }}:role/github_deploy"
         role-session-name: GithubDeploy
@@ -141,7 +148,7 @@ jobs:
 
     - name: Update ECS task def for Django web container
       id: django-web-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.4
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Django
         container-name: web
@@ -149,7 +156,7 @@ jobs:
 
     - name: Update ECS task def for Migration container
       id: migration-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.4
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-Migration
         container-name: migrate
@@ -157,7 +164,7 @@ jobs:
 
     - name: Update ECS task def for Celery worker container
       id: celery-worker-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.4
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryWorkerTask
         container-name: celery-worker
@@ -165,7 +172,7 @@ jobs:
 
     - name: Update ECS task def for Celery beat container
       id: celery-beat-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1.8.4
+      uses: aws-actions/amazon-ecs-render-task-definition@v1.9.0
       with:
         task-definition-family: ${{ env.APP_NAME }}-${{ env.DEPLOY_ENV }}-CeleryBeatTask
         container-name: celery-beat

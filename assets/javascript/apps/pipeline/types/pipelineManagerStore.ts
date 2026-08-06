@@ -25,11 +25,13 @@ export type PipelineManagerStoreType = {
   nodeHasErrors: (nodeId: string) => boolean;
   getNodeFieldError: (nodeId: string, fieldName: string) => string | undefined;
   edgeHasErrors: (edgeId: string) => boolean;
-  getPipelineError: () => string | undefined;
+  getPipelineError: () => string[];
 };
 
 export type ErrorsType = {
   node?: {[nodeId: string]: {[field: string]: string}};
   edge?: string[];
-  pipeline?: string;
+  // Graph-level messages that name no single node or edge. A list: independent structural checks
+  // are reported together rather than one per save.
+  pipeline?: string[];
 };

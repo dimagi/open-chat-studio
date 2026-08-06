@@ -17,6 +17,7 @@ from apps.evaluations.models import (
     Evaluator,
     EvaluatorTagRule,
 )
+from apps.service_providers.models import LlmProviderTypes
 from apps.utils.factories.experiment import ChatFactory, ChatMessageFactory, ExperimentFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamFactory
@@ -30,6 +31,17 @@ class EvaluatorFactory(DjangoModelFactory):
     type = "LlmEvaluator"
     name = factory.Sequence(lambda n: f"Test Evaluator {n}")
     evaluation_mode = "message"
+    # An LlmEvaluator needs both to be runnable, so the default is a valid one. Pass
+    # ``llm_provider=None, llm_provider_model=None`` for an evaluator with nothing selected.
+    llm_provider = factory.SubFactory(LlmProviderFactory, team=factory.SelfAttribute("..team"))
+    # The model's type has to match the provider's or the pair is one the evaluator form rejects,
+    # so follow the provider rather than defaulting both to OpenAI independently. This stays a
+    # SubFactory so ``build()`` builds the model instead of saving it against an unsaved team.
+    llm_provider_model = factory.SubFactory(
+        LlmProviderModelFactory,
+        team=factory.SelfAttribute("..team"),
+        type=factory.SelfAttribute("..llm_provider.type", default=str(LlmProviderTypes.openai)),
+    )
     params = factory.LazyFunction(
         lambda: {
             "llm_prompt": "give me the sentiment of the user messages",
@@ -50,22 +62,6 @@ class EvaluatorFactory(DjangoModelFactory):
             },
         }
     )
-
-
-def configure_evaluator_llm_provider(evaluator: Evaluator) -> Evaluator:
-    """Point an LLM evaluator at real providers in its own team, making it runnable.
-
-    ``EvaluatorFactory`` leaves the provider ids out of ``params``, so by default an
-    ``LlmEvaluator`` it builds names no provider — which the form rejects on save and an
-    evaluation run rejects pre-flight. Tests that post the evaluator form, or drive a run
-    through the coordinator, need this; most tests do not.
-    """
-    evaluator.params |= {
-        "llm_provider_id": LlmProviderFactory.create(team=evaluator.team).id,
-        "llm_provider_model_id": LlmProviderModelFactory.create(team=evaluator.team).id,
-    }
-    evaluator.save(update_fields=["params"])
-    return evaluator
 
 
 class EvaluationTagFactory(DjangoModelFactory):

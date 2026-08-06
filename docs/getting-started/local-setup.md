@@ -104,6 +104,16 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
     inv celery --threads
     ```
 
+    Either form consumes all [task queues](../hosting/index.md#task-queues). To reproduce the
+    production split — where chat, background and evaluation work get separate workers — run one
+    process per queue:
+
+    ```bash
+    inv celery --queues=celery
+    inv celery --queues=background
+    inv celery --queues=evaluations
+    ```
+
 ---
 
 Next: [Common Development Tasks](common-tasks.md)

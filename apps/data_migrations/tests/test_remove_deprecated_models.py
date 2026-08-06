@@ -105,13 +105,12 @@ class TestRemoveDeprecatedModelsCommand:
     )
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_repoints_evaluators(self, mock_notify, replacement_name):
-        """Evaluator params and FK move together, so the delete pre-check no longer blocks."""
+        """The evaluator FK moves off the model, so the delete pre-check no longer blocks."""
         old_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4-old")
         replacement_model = (
             LlmProviderModelFactory(team=None, type="openai", name=replacement_name) if replacement_name else None
         )
-        evaluator = EvaluatorFactory.create(params={"llm_provider_model_id": old_model.id})
-        assert evaluator.llm_provider_model_id == old_model.id
+        evaluator = EvaluatorFactory.create(llm_provider_model=old_model)
 
         deleted_models = [("openai", "gpt-4-old", replacement_name) if replacement_name else ("openai", "gpt-4-old")]
         with patch(
@@ -122,9 +121,7 @@ class TestRemoveDeprecatedModelsCommand:
 
         assert not LlmProviderModel.objects.filter(id=old_model.id).exists()
         evaluator.refresh_from_db()
-        expected_id = replacement_model.id if replacement_model else None
-        assert evaluator.llm_provider_model_id == expected_id
-        assert evaluator.params["llm_provider_model_id"] == expected_id
+        assert evaluator.llm_provider_model_id == (replacement_model.id if replacement_model else None)
 
     @patch("apps.data_migrations.management.commands.remove_deprecated_models.deleted_model_notification")
     def test_notifies_affected_team(self, mock_notify):
@@ -152,7 +149,7 @@ class TestRemoveDeprecatedModelsCommand:
     def test_notifies_the_team_about_affected_evaluators(self, mock_notify):
         """Collected before the repoint moves the FK, or the evaluator goes unreported."""
         old_model = LlmProviderModelFactory(team=None, type="openai", name="gpt-4-old")
-        evaluator = EvaluatorFactory.create(params={"llm_provider_model_id": old_model.id})
+        evaluator = EvaluatorFactory.create(llm_provider_model=old_model)
 
         deleted_models = [("openai", "gpt-4-old")]
         with patch(

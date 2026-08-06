@@ -3483,6 +3483,13 @@ components:
           type: string
           format: date-time
           nullable: true
+        finalized_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the run's completion side effects (aggregates, stale-tag
+            reversal) landed. Set as soon as the run completes if it has nothing to
+            finalize.
         status:
           $ref: '#/components/schemas/StatusA8fEnum'
         type:

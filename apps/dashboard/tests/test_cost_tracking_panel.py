@@ -7,7 +7,7 @@ import pytest
 from django.urls import reverse
 from time_machine import travel
 
-from apps.cost_tracking.models import Confidence
+from apps.cost_tracking.models import Confidence, UsageSource
 from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory
@@ -194,7 +194,20 @@ class TestCostTimeseriesEndpoint:
 
         payload = response.json()
         assert len(payload) == 1
-        assert payload[0]["cost"] == 1.0
+        assert payload[0]["chat"] == 1.0
+
+    def test_series_are_split_by_source(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        _usage(team, cost="0.25", when=_NOW - timedelta(days=1), source=UsageSource.EVALUATION)
+
+        response = authenticated_client.get(
+            self._url(team) + "?date_range=custom&start_date=2026-06-01&end_date=2026-06-20"
+        )
+
+        payload = response.json()
+        assert payload[0]["chat"] == 1.0
+        assert payload[0]["evaluation"] == 0.25
 
     def test_respects_experiment_filter(self, authenticated_client, team, experiment):
         _enable_flag_for(team)
@@ -205,7 +218,7 @@ class TestCostTimeseriesEndpoint:
         matching = authenticated_client.get(base + f"&experiments={experiment.id}")
         other = authenticated_client.get(base + f"&experiments={other_experiment.id}")
 
-        assert matching.json()[0]["cost"] == 1.0
+        assert matching.json()[0]["chat"] == 1.0
         assert other.json() == []
 
 

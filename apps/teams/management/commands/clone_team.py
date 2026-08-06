@@ -262,9 +262,14 @@ class Command(BaseCommand):
             flag.save()
 
     def _clone_providers(self, ctx: CloneContext):
-        """Clone LLM, Voice, and Trace providers."""
+        """Clone LLM, Voice, and Trace providers.
+
+        Each source queryset is ordered so the clones are created in a fixed order: without it
+        the target rows' ids follow whatever order the database happens to return, which makes
+        the clone unreproducible.
+        """
         # LLM Providers
-        for provider in LlmProvider.objects.filter(team=ctx.source_team):
+        for provider in LlmProvider.objects.filter(team=ctx.source_team).order_by("id"):
             new_provider = LlmProvider.objects.create(
                 team=ctx.target_team,
                 type=provider.type,
@@ -274,7 +279,7 @@ class Command(BaseCommand):
             ctx.llm_providers[provider.id] = new_provider
 
         # LLM Provider Models (team-scoped only)
-        for model in LlmProviderModel.objects.filter(team=ctx.source_team):
+        for model in LlmProviderModel.objects.filter(team=ctx.source_team).order_by("id"):
             new_model = LlmProviderModel.objects.create(
                 team=ctx.target_team,
                 type=model.type,
@@ -284,7 +289,7 @@ class Command(BaseCommand):
             ctx.llm_provider_models[model.id] = new_model
 
         # Voice Providers
-        for provider in VoiceProvider.objects.filter(team=ctx.source_team):
+        for provider in VoiceProvider.objects.filter(team=ctx.source_team).order_by("id"):
             new_provider = VoiceProvider.objects.create(
                 team=ctx.target_team,
                 type=provider.type,
@@ -294,7 +299,7 @@ class Command(BaseCommand):
             ctx.voice_providers[provider.id] = new_provider
 
         # Trace Providers
-        for provider in TraceProvider.objects.filter(team=ctx.source_team):
+        for provider in TraceProvider.objects.filter(team=ctx.source_team).order_by("id"):
             new_provider = TraceProvider.objects.create(
                 team=ctx.target_team,
                 type=provider.type,
@@ -461,17 +466,15 @@ class Command(BaseCommand):
 
     def _clone_evaluations(self, ctx: CloneContext):
         """Clone evaluators, datasets, and configs."""
-        # Evaluators - remap llm_provider_id and llm_provider_model_id in params; the matching
-        # FK columns are derived from those on save.
         for evaluator in Evaluator.objects.filter(team=ctx.source_team):
-            params = dict(evaluator.params)
-            self._remap_evaluator_params(ctx, evaluator.name, params)
-
             new_evaluator = Evaluator.objects.create(
                 team=ctx.target_team,
                 name=evaluator.name,
                 type=evaluator.type,
-                params=params,
+                evaluation_mode=evaluator.evaluation_mode,
+                params=dict(evaluator.params),
+                llm_provider_id=self._remap_evaluator_llm_id(ctx, evaluator, "llm_provider_id"),
+                llm_provider_model_id=self._remap_evaluator_llm_id(ctx, evaluator, "llm_provider_model_id"),
             )
             ctx.evaluators[evaluator.id] = new_evaluator
 
@@ -551,26 +554,19 @@ class Command(BaseCommand):
             if new_evaluator_ids:
                 new_config.evaluators.set(new_evaluator_ids)
 
-    def _remap_evaluator_params(self, ctx: CloneContext, name: str, params: dict):
-        """Remap FK IDs in evaluator params to new team's objects."""
-        # Remap llm_provider_id
-        if "llm_provider_id" in params and params["llm_provider_id"]:
-            old_id = int(params["llm_provider_id"])
-            if old_id in ctx.llm_providers:
-                params["llm_provider_id"] = ctx.llm_providers[old_id].id
-            elif not LlmProvider.objects.filter(id=old_id, team__isnull=True).exists():
-                raise CommandError(
-                    f"Evaluator '{name}' references llm_provider_id={old_id} which was not found in source team."
-                )
-            # else: global provider, leave as-is
-
-        # Remap llm_provider_model_id
-        if "llm_provider_model_id" in params and params["llm_provider_model_id"]:
-            old_id = int(params["llm_provider_model_id"])
-            if old_id in ctx.llm_provider_models:
-                params["llm_provider_model_id"] = ctx.llm_provider_models[old_id].id
-            elif not LlmProviderModel.objects.filter(id=old_id, team__isnull=True).exists():
-                raise CommandError(
-                    f"Evaluator '{name}' references llm_provider_model_id={old_id} which was not found in source team."
-                )
-            # else: global model, leave as-is
+    def _remap_evaluator_llm_id(self, ctx: CloneContext, evaluator: Evaluator, field: str) -> int | None:
+        """The target team's id for one of an evaluator's LLM FKs, or the same id if it is global."""
+        mapping, model = {
+            "llm_provider_id": (ctx.llm_providers, LlmProvider),
+            "llm_provider_model_id": (ctx.llm_provider_models, LlmProviderModel),
+        }[field]
+        old_id = getattr(evaluator, field)
+        if not old_id:
+            return None
+        if old_id in mapping:
+            return mapping[old_id].id
+        if model.objects.filter(id=old_id, team__isnull=True).exists():
+            return old_id  # global, shared by both teams
+        raise CommandError(
+            f"Evaluator '{evaluator.name}' references {field}={old_id} which was not found in source team."
+        )

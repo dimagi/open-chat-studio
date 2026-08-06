@@ -842,7 +842,7 @@ function dashboard() {
                     return;
                 }
 
-                let parsedValue = "";
+                let parsedValue;
                 // Map the filter keys to the expected query params in the all sessions view
                 let keyMapped = dynamicFilterParamMapping[key] || key;
                 let operator = "any of";

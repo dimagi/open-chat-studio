@@ -1,12 +1,20 @@
 from unittest.mock import Mock, patch
 
+import httpx
+import openai
 import pytest
 from langchain_core.messages import HumanMessage
 
+from apps.chat.exceptions import UserReportableError
+from apps.service_providers.llm_service.image_types import (
+    DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES,
+    GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES,
+)
 from apps.service_providers.llm_service.utils import (
     detangle_file_ids,
     extract_file_ids_from_ocs_citations,
     format_multimodal_input,
+    invoke_with_image_error_translation,
     populate_reference_section_from_citations,
     remove_citations_from_text,
 )
@@ -290,3 +298,133 @@ class TestFormatMultimodalInput:
 
         with pytest.raises(ValueError, match="exceeds maximum size"):
             format_multimodal_input("Process this", [attachment])
+
+    @pytest.mark.parametrize(
+        "content_type",
+        [
+            pytest.param("image/bmp", id="bmp"),
+            pytest.param("image/svg+xml", id="svg"),
+            pytest.param("image/heic", id="heic"),
+            pytest.param("image/tiff", id="tiff"),
+        ],
+    )
+    def test_unsupported_image_type_raises_user_reportable_error(self, content_type):
+        attachment = Mock()
+        attachment.size = 1024
+        attachment.content_type = content_type
+        attachment.name = "holiday-photo"
+
+        with pytest.raises(UserReportableError) as exc_info:
+            format_multimodal_input("Look at this", [attachment])
+
+        assert "`holiday-photo`" in str(exc_info.value)
+        assert "GIF, JPEG, PNG, WEBP" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "content_type",
+        [
+            pytest.param("image/png", id="png"),
+            pytest.param("image/jpeg", id="jpeg"),
+            pytest.param("image/gif", id="gif"),
+            pytest.param("image/webp", id="webp"),
+        ],
+    )
+    def test_supported_image_types_pass_through(self, content_type):
+        attachment = Mock()
+        attachment.size = 1024
+        attachment.content_type = content_type
+        attachment.download_link = "http://example.com/image"
+        attachment.name = "image"
+
+        result = format_multimodal_input("Look at this", [attachment])
+
+        assert result.content[1]["mime_type"] == content_type
+
+    def test_provider_specific_allowlist_is_respected(self):
+        heic = Mock()
+        heic.size = 1024
+        heic.content_type = "image/heic"
+        heic.download_link = "http://example.com/photo"
+        heic.name = "photo"
+
+        result = format_multimodal_input(
+            "From my iPhone", [heic], supported_image_content_types=GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
+        )
+
+        assert result.content[1]["mime_type"] == "image/heic"
+
+    def test_provider_specific_allowlist_rejects_with_provider_types_in_message(self):
+        gif = Mock()
+        gif.size = 1024
+        gif.content_type = "image/gif"
+        gif.name = "animation"
+
+        with pytest.raises(UserReportableError) as exc_info:
+            format_multimodal_input(
+                "Fun gif", [gif], supported_image_content_types=GEMINI_SUPPORTED_IMAGE_CONTENT_TYPES
+            )
+
+        assert "HEIC, HEIF, JPEG, PNG, WEBP" in str(exc_info.value)
+
+    def test_second_attachment_unsupported_fails_whole_message(self):
+        """An unsupported image fails the whole message; attachments are never silently dropped."""
+        good = Mock()
+        good.size = 1024
+        good.content_type = "image/png"
+        good.download_link = "http://example.com/good"
+        good.name = "good"
+        bad = Mock()
+        bad.size = 1024
+        bad.content_type = "image/bmp"
+        bad.name = "bad"
+
+        with pytest.raises(UserReportableError):
+            format_multimodal_input("Two images", [good, bad])
+
+
+def _bad_request_error(code):
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    response = httpx.Response(400, request=request)
+    return openai.BadRequestError(
+        "You uploaded an unsupported image.", response=response, body={"message": "unsupported image", "code": code}
+    )
+
+
+class TestInvokeWithImageErrorTranslation:
+    @pytest.mark.parametrize(
+        "code",
+        [
+            pytest.param("invalid_image_format", id="invalid_image_format"),
+            pytest.param("invalid_image", id="invalid_image"),
+            pytest.param("image_parse_error", id="image_parse_error"),
+        ],
+    )
+    def test_invalid_image_error_is_translated_for_the_user(self, code):
+        agent = Mock()
+        agent.invoke.side_effect = _bad_request_error(code)
+
+        with pytest.raises(UserReportableError) as exc_info:
+            invoke_with_image_error_translation(
+                agent, {"messages": []}, supported_image_content_types=DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
+            )
+
+        assert "GIF, JPEG, PNG, WEBP" in str(exc_info.value)
+
+    def test_other_bad_request_errors_are_reraised(self):
+        agent = Mock()
+        agent.invoke.side_effect = _bad_request_error("context_length_exceeded")
+
+        with pytest.raises(openai.BadRequestError):
+            invoke_with_image_error_translation(
+                agent, {"messages": []}, supported_image_content_types=DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
+            )
+
+    def test_successful_invoke_returns_result(self):
+        agent = Mock()
+        agent.invoke.return_value = {"messages": ["ok"]}
+
+        result = invoke_with_image_error_translation(
+            agent, {"messages": []}, supported_image_content_types=DEFAULT_SUPPORTED_IMAGE_CONTENT_TYPES
+        )
+
+        assert result == {"messages": ["ok"]}

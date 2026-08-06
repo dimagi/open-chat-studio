@@ -11,6 +11,7 @@ from openai import (
 
 from apps.assistants.models import OpenAiAssistant
 from apps.assistants.sync import OpenAiSyncError, delete_openai_assistant
+from apps.utils.celery import Queues
 
 logger = get_task_logger("ocs.openai_sync")
 
@@ -20,6 +21,7 @@ logger = get_task_logger("ocs.openai_sync")
     retry_backoff=True,
     acks_late=True,
     bind=True,
+    queue=Queues.BACKGROUND,
 )
 def delete_openai_assistant_task(self, assistant_id: int):
     try:

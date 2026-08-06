@@ -19,7 +19,10 @@ from pathlib import Path
 import environ
 from celery.schedules import crontab
 from django.utils.translation import gettext_lazy
+from kombu import Queue
 from pythonjsonlogger.json import JsonFormatter
+
+from apps.utils.celery import Queues
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -315,6 +318,7 @@ SOCIALACCOUNT_PROVIDERS = {
 # Multi-Factor Authentication
 MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
 MFA_RECOVERY_CODE_COUNT = 10
+MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "Open Chat Studio"
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
@@ -567,6 +571,18 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = 10
 CELERY_WORKER_ENABLE_SOFT_SHUTDOWN_ON_IDLE = True
 
+
+def _celery_task_queues() -> tuple[Queue, ...]:
+    """Declaring the queues is what keeps single-worker deployments working: a worker started
+    without `-Q` consumes every queue listed here. Only production splits them out with a worker
+    per queue. It also extends the `/status/` celery healthcheck, which reports any declared queue
+    that has no active consumer. `task_default_queue` is left at its default ("celery" ==
+    Queues.CHAT) so third-party tasks land on a queue that is always consumed."""
+    return tuple(Queue(queue.value) for queue in Queues)
+
+
+CELERY_TASK_QUEUES = _celery_task_queues()
+
 SCHEDULED_TASKS = {
     "files.tasks.clean_up_expired_files": {
         "task": "apps.files.tasks.clean_up_expired_files",
@@ -670,6 +686,13 @@ PRELOGIN_CONTACT_EMAIL = env("PRELOGIN_CONTACT_EMAIL", default="")
 HUBSPOT_FORM_REGION = env("HUBSPOT_FORM_REGION", default="na1")
 HUBSPOT_FORM_PORTAL_ID = env("HUBSPOT_FORM_PORTAL_ID", default="")
 HUBSPOT_FORM_ID = env("HUBSPOT_FORM_ID", default="")
+# Chat widget config for the demo bots on the use cases page, keyed by the bot keys used in
+# templates/prelogin/applications.html. A bot without an entry renders as a static card with no chat.
+# The bots live on production, so the widget talks to production regardless of which deploy serves
+# the page, unless a bot sets "api_base_url" to test against another deploy. Format:
+# {"<bot key>": {"id": "<chatbot public id>", "embed_key": "<widget channel token>",
+#                "header_text": "<chat window title>", "api_base_url": "<optional other deploy>"}}
+PRELOGIN_DEMO_BOTS = env.json("PRELOGIN_DEMO_BOTS", default={})
 
 # Sentry setup
 
@@ -733,9 +756,6 @@ if TASKBADGER_API_KEY:
                     "apps.events.tasks.enqueue_timed_out_events",
                     # evaluation coordination manages one Taskbadger task per run itself
                     "apps.evaluations.tasks.coordinate_evaluation_runs",
-                    "apps.evaluations.tasks.drive_evaluation_run",
-                    "apps.evaluations.tasks.finalize_evaluation_run",
-                    "apps.evaluations.tasks.evaluate_message_batch",
                 ],
                 record_task_args=True,
                 # ping running tasks so long-running ones aren't marked stale
@@ -911,16 +931,6 @@ SLACK_ENABLED = SLACK_CLIENT_ID and SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET
 # Health checks
 # Tokens used to secure the /status endpoint. These should be kept secret
 HEALTH_CHECK_TOKENS = env.list("HEALTH_CHECK_TOKENS", default=[])
-HEALTH_CHECK = {
-    "SUBSETS": {
-        "general": ["Cache backend: default", "DatabaseBackend", "RedisHealthCheck"],
-        "celery": ["CeleryHealthCheckCelery"],
-    },
-}
-
-# increase from default (3)
-HEALTHCHECK_CELERY_QUEUE_TIMEOUT = 10
-HEALTHCHECK_CELERY_RESULT_TIMEOUT = 10
 
 CRYPTOGRAPHY_SALT = env("CRYPTOGRAPHY_SALT", default="")
 
@@ -984,6 +994,13 @@ SUPPORTED_FILE_TYPES = {
         ".css,.js,.xml,.md,.ics,.vcf,.rtf,.tsv,.yaml,.yml,.py,.c"
     ),
 }
+
+# Chat attachments accept the collections set minus image formats no LLM provider
+# supports (see apps/service_providers/llm_service/image_types.py).
+_CHAT_ATTACHMENT_EXCLUDED_EXTENSIONS = {".bmp", ".svg"}
+SUPPORTED_FILE_TYPES["chat_attachments"] = ",".join(
+    ext for ext in SUPPORTED_FILE_TYPES["collections"].split(",") if ext not in _CHAT_ATTACHMENT_EXCLUDED_EXTENSIONS
+)
 
 # CORS configuration for chat widget
 # Use URL regex to allow CORS only for specific endpoints (chat API)

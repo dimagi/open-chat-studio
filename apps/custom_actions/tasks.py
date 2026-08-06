@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.custom_actions.models import CustomAction, HealthCheckStatus
 from apps.ocs_notifications.notifications import custom_action_health_check_failure_notification
+from apps.utils.celery import Queues
 
 logger = logging.getLogger("ocs.custom_actions")
 
@@ -13,7 +14,7 @@ logger = logging.getLogger("ocs.custom_actions")
 HEALTH_CHECK_TIMEOUT = 5
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def check_all_custom_actions_health():
     """Periodic task to check health of all custom actions with health endpoints configured."""
     custom_actions = CustomAction.objects.exclude(healthcheck_path__isnull=True).exclude(healthcheck_path="")
@@ -24,7 +25,7 @@ def check_all_custom_actions_health():
     logger.info(f"Scheduled health checks for {custom_actions.count()} custom actions")
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def check_single_custom_action_health(action_id: int):
     """Check health of a single custom action.
 

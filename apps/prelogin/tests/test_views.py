@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 
+from apps.channels.widget_versions import widget_script_url
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -40,6 +41,59 @@ def test_applications_page_renders(client):
     response = client.get(reverse("prelogin:applications"))
     assert response.status_code == 200
     assert b"Use Cases" in response.content
+
+
+@pytest.mark.django_db()
+def test_applications_page_embeds_widget_for_configured_demo_bots(client, settings):
+    settings.PRELOGIN_DEMO_BOTS = {"nanibot": {"id": "6d5abc50-167d-4e78-a2a1-6ff6d3cb229c", "embed_key": "token-123"}}
+    response = client.get(reverse("prelogin:applications"))
+    content = response.content.decode()
+    assert 'chatbot-id="6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"' in content
+    assert 'embed-key="token-123"' in content
+    assert widget_script_url() in content
+    # The configured bot's card opens the widget; the other two stay inert.
+    assert content.count('data-demo-bot-trigger="nanibot"') == 1
+    assert content.count('class="bot-card bot-card-h bot-card-interactive"') == 1
+    assert content.count("Try this bot") == 1
+    # Every demo widget carries the same demonstration-only banner.
+    assert 'banner-message="Example bot: for demonstration and research purposes only."' in content
+    assert 'banner-style="info"' in content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "demo_bots",
+    [
+        pytest.param({"nanibot": {"id": "6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"}}, id="missing-embed-key"),
+        pytest.param({"nanibot": {"embed_key": "token-123"}}, id="missing-id"),
+        pytest.param({"nanibot": {"id": "", "embed_key": ""}}, id="blank-fields"),
+        pytest.param({"nanibot": "6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"}, id="entry-not-an-object"),
+        pytest.param(["6d5abc50-167d-4e78-a2a1-6ff6d3cb229c"], id="setting-not-an-object"),
+        pytest.param("nanibot", id="setting-is-a-string"),
+    ],
+)
+def test_applications_page_ignores_malformed_demo_bot_config(client, settings, demo_bots):
+    """Operator-supplied JSON of the wrong shape degrades to static cards, it doesn't 500."""
+    settings.PRELOGIN_DEMO_BOTS = demo_bots
+    response = client.get(reverse("prelogin:applications"))
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "<open-chat-studio-widget" not in content
+    assert "data-demo-bot-trigger" not in content
+    assert "Try this bot" not in content
+
+
+@pytest.mark.django_db()
+def test_applications_page_cards_are_inert_without_demo_bot_config(client, settings):
+    settings.PRELOGIN_DEMO_BOTS = {}
+    response = client.get(reverse("prelogin:applications"))
+    content = response.content.decode()
+    assert "<open-chat-studio-widget" not in content
+    assert "data-demo-bot-trigger" not in content
+    assert 'bot-card-interactive"' not in content  # the class is only ever in the stylesheet
+    assert "Try this bot" not in content
+    # No links to the chat UI that replaced these cards.
+    assert "/experiments/e/" not in content
 
 
 @pytest.mark.django_db()

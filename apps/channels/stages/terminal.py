@@ -121,6 +121,8 @@ class ResponseSendingStage(ProcessingStage):
             ctx.processing_errors.append(f"Send failed: {e}")
 
     def _send_text(self, ctx: MessageProcessingContext, text: str, recipient: str) -> None:
+        if not text:
+            return
         try:
             ctx.sender.send_text(text, recipient)
         except Exception as e:

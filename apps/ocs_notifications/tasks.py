@@ -13,6 +13,7 @@ from django.utils import timezone
 from apps.ocs_notifications.models import (
     NotificationEvent,
 )
+from apps.utils.celery import Queues
 from apps.web.meta import absolute_url
 
 if TYPE_CHECKING:
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ocs.notifications")
 
 
-@shared_task
+@shared_task(queue=Queues.BACKGROUND)
 def send_notification_email_async(user_ids, notification_event_id):
     from apps.users.models import (  # noqa: PLC0415 - circular: users.models → ocs_notifications.utils → ocs_notifications.tasks
         CustomUser,
@@ -89,7 +90,7 @@ def send_notification_email(users: list[CustomUser], notification_event: Notific
             )
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def cleanup_old_notification_events():
     """Delete NotificationEvent records older than 3 months."""
     three_months_ago = timezone.now() - timedelta(days=90)

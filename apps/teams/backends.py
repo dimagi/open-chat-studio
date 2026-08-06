@@ -198,6 +198,9 @@ GROUPS = [
             AppPermSetDef("teams", ALL),
             AppPermSetDef("custom_actions", ALL),
             AppPermSetDef("service_providers", ALL),
+            # OAuth applications are registered from the team admin page, so the role that administers
+            # the team can manage them.
+            AppPermSetDef("oauth", ALL),
         ],
     ),
     GroupDef(

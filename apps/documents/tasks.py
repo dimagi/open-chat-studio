@@ -34,18 +34,18 @@ from apps.documents.utils import bulk_delete_collection_files
 from apps.files.models import File, FilePurpose
 from apps.service_providers.models import LlmProvider
 from apps.teams.utils import current_team
-from apps.utils.celery import TaskbadgerTaskWrapper
+from apps.utils.celery import Queues, TaskbadgerTaskWrapper
 
 logger = get_task_logger("ocs.documents")
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def index_collection_files_task(collection_file_ids: list[int]):
     collection_files = CollectionFile.objects.filter(id__in=collection_file_ids)
     index_collection_files(collection_files_queryset=collection_files)
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def migrate_vector_stores(collection_id: int, from_vector_store_id: str, from_llm_provider_id: int):
     """Migrate vector stores from one provider to another"""
     collection_files = CollectionFile.objects.filter(collection_id=collection_id)
@@ -111,7 +111,7 @@ def _cleanup_old_vector_store(llm_provider_id: int, vector_store_id: str, file_i
             old_manager.client.files.delete(file_id)
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def create_collection_from_assistant_task(collection_id: int, assistant_id: int):
     """Create a collection from an assistant's file search resources"""
     # Get file search resources from the assistant
@@ -175,7 +175,7 @@ def create_collection_from_assistant_task(collection_id: int, assistant_id: int)
         index_collection_files_task(collection_file_ids=file_ids_to_index)
 
 
-@shared_task(bind=True, ignore_result=True)
+@shared_task(bind=True, ignore_result=True, queue=Queues.BACKGROUND)
 def sync_document_source_task(self, document_source_id: int):
     """Sync a specific document source"""
     task_id = self.request.id or str(uuid.uuid4())
@@ -240,7 +240,7 @@ def sync_document_source_task(self, document_source_id: int):
         )
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def sync_all_document_sources_task():
     """Sync all document sources that have auto_sync_enabled=True"""
     stale_cutoff = timezone.now() - SYNC_LOCK_TIMEOUT
@@ -258,11 +258,21 @@ def sync_all_document_sources_task():
         .values_list("id", flat=True)
     )
 
-    sync_document_source_task.map(auto_sources).delay()
+    # Dispatch one message per source rather than `sync_document_source_task.map(...)`: the
+    # `celery.map` builtin calls the task inline in a list comprehension, so every source would
+    # be synced serially inside a single task execution — no parallelism across the worker pool,
+    # no isolation (one source raising aborts every source after it), and no real per-item task
+    # backing the retry/timeout and `self.request.id` sync lock.
+    dispatched = 0
+    for source_id in auto_sources.iterator(100):
+        sync_document_source_task.delay(source_id)
+        dispatched += 1
+
+    logger.info("Dispatched auto-sync for %s document sources", dispatched)
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
-def async_create_collection_version(self, collection_id: int):
+@shared_task(queue=Queues.BACKGROUND)
+def async_create_collection_version(collection_id: int):
     try:
         collection = Collection.objects.get(id=collection_id)
         with current_team(collection.team):
@@ -278,6 +288,7 @@ def async_create_collection_version(self, collection_id: int):
     ignore_result=True,
     autoretry_for=(Exception,),
     retry_kwargs={"max_retries": 3, "countdown": 60},
+    queue=Queues.BACKGROUND,
 )
 def delete_collection_task(self, collection_id: int):
     try:
@@ -312,6 +323,7 @@ def delete_collection_task(self, collection_id: int):
     ignore_result=True,
     autoretry_for=(Exception,),
     retry_kwargs={"max_retries": 3, "countdown": 60},
+    queue=Queues.BACKGROUND,
 )
 def delete_document_source_task(self, document_source_id: int):
     """Delete or archive a DocumentSource and it's files"""
@@ -399,13 +411,13 @@ _ZIP_MAX_RETRIES = 3
 
 @shared_task(
     bind=True,
-    base=TaskbadgerTask,
     acks_late=True,
     ignore_result=False,
     max_retries=_ZIP_MAX_RETRIES,
     autoretry_for=(Exception,),
     dont_autoretry_for=(ZipIntegrityError,),
     retry_kwargs={"max_retries": _ZIP_MAX_RETRIES, "countdown": 60},
+    queue=Queues.BACKGROUND,
 )
 def create_collection_zip_task(self, collection_id: int, team_id: int):
     """

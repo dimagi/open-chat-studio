@@ -33,6 +33,16 @@ urlpatterns = [
         name="unmute_notification",
     ),
     path(
+        "do-not-disturb/",
+        views.SetDoNotDisturbView.as_view(),
+        name="set_do_not_disturb",
+    ),
+    path(
+        "do-not-disturb/<int:team_id>/cancel/",
+        views.CancelDoNotDisturbView.as_view(),
+        name="cancel_do_not_disturb",
+    ),
+    path(
         "mark-all-read/",
         views.MarkAllNotificationsReadView.as_view(),
         name="mark_all_notifications_read",

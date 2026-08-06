@@ -52,6 +52,7 @@ from apps.filters.models import FilterSet
 from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
+from apps.pipelines.exceptions import has_errors
 from apps.pipelines.views import (
     _pipeline_node_default_values,
     _pipeline_node_parameter_values,
@@ -458,8 +459,7 @@ class CreateChatbotVersion(LoginAndTeamRequiredMixin, PermissionRequiredMixin, F
         """Checks if the pipeline has errors before creating a new version."""
         experiment = self.object
         if pipeline := experiment.pipeline:
-            errors = pipeline.validate()
-            if errors:
+            if has_errors(pipeline.validate()):
                 return "Unable to create a new version when the pipeline has errors"
         return None
 

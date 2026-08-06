@@ -27,6 +27,12 @@ def test_all_providers_have_default_models():
         assert get_default_model(provider_type) is not None
 
 
+def test_a_provider_with_no_chat_models_has_no_default():
+    """``voyage`` is an embedding-only provider, so callers get a miss rather than a KeyError."""
+    assert "voyage" not in DEFAULT_LLM_PROVIDER_MODELS
+    assert get_default_model("voyage") is None
+
+
 @pytest.mark.django_db()
 def test_updates_existing_models():
     candidate = DEFAULT_LLM_PROVIDER_MODELS["openai"][0]
@@ -89,8 +95,7 @@ def test_converts_custom_models_to_global_models_pipelines():
 @pytest.mark.django_db()
 def test_converts_custom_models_to_global_models_evaluators():
     custom_model = LlmProviderModelFactory.create()
-    evaluator = EvaluatorFactory.create(team=custom_model.team, params={"llm_provider_model_id": custom_model.id})
-    assert evaluator.llm_provider_model_id == custom_model.id
+    evaluator = EvaluatorFactory.create(team=custom_model.team, llm_provider_model=custom_model)
 
     defaults = {custom_model.type: [Model(custom_model.name, custom_model.max_token_limit)]}
     with patch("apps.service_providers.llm_service.default_models.DEFAULT_LLM_PROVIDER_MODELS", defaults):
@@ -99,7 +104,6 @@ def test_converts_custom_models_to_global_models_evaluators():
     global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
     evaluator.refresh_from_db()
     assert evaluator.llm_provider_model_id == global_model.id
-    assert evaluator.params["llm_provider_model_id"] == global_model.id
 
 
 @pytest.mark.django_db()
@@ -107,10 +111,10 @@ def test_converts_custom_models_to_global_models_from_a_migration(requires_migra
     """``_update_llm_provider_models`` also runs from migrations, with historical models.
 
     Historical models carry no custom methods, so the evaluator repointing has to work
-    without ``Evaluator.set_llm_provider_model_id``.
+    against the reverse accessor alone.
     """
     custom_model = LlmProviderModelFactory.create()
-    evaluator = EvaluatorFactory.create(team=custom_model.team, params={"llm_provider_model_id": custom_model.id})
+    evaluator = EvaluatorFactory.create(team=custom_model.team, llm_provider_model=custom_model)
 
     historical_state = MigrationExecutor(connection).loader.project_state()
     HistoricalLlmProviderModel = historical_state.apps.get_model("service_providers", "LlmProviderModel")
@@ -122,7 +126,6 @@ def test_converts_custom_models_to_global_models_from_a_migration(requires_migra
     global_model = LlmProviderModel.objects.get(team=None, type=custom_model.type, name=custom_model.name)
     evaluator.refresh_from_db()
     assert evaluator.llm_provider_model_id == global_model.id
-    assert evaluator.params["llm_provider_model_id"] == global_model.id
 
 
 @pytest.mark.django_db()

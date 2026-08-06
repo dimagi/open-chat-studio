@@ -24,13 +24,13 @@ repos:
       - id: djade
         args: [--target-version, "5.1"]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
+    rev: v0.16.1
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes ]
       - id: ruff-format
   - repo: https://github.com/djlint/djLint
-    rev: v1.42.3
+    rev: v1.43.2
     hooks:
 #      - id: djlint-reformat-django enable once format changes have been applied
       - id: djlint-django
@@ -38,11 +38,11 @@ repos:
     rev: 'v10.8.0'
     hooks:
       - id: eslint
+        # Keep these in sync with the matching devDependencies in package.json.
         additional_dependencies:
-          - eslint@9.39.1
-          - '@eslint/js@9.39.2'
-          - eslint-plugin-react@7.37.5
-          - typescript-eslint@8.46.1
+          - eslint@10.8.0
+          - '@eslint/js@10.0.1'
+          - typescript-eslint@8.65.0
         files: ^assets/javascript/.*\.[jt]sx?$  # *.js, *.jsx, *.ts and *.tsx
         types: [ file ]
         args: [ --fix ]
@@ -54,7 +54,7 @@ repos:
         types: [ file ]
   - repo: https://github.com/allganize/ty-pre-commit
     # Ty version. Keep in sync with the `ty` entry in pyproject.toml's [dependency-groups.dev].
-    rev: v0.0.63
+    rev: v0.0.65
     hooks:
       # Run the type checker.
       - id: ty-check
@@ -73,6 +73,15 @@ repos:
         pass_filenames: false
         always_run: true
         fail_fast: true
+      - id: eslint-versions-in-sync
+        name: eslint pins in .pre-commit-config.yaml must match pnpm-lock.yaml
+        # package.json and .pre-commit-config.yaml are bumped by different
+        # Dependabot ecosystems, so they drift apart silently.
+        entry: python scripts/check_eslint_versions.py
+        language: python
+        additional_dependencies: [pyyaml]
+        pass_filenames: false
+        files: ^(\.pre-commit-config\.yaml|package\.json|pnpm-lock\.yaml)$
       - id: atomic-exception-handling
         name: database exceptions must not be caught inside transaction.atomic()
         # Stdlib-only AST check, so it needs no virtualenv of its own. The repo-wide

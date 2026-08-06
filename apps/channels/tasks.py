@@ -34,12 +34,13 @@ from apps.ocs_notifications.notifications import widget_auth_level_upgrade_notif
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.tracing.base import Tracer
 from apps.teams.utils import set_current_team
+from apps.utils.celery import Queues
 from apps.utils.taskbadger import update_taskbadger_data
 
 log = get_task_logger("ocs.channels")
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True, queue=Queues.CHAT)
 def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     experiment_channel = get_experiment_channel(ChannelPlatform.TELEGRAM, external_id=channel_external_id)
     if not experiment_channel:
@@ -63,7 +64,7 @@ def handle_telegram_message(self, message_data: str, channel_external_id: uuid):
     message_handler.new_user_message(message)
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True, queue=Queues.CHAT)
 def handle_twilio_message(self, message_data: dict):
     message = TwilioMessage.parse(message_data)
 
@@ -109,7 +110,7 @@ def validate_twillio_request(experiment_channel, raw_data, request_uri, signatur
         return False
 
 
-@shared_task(bind=True, base=TaskbadgerTask)
+@shared_task(bind=True, base=TaskbadgerTask, queue=Queues.CHAT)
 def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dict):
     message = SureAdhereMessage.parse(message_data)
     experiment_channel = get_experiment_channel(
@@ -125,7 +126,7 @@ def handle_sureadhere_message(self, sureadhere_tenant_id: str, message_data: dic
     channel.new_user_message(message)
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True, queue=Queues.CHAT)
 def handle_turn_message(self, experiment_id: uuid, message_data: dict):
     message = WhatsAppMessage.parse(message_data)
     experiment_channel = get_experiment_channel(
@@ -181,7 +182,7 @@ def handle_evaluation_message(
     return channel.new_user_message(message)
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True, queue=Queues.CHAT)
 def handle_commcare_connect_message(self, experiment_id: int, participant_data_id: int, messages: list[Message]):
     participant_data = ParticipantData.objects.prefetch_related("participant").get(id=participant_data_id)
     experiment_channel = get_experiment_channel(ChannelPlatform.COMMCARE_CONNECT, experiment_id=experiment_id)
@@ -218,7 +219,7 @@ def get_experiment_channel_base_query(platform, **query_kwargs):
     ).filter(experiment__is_archived=False)
 
 
-@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True)
+@shared_task(bind=True, base=TaskbadgerTask, ignore_result=True, queue=Queues.CHAT)
 def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message_data: dict):
     message = WhatsAppMessage.parse(message_data)
     experiment_channel = (
@@ -248,6 +249,7 @@ def handle_meta_cloud_api_message(self, channel_id: int, team_slug: str, message
     retry_backoff=60,
     retry_backoff_max=300,
     retry_jitter=True,
+    queue=Queues.CHAT,
 )
 def handle_email_message(self, email_data: dict, channel_id: int | None = None, session_id: int | None = None):
     from apps.channels.email_channel import (  # noqa: PLC0415 - tests patch EmailChannel at source module
@@ -302,7 +304,7 @@ def handle_email_message(self, email_data: dict, channel_id: int | None = None, 
     channel.new_user_message(message)
 
 
-@shared_task(ignore_result=True)
+@shared_task(ignore_result=True, queue=Queues.BACKGROUND)
 def ratchet_widget_auth_levels():
     """Raise required_auth_level for embedded-widget channels whose widget has upgraded.
 

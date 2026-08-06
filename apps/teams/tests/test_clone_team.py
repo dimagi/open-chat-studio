@@ -64,7 +64,8 @@ def source_team(django_db_blocker):
         )
 
         # Evaluations
-        evaluator = EvaluatorFactory.create(team=team)
+        # Non-default evaluation_mode so the clone is checked to carry it over
+        evaluator = EvaluatorFactory.create(team=team, evaluation_mode="session")
         dataset = EvaluationDatasetFactory.create(team=team)
         EvaluationConfigFactory.create(team=team, dataset=dataset, base_experiment=experiment, evaluators=[evaluator])
 
@@ -250,6 +251,15 @@ def test_clone_team_clones_evaluations(source_team):
     source_eval_count = Evaluator.objects.filter(team=source_team).count()
     target_eval_count = Evaluator.objects.filter(team=target).count()
     assert target_eval_count == source_eval_count
+
+    # The provider selection is FK-only, and must land on the target team's own copies
+    source_evaluator = Evaluator.objects.filter(team=source_team).first()
+    target_evaluator = Evaluator.objects.get(team=target, name=source_evaluator.name)
+    assert target_evaluator.llm_provider.team == target
+    assert target_evaluator.llm_provider.name == source_evaluator.llm_provider.name
+    assert target_evaluator.llm_provider_model.team == target
+    assert target_evaluator.llm_provider_model.name == source_evaluator.llm_provider_model.name
+    assert target_evaluator.evaluation_mode == source_evaluator.evaluation_mode
 
     # Verify datasets cloned
     source_ds_count = EvaluationDataset.objects.filter(team=source_team).count()

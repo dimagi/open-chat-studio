@@ -8,7 +8,6 @@ from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
     EvaluationMessageFactory,
     EvaluatorFactory,
-    configure_evaluator_llm_provider,
 )
 
 
@@ -38,8 +37,7 @@ def test_full_run_freezes_all_dataset_messages():
 @patch("apps.evaluations.tasks.evaluate_message_batch.delay")
 def test_coordinator_dispatches_only_scoped_messages_for_delta(delay_mock, _publish):
     config = EvaluationConfigFactory.create()
-    # Configured providers, or the run fails its pre-flight instead of dispatching.
-    evaluator = configure_evaluator_llm_provider(EvaluatorFactory.create(team=config.team))
+    evaluator = EvaluatorFactory.create(team=config.team)
     config.evaluators.set([evaluator])
     in_scope = EvaluationMessageFactory.create()
     out_of_scope = EvaluationMessageFactory.create()

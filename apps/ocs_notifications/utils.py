@@ -53,6 +53,7 @@ def create_notification(
     event_data: dict | None = None,
     permissions: list[str] | None = None,
     links: dict | None = None,
+    once_per_event_type: bool = False,
 ):
     """
     Create a notification event and associate it with the given users.
@@ -64,17 +65,26 @@ def create_notification(
         team (Team, optional): A team whose members will be associated with the notification.
         slug (str): A slug to identify the event type. Used with event_data for uniqueness.
         event_data (dict, optional): Additional data to store with the event type. Combined with slug for uniqueness.
+        once_per_event_type (bool): For announcements rather than recurring conditions. Skip the notification
+            entirely if a member of this team has already been notified about this slug + event_data, so a
+            caller that re-runs over its whole subject list doesn't re-announce what the team was told.
+            Keyed on the recipients rather than the event type so that a first attempt which reached nobody
+            (no member held the required permission, or they were all on Do Not Disturb) is retried.
 
     Returns:
-        NotificationEvent: The created NotificationEvent instance, or None if creation failed.
+        NotificationEvent: The created NotificationEvent instance, or None if it was skipped or creation failed.
     """
     links = links or {}
+    event_data = event_data or {}
+    identifier = create_identifier(slug, event_data)
+
+    if once_per_event_type and EventUser.objects.filter(team=team, event_type__identifier=identifier).exists():
+        logger.debug("Skipping '%s' notification for team %s: already announced", slug, team.slug)
+        return None
 
     user_info = get_users_to_be_notified(team, permissions)
     users = list(user_info.keys())
 
-    event_data = event_data or {}
-    identifier = create_identifier(slug, event_data)
     event_type, _created = EventType.objects.get_or_create(
         team=team, identifier=identifier, defaults={"event_data": event_data, "level": level}
     )
