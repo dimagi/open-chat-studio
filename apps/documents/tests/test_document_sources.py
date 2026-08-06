@@ -234,6 +234,27 @@ class TestDocumentSourceManager:
         assert names == {"ok.md"}
 
     @patch("apps.documents.document_source_service.create_loader")
+    def test_whitespace_only_payload_is_stored_not_skipped(self, create_loader, collection, document_source):
+        """The source served bytes, so store them (ADR-0051) and let indexing judge the text.
+
+        Skipping at sync time would leave a previously synced file in place with stale content,
+        since the identifier is already marked as seen and so escapes stale-file removal.
+        """
+        docs = [
+            SourceDocument(content=b"  \n  ", metadata={"source": "blank.txt", "sha": "1", "source_type": "test"}),
+        ]
+        create_loader.return_value = MockLoader(collection, docs)
+        manager = DocumentSourceManager(document_source)
+        manager._index_files = Mock()
+
+        result = manager.sync_collection()
+
+        assert result.files_added == 1
+        assert result.files_failed == 0
+        names = set(CollectionFile.objects.filter(collection=collection).values_list("file__name", flat=True))
+        assert names == {"blank.txt"}
+
+    @patch("apps.documents.document_source_service.create_loader")
     def test_sync_collection_update_existing(self, create_loader, collection, document_source):
         create_loader.return_value = MockLoader.for_document_source(collection, document_source)
 

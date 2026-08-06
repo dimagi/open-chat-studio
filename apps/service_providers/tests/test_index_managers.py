@@ -203,6 +203,26 @@ class TestLocalIndexManager:
         assert "no text" in collection_file.failure_reason.lower()
         assert not FileChunkEmbedding.objects.filter(file=file).exists()
 
+    def test_add_files_fails_when_every_chunk_sanitizes_away(self, local_index_instance, index_manager):
+        """NUL-only content clears the empty-text check but leaves nothing to embed.
+
+        Postgres cannot store NUL bytes, so every chunk sanitizes down to "" and is skipped.
+        A file with no embeddings is indistinguishable from one that indexed cleanly unless
+        it is recorded as failed.
+        """
+        file = FileFactory.create(file__data=b"\x00\x00\x00")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with mock.patch.object(index_manager, "chunk_file", return_value=["\x00\x00\x00"]):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+        assert "no text" in collection_file.failure_reason.lower()
+        assert not FileChunkEmbedding.objects.filter(file=file).exists()
+
     def test_one_unextractable_file_does_not_stop_the_batch(self, local_index_instance, index_manager):
         """A batch is one Celery task, so a file that cannot be read must not abort the rest."""
         good_one = FileFactory.create(file__data=b"first document")

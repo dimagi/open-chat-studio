@@ -22,6 +22,7 @@
     {% endcomment %}
     <div class="flex items-center gap-2 text-sm text-base-content/70"
          role="progressbar"
+         aria-label="File indexing progress"
          aria-valuemin="0"
          aria-valuemax="{{ progress_total }}"
          aria-valuenow="{{ progress_indexed }}"

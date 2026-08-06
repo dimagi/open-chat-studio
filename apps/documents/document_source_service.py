@@ -225,7 +225,11 @@ class DocumentSourceManager:
         A single bad document must not abort the whole sync: log it, record it, and
         carry on so the remaining files are still processed and indexed.
         """
-        if not document.content.strip():
+        # Only bytes the source never served are skipped here. Content that is merely blank
+        # was still served, so it is stored (ADR-0051) and indexing records it as failed --
+        # skipping it now would leave an already-synced file in place with stale content,
+        # since its identifier is marked as seen and so escapes stale-file removal.
+        if not document.content:
             msg = "Skipping document with empty content (the source served no bytes)"
             logger.warning(
                 msg,
