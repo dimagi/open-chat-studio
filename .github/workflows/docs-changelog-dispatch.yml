@@ -42,10 +42,10 @@ jobs:
 
           # Check if any files in components/ folder were changed
           if grep -q "^components/" /tmp/changed_files.txt; then
-            echo "is_widget_change=true" >> $GITHUB_OUTPUT
+            echo "is_widget_change=true" >> "$GITHUB_OUTPUT"
             echo "Widget files were changed"
           else
-            echo "is_widget_change=false" >> $GITHUB_OUTPUT
+            echo "is_widget_change=false" >> "$GITHUB_OUTPUT"
             echo "No widget files changed"
           fi
         env:
@@ -60,10 +60,10 @@ jobs:
           # Check for checked checkbox indicating docs/changelog update needed
           # Looks for: - [x] This PR requires docs/changelog update
           if printf '%s\n' "$PR_BODY" | grep -qiE -- '- \[[xX]\].*[Rr]equires (docs|changelog|documentation)'; then
-            echo "needs_docs_update=true" >> $GITHUB_OUTPUT
+            echo "needs_docs_update=true" >> "$GITHUB_OUTPUT"
             echo "PR indicates docs/changelog update is needed"
           else
-            echo "needs_docs_update=false" >> $GITHUB_OUTPUT
+            echo "needs_docs_update=false" >> "$GITHUB_OUTPUT"
             echo "No docs/changelog update needed (checkbox not checked)"
           fi
         env:
