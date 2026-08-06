@@ -44,7 +44,7 @@ dependencies = [
     "langchain_google_genai",
     "langchain-voyageai",
     "langchain-community>=0.4.2",
-    "langfuse>=4.5.0",
+    "langfuse>=4.14.1",
     "langgraph>=1.2.9",
     "loguru",
     "mail-parser-reply>=0.20",
