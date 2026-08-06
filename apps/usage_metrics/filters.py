@@ -1,0 +1,70 @@
+"""Filter vocabulary for the usage-metrics read path (#3905).
+
+`UsageFilters` is the contract the usage surfaces code against; its shape was
+agreed in the design (docs/issues/3905-usage-metrics-convergence). The tag
+helper is this app's single definition of "this conversation carries one of
+these tags" - the same chat-or-message match the dashboard's session filter
+and the cost read path use.
+"""
+
+from dataclasses import dataclass
+
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Exists, OuterRef, Subquery
+
+from apps.annotations.models import CustomTaggedItem
+from apps.chat.models import Chat, ChatMessage
+from apps.teams.models import Team
+
+
+@dataclass(frozen=True)
+class UsageFilters:
+    """The filters every usage-metrics read honours, bundled so the metric
+    functions take one argument instead of five.
+
+    `experiment_ids`/`participant_ids`: `None` means "no filter"; an empty
+    list means "requested but matched nobody" and yields empty results (the
+    v2 usage API's resolved-handle semantics). `platform` is a single
+    platform slug. `tag_ids` narrows to conversations whose chat or any
+    message in it carries one of the tags; an empty list is treated as no
+    filter. `include_archived` applies to experiment enumeration only -
+    activity metrics count archived-experiment activity regardless, on both
+    surfaces, and this flag makes that existing behaviour explicit.
+    """
+
+    experiment_ids: list[int] | None = None
+    participant_ids: list[int] | None = None
+    platform: str | None = None
+    tag_ids: list[int] | None = None
+    include_archived: bool = True
+
+
+def chat_tag_exists_pair(team: Team, tag_ids: list[int], chat_id_ref: str) -> tuple[Exists, Exists]:
+    """The (tag-on-chat, tag-on-message) `Exists` pair behind the session tag
+    filter: a conversation matches when its chat, or any message in that chat,
+    carries one of `tag_ids`. `chat_id_ref` is the outer queryset's path to
+    the chat id (`"chat_id"` on sessions and messages). Tag links are
+    constrained to the reading team's own (`team_id`), so a `CustomTaggedItem`
+    row recorded under another team never qualifies a chat even if its tag and
+    target are local. `Exists()` rather than join+distinct, matching the
+    dashboard's tag filter.
+    """
+    chat_content_type = ContentType.objects.get_for_model(Chat)
+    message_content_type = ContentType.objects.get_for_model(ChatMessage)
+    tag_on_chat = Exists(
+        CustomTaggedItem.objects.filter(
+            team_id=team.id,
+            content_type=chat_content_type,
+            object_id=OuterRef(chat_id_ref),
+            tag_id__in=tag_ids,
+        )
+    )
+    tag_on_msg = Exists(
+        CustomTaggedItem.objects.filter(
+            team_id=team.id,
+            content_type=message_content_type,
+            object_id__in=Subquery(ChatMessage.objects.filter(chat=OuterRef(OuterRef(chat_id_ref))).values("id")),
+            tag_id__in=tag_ids,
+        )
+    )
+    return tag_on_chat, tag_on_msg
