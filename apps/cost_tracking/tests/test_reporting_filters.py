@@ -202,6 +202,40 @@ class TestCostFilters:
 
         assert summary.total_cost == Decimal(0)
 
+    def test_tag_filter_ignores_locally_recorded_link_with_foreign_team_tag_on_chat(self):
+        """The mirror inconsistent-link shape: a CustomTaggedItem row with a
+        LOCAL team_id, whose tag belongs to a FOREIGN team, targeting the
+        session's chat. The tag isn't the reading team's, so it must not
+        pull the record into a tag-filtered read."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=session.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[foreign_tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    def test_tag_filter_ignores_locally_recorded_link_with_foreign_team_tag_on_message(self):
+        """Same mirror shape as above, but the link targets a MESSAGE on the
+        session's chat rather than the chat itself - exercises `tag_on_msg`,
+        which a chat-targeted tag never reaches."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        message = ChatMessageFactory.create(chat=session.chat)
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[foreign_tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
     def test_tag_filter_counts_chat_spend_only(self):
         """A tag-filtered read is per-entity attribution, so evaluation spend on
         the tagged session is excluded (ADR-0048)."""

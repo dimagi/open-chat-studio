@@ -65,3 +65,42 @@ class TestTagFilterTeamScoping:
         assert list(querysets["sessions"]) == []
         assert list(querysets["experiments"]) == []
         assert list(querysets["participants"]) == []
+
+    def test_locally_recorded_link_with_foreign_team_tag_does_not_qualify_a_chat(self):
+        """The mirror inconsistent-link shape: a CustomTaggedItem row with a
+        LOCAL team_id, whose tag belongs to a FOREIGN team, targeting a local
+        chat. The tag isn't the reading team's, so it must not make the
+        session, experiment, or participant match."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=session.chat)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[foreign_tag.id])
+
+        assert list(querysets["sessions"]) == []
+        assert list(querysets["experiments"]) == []
+        assert list(querysets["participants"]) == []
+
+    def test_locally_recorded_link_with_foreign_team_tag_does_not_qualify_a_message(self):
+        """Same mirror shape as above, but the link targets a MESSAGE rather
+        than the chat - exercises the `_on_msg` predicates (`tag_on_msg`,
+        `exp_tag_on_msg`, `part_tag_on_msg`), which a chat-targeted tag never
+        reaches."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = _active_session(team, experiment)
+        message = ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+        )
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[foreign_tag.id])
+
+        assert list(querysets["sessions"]) == []
+        assert list(querysets["experiments"]) == []
+        assert list(querysets["participants"]) == []

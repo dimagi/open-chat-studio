@@ -66,6 +66,11 @@ class TestMessages:
         assert counts == {"human": 1, "ai": 1, "total": 2}
 
     def test_window_is_half_open(self):
+        """[start, end): the boundary at `start` is included, the boundary at
+        `end` is excluded. Asserting only `total == 2` doesn't discriminate
+        this from the `(start, end]` mutant - a symmetric interior message at
+        `_MID` cancels out and both windows give 2. Asserting on which
+        messages survived (by their `created_at`) does discriminate."""
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         _message(session, when=_START)
@@ -73,8 +78,14 @@ class TestMessages:
         _message(session, when=_END)
 
         counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters())
+        surviving = set(
+            metrics.messages_queryset(team, start=_START, end=_END, filters=UsageFilters()).values_list(
+                "created_at", flat=True
+            )
+        )
 
         assert counts["total"] == 2
+        assert surviving == {_START, _MID}
 
     def test_includes_evaluation_sessions(self):
         team = TeamFactory.create()
@@ -166,6 +177,21 @@ class TestMessages:
         CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=session.chat)
 
         counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[tag.id]))
+
+        assert counts["total"] == 0
+
+    def test_tag_filter_ignores_locally_recorded_link_with_foreign_team_tag(self):
+        """The mirror inconsistent-link shape: a CustomTaggedItem row with a
+        LOCAL team_id, whose tag belongs to a FOREIGN team, must not qualify
+        a local chat."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        _message(session)
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=session.chat)
+
+        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[foreign_tag.id]))
 
         assert counts["total"] == 0
 
