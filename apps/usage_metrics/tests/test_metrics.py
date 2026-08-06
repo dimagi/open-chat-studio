@@ -69,11 +69,12 @@ class TestMessages:
         team = TeamFactory.create()
         session = ExperimentSessionFactory.create(team=team)
         _message(session, when=_START)
+        _message(session, when=_MID)
         _message(session, when=_END)
 
         counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters())
 
-        assert counts["total"] == 1
+        assert counts["total"] == 2
 
     def test_includes_evaluation_sessions(self):
         team = TeamFactory.create()
@@ -94,6 +95,24 @@ class TestMessages:
         counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(participant_ids=[]))
 
         assert counts["total"] == 0
+
+    def test_empty_experiment_id_list_means_matched_nobody(self):
+        team = TeamFactory.create()
+        _message(ExperimentSessionFactory.create(team=team))
+
+        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(experiment_ids=[]))
+
+        assert counts["total"] == 0
+
+    def test_empty_tag_id_list_means_no_filter(self):
+        """Unlike experiment_ids/participant_ids, an empty tag_ids list means
+        "no filter" - the message still counts."""
+        team = TeamFactory.create()
+        _message(ExperimentSessionFactory.create(team=team))
+
+        counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[]))
+
+        assert counts["total"] == 1
 
     def test_filters_by_experiment_and_participant(self):
         team = TeamFactory.create()
@@ -164,6 +183,20 @@ class TestSessionCounts:
         )
 
         assert metrics.sessions_started(team, start=_START, end=_END, filters=UsageFilters()) == 1
+
+    def test_empty_participant_id_list_means_matched_nobody(self):
+        team = TeamFactory.create()
+        ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+
+        assert metrics.sessions_started(team, start=_START, end=_END, filters=UsageFilters(participant_ids=[])) == 0
+
+    def test_empty_tag_id_list_means_no_filter(self):
+        """Unlike experiment_ids/participant_ids, an empty tag_ids list means
+        "no filter" - the session still counts."""
+        team = TeamFactory.create()
+        ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+
+        assert metrics.sessions_started(team, start=_START, end=_END, filters=UsageFilters(tag_ids=[])) == 1
 
     def test_sessions_in_setup_complements_sessions_started(self):
         """sessions_started + sessions_in_setup = non-evaluation sessions

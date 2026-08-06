@@ -14,10 +14,17 @@ API semantics as one diff against this module; it also adds the
 `sessions_active` timeseries, whose per-period definition is contested today
 (the dashboard has two disagreeing chart implementations).
 
-Filter semantics (see `UsageFilters`): `experiment_ids`/`participant_ids`
-distinguish `None` (no filter) from `[]` (matched nobody -> empty result);
-`tag_ids` narrows to conversations whose chat or any message carries the tag;
-`include_archived` is not consulted here - activity metrics count
+Filter semantics (see `UsageFilters`): for the API-derived reads - `messages`,
+`sessions_started`, `sessions_in_setup`, `active_participants`, and their
+timeseries - `experiment_ids`/`participant_ids` distinguish `None` (no
+filter) from `[]` (matched nobody -> empty result). `sessions_active` does
+NOT follow this rule: it delegates to `filtered_querysets`, which treats an
+empty `experiment_ids`/`participant_ids` list as "no filter" (dashboard
+truthiness semantics), so identical empty-list filters yield opposite
+results on the two functions - see its docstring. `tag_ids` narrows to
+conversations whose chat or any message carries the tag, and an empty list
+always means "no filter" on every function in this module, `sessions_active`
+included. `include_archived` is not consulted here - activity metrics count
 archived-experiment activity on both surfaces today.
 """
 
@@ -114,6 +121,13 @@ def sessions_in_setup_queryset(
 
 
 def _session_base(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> QuerySet[ExperimentSession]:
+    """Shared base for ``sessions_started_queryset``/``sessions_in_setup_queryset``.
+    Evaluation sessions are excluded on the session's own ``platform`` column.
+    This differs from ``sessions_active``, which excludes via
+    ``experiment_channel__platform`` (see ``dashboard_querysets.py``);
+    ``ExperimentSession.platform`` is an independent nullable ``CharField``,
+    so the two exclusions can disagree on a session where the two columns are
+    out of sync."""
     queryset = ExperimentSession.objects.filter(team=team, created_at__gte=start, created_at__lt=end).exclude(
         platform=ChannelPlatform.EVALUATIONS
     )
@@ -157,10 +171,19 @@ def active_participants(team: Team, *, start: datetime, end: datetime, filters: 
 def sessions_active(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> int:
     """Sessions with at least one message of any type in the CLOSED interval
     ``[start, end]`` - the dashboard's current definition, reproduced
-    unchanged (SETUP sessions count, evaluation-channel sessions do not,
-    ``include_archived`` is not consulted). The definition-switch PR moves
-    this to a half-open window over human/AI messages with SETUP excluded;
-    until then this and the API-derived metrics deliberately disagree."""
+    unchanged (SETUP sessions count; evaluation-channel sessions do not,
+    excluded via ``experiment_channel__platform`` rather than the session's
+    own ``platform`` column that ``sessions_started``/``sessions_in_setup``
+    key on - see ``_session_base``; ``include_archived`` is not consulted).
+    The definition-switch PR moves this to a half-open window over human/AI
+    messages with SETUP excluded; until then this and the API-derived
+    metrics deliberately disagree.
+
+    Empty-list filter semantics also differ from the rest of this module: via
+    ``filtered_querysets``, an empty ``experiment_ids`` or ``participant_ids``
+    list means "no filter" here (dashboard truthiness semantics), not
+    "matched nobody" as it does on ``sessions_started`` and the other
+    API-derived reads."""
     querysets = filtered_querysets(
         team,
         start_date=start,
