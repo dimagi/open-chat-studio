@@ -1,10 +1,10 @@
 """Filter vocabulary for the usage-metrics read path (#3905).
 
 `UsageFilters` is the contract the usage surfaces code against; its shape was
-agreed in the design (docs/issues/3905-usage-metrics-convergence). The tag
-helper is this app's single definition of "this conversation carries one of
-these tags" - the same chat-or-message match the dashboard's session filter
-and the cost read path use.
+agreed in the design discussed on issue #3905. The tag helper is this app's
+single definition of "this conversation carries one of these tags" - the same
+chat-or-message match the dashboard's session filter and the cost read path
+use.
 """
 
 from dataclasses import dataclass
@@ -27,9 +27,18 @@ class UsageFilters:
     v2 usage API's resolved-handle semantics). `platform` is a single
     platform slug. `tag_ids` narrows to conversations whose chat or any
     message in it carries one of the tags; an empty list is treated as no
-    filter. `include_archived` applies to experiment enumeration only -
-    activity metrics count archived-experiment activity regardless, on both
-    surfaces, and this flag makes that existing behaviour explicit.
+    filter.
+
+    `include_archived` is not currently consulted by any function in this
+    module - it is part of the agreed filter shape for surfaces that don't
+    exist yet. The two enumeration paths that exist today each hardcode their
+    own answer instead of reading this flag: `filtered_querysets` in this app
+    hardcodes `is_archived=False, working_version=None` when it builds the
+    `experiments` queryset, while the v2 usage API enumerates experiments with
+    `Experiment.objects.get_all()` (archived and unarchived alike). The
+    default here (`True`) matches the v2 API's behaviour, not the dashboard's
+    - a follow-up that wires this flag into `filtered_querysets` must not
+    assume the default is safe for that path.
     """
 
     experiment_ids: list[int] | None = None
