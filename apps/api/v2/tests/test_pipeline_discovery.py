@@ -102,8 +102,9 @@ def team_with_resources(db):
     LlmProviderModelFactory.create(team=team, type="openai")
     VoiceProviderFactory.create(team=team, name="Prod Polly")
     SourceMaterialFactory.create(team=team, topic="Returns policy")
-    # llm_provider/embedding_provider_model default to fresh SubFactory rows scoped to `team`; pin
-    # them to None so this collection doesn't add an extra, unwanted LlmProvider to the team.
+    # CollectionFactory's SubFactories would otherwise auto-create an LlmProvider and an
+    # EmbeddingProviderModel on this team, polluting the LlmProviderId assertions below.
+    # A media collection (is_index=False) has neither in production anyway.
     CollectionFactory.create(
         team=team, name="Policy docs", is_index=False, llm_provider=None, embedding_provider_model=None
     )
@@ -134,6 +135,8 @@ def test_options_are_team_scoped(team_with_resources):
     LlmProviderFactory.create(team=other_team, name="Their OpenAI")
     VoiceProviderFactory.create(team=other_team, name="Their Polly")
     SourceMaterialFactory.create(team=other_team, topic="Their policy")
+    # Same SubFactory pollution as in `team_with_resources` above -- pin to None or an unwanted
+    # LlmProvider on `other_team` would land in the leak-check labels below.
     CollectionFactory.create(
         team=other_team, name="Their docs", is_index=False, llm_provider=None, embedding_provider_model=None
     )
