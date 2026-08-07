@@ -889,3 +889,40 @@ class TestCollectionIndexingProgress:
 
         assert "1 of 2 files indexed" in content
         assert "hx-trigger" in content
+
+
+@pytest.mark.django_db()
+class TestCollectionUploadedFileCount:
+    """The 'N uploaded (max M)' figure beside the progress bar, which also gates the upload
+    buttons -- so a stale total leaves a user unable to add files."""
+
+    @pytest.fixture()
+    def collection(self):
+        team = TeamWithUsersFactory.create()
+        return CollectionFactory.create(team=team, is_index=True, is_remote_index=False)
+
+    def _page(self, client, collection) -> str:
+        url = reverse("documents:single_collection_home", args=[collection.team.slug, collection.id])
+        return client.get(url).content.decode()
+
+    def test_files_of_a_removed_source_are_not_counted(self, collection, client):
+        """Same reason as the progress counter: the source's card is already gone from the
+        page, and its files are only still here until the deletion task runs."""
+        removed = DocumentSourceFactory.create(collection=collection, team=collection.team, is_archived=True)
+        CollectionFileFactory.create(collection=collection, document_source=removed, status=FileStatus.COMPLETED)
+        CollectionFileFactory.create(collection=collection, status=FileStatus.COMPLETED)
+        client.force_login(collection.team.members.first())
+
+        content = self._page(client, collection)
+
+        assert ">1</span> uploaded" in content
+
+    def test_files_of_a_live_source_are_counted(self, collection, client):
+        source = DocumentSourceFactory.create(collection=collection, team=collection.team, source_type="github")
+        CollectionFileFactory.create(collection=collection, document_source=source, status=FileStatus.COMPLETED)
+        CollectionFileFactory.create(collection=collection, status=FileStatus.COMPLETED)
+        client.force_login(collection.team.members.first())
+
+        content = self._page(client, collection)
+
+        assert ">2</span> uploaded" in content

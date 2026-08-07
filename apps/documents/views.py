@@ -100,10 +100,14 @@ def single_collection_home(request, team_slug: str, pk: int):
     document_sources = (
         DocumentSource.objects.working_versions_queryset().filter(collection=collection).prefetch_related("sync_logs")
     )
-    file_stats = CollectionFile.objects.filter(collection=collection).aggregate(
-        total=Count("id"),
-        manual=Count("id", filter=Q(document_source__isnull=True)),
-        unsendable=Count("id", filter=~Q(file__unsupported_channels={})),
+    file_stats = (
+        CollectionFile.objects.filter(collection=collection)
+        .exclude(document_source__is_archived=True)
+        .aggregate(
+            total=Count("id"),
+            manual=Count("id", filter=Q(document_source__isnull=True)),
+            unsendable=Count("id", filter=~Q(file__unsupported_channels={})),
+        )
     )
     collection_files_count = file_stats["total"]
     manually_uploaded_files_count = file_stats["manual"]
