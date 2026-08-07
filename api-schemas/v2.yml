@@ -146,6 +146,13 @@ paths:
                 items:
                   $ref: '#/components/schemas/NodeType'
           description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeTypeNotFound'
+          description: No such node type, or the type is deprecated and therefore
+            not listed.
   /api/v2/pipeline/options/:
     get:
       operationId: pipeline_options
@@ -1757,6 +1764,14 @@ components:
       - description
       - schema
       - type
+    NodeTypeNotFound:
+      type: object
+      description: The body DRF renders for the `NotFound` raised on an unknown `type`.
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     PaginatedChatbotList:
       type: object
       required:

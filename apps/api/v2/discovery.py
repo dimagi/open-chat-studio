@@ -10,7 +10,7 @@ from functools import cache
 
 from django.db.models.functions import Lower
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import GenericAPIView
@@ -37,6 +37,12 @@ class NodeTypeSerializer(serializers.Serializer):
         )
     )
     schema = serializers.DictField(help_text="JSON Schema for the node's `params`.")
+
+
+class NodeTypeNotFoundSerializer(serializers.Serializer):
+    """The body DRF renders for the `NotFound` raised on an unknown `type`."""
+
+    detail = serializers.CharField()
 
 
 @cache
@@ -106,7 +112,13 @@ class PipelineNodesView(DiscoveryView):
                 description="Return only this node type. An unknown or deprecated name returns 404.",
             )
         ],
-        responses={200: NodeTypeSerializer(many=True)},
+        responses={
+            200: NodeTypeSerializer(many=True),
+            404: OpenApiResponse(
+                response=NodeTypeNotFoundSerializer,
+                description="No such node type, or the type is deprecated and therefore not listed.",
+            ),
+        },
     )
     def get(self, request):
         node_types = _node_types()
