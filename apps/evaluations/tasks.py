@@ -447,13 +447,18 @@ def _drive_run(run_id: int) -> None:
         )
         if run is None:
             return  # locked by another driver, or already terminal/gone
+        # Read before coordinating, which moves the run off PENDING. Doubles as the claim on
+        # creating the run's Taskbadger task: the transition happens under this row lock, so
+        # exactly one tick ever sees PENDING, and a rolled-back tick leaves the claim open.
+        first_tick = run.status == EvaluationRunStatus.PENDING
         with current_team(run.team):
             result = _coordinate_locked_run(run)
 
     with current_team(run.team):
         # Ahead of the dispatches so the run's task exists to nest them under on the
         # first tick, which is the tick that dispatches the first batches.
-        _ensure_taskbadger_task(run, result.total)
+        if first_tick:
+            _ensure_taskbadger_task(run, result.total)
         tb_parent = _taskbadger_parent_kwargs(run)
         for batch in result.batches:
             evaluate_message_batch.apply_async(args=[run.id, batch], **tb_parent)
@@ -551,13 +556,16 @@ def _publish_progress(job_id: str, current: int, total: int, *, stop: bool = Fal
 
 
 def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
-    """Create the run's Taskbadger task once, after the tick's transaction has committed.
+    """Create the run's Taskbadger task, after the tick's transaction has committed.
 
-    Called outside the coordination lock so the blocking HTTP request never stalls
-    other runs in the sweep. That also means two overlapping ticks can both see an empty
-    id and both create a remote task, so the write claims the field conditionally and a
-    losing tick adopts the winner's id: every dispatch across the run nests under one
-    parent, at the cost of an unused root task in Taskbadger.
+    Called outside the coordination lock so the blocking HTTP request never stalls other
+    runs in the sweep. Nothing here is idempotent against a concurrent caller — a second
+    create would be a second root task, not a no-op — so `_drive_run` calls this only on
+    the tick that claimed PENDING under the lock.
+
+    Consequently the create is never retried: if it fails, or the worker dies before the id
+    is stored, the run spends its life without a task. Every Taskbadger call site no-ops on
+    an empty id, so that costs monitoring only.
     """
     if run.taskbadger_task_id:
         return
@@ -579,11 +587,8 @@ def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
         },
     )
     if task is not None:
-        claimed = EvaluationRun.objects.filter(id=run.id, taskbadger_task_id="").update(taskbadger_task_id=task.id)
-        if claimed:
-            run.taskbadger_task_id = task.id
-        else:
-            run.refresh_from_db(fields=["taskbadger_task_id"])
+        run.taskbadger_task_id = task.id
+        run.save(update_fields=["taskbadger_task_id"])
 
 
 def _taskbadger_parent_kwargs(run: EvaluationRun) -> dict:

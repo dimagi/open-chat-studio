@@ -678,24 +678,50 @@ def test_ensure_taskbadger_task_records_run_context():
 
 
 @pytest.mark.django_db()
-def test_ensure_taskbadger_task_adopts_the_winners_id_when_two_ticks_race():
-    """The id must be stable: creation runs outside the row lock, so ticks can overlap here.
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_a_tick_overlapping_the_create_does_not_make_a_second_taskbadger_task(_batch, _publish):
+    """Creating twice would mean two root tasks, not a no-op: the create is not idempotent.
 
-    Whoever writes first owns the field, and the loser dispatches under that same parent
-    rather than under the root task it created and then abandoned.
+    Interleaves the two ticks at the only point where the empty-id guard cannot help — the
+    first tick has committed, so its row lock is gone, but has not stored the new id yet.
+    Only the PENDING claim keeps the second tick out of the create.
     """
-    run = EvaluationRunFactory.create()
+    run, _evaluators, _messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
+    overlapped = False
 
-    def claim_from_a_competing_tick(**kwargs):
-        EvaluationRun.objects.filter(id=run.id).update(taskbadger_task_id="tb-winner")
-        return Mock(id="tb-loser")
+    def drive_again_mid_create(**kwargs):
+        nonlocal overlapped
+        if not overlapped:  # once: the second tick must not recurse back into the create
+            overlapped = True
+            drive_evaluation_run(run.id)
+        return Mock(id="tb-run")
 
-    with patch("apps.evaluations.tasks.taskbadger.create_task_safe", side_effect=claim_from_a_competing_tick):
-        _ensure_taskbadger_task(run, total=5)
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe", side_effect=drive_again_mid_create) as create_mock:
+        drive_evaluation_run(run.id)
 
-    assert run.taskbadger_task_id == "tb-winner"
+    assert overlapped  # the interleaving happened, so the assertion below means something
+    create_mock.assert_called_once()
     run.refresh_from_db()
-    assert run.taskbadger_task_id == "tb-winner"
+    assert run.taskbadger_task_id == "tb-run"
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_a_run_past_its_first_tick_is_not_given_a_taskbadger_task(_batch, _publish):
+    """Deliberate: retrying the create on a later tick is what let overlapping ticks double up.
+
+    Reachable when the first tick's create failed, or for a run already in flight when this
+    shipped. The run stays unmonitored rather than picking up a task mid-flight.
+    """
+    run, _evaluators, _messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
+    assert run.taskbadger_task_id == ""
+
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe") as create_mock:
+        drive_evaluation_run(run.id)
+
+    create_mock.assert_not_called()
 
 
 @pytest.mark.django_db()
