@@ -21,7 +21,9 @@ from apps.experiments.models import SyntheticVoice
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
 from apps.pipelines.node_options import get_node_default_values, get_node_parameter_values, get_node_schemas
+from apps.pipelines.nodes.base import OptionsSource
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
+from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
 
 class NodeTypeSerializer(serializers.Serializer):
@@ -135,6 +137,31 @@ def _clean_options(value):
     return value
 
 
+# The option keys holding prompt/template variables rather than resource ids.
+PROMPT_VAR_OPTION_KEYS = (
+    OptionsSource.text_editor_autocomplete_vars_llm_node,
+    OptionsSource.text_editor_autocomplete_vars_router_node,
+    OptionsSource.jinja_node,
+)
+
+
+def _describe_prompt_vars(options: dict) -> dict:
+    """Swap each prompt variable's redundant ``value`` for a description of what it does.
+
+    The builder emits these as ``{"label": v, "value": v}`` -- the two are always identical, since
+    the value is just the name typed into the template. A human reading an autocomplete dropdown
+    infers the rest from the name; an agent cannot, so it gets the description instead. Mutates a
+    copy of the list, never ``PROMPT_VAR_DESCRIPTIONS``.
+    """
+    for key in PROMPT_VAR_OPTION_KEYS:
+        if not (entries := options.get(key)):
+            continue
+        options[key] = [
+            {"label": entry["label"], "description": PROMPT_VAR_DESCRIPTIONS[entry["label"]]} for entry in entries
+        ]
+    return options
+
+
 class PipelineOptionsView(DiscoveryView):
     @extend_schema(
         operation_id="pipeline_options",
@@ -149,7 +176,12 @@ class PipelineOptionsView(DiscoveryView):
             "`LlmProviderModelId`, `tool_config` -> `built_in_tools_config`, and `synthetic_voice_id` "
             "-> `synthetic_voice_id` (a same-name coincidence, not a declared link). `VoiceProviderId` "
             "and `default_values` are not option lists for any node param -- the former is the team's "
-            "configured voice providers, the latter the values a new node is created with."
+            "configured voice providers, the latter the values a new node is created with.\n\n"
+            "`text_editor_autocomplete_vars_llm_node`, `text_editor_autocomplete_vars_router_node` "
+            "and `jinja_node` list template variables rather than resource ids, so their entries "
+            "carry `label` and `description` instead of `label` and `value` -- write the `label` "
+            "into the prompt or template, and read the `description` for what it holds and when to "
+            "use it."
         ),
         tags=["Pipelines"],
         responses={200: OpenApiTypes.OBJECT},
@@ -174,6 +206,12 @@ class PipelineOptionsView(DiscoveryView):
                         }
                     },
                     "VoiceProviderId": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
+                    "jinja_node": [
+                        {
+                            "label": "input",
+                            "description": "The text passed into this node from the preceding one.",
+                        }
+                    ],
                     "default_values": {"llm_provider_id": 1, "llm_provider_model_id": 5},
                 },
                 response_only=True,
@@ -211,4 +249,4 @@ class PipelineOptionsView(DiscoveryView):
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
         options["default_values"] = get_node_default_values(llm_providers, llm_provider_models)
-        return Response(options)
+        return Response(_describe_prompt_vars(options))

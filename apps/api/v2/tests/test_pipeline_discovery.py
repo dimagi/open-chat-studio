@@ -10,6 +10,7 @@ from apps.utils.factories.service_provider_factories import (
     VoiceProviderFactory,
 )
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -307,3 +308,49 @@ def test_options_never_expose_provider_config(team_with_resources):
 @pytest.mark.django_db()
 def test_options_unauthenticated_request_is_rejected(team_with_resources, client):
     assert client.get(reverse("api:v2:pipeline-options")).status_code == 401
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "options_key",
+    [
+        pytest.param("text_editor_autocomplete_vars_llm_node", id="llm-node-vars"),
+        pytest.param("text_editor_autocomplete_vars_router_node", id="router-node-vars"),
+        pytest.param("jinja_node", id="jinja-node-vars"),
+    ],
+)
+def test_prompt_var_options_carry_a_description_not_a_value(team_with_resources, options_key):
+    """The builder emits {"label": v, "value": v} -- the two are always identical, so the value
+    tells an agent nothing. It gets a description of what the variable holds instead."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    entries = client.get(reverse("api:v2:pipeline-options")).json()[options_key]
+
+    assert entries
+    for entry in entries:
+        assert sorted(entry) == ["description", "label"], entry
+        assert entry["description"].strip()
+        assert entry["description"] != entry["label"]
+
+
+@pytest.mark.django_db()
+def test_prompt_var_descriptions_are_the_real_ones(team_with_resources):
+    """Pins one description end-to-end so a refactor can't quietly serve placeholder text."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    by_label = {
+        entry["label"]: entry["description"]
+        for entry in client.get(reverse("api:v2:pipeline-options")).json()["jinja_node"]
+    }
+
+    assert by_label["input"] == PROMPT_VAR_DESCRIPTIONS["input"]
+    assert "session" in by_label["session_state"]
+    assert "run" in by_label["temp_state"]
+
+
+@pytest.mark.django_db()
+def test_resource_option_lists_keep_their_value(team_with_resources):
+    """Only the prompt-variable keys are reshaped -- resource lists still carry the id to write."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    options = client.get(reverse("api:v2:pipeline-options")).json()
+
+    assert options["source_material"][0]["value"]
+    assert "description" not in options["source_material"][0]

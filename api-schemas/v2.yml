@@ -153,6 +153,8 @@ paths:
         The values each node param accepts, scoped to the API key's team: resource ids to reference, tool names, and the provider defaults a new node is created with.
 
         Most keys match a node param's `ui:optionsSource` from `/pipeline/nodes/` -- `source_material_id`, `collection_id`, `tools`, `mcp_tools`, `custom_actions` and `built_in_tools` all resolve this way. Four params have no such link and must be inferred from context: `llm_provider_id` -> `LlmProviderId`, `llm_provider_model_id` -> `LlmProviderModelId`, `tool_config` -> `built_in_tools_config`, and `synthetic_voice_id` -> `synthetic_voice_id` (a same-name coincidence, not a declared link). `VoiceProviderId` and `default_values` are not option lists for any node param -- the former is the team's configured voice providers, the latter the values a new node is created with.
+
+        `text_editor_autocomplete_vars_llm_node`, `text_editor_autocomplete_vars_router_node` and `jinja_node` list template variables rather than resource ids, so their entries carry `label` and `description` instead of `label` and `value` -- write the `label` into the prompt or template, and read the `description` for what it holds and when to use it.
       summary: List Pipeline Node Options
       tags:
       - Pipelines
@@ -194,6 +196,10 @@ paths:
                     - value: 2
                       label: Prod Polly
                       type: aws
+                    jinja_node:
+                    - label: input
+                      description: The text passed into this node from the preceding
+                        one.
                     default_values:
                       llm_provider_id: 1
                       llm_provider_model_id: 5
