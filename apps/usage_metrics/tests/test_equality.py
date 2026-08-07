@@ -19,6 +19,7 @@ from apps.dashboard.services import DashboardService
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.usage_metrics import metrics
 from apps.usage_metrics.filters import UsageFilters
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -156,6 +157,51 @@ class TestSurfacesAgreeWhereParametersCoincide:
 
         assert active == 2  # started_and_active, old_but_active
         assert started == 3  # started_and_active, the never-engaged one, the system-only one
+
+
+class TestTagFilteredSurfacesAgree:
+    """A chat-level tag is the common tagging shape (the session-tag UI writes
+    the link against the Chat), and every surface matches it the same way:
+    chat-or-message (`chat_tag_exists_pair`). One tagged and one untagged
+    conversation pin that the filter narrows every count to the tagged one
+    identically - dashboard cards, the bot-performance column, and the API."""
+
+    @pytest.fixture()
+    def tagged_team(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(tagged, message_type=ChatMessageType.HUMAN)
+        _message(tagged, message_type=ChatMessageType.AI)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(untagged, message_type=ChatMessageType.HUMAN)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        return team, tag
+
+    def test_dashboard_cards_agree_with_each_other_and_the_metrics(self, tagged_team):
+        team, tag = tagged_team
+        overview = DashboardService(team).get_overview_stats(start_date=_START, end_date=_END, tag_ids=[tag.id])
+        filters = UsageFilters(tag_ids=[tag.id])
+
+        assert overview["total_sessions"] == 1
+        assert (
+            overview["total_messages"] == metrics.messages(team, start=_START, end=_END, filters=filters)["total"] == 2
+        )
+        assert (
+            overview["active_participants"]
+            == metrics.active_participants(team, start=_START, end=_END, filters=filters)
+            == 1
+        )
+
+    def test_bot_performance_messages_agree_with_the_headline(self, tagged_team):
+        team, tag = tagged_team
+        overview = DashboardService(team).get_overview_stats(start_date=_START, end_date=_END, tag_ids=[tag.id])
+        performance = DashboardService(team).get_bot_performance_summary(
+            start_date=_START, end_date=_END, tag_ids=[tag.id]
+        )
+
+        assert performance["results"][0]["messages"] == overview["total_messages"] == 2
 
 
 class TestScalarsAndTimeseriesAgree:

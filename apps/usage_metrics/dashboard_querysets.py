@@ -191,21 +191,14 @@ def filtered_querysets(
             Q(_part_tchat=True) | Q(_part_tmsg=True)
         )
 
-        # Messages: the message's own tags carry the tag (both the link row and its tag must
-        # belong to the reading team). Message-only match - a tag on the chat (rather than the
-        # message itself) does not pull the chat's messages in here; that broader chat-or-message
-        # match is what the sessions/experiments/participants legs above use via
-        # `chat_tag_exists_pair`, not this one.
-        msg_tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id=OuterRef("id"),
-                tag_id__in=tag_ids,
-            )
+        # Messages: the same chat-or-message match as every other leg and as
+        # `usage_metrics.messages_queryset`, so a chat-level tag narrows the
+        # message counts to the tagged conversations it narrows the session
+        # counts to, and the dashboard agrees with the API under the filter.
+        msg_tag_on_chat, msg_tag_on_msg = chat_tag_exists_pair(team, tag_ids, "chat_id")
+        messages = messages.annotate(_msg_tchat=msg_tag_on_chat, _msg_tmsg=msg_tag_on_msg).filter(
+            Q(_msg_tchat=True) | Q(_msg_tmsg=True)
         )
-        messages = messages.filter(msg_tag_on_msg)
 
     return {
         "experiments": experiments,

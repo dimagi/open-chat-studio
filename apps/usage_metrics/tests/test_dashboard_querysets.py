@@ -202,7 +202,9 @@ class TestMessageTagFilterTeamScoping:
     def test_own_teams_link_on_a_message_matches(self):
         """Positive control: the reading team's own link on its own tag,
         targeting a message, must qualify - otherwise the two negative
-        assertions above prove nothing."""
+        assertions above prove nothing. The match is chat-or-message, so the
+        tagged message pulls its whole conversation in: the session's other
+        (untagged) message qualifies alongside it."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
         session = _active_session(team, experiment)
@@ -214,30 +216,31 @@ class TestMessageTagFilterTeamScoping:
 
         querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
 
-        assert [m.id for m in querysets["messages"]] == [message.id]
+        assert {m.id for m in querysets["messages"]} == set(
+            ChatMessage.objects.filter(chat=session.chat).values_list("id", flat=True)
+        )
 
-    def test_tag_on_the_chat_does_not_pull_its_messages_into_the_messages_leg(self):
-        """Message-only semantics control: the sessions/experiments/
-        participants legs use the broader chat-or-message match
-        (`chat_tag_exists_pair`), but the messages leg must not - a tag
-        recorded on the chat rather than on a message must not make that
-        chat's messages match here. Widening to chat-or-message would be an
-        unrequested behaviour change."""
+    def test_tag_on_the_chat_pulls_its_messages_into_the_messages_leg(self):
+        """Every leg matches tags chat-or-message (`chat_tag_exists_pair`): a
+        tag recorded on the chat qualifies the conversation's messages the same
+        way it qualifies the session. Without this, a chat-level tag filter
+        counted the session on one card while zeroing the message and
+        participant counts beside it, and the dashboard disagreed with
+        `usage_metrics.messages` under the same filter."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
         session = _active_session(team, experiment)
-        ChatMessage.objects.create(
-            chat=session.chat, message_type=ChatMessageType.HUMAN, content="untagged", created_at=_MID
-        )
+        untagged_session = _active_session(team, experiment)
         tag = TagFactory.create(team=team)
         CustomTaggedItemFactory.create(team=team, tag=tag, target=session.chat)
 
         querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
 
-        assert list(querysets["messages"]) == []
-        # sanity: the chat-level tag does still qualify the session, so the empty messages
-        # result above is the message-only leg behaving correctly, not a broken fixture.
+        assert {m.id for m in querysets["messages"]} == set(
+            ChatMessage.objects.filter(chat=session.chat).values_list("id", flat=True)
+        )
         assert [s.id for s in querysets["sessions"]] == [session.id]
+        assert untagged_session.chat.messages.exists()  # the excluded shape is real, not an empty fixture
 
 
 class TestEvaluationExclusionColumn:

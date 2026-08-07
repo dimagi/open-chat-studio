@@ -42,6 +42,7 @@ Numbers visibly change:
 - Dashboard active-participant counts drop participants whose only in-window activity is AI or `system` messages, on the overview stat and the session-analytics series. The active-participants chart already used this definition and does not move.
 - The API's `messages` and `participants` metrics drop evaluation activity, and `participants` drops participants whose only in-window activity is AI messages. Grouped rows now sum to the ungrouped total.
 - Instants on a window boundary stop being counted in two adjacent periods.
+- A tag filter matches whole conversations everywhere: a conversation qualifies when its chat, or any message in it, carries the tag. The dashboard's message counts previously matched a tag filter only against tags placed on individual messages, so a chat-level tag narrowed the session cards but zeroed the message and participant counts beside them.
 
 `sessions_in_setup` is new. It is exposed through `usage_metrics` and has no UI surface in this block.
 
