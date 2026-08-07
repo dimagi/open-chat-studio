@@ -23,6 +23,10 @@ class WeekdaysEnum(int, Enum):
     SUNDAY = 7
 
 
+class EndSessionSchema(BaseModel):
+    pass
+
+
 class RecurringReminderSchema(BaseModel):
     datetime_due: datetime = Field(description="The first (or only) reminder start date in ISO 8601 format")
     every: int = Field(description="Number of 'periods' to wait between reminders")
