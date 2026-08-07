@@ -295,6 +295,24 @@ class TestCostFilters:
 
 
 @pytest.mark.django_db()
+class TestCostSummaryWindowBound:
+    """`cost_summary` reads [previous_start, end) and nothing else. The bound is
+    on the queryset, not only inside the conditional aggregates, so the scan
+    does not grow with the team's whole history (#3905)."""
+
+    def test_records_far_outside_the_window_do_not_widen_the_scan(self, team):
+        start = _NOW - timedelta(days=7)
+        end = _NOW
+        _usage(team, cost="1.00", when=start + timedelta(days=1))
+        _usage(team, cost="99.00", when=start - timedelta(days=400))
+
+        summary = cost_summary(team, start=start, end=end)
+
+        assert summary.total_cost == Decimal("1.00")
+        assert summary.previous_period_cost == Decimal("0.00")
+
+
+@pytest.mark.django_db()
 class TestEvaluationSourceRule:
     """ADR-0048: evaluation spend is the team's spend, never a chatbot's, a
     participant's or a conversation's.

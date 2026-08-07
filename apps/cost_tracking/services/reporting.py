@@ -259,25 +259,33 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
     period_q = Q(timestamp__gte=start, timestamp__lt=end)
     previous_q = Q(timestamp__gte=previous_start, timestamp__lt=start)
 
-    agg = _scoped_records(team, filters).aggregate(
-        total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
-        previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
-        exact=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        estimated=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
-        # Rows that got recorded but the resolver couldn't price (no matching
-        # PricingRule). Excludes UNKNOWN-confidence rows because those have
-        # their own counter. Distinct row counter, not a sum - these rows
-        # contribute $0 to total_cost.
-        unpriced_rows=Count("id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)),
+    # Bound the scan to the two periods the aggregates below actually read.
+    # Without it this scans the team's whole UsageRecord history on every load.
+    agg = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=previous_start, timestamp__lt=end)
+        .aggregate(
+            total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
+            previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
+            exact=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            estimated=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
+            # Rows that got recorded but the resolver couldn't price (no matching
+            # PricingRule). Excludes UNKNOWN-confidence rows because those have
+            # their own counter. Distinct row counter, not a sum - these rows
+            # contribute $0 to total_cost.
+            unpriced_rows=Count(
+                "id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)
+            ),
+        )
     )
 
     return CostSummary(
