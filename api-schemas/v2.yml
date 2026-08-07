@@ -115,6 +115,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v2/pipeline/nodes/:
+    get:
+      operationId: pipeline_node_list
+      description: 'The node types a pipeline can contain, with the JSON schema of
+        each one''s `params`. Deprecated types are omitted. Types with `can_add: false`
+        are managed by the server and must not be created.'
+      summary: List Pipeline Node Types
+      parameters:
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: Return only this node type. An unknown or deprecated name returns
+          404.
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeType'
+          description: ''
   /api/v2/trigger_bot/:
     post:
       operationId: trigger_bot_message
@@ -1644,6 +1674,28 @@ components:
       - ai
       - human
       - total
+    NodeType:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Write this to a node's `type` field.
+        description:
+          type: string
+        can_add:
+          type: boolean
+          description: False for structural nodes the server manages itself -- Start,
+            End and Passthrough. They are listed so the agent can resolve types it
+            reads from /inspect/, not so it can create them.
+        schema:
+          type: object
+          additionalProperties: {}
+          description: JSON Schema for the node's `params`.
+      required:
+      - can_add
+      - description
+      - schema
+      - type
     PaginatedChatbotList:
       type: object
       required:
