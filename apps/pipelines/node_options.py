@@ -22,6 +22,28 @@ from apps.utils.prompt import PromptVars
 
 def get_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
     """Returns the possible values for each input type"""
+    return {
+        **_llm_provider_options(llm_providers, llm_provider_models),
+        **_team_resource_options(team, include_versions),
+        **_tool_options(team),
+        **_built_in_tool_options(llm_providers),
+        **_prompt_var_options(),
+        **_synthetic_voice_options(synthetic_voices),
+    }
+
+
+def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QuerySet):
+    return {
+        "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
+        "LlmProviderModelId": [
+            _option(provider.id, str(provider), provider.type, None, provider.max_token_limit)
+            for provider in llm_provider_models
+        ],
+    }
+
+
+def _team_resource_options(team, include_versions: bool):
+    """The team's referenceable resources, each with a link into the UI for the builder's edit button."""
     common_filters = {"team": team}
     if not include_versions:
         common_filters["working_version"] = None
@@ -35,20 +57,50 @@ def get_node_parameter_values(team, llm_providers, llm_provider_models, syntheti
         .all()
     )
 
-    def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
-        data = {"value": value, "label": label}
-        data = data | ({"type": type_} if type_ else {})
-        data = data | ({"edit_url": edit_url} if edit_url else {})
-        data = data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
-        return data
+    def _collection_url(collection_id: int):
+        return reverse("documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection_id})
 
-    def _get_assistant_url(assistant_id: int):
-        """
-        Always link to the working version. If `working_version_id` is None, it means the assistant is the working
-        version
-        """
-        return reverse("assistants:edit", args=[team.slug, assistant_id])
+    return {
+        OptionsSource.source_material: (
+            [_option("", "Select a topic")]
+            + [_option(material["id"], material["topic"]) for material in source_materials]
+        ),
+        OptionsSource.assistant: (
+            [_option("", "Select an Assistant")]
+            + [
+                _option(
+                    value=assistant["id"],
+                    label=assistant["name"],
+                    # Always link to the working version. If `working_version_id` is None, it means the
+                    # assistant is the working version.
+                    edit_url=reverse("assistants:edit", args=[team.slug, assistant["id"]]),
+                )
+                for assistant in assistants
+            ]
+        ),
+        OptionsSource.collection: (
+            [_option("", "Select a Collection")]
+            + [
+                _option(
+                    value=collection["id"],
+                    label=collection["name"],
+                    edit_url=_collection_url(collection["id"]),
+                )
+                for collection in collections
+            ]
+        ),
+        OptionsSource.collection_index: [
+            _option(
+                value=index["id"],
+                label=f"{index['name']} ({'Remote' if index['is_remote_index'] else 'Local'})",
+                edit_url=_collection_url(index["id"]),
+            )
+            for index in collection_indexes
+        ],
+    }
 
+
+def _tool_options(team):
     custom_action_operations = []
     for _custom_action_name, operations_disp in get_custom_action_operation_choices(team):
         custom_action_operations.extend(operations_disp)
@@ -60,54 +112,15 @@ def get_node_parameter_values(team, llm_providers, llm_provider_models, syntheti
     ]
 
     return {
-        "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
-        "LlmProviderModelId": [
-            _option(provider.id, str(provider), provider.type, None, provider.max_token_limit)
-            for provider in llm_provider_models
-        ],
-        OptionsSource.source_material: (
-            [_option("", "Select a topic")]
-            + [_option(material["id"], material["topic"]) for material in source_materials]
-        ),
-        OptionsSource.assistant: (
-            [_option("", "Select an Assistant")]
-            + [
-                _option(
-                    value=assistant["id"],
-                    label=assistant["name"],
-                    edit_url=_get_assistant_url(assistant["id"]),
-                )
-                for assistant in assistants
-            ]
-        ),
-        OptionsSource.collection: (
-            [_option("", "Select a Collection")]
-            + [
-                _option(
-                    value=collection["id"],
-                    label=collection["name"],
-                    edit_url=reverse(
-                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection["id"]}
-                    ),
-                )
-                for collection in collections
-            ]
-        ),
-        OptionsSource.collection_index: (
-            [
-                _option(
-                    value=index["id"],
-                    label=f"{index['name']} ({'Remote' if index['is_remote_index'] else 'Local'})",
-                    edit_url=reverse(
-                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": index["id"]}
-                    ),
-                )
-                for index in collection_indexes
-            ]
-        ),
         OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.mcp_tools: [_option(value, label) for value, label in mcp_tools],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
+    }
+
+
+def _built_in_tool_options(llm_providers: list[dict]):
+    """Built-in tools are keyed by provider type -- each provider exposes a different set."""
+    return {
         OptionsSource.built_in_tools: {
             provider["type"].lower(): [
                 _option(value, label) for value, label in BuiltInTools.choices_for_provider(provider["type"].lower())
@@ -116,17 +129,35 @@ def get_node_parameter_values(team, llm_providers, llm_provider_models, syntheti
             if provider.get("type")
         },
         OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
+    }
+
+
+def _prompt_var_options():
+    return {
         OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
         OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
         OptionsSource.jinja_node: PromptVars.get_jinja_vars(),
+    }
+
+
+def _synthetic_voice_options(synthetic_voices):
+    return {
         OptionsSource.synthetic_voice_id: sorted(
             [
                 _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}
                 for voice in synthetic_voices
             ],
             key=lambda v: v["label"],
-        ),
+        )
     }
+
+
+def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
+    data = {"value": value, "label": label}
+    data = data | ({"type": type_} if type_ else {})
+    data = data | ({"edit_url": edit_url} if edit_url else {})
+    data = data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
+    return data
 
 
 def get_node_default_values(llm_providers: list[dict], llm_provider_models: QuerySet):
