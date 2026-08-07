@@ -10,7 +10,7 @@ from functools import cache
 
 from django.db.models.functions import Lower
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import GenericAPIView
@@ -42,6 +42,11 @@ def _node_types() -> list[dict]:
     """Node types reshaped for agent consumption.
 
     Cached because the node classes are fixed at import time, so this is static per deploy.
+
+    Only root-level ``ui:*`` keys (``ui:deprecated``, ``ui:can_add``) are stripped from the schema.
+    Per-property ``ui:*`` keys -- notably ``ui:optionsSource``, which names the ``/options/`` key a
+    param's values come from -- are deliberately retained; stripping those would sever the only
+    machine-readable link between the two endpoints.
     """
     node_types = []
     for schema in get_node_schemas():
@@ -84,7 +89,10 @@ class PipelineNodesView(DiscoveryView):
         description=(
             "The node types a pipeline can contain, with the JSON schema of each one's `params`. "
             "Deprecated types are omitted. Types with `can_add: false` are managed by the server "
-            "and must not be created."
+            "and must not be created.\n\n"
+            "Only root-level `ui:*` schema keys are stripped. Per-property `ui:*` keys survive -- in "
+            "particular `ui:optionsSource`, which names the key in `/pipeline/options/` a param's "
+            "values come from. See that endpoint's description for the params it does not cover."
         ),
         tags=["Pipelines"],
         parameters=[
@@ -133,11 +141,44 @@ class PipelineOptionsView(DiscoveryView):
         summary="List Pipeline Node Options",
         description=(
             "The values each node param accepts, scoped to the API key's team: resource ids to "
-            "reference, tool names, and the provider defaults a new node is created with. Keys "
-            "match the node schemas' option sources."
+            "reference, tool names, and the provider defaults a new node is created with.\n\n"
+            "Most keys match a node param's `ui:optionsSource` from `/pipeline/nodes/` -- "
+            "`source_material_id`, `collection_id`, `tools`, `mcp_tools`, `custom_actions` and "
+            "`built_in_tools` all resolve this way. Four params have no such link and must be "
+            "inferred from context: `llm_provider_id` -> `LlmProviderId`, `llm_provider_model_id` -> "
+            "`LlmProviderModelId`, `tool_config` -> `built_in_tools_config`, and `synthetic_voice_id` "
+            "-> `synthetic_voice_id` (a same-name coincidence, not a declared link). `VoiceProviderId` "
+            "and `default_values` are not option lists for any node param -- the former is the team's "
+            "configured voice providers, the latter the values a new node is created with."
         ),
         tags=["Pipelines"],
         responses={200: OpenApiTypes.OBJECT},
+        examples=[
+            OpenApiExample(
+                name="PipelineOptions",
+                summary="A flat option list, a nested built-in-tools block, and the default values.",
+                value={
+                    "LlmProviderId": [{"value": 1, "label": "Prod OpenAI", "type": "openai"}],
+                    "source_material": [{"value": 3, "label": "Returns policy"}],
+                    "built_in_tools": {"openai": [{"value": "web-search", "label": "Web Search"}]},
+                    "built_in_tools_config": {
+                        "anthropic": {
+                            "web-search": [
+                                {
+                                    "name": "allowed_domains",
+                                    "type": "expandable_text",
+                                    "label": "Allowed Domains",
+                                    "helpText": "Only search these domains. Separate entries with newlines.",
+                                }
+                            ]
+                        }
+                    },
+                    "VoiceProviderId": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
+                    "default_values": {"llm_provider_id": 1, "llm_provider_model_id": 5},
+                },
+                response_only=True,
+            )
+        ],
     )
     def get(self, request):
         team = request.team
