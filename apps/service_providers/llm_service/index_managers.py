@@ -144,8 +144,8 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
             if _reads_as_empty(file):
                 # Linking succeeds for a file with no text in it, so the provider's verdict
                 # alone would leave this COMPLETED with nothing indexed -- indistinguishable
-                # from a file that indexed cleanly. Source files are stored unparsed
-                # (ADR-0051), so a scanned or image-only document reaches this point.
+                # from a file that indexed cleanly. Source files are stored unparsed, so a
+                # scanned or image-only document reaches this point.
                 self._fail(collection_file, FileReadException(NO_EXTRACTABLE_TEXT))
                 continue
             try:
@@ -354,8 +354,8 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         try:
             document_text = file.read_content()
             if not document_text.strip():
-                # Source files are stored unparsed (ADR-0051), so a scanned or image-only
-                # document reaches indexing and yields nothing. Without this, it would be
+                # Source files are stored unparsed, so a scanned or image-only document
+                # reaches indexing and yields nothing. Without this, it would be
                 # marked COMPLETED with no embeddings -- indistinguishable from a file that
                 # actually indexed.
                 raise FileReadException(NO_EXTRACTABLE_TEXT)

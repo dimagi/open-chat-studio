@@ -151,7 +151,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
         """Download the attachment and hand on its bytes unparsed.
 
         Nothing here inspects the payload: the feed's `file_type` is a third party's claim,
-        and the reader that can be trusted to pick a parser runs at index time (ADR-0051).
+        and the reader that can be trusted to pick a parser runs at index time.
         """
         try:
             validate_user_input_url(url, strict=not settings.DEBUG)

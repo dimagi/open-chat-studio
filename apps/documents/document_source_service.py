@@ -226,7 +226,7 @@ class DocumentSourceManager:
         carry on so the remaining files are still processed and indexed.
         """
         # Only bytes the source never served are skipped here. Content that is merely blank
-        # was still served, so it is stored (ADR-0051) and indexing records it as failed --
+        # was still served, so it is stored and indexing records it as failed --
         # skipping it now would leave an already-synced file in place with stale content,
         # since its identifier is marked as seen and so escapes stale-file removal.
         if not document.content:
@@ -276,7 +276,7 @@ class DocumentSourceManager:
         """Create a new file from a document.
 
         No content type is passed: ``File.create`` sniffs it from the bytes, which is the
-        only claim about the document we trust (ADR-0051).
+        only claim about the document we trust.
         """
         filename = self._extract_filename(document, identifier)
         content_file = ContentFile(document.content)

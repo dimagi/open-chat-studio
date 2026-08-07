@@ -44,7 +44,7 @@ class GitHubDocumentLoader(BaseDocumentLoader[GitHubSourceConfig]):
         replaces decoded every blob as UTF-8, so one file that is not UTF-8 text -- a binary
         asset, a latin-1 source file -- raised UnicodeDecodeError out of the generator and
         aborted the whole sync, taking the files after it down with it. There is no decode
-        here to fail, and bytes are what gets stored anyway (ADR-0051).
+        here to fail, and bytes are what gets stored anyway.
         """
         try:
             max_bytes = _max_blob_bytes()

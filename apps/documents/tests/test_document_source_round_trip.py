@@ -1,9 +1,9 @@
-"""End-to-end guard for ADR-0051: a synced document survives as the file the source served.
+"""End-to-end guard: a synced document survives as the file the source served.
 
 The unit tests around the sync stub the loader out, so nothing else covers the whole path
 a real PDF takes: fetched from a feed, stored, read back for indexing, and downloaded by a
-user. The download is what motivated ADR-0051 — storing extracted text under the source's
-own filename produced a `.pdf` no reader could open.
+user. The download is what motivated storing the bytes verbatim — extracted text under the
+source's own filename produced a `.pdf` no reader could open.
 """
 
 import json

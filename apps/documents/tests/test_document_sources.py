@@ -210,7 +210,7 @@ class TestDocumentSourceManager:
 
     @patch("apps.documents.document_source_service.create_loader")
     def test_whitespace_only_payload_is_stored_not_skipped(self, create_loader, collection, document_source):
-        """The source served bytes, so store them (ADR-0051) and let indexing judge the text.
+        """The source served bytes, so store them and let indexing judge the text.
 
         Skipping at sync time would leave a previously synced file in place with stale content,
         since the identifier is already marked as seen and so escapes stale-file removal.

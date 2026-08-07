@@ -10,8 +10,8 @@ from apps.documents.models import Collection, CollectionFile
 class SourceDocument:
     """A document as its source served it: the original bytes, plus metadata about them.
 
-    Deliberately not text. Extraction happens at index time (see ADR-0051), so a loader
-    that fetches a PDF hands on the PDF.
+    Deliberately not text. Extraction happens at index time, so a loader that fetches a
+    PDF hands on the PDF.
     """
 
     content: bytes
