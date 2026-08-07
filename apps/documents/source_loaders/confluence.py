@@ -3,11 +3,10 @@ from collections.abc import Iterator
 from typing import Self
 
 from langchain_community.document_loaders.confluence import ConfluenceLoader
-from langchain_core.documents import Document
 
 from apps.documents.datamodels import ConfluenceSourceConfig
 from apps.documents.models import Collection, CollectionFile, DocumentSource
-from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.documents.source_loaders.base import BaseDocumentLoader, SourceDocument
 from apps.service_providers.models import AuthProviderType
 
 logger = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
             raise ValueError("Confluence authentication both username and password")
         return cls(collection, document_source.config.confluence, auth_provider)
 
-    def load_documents(self) -> Iterator[Document]:
+    def load_documents(self) -> Iterator[SourceDocument]:
         """Load documents from Confluence using configured options"""
         try:
             username = self.auth_provider.config.get("username")
@@ -58,20 +57,23 @@ class ConfluenceDocumentLoader(BaseDocumentLoader[ConfluenceSourceConfig]):
                         "citation_url": document.metadata.get("source"),
                     }
                 )
-                yield document
+                # Confluence serves pages as HTML and ConfluenceLoader converts them to
+                # text, so unlike the other loaders these are not the source's own bytes.
+                # There is no rawer representation to hand on: the API has no file to serve.
+                yield SourceDocument(content=document.page_content.encode("utf-8"), metadata=document.metadata)
 
         except Exception as e:
             logger.error(f"Error loading documents from Confluence: {str(e)}")
             raise
 
-    def get_document_identifier(self, document: Document) -> str:
+    def get_document_identifier(self, document: SourceDocument) -> str:
         """Get a unique identifier for a Confluence document"""
         page_id = document.metadata.get("id")
         if page_id:
             return f"confluence://{self.config.base_url}/{page_id}"
         return document.metadata.get("source", "")
 
-    def should_update_document(self, document: Document, existing_file: CollectionFile) -> bool:
+    def should_update_document(self, document: SourceDocument, existing_file: CollectionFile) -> bool:
         # Check if last modified time changed
         new_modified = document.metadata.get("when")
         old_modified = existing_file.file.metadata.get("when")

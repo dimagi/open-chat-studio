@@ -38,6 +38,11 @@ urlpatterns = [
         views.get_collection_file_status,
         name="get_collection_file_status",
     ),
+    path(
+        "collections/<int:collection_id>/indexing-progress",
+        views.collection_indexing_progress,
+        name="collection_indexing_progress",
+    ),
     # document source
     path(
         "collections/<int:collection_id>/source/", views.CreateDocumentSource.as_view(), name="create_document_source"
