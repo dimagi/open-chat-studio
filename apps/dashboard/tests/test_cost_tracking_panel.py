@@ -4,6 +4,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from time_machine import travel
 
@@ -295,3 +297,48 @@ class TestBotPerformanceCostColumns:
 
         row = next(r for r in response.json()["results"] if r["experiment_id"] == experiment.id)
         assert row["cost"] == 1.0
+
+
+@pytest.mark.django_db()
+class TestCostPanelCaching:
+    """The cost panel's three reads are cached like every other dashboard
+    metric, accepting the same up-to-30-minutes staleness (#3905)."""
+
+    def _url(self, team):
+        return reverse("dashboard:index", kwargs={"team_slug": team.slug})
+
+    def test_summary_is_served_from_cache_on_the_second_read(self, authenticated_client, team):
+        _enable_flag_for(team)
+        url = self._url(team)
+
+        authenticated_client.get(url)
+        with CaptureQueriesContext(connection) as captured:
+            second = authenticated_client.get(url)
+
+        assert second.status_code == 200
+        summary_queries = [q for q in captured.captured_queries if "usagerecord" in q["sql"].lower()]
+        assert summary_queries == []
+
+    def test_cached_summary_round_trips_its_decimals(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        url = self._url(team)
+
+        authenticated_client.get(url)
+        response = authenticated_client.get(url)
+
+        summary = response.context["cost_summary"]
+        assert summary.total_cost == Decimal("1.23")
+        assert isinstance(summary.total_cost, Decimal)
+
+    def test_a_different_filter_gets_its_own_cache_entry(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        experiment = ExperimentFactory.create(team=team)
+        url = self._url(team)
+
+        unfiltered = authenticated_client.get(url).context["cost_summary"]
+        filtered = authenticated_client.get(url, {"experiments": [experiment.id]}).context["cost_summary"]
+
+        assert unfiltered.total_cost == Decimal("1.23")
+        assert filtered.total_cost == Decimal("0.00")

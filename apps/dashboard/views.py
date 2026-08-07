@@ -1,36 +1,101 @@
 import json
+from dataclasses import asdict
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
 from waffle import flag_is_active
 
-from apps.cost_tracking.services.reporting import CostFilters, cost_summary, cost_timeseries, coverage_gaps
+from apps.cost_tracking.services.reporting import (
+    CostFilters,
+    CostSummary,
+    CoverageGaps,
+    ModelCoverageGap,
+    cost_summary,
+    cost_timeseries,
+    coverage_gaps,
+)
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 
 from .forms import DashboardFilterForm, SavedFilterForm
-from .models import DashboardFilter
+from .models import DashboardCache, DashboardFilter
 from .services import DashboardService
 
 COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 DEFAULT_COST_PERIOD_DAYS = 30
 
 
+def _cost_cache_key(prefix: str, filter_form: DashboardFilterForm) -> str:
+    """Key on the form's submitted parameters, not on the resolved window. With
+    no date range submitted the window is `now`-relative and would otherwise
+    change every request, so the entry would never be hit. The window then
+    slides while the cached value stays put for up to the TTL - the same
+    staleness every other dashboard metric already accepts."""
+    params = filter_form.get_filter_params() if filter_form.is_valid() else {}
+    return f"{prefix}_{DashboardService._cache_key(params)}"
+
+
+def _cached(team, cache_key: str, compute, decode):
+    """Serve `compute()` through DashboardCache, encoding via the JSON encoder
+    the cache field expects and rebuilding the dataclass on the way out."""
+    cached_data = DashboardCache.get_cached_data(team, cache_key)
+    if cached_data is not None:
+        return decode(cached_data)
+    value = compute()
+    DashboardCache.set_cached_data(team, cache_key, json.loads(json.dumps(asdict(value), cls=DjangoJSONEncoder)))
+    return value
+
+
+def _cost_summary_from_cache(payload: dict) -> CostSummary:
+    return CostSummary(
+        period_start=parse_datetime(payload["period_start"]),
+        period_end=parse_datetime(payload["period_end"]),
+        total_cost=Decimal(payload["total_cost"]),
+        previous_period_cost=Decimal(payload["previous_period_cost"]),
+        delta_pct=payload["delta_pct"],
+        exact_cost=Decimal(payload["exact_cost"]),
+        estimated_cost=Decimal(payload["estimated_cost"]),
+        unknown_call_count=payload["unknown_call_count"],
+        unpriced_call_count=payload["unpriced_call_count"],
+    )
+
+
+def _coverage_gaps_from_cache(payload: dict) -> CoverageGaps:
+    return CoverageGaps(
+        unpriced=[ModelCoverageGap(**gap) for gap in payload["unpriced"]],
+        unknown=[ModelCoverageGap(**gap) for gap in payload["unknown"]],
+    )
+
+
 def _cost_tracking_context(request, filter_form: DashboardFilterForm) -> dict:
     """Return the cost-tracking panel context. When the flag is off the panel
-    is hidden entirely - no service calls are made.
+    is hidden entirely - no service calls are made. Both reads go through
+    DashboardCache on the same 30-minute TTL as every other dashboard metric
+    (#3905).
     """
     if not flag_is_active(request, COST_TRACKING_FLAG):
         return {"cost_tracking_enabled": False}
     start, end, filters = _cost_panel_scope(filter_form)
     return {
         "cost_tracking_enabled": True,
-        "cost_summary": cost_summary(request.team, start=start, end=end, filters=filters),
-        "cost_coverage_gaps": coverage_gaps(request.team, start=start, end=end, filters=filters),
+        "cost_summary": _cached(
+            request.team,
+            _cost_cache_key("cost_summary", filter_form),
+            lambda: cost_summary(request.team, start=start, end=end, filters=filters),
+            _cost_summary_from_cache,
+        ),
+        "cost_coverage_gaps": _cached(
+            request.team,
+            _cost_cache_key("cost_coverage_gaps", filter_form),
+            lambda: coverage_gaps(request.team, start=start, end=end, filters=filters),
+            _coverage_gaps_from_cache,
+        ),
     }
 
 
@@ -196,9 +261,19 @@ class CostTrackingApiView(DashboardApiView):
     def get(self, request, *args, **kwargs):
         if not flag_is_active(request, COST_TRACKING_FLAG):
             return self.json_response([])
-        start, end, filters = _cost_panel_scope(DashboardFilterForm(data=request.GET, team=request.team))
+        filter_form = DashboardFilterForm(data=request.GET, team=request.team)
+        start, end, filters = _cost_panel_scope(filter_form)
         granularity = request.GET.get("granularity", "daily")
-        data = cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters)
+        cache_key = f"{_cost_cache_key('cost_timeseries', filter_form)}_{granularity}"
+        data = DashboardCache.get_cached_data(request.team, cache_key)
+        if data is None:
+            data = json.loads(
+                json.dumps(
+                    cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters),
+                    cls=DjangoJSONEncoder,
+                )
+            )
+            DashboardCache.set_cached_data(request.team, cache_key, data)
         return self.json_response(data)
 
 

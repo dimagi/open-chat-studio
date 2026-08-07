@@ -556,7 +556,8 @@ class DashboardService:
             "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
         }
 
-    def _cache_key(self, filters: dict) -> str:
+    @staticmethod
+    def _cache_key(filters: dict) -> str:
         def normalize(obj):
             if isinstance(obj, dict):
                 return {k: normalize(obj[k]) for k in sorted(obj)}
