@@ -144,6 +144,26 @@ class TestDashboardService:
         for key in ["human_messages", "ai_messages", "totals"]:
             assert isinstance(data[key], list)
 
+    def test_get_message_volume_data_total_excludes_system_messages(
+        self, team, experiment, participant, experiment_session, chat
+    ):
+        """The chart's per-period total is human + ai, not every message type
+        (ADR-0051): a SYSTEM message must not inflate it."""
+        service = DashboardService(team)
+
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Human message")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.AI, content="AI message")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.SYSTEM, content="System message")
+
+        data = service.get_message_volume_data(granularity="daily")
+
+        assert len(data["totals"]) == 1
+        period = data["totals"][0]
+        assert period["human_messages"] == 1
+        assert period["ai_messages"] == 1
+        assert period["total_messages"] == 2
+        assert period["total_messages"] == period["human_messages"] + period["ai_messages"]
+
     def test_get_bot_performance_summary(self, team, experiment, participant, experiment_session, chat):
         """Test bot performance summary generation"""
         service = DashboardService(team)
