@@ -201,7 +201,9 @@ function ToggleWidget(props: ToggleWidgetParams) {
 
 function SelectWidget(props: WidgetParams) {
   const options = getSelectOptions(props.schema);
-  const selectedOption = options.find((option) => option.value.toString() === props.paramValue);
+  // Resource ids arrive as numbers (they are read off the node's FK columns) but are written back
+  // as strings by the select, so compare as strings or the option goes unmatched on first render.
+  const selectedOption = options.find((option) => option.value.toString() === String(props.paramValue ?? ""));
   const [link, setLink] = useState<string | undefined>(selectedOption?.edit_url);
 
   const onUpdate = (event: ChangeEvent<HTMLSelectElement>) => {

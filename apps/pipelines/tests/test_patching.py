@@ -13,6 +13,7 @@ from apps.pipelines.flow import (
     NodeDiff,
     PipelineDiffPayload,
 )
+from apps.pipelines.models import Node
 from apps.pipelines.nodes.nodes import EndNode, LLMResponseWithPrompt, StartNode
 from apps.pipelines.patching import apply_pipeline_patch
 from apps.utils.factories.pipelines import PipelineFactory
@@ -633,9 +634,14 @@ class TestPostEndpointBackwardCompatibility:
         pipeline.refresh_from_db()
         assert "nodes" not in pipeline.data
         assert pipeline.node_set.get(flow_id="start").params == {"name": "start"}
-        # the response still serves full nodes, reconstructed from the rows
+        # the response still serves full nodes, reconstructed from the rows — the stored params
+        # plus the resource ids read off the FK columns, all unset for a start node
         response_nodes = {n["id"]: n for n in response.json()["data"]["nodes"]}
-        assert response_nodes["start"]["data"]["params"] == {"name": "start"}
+        assert response_nodes["start"]["data"]["params"] == {
+            "name": "start",
+            **{f"{field_name}_id": None for field_name in Node.resource_fk_fields()},
+            "collection_index_ids": [],
+        }
 
     def test_post_without_nodes_key_is_rejected(self, authed_client, pipeline, team_with_users):
         """A payload whose data omits ``nodes`` is malformed, not an empty graph — accepting
