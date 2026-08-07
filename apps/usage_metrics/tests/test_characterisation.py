@@ -1,8 +1,8 @@
-"""Characterisation tests for #3905: pin what the dashboard and the v2 usage API
-compute TODAY for the same team and window, including where they diverge. The
-extraction PR must keep every one of these green; only the definition-switch PR
-may change an assertion here, and each change there maps to a row in the design's
-divergence table.
+"""Cross-surface definition tests for #3905: the dashboard and the v2 usage API
+compute the same activity metrics the same way (ADR-0051). Each class here
+covers one row of the design's former divergence table, asserting the converged
+behaviour on both surfaces. These started life as characterisation tests pinning
+the divergence; they now pin its absence.
 """
 
 from datetime import UTC, datetime
