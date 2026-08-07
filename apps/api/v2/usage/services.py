@@ -588,8 +588,9 @@ def _session_count(query: UsageQuery) -> int:
 
 
 def _active_participant_count(query: UsageQuery) -> int:
-    """Distinct participants *active* in the window - those with at least one
-    human/AI message in it, keyed off message activity (not session creation)."""
+    """Distinct participants *active* in the window - those who authored at
+    least one HUMAN message in it, keyed off message activity (not session
+    creation). Receiving AI output is not activity (ADR-0051)."""
     return usage_metrics.active_participants(
         query.team, start=query.start, end=query.end, filters=_usage_filters(query)
     )
@@ -601,8 +602,9 @@ def _message_counts(query: UsageQuery) -> MessageCounts:
 
 
 def _message_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
-    """The `messages` metric universe - every message type, evaluation
-    sessions included (apps.usage_metrics)."""
+    """The `messages` metric universe - every message type, with
+    evaluation-harness and SETUP-session activity excluded (apps.usage_metrics,
+    ADR-0051)."""
     return usage_metrics.messages_queryset(query.team, start=query.start, end=query.end, filters=_usage_filters(query))
 
 
