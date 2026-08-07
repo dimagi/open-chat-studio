@@ -394,6 +394,7 @@ class DashboardService:
                     experiment_ids=cache_filters.get("experiment_ids"),
                     platform_names=cache_filters.get("platform_names"),
                     participant_ids=cache_filters.get("participant_ids"),
+                    tag_ids=cache_filters.get("tag_ids"),
                 ),
             )
             if include_cost
