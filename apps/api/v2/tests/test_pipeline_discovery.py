@@ -56,10 +56,23 @@ def test_structural_node_types_are_listed_but_flagged_not_addable(team):
 
 
 @pytest.mark.django_db()
-def test_ui_keys_are_stripped(team):
+def test_root_level_ui_keys_are_stripped(team):
+    """Only root-level `ui:*` keys (`ui:deprecated`, `ui:can_add`) are stripped. Per-property `ui:*`
+    keys -- e.g. `ui:optionsSource` -- are deliberately retained; see the companion test below."""
     client = ApiTestClient(team.members.first(), team)
     for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
         assert not [key for key in entry["schema"] if key.startswith("ui:")], entry["type"]
+
+
+@pytest.mark.django_db()
+def test_property_level_ui_options_source_survives(team):
+    """`ui:optionsSource` is the only machine-readable join from a node param to an `/options/` key;
+    a future "strip all ui: keys" cleanup must not silently sever it."""
+    client = ApiTestClient(team.members.first(), team)
+    by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
+
+    source_material_id = by_type["LLMResponseWithPrompt"]["schema"]["properties"]["source_material_id"]
+    assert source_material_id["ui:optionsSource"] == "source_material"
 
 
 @pytest.mark.django_db()
@@ -172,9 +185,17 @@ def test_options_carry_no_edit_urls(team_with_resources):
 
 
 def test_clean_options_recurses_into_nested_dicts():
-    """`built_in_tools` is a dict of lists and `built_in_tools_config` is a dict of dicts of lists --
-    a `_clean_options` that only special-cased the top-level-list case would silently skip both,
-    leaving placeholder entries and `edit_url` buried at depth >= 2 untouched."""
+    """`built_in_tools` is a dict of lists keyed by provider type -- a `_clean_options` that only
+    special-cased the top-level-list case would silently skip it, leaving placeholder entries and
+    `edit_url` buried at depth >= 2 untouched. `edit_url` is exercised at depth 3 via
+    `built_in_tools_config` for the same reason.
+
+    Real `built_in_tools_config` entries (`BuiltInTools.get_tool_configs_by_provider`) are
+    `{name, type, label, helpText}` descriptors with no `value` key at all, so the placeholder strip
+    (which only matches `option.get("value") == ""`) can never touch them -- they must survive
+    `_clean_options` unchanged. A fixture that gave them a `value` key, as an earlier version of this
+    test did, would lock in "silently drop a config descriptor" as intended behaviour, which is not
+    the actual contract."""
     nested = {
         "built_in_tools": {
             "openai": [
@@ -185,8 +206,19 @@ def test_clean_options_recurses_into_nested_dicts():
         "built_in_tools_config": {
             "anthropic": {
                 "web-search": [
-                    {"value": "", "name": "allowed_domains", "edit_url": "/tools/anthropic/web-search"},
-                    {"value": "keep-me", "name": "blocked_domains"},
+                    {
+                        "name": "allowed_domains",
+                        "type": "expandable_text",
+                        "label": "Allowed Domains",
+                        "helpText": "Only search these domains. Separate entries with newlines.",
+                        "edit_url": "/tools/anthropic/web-search",
+                    },
+                    {
+                        "name": "blocked_domains",
+                        "type": "expandable_text",
+                        "label": "Blocked Domains",
+                        "helpText": "Exclude these domains from search. Separate entries with newlines.",
+                    },
                 ],
             },
         },
@@ -196,7 +228,18 @@ def test_clean_options_recurses_into_nested_dicts():
 
     assert cleaned["built_in_tools"]["openai"] == [{"value": "web-search", "label": "Web Search"}]
     assert cleaned["built_in_tools_config"]["anthropic"]["web-search"] == [
-        {"value": "keep-me", "name": "blocked_domains"}
+        {
+            "name": "allowed_domains",
+            "type": "expandable_text",
+            "label": "Allowed Domains",
+            "helpText": "Only search these domains. Separate entries with newlines.",
+        },
+        {
+            "name": "blocked_domains",
+            "type": "expandable_text",
+            "label": "Blocked Domains",
+            "helpText": "Exclude these domains from search. Separate entries with newlines.",
+        },
     ]
 
 
