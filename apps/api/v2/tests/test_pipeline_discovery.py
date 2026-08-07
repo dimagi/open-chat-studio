@@ -3,7 +3,7 @@ from django.urls import reverse
 
 from apps.api.v2.discovery import _clean_options
 from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.experiment import SourceMaterialFactory
+from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
     LlmProviderModelFactory,
@@ -208,6 +208,38 @@ def test_options_include_voice_providers_with_type(team_with_resources):
 
     assert [option["label"] for option in voice_providers] == ["Prod Polly"]
     assert voice_providers[0]["type"] == "aws"
+
+
+@pytest.mark.django_db()
+def test_options_synthetic_voices_are_filtered_by_team_voice_provider_type(team_with_resources):
+    """`SyntheticVoice.service` ("AWS") and `VoiceProviderType` ("aws") differ only in case -- a naive
+    `service__in` match against the team's provider types would return nothing, the same trap the
+    chatbot builder avoids with `service__iexact`. `team_with_resources` has an AWS voice provider,
+    so AWS voices must be listed; Azure/OpenAI voices -- reachable to every team via `get_for_team`
+    since none of the three are team-scoped services -- must not be, absent a matching provider."""
+    SyntheticVoiceFactory.create(name="Aria", service="AWS")
+    SyntheticVoiceFactory.create(name="Elan", service="Azure")
+    SyntheticVoiceFactory.create(name="Coral", service="OpenAI")
+
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    voices = client.get(reverse("api:v2:pipeline-options")).json()["synthetic_voice_id"]
+
+    services = {voice["type"] for voice in voices}
+    assert "aws" in services
+    assert not {"azure", "openai"} & services
+
+
+@pytest.mark.django_db()
+def test_options_synthetic_voices_are_empty_without_a_voice_provider(team):
+    """A team with no VoiceProvider can reach no synthetic voice, however many exist generally --
+    this is the 564-unreachable-voices bug the filtering in the view fixes."""
+    SyntheticVoiceFactory.create(service="AWS")
+    SyntheticVoiceFactory.create(service="Azure")
+
+    client = ApiTestClient(team.members.first(), team)
+    options = client.get(reverse("api:v2:pipeline-options")).json()
+
+    assert options["synthetic_voice_id"] == []
 
 
 @pytest.mark.django_db()

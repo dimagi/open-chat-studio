@@ -8,6 +8,7 @@ this module.
 
 from functools import cache
 
+from django.db.models.functions import Lower
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers
@@ -142,18 +143,31 @@ class PipelineOptionsView(DiscoveryView):
         team = request.team
         llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
         llm_provider_models = LlmProviderModel.objects.for_team(team)
+        voice_providers = list(VoiceProvider.objects.filter(team=team))
+
+        # SyntheticVoice.service ("AWS", "Azure", ...) and VoiceProviderType ("aws", "azure", ...) differ
+        # only in case, so a plain `service__in` against the team's provider types matches nothing -- see
+        # the chatbot builder's `service__iexact` for the same pairing. Without a team-owned provider for
+        # a service, its voices are unreachable and must not be listed.
+        reachable_services = {provider.type.lower() for provider in voice_providers}
+        synthetic_voices = (
+            SyntheticVoice.get_for_team(team, [])
+            .annotate(service_lower=Lower("service"))
+            .filter(service_lower__in=reachable_services)
+            if reachable_services
+            else SyntheticVoice.objects.none()
+        )
 
         options = _clean_options(
             get_node_parameter_values(
                 team=team,
                 llm_providers=llm_providers,
                 llm_provider_models=llm_provider_models,
-                synthetic_voices=SyntheticVoice.get_for_team(team, []),
+                synthetic_voices=synthetic_voices,
             )
         )
         options["VoiceProviderId"] = [
-            {"value": provider.id, "label": provider.name, "type": provider.type}
-            for provider in VoiceProvider.objects.filter(team=team)
+            {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
         options["default_values"] = get_node_default_values(llm_providers, llm_provider_models)
         return Response(options)
