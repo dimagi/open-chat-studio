@@ -318,11 +318,6 @@ class DocumentSourceManager:
         existing_file.content_size = content_file.size
         existing_file.content_type = content_type
         existing_file.metadata = document.metadata
-        # Whatever was uploaded to a remote index describes the old bytes -- a different
-        # format entirely, now that the source's own file is what gets stored. Clearing the
-        # id makes the next index run re-upload rather than trust the stale copy.
-        existing_file.external_id = ""
-        existing_file.external_source = ""
         existing_file.save()
 
         collection_file.status = FileStatus.PENDING

@@ -135,11 +135,12 @@ class TestDocumentSourceManager:
         assert file.content_size == len(PDF_BYTES)
 
     @patch("apps.documents.document_source_service.create_loader")
-    def test_update_discards_the_remote_copy_of_the_old_bytes(self, create_loader, collection, document_source):
-        """An update can change the format outright, not just the text.
+    def test_update_keeps_the_remote_file_handle(self, create_loader, collection, document_source):
+        """The external id is the only handle on the copy already uploaded to a remote index.
 
-        The remote index skips re-uploading a file whose external id still resolves, so
-        keeping the id would leave the previous bytes indexed under the new content type.
+        Blanking it on update would orphan that copy: the next index run uploads a second
+        file, and every delete path keys off the current id, so the old one would stay in the
+        vector store and the provider's storage with no way to reach it.
         """
         url = "https://example.com/doc.pdf"
         create_loader.return_value = MockLoader(
@@ -160,8 +161,8 @@ class TestDocumentSourceManager:
         manager.sync_collection()
 
         file.refresh_from_db()
-        assert file.external_id == ""
-        assert file.external_source == ""
+        assert file.external_id == "openai-file-123"
+        assert file.external_source == "openai"
 
     @patch("apps.documents.document_source_service.create_loader")
     def test_update_keeps_the_extension_create_added(self, create_loader, collection, document_source):
