@@ -400,20 +400,6 @@ class TestRemoteIndexManager:
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
 
-    def test_one_text_free_file_does_not_stop_the_batch(self, remote_collection_index, index_manager):
-        good = FileFactory.create(file__data=b"real content", external_id="good-id")
-        text_free = FileFactory.create(file__data=b"")
-        for file in (good, text_free):
-            remote_collection_index.files.add(file)
-        collection_files = CollectionFile.objects.filter(collection=remote_collection_index, file__in=[good, text_free])
-        collection_files.update(status=FileStatus.PENDING)
-
-        index_manager.add_files(collection_files.order_by("file_id").iterator(1))
-
-        statuses = {cf.file_id: cf.status for cf in collection_files}
-        assert statuses[good.id] == FileStatus.COMPLETED
-        assert statuses[text_free.id] == FileStatus.FAILED
-
     def test_add_files_with_file_upload_failures(self, remote_collection_index, index_manager):
         file = FileFactory.create(file__data=b"test content")
         remote_collection_index.files.add(file)

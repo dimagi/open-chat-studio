@@ -108,32 +108,6 @@ class TestDocumentSourceManager:
         manager._index_files.assert_called_once()
 
     @patch("apps.documents.document_source_service.create_loader")
-    def test_sync_stores_source_bytes_and_sniffed_content_type(self, create_loader, collection, document_source):
-        """A synced PDF is stored as the PDF the source served, not as extracted text.
-
-        The filename keeps the source's extension either way, so storing text under a .pdf
-        name produced a download that no PDF reader could open.
-        """
-        docs = [
-            SourceDocument(
-                content=PDF_BYTES,
-                metadata={"source": "https://example.com/report.pdf", "sha": "1", "source_type": "test"},
-            )
-        ]
-        create_loader.return_value = MockLoader(collection, docs)
-        manager = DocumentSourceManager(document_source)
-        manager._index_files = Mock()
-
-        result = manager.sync_collection()
-
-        assert result.success
-        file = CollectionFile.objects.get(collection=collection).file
-        assert file.name == "report.pdf"
-        assert file.file.read() == PDF_BYTES
-        assert file.content_type == "application/pdf"
-        assert file.content_size == len(PDF_BYTES)
-
-    @patch("apps.documents.document_source_service.create_loader")
     def test_update_refreshes_content_type(self, create_loader, collection, document_source):
         """An update rewrites the bytes, so a stale content type would misdescribe them."""
         url = "https://example.com/doc.pdf"

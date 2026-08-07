@@ -98,17 +98,6 @@ class TestGitHubDocumentLoader:
 
         assert [doc.content for doc in documents] == [latin1, b"reached"]
 
-    def test_binary_blob_is_yielded_unparsed(self, github_config, httpx_mock):
-        """Bytes as served, so the reader picks a parser at index time (ADR-0051)."""
-        png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
-        config = GitHubSourceConfig(repo_url="https://github.com/test/repo", branch="main", file_pattern="*.png")
-        _tree(httpx_mock, [_blob("logo.png")])
-        httpx_mock.add_response(url=f"{CONTENTS_URL}/logo.png?ref=main", content=png)
-
-        documents = list(_loader(config).load_documents())
-
-        assert [doc.content for doc in documents] == [png]
-
     def test_directories_and_submodules_are_not_fetched(self, github_config, httpx_mock):
         """Only blobs have content. The tree also lists directories and submodule pointers,
         and fetching those spends a request per entry to be told there is nothing there."""

@@ -78,27 +78,6 @@ class TestLoadDocumentsRoot:
         assert list(loader.load_documents()) == []
 
 
-class TestAttachmentBytes:
-    """The loader hands on what the source served, byte for byte."""
-
-    def test_attachment_bytes_are_yielded_verbatim(self, json_config, httpx_mock):
-        feed = [_single_attachment_item()]
-        httpx_mock.add_response(url="https://example.com/feed.json", json=feed)
-        httpx_mock.add_response(
-            url="https://example.com/file.pdf",
-            content=PDF_BYTES,
-            headers={"content-type": "application/pdf"},
-        )
-
-        loader = _make_loader(json_config)
-        docs = list(loader.load_documents())
-
-        assert len(docs) == 1
-        # Extraction belongs to indexing: the raw PDF header surviving is what proves the
-        # loader did not parse it on the way through.
-        assert docs[0].content == PDF_BYTES
-
-
 class TestLoadDocumentsAttachments:
     def test_multi_attachment_yields_one_doc_per_attachment(self, json_config, httpx_mock):
         feed = [

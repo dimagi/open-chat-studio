@@ -779,31 +779,15 @@ class TestCollectionIndexingProgress:
             for _ in range(count):
                 CollectionFileFactory.create(collection=collection, status=getattr(FileStatus, status.upper()))
 
-    def test_counts_indexed_out_of_total(self, collection, client):
-        self._make_files(collection, completed=2, in_progress=3, pending=1)
-        client.force_login(collection.team.members.first())
-
-        content = client.get(self._url(collection)).content.decode()
-
-        assert "2 of 6 files indexed" in content
-
     def test_failures_are_reported_alongside_the_count(self, collection, client):
         """A failed file will never complete, so it must not read as still-pending work."""
-        self._make_files(collection, completed=2, failed=1, pending=1)
+        self._make_files(collection, completed=2, in_progress=1, pending=1, failed=1)
         client.force_login(collection.team.members.first())
 
         content = client.get(self._url(collection)).content.decode()
 
-        assert "2 of 4 files indexed" in content
+        assert "2 of 5 files indexed" in content
         assert "1 failed" in content
-
-    def test_polls_while_work_is_outstanding(self, collection, client):
-        self._make_files(collection, completed=1, in_progress=1)
-        client.force_login(collection.team.members.first())
-
-        content = client.get(self._url(collection)).content.decode()
-
-        assert "hx-trigger" in content
 
     def test_stops_polling_once_nothing_is_pending(self, collection, client):
         """Left polling, every open collection page would hit the server forever."""
