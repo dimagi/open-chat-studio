@@ -448,8 +448,9 @@ class EndSessionTool(CustomBaseTool):
         "This will mark the session as completed. "
         "New messages will result in a new session being created."
     )
+    args_schema: type[schemas.EndSessionSchema] = schemas.EndSessionSchema
 
-    def action(self, *args, **kwargs):
+    def action(self):
         self.tool_callbacks.register_intent(Intents.END_SESSION)
         return "Your intent to end the session has been registered."
 
