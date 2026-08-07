@@ -554,8 +554,10 @@ def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
     """Create the run's Taskbadger task once, after the tick's transaction has committed.
 
     Called outside the coordination lock so the blocking HTTP request never stalls
-    other runs in the sweep. The taskbadger_task_id check keeps it effectively
-    once-per-run; a rare duplicate under overlapping sweeps is harmless for monitoring.
+    other runs in the sweep. That also means two overlapping ticks can both see an empty
+    id and both create a remote task, so the write claims the field conditionally and a
+    losing tick adopts the winner's id: every dispatch across the run nests under one
+    parent, at the cost of an unused root task in Taskbadger.
     """
     if run.taskbadger_task_id:
         return
@@ -577,8 +579,11 @@ def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
         },
     )
     if task is not None:
-        run.taskbadger_task_id = task.id
-        run.save(update_fields=["taskbadger_task_id"])
+        claimed = EvaluationRun.objects.filter(id=run.id, taskbadger_task_id="").update(taskbadger_task_id=task.id)
+        if claimed:
+            run.taskbadger_task_id = task.id
+        else:
+            run.refresh_from_db(fields=["taskbadger_task_id"])
 
 
 def _taskbadger_parent_kwargs(run: EvaluationRun) -> dict:

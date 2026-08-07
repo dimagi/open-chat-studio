@@ -678,6 +678,27 @@ def test_ensure_taskbadger_task_records_run_context():
 
 
 @pytest.mark.django_db()
+def test_ensure_taskbadger_task_adopts_the_winners_id_when_two_ticks_race():
+    """The id must be stable: creation runs outside the row lock, so ticks can overlap here.
+
+    Whoever writes first owns the field, and the loser dispatches under that same parent
+    rather than under the root task it created and then abandoned.
+    """
+    run = EvaluationRunFactory.create()
+
+    def claim_from_a_competing_tick(**kwargs):
+        EvaluationRun.objects.filter(id=run.id).update(taskbadger_task_id="tb-winner")
+        return Mock(id="tb-loser")
+
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe", side_effect=claim_from_a_competing_tick):
+        _ensure_taskbadger_task(run, total=5)
+
+    assert run.taskbadger_task_id == "tb-winner"
+    run.refresh_from_db()
+    assert run.taskbadger_task_id == "tb-winner"
+
+
+@pytest.mark.django_db()
 def test_ensure_taskbadger_task_is_free_once_created(django_assert_num_queries):
     """The config lookup must stay below the task-id guard: it runs once per run, not once per tick."""
     run = EvaluationRunFactory.create(taskbadger_task_id="tb-1")
