@@ -1,6 +1,6 @@
 """The dashboard's filtered activity querysets, moved here from
 apps/dashboard/services.py (#3905) so the filter logic has one home. These
-reproduce the dashboard's CURRENT semantics - closed [start_date, end_date]
+reproduce the dashboard's CURRENT semantics - half-open [start_date, end_date)
 window, sessions = any message in window, message totals include SYSTEM,
 evaluation activity excluded - which differ from the v2 usage API semantics in
 metrics.py. The definition-switch PR converges the two; until then both live
@@ -49,7 +49,7 @@ def filtered_querysets(
     if not start_date:
         start_date = end_date - timedelta(days=30)
 
-    base_filters = {"created_at__gte": start_date, "created_at__lte": end_date}
+    base_filters = {"created_at__gte": start_date, "created_at__lt": end_date}
 
     experiments = Experiment.objects.filter(team=team, is_archived=False, working_version=None)
     # Use Exists() to avoid join+distinct - prevents row explosion upfront for better performance
@@ -57,7 +57,7 @@ def filtered_querysets(
         ChatMessage.objects.filter(
             chat=OuterRef("chat"),
             created_at__gte=start_date,
-            created_at__lte=end_date,
+            created_at__lt=end_date,
         )
     )
     sessions = (

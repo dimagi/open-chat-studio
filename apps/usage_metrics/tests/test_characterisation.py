@@ -164,23 +164,33 @@ class TestMessageTypeTotalDivergence:
         assert _api_results(self._team(), ["messages"])["messages"] == {"human": 1, "ai": 1, "total": 2}
 
 
-class TestWindowBoundaryDivergence:
-    """Dashboard windows are closed (lte); API windows are half-open (lt)
-    (design section 2, row 6). A message at the boundary instant counts on the
-    dashboard side only."""
+class TestWindowBoundaryIsHalfOpen:
+    """Windows are half-open [start, end) on both surfaces (ADR-0051), so an
+    instant exactly on the boundary belongs to the next period, not this one,
+    and is never counted twice across adjacent periods."""
 
     def _team(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(session, when=_END)
         return team
 
-    def test_dashboard_includes_the_end_boundary_instant(self):
-        assert _overview(self._team())["total_messages"] == 1
+    def test_dashboard_excludes_the_end_boundary_instant(self):
+        assert _overview(self._team())["total_messages"] == 0
 
     def test_api_excludes_the_end_boundary_instant(self):
         assert _api_results(self._team(), ["messages"])["messages"]["total"] == 0
+
+    def test_both_surfaces_include_the_start_boundary_instant(self):
+        """The other half of half-open: [start is inclusive."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(session, when=_START)
+
+        assert _overview(team)["total_messages"] == 1
+        assert _api_results(team, ["messages"])["messages"]["total"] == 1
 
 
 class TestActiveParticipantsFourImplementations:

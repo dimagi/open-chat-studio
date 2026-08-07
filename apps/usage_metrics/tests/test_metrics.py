@@ -267,18 +267,18 @@ class TestSessionCounts:
 
         assert (started, in_setup) == (2, 1)
 
-    def test_sessions_active_counts_any_message_in_closed_window(self):
-        """The dashboard's current definition, unchanged: any message type
-        qualifies, SETUP sessions count, the window end is inclusive."""
+    def test_sessions_active_counts_any_message_in_half_open_window(self):
+        """The dashboard's current definition: any message type qualifies,
+        SETUP sessions count, the window end is exclusive (ADR-0051)."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
         system_only = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
         _message(system_only, message_type=ChatMessageType.SYSTEM)
-        boundary = ExperimentSessionFactory.create(team=team, experiment=experiment)
-        _message(boundary, when=_END)
+        at_boundary = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        _message(at_boundary, when=_END)
         ExperimentSessionFactory.create(team=team, experiment=experiment)  # silent
 
-        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters()) == 2
+        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters()) == 1
 
 
 @pytest.mark.django_db()

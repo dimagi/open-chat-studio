@@ -314,7 +314,7 @@ class DashboardService:
 
         # Get participant engagement stats
         date_filter = Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"]) & Q(
-            experimentsession__chat__messages__created_at__lte=querysets["end_date"]
+            experimentsession__chat__messages__created_at__lt=querysets["end_date"]
         )
 
         participant_stats = (

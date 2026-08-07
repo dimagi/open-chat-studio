@@ -169,15 +169,15 @@ def active_participants(team: Team, *, start: datetime, end: datetime, filters: 
 
 
 def sessions_active(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> int:
-    """Sessions with at least one message of any type in the CLOSED interval
-    ``[start, end]`` - the dashboard's current definition, reproduced
-    unchanged (SETUP sessions count; evaluation-channel sessions do not,
-    excluded via ``experiment_channel__platform`` rather than the session's
-    own ``platform`` column that ``sessions_started``/``sessions_in_setup``
-    key on - see ``_session_base``; ``include_archived`` is not consulted).
-    The definition-switch PR moves this to a half-open window over human/AI
-    messages with SETUP excluded; until then this and the API-derived
-    metrics deliberately disagree.
+    """Sessions with at least one message of any type in the half-open
+    interval ``[start, end)`` (SETUP sessions count; evaluation-channel
+    sessions do not, excluded via ``experiment_channel__platform`` rather
+    than the session's own ``platform`` column that
+    ``sessions_started``/``sessions_in_setup`` key on - see
+    ``_session_base``; ``include_archived`` is not consulted). The
+    definition-switch PR moves this further, to human/AI messages only with
+    SETUP excluded; until then this and the API-derived metrics deliberately
+    disagree on which message types and session statuses qualify.
 
     Empty-list filter semantics also differ from the rest of this module: via
     ``filtered_querysets``, an empty ``experiment_ids`` or ``participant_ids``
