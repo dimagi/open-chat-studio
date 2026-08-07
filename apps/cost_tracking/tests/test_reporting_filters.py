@@ -296,20 +296,22 @@ class TestCostFilters:
 
 @pytest.mark.django_db()
 class TestCostSummaryWindowBound:
-    """`cost_summary` reads [previous_start, end) and nothing else. The bound is
-    on the queryset, not only inside the conditional aggregates, so the scan
-    does not grow with the team's whole history (#3905)."""
+    """`cost_summary` reads exactly [previous_start, end): a record in the current
+    period lands in `total_cost`, a record in the prior period lands in
+    `previous_period_cost`, and a record far outside both lands in neither. This
+    pins the values a queryset-level bound must preserve (#3905)."""
 
-    def test_records_far_outside_the_window_do_not_widen_the_scan(self, team):
+    def test_reads_exactly_the_current_and_previous_periods(self, team):
         start = _NOW - timedelta(days=7)
         end = _NOW
         _usage(team, cost="1.00", when=start + timedelta(days=1))
+        _usage(team, cost="2.00", when=start - timedelta(days=3))
         _usage(team, cost="99.00", when=start - timedelta(days=400))
 
         summary = cost_summary(team, start=start, end=end)
 
         assert summary.total_cost == Decimal("1.00")
-        assert summary.previous_period_cost == Decimal("0.00")
+        assert summary.previous_period_cost == Decimal("2.00")
 
 
 @pytest.mark.django_db()
