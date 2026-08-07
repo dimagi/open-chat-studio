@@ -241,6 +241,14 @@ class DashboardService:
     def _compute_bot_performance(self, cache_filters: dict, include_cost: bool) -> list[dict[str, Any]]:
         """Build the (uncached, unordered) per-experiment performance rows."""
         querysets = self.get_filtered_queryset_base(**cache_filters)
+        # Conversation turns inside the window, so this column agrees with the
+        # headline message total rather than counting each chat's whole history
+        # (ADR-0051).
+        in_window_turns = Q(
+            chat__messages__message_type__in=CONVERSATION_MESSAGE_TYPES,
+            chat__messages__created_at__gte=querysets["start_date"],
+            chat__messages__created_at__lt=querysets["end_date"],
+        )
         # Pre-compute session stats.
         # The alternative for better performance would be to use a raw SQL Query
         session_stats = (
@@ -250,7 +258,7 @@ class DashboardService:
             .annotate(
                 participants_count=Count("participant", distinct=True),
                 sessions_count=Count("id", distinct=True),
-                messages_count=Count("chat__messages", distinct=True),
+                messages_count=Count("chat__messages", distinct=True, filter=in_window_turns),
             )
         )
         stats_dict = {stat["experiment_id"]: stat for stat in session_stats}

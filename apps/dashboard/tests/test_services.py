@@ -190,6 +190,31 @@ class TestDashboardService:
             for field in expected_fields:
                 assert field in item
 
+    @pytest.mark.django_db()
+    def test_bot_performance_messages_obey_the_window_and_message_types(self, team, experiment, participant):
+        """The per-chatbot Messages column counts the same rows the headline
+        total does: conversation turns inside the window (ADR-0051)."""
+        now = timezone.now()
+        session = ExperimentSession.objects.create(
+            experiment=experiment, participant=participant, team=team, status="active"
+        )
+        chat = session.chat
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="in window")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.AI, content="in window")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.SYSTEM, content="not a turn")
+        ChatMessage.objects.create(
+            chat=chat,
+            message_type=ChatMessageType.HUMAN,
+            content="before the window",
+            created_at=now - timedelta(days=90),
+        )
+
+        data = DashboardService(team).get_bot_performance_summary(
+            start_date=now - timedelta(days=1), end_date=now + timedelta(days=1)
+        )
+
+        assert data["results"][0]["messages"] == 2
+
     def test_get_channel_breakdown_data(self, team, experiment, participant, experiment_channel):
         """Test channel breakdown data generation"""
         service = DashboardService(team)
