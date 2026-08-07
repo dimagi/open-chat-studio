@@ -81,7 +81,7 @@ Features layered on top of the domain, plus supporting services.
 | `trace` | `Trace`/`Span` observability records for requests and pipeline steps. |
 | `events` | Event triggers and scheduled actions. |
 | `cost_tracking` | LLM usage and cost accounting. |
-| `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard and usage API. Models-free. |
+| `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard and usage API. Definitions in ADR-0051. Models-free. |
 | `analysis` | Analysis pipelines over conversation data. |
 | `ocs_notifications` | In-app notifications. |
 | `banners` | Site banners. |
