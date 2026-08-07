@@ -1,18 +1,16 @@
 """Activity metrics over sessions, messages, and participants (#3905).
 
-Each function reproduces, unchanged, the semantics its consumer computes
-today - this PR extracts, it does not converge. `messages`,
-`sessions_started`, and `active_participants` (and their timeseries) are the
-v2 usage API's current reads: half-open `[start, end)` windows,
-evaluation-harness activity excluded (ADR-0051), `total = human + ai`.
-`sessions_active` is the dashboard's current definition (any message in the
-closed window) via `dashboard_querysets`. `sessions_in_setup` is new and has
-no consumer yet: sessions created in the window still in SETUP, so
+Every function here is the canonical definition per ADR-0051: half-open
+`[start, end)` windows, evaluation-harness activity excluded, conversation
+turns are human/AI messages (`system` excluded). `sessions_active` and
+`sessions_started` legitimately differ from each other - they answer
+different questions, not the same one two ways. `sessions_active` is a
+session with a conversation turn in the window (SETUP excluded);
+`sessions_started` is a session created in the window (also SETUP-excluded,
+via a different mechanism - see `_session_base`). `sessions_in_setup` is the
+complement: sessions created in the window still in SETUP, so
 `sessions_started + sessions_in_setup` is every non-evaluation session
-created in the window. The definition-switch PR converges the dashboard and
-API semantics as one diff against this module; it also adds the
-`sessions_active` timeseries, whose per-period definition is contested today
-(the dashboard has two disagreeing chart implementations).
+created in the window.
 
 Filter semantics (see `UsageFilters`): for the API-derived reads - `messages`,
 `sessions_started`, `sessions_in_setup`, `active_participants`, and their
@@ -178,15 +176,12 @@ def active_participants(team: Team, *, start: datetime, end: datetime, filters: 
 
 
 def sessions_active(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> int:
-    """Sessions with at least one message of any type in the half-open
-    interval ``[start, end)`` (SETUP sessions count; evaluation sessions do
-    not, excluded on the same ``platform`` column
-    ``sessions_started``/``sessions_in_setup`` key on - see
-    ``_session_base``; ``include_archived`` is not consulted). This and the
-    API-derived metrics still deliberately disagree on which message types
-    and session statuses qualify a session.
+    """Sessions with at least one human or AI message in ``[start, end)``,
+    ``SETUP`` and evaluation sessions excluded (ADR-0051). Computed through
+    ``filtered_querysets`` so the dashboard's charts, which read those
+    querysets directly, count the same sessions this returns.
 
-    Empty-list filter semantics also differ from the rest of this module: via
+    Empty-list filter semantics differ from the rest of this module: via
     ``filtered_querysets``, an empty ``experiment_ids`` or ``participant_ids``
     list means "no filter" here (dashboard truthiness semantics), not
     "matched nobody" as it does on ``sessions_started`` and the other
@@ -201,6 +196,34 @@ def sessions_active(team: Team, *, start: datetime, end: datetime, filters: Usag
         tag_ids=filters.tag_ids,
     )
     return querysets["sessions"].count()
+
+
+def sessions_active_queryset(
+    team: Team, *, start: datetime, end: datetime, filters: UsageFilters
+) -> QuerySet[ChatMessage]:
+    """The conversation-turn message rows behind ``sessions_active``, excluding
+    turns belonging to sessions still in ``SETUP`` so the rows agree with the
+    scalar count."""
+    return conversation_messages(messages_queryset(team, start=start, end=end, filters=filters)).exclude(
+        chat__experiment_session__status=SessionStatus.SETUP
+    )
+
+
+def sessions_active_timeseries(
+    team: Team, *, start: datetime, end: datetime, granularity: str, tz: ZoneInfo, filters: UsageFilters
+) -> dict:
+    """``{local bucket date: int}`` of distinct sessions with a conversation
+    turn in each bucket. Bucketed on the message's timestamp, not the session's
+    creation - a session spanning three days is active in all three."""
+    return {
+        bucket: row["n"]
+        for bucket, row in _by_bucket(
+            sessions_active_queryset(team, start=start, end=end, filters=filters),
+            granularity,
+            tz,
+            n=Count("chat__experiment_session", distinct=True),
+        )
+    }
 
 
 def messages_timeseries(

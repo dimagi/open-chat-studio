@@ -1,10 +1,10 @@
 """The dashboard's filtered activity querysets, moved here from
 apps/dashboard/services.py (#3905) so the filter logic has one home. These
 reproduce the dashboard's CURRENT semantics - half-open [start_date, end_date)
-window, sessions = any message in window, message totals include SYSTEM,
-evaluation activity excluded - which differ from the v2 usage API semantics in
-metrics.py. The definition-switch PR converges the two; until then both live
-here side by side.
+window, sessions = a human or AI message in the window, SETUP excluded,
+message totals include SYSTEM, evaluation activity excluded - which differ
+from the v2 usage API semantics in metrics.py. The definition-switch PR
+converges the two; until then both live here side by side.
 
 Evaluation-harness activity is decided on ``ExperimentSession.platform``
 everywhere in this app. ``ExperimentChannel.platform`` is a separate nullable
@@ -28,10 +28,10 @@ from django.utils import timezone
 from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import Chat, ChatMessage
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.teams.models import Team
 
-from .filters import chat_tag_exists_pair
+from .filters import CONVERSATION_MESSAGE_TYPES, chat_tag_exists_pair
 
 
 def filtered_querysets(
@@ -60,6 +60,7 @@ def filtered_querysets(
     msg_exists = Exists(
         ChatMessage.objects.filter(
             chat=OuterRef("chat"),
+            message_type__in=CONVERSATION_MESSAGE_TYPES,
             created_at__gte=start_date,
             created_at__lt=end_date,
         )
@@ -67,6 +68,7 @@ def filtered_querysets(
     sessions = (
         ExperimentSession.objects.filter(team=team)
         .exclude(platform=ChannelPlatform.EVALUATIONS)
+        .exclude(status=SessionStatus.SETUP)
         .annotate(_has_msgs=msg_exists)
         .filter(_has_msgs=True)
     )

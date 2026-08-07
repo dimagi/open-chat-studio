@@ -267,16 +267,17 @@ class TestSessionCounts:
 
         assert (started, in_setup) == (2, 1)
 
-    def test_sessions_active_counts_any_message_in_half_open_window(self):
-        """The dashboard's current definition: any message type qualifies,
-        SETUP sessions count, the window end is exclusive (ADR-0051)."""
+    def test_sessions_active_needs_a_conversation_turn_in_the_half_open_window(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        system_only = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+        system_only = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(system_only, message_type=ChatMessageType.SYSTEM)
-        at_boundary = ExperimentSessionFactory.create(team=team, experiment=experiment)
-        _message(at_boundary, when=_END)
-        ExperimentSessionFactory.create(team=team, experiment=experiment)  # silent
+        in_setup = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+        _message(in_setup)
+        boundary = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(boundary, when=_END)
+        counted = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(counted)
 
         assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters()) == 1
 
@@ -362,3 +363,43 @@ class TestTimeseries:
         )
 
         assert series == {date(2026, 6, 10): 1}
+
+
+@pytest.mark.django_db()
+@pytest.mark.usefixtures("frozen_time")
+class TestSessionsActiveTimeseries:
+    def test_buckets_on_message_time_so_one_session_spans_buckets(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+        _message(session, when=datetime(2026, 6, 9, 12, 0, tzinfo=UTC))
+        _message(session, when=_MID)
+
+        series = metrics.sessions_active_timeseries(
+            team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
+        )
+
+        assert series == {date(2026, 6, 9): 1, date(2026, 6, 10): 1}
+
+    def test_system_only_and_setup_sessions_are_absent(self):
+        team = TeamFactory.create()
+        system_only = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+        _message(system_only, message_type=ChatMessageType.SYSTEM)
+        in_setup = ExperimentSessionFactory.create(team=team, status=SessionStatus.SETUP)
+        _message(in_setup)
+
+        series = metrics.sessions_active_timeseries(
+            team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
+        )
+
+        assert series == {}
+
+    def test_sums_to_the_scalar_when_no_session_spans_buckets(self):
+        team = TeamFactory.create()
+        for _ in range(3):
+            _message(ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE))
+
+        series = metrics.sessions_active_timeseries(
+            team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
+        )
+
+        assert sum(series.values()) == metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters())

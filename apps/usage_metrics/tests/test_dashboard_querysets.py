@@ -12,7 +12,7 @@ from field_audit.models import AuditAction
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -32,7 +32,7 @@ def _frozen_time():
 
 
 def _active_session(team, experiment):
-    session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+    session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
     ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="x", created_at=_MID)
     return session
 

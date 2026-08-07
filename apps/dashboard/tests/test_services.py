@@ -5,7 +5,7 @@ import pytest
 from django.utils import timezone
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -377,8 +377,10 @@ class TestGetTagAnalyticsDataTeamScoping:
 
 
 def _create_session(experiment, participant, team, message_date):
-    session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
-    message = ChatMessage.objects.create(chat=session.chat)
+    session = ExperimentSession.objects.create(
+        experiment=experiment, participant=participant, team=team, status=SessionStatus.ACTIVE
+    )
+    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN)
     message.created_at = message_date
     message.save()
     return session

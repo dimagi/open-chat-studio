@@ -13,8 +13,9 @@ from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
+from apps.experiments.models import SessionStatus
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
-from apps.usage_metrics.metrics import CONVERSATION_MESSAGE_TYPES, conversation_message_total
+from apps.usage_metrics.metrics import CONVERSATION_MESSAGE_TYPES, conversation_message_total, conversation_messages
 
 from ..trace.models import Trace
 from .models import DashboardCache
@@ -105,7 +106,11 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
-        messages = querysets["messages"]
+        # Conversation turns only, SETUP sessions excluded, so each period's
+        # session count is `sessions_active` restricted to that period (ADR-0051).
+        messages = conversation_messages(querysets["messages"]).exclude(
+            chat__experiment_session__status=SessionStatus.SETUP
+        )
 
         trunc_func = self._get_trunc_function(granularity)
 
