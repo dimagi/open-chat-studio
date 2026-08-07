@@ -155,12 +155,12 @@ def get_node_schemas():
         and cls not in (pipeline_nodes.PipelineNode, pipeline_nodes.PipelineRouterNode)
     ]
     for node_class in node_classes:
-        schemas.append(get_node_schema(node_class))
+        schemas.append(_get_node_schema(node_class))
 
     return schemas
 
 
-def get_node_schema(node_class):
+def _get_node_schema(node_class):
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
 
