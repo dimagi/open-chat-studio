@@ -95,7 +95,11 @@ def test_type_filter_returns_a_single_element_array(team):
 )
 def test_type_filter_404s(team, node_type):
     client = ApiTestClient(team.members.first(), team)
-    assert client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type}).status_code == 404
+    response = client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type})
+
+    assert response.status_code == 404
+    # Guards the shape `NodeTypeNotFoundSerializer` documents in the OpenAPI schema.
+    assert list(response.json()) == ["detail"]
 
 
 @pytest.mark.django_db()
