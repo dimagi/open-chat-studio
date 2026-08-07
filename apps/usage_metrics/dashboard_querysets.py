@@ -6,6 +6,10 @@ evaluation activity excluded - which differ from the v2 usage API semantics in
 metrics.py. The definition-switch PR converges the two; until then both live
 here side by side.
 
+Evaluation-harness activity is decided on ``ExperimentSession.platform``
+everywhere in this app. ``ExperimentChannel.platform`` is a separate nullable
+column and the two can disagree on a row (ADR-0051).
+
 One deliberate exception: tag-link matching here is narrower than the
 dashboard's original (unscoped) match. Every `CustomTaggedItem` lookup in this
 module is constrained to the reading team's own rows (`team_id` and
@@ -62,7 +66,7 @@ def filtered_querysets(
     )
     sessions = (
         ExperimentSession.objects.filter(team=team)
-        .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+        .exclude(platform=ChannelPlatform.EVALUATIONS)
         .annotate(_has_msgs=msg_exists)
         .filter(_has_msgs=True)
     )

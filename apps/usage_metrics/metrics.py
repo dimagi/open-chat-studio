@@ -3,11 +3,11 @@
 Each function reproduces, unchanged, the semantics its consumer computes
 today - this PR extracts, it does not converge. `messages`,
 `sessions_started`, and `active_participants` (and their timeseries) are the
-v2 usage API's current reads: half-open `[start, end)` windows, evaluation
-messages included in `messages`, `total = human + ai`. `sessions_active` is
-the dashboard's current definition (any message in the closed window) via
-`dashboard_querysets`. `sessions_in_setup` is new and has no consumer yet:
-sessions created in the window still in SETUP, so
+v2 usage API's current reads: half-open `[start, end)` windows,
+evaluation-harness activity excluded (ADR-0051), `total = human + ai`.
+`sessions_active` is the dashboard's current definition (any message in the
+closed window) via `dashboard_querysets`. `sessions_in_setup` is new and has
+no consumer yet: sessions created in the window still in SETUP, so
 `sessions_started + sessions_in_setup` is every non-evaluation session
 created in the window. The definition-switch PR converges the dashboard and
 API semantics as one diff against this module; it also adds the
@@ -70,13 +70,17 @@ def message_counts_from_row(row: dict) -> MessageCounts:
 
 
 def messages_queryset(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> QuerySet[ChatMessage]:
-    """Team-scoped ``ChatMessage`` in ``[start, end)``, every message type and
-    every session kind (evaluation sessions included). ``ChatMessage`` has no
-    direct team FK, so scope via ``chat__team``; participant/chatbot filters
-    hit the session's FK-id columns so no join to the experiment/participant
-    tables. Backed by the ``(chat, message_type, created_at)`` index.
+    """Team-scoped ``ChatMessage`` in ``[start, end)``, evaluation-harness
+    activity excluded (ADR-0051). ``ChatMessage`` has no direct team FK, so
+    scope via ``chat__team``; participant/chatbot filters hit the session's
+    FK-id columns so no join to the experiment/participant tables. Backed by
+    the ``(chat, message_type, created_at)`` index. Every message type is still
+    in this universe - the human/AI narrowing belongs to the metrics that count
+    conversation turns, not to the scoping.
     """
-    queryset = ChatMessage.objects.filter(chat__team=team, created_at__gte=start, created_at__lt=end)
+    queryset = ChatMessage.objects.filter(chat__team=team, created_at__gte=start, created_at__lt=end).exclude(
+        chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
+    )
     if filters.participant_ids is not None:
         queryset = queryset.filter(chat__experiment_session__participant_id__in=filters.participant_ids)
     if filters.experiment_ids is not None:
@@ -122,12 +126,9 @@ def sessions_in_setup_queryset(
 
 def _session_base(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> QuerySet[ExperimentSession]:
     """Shared base for ``sessions_started_queryset``/``sessions_in_setup_queryset``.
-    Evaluation sessions are excluded on the session's own ``platform`` column.
-    This differs from ``sessions_active``, which excludes via
-    ``experiment_channel__platform`` (see ``dashboard_querysets.py``);
-    ``ExperimentSession.platform`` is an independent nullable ``CharField``,
-    so the two exclusions can disagree on a session where the two columns are
-    out of sync."""
+    Evaluation sessions are excluded on the session's own ``platform`` column,
+    the same column ``sessions_active`` now excludes on (see
+    ``dashboard_querysets.py``; ADR-0051)."""
     queryset = ExperimentSession.objects.filter(team=team, created_at__gte=start, created_at__lt=end).exclude(
         platform=ChannelPlatform.EVALUATIONS
     )
@@ -170,14 +171,12 @@ def active_participants(team: Team, *, start: datetime, end: datetime, filters: 
 
 def sessions_active(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> int:
     """Sessions with at least one message of any type in the half-open
-    interval ``[start, end)`` (SETUP sessions count; evaluation-channel
-    sessions do not, excluded via ``experiment_channel__platform`` rather
-    than the session's own ``platform`` column that
+    interval ``[start, end)`` (SETUP sessions count; evaluation sessions do
+    not, excluded on the same ``platform`` column
     ``sessions_started``/``sessions_in_setup`` key on - see
-    ``_session_base``; ``include_archived`` is not consulted). The
-    definition-switch PR moves this further, to human/AI messages only with
-    SETUP excluded; until then this and the API-derived metrics deliberately
-    disagree on which message types and session statuses qualify.
+    ``_session_base``; ``include_archived`` is not consulted). This and the
+    API-derived metrics still deliberately disagree on which message types
+    and session statuses qualify a session.
 
     Empty-list filter semantics also differ from the rest of this module: via
     ``filtered_querysets``, an empty ``experiment_ids`` or ``participant_ids``

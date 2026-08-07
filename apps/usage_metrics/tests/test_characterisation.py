@@ -103,9 +103,9 @@ class TestSetupSessionDivergence:
         assert _api_results(self._team(), ["sessions"])["sessions"] == 0
 
 
-class TestEvaluationMessageDivergence:
-    """The API counts evaluation messages; the dashboard excludes them
-    (design section 2, row 3)."""
+class TestEvaluationActivityIsExcludedEverywhere:
+    """Evaluation-harness activity counts on neither surface (ADR-0051), and
+    the API's grouped rows now sum to its ungrouped total."""
 
     def _team(self):
         team = TeamFactory.create()
@@ -113,6 +113,7 @@ class TestEvaluationMessageDivergence:
         eval_session = ExperimentSessionFactory.create(
             team=team,
             experiment=experiment,
+            status=SessionStatus.ACTIVE,
             experiment_channel=ExperimentChannelFactory(
                 team=team, experiment=experiment, platform=ChannelPlatform.EVALUATIONS
             ),
@@ -123,12 +124,16 @@ class TestEvaluationMessageDivergence:
     def test_dashboard_excludes_evaluation_messages(self):
         assert _overview(self._team())["total_messages"] == 0
 
-    def test_api_counts_evaluation_messages(self):
-        assert _api_results(self._team(), ["messages"])["messages"] == {"human": 1, "ai": 0, "total": 1}
+    def test_api_excludes_evaluation_messages(self):
+        assert _api_results(self._team(), ["messages"])["messages"] == {"human": 0, "ai": 0, "total": 0}
 
-    def test_api_platform_grouping_excludes_evaluations_while_total_counts_them(self):
-        """The API-internal inconsistency the design's problem statement names:
-        grouped rows shrink their universe, the ungrouped total does not."""
+    def test_api_excludes_evaluation_participants(self):
+        assert _api_results(self._team(), ["participants"])["participants"] == 0
+
+    def test_api_platform_grouping_and_total_agree(self):
+        """The API-internal inconsistency the design's problem statement named:
+        grouped rows shrank their universe while the ungrouped total did not.
+        Both now exclude evaluations, so the two reconcile."""
         team = self._team()
         query = api_usage.resolve_query_filters(
             api_usage.UsageQuery(
@@ -141,7 +146,7 @@ class TestEvaluationMessageDivergence:
             )
         )
         assert list(api_usage.group_entities(query)) == []
-        assert _api_results(team, ["messages"])["messages"]["total"] == 1
+        assert _api_results(team, ["messages"])["messages"]["total"] == 0
 
 
 class TestMessageTypeTotalDivergence:

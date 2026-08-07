@@ -8,8 +8,11 @@ from datetime import UTC, datetime
 
 import pytest
 import time_machine
+from field_audit.models import AuditAction
 
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import ExperimentSession
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -225,3 +228,27 @@ class TestMessageTagFilterTeamScoping:
         # sanity: the chat-level tag does still qualify the session, so the empty messages
         # result above is the message-only leg behaving correctly, not a broken fixture.
         assert [s.id for s in querysets["sessions"]] == [session.id]
+
+
+class TestEvaluationExclusionColumn:
+    """`ExperimentSession.platform` is the sole discriminator for
+    evaluation-harness activity (ADR-0051). The session's channel may carry a
+    different platform - the two are independent nullable columns - and the
+    channel's value must not decide the session's fate either way."""
+
+    def test_session_platform_decides_exclusion_not_the_channels(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        # Session is an evaluation session; its channel says otherwise.
+        eval_session = _active_session(team, experiment)
+        ExperimentSession.objects.filter(pk=eval_session.pk).update(platform=ChannelPlatform.EVALUATIONS)
+        # Session is a real web session; its channel says evaluations.
+        web_session = _active_session(team, experiment)
+        ExperimentSession.objects.filter(pk=web_session.pk).update(platform=ChannelPlatform.WEB)
+        ExperimentChannel.objects.filter(pk=web_session.experiment_channel_id).update(
+            platform=ChannelPlatform.EVALUATIONS, audit_action=AuditAction.IGNORE
+        )
+
+        querysets = filtered_querysets(team, start_date=_START, end_date=_END)
+
+        assert [s.id for s in querysets["sessions"]] == [web_session.id]

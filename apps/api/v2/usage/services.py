@@ -21,7 +21,6 @@ from django.db.models import Count, F, QuerySet
 from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
 from django.utils import timezone
 
-from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.services import reporting
 from apps.experiments.models import Experiment, ExperimentSession, Participant
@@ -190,12 +189,11 @@ def _chatbot_entities(query: "UsageQuery") -> QuerySet:
 def _platform_entities(query: "UsageQuery") -> QuerySet:
     # Platform has no backing model, so return the distinct slugs present, ordered on the ``platform``
     # alias (which also clears ``ChatMessage``'s default ``created_at`` ordering, keeping ``.distinct()``
-    # one row per slug). ``evaluations`` is excluded to match the session metric's exclusion.
+    # one row per slug). Evaluation sessions are already out of the message universe (ADR-0051).
     return (
         _message_queryset(query)
         .exclude(chat__experiment_session__platform__isnull=True)
         .exclude(chat__experiment_session__platform="")
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
         .values(platform=F("chat__experiment_session__platform"))
         .distinct()
         .order_by("chat__experiment_session__platform")

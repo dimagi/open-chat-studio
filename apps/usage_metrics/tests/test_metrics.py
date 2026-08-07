@@ -52,7 +52,7 @@ def frozen_time():
 @pytest.mark.usefixtures("frozen_time")
 class TestMessages:
     """Reproduces the v2 usage API's current message read: half-open window,
-    every session type (evaluations included), total = human + ai."""
+    evaluation-harness activity excluded (ADR-0051), total = human + ai."""
 
     def test_counts_human_ai_and_total(self):
         team = TeamFactory.create()
@@ -87,7 +87,7 @@ class TestMessages:
         assert counts["total"] == 2
         assert surviving == {_START, _MID}
 
-    def test_includes_evaluation_sessions(self):
+    def test_excludes_evaluation_sessions(self):
         team = TeamFactory.create()
         eval_session = ExperimentSessionFactory.create(
             team=team,
@@ -97,7 +97,7 @@ class TestMessages:
 
         counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters())
 
-        assert counts["total"] == 1
+        assert counts["total"] == 0
 
     def test_empty_id_list_means_matched_nobody(self):
         team = TeamFactory.create()
