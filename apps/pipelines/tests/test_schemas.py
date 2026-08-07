@@ -1,13 +1,13 @@
 import json
 import pathlib
 
-from apps.pipelines.views import _pipeline_node_schemas
+from apps.pipelines.node_options import get_node_schemas
 
 BASE = pathlib.Path(__file__).parent / "node_schemas"
 
 
 def test_schemas():
-    schemas = _pipeline_node_schemas()
+    schemas = get_node_schemas()
     for schema in schemas:
         title = schema["title"]
         assert schema["description"], title
@@ -21,7 +21,7 @@ def test_schemas():
 
 
 def test_pipeline_node_schemas():
-    schemas = {schema["title"] for schema in _pipeline_node_schemas()}
+    schemas = {schema["title"] for schema in get_node_schemas()}
     for file in BASE.glob("*.json"):
         node_name = file.name.split(".")[0]
         if node_name not in schemas:

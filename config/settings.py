@@ -545,6 +545,10 @@ SPECTACULAR_SETTINGS = {
             "description": "Manage participants, their data, and their schedules.",
         },
         {
+            "name": "Pipelines",
+            "description": "Discover the pipeline node types an agent may build and the resource ids it may reference.",
+        },
+        {
             "name": "Usage",
             "description": "Inspect team usage and activity data (message counts, and more).",
         },

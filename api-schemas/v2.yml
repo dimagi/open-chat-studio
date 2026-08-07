@@ -115,6 +115,104 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v2/pipeline/nodes/:
+    get:
+      operationId: pipeline_node_list
+      description: |-
+        The node types a pipeline can contain, with the JSON schema of each one's `params`. Deprecated types are omitted. Types with `can_add: false` are managed by the server and must not be created.
+
+        Only root-level `ui:*` schema keys are stripped. Per-property `ui:*` keys survive -- in particular `ui:optionsSource`, which names the key in `/pipeline/options/` a param's values come from. See that endpoint's description for the params it does not cover.
+      summary: List Pipeline Node Types
+      parameters:
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: Return only this node type. An unknown or deprecated name returns
+          404.
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeType'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeTypeNotFound'
+          description: No such node type, or the type is deprecated and therefore
+            not listed.
+  /api/v2/pipeline/options/:
+    get:
+      operationId: pipeline_options
+      description: |-
+        The values each node param accepts, scoped to the API key's team: resource ids to reference, tool names, and the provider defaults a new node is created with.
+
+        Most keys match a node param's `ui:optionsSource` from `/pipeline/nodes/` -- `source_material_id`, `collection_id`, `tools`, `mcp_tools`, `custom_actions` and `built_in_tools` all resolve this way. Four params have no such link and must be inferred from context: `llm_provider_id` -> `LlmProviderId`, `llm_provider_model_id` -> `LlmProviderModelId`, `tool_config` -> `built_in_tools_config`, and `synthetic_voice_id` -> `synthetic_voice_id` (a same-name coincidence, not a declared link). `VoiceProviderId` and `default_values` are not option lists for any node param -- the former is the team's configured voice providers, the latter the values a new node is created with.
+
+        `text_editor_autocomplete_vars_llm_node`, `text_editor_autocomplete_vars_router_node` and `jinja_node` list template variables rather than resource ids, so their entries carry `label` and `description` instead of `label` and `value` -- write the `label` into the prompt or template, and read the `description` for what it holds and when to use it.
+      summary: List Pipeline Node Options
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+              examples:
+                PipelineOptions:
+                  value:
+                    LlmProviderId:
+                    - value: 1
+                      label: Prod OpenAI
+                      type: openai
+                    source_material:
+                    - value: 3
+                      label: Returns policy
+                    built_in_tools:
+                      openai:
+                      - value: web-search
+                        label: Web Search
+                    built_in_tools_config:
+                      anthropic:
+                        web-search:
+                        - name: allowed_domains
+                          type: expandable_text
+                          label: Allowed Domains
+                          helpText: Only search these domains. Separate entries with
+                            newlines.
+                    VoiceProviderId:
+                    - value: 2
+                      label: Prod Polly
+                      type: aws
+                    jinja_node:
+                    - label: input
+                      description: The text passed into this node from the preceding
+                        one.
+                    default_values:
+                      llm_provider_id: 1
+                      llm_provider_model_id: 5
+                  summary: A flat option list, a nested built-in-tools block, and
+                    the default values.
+          description: ''
   /api/v2/trigger_bot/:
     post:
       operationId: trigger_bot_message
@@ -1644,6 +1742,36 @@ components:
       - ai
       - human
       - total
+    NodeType:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Write this to a node's `type` field.
+        description:
+          type: string
+        can_add:
+          type: boolean
+          description: False for structural nodes the server manages itself -- Start,
+            End and Passthrough. They are listed so the agent can resolve types it
+            reads from /inspect/, not so it can create them.
+        schema:
+          type: object
+          additionalProperties: {}
+          description: JSON Schema for the node's `params`.
+      required:
+      - can_add
+      - description
+      - schema
+      - type
+    NodeTypeNotFound:
+      type: object
+      description: The body DRF renders for the `NotFound` raised on an unknown `type`.
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     PaginatedChatbotList:
       type: object
       required:
@@ -2117,6 +2245,9 @@ tags:
 - name: Me
   description: Information about the authenticated user and the team the token is
     scoped to.
+- name: Pipelines
+  description: Discover the pipeline node types an agent may build and the resource
+    ids it may reference.
 - name: Usage
   description: Inspect team usage and activity data (message counts, and more).
 externalDocs:

@@ -46,6 +46,56 @@ class PromptVars(models.TextChoices):
         return [{"label": v, "value": v} for v in vars_]
 
 
+# What each template variable holds and when to reach for it. The pipeline builder shows these
+# variables as bare autocomplete entries -- a human infers the meaning from the name -- but the v2
+# discovery API serves them to an LLM agent that has no such context, so it gets these instead of
+# the (identical to the label) value. Every variable the three PromptVars accessors above return
+# must have an entry; TestPromptVarDescriptions in apps/utils/tests/test_prompt_utils.py enforces that.
+PROMPT_VAR_DESCRIPTIONS = {
+    "participant_data": (
+        "The participant's stored data, addressed by key -- `participant_data.name`. Use it to "
+        "personalise a response. In LLM prompts it also carries their `scheduled_messages`, and a "
+        "key that doesn't exist renders empty instead of failing."
+    ),
+    "source_material": (
+        "The full text of the node's configured source material. Use it to ground answers in a "
+        "fixed reference document. Empty when the node has no `source_material_id` set."
+    ),
+    "current_datetime": (
+        "The current date and time in the participant's own timezone. Use it for anything "
+        "time-relative -- scheduling, deadlines, or resolving what 'today' means."
+    ),
+    "media": (
+        "One line per file in the node's media collection, each with the file's id, content type "
+        "and summary. Use it so the model can pick a file to talk about."
+    ),
+    "collection_index_summaries": (
+        "One line per selected collection index, each with its id, name and summary. Use it when "
+        "several indexes are attached so the model can choose which one to search."
+    ),
+    "temp_state": (
+        "Scratch state for the current run only, holding `user_input`, `outputs` (keyed by node "
+        "name) and `attachments`. Use it to pass data between nodes while handling one message. "
+        "Discarded when the run ends -- `session_state` is the durable equivalent."
+    ),
+    "session_state": (
+        "State that survives for the whole session. Use it to remember something between messages, "
+        "such as a preference the participant stated earlier. `temp_state` is the per-run equivalent."
+    ),
+    "input": "The text passed into this node from the preceding one.",
+    "node_inputs": (
+        "The inputs to this node as a list, for when more than one node feeds it. Use it to combine several branches."
+    ),
+    "participant_details": (
+        "The participant's `identifier` and `platform`. Use it when the message should reference "
+        "who they are or where they're talking to you from."
+    ),
+    "participant_schedules": ("The participant's scheduled messages for this bot, as a list, including inactive ones."),
+    "input_message_id": ("The database id of the incoming message. Use it to correlate with traces or the API."),
+    "input_message_url": "A link to the incoming message in the web UI.",
+}
+
+
 PROMPT_VARS_REQUIRED_BY_TOOL = {
     AgentTools.DELETE_REMINDER: [PromptVars.PARTICIPANT_DATA],
     AgentTools.MOVE_SCHEDULED_MESSAGE_DATE: [PromptVars.PARTICIPANT_DATA, PromptVars.CURRENT_DATETIME],

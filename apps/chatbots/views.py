@@ -53,13 +53,12 @@ from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.exceptions import has_errors
-from apps.pipelines.views import (
-    _pipeline_node_default_values,
-    _pipeline_node_parameter_values,
-    _pipeline_node_schemas,
-    get_widget_page_context,
-    llm_model_parameter_context,
+from apps.pipelines.node_options import (
+    get_node_default_values,
+    get_node_parameter_values,
+    get_node_schemas,
 )
+from apps.pipelines.views import get_widget_page_context, llm_model_parameter_context
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -367,16 +366,16 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
-            "node_schemas": _pipeline_node_schemas(),
+            "node_schemas": get_node_schemas(),
             "experiment": experiment,
             "page_title": f"Edit {experiment.name}",
-            "parameter_values": _pipeline_node_parameter_values(
+            "parameter_values": get_node_parameter_values(
                 team=self.request.team,
                 llm_providers=llm_providers,
                 llm_provider_models=llm_provider_models,
                 synthetic_voices=synthetic_voices,
             ),
-            "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "default_values": get_node_default_values(llm_providers, llm_provider_models),
             "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
