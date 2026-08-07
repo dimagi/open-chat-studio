@@ -56,8 +56,12 @@ offers", not "always a binary blob".
 - Rows synced before this decision are unaffected: they still hold extracted text under the
   source's filename and are only rewritten when their `sha`/`date` changes. Repairing them
   needs a forced re-sync, which is not part of this decision.
-- `_update_file` must now clear `File.external_id`, because an update can change the format
-  outright and the remote index skips re-uploading a file whose id still resolves.
+- An update can now change a file's format outright, but `_update_file` still leaves
+  `File.external_id` in place. The remote index skips re-uploading a file whose id resolves,
+  so a remote-indexed collection keeps serving the old bytes until something re-uploads.
+  Clearing the id would be worse: it is the only handle on the uploaded copy, so blanking it
+  orphans that copy in the vector store and the provider's storage. Propagating updates to a
+  remote index needs a delete-then-upload step, which is not part of this decision.
 
 ## Alternatives considered
 
