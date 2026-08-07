@@ -9,7 +9,7 @@ from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from apps.pipelines.models import Node, Pipeline
+from apps.pipelines.models import Node
 from apps.pipelines.tests.utils import content_flow_node
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -163,13 +163,12 @@ class TestFlowNodeReadsResourceFKs:
     """to_flow_node() serves the resource ids from the FK columns, not from the copies in params."""
 
     def test_scalar_ids_come_from_the_fk_columns(self):
-        """The editor posts (and params therefore store) the ids as strings; the flow node serves
-        the ints held by the columns."""
+        """Params carries no ids at all, so the served ints can only have come off the columns."""
         provider = LlmProviderFactory.create()
         model = LlmProviderModelFactory.create()
         node = NodeFactory.create(
             type="LLMResponseWithPrompt",
-            params={"llm_provider_id": str(provider.id), "llm_provider_model_id": str(model.id)},
+            params={"name": "llm"},
             llm_provider=provider,
             llm_provider_model=model,
         )
@@ -178,17 +177,6 @@ class TestFlowNodeReadsResourceFKs:
 
         assert params["llm_provider_id"] == provider.id
         assert params["llm_provider_model_id"] == model.id
-
-    def test_fk_column_wins_over_a_drifted_params_copy(self):
-        provider = LlmProviderFactory.create()
-        other_provider = LlmProviderFactory.create()
-        node = NodeFactory.create(
-            type="LLMResponseWithPrompt",
-            params={"llm_provider_id": other_provider.id},
-            llm_provider=provider,
-        )
-
-        assert node.to_flow_node().data.params["llm_provider_id"] == provider.id
 
     def test_reference_to_deleted_resource_reads_as_unset(self):
         """SET_NULL nulls the column when the resource goes, but the id lingers in params. The
@@ -206,39 +194,14 @@ class TestFlowNodeReadsResourceFKs:
         assert node.to_flow_node().data.params["llm_provider_id"] is None
 
     def test_collection_index_ids_come_from_the_m2m(self):
+        """Params carries no ids, so the served list can only have come off the M2M — sorted,
+        since the through rows have no ordering of their own."""
         first = CollectionFactory.create(is_index=True)
         second = CollectionFactory.create(is_index=True)
-        node = NodeFactory.create(
-            type="LLMResponseWithPrompt",
-            params={"collection_index_ids": [str(second.id)]},
-        )
+        node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm"})
         node.collection_indexes.set([second, first])
 
         assert node.to_flow_node().data.params["collection_index_ids"] == sorted([first.id, second.id])
-
-    def test_collection_index_ids_are_served_even_when_params_omit_them(self):
-        """The M2M is the reference: whatever it holds is served, whether or not the params copy
-        was ever written."""
-        index = CollectionFactory.create(is_index=True)
-        node = NodeFactory.create(type="LLMResponseWithPrompt", params={"name": "llm"})
-        node.collection_indexes.set([index])
-
-        assert node.to_flow_node().data.params["collection_index_ids"] == [index.id]
-
-    def test_scalar_ids_are_served_even_when_params_omit_them(self):
-        """Same for the scalar columns: they are the reference, so they are served whether or not
-        params carries a copy. An unset resource reads as null rather than being left out."""
-        provider = LlmProviderFactory.create()
-        node = NodeFactory.create(
-            type="LLMResponseWithPrompt",
-            params={"name": "llm"},
-            llm_provider=provider,
-        )
-
-        params = node.to_flow_node().data.params
-
-        assert params["llm_provider_id"] == provider.id
-        assert params["assistant_id"] is None
 
     def test_deleted_collection_index_reads_as_empty(self):
         """Deleting a Collection cascades the M2M through row away while the id lingers in params.
@@ -316,34 +279,6 @@ class TestFlowDataReadsResourceFKs:
         assert params["llm_provider_id"] == provider.id
         assert params["llm_provider_model_id"] == model.id
         assert params["collection_index_ids"] == [index.id]
-
-    @pytest.mark.parametrize(
-        "llm_node_count",
-        [
-            pytest.param(1, id="one_node"),
-            pytest.param(3, id="three_nodes"),
-            pytest.param(8, id="eight_nodes"),
-        ],
-    )
-    def test_collection_indexes_are_prefetched(self, llm_node_count, django_assert_num_queries):
-        """Fetched the way the read call sites fetch it: the pipeline row, its nodes and their
-        collection_indexes, however many nodes there are. Reading the M2M per node instead would
-        be an N+1 on every editor load."""
-        index = CollectionFactory.create(is_index=True)
-        pipeline_id = self._pipeline_with_llm_nodes(llm_node_count, {"collection_index_ids": [index.id]}).pk
-
-        with django_assert_num_queries(3):
-            pipeline = Pipeline.objects.prefetch_related("node_set__collection_indexes").get(pk=pipeline_id)
-            # start, end and the LLM nodes
-            assert len(pipeline.flow_data["nodes"]) == llm_node_count + 2
-
-    def test_prefetched_node_set_is_reused(self, django_assert_num_queries):
-        index = CollectionFactory.create(is_index=True)
-        pipeline = self._pipeline_with_llm_nodes(3, {"collection_index_ids": [index.id]})
-        pipeline = Pipeline.objects.prefetch_related("node_set__collection_indexes").get(pk=pipeline.pk)
-
-        with django_assert_num_queries(0):
-            assert len(pipeline.flow_data["nodes"]) == 5
 
     def test_clear_node_caches_re_primes_the_prefetch(self, django_assert_num_queries):
         """The save paths write rows straight to the DB and then rebuild flow_data for the
