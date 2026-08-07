@@ -41,7 +41,12 @@ from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.teams.models import Team
 
 from .dashboard_querysets import filtered_querysets
-from .filters import UsageFilters, chat_tag_exists_pair
+from .filters import (
+    CONVERSATION_MESSAGE_TYPES,  # noqa: F401 - re-exported for callers importing it from this module
+    UsageFilters,
+    chat_tag_exists_pair,
+    conversation_messages,
+)
 
 _TRUNC = {
     "daily": TruncDate,
@@ -67,6 +72,11 @@ MESSAGE_ANNOTATIONS = {
 def message_counts_from_row(row: dict) -> MessageCounts:
     """Build a :class:`MessageCounts` from a row/aggregate carrying ``human``/``ai`` counts."""
     return MessageCounts(human=row["human"], ai=row["ai"], total=row["human"] + row["ai"])
+
+
+def conversation_message_total(message_queryset: QuerySet[ChatMessage]) -> int:
+    """``human + ai`` count over an already-scoped message queryset."""
+    return conversation_messages(message_queryset).count()
 
 
 def messages_queryset(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> QuerySet[ChatMessage]:
@@ -100,9 +110,7 @@ def active_participants_queryset(
 ) -> QuerySet[ChatMessage]:
     """The message rows behind the active-participants count: human/AI only,
     the same categories the ``messages`` metric surfaces."""
-    return messages_queryset(team, start=start, end=end, filters=filters).filter(
-        message_type__in=(ChatMessageType.HUMAN, ChatMessageType.AI)
-    )
+    return conversation_messages(messages_queryset(team, start=start, end=end, filters=filters))
 
 
 def sessions_started_queryset(

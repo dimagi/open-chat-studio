@@ -10,10 +10,10 @@ use.
 from dataclasses import dataclass
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Subquery
+from django.db.models import Exists, OuterRef, QuerySet, Subquery
 
 from apps.annotations.models import CustomTaggedItem
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.teams.models import Team
 
 
@@ -46,6 +46,19 @@ class UsageFilters:
     platform: str | None = None
     tag_ids: list[int] | None = None
     include_archived: bool = True
+
+
+# The message types that are conversation turns. `system` messages are internal
+# bookkeeping and are not counted by any metric (ADR-0051).
+CONVERSATION_MESSAGE_TYPES = (ChatMessageType.HUMAN, ChatMessageType.AI)
+
+
+def conversation_messages(message_queryset: QuerySet[ChatMessage]) -> QuerySet[ChatMessage]:
+    """Narrow any team-scoped, windowed message queryset to conversation turns.
+    Both surfaces route through this, so "which messages count" is defined once
+    whether the caller starts from ``messages_queryset`` (the API) or from
+    ``filtered_querysets`` (the dashboard)."""
+    return message_queryset.filter(message_type__in=CONVERSATION_MESSAGE_TYPES)
 
 
 def chat_tag_exists_pair(team: Team, tag_ids: list[int], chat_id_ref: str) -> tuple[Exists, Exists]:

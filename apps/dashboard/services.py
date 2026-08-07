@@ -14,6 +14,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
+from apps.usage_metrics.metrics import CONVERSATION_MESSAGE_TYPES, conversation_message_total
 
 from ..trace.models import Trace
 from .models import DashboardCache
@@ -147,7 +148,7 @@ class DashboardService:
             .annotate(
                 human_messages=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
                 ai_messages=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-                total_messages=Count("id"),
+                total_messages=Count("id", filter=Q(message_type__in=CONVERSATION_MESSAGE_TYPES)),
             )
             .order_by("period")
         )
@@ -557,7 +558,7 @@ class DashboardService:
             "total_experiments": querysets["experiments"].count(),
             "total_participants": querysets["participants"].count(),
             "total_sessions": querysets["sessions"].count(),
-            "total_messages": querysets["messages"].count(),
+            "total_messages": conversation_message_total(querysets["messages"]),
             "active_experiments": querysets["experiments"]
             .filter(sessions__in=querysets["sessions"])
             .distinct()

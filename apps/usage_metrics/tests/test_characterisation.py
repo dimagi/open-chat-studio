@@ -149,21 +149,21 @@ class TestEvaluationActivityIsExcludedEverywhere:
         assert _api_results(team, ["messages"])["messages"]["total"] == 0
 
 
-class TestMessageTypeTotalDivergence:
-    """Dashboard message totals include SYSTEM messages; the API total is
-    human + ai (design section 2, row 7)."""
+class TestMessageTotalIsHumanPlusAi:
+    """`system` messages are internal and are not conversation turns, so both
+    surfaces count human + ai (ADR-0051)."""
 
     def _team(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(session, message_type=ChatMessageType.HUMAN)
         _message(session, message_type=ChatMessageType.AI)
         _message(session, message_type=ChatMessageType.SYSTEM)
         return team
 
-    def test_dashboard_total_includes_system_messages(self):
-        assert _overview(self._team())["total_messages"] == 3
+    def test_dashboard_total_excludes_system_messages(self):
+        assert _overview(self._team())["total_messages"] == 2
 
     def test_api_total_is_human_plus_ai(self):
         assert _api_results(self._team(), ["messages"])["messages"] == {"human": 1, "ai": 1, "total": 2}
