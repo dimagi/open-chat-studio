@@ -390,7 +390,7 @@ def pipeline_data(request, team_slug: str, pk: int):
 
     try:
         # flow_data below rebuilds every node from its row, reading the collection_indexes M2M.
-        pipeline = Pipeline.objects.prefetch_related("node_set__collection_indexes").get(pk=pk)
+        pipeline = Pipeline.objects.prefetch_related("node_set__collection_indexes").get(pk=pk, team=request.team)
     except Pipeline.DoesNotExist:
         pipeline = Pipeline.objects.create(id=pk, team=request.team, data={"edges": []}, name="New Pipeline")
     return JsonResponse(
