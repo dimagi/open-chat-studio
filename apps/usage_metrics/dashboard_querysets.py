@@ -43,10 +43,14 @@ def filtered_querysets(
     platform_names: list[str] | None = None,
     participant_ids: list[int] | None = None,
     tag_ids: list[int] | None = None,
+    include_archived: bool = False,
 ) -> dict[str, Any]:
     """Base querysets with the dashboard's common filters applied. Returns
     `experiments`, `sessions`, `messages`, `participants` querysets plus the
-    resolved `start_date`/`end_date` (defaulting to the last 30 days)."""
+    resolved `start_date`/`end_date` (defaulting to the last 30 days).
+
+    `include_archived` applies to the `experiments` enumeration only. The
+    activity querysets count archived-chatbot activity either way (ADR-0051)."""
 
     if not end_date:
         end_date = timezone.now()
@@ -55,7 +59,10 @@ def filtered_querysets(
 
     base_filters = {"created_at__gte": start_date, "created_at__lt": end_date}
 
-    experiments = Experiment.objects.filter(team=team, is_archived=False, working_version=None)
+    # `Experiment.objects` already filters `is_archived=False` (VersionsObjectManagerMixin);
+    # `get_all()` is the archived-inclusive manager.
+    experiment_manager = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
+    experiments = experiment_manager.filter(team=team, working_version=None)
     # Use Exists() to avoid join+distinct - prevents row explosion upfront for better performance
     msg_exists = Exists(
         ChatMessage.objects.filter(

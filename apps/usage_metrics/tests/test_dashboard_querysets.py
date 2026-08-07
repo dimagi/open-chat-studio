@@ -15,6 +15,7 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 
@@ -32,7 +33,16 @@ def _frozen_time():
 
 
 def _active_session(team, experiment):
-    session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+    # experiment_channel is pinned to `experiment` too: left at its default, ExperimentChannelFactory's
+    # own SubFactory builds an unrelated Experiment for the same team, which would show up as a second,
+    # non-archived experiment and defeat any assertion that counts a team's experiments directly (see the
+    # same fix in test_characterisation.py's TestArchivedExperimentActivity._team).
+    session = ExperimentSessionFactory.create(
+        team=team,
+        experiment=experiment,
+        status=SessionStatus.ACTIVE,
+        experiment_channel=ExperimentChannelFactory(team=team, experiment=experiment),
+    )
     ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="x", created_at=_MID)
     return session
 
@@ -252,3 +262,35 @@ class TestEvaluationExclusionColumn:
         querysets = filtered_querysets(team, start_date=_START, end_date=_END)
 
         assert [s.id for s in querysets["sessions"]] == [web_session.id]
+
+
+class TestIncludeArchived:
+    """`include_archived` applies to experiment enumeration only. Activity
+    metrics count archived-chatbot activity either way - it happened, and the
+    spend was real (ADR-0051)."""
+
+    def _team(self):
+        team = TeamFactory.create()
+        live = ExperimentFactory.create(team=team)
+        _active_session(team, live)
+        archived = ExperimentFactory.create(team=team, is_archived=True)
+        _active_session(team, archived)
+        return team
+
+    def test_enumeration_excludes_archived_by_default(self):
+        querysets = filtered_querysets(self._team(), start_date=_START, end_date=_END)
+
+        assert querysets["experiments"].count() == 1
+
+    def test_enumeration_includes_archived_when_asked(self):
+        querysets = filtered_querysets(self._team(), start_date=_START, end_date=_END, include_archived=True)
+
+        assert querysets["experiments"].count() == 2
+
+    def test_activity_counts_archived_chatbots_either_way(self):
+        team = self._team()
+
+        default = filtered_querysets(team, start_date=_START, end_date=_END)
+        inclusive = filtered_querysets(team, start_date=_START, end_date=_END, include_archived=True)
+
+        assert default["sessions"].count() == inclusive["sessions"].count() == 2

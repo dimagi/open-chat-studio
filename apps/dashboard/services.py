@@ -58,6 +58,7 @@ class DashboardService:
         platform_names: list[str] | None = None,
         participant_ids: list[int] | None = None,
         tag_ids: list[int] | None = None,
+        include_archived: bool = False,
     ) -> dict[str, Any]:
         """Base querysets with common filters applied. The builder lives in
         apps.usage_metrics (#3905); this delegation keeps the service API
@@ -70,6 +71,7 @@ class DashboardService:
             platform_names=platform_names,
             participant_ids=participant_ids,
             tag_ids=tag_ids,
+            include_archived=include_archived,
         )
 
     def get_active_participants_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:

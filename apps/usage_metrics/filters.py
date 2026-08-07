@@ -29,16 +29,13 @@ class UsageFilters:
     message in it carries one of the tags; an empty list is treated as no
     filter.
 
-    `include_archived` is not currently consulted by any function in this
-    module - it is part of the agreed filter shape for surfaces that don't
-    exist yet. The two enumeration paths that exist today each hardcode their
-    own answer instead of reading this flag: `filtered_querysets` in this app
-    hardcodes `is_archived=False, working_version=None` when it builds the
-    `experiments` queryset, while the v2 usage API enumerates experiments with
-    `Experiment.objects.get_all()` (archived and unarchived alike). The
-    default here (`True`) matches the v2 API's behaviour, not the dashboard's
-    - a follow-up that wires this flag into `filtered_querysets` must not
-    assume the default is safe for that path.
+    `include_archived` applies to experiment enumeration only: activity
+    metrics count archived-chatbot activity regardless (ADR-0051). The
+    default (`True`) matches the v2 usage API, which enumerates chatbots with
+    `Experiment.objects.get_all()`; `filtered_querysets` defaults the other
+    way, matching the dashboard's archived-excluding chatbot list. A caller
+    passing `UsageFilters` through to `filtered_querysets` must pass this
+    field explicitly rather than relying on either default.
     """
 
     experiment_ids: list[int] | None = None
