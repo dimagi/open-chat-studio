@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 
+from apps.api.v2.discovery import _clean_options
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory
 from apps.utils.factories.service_provider_factories import (
@@ -168,6 +169,35 @@ def test_options_carry_no_edit_urls(team_with_resources):
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     assert "edit_url" not in client.get(reverse("api:v2:pipeline-options")).content.decode()
+
+
+def test_clean_options_recurses_into_nested_dicts():
+    """`built_in_tools` is a dict of lists and `built_in_tools_config` is a dict of dicts of lists --
+    a `_clean_options` that only special-cased the top-level-list case would silently skip both,
+    leaving placeholder entries and `edit_url` buried at depth >= 2 untouched."""
+    nested = {
+        "built_in_tools": {
+            "openai": [
+                {"value": "web-search", "label": "Web Search", "edit_url": "/tools/web-search"},
+                {"value": "", "label": "Select a tool"},
+            ],
+        },
+        "built_in_tools_config": {
+            "anthropic": {
+                "web-search": [
+                    {"value": "", "name": "allowed_domains", "edit_url": "/tools/anthropic/web-search"},
+                    {"value": "keep-me", "name": "blocked_domains"},
+                ],
+            },
+        },
+    }
+
+    cleaned = _clean_options(nested)
+
+    assert cleaned["built_in_tools"]["openai"] == [{"value": "web-search", "label": "Web Search"}]
+    assert cleaned["built_in_tools_config"]["anthropic"]["web-search"] == [
+        {"value": "keep-me", "name": "blocked_domains"}
+    ]
 
 
 @pytest.mark.django_db()
