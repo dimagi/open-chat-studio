@@ -1,10 +1,16 @@
 """The dashboard's filtered activity querysets, moved here from
-apps/dashboard/services.py (#3905) so the filter logic has one home. These
-reproduce the dashboard's CURRENT semantics - half-open [start_date, end_date)
-window, sessions = a human or AI message in the window, SETUP excluded,
-message totals include SYSTEM, evaluation activity excluded - which differ
-from the v2 usage API semantics in metrics.py. The definition-switch PR
-converges the two; until then both live here side by side.
+apps/dashboard/services.py (#3905) so the filter logic has one home.
+
+These are the canonical definitions per ADR-0051, the same ones metrics.py
+computes for the v2 usage API: a half-open [start_date, end_date) window,
+`sessions` = a session with a human or AI message in the window, and
+evaluation-harness and SETUP-session activity excluded from both the session
+and the message querysets.
+
+The `messages` queryset deliberately keeps every message *type*, SYSTEM
+included, because `get_tag_analytics_data` reads it to find tagged messages
+and a SYSTEM message can carry a tag. Narrowing to conversation turns is the
+job of the metrics that count them - see `conversation_messages` in filters.py.
 
 Evaluation-harness activity is decided on ``ExperimentSession.platform``
 everywhere in this app. ``ExperimentChannel.platform`` is a separate nullable
@@ -79,8 +85,10 @@ def filtered_querysets(
         .annotate(_has_msgs=msg_exists)
         .filter(_has_msgs=True)
     )
-    messages = ChatMessage.objects.filter(chat__team=team, **base_filters).exclude(
-        chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
+    messages = (
+        ChatMessage.objects.filter(chat__team=team, **base_filters)
+        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        .exclude(chat__experiment_session__status=SessionStatus.SETUP)
     )
     participants = Participant.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS)
 

@@ -21,8 +21,9 @@ We will define each activity metric once, in `apps/usage_metrics/`, and have eve
 - **`sessions_in_setup`** - sessions created in the window and still in `SETUP`. `sessions_started + sessions_in_setup` is every non-evaluation session created in the window, so setup drop-off stays countable.
 - **`messages`** - human and AI messages only, evaluation sessions excluded. `total` is `human + ai`; `system` messages are internal and are not conversation turns.
 - **`active_participants`** - distinct participants who authored at least one human message in the window. A participant who only received AI output was not active.
+- **Sessions still in `SETUP` are excluded from every activity metric**, not only from the session counts. `SETUP` is the state a session occupies until its first message: the consent flow moves it to `PENDING` and then `ACTIVE`, and a chatbot without conversational consent activates it straight away, so a session resting at `SETUP` has no conversation in it. Counting its turns or its author while `sessions_active` drops the session would put a ratio's numerator and denominator on different universes, which the ratios rule below forbids.
 - **Windows are half-open `[start, end)`** on every surface, so an instant on the boundary is counted exactly once across adjacent periods. A date-range picker whose end date should be fully included resolves that date to the start of the following day.
-- **`ExperimentSession.platform`** is the sole discriminator for evaluation-harness activity. `ExperimentChannel.platform` is a separate nullable column and the two can disagree on a row (the model predates the v2 API's chatbot rename, ADR-0023).
+- **`ExperimentSession.platform`** is the sole discriminator for evaluation-harness activity. `ExperimentChannel.platform` is a separate nullable column, nothing keeps the two aligned, and they can disagree on a row.
 - **`include_archived`** applies to experiment *enumeration* only. Activity metrics count archived-chatbot activity regardless, because that activity happened and the spend was real.
 
 Two rules govern how these metrics may be combined. Running example: a team spends $100 in June, $80 from chat and $20 from evaluation runs.
@@ -37,7 +38,7 @@ Both surfaces move to the same numbers in one change, with no flag - a flag woul
 Numbers visibly change:
 
 - Dashboard session counts drop sessions whose only in-window activity is a `system` message, and drop sessions still in `SETUP`.
-- Dashboard message totals drop `system` messages.
+- Dashboard message totals drop `system` messages, and both surfaces drop turns belonging to sessions still in `SETUP`. In practice a session resting at `SETUP` holds no conversation, so this moves few or no rows; it is what keeps the per-session and per-participant ratios on one universe.
 - Dashboard active-participant counts drop participants whose only in-window activity is AI or `system` messages, on the overview stat and the session-analytics series. The active-participants chart already used this definition and does not move.
 - The API's `messages` and `participants` metrics drop evaluation activity, and `participants` drops participants whose only in-window activity is AI messages. Grouped rows now sum to the ungrouped total.
 - Instants on a window boundary stop being counted in two adjacent periods.

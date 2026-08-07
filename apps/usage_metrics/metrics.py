@@ -1,8 +1,9 @@
 """Activity metrics over sessions, messages, and participants (#3905).
 
 Every function here is the canonical definition per ADR-0051: half-open
-`[start, end)` windows, evaluation-harness activity excluded, conversation
-turns are human/AI messages (`system` excluded). `sessions_active` and
+`[start, end)` windows, evaluation-harness and `SETUP`-session activity
+excluded, conversation turns are human/AI messages (`system` excluded).
+`sessions_active` and
 `sessions_started` legitimately differ from each other - they answer
 different questions, not the same one two ways. `sessions_active` is a
 session with a conversation turn in the window (SETUP excluded);
@@ -22,8 +23,11 @@ truthiness semantics), so identical empty-list filters yield opposite
 results on the two functions - see its docstring. `tag_ids` narrows to
 conversations whose chat or any message carries the tag, and an empty list
 always means "no filter" on every function in this module, `sessions_active`
-included. `include_archived` is not consulted here - activity metrics count
-archived-experiment activity on both surfaces today.
+included. `include_archived` is not consulted by any function here: it governs
+experiment *enumeration*, which only `filtered_querysets` returns, and activity
+metrics count archived-chatbot activity either way (ADR-0051). `sessions_active`
+delegates to `filtered_querysets` but reads only its `sessions` queryset, so it
+does not forward the field.
 """
 
 from datetime import datetime
@@ -78,16 +82,25 @@ def conversation_message_total(message_queryset: QuerySet[ChatMessage]) -> int:
 
 
 def messages_queryset(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> QuerySet[ChatMessage]:
-    """Team-scoped ``ChatMessage`` in ``[start, end)``, evaluation-harness
-    activity excluded (ADR-0051). ``ChatMessage`` has no direct team FK, so
-    scope via ``chat__team``; participant/chatbot filters hit the session's
-    FK-id columns so no join to the experiment/participant tables. Backed by
-    the ``(chat, message_type, created_at)`` index. Every message type is still
-    in this universe - the human/AI narrowing belongs to the metrics that count
+    """Team-scoped ``ChatMessage`` in ``[start, end)``, with evaluation-harness
+    activity and ``SETUP``-session activity excluded (ADR-0051). ``SETUP`` is
+    excluded on the same universe as ``sessions_active`` drops the session, so
+    a ratio built from a count here over a session count stays on one universe.
+    ``ChatMessage`` has no direct team FK, so scope via ``chat__team``;
+    participant/chatbot filters hit the session's FK-id columns so no join to
+    the experiment/participant tables. Backed by the
+    ``(chat, message_type, created_at)`` index. Every message *type* is still in
+    this universe - the human/AI narrowing belongs to the metrics that count
     conversation turns, not to the scoping.
+
+    Both exclusions cross the nullable session relation, so a message whose
+    chat has no session stays in the universe. That is the dashboard's
+    long-standing behaviour and is deliberate.
     """
-    queryset = ChatMessage.objects.filter(chat__team=team, created_at__gte=start, created_at__lt=end).exclude(
-        chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
+    queryset = (
+        ChatMessage.objects.filter(chat__team=team, created_at__gte=start, created_at__lt=end)
+        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        .exclude(chat__experiment_session__status=SessionStatus.SETUP)
     )
     if filters.participant_ids is not None:
         queryset = queryset.filter(chat__experiment_session__participant_id__in=filters.participant_ids)
@@ -208,12 +221,10 @@ def sessions_active(team: Team, *, start: datetime, end: datetime, filters: Usag
 def sessions_active_queryset(
     team: Team, *, start: datetime, end: datetime, filters: UsageFilters
 ) -> QuerySet[ChatMessage]:
-    """The conversation-turn message rows behind ``sessions_active``, excluding
-    turns belonging to sessions still in ``SETUP`` so the rows agree with the
-    scalar count."""
-    return conversation_messages(messages_queryset(team, start=start, end=end, filters=filters)).exclude(
-        chat__experiment_session__status=SessionStatus.SETUP
-    )
+    """The conversation-turn message rows behind ``sessions_active``.
+    ``messages_queryset`` already drops ``SETUP``-session turns, so these rows
+    agree with the scalar count without a second exclusion here."""
+    return conversation_messages(messages_queryset(team, start=start, end=end, filters=filters))
 
 
 def sessions_active_timeseries(

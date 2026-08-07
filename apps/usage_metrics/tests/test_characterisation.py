@@ -108,6 +108,34 @@ class TestSetupSessionsCountOnNeitherSurface:
         assert metrics.sessions_in_setup(self._team(), start=_START, end=_END, filters=UsageFilters()) == 1
 
 
+class TestSetupSessionActivityCountsNowhere:
+    """A session still in `SETUP` was never engaged, so nothing inside it
+    counts on any metric (ADR-0051) - not its turns, not its author. Counting
+    its messages while `sessions_active` drops the session would put a ratio's
+    numerator and denominator on different universes, which is exactly what
+    the ADR's ratios rule forbids."""
+
+    def _team(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        in_setup = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+        _message(in_setup, message_type=ChatMessageType.HUMAN)
+        _message(in_setup, message_type=ChatMessageType.AI)
+        return team
+
+    def test_dashboard_messages_exclude_setup_session_turns(self):
+        assert _overview(self._team())["total_messages"] == 0
+
+    def test_dashboard_participants_exclude_setup_session_authors(self):
+        assert _overview(self._team())["active_participants"] == 0
+
+    def test_api_messages_exclude_setup_session_turns(self):
+        assert _api_results(self._team(), ["messages"])["messages"] == {"human": 0, "ai": 0, "total": 0}
+
+    def test_api_participants_exclude_setup_session_authors(self):
+        assert _api_results(self._team(), ["participants"])["participants"] == 0
+
+
 class TestSessionsActiveNeedsAConversationTurn:
     """A session whose only in-window activity is a `system` message was not
     active (ADR-0051)."""
