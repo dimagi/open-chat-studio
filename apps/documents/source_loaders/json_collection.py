@@ -9,6 +9,7 @@ from django.conf import settings
 from apps.documents.datamodels import JSONCollectionSourceConfig
 from apps.documents.models import Collection, DocumentSource
 from apps.documents.source_loaders.base import BaseDocumentLoader, SourceDocument
+from apps.documents.source_loaders.http import read_capped
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 logger = logging.getLogger(__name__)
@@ -171,14 +172,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             headers=self._get_auth_headers(),
         ) as response:
             response.raise_for_status()
-            chunks: list[bytes] = []
-            total = 0
-            for chunk in response.iter_bytes():
-                total += len(chunk)
-                if total > MAX_RESPONSE_BYTES:
-                    raise ValueError(f"Response from {url} exceeds {MAX_RESPONSE_BYTES} byte cap")
-                chunks.append(chunk)
-            return b"".join(chunks)
+            return read_capped(response, MAX_RESPONSE_BYTES, url)
 
     def get_document_identifier(self, document: SourceDocument) -> str:
         link = document.metadata.get("link")
