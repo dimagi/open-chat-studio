@@ -4,7 +4,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 from django.core.management import call_command
+from django.db import connection
 from django.test import Client
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.pipelines.models import Node, Pipeline
@@ -223,6 +225,21 @@ class TestFlowNodeReadsResourceFKs:
 
         assert node.to_flow_node().data.params["collection_index_ids"] == [index.id]
 
+    def test_scalar_ids_are_served_even_when_params_omit_them(self):
+        """Same for the scalar columns: they are the reference, so they are served whether or not
+        params carries a copy. An unset resource reads as null rather than being left out."""
+        provider = LlmProviderFactory.create()
+        node = NodeFactory.create(
+            type="LLMResponseWithPrompt",
+            params={"name": "llm"},
+            llm_provider=provider,
+        )
+
+        params = node.to_flow_node().data.params
+
+        assert params["llm_provider_id"] == provider.id
+        assert params["assistant_id"] is None
+
     def test_deleted_collection_index_reads_as_empty(self):
         """Deleting a Collection cascades the M2M through row away while the id lingers in params.
         The params copy must not be served — the same correction the scalar FKs get."""
@@ -238,12 +255,16 @@ class TestFlowNodeReadsResourceFKs:
 
         assert node.to_flow_node().data.params["collection_index_ids"] == []
 
-    def test_params_the_node_does_not_carry_are_not_added(self):
-        """A node type that references no resource must not grow a null param for one, and an
-        empty collection_indexes M2M adds no empty list."""
+    def test_every_resource_id_is_served_from_the_columns(self):
+        """The columns, not params, decide what the flow node reports — so all of them are served,
+        including the ones a node type never references."""
         node = NodeFactory.create(type="StartNode", params={"name": "start"})
 
-        assert node.to_flow_node().data.params == {"name": "start"}
+        assert node.to_flow_node().data.params == {
+            "name": "start",
+            **{f"{field_name}_id": None for field_name in Node.resource_fk_fields()},
+            "collection_index_ids": [],
+        }
 
     def test_stored_params_are_left_alone(self):
         provider = LlmProviderFactory.create()
@@ -305,12 +326,14 @@ class TestFlowDataReadsResourceFKs:
         ],
     )
     def test_collection_indexes_are_prefetched(self, llm_node_count, django_assert_num_queries):
-        """One query for the rows and one for their collection_indexes, however many nodes there
-        are — reading the M2M per node would be an N+1 on every editor load."""
+        """Fetched the way the read call sites fetch it: the pipeline row, its nodes and their
+        collection_indexes, however many nodes there are. Reading the M2M per node instead would
+        be an N+1 on every editor load."""
         index = CollectionFactory.create(is_index=True)
-        pipeline = self._pipeline_with_llm_nodes(llm_node_count, {"collection_index_ids": [index.id]})
+        pipeline_id = self._pipeline_with_llm_nodes(llm_node_count, {"collection_index_ids": [index.id]}).pk
 
-        with django_assert_num_queries(2):
+        with django_assert_num_queries(3):
+            pipeline = Pipeline.objects.prefetch_related("node_set__collection_indexes").get(pk=pipeline_id)
             # start, end and the LLM nodes
             assert len(pipeline.flow_data["nodes"]) == llm_node_count + 2
 
@@ -318,6 +341,16 @@ class TestFlowDataReadsResourceFKs:
         index = CollectionFactory.create(is_index=True)
         pipeline = self._pipeline_with_llm_nodes(3, {"collection_index_ids": [index.id]})
         pipeline = Pipeline.objects.prefetch_related("node_set__collection_indexes").get(pk=pipeline.pk)
+
+        with django_assert_num_queries(0):
+            assert len(pipeline.flow_data["nodes"]) == 5
+
+    def test_clear_node_caches_re_primes_the_prefetch(self, django_assert_num_queries):
+        """The save paths write rows straight to the DB and then rebuild flow_data for the
+        response, so the reload has to bring the M2M back with it."""
+        index = CollectionFactory.create(is_index=True)
+        # _pipeline_with_llm_nodes ends in clear_node_caches(), same as the save paths do.
+        pipeline = self._pipeline_with_llm_nodes(3, {"collection_index_ids": [index.id]})
 
         with django_assert_num_queries(0):
             assert len(pipeline.flow_data["nodes"]) == 5
@@ -381,6 +414,34 @@ class TestEditorEndpointServesResourceFKs:
         assert served["data"]["params"]["llm_provider_id"] is None
         # The row still carries the stale id; only the read is corrected.
         assert pipeline.node_set.get(flow_id="llm-1").params["llm_provider_id"] == str(provider_id)
+
+    @pytest.mark.parametrize(
+        "llm_node_count",
+        [
+            pytest.param(1, id="one_node"),
+            pytest.param(6, id="six_nodes"),
+        ],
+    )
+    def test_editor_load_reads_the_indexes_once(self, authed_client, team_with_users, llm_node_count):
+        """The prefetch lives at the endpoint, so serving the graph hits the collection_indexes
+        through table once however many nodes there are — not once per node."""
+        index = CollectionFactory.create(team=team_with_users, is_index=True)
+        pipeline = PipelineFactory.create(team=team_with_users)
+        for position in range(llm_node_count):
+            NodeFactory.create(
+                pipeline=pipeline,
+                type="LLMResponseWithPrompt",
+                flow_id=f"llm-{position}",
+                params={"name": f"llm-{position}", "collection_index_ids": [index.id]},
+            ).update_from_params()
+
+        with CaptureQueriesContext(connection) as captured:
+            response = authed_client.get(self._url(team_with_users.slug, pipeline.id))
+        assert response.status_code == 200
+
+        through_table = Node.collection_indexes.through._meta.db_table
+        index_reads = [query for query in captured.captured_queries if through_table in query["sql"]]
+        assert len(index_reads) == 1, f"{len(index_reads)} reads of {through_table} for {llm_node_count} nodes"
 
 
 @pytest.mark.django_db()

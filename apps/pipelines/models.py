@@ -194,16 +194,20 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             created_node.update_from_params()
 
     def clear_node_caches(self) -> None:
-        """Forget the cached ``Node`` rows and the ``flow_data`` rebuilt from them.
+        """Re-read the ``Node`` rows and drop the ``flow_data`` built from the stale ones.
 
         ``update_nodes_from_data`` writes rows straight to the database, behind the back of a
         prefetched ``node_set`` and of ``flow_data``'s cache. A caller that reads either after
         reconciling must call this first or it sees the pre-reconcile graph.
+
+        The rows are re-prefetched with their ``collection_indexes`` rather than just dropped,
+        since every caller here reads ``flow_data`` next and that reads the M2M per node.
         """
         # No fields: clears the whole prefetch cache, node_set included.
         self.refresh_from_db()
         with contextlib.suppress(AttributeError):  # nothing cached if flow_data was never read
             del self.flow_data
+        models.prefetch_related_objects([self], "node_set__collection_indexes")
 
     def validate(self, full=True) -> ErrorReport:
         """Every problem with this pipeline. All three buckets empty means it is valid.
@@ -296,12 +300,9 @@ class Pipeline(BaseTeamModel, VersionsMixin):
         # rows still describe a graph. Same trigger as ``data_without_positions``' guard but a
         # different fallback: that one returns the empty data as-is rather than rebuilding.
         flow = Flow(**(self.data or {"edges": []}))
-        nodes = list(self.node_set.all())
-        # Each node reads its collection_indexes M2M (Node.resource_params); prefetch them in one
-        # query. prefetch_related_objects works off the list, so a prefetched node_set is still
-        # reused, and it no-ops when the M2M was prefetched along with it.
-        models.prefetch_related_objects(nodes, "collection_indexes")
-        flow.nodes = [node.to_flow_node() for node in nodes]
+        # Each node reads its collection_indexes M2M (Node.resource_params), so callers fetch the
+        # pipeline with ``node_set__collection_indexes`` prefetched or this is an N+1.
+        flow.nodes = [node.to_flow_node() for node in self.node_set.all()]
         return flow.model_dump()
 
     @property
@@ -599,33 +600,18 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
         ]
 
     def resource_params(self) -> dict:
-        """The ids of the resources this node references, read off its FK columns.
+        """The ids of the resources this node references, read off its FK columns and M2M.
 
-        ``params`` duplicates these ids — it is what the editor posts and what the node classes
-        validate — but the FK columns are the constraint-backed mirror of them (see
-        ``_sync_resource_fk_fields``): when a referenced resource is deleted the column is nulled
-        while the stale id lingers in params. Reading them back from the columns is what
-        ``to_flow_node`` serves, so a dangling reference reads as unset rather than as an id that
-        no longer resolves, and the ids come out as ints — the form the columns store them in.
-
-        Scalar ids are only returned for params the row already carries: a node type that
-        references no resource must not grow a null param for one. ``collection_index_ids`` is
-        returned whenever the M2M holds anything — the M2M is the reference, so what it holds is
-        served whether or not the params copy was ever written — and also whenever params carries
-        the key, so that a params copy left behind by a deleted index is corrected to ``[]``
-        rather than served as-is. A node with neither grows no empty list.
+        Params carries copies of these ids, but the columns are the constraint-backed mirror of
+        them (see ``_sync_resource_fk_fields``): deleting a resource nulls the column while the
+        stale id lingers in params. ``to_flow_node`` serves what this returns, so a dangling
+        reference reads as unset rather than as an id that no longer resolves.
         """
-        params = self.params or {}
         resource_params = {
-            f"{field_name}_id": getattr(self, f"{field_name}_id")
-            for field_name in self.resource_fk_fields()
-            if f"{field_name}_id" in params
+            f"{field_name}_id": getattr(self, f"{field_name}_id") for field_name in self.resource_fk_fields()
         }
-        # ``all()`` rather than values_list so a prefetched M2M is reused; sorted because the
-        # through rows have no ordering of their own and the read must be stable.
-        collection_index_ids = sorted(collection.id for collection in self.collection_indexes.all())
-        if collection_index_ids or "collection_index_ids" in params:
-            resource_params["collection_index_ids"] = collection_index_ids
+        # sorted because the through rows have no ordering of their own and the read must be stable.
+        resource_params["collection_index_ids"] = sorted(index.id for index in self.collection_indexes.all())
         return resource_params
 
     def _sync_resource_fk_fields(self):

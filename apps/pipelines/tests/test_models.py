@@ -836,7 +836,9 @@ class TestPipelineRevert:
         assert "nodes" not in pipeline.data
         working_template = pipeline.node_set.get(type="RenderTemplate")
         version_template = version.node_set.get(type="RenderTemplate")
-        assert working_template.params == version_template.params
+        # What the version's row holds, plus the resource ids read off its columns (all unset
+        # here) — not the stale blob embedded in the version's ``data``.
+        assert working_template.params == {**version_template.params, **version_template.resource_params()}
 
 
 @pytest.mark.django_db()
