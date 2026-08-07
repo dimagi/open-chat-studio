@@ -451,16 +451,19 @@ def _drive_run(run_id: int) -> None:
             result = _coordinate_locked_run(run)
 
     with current_team(run.team):
-        for batch in result.batches:
-            evaluate_message_batch.delay(run.id, batch)
+        # Ahead of the dispatches so the run's task exists to nest them under on the
+        # first tick, which is the tick that dispatches the first batches.
         _ensure_taskbadger_task(run, result.total)
+        tb_parent = _taskbadger_parent_kwargs(run)
+        for batch in result.batches:
+            evaluate_message_batch.apply_async(args=[run.id, batch], **tb_parent)
         _publish_tick(run, result)
         # Dispatched last on purpose. The run is terminal by now, so no later tick repeats
         # this block — a broker error here would otherwise cost the run its completion
         # signal (stopping the UI poll) as well as its aggregates. `done == 0` means there
         # is nothing to aggregate and no applied tags to reverse against.
         if result.terminal == "success" and result.done > 0:
-            finalize_evaluation_run.delay(run.id)
+            finalize_evaluation_run.apply_async(args=[run.id], **tb_parent)
 
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)
@@ -576,6 +579,26 @@ def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
     if task is not None:
         run.taskbadger_task_id = task.id
         run.save(update_fields=["taskbadger_task_id"])
+
+
+def _taskbadger_parent_kwargs(run: EvaluationRun) -> dict:
+    """`apply_async` kwargs that nest a dispatched task under the run's Taskbadger task.
+
+    The header form rather than the `taskbadger_parent=` one: that spelling requires
+    `base=taskbadger.celery.Task`, and these tasks use the plain base class, so Celery would
+    swallow it as an unknown option. Both are documented — see "Subtasks" and "Customization
+    without the task base class" at https://docs.taskbadger.net/python-celery/.
+
+    The run's own task is created by `taskbadger.create_task_safe`, which does not auto-nest,
+    so it is a root task — a requirement for it to be a parent, as tasks nest a single level.
+
+    Empty when the run has no task. Omitting the key leaves the integration's automatic
+    nesting in place (under `drive_evaluation_run`, the tracked task this runs inside);
+    an explicit `parent: None` would instead publish the child as a root task.
+    """
+    if not run.taskbadger_task_id:
+        return {}
+    return {"headers": {"taskbadger_kwargs": {"parent": run.taskbadger_task_id}}}
 
 
 def _update_taskbadger(run: EvaluationRun, *, value: int, value_max: int, status: StatusEnum | None = None) -> None:
