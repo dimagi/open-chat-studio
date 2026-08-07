@@ -15,7 +15,12 @@ from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
 from apps.experiments.models import SessionStatus
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
-from apps.usage_metrics.metrics import CONVERSATION_MESSAGE_TYPES, conversation_message_total, conversation_messages
+from apps.usage_metrics.metrics import (
+    CONVERSATION_MESSAGE_TYPES,
+    conversation_message_total,
+    conversation_messages,
+    distinct_active_participants,
+)
 
 from ..trace.models import Trace
 from .models import DashboardCache
@@ -120,7 +125,11 @@ class DashboardService:
             .values("period")
             .annotate(
                 total_sessions=Count("chat__experiment_session", distinct=True),
-                unique_participants=Count("chat__experiment_session__participant", distinct=True),
+                unique_participants=Count(
+                    "chat__experiment_session__participant",
+                    distinct=True,
+                    filter=Q(message_type=ChatMessageType.HUMAN),
+                ),
             )
             .order_by("period")
         )
@@ -568,7 +577,7 @@ class DashboardService:
             .filter(sessions__in=querysets["sessions"])
             .distinct()
             .count(),
-            "active_participants": querysets["sessions"].values("participant").distinct().count(),
+            "active_participants": distinct_active_participants(querysets["messages"]),
             "completed_sessions": querysets["sessions"].filter(ended_at__isnull=False).count(),
         }
 

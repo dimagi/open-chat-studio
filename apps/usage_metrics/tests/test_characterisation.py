@@ -216,14 +216,11 @@ class TestWindowBoundaryIsHalfOpen:
         assert _api_results(team, ["messages"])["messages"]["total"] == 1
 
 
-class TestActiveParticipantsFourImplementations:
-    """The four current implementations define "active participant" (design
-    section 2, row 4): the dashboard chart counts HUMAN-message authors only;
-    the dashboard session-analytics series, the overview stat, and the API now
-    agree on HUMAN+AI conversation-turn authors, SETUP sessions excluded
-    (ADR-0051). One participant per activity shape (human, AI-only,
-    system-only) pins all four: the chart isolates the HUMAN author, and the
-    other three exclude the system-only participant."""
+class TestActiveParticipantsIsOneDefinition:
+    """What was four implementations is one (ADR-0051): a participant is active
+    when they authored a HUMAN message in the window. Receiving AI output is
+    not activity, and neither is a `system` message. One participant per
+    activity shape pins every surface to the same answer."""
 
     def _team(self):
         team = TeamFactory.create()
@@ -236,23 +233,23 @@ class TestActiveParticipantsFourImplementations:
         _message(system_only, message_type=ChatMessageType.SYSTEM)
         return team
 
-    def test_dashboard_chart_counts_human_authors_only(self):
+    def test_dashboard_chart_counts_human_authors(self):
         data = DashboardService(self._team()).get_active_participants_data(
             granularity="daily", start_date=_START, end_date=_END
         )
         assert sum(point["active_participants"] for point in data) == 1
 
-    def test_dashboard_session_analytics_counts_conversation_turn_authors(self):
+    def test_dashboard_session_analytics_counts_human_authors(self):
         data = DashboardService(self._team()).get_session_analytics_data(
             granularity="daily", start_date=_START, end_date=_END
         )
-        assert sum(point["active_participants"] for point in data["participants"]) == 2
+        assert sum(point["active_participants"] for point in data["participants"]) == 1
 
-    def test_dashboard_overview_counts_participants_of_active_sessions(self):
-        assert _overview(self._team())["active_participants"] == 2
+    def test_dashboard_overview_counts_human_authors(self):
+        assert _overview(self._team())["active_participants"] == 1
 
-    def test_api_counts_human_and_ai_authors(self):
-        assert _api_results(self._team(), ["participants"])["participants"] == 2
+    def test_api_counts_human_authors(self):
+        assert _api_results(self._team(), ["participants"])["participants"] == 1
 
 
 class TestArchivedExperimentActivity:

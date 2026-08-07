@@ -285,11 +285,13 @@ class TestSessionCounts:
 @pytest.mark.django_db()
 @pytest.mark.usefixtures("frozen_time")
 class TestActiveParticipants:
-    def test_counts_distinct_human_or_ai_authors(self):
+    def test_counts_distinct_human_authors_only(self):
         team = TeamFactory.create()
         human = ExperimentSessionFactory.create(team=team)
         _message(human, message_type=ChatMessageType.HUMAN)
         _message(human, message_type=ChatMessageType.AI)
+        ai_only = ExperimentSessionFactory.create(team=team)
+        _message(ai_only, message_type=ChatMessageType.AI)
         system_only = ExperimentSessionFactory.create(team=team)
         _message(system_only, message_type=ChatMessageType.SYSTEM)
 

@@ -106,9 +106,18 @@ def messages_queryset(team: Team, *, start: datetime, end: datetime, filters: Us
 def active_participants_queryset(
     team: Team, *, start: datetime, end: datetime, filters: UsageFilters
 ) -> QuerySet[ChatMessage]:
-    """The message rows behind the active-participants count: human/AI only,
-    the same categories the ``messages`` metric surfaces."""
-    return conversation_messages(messages_queryset(team, start=start, end=end, filters=filters))
+    """The message rows behind the active-participants count: HUMAN messages
+    only. Receiving AI output is not activity (ADR-0051)."""
+    return messages_queryset(team, start=start, end=end, filters=filters).filter(message_type=ChatMessageType.HUMAN)
+
+
+def distinct_active_participants(message_queryset: QuerySet[ChatMessage]) -> int:
+    """Distinct participants who authored a HUMAN message in an already-scoped
+    message queryset. The one definition of the count, callable from either
+    surface's starting queryset."""
+    return message_queryset.filter(message_type=ChatMessageType.HUMAN).aggregate(
+        n=Count("chat__experiment_session__participant", distinct=True)
+    )["n"]
 
 
 def sessions_started_queryset(
@@ -169,10 +178,8 @@ def sessions_in_setup(team: Team, *, start: datetime, end: datetime, filters: Us
 
 
 def active_participants(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> int:
-    """Distinct participants with at least one human/AI message in the window."""
-    return active_participants_queryset(team, start=start, end=end, filters=filters).aggregate(
-        n=Count("chat__experiment_session__participant", distinct=True)
-    )["n"]
+    """Distinct participants with at least one HUMAN message in the window."""
+    return distinct_active_participants(messages_queryset(team, start=start, end=end, filters=filters))
 
 
 def sessions_active(team: Team, *, start: datetime, end: datetime, filters: UsageFilters) -> int:
@@ -256,7 +263,7 @@ def sessions_in_setup_timeseries(
 def active_participants_timeseries(
     team: Team, *, start: datetime, end: datetime, granularity: str, tz: ZoneInfo, filters: UsageFilters
 ) -> dict:
-    """``{local bucket date: int}`` of distinct human/AI-message authors per bucket."""
+    """``{local bucket date: int}`` of distinct HUMAN-message authors per bucket."""
     return {
         bucket: row["n"]
         for bucket, row in _by_bucket(
