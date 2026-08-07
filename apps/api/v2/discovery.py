@@ -16,9 +16,11 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.experiments.models import SyntheticVoice
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
-from apps.pipelines.node_options import get_node_schemas
+from apps.pipelines.node_options import get_node_default_values, get_node_parameter_values, get_node_schemas
+from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 
 
 class NodeTypeSerializer(serializers.Serializer):
@@ -103,3 +105,55 @@ class PipelineNodesView(DiscoveryView):
             if not node_types:
                 raise NotFound(f"Unknown node type: {requested_type}")
         return Response(self.get_serializer(node_types, many=True).data)
+
+
+def _clean_options(value):
+    """Strip builder-only affordances from an options payload.
+
+    Two things the editor needs and an agent must not see: placeholder entries with an empty
+    ``value`` (a prompt like "Select a topic", not a referenceable id) and ``edit_url`` (a link into
+    the Django UI). The walk recurses because ``built_in_tools`` is a dict of lists keyed by provider
+    type, not a flat list.
+    """
+    if isinstance(value, dict):
+        return {key: _clean_options(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [
+            {key: item for key, item in option.items() if key != "edit_url"} if isinstance(option, dict) else option
+            for option in value
+            if not (isinstance(option, dict) and option.get("value") == "")
+        ]
+    return value
+
+
+class PipelineOptionsView(DiscoveryView):
+    @extend_schema(
+        operation_id="pipeline_options",
+        summary="List Pipeline Node Options",
+        description=(
+            "The values each node param accepts, scoped to the API key's team: resource ids to "
+            "reference, tool names, and the provider defaults a new node is created with. Keys "
+            "match the node schemas' option sources."
+        ),
+        tags=["Pipelines"],
+        responses={200: OpenApiTypes.OBJECT},
+    )
+    def get(self, request):
+        team = request.team
+        llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
+        llm_provider_models = LlmProviderModel.objects.for_team(team)
+
+        options = _clean_options(
+            get_node_parameter_values(
+                team=team,
+                llm_providers=llm_providers,
+                llm_provider_models=llm_provider_models,
+                synthetic_voices=SyntheticVoice.get_for_team(team, []),
+            )
+        )
+        options["VoiceProviderId"] = [
+            {"value": provider.id, "label": provider.name, "type": provider.type}
+            for provider in VoiceProvider.objects.filter(team=team)
+        ]
+        options["default_values"] = get_node_default_values(llm_providers, llm_provider_models)
+        return Response(options)

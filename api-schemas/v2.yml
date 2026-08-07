@@ -145,6 +145,28 @@ paths:
                 items:
                   $ref: '#/components/schemas/NodeType'
           description: ''
+  /api/v2/pipeline/options/:
+    get:
+      operationId: pipeline_options
+      description: 'The values each node param accepts, scoped to the API key''s team:
+        resource ids to reference, tool names, and the provider defaults a new node
+        is created with. Keys match the node schemas'' option sources.'
+      summary: List Pipeline Node Options
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /api/v2/trigger_bot/:
     post:
       operationId: trigger_bot_message

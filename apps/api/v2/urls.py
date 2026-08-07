@@ -3,7 +3,7 @@ from rest_framework import routers
 
 from apps.api.v2 import views
 from apps.api.v2.channels import TriggerBotMessageView
-from apps.api.v2.discovery import PipelineNodesView
+from apps.api.v2.discovery import PipelineNodesView, PipelineOptionsView
 from apps.api.v2.usage.views import UsageView
 
 app_name = "v2"
@@ -18,5 +18,6 @@ urlpatterns = [
     path("usage/", UsageView.as_view(), name="usage"),
     path("trigger_bot/", TriggerBotMessageView.as_view(), name="trigger_bot"),
     path("pipeline/nodes/", PipelineNodesView.as_view(), name="pipeline-nodes"),
+    path("pipeline/options/", PipelineOptionsView.as_view(), name="pipeline-options"),
     path("", include(router.urls)),
 ]
