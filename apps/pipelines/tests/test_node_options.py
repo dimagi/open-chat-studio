@@ -8,7 +8,7 @@ from apps.pipelines.node_options import (
 )
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.factories.pipelines import PipelineFactory
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -40,17 +40,18 @@ def test_get_node_parameter_values_is_team_scoped():
 def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
     team = TeamWithUsersFactory.create()
     provider = LlmProviderFactory.create(team=team, type="openai")
+    # Own the model row rather than leaning on the global seed rows (team=None) that migration
+    # 0021 installs: any `django_db(transaction=True)` test flushes those away for the rest of
+    # the process, so relying on them makes this test's outcome depend on execution order.
+    model = LlmProviderModelFactory.create(team=team, type="openai")
 
     defaults = get_node_default_values(
         list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
-        LlmProviderModel.objects.for_team(team),
+        LlmProviderModel.objects.filter(team=team),
     )
 
     assert defaults["llm_provider_id"] == provider.id
-    # The model may be one of the global seed rows (team=None) that migration
-    # 0020 installs -- `for_team` includes those and they win the implicit pk
-    # ordering. What the function guarantees is only that the type matches.
-    assert LlmProviderModel.objects.get(id=defaults["llm_provider_model_id"]).type == "openai"
+    assert defaults["llm_provider_model_id"] == model.id
 
 
 @pytest.mark.django_db()
