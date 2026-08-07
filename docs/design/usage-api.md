@@ -107,6 +107,8 @@ plus a **max window** relative to granularity (e.g. reject `daily` over a multi-
 
 ### Metrics → sources
 
+> The metric *definitions* below are superseded by [ADR-0051](../adr/0051-usage-activity-metric-definitions.md); this table describes the sources they read, not their semantics.
+
 | Metric | Source | Shape |
 |---|---|---|
 | `messages` | `ChatMessage` grouped by `message_type`, scoped `chat__team`, participant via `chat__experiment_session__participant` | `{human, ai, total}` |
