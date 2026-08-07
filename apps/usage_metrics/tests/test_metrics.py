@@ -267,6 +267,17 @@ class TestSessionCounts:
 
         assert (started, in_setup) == (2, 1)
 
+    def test_sessions_active_empty_id_list_means_matched_nobody_like_its_siblings(self):
+        """`sessions_active` delegates to `filtered_querysets`, whose truthiness
+        check would silently treat `[]` as "no filter" and return the team-wide
+        count. The module has one empty-list semantic: `[]` matched nobody."""
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+        _message(session)
+
+        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters(experiment_ids=[])) == 0
+        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters(participant_ids=[])) == 0
+
     def test_sessions_active_needs_a_conversation_turn_in_the_half_open_window(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)

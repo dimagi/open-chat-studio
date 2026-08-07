@@ -43,10 +43,16 @@ def _cost_cache_key(prefix: str, filter_form: DashboardFilterForm) -> str:
 
 def _cached(team, cache_key: str, compute, decode):
     """Serve `compute()` through DashboardCache, encoding via the JSON encoder
-    the cache field expects and rebuilding the dataclass on the way out."""
+    the cache field expects and rebuilding the dataclass on the way out. A
+    payload that no longer decodes - an entry written by an older code shape,
+    still inside its TTL after a deploy - falls through to a recompute that
+    overwrites it, rather than surfacing the decode error on every load."""
     cached_data = DashboardCache.get_cached_data(team, cache_key)
     if cached_data is not None:
-        return decode(cached_data)
+        try:
+            return decode(cached_data)
+        except (KeyError, TypeError, ValueError):
+            pass
     value = compute()
     DashboardCache.set_cached_data(team, cache_key, json.loads(json.dumps(asdict(value), cls=DjangoJSONEncoder)))
     return value
@@ -264,6 +270,11 @@ class CostTrackingApiView(DashboardApiView):
         filter_form = DashboardFilterForm(data=request.GET, team=request.team)
         start, end, filters = _cost_panel_scope(filter_form)
         granularity = request.GET.get("granularity", "daily")
+        if granularity not in ("daily", "weekly", "monthly"):
+            # The value arrives raw from the query string and is folded into the
+            # cache key below; reporting falls back to daily for unknown values,
+            # so normalise first rather than minting a cache row per string.
+            granularity = "daily"
         cache_key = f"{_cost_cache_key('cost_timeseries', filter_form)}_{granularity}"
         data = DashboardCache.get_cached_data(request.team, cache_key)
         if data is None:

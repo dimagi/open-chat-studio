@@ -13,14 +13,12 @@ complement: sessions created in the window still in SETUP, so
 `sessions_started + sessions_in_setup` is every non-evaluation session
 created in the window.
 
-Filter semantics (see `UsageFilters`): for the API-derived reads - `messages`,
-`sessions_started`, `sessions_in_setup`, `active_participants`, and their
-timeseries - `experiment_ids`/`participant_ids` distinguish `None` (no
-filter) from `[]` (matched nobody -> empty result). `sessions_active` does
-NOT follow this rule: it delegates to `filtered_querysets`, which treats an
-empty `experiment_ids`/`participant_ids` list as "no filter" (dashboard
-truthiness semantics), so identical empty-list filters yield opposite
-results on the two functions - see its docstring. `tag_ids` narrows to
+Filter semantics (see `UsageFilters`): `experiment_ids`/`participant_ids`
+distinguish `None` (no filter) from `[]` (matched nobody -> empty result) on
+every function in this module. `sessions_active` delegates to
+`filtered_querysets`, which treats an empty list as "no filter" (dashboard
+truthiness semantics), so it answers the empty-list case itself before
+delegating - see its docstring. `tag_ids` narrows to
 conversations whose chat or any message carries the tag, and an empty list
 always means "no filter" on every function in this module, `sessions_active`
 included. `include_archived` is not consulted by any function here: it governs
@@ -201,11 +199,12 @@ def sessions_active(team: Team, *, start: datetime, end: datetime, filters: Usag
     ``filtered_querysets`` so the dashboard's charts, which read those
     querysets directly, count the same sessions this returns.
 
-    Empty-list filter semantics differ from the rest of this module: via
-    ``filtered_querysets``, an empty ``experiment_ids`` or ``participant_ids``
-    list means "no filter" here (dashboard truthiness semantics), not
-    "matched nobody" as it does on ``sessions_started`` and the other
-    API-derived reads."""
+    ``filtered_querysets`` treats an empty ``experiment_ids``/``participant_ids``
+    list as "no filter" (dashboard truthiness semantics), so the empty-list
+    case is answered here before delegating: ``[]`` means "requested but
+    matched nobody", the same as every other function in this module."""
+    if filters.experiment_ids == [] or filters.participant_ids == []:
+        return 0
     querysets = filtered_querysets(
         team,
         start_date=start,

@@ -10,6 +10,7 @@ from django.urls import reverse
 from time_machine import travel
 
 from apps.cost_tracking.models import Confidence, UsageSource
+from apps.dashboard.models import DashboardCache
 from apps.teams.models import Flag
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -342,3 +343,36 @@ class TestCostPanelCaching:
 
         assert unfiltered.total_cost == Decimal("1.23")
         assert filtered.total_cost == Decimal("0.00")
+
+    def test_a_stale_cache_shape_recomputes_instead_of_erroring(self, authenticated_client, team):
+        """A deploy can change the cached payload's shape while entries written
+        by the previous code are still inside their TTL. Decoding must fall
+        back to recomputing (and overwriting the entry), never surface the
+        KeyError/TypeError to the page."""
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        url = self._url(team)
+
+        authenticated_client.get(url)
+        DashboardCache.objects.filter(cache_key__startswith="cost_").update(data={"written_by": "older code"})
+        response = authenticated_client.get(url)
+
+        assert response.status_code == 200
+        assert response.context["cost_summary"].total_cost == Decimal("1.23")
+
+    def test_an_unknown_granularity_shares_the_daily_cache_entry(self, authenticated_client, team):
+        """The timeseries cache key folds in the granularity, which arrives
+        raw from the query string. An unrecognised value computes the daily
+        series anyway (reporting falls back to TruncDate), so it must reuse
+        the daily key rather than mint an unbounded row per distinct string."""
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        url = reverse("dashboard:api_cost_timeseries", kwargs={"team_slug": team.slug})
+
+        daily = authenticated_client.get(url, {"granularity": "daily"})
+        bogus = authenticated_client.get(url, {"granularity": "bogus-123"})
+
+        assert daily.status_code == bogus.status_code == 200
+        assert bogus.json() == daily.json()
+        keys = set(DashboardCache.objects.values_list("cache_key", flat=True))
+        assert not any("bogus" in key for key in keys)

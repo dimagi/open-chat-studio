@@ -410,7 +410,7 @@ function dashboard() {
                     },
                     {
                         label: 'Completed Sessions',
-                        tooltip: 'Completed sessions out of active sessions - those with at least one message in the selected date range.',
+                        tooltip: 'Completed sessions out of active sessions - those with a message sent or received in the selected date range.',
                         numerator: data.completed_sessions || 0,
                         denominator: data.total_sessions || 0,
                         icon: 'fas fa-comments',
