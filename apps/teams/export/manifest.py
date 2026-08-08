@@ -132,6 +132,10 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     # slug may already be taken by another team on the target. TagBase.save() regenerates a
     # collision-free slug when it's absent.
     "annotations.tag": ["slug"],
+    # search_vector is a stored generated column derived from context + text. Postgres recomputes it
+    # on insert, so shipping the tsvector would bloat every chunk in the payload for nothing -- and
+    # unlike `embedding` (which costs a provider API call to rebuild) it cannot be written back.
+    "files.filechunkembedding": ["search_vector"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).

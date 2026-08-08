@@ -972,6 +972,19 @@ MAX_FILE_SIZE_MB = 50
 # How long after the last message a chat session token remains usable.
 CHAT_SESSION_TOKEN_INACTIVITY_WINDOW = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
+
+# Hybrid search: lexical retrieval fused with dense retrieval by Reciprocal Rank Fusion.
+# Gated per-team by the `flag_hybrid_search` waffle flag; when inactive, retrieval stays dense-only.
+# `simple` tokenizes without language-specific stemming, which suits the multilingual and
+# code-mixed corpora common in OCS deployments. Changing it requires a migration, since the
+# config is baked into the `search_vector` generated column.
+DOCUMENT_SEARCH_FTS_CONFIG = "simple"
+# Weight given to the dense ranking in fusion; the lexical ranking gets (1 - weight).
+DOCUMENT_SEARCH_DENSE_WEIGHT = 0.7
+# Candidates pulled from each branch before fusion. Larger values trade latency for recall.
+DOCUMENT_SEARCH_FETCH_K = 40
+# RRF smoothing constant. 60 is the value from the original RRF paper and the common default.
+DOCUMENT_SEARCH_RRF_K = 60
 SUPPORTED_FILE_TYPES = {
     "file_search": (
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"

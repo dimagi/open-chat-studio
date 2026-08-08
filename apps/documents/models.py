@@ -2,6 +2,8 @@ import logging
 from collections.abc import Iterator
 from datetime import timedelta
 
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models.expressions import Combinable
 from django.urls import reverse
@@ -196,6 +198,26 @@ class Collection(BaseTeamModel, VersionsMixin):
         related_name="+",
         help_text="The LLM provider used with contextualizer_llm_model to generate context headers.",
     )
+    # Hybrid search tuning. Null means "use the DOCUMENT_SEARCH_* setting default"; these are
+    # deliberately kept off the pipeline node UI for now to avoid overwhelming bot builders.
+    search_dense_weight = models.FloatField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text=(
+            "Weight of dense (semantic) results when fusing with lexical results, between 0 and 1. "
+            "The lexical ranking receives the remaining weight. Leave blank to use the system default."
+        ),
+    )
+    search_fetch_k = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1)],
+        help_text=(
+            "How many candidates to retrieve from each of the dense and lexical searches before "
+            "fusing them. Leave blank to use the system default."
+        ),
+    )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
     objects = CollectionObjectManager()
@@ -205,7 +227,20 @@ class Collection(BaseTeamModel, VersionsMixin):
             models.UniqueConstraint(
                 fields=["team", "name", "version_number", "working_version_id"],
                 name="unique_collection_version_per_team",
-            )
+            ),
+            # The hybrid search knobs are deliberately absent from every form, so `full_clean()`
+            # never runs and their field validators never fire. The database is therefore the only
+            # place a bad value can actually be stopped. An out-of-range weight would hand the
+            # lexical ranking a negative weight, silently penalising the chunks it matched.
+            models.CheckConstraint(
+                condition=models.Q(search_dense_weight__isnull=True)
+                | models.Q(search_dense_weight__gte=0, search_dense_weight__lte=1),
+                name="collection_search_dense_weight_between_0_and_1",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(search_fetch_k__isnull=True) | models.Q(search_fetch_k__gte=1),
+                name="collection_search_fetch_k_at_least_1",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -435,7 +470,7 @@ class Collection(BaseTeamModel, VersionsMixin):
                 },
             )
             return None
-        if not self._contextual_retrieval_flag_active():
+        if not self._flag_active_for_team(Flags.CONTEXTUAL_RETRIEVAL):
             return None
         try:
             service = self.contextualizer_llm_provider.get_llm_service()
@@ -448,20 +483,43 @@ class Collection(BaseTeamModel, VersionsMixin):
             return None
         return LLMContextualizer(chat_model)
 
-    def _contextual_retrieval_flag_active(self) -> bool:
-        """Whether the contextual retrieval flag is active for this collection's team.
+    def _flag_active_for_team(self, flag_info: Flags) -> bool:
+        """Whether the given feature flag is active for this collection's team.
 
-        Indexing runs in a Celery task with no request, so this mirrors Waffle's
-        Flag.is_active precedence directly: an explicit `everyone` value wins,
-        otherwise fall back to team membership.
+        Indexing and retrieval both run without a request (Celery task / tool call), so this
+        mirrors Waffle's Flag.is_active precedence directly: an explicit `everyone` value
+        wins, otherwise fall back to team membership.
         """
 
-        flag = Flag.objects.filter(name=Flags.CONTEXTUAL_RETRIEVAL.slug).first()
+        flag = Flag.objects.filter(name=flag_info.slug).first()
         if not flag:
             return False
         if flag.everyone is not None:
             return flag.everyone
         return flag.is_active_for_team(self.team)
+
+    @property
+    def hybrid_search_enabled(self) -> bool:
+        """Whether retrieval should fuse lexical results with dense results for this collection.
+
+        Remote indexes are excluded: their chunks live at the provider, so there is no local
+        `search_vector` to search lexically.
+        """
+        if self.is_remote_index:
+            return False
+        return self._flag_active_for_team(Flags.HYBRID_SEARCH)
+
+    @property
+    def search_dense_weight_or_default(self) -> float:
+        if self.search_dense_weight is None:
+            return settings.DOCUMENT_SEARCH_DENSE_WEIGHT
+        return self.search_dense_weight
+
+    @property
+    def search_fetch_k_or_default(self) -> int:
+        if self.search_fetch_k is None:
+            return settings.DOCUMENT_SEARCH_FETCH_K
+        return self.search_fetch_k
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
