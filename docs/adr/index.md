@@ -6,7 +6,9 @@ hide:
 
 # Architecture Decisions
 
-This section captures architectural decisions made on Open Chat Studio as Architecture Decision Records (ADRs). See [ADR-0000](0000-record-architecture-decisions.md) for the introduction.
+This section captures architectural decisions made on Open Chat Studio as Architecture Decision Records (ADRs). See [ADR-0000](0000-record-architecture-decisions.md) for why this exists.
+
+Writing one? See the [ADR process guide](../developer_guides/adr_process.md) for the status lifecycle and step-by-step instructions.
 
 ## Index
 
