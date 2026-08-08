@@ -72,8 +72,8 @@ def test_empty_evaluation_config():
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_marks_run_complete_when_all_results_present(delay_mock, _publish, team_with_users):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_marks_run_complete_when_all_results_present(dispatch_mock, _publish, team_with_users):
     config = EvaluationConfigFactory.create(team=team_with_users)
     evaluator = EvaluatorFactory.create(team=team_with_users)
     config.evaluators.set([evaluator])
