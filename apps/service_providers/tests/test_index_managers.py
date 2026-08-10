@@ -72,13 +72,12 @@ class TestLocalIndexManager:
             yield manager
 
     def test_add_files_success(self, local_index_instance, index_manager):
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"test content")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-        with mock.patch.object(file, "read_content", return_value="test content"):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            index_manager.add_files(iterator)
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        index_manager.add_files(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
@@ -91,13 +90,12 @@ class TestLocalIndexManager:
 
     def test_add_files_fails(self, local_index_instance, index_manager):
         """If anything goes wrong during local indexing, the file should be marked as failed"""
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"test content")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
         collection_file.status = FileStatus.PENDING
         collection_file.save()
 
-        # Mock file.read_content to raise an exception
         with mock.patch.object(index_manager, "chunk_file", side_effect=Exception("Read failed")):
             iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
             index_manager.add_files(iterator)
@@ -108,7 +106,7 @@ class TestLocalIndexManager:
     def test_add_files_records_the_failure_reason(self, local_index_instance, index_manager):
         """The exception that caused the failure is the only place the reason exists, so it is
         captured there rather than reconstructed later from the status."""
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"test content")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
@@ -124,34 +122,30 @@ class TestLocalIndexManager:
 
     def test_add_files_clears_the_failure_reason_on_success(self, local_index_instance, index_manager):
         """A reason left by an earlier attempt describes an outcome that no longer holds."""
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"test content")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
         collection_file.status = FileStatus.FAILED
         collection_file.failure_reason = "ValueError: stale reason from the previous attempt"
         collection_file.save()
 
-        with mock.patch.object(file, "read_content", return_value="test content"):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            index_manager.add_files(iterator)
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        index_manager.add_files(iterator)
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
         assert collection_file.failure_reason == ""
 
     def test_add_files_calls_get_embedding_vector_with_document_input_type(self, local_index_instance, index_manager):
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"test content")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-        with (
-            mock.patch.object(file, "read_content", return_value="test content"),
-            mock.patch.object(
-                index_manager,
-                "get_embedding_vector",
-                wraps=index_manager.get_embedding_vector,
-            ) as spy,
-        ):
+        with mock.patch.object(
+            index_manager,
+            "get_embedding_vector",
+            wraps=index_manager.get_embedding_vector,
+        ) as spy:
             iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
             index_manager.add_files(iterator)
 
@@ -163,12 +157,11 @@ class TestLocalIndexManager:
         """A chunk made up only of NUL bytes becomes "" after sanitization. Skip it so the
         embedder is never called with an empty string (Voyage raises; OpenAI/Google reject
         via the API) and no partial chunks are persisted for a file that then fails."""
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"irrelevant")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
         with (
-            mock.patch.object(file, "read_content", return_value="irrelevant"),
             mock.patch.object(index_manager, "chunk_file", return_value=["test", "\x00\x00", "content"]),
             mock.patch.object(
                 index_manager,
@@ -191,6 +184,64 @@ class TestLocalIndexManager:
         assert spy.call_count == 2
         embedded_texts = [call.args[0] for call in spy.call_args_list]
         assert "" not in embedded_texts
+
+    def test_add_files_fails_when_no_text_can_be_extracted(self, local_index_instance, index_manager):
+        """Source files are stored unparsed, so an image-only PDF now reaches indexing.
+
+        Extracting nothing from it leaves a file with no embeddings, which is indistinguishable
+        from a successfully indexed file unless it is recorded as failed.
+        """
+        file = FileFactory.create(file__data=b"   \n  ")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+        assert "no text" in collection_file.failure_reason.lower()
+        assert not FileChunkEmbedding.objects.filter(file=file).exists()
+
+    def test_add_files_fails_when_every_chunk_sanitizes_away(self, local_index_instance, index_manager):
+        """NUL-only content clears the empty-text check but leaves nothing to embed.
+
+        Postgres cannot store NUL bytes, so every chunk sanitizes down to "" and is skipped.
+        A file with no embeddings is indistinguishable from one that indexed cleanly unless
+        it is recorded as failed.
+        """
+        file = FileFactory.create(file__data=b"\x00\x00\x00")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with mock.patch.object(index_manager, "chunk_file", return_value=["\x00\x00\x00"]):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+        assert "no text" in collection_file.failure_reason.lower()
+        assert not FileChunkEmbedding.objects.filter(file=file).exists()
+
+    def test_one_unextractable_file_does_not_stop_the_batch(self, local_index_instance, index_manager):
+        """A batch is one Celery task, so a file that cannot be read must not abort the rest."""
+        good_one = FileFactory.create(file__data=b"first document")
+        unextractable = FileFactory.create(file__data=b"   \n  ")
+        good_two = FileFactory.create(file__data=b"second document")
+        for file in (good_one, unextractable, good_two):
+            local_index_instance.files.add(file)
+
+        collection_files = CollectionFile.objects.filter(
+            collection=local_index_instance, file__in=[good_one, unextractable, good_two]
+        )
+        index_manager.add_files(collection_files.order_by("file_id").iterator(1))
+
+        statuses = {cf.file_id: cf.status for cf in collection_files}
+        assert statuses[good_one.id] == FileStatus.COMPLETED
+        assert statuses[unextractable.id] == FileStatus.FAILED
+        assert statuses[good_two.id] == FileStatus.COMPLETED
+        assert FileChunkEmbedding.objects.filter(file=good_two).count() == 2
+        assert not FileChunkEmbedding.objects.filter(file=unextractable).exists()
 
     def test_query_calls_get_embedding_vector_with_query_input_type(self, local_index_instance, index_manager):
         with mock.patch.object(
@@ -236,13 +287,12 @@ class TestLocalIndexManagerContextualization:
         )
 
     def test_context_stored_when_contextualizer_set(self, local_index_instance, contextualizing_index_manager):
-        file = FileFactory.create(name="annual_report.pdf")
+        file = FileFactory.create(name="annual_report.pdf", file__data=b"full document text")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-        with mock.patch.object(file, "read_content", return_value="full document text"):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            contextualizing_index_manager.add_files(iterator)
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        contextualizing_index_manager.add_files(iterator)
 
         embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
         assert embeddings.count() == 2
@@ -253,13 +303,12 @@ class TestLocalIndexManagerContextualization:
 
     def test_no_context_when_contextualizer_none(self, local_index_instance):
         manager = LocalIndexManagerMock(api_key="api-123", embedding_model_name="embedding-model")
-        file = FileFactory.create(name="annual_report.pdf")
+        file = FileFactory.create(name="annual_report.pdf", file__data=b"full document text")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-        with mock.patch.object(file, "read_content", return_value="full document text"):
-            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
-            manager.add_files(iterator)
+        iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+        manager.add_files(iterator)
 
         embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
         assert embeddings.count() == 2
@@ -268,18 +317,15 @@ class TestLocalIndexManagerContextualization:
             assert embedding.contextualized_text == embedding.text
 
     def test_embedded_input_includes_context(self, local_index_instance, contextualizing_index_manager):
-        file = FileFactory.create(name="annual_report.pdf")
+        file = FileFactory.create(name="annual_report.pdf", file__data=b"full document text")
         local_index_instance.files.add(file)
         collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
 
-        with (
-            mock.patch.object(file, "read_content", return_value="full document text"),
-            mock.patch.object(
-                contextualizing_index_manager,
-                "get_embedding_vector",
-                wraps=contextualizing_index_manager.get_embedding_vector,
-            ) as spy,
-        ):
+        with mock.patch.object(
+            contextualizing_index_manager,
+            "get_embedding_vector",
+            wraps=contextualizing_index_manager.get_embedding_vector,
+        ) as spy:
             iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
             contextualizing_index_manager.add_files(iterator)
 
@@ -301,10 +347,11 @@ class TestRemoteIndexManager:
             yield manager
 
     def test_add_files_success(self, remote_collection_index, index_manager):
-        file = FileFactory.create(external_id="test_file_id_3")
+        file = FileFactory.create(external_id="test_file_id_3", file__data=b"test content")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
-        collection_file.status = FileStatus.PENDING
+        collection_file.status = FileStatus.FAILED
+        collection_file.failure_reason = "ValueError: stale reason from the previous attempt"
         collection_file.save()
 
         iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
@@ -312,9 +359,49 @@ class TestRemoteIndexManager:
 
         collection_file.refresh_from_db()
         assert collection_file.status == FileStatus.COMPLETED
+        # A reason left by an earlier attempt describes an outcome that no longer holds.
+        assert collection_file.failure_reason == ""
+
+    def test_file_with_no_extractable_text_is_failed_without_uploading(self, remote_collection_index, index_manager):
+        """The provider accepts a text-free file and reports nothing wrong.
+
+        Source files are stored unparsed, so an image-only PDF reaches indexing. Linking it
+        would leave it COMPLETED with nothing indexed, which no one can tell apart from a
+        file that indexed cleanly.
+        """
+        file = FileFactory.create(file__data=b"   \n  ")
+        remote_collection_index.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        collection_file.status = FileStatus.PENDING
+        collection_file.save()
+
+        with mock.patch.object(index_manager, "upload_file_to_remote") as upload:
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.FAILED
+        assert "no text" in collection_file.failure_reason.lower()
+        upload.assert_not_called()
+
+    def test_unreadable_file_is_left_for_the_remote_index_to_judge(self, remote_collection_index, index_manager):
+        """The provider indexes formats our readers do not, so a failed local read is not a
+        verdict on the file -- only an empty successful read is."""
+        file = FileFactory.create(file__data=b"content", external_id="test_file_id_4")
+        remote_collection_index.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
+        collection_file.status = FileStatus.PENDING
+        collection_file.save()
+
+        with mock.patch.object(type(file), "read_content", side_effect=Exception("no reader for this type")):
+            iterator = CollectionFile.objects.filter(id=collection_file.id).iterator(1)
+            index_manager.add_files(iterator)
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.COMPLETED
 
     def test_add_files_with_file_upload_failures(self, remote_collection_index, index_manager):
-        file = FileFactory.create()
+        file = FileFactory.create(file__data=b"test content")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
         collection_file.status = FileStatus.PENDING
@@ -331,7 +418,7 @@ class TestRemoteIndexManager:
         assert collection_file.status == FileStatus.FAILED
 
     def test_add_files_with_linking_failures(self, remote_collection_index, index_manager):
-        file = FileFactory.create(external_id="test_file_id")
+        file = FileFactory.create(external_id="test_file_id", file__data=b"test content")
         remote_collection_index.files.add(file)
         collection_file = CollectionFile.objects.get(collection=remote_collection_index, file=file)
         collection_file.status = FileStatus.PENDING

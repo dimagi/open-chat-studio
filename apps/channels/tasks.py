@@ -33,7 +33,7 @@ from apps.experiments.models import ExperimentSession, ParticipantData
 from apps.ocs_notifications.notifications import widget_auth_level_upgrade_notification
 from apps.service_providers.models import MessagingProviderType
 from apps.service_providers.tracing.base import Tracer
-from apps.teams.utils import set_current_team
+from apps.teams.utils import current_team, set_current_team
 from apps.utils.celery import Queues
 from apps.utils.taskbadger import update_taskbadger_data
 
@@ -348,7 +348,8 @@ def ratchet_widget_auth_levels():
             channel.auth_level_notified_at = None
             # save() routes through the audited manager so the level change is recorded;
             # update_fields keeps concurrent widget_version telemetry writes from being clobbered.
-            channel.save(update_fields=["required_auth_level", "pending_auth_level", "auth_level_notified_at"])
+            with current_team(channel.team):
+                channel.save(update_fields=["required_auth_level", "pending_auth_level", "auth_level_notified_at"])
 
     effective_date = now + ExperimentChannel.AUTH_LEVEL_RATCHET_GRACE
     for data in notify_by_team.values():
