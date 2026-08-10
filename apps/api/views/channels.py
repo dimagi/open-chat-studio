@@ -49,7 +49,7 @@ def generate_key(request: Request):
         commcare_connect_channel_id, participant_identifier=connect_id
     )
     if participant_data is None:
-        connect_logger.error(
+        connect_logger.warning(
             f"ParticipantData with connect_id: {connect_id} and channel_id: {commcare_connect_channel_id} not found"
         )
         raise Http404()
