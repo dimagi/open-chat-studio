@@ -1129,7 +1129,7 @@ function BuiltInToolsWidget(props: WidgetParams) {
 
   if (options.length === 0) return <></>;
 
-  const toolConfigsMap = parameterValues.built_in_tools_config as unknown as Record<string, Record<string, PropertySchema[]>>;
+  const toolConfigsMap = parameterValues.tool_config as unknown as Record<string, Record<string, PropertySchema[]>>;
   const providerToolConfigs = toolConfigsMap[providerKey] || {};
 
   const toolConfig = props.nodeParams.tool_config || {};

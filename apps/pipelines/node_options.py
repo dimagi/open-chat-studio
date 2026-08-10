@@ -128,7 +128,7 @@ def _built_in_tool_options(llm_providers: list[dict]):
             for provider in llm_providers
             if provider.get("type")
         },
-        OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
+        OptionsSource.tool_config: BuiltInTools.get_tool_configs_by_provider(),
     }
 
 

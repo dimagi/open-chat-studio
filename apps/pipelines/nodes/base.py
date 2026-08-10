@@ -475,7 +475,7 @@ class OptionsSource(StrEnum):
     built_in_tools = "built_in_tools"
     mcp_tools = "mcp_tools"
     collection_index = "collection_index"
-    built_in_tools_config = "built_in_tools_config"
+    tool_config = "tool_config"
     text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
     text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
     jinja_node = "jinja_node"
