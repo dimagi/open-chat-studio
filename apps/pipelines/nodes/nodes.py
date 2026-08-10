@@ -77,6 +77,7 @@ from apps.utils.python_execution import RestrictedPythonExecutionMixin, get_code
 from apps.utils.restricted_http import RestrictedHttpClient
 
 from .mixins import (
+    HISTORY_TYPE_DESCRIPTION,
     ExtractStructuredDataNodeMixin,
     HistoryMixin,
     LLMResponseMixin,
@@ -264,10 +265,21 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
 
     source_material_id: OptionalInt = Field(
-        None, json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material)
+        None,
+        description=(
+            "A reference document whose full text is made available to the prompt. Setting it "
+            "requires the prompt to use `{source_material}`, and using that variable requires this "
+            "to be set."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.source_material),
     )
     prompt: str = Field(
         default="You are a helpful assistant. Answer the user's query as best you can",
+        description=(
+            "The system prompt. May reference template variables in single braces -- `{participant_data}`, "
+            "`{current_datetime}` -- each of which must appear at most once. Literal braces have to be "
+            "doubled."
+        ),
         json_schema_extra=UiSchema(
             widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_llm_node
         ),
@@ -275,11 +287,19 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     collection_id: OptionalInt = Field(
         None,
         title="Media",
+        description=(
+            "A media collection whose files the node can talk about. Setting it requires the prompt "
+            "to use `{media}`, and using that variable requires this to be set."
+        ),
         json_schema_extra=UiSchema(widget=Widgets.select, options_source=OptionsSource.collection),
     )
     collection_index_ids: list[int] = Field(
         default_factory=list,
         title="Collection Indexes",
+        description=(
+            "Searchable indexes the node may retrieve from. Selecting more than one requires the "
+            "prompt to use `{collection_index_summaries}` so the model can choose between them."
+        ),
         json_schema_extra=UiSchema(
             widget=Widgets.searchable_multiselect, options_source=OptionsSource.collection_index
         ),
@@ -333,10 +353,18 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.GLOBAL,
+        description=HISTORY_TYPE_DESCRIPTION,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
     synthetic_voice_id: OptionalInt = Field(
-        None, title="Voice Model", json_schema_extra=UiSchema(widget=Widgets.voice_widget)
+        None,
+        title="Voice Model",
+        description=(
+            "The text-to-speech voice this node's reply is spoken in. Must belong to the voice "
+            "provider configured on the chatbot -- each option carries the `provider_id` it needs to "
+            "match. Leave unset to reply in text only."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.voice_widget),
     )
 
     @model_validator(mode="after")
@@ -575,14 +603,20 @@ class Passthrough(PipelineNode):
 class StartNode(Passthrough):
     """The start of the pipeline"""
 
-    name: str = "start"
+    name: str = Field(
+        default="start",
+        description="Fixed at `start`. The server creates this node; there is never more than one.",
+    )
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="Start", flow_node_type="startNode"))
 
 
 class EndNode(Passthrough):
     """The end of the pipeline"""
 
-    name: str = "end"
+    name: str = Field(
+        default="end",
+        description="Fixed at `end`. The server creates this node; there is never more than one.",
+    )
     model_config = ConfigDict(json_schema_extra=NodeSchema(label="End", flow_node_type="endNode"))
 
 
@@ -639,12 +673,18 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
     prompt: str = Field(
         default="You are an extremely helpful router",
         min_length=1,
+        description=(
+            "Instructions telling the LLM how to choose between `keywords`. The model is constrained "
+            "to return one of them, so describe when each applies rather than asking for free text. "
+            "A narrower set of template variables is available here than on an LLM node."
+        ),
         json_schema_extra=UiSchema(
             widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_router_node
         ),
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NODE,
+        description=HISTORY_TYPE_DESCRIPTION,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
 
@@ -807,7 +847,13 @@ class ExtractParticipantData(
         description="A JSON object structure where the key is the name of the field and the value the description",
         json_schema_extra=UiSchema(widget=Widgets.expandable_text),
     )
-    key_name: str = ""
+    key_name: str = Field(
+        default="",
+        description=(
+            "Nests the extracted object under this key in the participant's data instead of merging "
+            "it in at the top level. Leave empty to merge."
+        ),
+    )
 
     def get_reference_data(self, context) -> Any:
         """Returns the participant data as reference. If there is a `key_name`, the value in the participant data

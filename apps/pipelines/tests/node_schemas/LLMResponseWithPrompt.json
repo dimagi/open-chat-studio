@@ -8,17 +8,20 @@
       "type": "string"
     },
     "llm_provider_id": {
+      "description": "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
       "title": "LLM Model",
       "type": "integer",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
+      "description": "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- an OpenAI provider cannot run an Anthropic model.",
       "title": "Llm Provider Model Id",
       "type": "integer",
       "ui:widget": "none"
     },
     "llm_model_parameters": {
       "additionalProperties": true,
+      "description": "Generation settings passed to the model, such as `temperature`. Which keys are accepted depends on the model; leave empty to use its defaults.",
       "title": "Llm Model Parameters",
       "type": "object",
       "ui:widget": "none"
@@ -33,6 +36,7 @@
       "title": "PipelineChatHistoryTypes",
       "type": "string",
       "default": "global",
+      "description": "Which past messages to put in the prompt. `none` sends only the current input; `node` remembers just this node's own turns; `named` shares one history between every node set to the same `history_name`; `global` uses the participant's whole conversation.",
       "ui:enumLabels": [
         "Node",
         "Named",
@@ -43,6 +47,7 @@
     },
     "history_name": {
       "default": null,
+      "description": "The shared history to read and write. Only used when `history_type` is `named`.",
       "title": "History Name",
       "ui:widget": "none",
       "type": "string"
@@ -56,6 +61,7 @@
       "title": "PipelineChatHistoryModes",
       "type": "string",
       "default": "summarize",
+      "description": "How to shrink history that outgrows its limit: `summarize` replaces old messages with a summary, `truncate_tokens` drops them to fit `user_max_token_limit`, and `max_history_length` keeps only the most recent `max_history_length` messages.",
       "ui:enumLabels": [
         "Summarize",
         "Truncate Tokens",
@@ -89,12 +95,14 @@
       }
     },
     "name": {
+      "description": "Identifies the node within its pipeline. Another node reaches this one's result through `temp_state.outputs.<name>`, so renaming it breaks any template that does.",
       "title": "Node Name",
       "type": "string",
       "ui:widget": "node_name"
     },
     "source_material_id": {
       "default": null,
+      "description": "A reference document whose full text is made available to the prompt. Setting it requires the prompt to use `{source_material}`, and using that variable requires this to be set.",
       "title": "Source Material Id",
       "ui:optionsSource": "source_material",
       "ui:widget": "select",
@@ -102,6 +110,7 @@
     },
     "prompt": {
       "default": "You are a helpful assistant. Answer the user's query as best you can",
+      "description": "The system prompt. May reference template variables in single braces -- `{participant_data}`, `{current_datetime}` -- each of which must appear at most once. Literal braces have to be doubled.",
       "title": "Prompt",
       "type": "string",
       "ui:optionsSource": "text_editor_autocomplete_vars_llm_node",
@@ -109,12 +118,14 @@
     },
     "collection_id": {
       "default": null,
+      "description": "A media collection whose files the node can talk about. Setting it requires the prompt to use `{media}`, and using that variable requires this to be set.",
       "title": "Media",
       "ui:optionsSource": "collection",
       "ui:widget": "select",
       "type": "integer"
     },
     "collection_index_ids": {
+      "description": "Searchable indexes the node may retrieve from. Selecting more than one requires the prompt to use `{collection_index_summaries}` so the model can choose between them.",
       "items": {
         "type": "integer"
       },
@@ -201,6 +212,7 @@
     },
     "synthetic_voice_id": {
       "default": null,
+      "description": "The text-to-speech voice this node's reply is spoken in. Must belong to the voice provider configured on the chatbot -- each option carries the `provider_id` it needs to match. Leave unset to reply in text only.",
       "title": "Voice Model",
       "ui:widget": "voice_widget",
       "type": "integer"

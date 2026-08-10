@@ -2,11 +2,13 @@
   "description": "Routes the input to a linked node using the temp state of the pipeline or participant data",
   "properties": {
     "name": {
+      "description": "Identifies the node within its pipeline. Another node reaches this one's result through `temp_state.outputs.<name>`, so renaming it breaks any template that does.",
       "title": "Node Name",
       "type": "string",
       "ui:widget": "node_name"
     },
     "keywords": {
+      "description": "The routes this node can take, one per output. Uppercased and deduplicated on save. Entry `i` is served by output handle `output_i`, so adding, removing or reordering keywords rewires the node's outgoing edges.",
       "items": {
         "type": "string"
       },
@@ -16,6 +18,7 @@
     },
     "default_keyword_index": {
       "default": 0,
+      "description": "Position in `keywords` to fall back to when no route matches. Must be a valid index into `keywords`.",
       "title": "Default Keyword Index",
       "type": "integer",
       "ui:widget": "none"

@@ -2,22 +2,26 @@
   "description": "Calls an LLM with the given input",
   "properties": {
     "llm_provider_id": {
+      "description": "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
       "title": "LLM Model",
       "type": "integer",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
+      "description": "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- an OpenAI provider cannot run an Anthropic model.",
       "title": "Llm Provider Model Id",
       "type": "integer",
       "ui:widget": "none"
     },
     "llm_model_parameters": {
       "additionalProperties": true,
+      "description": "Generation settings passed to the model, such as `temperature`. Which keys are accepted depends on the model; leave empty to use its defaults.",
       "title": "Llm Model Parameters",
       "type": "object",
       "ui:widget": "none"
     },
     "name": {
+      "description": "Identifies the node within its pipeline. Another node reaches this one's result through `temp_state.outputs.<name>`, so renaming it breaks any template that does.",
       "title": "Node Name",
       "type": "string",
       "ui:widget": "node_name"

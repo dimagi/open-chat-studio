@@ -71,9 +71,28 @@ class OutputMessageTagMixin(BaseModel):
 
 
 class LLMResponseMixin(BaseModel):
-    llm_provider_id: int = Field(..., title="LLM Model", json_schema_extra=UiSchema(widget=Widgets.llm_provider_model))
-    llm_provider_model_id: int = Field(..., json_schema_extra=UiSchema(widget=Widgets.none))
-    llm_model_parameters: dict[str, Any] = Field(default_factory=dict, json_schema_extra=UiSchema(widget=Widgets.none))
+    llm_provider_id: int = Field(
+        ...,
+        title="LLM Model",
+        description="The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
+        json_schema_extra=UiSchema(widget=Widgets.llm_provider_model),
+    )
+    llm_provider_model_id: int = Field(
+        ...,
+        description=(
+            "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- "
+            "an OpenAI provider cannot run an Anthropic model."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
+    )
+    llm_model_parameters: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Generation settings passed to the model, such as `temperature`. Which keys are accepted "
+            "depends on the model; leave empty to use its defaults."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -135,19 +154,35 @@ class LLMResponseMixin(BaseModel):
         return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
 
+# Subclasses re-declare `history_type` only to change its default, so the text lives here rather
+# than being copied to each override and drifting.
+HISTORY_TYPE_DESCRIPTION = (
+    "Which past messages to put in the prompt. `none` sends only the current input; `node` "
+    "remembers just this node's own turns; `named` shares one history between every node set "
+    "to the same `history_name`; `global` uses the participant's whole conversation."
+)
+
+
 class HistoryMixin(LLMResponseMixin):
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NONE,
+        description=HISTORY_TYPE_DESCRIPTION,
         json_schema_extra=UiSchema(widget=Widgets.history, enum_labels=PipelineChatHistoryTypes.labels),
     )
     history_name: str | None = Field(
         None,
+        description="The shared history to read and write. Only used when `history_type` is `named`.",
         json_schema_extra=UiSchema(
             widget=Widgets.none,
         ),
     )
     history_mode: PipelineChatHistoryModes = Field(
         default=PipelineChatHistoryModes.SUMMARIZE,
+        description=(
+            "How to shrink history that outgrows its limit: `summarize` replaces old messages with a "
+            "summary, `truncate_tokens` drops them to fit `user_max_token_limit`, and "
+            "`max_history_length` keeps only the most recent `max_history_length` messages."
+        ),
         json_schema_extra=UiSchema(widget=Widgets.history_mode, enum_labels=PipelineChatHistoryModes.labels),
     )
     user_max_token_limit: int | None = Field(
@@ -271,8 +306,22 @@ class HistoryMixin(LLMResponseMixin):
 
 
 class RouterMixin(BaseModel):
-    keywords: list[str] = Field(default_factory=list, json_schema_extra=UiSchema(widget=Widgets.keywords))
-    default_keyword_index: int = Field(default=0, json_schema_extra=UiSchema(widget=Widgets.none))
+    keywords: list[str] = Field(
+        default_factory=list,
+        description=(
+            "The routes this node can take, one per output. Uppercased and deduplicated on save. "
+            "Entry `i` is served by output handle `output_i`, so adding, removing or reordering "
+            "keywords rewires the node's outgoing edges."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.keywords),
+    )
+    default_keyword_index: int = Field(
+        default=0,
+        description=(
+            "Position in `keywords` to fall back to when no route matches. Must be a valid index into `keywords`."
+        ),
+        json_schema_extra=UiSchema(widget=Widgets.none),
+    )
     tag_output_message: bool = Field(
         default=False,
         description="Tag the output message with the selected route",

@@ -253,7 +253,14 @@ class BasePipelineNode(BaseModel, ABC):
     node_id: SkipJsonSchema[str] = Field(exclude=True)
     django_node: SkipJsonSchema[Any] = Field(exclude=True)
 
-    name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
+    name: str = Field(
+        title="Node Name",
+        description=(
+            "Identifies the node within its pipeline. Another node reaches this one's result through "
+            "`temp_state.outputs.<name>`, so renaming it breaks any template that does."
+        ),
+        json_schema_extra={"ui:widget": "node_name"},
+    )
 
     def _prepare_state(self, node_id: str, incoming_nodes: list, state: PipelineState):
         """This function initializes the state before executing the node function. This is primarily
