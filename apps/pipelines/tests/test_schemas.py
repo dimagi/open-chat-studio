@@ -1,9 +1,31 @@
 import json
 import pathlib
 
+import pytest
+
 from apps.pipelines.node_options import get_node_schemas
 
 BASE = pathlib.Path(__file__).parent / "node_schemas"
+
+
+def _live_schemas():
+    """Schemas for the node types the discovery API serves -- deprecated ones are never listed."""
+    return [schema for schema in get_node_schemas() if not schema.get("ui:deprecated")]
+
+
+@pytest.mark.parametrize("schema", _live_schemas(), ids=lambda schema: schema["title"])
+def test_every_param_is_described(schema):
+    """`title` is derived from the field name ("Llm Provider Model Id"), so it tells an agent
+    nothing the key didn't already. The v2 discovery API serves these schemas to an LLM that has no
+    UI, no tooltips and no changelog to fall back on, so every param it may write needs a
+    `description` saying what the value does.
+    """
+    undescribed = [name for name, prop in schema["properties"].items() if not prop.get("description", "").strip()]
+    assert not undescribed, (
+        f"{schema['title']} params without a description: {undescribed}. "
+        f"Add `description=` to the pydantic Field -- the pipeline builder shows it as help text and "
+        f"/api/v2/pipeline/nodes/ serves it to agents."
+    )
 
 
 def test_schemas():
