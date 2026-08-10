@@ -1,7 +1,8 @@
 import pytest
 from django.urls import reverse
 
-from apps.api.v2.discovery import _clean_options, _documentation_url
+from apps.api.v2.discovery.node_types import _documentation_url
+from apps.api.v2.discovery.options import _clean_options
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import (
