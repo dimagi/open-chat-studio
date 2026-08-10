@@ -170,10 +170,8 @@ paths:
                             title: LLM Model
                             description: The configured LLM service provider this
                               node calls.
-                            options_source: llm_provider_id
                           llm_provider_model_id:
                             type: integer
-                            options_source: llm_provider_model_id
                             must_match:
                               field: llm_provider_id
                               'on': type
@@ -193,7 +191,7 @@ paths:
       description: |-
         The values each node param accepts, scoped to the API key's team.
 
-        Each key is named by some node param's `options_source` in `/pipeline/nodes/`; resolve a param through that rather than matching key names by eye.
+        A key holds the values for the node param of the same name: write one of `assistant`'s entries into a node's `assistant_id`, one of `collection_index`'s into `collection_index_ids`.
       summary: List Pipeline Node Options
       parameters:
       - in: query
@@ -236,7 +234,7 @@ paths:
                       openai:
                       - value: web-search
                         label: Web Search
-                    built_in_tools_config:
+                    tool_config:
                       anthropic:
                         web-search:
                         - name: allowed_domains
@@ -248,7 +246,7 @@ paths:
                     - value: 2
                       label: Prod Polly
                       type: aws
-                    jinja_node:
+                    prompt_variables:
                     - label: input
                       description: The text passed into this node from the preceding
                         one.
@@ -1863,13 +1861,13 @@ components:
         schema:
           type: object
           additionalProperties: {}
-          description: 'JSON Schema for the node''s `params`. Properties carry these
-            keys beyond standard JSON Schema, where they apply: `options_source` (the
-            `/pipeline/options/` key holding this param''s permitted values), `must_match`
-            (this value must agree with another param''s chosen option on the named
-            attribute), `options_keyed_by` (the option list is a dict, and another
-            param''s chosen option selects the sub-list), `applies_when` (the param
-            is ignored unless the condition holds) and `requires_feature_flag`.'
+          description: 'JSON Schema for the node''s `params`. A param drawing from
+            a fixed set of values takes them from the `/pipeline/options/` key of
+            the same name. Properties carry these keys beyond standard JSON Schema,
+            where they apply: `must_match` (this value must agree with another param''s
+            chosen option on the named attribute), `options_keyed_by` (the option
+            list is a dict, and another param''s chosen option selects the sub-list),
+            `applies_when` (the param is ignored unless the condition holds) and `requires_feature_flag`.'
       required:
       - description
       - outputs
@@ -1987,9 +1985,9 @@ components:
     PipelineOptions:
       type: object
       description: |-
-        The documented keys. A response carries a subset when `?node_type=` is given, and may carry
-        keys not listed here as new node params are added -- resolve them through `options_source`
-        rather than against this list.
+        The documented keys. Each holds the values for the node param of the same name. A response
+        carries a subset when `?node_type=` is given, and may carry keys not listed here as new node
+        params are added.
       properties:
         llm_provider_id:
           type: array
@@ -2046,23 +2044,16 @@ components:
             items:
               $ref: '#/components/schemas/Option'
           description: Keyed by LLM provider type.
-        built_in_tools_config:
+        tool_config:
           type: object
           additionalProperties: {}
           description: Per-provider, per-tool config field descriptors. Keyed by LLM
             provider type.
-        text_editor_autocomplete_vars_llm_node:
+        prompt_variables:
           type: array
           items:
             $ref: '#/components/schemas/PromptVariable'
-        text_editor_autocomplete_vars_router_node:
-          type: array
-          items:
-            $ref: '#/components/schemas/PromptVariable'
-        jinja_node:
-          type: array
-          items:
-            $ref: '#/components/schemas/PromptVariable'
+          description: The variables a node's template params may reference.
         default_llm_provider:
           allOf:
           - $ref: '#/components/schemas/DefaultLlmProvider'

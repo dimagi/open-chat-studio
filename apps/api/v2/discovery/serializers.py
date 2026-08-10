@@ -33,12 +33,13 @@ class NodeTypeSerializer(serializers.Serializer):
     outputs = NodeOutputsSerializer(help_text="How many outputs the node has and how edges address them.")
     schema = serializers.DictField(
         help_text=(
-            "JSON Schema for the node's `params`. Properties carry these keys beyond standard JSON "
-            "Schema, where they apply: `options_source` (the `/pipeline/options/` key holding this "
-            "param's permitted values), `must_match` (this value must agree with another param's "
-            "chosen option on the named attribute), `options_keyed_by` (the option list is a dict, "
-            "and another param's chosen option selects the sub-list), `applies_when` (the param is "
-            "ignored unless the condition holds) and `requires_feature_flag`."
+            "JSON Schema for the node's `params`. A param drawing from a fixed set of values takes "
+            "them from the `/pipeline/options/` key of the same name. Properties carry these keys "
+            "beyond standard JSON Schema, where they apply: `must_match` (this value must agree "
+            "with another param's chosen option on the named attribute), `options_keyed_by` (the "
+            "option list is a dict, and another param's chosen option selects the sub-list), "
+            "`applies_when` (the param is ignored unless the condition holds) and "
+            "`requires_feature_flag`."
         )
     )
 
@@ -82,9 +83,9 @@ class DefaultLlmProviderSerializer(serializers.Serializer):
 
 
 class PipelineOptionsSerializer(serializers.Serializer):
-    """The documented keys. A response carries a subset when `?node_type=` is given, and may carry
-    keys not listed here as new node params are added -- resolve them through `options_source`
-    rather than against this list."""
+    """The documented keys. Each holds the values for the node param of the same name. A response
+    carries a subset when `?node_type=` is given, and may carry keys not listed here as new node
+    params are added."""
 
     llm_provider_id = OptionSerializer(many=True, required=False)
     llm_provider_model_id = OptionSerializer(many=True, required=False)
@@ -108,12 +109,12 @@ class PipelineOptionsSerializer(serializers.Serializer):
     built_in_tools = serializers.DictField(
         child=OptionSerializer(many=True), required=False, help_text="Keyed by LLM provider type."
     )
-    built_in_tools_config = serializers.DictField(
+    tool_config = serializers.DictField(
         required=False, help_text="Per-provider, per-tool config field descriptors. Keyed by LLM provider type."
     )
-    text_editor_autocomplete_vars_llm_node = PromptVariableSerializer(many=True, required=False)
-    text_editor_autocomplete_vars_router_node = PromptVariableSerializer(many=True, required=False)
-    jinja_node = PromptVariableSerializer(many=True, required=False)
+    prompt_variables = PromptVariableSerializer(
+        many=True, required=False, help_text="The variables a node's template params may reference."
+    )
     default_llm_provider = DefaultLlmProviderSerializer(
         required=False, help_text="A provider/model pair that already satisfies the `must_match` rule."
     )

@@ -1,27 +1,34 @@
 """The contract between `/pipeline/nodes/` and `/pipeline/options/`.
 
-One rule, no exceptions: a param's ``options_source`` names the key in `/pipeline/options/` holding
-its permitted values. The maps here are what make that true where the builder never declared the
-link, and what state the cross-param rules it enforces in JS instead. See ADR-0051.
+A param's permitted values live under the `/pipeline/options/` key of the same name -- `assistant_id`
+draws from `assistant`, `collection_index_ids` from `collection_index`. The maps here are what make
+that hold: they rename the option keys the builder spells differently, hide the ones an agent has no
+use for, and state the cross-param rules the builder enforces in JS instead. See ADR-0051.
 """
 
-# `OptionsSource` names that are not snake_case. The builder's JS reads these keys verbatim
+# `OptionsSource` names the builder's JS reads verbatim
 # (assets/javascript/apps/pipeline/nodes/widgets.tsx), so they are renamed on the API surface only.
 OPTIONS_KEY_RENAMES = {
     "LlmProviderId": "llm_provider_id",
     "LlmProviderModelId": "llm_provider_model_id",
     "VoiceProviderId": "voice_provider_id",
+    # Named for the builder's jinja-template widget; the values are the variables a template may use.
+    "jinja_node": "prompt_variables",
 }
 
-# Params whose values come from an options key the builder never declared, because it renders them
-# with a bespoke widget rather than the generic `select`. Without these the join has four exceptions
-# and the agent has to guess them from naming.
-IMPLIED_OPTIONS_SOURCE = {
-    "llm_provider_id": "llm_provider_id",
-    "llm_provider_model_id": "llm_provider_model_id",
-    "tool_config": "built_in_tools_config",
-    "synthetic_voice_id": "synthetic_voice_id",
-}
+# Option lists the API does not serve. Both hold the autocomplete entries the builder offers while
+# someone types an LLM or router prompt -- a dropdown's worth of names, with the node's real prompt
+# contract (which variables it accepts, what each holds) living in the param's own description.
+HIDDEN_OPTION_KEYS = frozenset(
+    {
+        "text_editor_autocomplete_vars_llm_node",
+        "text_editor_autocomplete_vars_router_node",
+    }
+)
+
+# Params the builder renders with a bespoke widget rather than the generic `select`, so it declares
+# no `ui:optionsSource` for them. Their options key is the param name, as everywhere else.
+IMPLIED_OPTION_KEYS = frozenset({"llm_provider_id", "llm_provider_model_id", "tool_config", "synthetic_voice_id"})
 
 # Both the model and the provider carry a `type` ("openai", "anthropic", ...) and the two must agree;
 # `get_node_default_values` silently relies on this when it picks the pair a new node starts with.
@@ -36,9 +43,9 @@ OPTIONS_KEYED_BY = {"built_in_tools": PROVIDER_TYPE_MATCH, "tool_config": PROVID
 
 # `ui:*` property keys that carry meaning for an agent, renamed out of the builder's vocabulary.
 # Everything else `ui:*` is presentation (`ui:widget`, `ui:rows`, `ui:onShowDefault`) or duplicates
-# the JSON Schema (`ui:enumLabels` restates `enum`) and is dropped.
+# something the agent already has (`ui:enumLabels` restates `enum`, `ui:optionsSource` restates the
+# param name) and is dropped.
 UI_KEY_TRANSLATIONS = {
-    "ui:optionsSource": "options_source",
     "ui:visibleWhen": "applies_when",
     "ui:flagRequired": "requires_feature_flag",
 }

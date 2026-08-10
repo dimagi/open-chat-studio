@@ -1,8 +1,8 @@
 import pytest
 from django.urls import reverse
 
-from apps.api.v2.discovery.node_types import _documentation_url
-from apps.api.v2.discovery.options import _clean_options
+from apps.api.v2.discovery.node_types import _documentation_url, option_keys_for_node_type
+from apps.api.v2.discovery.views import PipelineOptionsView
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import (
@@ -61,9 +61,10 @@ def test_only_addable_node_types_are_listed(team):
 @pytest.mark.django_db()
 def test_no_ui_key_survives_anywhere(team):
     """`ui:` is the builder's vocabulary. The API translates the two keys that carry meaning for an
-    agent (`ui:optionsSource`, `ui:visibleWhen`) into `options_source`/`applies_when` and drops the
-    rest, so nothing reaches the agent still labelled as a UI concern -- notably `ui:widget: "none"`,
-    which sits on required fields like `llm_provider_model_id` and reads as "do not set this"."""
+    agent (`ui:visibleWhen`, `ui:flagRequired`) into `applies_when`/`requires_feature_flag` and drops
+    the rest, so nothing reaches the agent still labelled as a UI concern -- notably
+    `ui:widget: "none"`, which sits on required fields like `llm_provider_model_id` and reads as
+    "do not set this"."""
     client = ApiTestClient(team.members.first(), team)
     for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
         assert not [key for key in entry["schema"] if key.startswith("ui:")], entry["type"]
@@ -72,49 +73,59 @@ def test_no_ui_key_survives_anywhere(team):
 
 
 @pytest.mark.django_db()
-def test_declared_options_source_is_translated(team):
-    """The builder's `ui:optionsSource` becomes `options_source` -- same join, agent vocabulary."""
+def test_no_param_carries_an_options_source(team):
+    """A param's options live under the `/pipeline/options/` key of the same name, so naming the key
+    on every param restated what the param is already called. `?node_type=` still trims the payload
+    to one node, which is what the builder's `ui:optionsSource` is kept for internally."""
     client = ApiTestClient(team.members.first(), team)
-    by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
 
-    source_material_id = by_type["LLMResponseWithPrompt"]["schema"]["properties"]["source_material_id"]
-    assert source_material_id["options_source"] == "source_material"
+    for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
+        for name, prop in entry["schema"]["properties"].items():
+            assert "options_source" not in prop, f"{entry['type']}.{name}"
 
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    ("node_type", "param", "expected_key"),
+    ("node_type", "expected_keys"),
     [
-        pytest.param("LLMResponseWithPrompt", "llm_provider_id", "llm_provider_id", id="llm-provider"),
-        pytest.param("LLMResponseWithPrompt", "llm_provider_model_id", "llm_provider_model_id", id="llm-model"),
-        pytest.param("LLMResponseWithPrompt", "tool_config", "built_in_tools_config", id="tool-config"),
-        pytest.param("LLMResponseWithPrompt", "synthetic_voice_id", "synthetic_voice_id", id="synthetic-voice"),
+        pytest.param(
+            "LLMResponseWithPrompt",
+            {"llm_provider_id", "llm_provider_model_id", "tool_config", "synthetic_voice_id"},
+            id="params-the-builder-hard-codes-a-widget-for",
+        ),
+        pytest.param(
+            "LLMResponseWithPrompt",
+            {"source_material", "collection", "collection_index", "agent_tools", "custom_actions", "mcp_tools"},
+            id="params-the-builder-declares-a-source-for",
+        ),
+        pytest.param("RenderTemplate", {"prompt_variables"}, id="template-vars"),
     ],
 )
-def test_params_the_builder_never_linked_are_linked_here(team, node_type, param, expected_key):
-    """These four params have no `ui:optionsSource` -- the builder hard-codes their widgets instead.
-    The endpoint used to tell the agent to infer the link "from context", i.e. to guess. The link is
-    synthesised here so `options_source` is a rule with no exceptions."""
-    client = ApiTestClient(team.members.first(), team)
-    by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
+def test_scoping_covers_every_param_that_reads_an_option_list(team_with_resources, node_type, expected_keys):
+    """`?node_type=` has to reach the params the builder never declared a `ui:optionsSource` for --
+    it hard-codes their widgets instead -- as well as the ones it did. Missing one leaves the agent
+    with a param it cannot fill from the scoped response."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    assert by_type[node_type]["schema"]["properties"][param]["options_source"] == expected_key
+    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type}).json()
+
+    assert expected_keys <= set(scoped)
 
 
 @pytest.mark.django_db()
-def test_every_options_source_resolves_to_an_options_key(team_with_resources):
-    """The join must be total: every `options_source` a node param declares has to name a key that
-    `/pipeline/options/` actually returns, or the agent follows a dangling pointer."""
+def test_every_key_a_node_type_scopes_to_is_actually_served(team_with_resources):
+    """The keys a node type reads come from the builder's schemas; the payload is assembled
+    independently. A name in one and not the other is a param an agent cannot fill -- scoping would
+    silently drop the key rather than fail, so it has to be asserted against the source."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
     option_keys = set(client.get(reverse("api:v2:pipeline-options")).json())
 
-    dangling = {
-        f"{entry['type']}.{name}": prop["options_source"]
-        for entry in client.get(reverse("api:v2:pipeline-nodes")).json()
-        for name, prop in entry["schema"]["properties"].items()
-        if "options_source" in prop and prop["options_source"] not in option_keys
-    }
-    assert not dangling
+    dangling = {}
+    for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
+        scoped_keys = option_keys_for_node_type(entry["type"])
+        assert scoped_keys is not None, f"{entry['type']} is listed but cannot be scoped to"
+        dangling[entry["type"]] = sorted(scoped_keys - option_keys)
+    assert not {node_type: keys for node_type, keys in dangling.items() if keys}
 
 
 @pytest.mark.django_db()
@@ -207,8 +218,8 @@ def test_the_model_must_match_its_provider(team, node_type):
     ],
 )
 def test_provider_keyed_params_say_what_keys_them(team, param):
-    """`built_in_tools` and `built_in_tools_config` are dicts keyed by provider type, not flat lists.
-    Without this the agent has to guess which sub-list its chosen provider unlocks."""
+    """`built_in_tools` and `tool_config` are dicts keyed by provider type, not flat lists. Without
+    this the agent has to guess which sub-list its chosen provider unlocks."""
     client = ApiTestClient(team.members.first(), team)
     by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
 
@@ -409,10 +420,10 @@ def test_options_carry_no_edit_urls(team_with_resources):
 def test_clean_options_recurses_into_nested_dicts():
     """`built_in_tools` is a dict of lists keyed by provider type -- a `_clean_options` that only
     special-cased the top-level-list case would silently skip it, leaving placeholder entries and
-    `edit_url` buried at depth >= 2 untouched. `edit_url` is exercised at depth 3 via
-    `built_in_tools_config` for the same reason.
+    `edit_url` buried at depth >= 2 untouched. `edit_url` is exercised at depth 3 via `tool_config`
+    for the same reason.
 
-    Real `built_in_tools_config` entries (`BuiltInTools.get_tool_configs_by_provider`) are
+    Real `tool_config` entries (`BuiltInTools.get_tool_configs_by_provider`) are
     `{name, type, label, helpText}` descriptors with no `value` key at all, so the placeholder strip
     (which only matches `option.get("value") == ""`) can never touch them -- they must survive
     `_clean_options` unchanged. A fixture that gave them a `value` key, as an earlier version of this
@@ -425,7 +436,7 @@ def test_clean_options_recurses_into_nested_dicts():
                 {"value": "", "label": "Select a tool"},
             ],
         },
-        "built_in_tools_config": {
+        "tool_config": {
             "anthropic": {
                 "web-search": [
                     {
@@ -446,10 +457,10 @@ def test_clean_options_recurses_into_nested_dicts():
         },
     }
 
-    cleaned = _clean_options(nested)
+    cleaned = PipelineOptionsView._clean_options(nested)
 
     assert cleaned["built_in_tools"]["openai"] == [{"value": "web-search", "label": "Web Search"}]
-    assert cleaned["built_in_tools_config"]["anthropic"]["web-search"] == [
+    assert cleaned["tool_config"]["anthropic"]["web-search"] == [
         {
             "name": "allowed_domains",
             "type": "expandable_text",
@@ -537,7 +548,7 @@ def test_options_can_be_scoped_to_one_node_type(team_with_resources):
 
     scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "RenderTemplate"}).json()
 
-    assert set(scoped) == {"jinja_node"}
+    assert set(scoped) == {"prompt_variables"}
 
 
 @pytest.mark.django_db()
@@ -549,7 +560,7 @@ def test_scoped_options_keep_the_provider_defaults_for_llm_nodes(team_with_resou
 
     assert "default_llm_provider" in scoped
     assert "llm_provider_id" in scoped
-    assert "jinja_node" not in scoped
+    assert "prompt_variables" not in scoped
 
 
 @pytest.mark.django_db()
@@ -603,19 +614,11 @@ def test_options_unauthenticated_request_is_rejected(team_with_resources, client
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    "options_key",
-    [
-        pytest.param("text_editor_autocomplete_vars_llm_node", id="llm-node-vars"),
-        pytest.param("text_editor_autocomplete_vars_router_node", id="router-node-vars"),
-        pytest.param("jinja_node", id="jinja-node-vars"),
-    ],
-)
-def test_prompt_var_options_carry_a_description_not_a_value(team_with_resources, options_key):
+def test_prompt_var_options_carry_a_description_not_a_value(team_with_resources):
     """The builder emits {"label": v, "value": v} -- the two are always identical, so the value
     tells an agent nothing. It gets a description of what the variable holds instead."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    entries = client.get(reverse("api:v2:pipeline-options")).json()[options_key]
+    entries = client.get(reverse("api:v2:pipeline-options")).json()["prompt_variables"]
 
     assert entries
     for entry in entries:
@@ -625,12 +628,29 @@ def test_prompt_var_options_carry_a_description_not_a_value(team_with_resources,
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "options_key",
+    [
+        pytest.param("text_editor_autocomplete_vars_llm_node", id="llm-node-vars"),
+        pytest.param("text_editor_autocomplete_vars_router_node", id="router-node-vars"),
+    ],
+)
+def test_builder_only_autocomplete_lists_are_not_served(team_with_resources, options_key):
+    """These two exist to populate the builder's prompt-editor dropdown. What a prompt may reference
+    is stated in the param's own description, so serving the raw name list adds tokens and no
+    information."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+
+    assert options_key not in client.get(reverse("api:v2:pipeline-options")).json()
+
+
+@pytest.mark.django_db()
 def test_prompt_var_descriptions_are_the_real_ones(team_with_resources):
     """Pins one description end-to-end so a refactor can't quietly serve placeholder text."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
     by_label = {
         entry["label"]: entry["description"]
-        for entry in client.get(reverse("api:v2:pipeline-options")).json()["jinja_node"]
+        for entry in client.get(reverse("api:v2:pipeline-options")).json()["prompt_variables"]
     }
 
     assert by_label["input"] == PROMPT_VAR_DESCRIPTIONS["input"]

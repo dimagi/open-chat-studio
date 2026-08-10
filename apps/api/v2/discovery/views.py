@@ -18,10 +18,12 @@ from apps.experiments.models import SyntheticVoice
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
 from apps.pipelines.node_options import get_node_default_values, get_node_parameter_values
+from apps.pipelines.nodes.base import OptionsSource
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
+from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
-from .node_types import _etag, _node_types, _unknown_node_type
-from .options import _clean_options, _describe_prompt_vars, _keys_for_node_type, _rename_option_keys
+from .contract import HIDDEN_OPTION_KEYS, OPTIONS_KEY_RENAMES
+from .node_types import etag, get_node_types, option_keys_for_node_type, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
 
@@ -94,11 +96,9 @@ class PipelineNodesView(DiscoveryView):
                                     "type": "integer",
                                     "title": "LLM Model",
                                     "description": "The configured LLM service provider this node calls.",
-                                    "options_source": "llm_provider_id",
                                 },
                                 "llm_provider_model_id": {
                                     "type": "integer",
-                                    "options_source": "llm_provider_model_id",
                                     "must_match": {"field": "llm_provider_id", "on": "type"},
                                 },
                             },
@@ -110,19 +110,19 @@ class PipelineNodesView(DiscoveryView):
         ],
     )
     def get(self, request):
-        node_types = _node_types()
+        node_types = get_node_types()
         requested_type = request.query_params.get("type")
         if requested_type:
             node_types = [node for node in node_types if node["type"] == requested_type]
             if not node_types:
-                raise _unknown_node_type(requested_type)
+                raise unknown_node_type(requested_type)
 
         payload = self.get_serializer(node_types, many=True).data
-        etag = _etag(payload)
-        if request.headers.get("If-None-Match") == etag:
+        payload_etag = etag(payload)
+        if request.headers.get("If-None-Match") == payload_etag:
             return HttpResponseNotModified()
         response = Response(payload)
-        response["ETag"] = etag
+        response["ETag"] = payload_etag
         return response
 
 
@@ -132,8 +132,9 @@ class PipelineOptionsView(DiscoveryView):
         summary="List Pipeline Node Options",
         description=(
             "The values each node param accepts, scoped to the API key's team.\n\n"
-            "Each key is named by some node param's `options_source` in `/pipeline/nodes/`; resolve a "
-            "param through that rather than matching key names by eye."
+            "A key holds the values for the node param of the same name: write one of `assistant`'s "
+            "entries into a node's `assistant_id`, one of `collection_index`'s into "
+            "`collection_index_ids`."
         ),
         tags=["Pipelines"],
         parameters=[
@@ -165,7 +166,7 @@ class PipelineOptionsView(DiscoveryView):
                     "collection": [{"value": 7, "label": "Policy docs"}],
                     "collection_index": [{"value": 9, "label": "Support KB (Remote)"}],
                     "built_in_tools": {"openai": [{"value": "web-search", "label": "Web Search"}]},
-                    "built_in_tools_config": {
+                    "tool_config": {
                         "anthropic": {
                             "web-search": [
                                 {
@@ -178,7 +179,7 @@ class PipelineOptionsView(DiscoveryView):
                         }
                     },
                     "voice_provider_id": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
-                    "jinja_node": [
+                    "prompt_variables": [
                         {
                             "label": "input",
                             "description": "The text passed into this node from the preceding one.",
@@ -192,9 +193,9 @@ class PipelineOptionsView(DiscoveryView):
     )
     def get(self, request):
         requested_type = request.query_params.get("node_type")
-        wanted = _keys_for_node_type(requested_type) if requested_type else None
+        wanted = option_keys_for_node_type(requested_type) if requested_type else None
         if requested_type and wanted is None:
-            raise _unknown_node_type(requested_type)
+            raise unknown_node_type(requested_type)
 
         team = request.team
         llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
@@ -214,7 +215,7 @@ class PipelineOptionsView(DiscoveryView):
             else SyntheticVoice.objects.none()
         )
 
-        options = _clean_options(
+        options = self._clean_options(
             get_node_parameter_values(
                 team=team,
                 llm_providers=llm_providers,
@@ -226,8 +227,49 @@ class PipelineOptionsView(DiscoveryView):
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
         options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)
-        options = _rename_option_keys(_describe_prompt_vars(options))
+        options = self._to_api_vocabulary(self._describe_prompt_vars(options))
 
         if wanted is not None:
             options = {key: value for key, value in options.items() if key in wanted}
         return Response(options)
+
+    @classmethod
+    def _clean_options(cls, value):
+        """Strip builder-only affordances from an options payload.
+
+        Two things the editor needs and an agent must not see: placeholder entries with an empty
+        ``value`` (a prompt like "Select a topic", not a referenceable id) and ``edit_url`` (a link
+        into the Django UI). The walk recurses because ``built_in_tools`` is a dict of lists keyed by
+        provider type, not a flat list.
+        """
+        if isinstance(value, dict):
+            return {key: cls._clean_options(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [
+                {key: item for key, item in option.items() if key != "edit_url"} if isinstance(option, dict) else option
+                for option in value
+                if not (isinstance(option, dict) and option.get("value") == "")
+            ]
+        return value
+
+    @staticmethod
+    def _describe_prompt_vars(options: dict) -> dict:
+        """Swap each template variable's redundant ``value`` for a description of what it does.
+
+        The builder emits these as ``{"label": v, "value": v}`` -- the two are always identical,
+        since the value is just the name typed into the template. A human reading an autocomplete
+        dropdown infers the rest from the name; an agent cannot, so it gets the description instead.
+        Mutates a copy of the list, never ``PROMPT_VAR_DESCRIPTIONS``.
+        """
+        if entries := options.get(OptionsSource.jinja_node):
+            options[OptionsSource.jinja_node] = [
+                {"label": entry["label"], "description": PROMPT_VAR_DESCRIPTIONS[entry["label"]]} for entry in entries
+            ]
+        return options
+
+    @staticmethod
+    def _to_api_vocabulary(options: dict) -> dict:
+        """Drop the builder-only option lists and rename the keys the builder spells its own way."""
+        return {
+            OPTIONS_KEY_RENAMES.get(key, key): value for key, value in options.items() if key not in HIDDEN_OPTION_KEYS
+        }
