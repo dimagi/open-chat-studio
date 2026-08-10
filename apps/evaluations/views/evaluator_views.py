@@ -11,7 +11,6 @@ from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import Tag
-from apps.custom_actions.schema_utils import resolve_references
 from apps.evaluations import evaluators
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
@@ -20,6 +19,7 @@ from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.schema_utils import resolve_references
 from apps.web.waf import WafRule, waf_allow
 
 

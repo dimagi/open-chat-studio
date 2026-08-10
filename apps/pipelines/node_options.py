@@ -12,12 +12,12 @@ from django.urls import reverse
 
 from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
-from apps.custom_actions.schema_utils import resolve_references
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import OptionsSource
 from apps.utils.prompt import PromptVars
+from apps.utils.schema_utils import resolve_references
 
 
 def get_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
