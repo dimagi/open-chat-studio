@@ -267,19 +267,20 @@ class TestSearchCollection:
         get_query_vector.assert_not_called()
         assert [result.id for result in results] == [chunk.id]
 
-    def test_per_collection_overrides_take_precedence(self):
+    def test_per_collection_values_are_used(self):
         collection = CollectionFactory.create(search_dense_weight=0.25, search_fetch_k=7)
-        assert collection.search_dense_weight_or_default == 0.25
-        assert collection.search_fetch_k_or_default == 7
+        assert collection.search_dense_weight == 0.25
+        assert collection.search_fetch_k == 7
 
-    def test_falls_back_to_settings_when_unset(self):
+    def test_new_collections_are_seeded_from_the_settings(self):
+        """Every collection holds a usable value, so callers read the field directly."""
         collection = CollectionFactory.create()
-        assert collection.search_dense_weight_or_default == settings.DOCUMENT_SEARCH_DENSE_WEIGHT
-        assert collection.search_fetch_k_or_default == settings.DOCUMENT_SEARCH_FETCH_K
+        assert collection.search_dense_weight == settings.DOCUMENT_SEARCH_DENSE_WEIGHT
+        assert collection.search_fetch_k == settings.DOCUMENT_SEARCH_FETCH_K
 
 
 @pytest.mark.django_db()
-class TestHybridSearchOverrideConstraints:
+class TestHybridSearchKnobConstraints:
     """The knobs are absent from every form, so `full_clean()` never runs and the field
     validators never fire. These constraints are the only thing actually stopping a bad value,
     so they are asserted against the database rather than through a form.
@@ -290,7 +291,9 @@ class TestHybridSearchOverrideConstraints:
         [
             pytest.param("search_dense_weight", -0.1, id="weight-below-zero"),
             pytest.param("search_dense_weight", 1.1, id="weight-above-one"),
+            pytest.param("search_dense_weight", None, id="weight-null"),
             pytest.param("search_fetch_k", 0, id="fetch-k-zero"),
+            pytest.param("search_fetch_k", None, id="fetch-k-null"),
         ],
     )
     def test_out_of_range_values_are_rejected(self, field, value):
@@ -308,9 +311,7 @@ class TestHybridSearchOverrideConstraints:
         [
             pytest.param("search_dense_weight", 0.0, id="weight-zero"),
             pytest.param("search_dense_weight", 1.0, id="weight-one"),
-            pytest.param("search_dense_weight", None, id="weight-null-uses-default"),
             pytest.param("search_fetch_k", 1, id="fetch-k-one"),
-            pytest.param("search_fetch_k", None, id="fetch-k-null-uses-default"),
         ],
     )
     def test_valid_boundary_values_are_accepted(self, field, value):

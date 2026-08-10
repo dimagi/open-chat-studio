@@ -198,25 +198,22 @@ class Collection(BaseTeamModel, VersionsMixin):
         related_name="+",
         help_text="The LLM provider used with contextualizer_llm_model to generate context headers.",
     )
-    # Hybrid search tuning. Null means "use the DOCUMENT_SEARCH_* setting default"; these are
-    # deliberately kept off the pipeline node UI for now to avoid overwhelming bot builders.
+    # Hybrid search tuning, seeded from the DOCUMENT_SEARCH_* settings so every collection holds a
+    # usable value and callers can read the field directly. These are deliberately kept off the
+    # pipeline node UI for now to avoid overwhelming bot builders. Changing a setting only affects
+    # collections created afterwards; retuning existing ones takes a data migration.
     search_dense_weight = models.FloatField(
-        blank=True,
-        null=True,
+        default=settings.DOCUMENT_SEARCH_DENSE_WEIGHT,
         validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
         help_text=(
             "Weight of dense (semantic) results when fusing with lexical results, between 0 and 1. "
-            "The lexical ranking receives the remaining weight. Leave blank to use the system default."
+            "The lexical ranking receives the remaining weight."
         ),
     )
     search_fetch_k = models.PositiveIntegerField(
-        blank=True,
-        null=True,
+        default=settings.DOCUMENT_SEARCH_FETCH_K,
         validators=[MinValueValidator(1)],
-        help_text=(
-            "How many candidates to retrieve from each of the dense and lexical searches before "
-            "fusing them. Leave blank to use the system default."
-        ),
+        help_text=("How many candidates to retrieve from each of the dense and lexical searches before fusing them."),
     )
     create_version_task_id = models.CharField(max_length=128, blank=True)
 
@@ -233,12 +230,11 @@ class Collection(BaseTeamModel, VersionsMixin):
             # place a bad value can actually be stopped. An out-of-range weight would hand the
             # lexical ranking a negative weight, silently penalising the chunks it matched.
             models.CheckConstraint(
-                condition=models.Q(search_dense_weight__isnull=True)
-                | models.Q(search_dense_weight__gte=0, search_dense_weight__lte=1),
+                condition=models.Q(search_dense_weight__gte=0, search_dense_weight__lte=1),
                 name="collection_search_dense_weight_between_0_and_1",
             ),
             models.CheckConstraint(
-                condition=models.Q(search_fetch_k__isnull=True) | models.Q(search_fetch_k__gte=1),
+                condition=models.Q(search_fetch_k__gte=1),
                 name="collection_search_fetch_k_at_least_1",
             ),
         ]
@@ -508,18 +504,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_remote_index:
             return False
         return self._flag_active_for_team(Flags.HYBRID_SEARCH)
-
-    @property
-    def search_dense_weight_or_default(self) -> float:
-        if self.search_dense_weight is None:
-            return settings.DOCUMENT_SEARCH_DENSE_WEIGHT
-        return self.search_dense_weight
-
-    @property
-    def search_fetch_k_or_default(self) -> int:
-        if self.search_fetch_k is None:
-            return settings.DOCUMENT_SEARCH_FETCH_K
-        return self.search_fetch_k
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
