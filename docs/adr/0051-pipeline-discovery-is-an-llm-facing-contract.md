@@ -27,10 +27,10 @@ guesses.
 We will treat these two endpoints as a contract read by a model with no other context, and encode in
 the payload what the prose was explaining:
 
-- **A param's options live under the `/pipeline/options/` key of the same name.** `assistant_id`
-  draws from `assistant`, `collection_index_ids` from `collection_index`. The shared helper names every
-  key after the param that reads it, so the rule holds rather than being restated on every param. It
-  has one documented exception, below.
+- **A param's options live under the `/pipeline/options/` key of the same name.** `source_material_id`
+  draws from `source_material`, `collection_index_ids` from `collection_index`. The shared helper names
+  every key after the param that reads it, so the rule holds rather than being restated on every param.
+  It has one documented exception, below.
 - **Prompt variables are keyed by prompt flavour, not by param name.** `prompt_variables` serves
   `template_string`, `llm_prompt_variables` serves an LLM node's `prompt`, `router_prompt_variables` a
   router's. The exception is forced: two different params are both called `prompt` and each accepts a
@@ -61,6 +61,12 @@ the payload what the prose was explaining:
   node types reference, derived from their `ui:optionsSource` declarations, plus
   `API_ONLY_OPTION_KEYS`. A param the API withholds takes its option list with it, and so does a node
   type that stops being listed.
+- **Every param that reads an option list says so on the field.** Four did not, because their widgets
+  resolve options themselves and ignore `optionsSource` (`llm_provider_id`, `llm_provider_model_id`,
+  `tool_config`, `synthetic_voice_id`). Since the whitelist and `?node_type=` scoping are both derived
+  from those declarations, an undeclared param is one whose options a scoped response silently omits —
+  so the declaration is now unconditional, and `test_scoping_covers_every_param_that_reads_an_option_list`
+  holds it that way. The builder is unaffected: the widgets that ignore the key keep ignoring it.
 
 Most of this lives in `apps/api/v2/discovery/`. The exception is the one decision that belongs to the
 param itself: `UiSchema(api_exclude=True)` withholds a param, and the whitelist then withholds its
@@ -97,9 +103,9 @@ snake_case after the param that reads it, and both the builder and the API read 
   create in the list of types it may create, behind one boolean among six fields. Their schemas
   offer nothing to act on — a single fixed `name` param, and `StartNode`/`EndNode` are `can_delete:
   false` and excluded from versioning.
-- **Declare the four missing links in `UiSchema` so builder and API agree.** Rejected for now: it
-  changes the builder's schema for widgets that ignore `optionsSource`, widening a read-only ticket
-  into a frontend change.
+- **Leave the four undeclared `optionsSource` links out and special-case them in the API.** Rejected:
+  it puts the pairing in two places, one of which the field's author never sees. Declaring it on the
+  field turned out not to touch the frontend at all, so the reason to avoid it did not hold.
 - **Keep the exceptions in the endpoint description.** Rejected — prose an agent must remember is
   where the errors come from; the point of the endpoint is to remove guesswork.
 - **Strip every `ui:*` key, including `ui:optionsSource`.** Rejected: that was the original plan and
