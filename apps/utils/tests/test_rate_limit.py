@@ -1,14 +1,18 @@
-"""Tests for the rate limiting core (issue #2349 / #2140, story S1)."""
+"""Tests for the rate limiting core (issues #2349 / #2140)."""
 
 from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
 
 import pytest
 from django.conf import settings
+from django.core.cache import cache as default_cache
 from django.core.cache import caches
 from django.test import RequestFactory, override_settings
+from waffle import get_waffle_flag_model
 
-from apps.utils.rate_limit import check, client_ip, parse_rate
+from apps.teams.flags import Flags
+from apps.utils.factories.team import TeamFactory
+from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG, check, client_ip, is_exempt, parse_rate
 
 TINY_LIMITS = {"api": {"rate": "3/5m", "fail_open": True}}
 
@@ -16,6 +20,7 @@ TINY_LIMITS = {"api": {"rate": "3/5m", "fail_open": True}}
 @pytest.fixture(autouse=True)
 def _clear_rate_limit_cache():
     caches["rate_limit"].clear()
+    default_cache.clear()  # Clear all waffle and other caches
 
 
 @pytest.mark.parametrize(
@@ -237,3 +242,32 @@ def test_client_ip_treats_negative_proxy_count_as_untrusted(settings):
     settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = -1
     request = _request(remote_addr="203.0.113.9", forwarded_for="198.51.100.1, 10.0.0.1")
     assert client_ip(request) == "203.0.113.9"
+
+
+def test_exempt_flag_slugs_match():
+    """The core's slug constant and the teams flag declaration stay in sync."""
+    assert Flags.IGNORE_RATE_LIMITING.slug == RATE_LIMIT_EXEMPT_FLAG
+
+
+@pytest.mark.django_db()
+def test_is_exempt_for_flagged_team():
+    """A team with the flag enabled is exempt; others are not."""
+    flag = get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG)
+    exempt_team = TeamFactory()
+    other_team = TeamFactory()
+    flag.teams.add(exempt_team)
+
+    request = RequestFactory().get("/")
+    request.team = exempt_team
+    assert is_exempt(request)
+
+    request.team = other_team
+    assert not is_exempt(request)
+
+
+@pytest.mark.django_db()
+def test_is_exempt_for_everyone_acts_as_kill_switch():
+    """Everyone-on disables rate limiting globally."""
+    get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG, everyone=True)
+    request = RequestFactory().get("/")
+    assert is_exempt(request)

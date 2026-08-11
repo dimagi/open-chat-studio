@@ -12,8 +12,11 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.core.cache import caches
+from waffle import flag_is_active
 
 logger = logging.getLogger("ocs.rate_limit")
+
+RATE_LIMIT_EXEMPT_FLAG = "flag_ignore_rate_limiting"
 
 _RATE_RE = re.compile(r"^(?P<count>\d+)/(?P<magnitude>\d*)(?P<unit>[smh])$")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
@@ -126,3 +129,7 @@ def _bucket_ip(ip: str) -> str:
     if isinstance(parsed, ipaddress.IPv6Address):
         return str(ipaddress.ip_network(f"{ip}/64", strict=False))
     return ip
+
+
+def is_exempt(request) -> bool:
+    return bool(flag_is_active(request, RATE_LIMIT_EXEMPT_FLAG))
