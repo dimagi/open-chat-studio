@@ -12,6 +12,12 @@ def _render_to_json(value):
     return Template("{% load json_tags %}{{ value|to_json }}").render(Context({"value": value}))
 
 
+def _circular_dict():
+    data = {}
+    data["self"] = data
+    return data
+
+
 class TestToJson:
     def test_output_is_not_marked_safe(self):
         # unsafe output means Django's autoescaping runs over the JSON when it is rendered
@@ -43,6 +49,18 @@ class TestToJson:
         # what the browser displays is unchanged: entities decode back to the original JSON
         rendered = _render_to_json({"greeting": "<b>hi</b>", "count": 2})
         assert json.loads(html.unescape(rendered)) == {"greeting": "<b>hi</b>", "count": 2}
+
+    @pytest.mark.parametrize(
+        "make_value",
+        [
+            pytest.param(lambda: {1, 2}, id="set-is-not-serializable"),
+            pytest.param(lambda: {"obj": object()}, id="arbitrary-object"),
+            pytest.param(_circular_dict, id="circular-reference"),
+        ],
+    )
+    def test_unserializable_value_returns_message(self, make_value):
+        # json.dumps raises TypeError for unsupported types and ValueError for circular data
+        assert to_json(make_value()) == "Unable to encode JSON data"
 
 
 class TestHighlightJson:

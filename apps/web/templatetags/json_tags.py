@@ -1,5 +1,4 @@
 import json
-from json import JSONDecodeError
 
 from django import template
 from django.core.serializers.json import DjangoJSONEncoder
@@ -50,8 +49,9 @@ def to_json(obj):
         obj = dict(obj)
     try:
         return json.dumps(obj, indent=2, cls=DjangoJSONEncoder)
-    except JSONDecodeError:
-        return "Unable to decode JSON data"
+    except (TypeError, ValueError):
+        # TypeError: value is not serializable; ValueError: circular reference
+        return "Unable to encode JSON data"
 
 
 @register.filter
