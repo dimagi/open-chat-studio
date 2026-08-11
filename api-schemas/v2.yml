@@ -192,6 +192,8 @@ paths:
         The values each node param accepts, scoped to the API key's team.
 
         A key holds the values for the node param of the same name: write one of `source_material`'s entries into a node's `source_material_id`, one of `collection_index`'s into `collection_index_ids`.
+
+        Prompt variables are the exception, because two different params are both named `prompt` and they accept different sets. A template node's `template_string` draws from `prompt_variables`, an LLM node's `prompt` from `llm_prompt_variables`, and a router's `prompt` from `router_prompt_variables`. Pass `?node_type=` to receive only the list that applies -- the sets are not interchangeable.
       summary: List Pipeline Node Options
       parameters:
       - in: query
@@ -250,6 +252,13 @@ paths:
                     - label: input
                       description: The text passed into this node from the preceding
                         one.
+                    llm_prompt_variables:
+                    - label: source_material
+                      description: The full text of the source material chosen in
+                        `source_material_id`.
+                    router_prompt_variables:
+                    - label: session_state
+                      description: State that survives for the whole session.
                     default_llm_provider:
                       llm_provider_id: 1
                       llm_provider_model_id: 5
@@ -2048,7 +2057,24 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PromptVariable'
-          description: The variables a node's template params may reference.
+          description: The variables a template node's `template_string` may reference.
+            Each prompt-shaped param has its own list -- see `llm_prompt_variables`
+            and `router_prompt_variables` -- because the accepted set differs. Use
+            `?node_type=` to get the one that applies.
+        llm_prompt_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVariable'
+          description: 'The variables an LLM node''s `prompt` may reference. A superset
+            of `router_prompt_variables`: it adds the ones backed by a param on the
+            same node, such as `source_material` and `media`.'
+        router_prompt_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVariable'
+          description: The variables a router node's `prompt` may reference. Narrower
+            than `llm_prompt_variables` -- a router has no source material or media
+            to interpolate.
         default_llm_provider:
           allOf:
           - $ref: '#/components/schemas/DefaultLlmProvider'
