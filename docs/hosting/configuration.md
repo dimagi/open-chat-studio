@@ -45,6 +45,14 @@ All configuration is via environment variables. In production, set `DJANGO_SETTI
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. |
 
+## Rate Limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATE_LIMIT_ENFORCE` | `False` | When `False`, over-limit requests are served and logged as `rate_limit.would_block`; when `True`, they receive HTTP 429. |
+| `RATE_LIMIT_API` | `2000/5m` | Request limit for the `api` scope, format `count/window` with `s`/`m`/`h` units. |
+| `RATE_LIMIT_TRUSTED_PROXY_COUNT` | `0` | Number of trusted reverse proxies; required for correct client IPs behind a proxy or tunnel before enabling any IP-keyed scope. |
+
 ## Email
 
 One of the following email backends must be configured. Set `DJANGO_EMAIL_BACKEND` to choose:
