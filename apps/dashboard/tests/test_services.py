@@ -6,6 +6,8 @@ from django.utils import timezone
 
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
+from apps.utils.factories.team import TeamFactory
 
 from ..models import DashboardCache
 from ..services import DashboardService
@@ -290,6 +292,68 @@ class TestDashboardService:
 
         # Data should be identical
         assert data1 == data2
+
+
+@pytest.mark.django_db()
+class TestGetTagAnalyticsDataTeamScoping:
+    """`get_tag_analytics_data` reads `CustomTaggedItem` rows directly (not
+    via a team-scoped queryset like the other dashboard reads), so it needs
+    its own team-scoping pin. Both the link's own `team_id` and its tag's
+    `team_id` must match the reading team, or a foreign team's tag - and its
+    user-authored name - leaks into this team's breakdown.
+
+    Each test uses its own `team` fixture instance (function-scoped, so a
+    fresh team and a fresh `DashboardCache` key every time) to guarantee a
+    cached value from another test can never serve a result here.
+    """
+
+    def test_foreign_link_with_foreign_tag_on_local_message_is_excluded(self, team, chat):
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
+        foreign_team = TeamFactory.create()
+        foreign_tag = TagFactory.create(team=foreign_team, name="OTHER-TEAMS-SECRET-TAG")
+        CustomTaggedItemFactory.create(team=foreign_team, tag=foreign_tag, target=message)
+
+        data = DashboardService(team).get_tag_analytics_data()
+
+        assert data["tag_categories"] == {}
+        assert data["total_tagged_messages"] == 0
+
+    def test_foreign_link_with_local_tag_on_local_message_is_excluded(self, team, chat):
+        """The mirror shape: the link row's `team_id` is foreign even though
+        its tag belongs to the reading team - still must not count."""
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
+        foreign_team = TeamFactory.create()
+        local_tag = TagFactory.create(team=team, name="local-tag")
+        CustomTaggedItemFactory.create(team=foreign_team, tag=local_tag, target=message)
+
+        data = DashboardService(team).get_tag_analytics_data()
+
+        assert data["tag_categories"] == {}
+        assert data["total_tagged_messages"] == 0
+
+    def test_local_link_with_foreign_tag_on_local_message_is_excluded(self, team, chat):
+        """Isolates the `tag__team_id` predicate: the link row's own
+        `team_id` already matches the reading team, so only the tag's team
+        membership is left to reject this row."""
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
+        foreign_team = TeamFactory.create()
+        foreign_tag = TagFactory.create(team=foreign_team, name="foreign-tag")
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
+
+        data = DashboardService(team).get_tag_analytics_data()
+
+        assert data["tag_categories"] == {}
+        assert data["total_tagged_messages"] == 0
+
+    def test_own_teams_link_and_tag_are_counted(self, team, chat):
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
+        tag = TagFactory.create(team=team, name="our-own-tag")
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
+
+        data = DashboardService(team).get_tag_analytics_data()
+
+        assert data["tag_categories"] == {tag.label: {tag.name: 1}}
+        assert data["total_tagged_messages"] == 1
 
 
 def _create_session(experiment, participant, team, message_date):
