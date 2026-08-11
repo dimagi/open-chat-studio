@@ -27,17 +27,15 @@ CodeRabbit finding on PR #4132.
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import Chat, ChatMessage
+from apps.chat.models import ChatMessage
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.teams.models import Team
 
-from .filters import CONVERSATION_MESSAGE_TYPES, chat_tag_exists_pair
+from .filters import CONVERSATION_MESSAGE_TYPES, chat_tag_exists_pair, tagged_conversation_exists_pair
 
 
 def filtered_querysets(
@@ -123,69 +121,21 @@ def filtered_querysets(
         participants = participants.filter(id__in=participant_ids)
 
     if tag_ids:
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        message_content_type = ContentType.objects.get_for_model(ChatMessage)
-
-        # Sessions: chat or any message in it carries the tag (both the link row and its tag
-        # must belong to the reading team)
+        # One tag-match rule for every leg (chat-or-message, team-scoped links):
+        # sessions and messages resolve it from their chat id, experiments and
+        # participants from their sessions' chats.
         tag_on_chat, tag_on_msg = chat_tag_exists_pair(team, tag_ids, "chat_id")
         sessions = sessions.annotate(_tchat=tag_on_chat, _tmsg=tag_on_msg).filter(Q(_tchat=True) | Q(_tmsg=True))
 
-        # Experiments: any session's chat or messages carry the tag (both the link row and
-        # its tag must belong to the reading team)
-        exp_tag_on_chat = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=chat_content_type,
-                object_id__in=Subquery(
-                    Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values("id")
-                ),
-                tag_id__in=tag_ids,
-            )
-        )
-        exp_tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id__in=Subquery(
-                    ChatMessage.objects.filter(chat__experiment_session__experiment=OuterRef(OuterRef("id"))).values(
-                        "id"
-                    )
-                ),
-                tag_id__in=tag_ids,
-            )
+        exp_tag_on_chat, exp_tag_on_msg = tagged_conversation_exists_pair(
+            team, tag_ids, "experiment_session__experiment"
         )
         experiments = experiments.annotate(_exp_tchat=exp_tag_on_chat, _exp_tmsg=exp_tag_on_msg).filter(
             Q(_exp_tchat=True) | Q(_exp_tmsg=True)
         )
 
-        # Participants: any of their sessions' chats or messages carry the tag (both the
-        # link row and its tag must belong to the reading team)
-        part_tag_on_chat = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=chat_content_type,
-                object_id__in=Subquery(
-                    Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values("id")
-                ),
-                tag_id__in=tag_ids,
-            )
-        )
-        part_tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id__in=Subquery(
-                    ChatMessage.objects.filter(chat__experiment_session__participant=OuterRef(OuterRef("id"))).values(
-                        "id"
-                    )
-                ),
-                tag_id__in=tag_ids,
-            )
+        part_tag_on_chat, part_tag_on_msg = tagged_conversation_exists_pair(
+            team, tag_ids, "experiment_session__participant"
         )
         participants = participants.annotate(_part_tchat=part_tag_on_chat, _part_tmsg=part_tag_on_msg).filter(
             Q(_part_tchat=True) | Q(_part_tmsg=True)

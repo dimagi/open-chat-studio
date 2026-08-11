@@ -10,7 +10,7 @@ use.
 from dataclasses import dataclass
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, QuerySet, Subquery
+from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
 
 from apps.annotations.models import CustomTaggedItem
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
@@ -49,6 +49,11 @@ class UsageFilters:
 # bookkeeping and are not counted by any metric (ADR-0051).
 CONVERSATION_MESSAGE_TYPES = (ChatMessageType.HUMAN, ChatMessageType.AI)
 
+# What makes a participant active: they authored a HUMAN message. Receiving AI
+# output is not activity (ADR-0051). Every surface's participant count filters
+# on this one predicate.
+HUMAN_AUTHORED = Q(message_type=ChatMessageType.HUMAN)
+
 
 def conversation_messages(message_queryset: QuerySet[ChatMessage]) -> QuerySet[ChatMessage]:
     """Narrow any team-scoped, windowed message queryset to conversation turns.
@@ -56,6 +61,39 @@ def conversation_messages(message_queryset: QuerySet[ChatMessage]) -> QuerySet[C
     whether the caller starts from ``messages_queryset`` (the API) or from
     ``filtered_querysets`` (the dashboard)."""
     return message_queryset.filter(message_type__in=CONVERSATION_MESSAGE_TYPES)
+
+
+def tagged_conversation_exists_pair(team: Team, tag_ids: list[int], session_path: str) -> tuple[Exists, Exists]:
+    """The (tag-on-chat, tag-on-message) `Exists` pair for querysets one step
+    removed from the chat: an experiment or participant matches when any of
+    its sessions' conversations carries one of `tag_ids`. `session_path` is
+    the ``Chat``-side path back to the outer queryset's row
+    (``"experiment_session__experiment"`` / ``"experiment_session__participant"``).
+    Team scoping is the same as :func:`chat_tag_exists_pair`: both the link
+    row and its tag must belong to the reading team."""
+    chat_content_type = ContentType.objects.get_for_model(Chat)
+    message_content_type = ContentType.objects.get_for_model(ChatMessage)
+    tag_on_chat = Exists(
+        CustomTaggedItem.objects.filter(
+            team_id=team.id,
+            tag__team_id=team.id,
+            content_type=chat_content_type,
+            object_id__in=Subquery(Chat.objects.filter(**{session_path: OuterRef(OuterRef("id"))}).values("id")),
+            tag_id__in=tag_ids,
+        )
+    )
+    tag_on_msg = Exists(
+        CustomTaggedItem.objects.filter(
+            team_id=team.id,
+            tag__team_id=team.id,
+            content_type=message_content_type,
+            object_id__in=Subquery(
+                ChatMessage.objects.filter(**{f"chat__{session_path}": OuterRef(OuterRef("id"))}).values("id")
+            ),
+            tag_id__in=tag_ids,
+        )
+    )
+    return tag_on_chat, tag_on_msg
 
 
 def chat_tag_exists_pair(team: Team, tag_ids: list[int], chat_id_ref: str) -> tuple[Exists, Exists]:

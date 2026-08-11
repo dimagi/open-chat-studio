@@ -14,6 +14,7 @@ from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
+from apps.usage_metrics.filters import HUMAN_AUTHORED
 from apps.usage_metrics.metrics import (
     CONVERSATION_MESSAGE_TYPES,
     conversation_message_total,
@@ -130,7 +131,7 @@ class DashboardService:
                 unique_participants=Count(
                     "chat__experiment_session__participant",
                     distinct=True,
-                    filter=Q(message_type=ChatMessageType.HUMAN),
+                    filter=HUMAN_AUTHORED,
                 ),
             )
             .order_by("period")

@@ -41,12 +41,14 @@ def _cost_cache_key(prefix: str, filter_form: DashboardFilterForm) -> str:
     return f"{prefix}_{DashboardService._cache_key(params)}"
 
 
-def _cached(team, cache_key: str, compute, decode):
+def _cached(team, cache_key: str, compute, decode, encode=asdict):
     """Serve `compute()` through DashboardCache, encoding via the JSON encoder
     the cache field expects and rebuilding the dataclass on the way out. A
     payload that no longer decodes - an entry written by an older code shape,
     still inside its TTL after a deploy - falls through to a recompute that
-    overwrites it, rather than surfacing the decode error on every load."""
+    overwrites it, rather than surfacing the decode error on every load.
+    `encode` defaults to dataclass encoding; a payload that is already
+    JSON-shaped passes identity functions for both directions."""
     cached_data = DashboardCache.get_cached_data(team, cache_key)
     if cached_data is not None:
         try:
@@ -54,7 +56,7 @@ def _cached(team, cache_key: str, compute, decode):
         except (KeyError, TypeError, ValueError):
             pass
     value = compute()
-    DashboardCache.set_cached_data(team, cache_key, json.loads(json.dumps(asdict(value), cls=DjangoJSONEncoder)))
+    DashboardCache.set_cached_data(team, cache_key, json.loads(json.dumps(encode(value), cls=DjangoJSONEncoder)))
     return value
 
 
@@ -276,15 +278,16 @@ class CostTrackingApiView(DashboardApiView):
             # so normalise first rather than minting a cache row per string.
             granularity = "daily"
         cache_key = f"{_cost_cache_key('cost_timeseries', filter_form)}_{granularity}"
-        data = DashboardCache.get_cached_data(request.team, cache_key)
-        if data is None:
-            data = json.loads(
-                json.dumps(
-                    cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters),
-                    cls=DjangoJSONEncoder,
-                )
-            )
-            DashboardCache.set_cached_data(request.team, cache_key, data)
+        # The payload is already JSON-shaped (floats + dates), so both cache
+        # directions are identity; the JSON round-trip in _cached normalises
+        # the dates the same way the previous inline encoding did.
+        data = _cached(
+            request.team,
+            cache_key,
+            lambda: cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters),
+            decode=lambda payload: payload,
+            encode=lambda value: value,
+        )
         return self.json_response(data)
 
 

@@ -43,12 +43,16 @@ from apps.teams.models import Team
 from .dashboard_querysets import filtered_querysets
 from .filters import (
     CONVERSATION_MESSAGE_TYPES,  # noqa: F401 - re-exported for callers importing it from this module
+    HUMAN_AUTHORED,
     UsageFilters,
     chat_tag_exists_pair,
     conversation_messages,
 )
 
-_TRUNC = {
+# DB truncation per bucketed granularity (Django's TruncWeek starts weeks on
+# Monday). The one home of the granularity vocabulary - the v2 usage API's
+# grouped reads import it rather than keeping a copy.
+GRANULARITY_TRUNC = {
     "daily": TruncDate,
     "weekly": TruncWeek,
     "monthly": TruncMonth,
@@ -119,14 +123,14 @@ def active_participants_queryset(
 ) -> QuerySet[ChatMessage]:
     """The message rows behind the active-participants count: HUMAN messages
     only. Receiving AI output is not activity (ADR-0051)."""
-    return messages_queryset(team, start=start, end=end, filters=filters).filter(message_type=ChatMessageType.HUMAN)
+    return messages_queryset(team, start=start, end=end, filters=filters).filter(HUMAN_AUTHORED)
 
 
 def distinct_active_participants(message_queryset: QuerySet[ChatMessage]) -> int:
     """Distinct participants who authored a HUMAN message in an already-scoped
     message queryset. The one definition of the count, callable from either
     surface's starting queryset."""
-    return message_queryset.filter(message_type=ChatMessageType.HUMAN).aggregate(
+    return message_queryset.filter(HUMAN_AUTHORED).aggregate(
         n=Count("chat__experiment_session__participant", distinct=True)
     )["n"]
 
@@ -294,13 +298,16 @@ def _by_bucket(queryset: QuerySet, granularity: str, tz: ZoneInfo, **annotations
     ``annotations``; yields ``(local bucket date, row)``. ``TruncDate`` yields
     a date already; ``TruncWeek``/``TruncMonth`` yield a datetime whose local
     date is the bucket boundary."""
-    trunc = _TRUNC.get(granularity, TruncDate)
+    trunc = GRANULARITY_TRUNC.get(granularity, TruncDate)
     rows = queryset.annotate(bucket=trunc("created_at", tzinfo=tz)).values("bucket").annotate(**annotations)
     for row in rows:
-        yield _bucket_date(row["bucket"], tz), row
+        yield bucket_date(row["bucket"], tz), row
 
 
-def _bucket_date(value, tz: ZoneInfo):
+def bucket_date(value, tz: ZoneInfo):
+    """Normalise a DB truncation result to its local calendar date.
+    ``TruncDate`` yields a ``date`` already; ``TruncWeek``/``TruncMonth``
+    yield a datetime whose local date is the bucket boundary."""
     if isinstance(value, datetime):
         return value.astimezone(tz).date()
     return value
