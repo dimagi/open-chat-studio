@@ -93,7 +93,6 @@ Consult these guides when working in the relevant area:
 * `docs/developer_guides/code_systems/feature_flags.md` — when adding, using, or removing feature flags
 * `docs/developer_guides/feature_deprecation.md` — when deprecating or removing a feature
 * `docs/developer_guides/testing/help_agent_evals.md` — when adding or modifying help agents or their eval tests
-* `docs/agents/adr_process.md` — when brainstorming or designing new work, to check for related past ADRs before finalizing a design
 
 ## Agent skills
 
@@ -107,4 +106,4 @@ Single-context — `CONTEXT.md` and `docs/adr/` at the repo root (created lazily
 
 ### Architecture Decision Records (ADRs)
 
-ADRs live at `docs/adr/`, are immutable once accepted, and are rendered into the docs site under Architecture → Decisions. See `docs/agents/adr_process.md` for splitting decisions, the source-doc `status` lifecycle, extraction, hand-authoring, and citation conventions.
+ADRs live at `docs/adr/`. See `docs/agents/domain.md` for checking existing ADRs and citation conventions before finalizing a design, `docs/agents/adr_process.md` for what an ADR is and the source-doc `status` lifecycle, the `/extract-adrs` skill for turning a stable design doc into ADRs, and `docs/developer_guides/adr_process.md` to write one by hand.
