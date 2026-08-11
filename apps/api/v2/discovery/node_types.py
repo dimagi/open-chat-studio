@@ -1,4 +1,4 @@
-"""Reshaping the builder's node schemas into what an agent reads.
+"""Reshaping the builder's node schemas into what a client reads.
 
 Everything here is API-side: ``apps.pipelines.nodes.node_metadata`` keeps serving the builder its own
 vocabulary untouched.
@@ -29,7 +29,7 @@ from .contract import (
 
 @cache
 def get_node_types() -> list[dict]:
-    """Node types reshaped for agent consumption.
+    """Node types reshaped for client consumption.
 
     Cached because the node classes are fixed at import time, so this is static per deploy. The
     cache also captures ``DOCUMENTATION_BASE_URL``, which is deployment-static for the same reason;
@@ -41,7 +41,7 @@ def get_node_types() -> list[dict]:
             "type": schema["title"],
             "description": schema["description"],
             "outputs": _output_topology(schema),
-            "schema": _agent_schema(schema),
+            "schema": _schema(schema),
         }
         if documentation_url := _documentation_url(schema):
             entry["documentation_url"] = documentation_url
@@ -55,7 +55,7 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
 
 
 def unknown_node_type(requested_type: str) -> NotFound:
-    """A 404 the agent can act on: why the name failed, and what it could have asked for instead."""
+    """A 404 the client can act on: why the name failed, and what it could have asked for instead."""
     if (message := _deprecation_messages().get(requested_type)) is not None:
         advice = f" {message}" if message else ""
         detail = f"Node type '{requested_type}' is deprecated and can no longer be used.{advice}"
@@ -80,7 +80,7 @@ def _addable_schemas() -> list[dict]:
     ``ui:can_add`` covers both the deprecated types and the structural ones the server manages (the
     deprecation decorator forces it False). The endpoint answers "what can I build", so a type that
     fails that question is not an entry with a flag on it -- it is absent, and ``unknown_node_type``
-    explains why if the agent asks directly.
+    explains why if the client asks directly.
     """
     return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
 
@@ -98,23 +98,23 @@ def _output_topology(schema: dict) -> dict:
     return SINGLE_OUTPUT
 
 
-def _agent_schema(schema: dict) -> dict:
-    """The node's JSON Schema in agent vocabulary, with the params the API withholds taken out.
+def _schema(node_schema: dict) -> dict:
+    """The node's JSON Schema as served, with the params the API withholds taken out.
 
     A hidden param has to leave ``required`` as well as ``properties`` -- a name required but never
-    described reads as a field the agent failed to receive rather than one it is not offered.
+    described reads as a field the client failed to receive rather than one it is not offered.
     """
-    agent_schema = {key: value for key, value in schema.items() if not key.startswith("ui:") and key != "properties"}
-    agent_schema["properties"] = {
-        name: _agent_property(name, prop) for name, prop in schema["properties"].items() if name not in HIDDEN_PARAMS
+    served = {key: value for key, value in node_schema.items() if not key.startswith("ui:") and key != "properties"}
+    served["properties"] = {
+        name: _property(name, prop) for name, prop in node_schema["properties"].items() if name not in HIDDEN_PARAMS
     }
-    if required := agent_schema.get("required"):
-        agent_schema["required"] = [name for name in required if name not in HIDDEN_PARAMS]
-    return agent_schema
+    if required := served.get("required"):
+        served["required"] = [name for name in required if name not in HIDDEN_PARAMS]
+    return served
 
 
-def _agent_property(name: str, prop: dict) -> dict:
-    """One node param, in agent vocabulary: `ui:` keys translated or dropped, links made explicit."""
+def _property(name: str, prop: dict) -> dict:
+    """One node param, as served: `ui:` keys translated or dropped, links made explicit."""
     translated = {
         UI_KEY_TRANSLATIONS[key]: value
         for key, value in prop.items()
@@ -188,7 +188,7 @@ def _structural_types() -> frozenset[str]:
     """Types the server creates and manages: ``StartNode``, ``EndNode``, ``Passthrough``.
 
     Unlisted, but ``/inspect/`` still reports them as the ``type`` of real nodes, so a lookup on one
-    is a reasonable thing for an agent to do and must not come back as "unknown".
+    is a reasonable thing for a client to do and must not come back as "unknown".
     """
     return frozenset(
         schema["title"]

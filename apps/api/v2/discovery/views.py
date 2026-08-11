@@ -1,9 +1,9 @@
 """Team-level discovery endpoints for the chatbot write API.
 
-These tell an agent what it can build (`/pipeline/nodes/`) and which resource ids it may reference
+These tell a client what it can build (`/pipeline/nodes/`) and which resource ids it may reference
 (`/pipeline/options/`). Both read the shared helpers in ``apps.pipelines.node_metadata`` and reshape
-them -- the builder consumes those helpers raw, so every agent-facing transform lives in this
-package. See ADR-0051 for why the agent's view diverges from the builder's.
+them -- the builder consumes those helpers raw, so every client-facing transform lives in this
+package. See ADR-0051 for why this view diverges from the builder's.
 """
 
 from django.db.models.functions import Lower
@@ -233,7 +233,7 @@ class PipelineOptionsView(DiscoveryView):
     def _clean_options(cls, value):
         """Strip builder-only affordances from an options payload.
 
-        Two things the editor needs and an agent must not see: placeholder entries with an empty
+        Two things the editor needs and a client must not see: placeholder entries with an empty
         ``value`` (a prompt like "Select a topic", not a referenceable id) and ``edit_url`` (a link
         into the Django UI). The walk recurses because ``built_in_tools`` is a dict of lists keyed by
         provider type, not a flat list.
@@ -254,7 +254,7 @@ class PipelineOptionsView(DiscoveryView):
 
         The builder emits these as ``{"label": v, "value": v}`` -- the two are always identical,
         since the value is just the name typed into the template. A human reading an autocomplete
-        dropdown infers the rest from the name; an agent cannot, so it gets the description instead.
+        dropdown infers the rest from the name; a client cannot, so it gets the description instead.
         Mutates a copy of the list, never ``PROMPT_VAR_DESCRIPTIONS``.
         """
         if entries := options.get(OptionsSource.jinja_node):

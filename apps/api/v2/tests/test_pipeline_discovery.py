@@ -2,7 +2,7 @@ import pytest
 from django.urls import reverse
 
 from apps.api.v2.discovery.contract import HIDDEN_PARAMS
-from apps.api.v2.discovery.node_types import _agent_property, _documentation_url, option_keys_for_node_type
+from apps.api.v2.discovery.node_types import _documentation_url, _property, option_keys_for_node_type
 from apps.api.v2.discovery.views import PipelineOptionsView
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -253,7 +253,7 @@ def test_feature_flagged_params_are_marked():
 
     Tested against the translation directly rather than through an endpoint: no param in the served
     schemas carries `ui:flagRequired` today, so there is nothing there to assert against."""
-    assert _agent_property("some_param", {"type": "array", "ui:flagRequired": "flag_x"}) == {
+    assert _property("some_param", {"type": "array", "ui:flagRequired": "flag_x"}) == {
         "type": "array",
         "requires_feature_flag": "flag_x",
     }

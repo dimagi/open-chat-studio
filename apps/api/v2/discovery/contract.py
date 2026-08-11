@@ -3,7 +3,7 @@
 A param's permitted values live under the `/pipeline/options/` key of the same name --
 `source_material_id` draws from `source_material`, `collection_index_ids` from `collection_index`.
 The maps here are what make that hold: they rename the option keys the builder spells differently,
-hide the ones an agent has no use for, and state the cross-param rules the builder enforces in JS
+hide the ones a client has no use for, and state the cross-param rules the builder enforces in JS
 instead. See ADR-0051.
 """
 
@@ -32,7 +32,7 @@ HIDDEN_OPTION_KEYS = frozenset(
 )
 
 # Node params the API neither describes nor offers values for. A param and its option key are
-# withheld together: an agent is told never to construct an option value, so a param served without
+# withheld together: a client is told never to construct an option value, so a param served without
 # its list is one it cannot legally fill, and a list served without its param belongs to nothing.
 HIDDEN_PARAMS = frozenset({"mcp_tools"})
 
@@ -51,9 +51,9 @@ MUST_MATCH = {"llm_provider_model_id": PROVIDER_TYPE_MATCH}
 # these option keys are dicts keyed by provider type rather than flat lists.
 OPTIONS_KEYED_BY = {"built_in_tools": PROVIDER_TYPE_MATCH, "tool_config": PROVIDER_TYPE_MATCH}
 
-# `ui:*` property keys that carry meaning for an agent, renamed out of the builder's vocabulary.
+# `ui:*` property keys that carry meaning for a client, renamed out of the builder's vocabulary.
 # Everything else `ui:*` is presentation (`ui:widget`, `ui:rows`, `ui:onShowDefault`) or duplicates
-# something the agent already has (`ui:enumLabels` restates `enum`, `ui:optionsSource` restates the
+# something the client already has (`ui:enumLabels` restates `enum`, `ui:optionsSource` restates the
 # param name) and is dropped.
 UI_KEY_TRANSLATIONS = {
     "ui:visibleWhen": "applies_when",
