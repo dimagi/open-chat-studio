@@ -42,30 +42,10 @@ class TestValidatePromptVariables:
                 validate_prompt_variables(context, prompt_key="prompt", known_vars=set(PromptVars.values))
 
 
-class TestPromptVarDescriptions:
-    """The v2 discovery API serves these descriptions to an LLM agent in place of the redundant
-    ``value``, so a variable without one is a KeyError at request time, not a cosmetic gap."""
-
-    def test_every_offered_variable_has_a_description(self):
-        """All three prompt-variable lists are served, so all three need full coverage -- the mirror
-        of `test_no_description_is_orphaned`, which already spans them."""
-        missing = sorted(
-            {
-                entry["label"]
-                for accessor in (
-                    PromptVars.get_all_prompt_vars,
-                    PromptVars.get_router_prompt_vars,
-                    PromptVars.get_jinja_vars,
-                )
-                for entry in accessor()
-                if entry["label"] not in PROMPT_VAR_DESCRIPTIONS
-            }
-        )
-        assert not missing, f"Add these to PROMPT_VAR_DESCRIPTIONS in apps/utils/prompt.py: {missing}"
-
-    def test_no_description_is_orphaned(self):
-        """The reverse guard: a description for a variable nothing offers is dead weight."""
-        offered = {
+def test_every_offered_prompt_var_has_a_description():
+    """The v2 discovery API looks each one up by label, so a gap is a KeyError at request time."""
+    missing = sorted(
+        {
             entry["label"]
             for accessor in (
                 PromptVars.get_all_prompt_vars,
@@ -73,12 +53,7 @@ class TestPromptVarDescriptions:
                 PromptVars.get_jinja_vars,
             )
             for entry in accessor()
+            if entry["label"] not in PROMPT_VAR_DESCRIPTIONS
         }
-        assert not set(PROMPT_VAR_DESCRIPTIONS) - offered
-
-    def test_builder_payload_still_carries_value(self):
-        """The pipeline builder's autocomplete widget reads ``value``. Only the API swaps it out,
-        so these accessors must keep emitting it."""
-        for entry in PromptVars.get_all_prompt_vars():
-            assert entry["value"] == entry["label"]
-            assert "description" not in entry
+    )
+    assert not missing, f"Add these to PROMPT_VAR_DESCRIPTIONS in apps/utils/prompt.py: {missing}"

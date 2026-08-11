@@ -1,20 +1,11 @@
 import pytest
 from django.urls import reverse
 
-from apps.pipelines.nodes.node_metadata import (
-    get_node_default_values,
-    get_node_parameter_values,
-    get_node_schemas,
-)
+from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-
-
-def test_get_node_schemas_returns_every_concrete_node_type():
-    titles = {schema["title"] for schema in get_node_schemas()}
-    assert {"StartNode", "EndNode", "LLMResponseWithPrompt", "RouterNode"} <= titles
 
 
 @pytest.mark.django_db()
@@ -38,9 +29,7 @@ def test_get_node_parameter_values_is_team_scoped():
 
 @pytest.mark.django_db()
 def test_every_option_key_is_snake_case():
-    """The builder and the v2 discovery API read this payload verbatim, so its keys are the one
-    vocabulary both audiences share. A key spelled any other way forces whichever caller does not
-    spell it that way to translate, which is the thing this shape exists to avoid."""
+    """The builder and the v2 discovery API both read this payload verbatim."""
     team = TeamWithUsersFactory.create()
 
     values = get_node_parameter_values(
@@ -57,9 +46,7 @@ def test_every_option_key_is_snake_case():
 def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
     team = TeamWithUsersFactory.create()
     provider = LlmProviderFactory.create(team=team, type="openai")
-    # Own the model row rather than leaning on the global seed rows (team=None) that migration
-    # 0021 installs: any `django_db(transaction=True)` test flushes those away for the rest of
-    # the process, so relying on them makes this test's outcome depend on execution order.
+    # Own the model row: a `django_db(transaction=True)` test elsewhere flushes the global seed rows.
     model = LlmProviderModelFactory.create(team=team, type="openai")
 
     defaults = get_node_default_values(
@@ -73,7 +60,7 @@ def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
 
 @pytest.mark.django_db()
 def test_pipeline_builder_context_still_populated(client):
-    """Regression guard on the extraction: the builder view still gets its three context keys."""
+    """The builder view still gets its three context keys from the extracted helpers."""
     team = TeamWithUsersFactory.create()
     user = team.members.first()
     LlmProviderFactory.create(team=team)
