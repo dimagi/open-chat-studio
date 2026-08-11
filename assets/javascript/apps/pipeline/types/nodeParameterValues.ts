@@ -12,8 +12,8 @@
 
 
     export type NodeParameterValues = {
-      LlmProviderId: TypedOption[];
-      LlmProviderModelId: TypedOption[];
+      llm_provider_id: TypedOption[];
+      llm_provider_model_id: TypedOption[];
       [k: string]: Option[];
     };
 

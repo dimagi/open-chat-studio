@@ -34,8 +34,10 @@ def get_node_parameter_values(team, llm_providers, llm_provider_models, syntheti
 
 def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QuerySet):
     return {
-        "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
-        "LlmProviderModelId": [
+        OptionsSource.llm_provider_id: [
+            _option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers
+        ],
+        OptionsSource.llm_provider_model_id: [
             _option(provider.id, str(provider), provider.type, None, provider.max_token_limit)
             for provider in llm_provider_models
         ],

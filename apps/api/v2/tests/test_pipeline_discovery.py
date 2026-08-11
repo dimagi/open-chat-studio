@@ -569,8 +569,10 @@ def test_options_include_a_valid_starting_provider_pair(team_with_resources):
 
 @pytest.mark.django_db()
 def test_option_keys_are_all_snake_case(team_with_resources):
-    """`LlmProviderId` next to `source_material` makes the agent guess a convention on every lookup.
-    The builder keeps the mixed-case `OptionsSource` names; only the API surface is normalised."""
+    """A mixed-case key next to `source_material` makes the client guess a convention on every lookup.
+    The shared helper names every key in snake_case after the param that reads it, so this holds
+    without the API renaming anything -- see `test_every_option_key_is_snake_case` for the source-side
+    half of the guarantee."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     options = client.get(reverse("api:v2:pipeline-options")).json()

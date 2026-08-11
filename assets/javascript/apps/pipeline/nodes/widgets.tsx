@@ -853,7 +853,7 @@ export function LlmWidget(props: WidgetParams) {
   const readOnly = usePipelineStore((state) => state.readOnly);
 
   const getSelectedModelSchema = (selectedModelId: string) => {
-    const selectedModelName = parameterValues.LlmProviderModelId.find(model =>
+    const selectedModelName = parameterValues.llm_provider_model_id.find(model =>
       String(model.value) === String(selectedModelId)
     )?.label.split(": ")[1] || "";
 
@@ -901,7 +901,7 @@ export function LlmWidget(props: WidgetParams) {
   };
 
   type ProviderModelsByType = { [type: string]: TypedOption[] };
-    const providerModelsByType = parameterValues.LlmProviderModelId.reduce((acc, provModel) => {
+    const providerModelsByType = parameterValues.llm_provider_model_id.reduce((acc, provModel) => {
     if (!acc[provModel.type]) {
       acc[provModel.type] = [];
     }
@@ -936,8 +936,8 @@ export function LlmWidget(props: WidgetParams) {
           <option value="" disabled>
             Select a model
           </option>
-          {parameterValues.LlmProviderId.map((provider) => {
-            const providersWithSameType = parameterValues.LlmProviderId.filter(p => p.type === provider.type).length;
+          {parameterValues.llm_provider_id.map((provider) => {
+            const providersWithSameType = parameterValues.llm_provider_id.filter(p => p.type === provider.type).length;
 
             return providerModelsByType[provider.type] &&
               providerModelsByType[provider.type].map((providerModel) => (
@@ -1121,7 +1121,7 @@ export function InputField({label, help_text, inputError, children}: React.Props
 function BuiltInToolsWidget(props: WidgetParams) {
   const llmProviderId = concatenate(props.nodeParams["llm_provider_model_id"]);
   const { parameterValues } = getCachedData();
-  const models = parameterValues.LlmProviderModelId as LlmProviderModel[];
+  const models = parameterValues.llm_provider_model_id as LlmProviderModel[];
   const model = models.find((m) => String(m.value) === String(llmProviderId));
   const providerKey = model?.type?.toLowerCase() || "";
   const providerToolMap = parameterValues.built_in_tools as unknown as Record<string, TypedOption[]>

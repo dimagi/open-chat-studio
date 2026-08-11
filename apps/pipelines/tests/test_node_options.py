@@ -31,9 +31,26 @@ def test_get_node_parameter_values_is_team_scoped():
         synthetic_voices=[],
     )
 
-    provider_ids = {option["value"] for option in values["LlmProviderId"]}
+    provider_ids = {option["value"] for option in values["llm_provider_id"]}
     assert mine.id in provider_ids
     assert theirs.id not in provider_ids
+
+
+@pytest.mark.django_db()
+def test_every_option_key_is_snake_case():
+    """The builder and the v2 discovery API read this payload verbatim, so its keys are the one
+    vocabulary both audiences share. A key spelled any other way forces whichever caller does not
+    spell it that way to translate, which is the thing this shape exists to avoid."""
+    team = TeamWithUsersFactory.create()
+
+    values = get_node_parameter_values(
+        team=team,
+        llm_providers=list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
+        llm_provider_models=LlmProviderModel.objects.for_team(team),
+        synthetic_voices=[],
+    )
+
+    assert [key for key in values if key != key.lower()] == []
 
 
 @pytest.mark.django_db()
@@ -67,5 +84,5 @@ def test_pipeline_builder_context_still_populated(client):
 
     assert response.status_code == 200
     assert response.context["node_schemas"]
-    assert response.context["parameter_values"]["LlmProviderId"]
+    assert response.context["parameter_values"]["llm_provider_id"]
     assert "llm_provider_id" in response.context["default_values"]
