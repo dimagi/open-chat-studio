@@ -1,6 +1,7 @@
 """Tests for the rate limiting core (issue #2349 / #2140, story S1)."""
 
 from concurrent.futures import ThreadPoolExecutor
+from unittest import mock
 
 import pytest
 from django.conf import settings
@@ -141,3 +142,51 @@ def test_under_limit_logs_nothing(caplog):
     with caplog.at_level("INFO", logger="ocs.rate_limit"):
         check("api", "team", "42")
     assert not [r for r in caplog.records if r.message == "rate_limit.would_block"]
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_backend_error_fails_open_by_default(caplog):
+    """A cache outage lets requests pass and logs one alertable error."""
+    with mock.patch("apps.utils.rate_limit._count", side_effect=ConnectionError("redis down")):
+        with caplog.at_level("ERROR", logger="ocs.rate_limit"):
+            result = check("api", "team", "42")
+    assert result.allowed
+    assert result.degraded
+    errors = [r for r in caplog.records if r.message == "rate_limit.backend_error"]
+    assert len(errors) == 1
+
+
+@override_settings(
+    RATE_LIMITS={"api": {"rate": "3/5m", "fail_open": False}},
+    RATE_LIMIT_ENFORCE=True,
+)
+def test_backend_error_fails_closed_when_configured(caplog):
+    """A fail-closed scope refuses requests during a cache outage (the credentials scope will use this)."""
+    with mock.patch("apps.utils.rate_limit._count", side_effect=ConnectionError("redis down")):
+        with caplog.at_level("ERROR", logger="ocs.rate_limit"):
+            result = check("api", "team", "42")
+    assert not result.allowed
+    assert result.degraded
+    assert result.retry_after == 300
+
+
+@override_settings(
+    RATE_LIMITS={"api": {"rate": "3/5m", "fail_open": False}},
+    RATE_LIMIT_ENFORCE=False,
+)
+def test_backend_error_fail_closed_still_allows_in_log_only_mode():
+    """Log-only mode never blocks, even for fail-closed scopes."""
+    with mock.patch("apps.utils.rate_limit._count", side_effect=ConnectionError("redis down")):
+        result = check("api", "team", "42")
+    assert result.allowed
+    assert result.degraded
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS)
+def test_expired_key_between_add_and_incr_recovers():
+    """The add/incr race on window expiry retries once instead of erroring."""
+    real_cache = caches["rate_limit"]
+    with mock.patch.object(type(real_cache), "incr", autospec=True, side_effect=[ValueError("key gone"), 1]):
+        result = check("api", "team", "42")
+    assert result.allowed
+    assert result.remaining == 2

@@ -64,12 +64,27 @@ def _count(cache, key: str, timeout: int) -> int:
 
 
 def check(scope: str, identity_type: str, identity: str, team_id: int | None = None) -> RateLimitResult:
-    limit, window_seconds, _fail_open = _scope_config(scope)
+    limit, window_seconds, fail_open = _scope_config(scope)
     now = _now()
     window_start = now - (now % window_seconds)
     reset_seconds = window_start + window_seconds - now
     key = f"rl:{scope}:{window_start}:{identity_type}:{identity}"
-    count = _count(_cache(), key, timeout=window_seconds + 60)
+    try:
+        count = _count(_cache(), key, timeout=window_seconds + 60)
+    except Exception:
+        logger.exception(
+            "rate_limit.backend_error",
+            extra={"scope": scope, "identity_type": identity_type},
+        )
+        blocked = not fail_open and settings.RATE_LIMIT_ENFORCE
+        return RateLimitResult(
+            allowed=not blocked,
+            limit=limit,
+            remaining=0 if blocked else limit,
+            reset_seconds=window_seconds,
+            retry_after=window_seconds if blocked else None,
+            degraded=True,
+        )
     remaining = max(0, limit - count)
     if count > limit:
         if settings.RATE_LIMIT_ENFORCE:
