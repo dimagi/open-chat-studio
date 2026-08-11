@@ -1,9 +1,8 @@
-"""Team-level discovery endpoints for the chatbot write API.
+"""Team-level discovery endpoints for the chatbot write API: what a client can build
+(`/pipeline/nodes/`) and which resource ids it may reference (`/pipeline/options/`).
 
-These tell a client what it can build (`/pipeline/nodes/`) and which resource ids it may reference
-(`/pipeline/options/`). Both read the shared helpers in ``apps.pipelines.node_metadata`` and reshape
-them -- the builder consumes those helpers raw, so every client-facing transform lives in this
-package. See ADR-0051 for why this view diverges from the builder's.
+Both reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which the builder consumes
+raw. The reshaping rules live in ``contract.py`` and ``node_types.py``.
 """
 
 from django.db.models.functions import Lower
@@ -26,8 +25,7 @@ from .contract import API_ONLY_OPTION_KEYS, OPTIONS_KEY_RENAMES
 from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
-# The option lists holding prompt variables rather than referenceable resource ids. Their entries are
-# `{"label": v, "value": v}` pairs, which `_describe_prompt_vars` rewrites into `{label, description}`.
+# The option lists holding prompt variables rather than referenceable resource ids.
 PROMPT_VAR_OPTION_SOURCES = (
     OptionsSource.jinja_node,
     OptionsSource.text_editor_autocomplete_vars_llm_node,
@@ -36,19 +34,13 @@ PROMPT_VAR_OPTION_SOURCES = (
 
 
 class DiscoveryView(GenericAPIView):
-    """Shared auth for the discovery endpoints.
-
-    ``queryset`` exists only so DjangoModelPermissions can derive ``pipelines.view_pipeline`` from a
-    model; nothing is ever fetched through it.
-    """
+    """Shared auth for the discovery endpoints."""
 
     permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]  # TokenHasResourceScope maps GET -> chatbots:read
+    # Only here so DjangoModelPermissions can derive `pipelines.view_pipeline` from a model.
     queryset = Pipeline.objects.none()
-    # GenericAPIView defaults pagination_class to the project-wide cursor paginator, and drf-
-    # spectacular trusts it even though these views never call paginate_queryset(). Without this,
-    # the generated schema would falsely document a paginated envelope (`results`/`next`/`cursor`)
-    # for an endpoint that always returns a bare JSON array.
+    # Without this drf-spectacular documents a paginated envelope around the bare JSON array.
     pagination_class = None
 
 
@@ -247,8 +239,7 @@ class PipelineOptionsView(DiscoveryView):
                 synthetic_voices=synthetic_voices,
             )
         )
-        # No node param sources its options from this list -- it is here so a client can resolve the
-        # `provider_id` carried on a `synthetic_voice_id` entry. See `API_ONLY_OPTION_KEYS`.
+        # See `API_ONLY_OPTION_KEYS` -- no node param sources its options from this list.
         options[OptionsSource.voice_provider_id] = [
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
@@ -258,13 +249,9 @@ class PipelineOptionsView(DiscoveryView):
 
     @classmethod
     def _clean_options(cls, value):
-        """Strip builder-only affordances from an options payload.
-
-        Two things the editor needs and a client must not see: placeholder entries with an empty
-        ``value`` (a prompt like "Select a topic", not a referenceable id) and ``edit_url`` (a link
-        into the Django UI). The walk recurses because ``built_in_tools`` is a dict of lists keyed by
-        provider type, not a flat list.
-        """
+        """Strip builder-only affordances: placeholder entries with an empty ``value`` and
+        ``edit_url`` links into the Django UI. Recurses -- ``built_in_tools`` and ``tool_config`` nest
+        their lists inside dicts keyed by provider type."""
         if isinstance(value, dict):
             return {key: cls._clean_options(item) for key, item in value.items()}
         if isinstance(value, list):
@@ -277,17 +264,9 @@ class PipelineOptionsView(DiscoveryView):
 
     @staticmethod
     def _describe_prompt_vars(options: dict) -> dict:
-        """Swap each prompt variable's redundant ``value`` for a description of what it does.
-
-        The builder emits these as ``{"label": v, "value": v}`` -- the two are always identical,
-        since the value is just the name typed into the prompt. A human reading an autocomplete
-        dropdown infers the rest from the name; a client cannot, so it gets the description instead.
-
-        All three lists get the same treatment, so a client reads one entry shape whichever prompt it
-        is filling. ``PROMPT_VAR_DESCRIPTIONS`` has to cover every variable any of them offers, which
-        ``TestPromptVarDescriptions`` enforces -- a gap here is a 500, not a missing field.
-        Mutates a copy of the list, never ``PROMPT_VAR_DESCRIPTIONS``.
-        """
+        """Swap each prompt variable's redundant ``value`` (always equal to its ``label``) for a
+        description of what the variable holds. An uncovered variable is a KeyError here, which
+        ``test_every_offered_prompt_var_has_a_description`` guards against."""
         for source in PROMPT_VAR_OPTION_SOURCES:
             if entries := options.get(source):
                 options[source] = [
@@ -298,9 +277,6 @@ class PipelineOptionsView(DiscoveryView):
 
     @staticmethod
     def _to_api_vocabulary(options: dict) -> dict:
-        """Rename the option keys named for a builder widget rather than for the param that reads them.
-
-        Which keys are served is decided by the caller's whitelist, not here -- this only has to run
-        first so the whitelist and the payload are comparing the same vocabulary.
-        """
+        """Rename the option keys named for a builder widget rather than for the param that reads
+        them. Runs before the whitelist filter so both compare the same vocabulary."""
         return {OPTIONS_KEY_RENAMES.get(key, key): value for key, value in options.items()}

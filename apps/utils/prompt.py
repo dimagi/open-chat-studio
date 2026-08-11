@@ -46,11 +46,8 @@ class PromptVars(models.TextChoices):
         return [{"label": v, "value": v} for v in vars_]
 
 
-# What each template variable holds and when to reach for it. The pipeline builder shows these
-# variables as bare autocomplete entries -- a human infers the meaning from the name -- but the v2
-# discovery API serves them to an LLM agent that has no such context, so it gets these instead of
-# the (identical to the label) value. Every variable `PromptVars.get_jinja_vars` returns must have
-# an entry; TestPromptVarDescriptions in apps/utils/tests/test_prompt_utils.py enforces that.
+# What each template variable holds, served by the v2 discovery API in place of the value. Every
+# variable the accessors above return must have an entry.
 PROMPT_VAR_DESCRIPTIONS = {
     "participant_data": (
         "The participant's stored data, addressed by key -- `participant_data.name`. Use it to "

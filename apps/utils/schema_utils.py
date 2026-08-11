@@ -1,23 +1,10 @@
-"""JSON Schema / OpenAPI helpers shared across apps.
-
-Lives in `utils` rather than any one app because four apps read it: `custom_actions` (user-supplied
-OpenAPI specs), `pipelines` and `evaluations` (pydantic `model_json_schema()` output) and
-`service_providers` (LLM model parameter schemas).
-"""
+"""JSON Schema / OpenAPI helpers shared across apps."""
 
 from copy import deepcopy
 
 
 def resolve_references(openapi_spec: dict) -> dict:
-    """
-    Resolves all $ref references in an OpenAPI specification document.
-
-    Args:
-        openapi_spec: The OpenAPI specification document.
-
-    Returns:
-        The OpenAPI specification document with all $ref references resolved.
-    """
+    """Returns a copy of `openapi_spec` with every internal `$ref` replaced by what it points at."""
 
     def resolve_ref(data: dict, path: str) -> dict:
         if "$ref" in data:

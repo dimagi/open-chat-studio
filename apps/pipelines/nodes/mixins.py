@@ -155,8 +155,7 @@ class LLMResponseMixin(BaseModel):
         return self.get_llm_service().get_chat_model(model_name, **self.llm_model_parameters)
 
 
-# Subclasses re-declare `history_type` only to change its default, so the text lives here rather
-# than being copied to each override and drifting.
+# Shared with the subclasses that re-declare `history_type` only to change its default.
 HISTORY_TYPE_DESCRIPTION = (
     "Which past messages to put in the prompt. `none` sends only the current input; `node` "
     "remembers just this node's own turns; `named` shares one history between every node set "

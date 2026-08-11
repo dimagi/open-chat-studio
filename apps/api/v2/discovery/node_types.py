@@ -1,8 +1,5 @@
-"""Reshapes the builder's node schemas into the payload `/pipeline/nodes/` serves.
-
-Everything here is API-side; ``apps.pipelines.nodes.node_metadata`` keeps serving the builder its own
-vocabulary untouched.
-"""
+"""Reshapes the builder's node schemas (``apps.pipelines.nodes.node_metadata``) into the payload
+`/pipeline/nodes/` serves."""
 
 import hashlib
 import json
@@ -26,11 +23,8 @@ from .contract import (
 
 @cache
 def get_node_types() -> list[dict]:
-    """Node types reshaped for client consumption.
-
-    Static per deploy, so it is memoised. The cache also captures ``DOCUMENTATION_BASE_URL``; a test
-    that overrides that setting needs ``get_node_types.cache_clear()``.
-    """
+    """Node types reshaped for client consumption. Static per deploy, so it is memoised -- a test
+    overriding ``DOCUMENTATION_BASE_URL`` needs ``get_node_types.cache_clear()``."""
     node_types = []
     for schema in _addable_schemas():
         entry = {
@@ -51,18 +45,12 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
 
 
 def served_option_keys() -> frozenset[str]:
-    """Every option key some listed node type can reference, in API vocabulary.
-
-    The unscoped `/pipeline/options/` payload is this set plus ``API_ONLY_OPTION_KEYS``.
-    """
+    """Every option key some listed node type can reference, in API vocabulary."""
     return frozenset().union(*_option_keys_by_type().values())
 
 
 def unknown_node_type(requested_type: str) -> NotFound:
-    """A 404 carrying why the name failed and what the client could have asked for instead.
-
-    A deprecated type reads as unknown -- only the server-managed types get a message of their own.
-    """
+    """A 404 carrying why the name failed and what the client could have asked for instead."""
     if requested_type in _structural_types():
         detail = (
             f"Node type '{requested_type}' is managed by the server and cannot be created or "
@@ -79,19 +67,14 @@ def etag(payload) -> str:
 
 
 def _addable_schemas() -> list[dict]:
-    """The builder schemas behind the listed node types.
-
-    ``ui:can_add`` is False for both the deprecated types and the structural ones the server manages.
-    """
+    """The builder schemas behind the listed node types. ``ui:can_add`` is False for the deprecated
+    types and the structural ones the server manages."""
     return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
 
 
 def _output_topology(schema: dict) -> dict:
-    """How edges leave this node type, read from the node class.
-
-    Every listed type is addable and the only terminating type (``EndNode``) is not, so there is no
-    zero-output case to handle.
-    """
+    """How edges leave this node type. ``EndNode`` is the only terminating type and it is unlisted,
+    so there is no zero-output case."""
     node_class = resolve_node_class(schema["title"])
     if node_class is not None and issubclass(node_class, PipelineRouterNode):
         return PER_KEYWORD_OUTPUT
@@ -99,10 +82,8 @@ def _output_topology(schema: dict) -> dict:
 
 
 def _schema(node_schema: dict) -> dict:
-    """The node's JSON Schema as served, with the params the API withholds taken out.
-
-    A withheld param leaves ``required`` along with ``properties``.
-    """
+    """The node's JSON Schema as served, with withheld params taken out of ``properties`` and
+    ``required``."""
     served = {key: value for key, value in node_schema.items() if ":" not in key and key != "properties"}
     served["properties"] = {
         name: _property(name, prop) for name, prop in node_schema["properties"].items() if not prop.get("api:exclude")
@@ -113,8 +94,8 @@ def _schema(node_schema: dict) -> dict:
 
 
 def _property(name: str, prop: dict) -> dict:
-    """One node param, as served: every `ui:`/`api:` key dropped, the two that carry meaning re-added
-    under client names, and the cross-param links attached."""
+    """One node param, as served: namespaced keys dropped, the two that carry meaning re-added under
+    client names, cross-param links attached."""
     translated = {
         UI_KEY_TRANSLATIONS[key]: value
         for key, value in prop.items()
@@ -135,12 +116,8 @@ def _param_links(name: str) -> dict:
 
 
 def _documentation_url(schema: dict) -> str | None:
-    """The node's help link, absolutised.
-
-    ``ui:documentation_link`` is a site-relative path the builder joins to
-    ``window.DOCUMENTATION_BASE_URL`` in the browser (``getDocumentationLink`` in
-    assets/javascript/apps/pipeline/utils.tsx); an API client has no such base.
-    """
+    """The node's help link, absolutised. ``ui:documentation_link`` is site-relative -- the builder
+    joins it in the browser, an API client has no base to join it to."""
     link = schema.get("ui:documentation_link")
     if not link:
         return None
@@ -152,11 +129,7 @@ def _documentation_url(schema: dict) -> str | None:
 @cache
 def _option_keys_by_type() -> dict[str, frozenset[str]]:
     """The `/pipeline/options/` keys each node type's params can draw from, read off
-    ``ui:optionsSource``.
-
-    Withheld params contribute nothing. A known type that reads nothing yields an empty set, which is
-    a different answer from a missing key.
-    """
+    ``ui:optionsSource``. A known type that reads nothing yields an empty set, not a missing key."""
     keys_by_type = {}
     for schema in _addable_schemas():
         properties = schema["properties"]
@@ -174,10 +147,8 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
 
 @cache
 def _structural_types() -> frozenset[str]:
-    """Types the server creates and manages: ``StartNode``, ``EndNode``, ``Passthrough``.
-
-    Unlisted, but ``/inspect/`` still reports them as the ``type`` of real nodes.
-    """
+    """Types the server creates and manages. Unlisted, but ``/inspect/`` still reports them as the
+    ``type`` of real nodes."""
     return frozenset(
         schema["title"]
         for schema in get_node_schemas()

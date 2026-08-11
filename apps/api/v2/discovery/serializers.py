@@ -1,8 +1,7 @@
-"""Serializers for the discovery endpoints.
+"""Serializers describing the discovery endpoint responses for the OpenAPI schema.
 
-These exist to document the OpenAPI schema -- the views build plain dicts and hand them back. Each
-field's ``help_text`` is the one place a given fact is stated, so the endpoint descriptions can stay
-short.
+Documentation only -- the views build plain dicts and hand them back. Each field's ``help_text`` is
+what a client reads about that field.
 """
 
 from drf_spectacular.utils import extend_schema_field
@@ -56,10 +55,9 @@ class NodeTypeNotFoundSerializer(serializers.Serializer):
 
 @extend_schema_field({"oneOf": [{"type": "string"}, {"type": "integer"}]})
 class OptionValueField(serializers.Field):
-    """An option's ``value``, which is an integer for the model-backed keys and a string elsewhere.
+    """An option's ``value``: an integer for the model-backed keys, a string elsewhere.
 
-    A typed field would coerce one into the other, so this passes the value through untouched and
-    declares the union to the schema by hand.
+    Passes the value through untouched -- a typed field would coerce one into the other.
     """
 
     def to_representation(self, value):

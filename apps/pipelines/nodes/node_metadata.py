@@ -1,8 +1,8 @@
 """Node type schemas and the option values each node param accepts.
 
 Shared by the pipeline builder views and the v2 discovery API. The builder renders these straight
-into its editor; the API reshapes them for agent consumption in ``apps/api/v2/discovery.py``. Keep
-this module free of request and UI concerns so both callers can use it.
+into its editor; the API reshapes them in ``apps/api/v2/discovery/``. Keep this module free of request
+and UI concerns so both callers can use it.
 """
 
 import inspect
