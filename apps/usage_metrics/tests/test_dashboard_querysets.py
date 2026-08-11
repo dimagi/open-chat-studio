@@ -236,15 +236,17 @@ class TestIncludeArchived:
         _active_session(team, archived)
         return team
 
-    def test_enumeration_excludes_archived_by_default(self):
-        querysets = filtered_querysets(self._team(), start_date=_START, end_date=_END)
+    @pytest.mark.parametrize(
+        ("kwargs", "expected"),
+        [
+            pytest.param({}, 1, id="excluded-by-default"),
+            pytest.param({"include_archived": True}, 2, id="included-when-asked"),
+        ],
+    )
+    def test_enumeration_honours_include_archived(self, kwargs, expected):
+        querysets = filtered_querysets(self._team(), start_date=_START, end_date=_END, **kwargs)
 
-        assert querysets["experiments"].count() == 1
-
-    def test_enumeration_includes_archived_when_asked(self):
-        querysets = filtered_querysets(self._team(), start_date=_START, end_date=_END, include_archived=True)
-
-        assert querysets["experiments"].count() == 2
+        assert querysets["experiments"].count() == expected
 
     def test_activity_counts_archived_chatbots_either_way(self):
         team = self._team()

@@ -179,8 +179,15 @@ class TestEvaluationActivityIsExcludedEverywhere:
     def test_api_platform_grouping_and_total_agree(self):
         """The API-internal inconsistency the design's problem statement named:
         grouped rows shrank their universe while the ungrouped total did not.
-        Both now exclude evaluations, so the two reconcile."""
+        Both now exclude evaluations, so the two reconcile. The team here also
+        runs a non-evaluation session, so agreement on a non-zero total is what
+        is under test - an evaluation-only team reconciles trivially."""
         team = self._team()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(session, message_type=ChatMessageType.HUMAN)
+        _message(session, message_type=ChatMessageType.AI)
+
         query = api_usage.resolve_query_filters(
             api_usage.UsageQuery(
                 team=team,
@@ -191,8 +198,11 @@ class TestEvaluationActivityIsExcludedEverywhere:
                 group_by=api_usage.GROUP_PLATFORM,
             )
         )
-        assert list(api_usage.group_entities(query)) == []
-        assert _api_results(team, ["messages"])["messages"]["total"] == 0
+        rows = api_usage.group_rows(query, list(api_usage.group_entities(query)))
+
+        total = _api_results(team, ["messages"])["messages"]["total"]
+        assert total == 2
+        assert sum(row["messages"]["total"] for row in rows) == total
 
 
 class TestMessageTotalIsHumanPlusAi:

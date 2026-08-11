@@ -14,6 +14,7 @@ import pytest
 import time_machine
 
 from apps.api.v2.usage import services as api_usage
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.dashboard.services import DashboardService
 from apps.experiments.models import ExperimentSession, SessionStatus
@@ -228,7 +229,7 @@ class TestScalarsAndTimeseriesAgree:
 
         created_in_window = (
             ExperimentSession.objects.filter(team=busy_team, created_at__gte=_START, created_at__lt=_END)
-            .exclude(platform="evaluations")
+            .exclude(platform=ChannelPlatform.EVALUATIONS)
             .count()
         )
         assert started + in_setup == created_in_window
