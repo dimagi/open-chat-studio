@@ -53,7 +53,7 @@ from apps.teams.flags import get_all_flag_info
 from apps.teams.forms import TeamMetadataForm
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Flag, Team
-from apps.utils.rate_limit import rate_limited
+from apps.utils.rate_limit import client_ip, rate_limited
 
 logger = logging.getLogger("ocs.admin")
 
@@ -73,6 +73,22 @@ def _has_valid_reporting_token(request):
     if not header.startswith(prefix):
         return False
     return hmac.compare_digest(header.removeprefix(prefix).encode("utf-8"), token.encode("utf-8"))
+
+
+def admin_api_key(request, *args, **kwargs):
+    """Bucket admin API traffic by the most specific identity available.
+
+    A staff session gets its own bucket and the reporting consumer gets its own,
+    so neither can be starved by anonymous traffic sharing a proxy address.
+    Callers with no identity share the address bucket, which is what bounds
+    probing and guessing at the reporting token.
+    """
+    user = getattr(request, "user", None)
+    if user is not None and user.is_authenticated:
+        return "user", str(user.pk)
+    if _has_valid_reporting_token(request):
+        return "reporting_token", "shared"
+    return "ip", client_ip(request)
 
 
 def superuser_or_reporting_token(view_func):
@@ -511,7 +527,7 @@ def flag_history(request, flag_name):
 
 # Staff-level: team names/slugs are already visible to staff via the dashboard's
 # top-teams table and the team_detail page, which drive this search endpoint.
-@rate_limited("admin_api")
+@rate_limited("admin_api", key_fn=admin_api_key)
 @is_staff
 def teams_api(request):
     query = request.GET.get("q", "").strip()
@@ -531,7 +547,7 @@ def teams_api(request):
     return JsonResponse(data, safe=False)
 
 
-@rate_limited("admin_api")
+@rate_limited("admin_api", key_fn=admin_api_key)
 @is_superuser
 def users_api(request):
     query = request.GET.get("q", "").strip()
@@ -551,7 +567,7 @@ def users_api(request):
     return JsonResponse(data, safe=False)
 
 
-@rate_limited("admin_api")
+@rate_limited("admin_api", key_fn=admin_api_key)
 @superuser_or_reporting_token
 def provider_usage_api(request):
     """Cross-team LLM usage over a date range: per-team token + cost totals with
@@ -565,7 +581,7 @@ def provider_usage_api(request):
     return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
 
 
-@rate_limited("admin_api")
+@rate_limited("admin_api", key_fn=admin_api_key)
 @superuser_or_reporting_token
 def provider_keys_api(request):
     """Masked API-key fingerprint → team mapping across all LLM providers, so a

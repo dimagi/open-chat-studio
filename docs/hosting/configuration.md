@@ -51,7 +51,7 @@ All configuration is via environment variables. In production, set `DJANGO_SETTI
 |----------|---------|-------------|
 | `RATE_LIMIT_ENFORCE` | `False` | When `False`, over-limit requests are served and logged as `rate_limit.would_block` (sampled after the first crossing, not every request); when `True`, they receive HTTP 429. |
 | `RATE_LIMIT_API` | `2000/5m` | Request limit for the `api` scope, format `count/window` with `s`/`m`/`h` units. |
-| `RATE_LIMIT_ADMIN_API` | `100/5m` | Request limit for the `admin_api` scope (the `/admin/api/*` autocomplete and provider-reporting endpoints), keyed by client IP. Fails open: if the limiter's cache is unreachable, requests are served. |
+| `RATE_LIMIT_ADMIN_API` | `100/5m` | Request limit for the `admin_api` scope (the `/admin/api/*` autocomplete and provider-reporting endpoints). Keyed by signed-in user, then the provider-reporting token, then client IP, so anonymous traffic cannot spend a staff member's allowance. Set `RATE_LIMIT_TRUSTED_PROXY_COUNT` before enforcing, or all anonymous callers behind a proxy share one bucket. Fails open: if the limiter's cache is unreachable, requests are served. |
 | `RATE_LIMIT_TRUSTED_PROXY_COUNT` | `0` | Number of trusted reverse proxies; required for correct client IPs behind a proxy or tunnel before enabling any IP-keyed scope. |
 
 ## Email

@@ -4,12 +4,14 @@ from datetime import UTC, datetime
 
 import pytest
 import time_machine
+from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
-from django.test import override_settings
+from django.test import Client, RequestFactory, override_settings
 from django.urls import reverse
 from waffle import get_waffle_flag_model
 
+from apps.admin.views import admin_api_key
 from apps.users.models import CustomUser
 from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG
 
@@ -94,6 +96,55 @@ def test_the_four_endpoints_share_one_allowance(superuser_client):
     response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
 
     assert response.status_code == 429
+
+
+@pytest.mark.django_db()
+def test_key_prefers_the_authenticated_user():
+    """A staff session is the most specific identity, so it buckets alone."""
+    user = CustomUser.objects.create(username="staff@acme.com", is_staff=True)
+    request = RequestFactory().get("/")
+    request.user = user
+
+    assert admin_api_key(request) == ("user", str(user.pk))
+
+
+@override_settings(PROVIDER_REPORTING_API_TOKEN="s3cret-token")
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        pytest.param(
+            {"HTTP_AUTHORIZATION": "Bearer s3cret-token"},
+            ("reporting_token", "shared"),
+            id="valid-token-buckets-on-the-token",
+        ),
+        pytest.param(
+            {"HTTP_AUTHORIZATION": "Bearer wrong"},
+            ("ip", "203.0.113.5"),
+            id="wrong-token-buckets-on-the-address",
+        ),
+        pytest.param({}, ("ip", "203.0.113.5"), id="no-credentials-buckets-on-the-address"),
+    ],
+)
+def test_key_falls_back_from_token_to_address(headers, expected):
+    """Guessing the reporting token is bounded by the address bucket."""
+    request = RequestFactory().get("/", REMOTE_ADDR="203.0.113.5", **headers)
+    request.user = AnonymousUser()
+
+    assert admin_api_key(request) == expected
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_anonymous_traffic_cannot_starve_a_staff_user(superuser_client):
+    """Probing spends only the address bucket, never a signed-in user's."""
+    # A distinct client: the superuser_client fixture force-logs-in the shared one.
+    anonymous = Client()
+    url = reverse("ocs_admin:teams_api")
+    for _ in range(3):
+        anonymous.get(url)
+
+    assert anonymous.get(url).status_code == 429
+    assert superuser_client.get(url).status_code == 200
 
 
 @pytest.mark.django_db()
