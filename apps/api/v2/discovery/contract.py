@@ -1,9 +1,10 @@
 """The contract between `/pipeline/nodes/` and `/pipeline/options/`.
 
-A param's permitted values live under the `/pipeline/options/` key of the same name -- `assistant_id`
-draws from `assistant`, `collection_index_ids` from `collection_index`. The maps here are what make
-that hold: they rename the option keys the builder spells differently, hide the ones an agent has no
-use for, and state the cross-param rules the builder enforces in JS instead. See ADR-0051.
+A param's permitted values live under the `/pipeline/options/` key of the same name --
+`source_material_id` draws from `source_material`, `collection_index_ids` from `collection_index`.
+The maps here are what make that hold: they rename the option keys the builder spells differently,
+hide the ones an agent has no use for, and state the cross-param rules the builder enforces in JS
+instead. See ADR-0051.
 """
 
 # `OptionsSource` names the builder's JS reads verbatim
@@ -19,11 +20,13 @@ OPTIONS_KEY_RENAMES = {
 # Option lists the API does not serve. The autocomplete keys hold the entries the builder offers
 # while someone types an LLM or router prompt -- a dropdown's worth of names, with the node's real
 # prompt contract (which variables it accepts, what each holds) living in the param's own
-# description. The rest are the keys belonging to a param in `HIDDEN_PARAMS`.
+# description. `assistant` is read by one deprecated node type, which the API does not list, so
+# nothing it does serve can consume the list. The rest belong to a param in `HIDDEN_PARAMS`.
 HIDDEN_OPTION_KEYS = frozenset(
     {
         "text_editor_autocomplete_vars_llm_node",
         "text_editor_autocomplete_vars_router_node",
+        "assistant",
         "mcp_tools",
     }
 )

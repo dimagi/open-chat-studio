@@ -132,9 +132,9 @@ class PipelineOptionsView(DiscoveryView):
         summary="List Pipeline Node Options",
         description=(
             "The values each node param accepts, scoped to the API key's team.\n\n"
-            "A key holds the values for the node param of the same name: write one of `assistant`'s "
-            "entries into a node's `assistant_id`, one of `collection_index`'s into "
-            "`collection_index_ids`."
+            "A key holds the values for the node param of the same name: write one of "
+            "`source_material`'s entries into a node's `source_material_id`, one of "
+            "`collection_index`'s into `collection_index_ids`."
         ),
         tags=["Pipelines"],
         parameters=[

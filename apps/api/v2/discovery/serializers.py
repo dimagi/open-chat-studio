@@ -110,7 +110,6 @@ class PipelineOptionsSerializer(serializers.Serializer):
     )
     synthetic_voice_id = OptionSerializer(many=True, required=False)
     source_material = OptionSerializer(many=True, required=False)
-    assistant = OptionSerializer(many=True, required=False)
     collection = OptionSerializer(
         many=True, required=False, help_text="Media collections -- files a node can talk about."
     )

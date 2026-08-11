@@ -130,6 +130,25 @@ def test_every_key_a_node_type_scopes_to_is_actually_served(team_with_resources)
 
 
 @pytest.mark.django_db()
+def test_every_key_served_is_read_by_some_listed_node_type(team_with_resources):
+    """The mirror of the check above. A key no listed type scopes to is a list nothing can consume:
+    it costs every response its payload and points at a param that turns out not to be offered --
+    a type gets deprecated, and its option list keeps being served to clients with no use for it."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    option_keys = set(client.get(reverse("api:v2:pipeline-options")).json())
+
+    read = set()
+    for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
+        scoped_keys = option_keys_for_node_type(entry["type"])
+        assert scoped_keys is not None, f"{entry['type']} is listed but cannot be scoped to"
+        read |= scoped_keys
+
+    # `voice_provider_id` is the one deliberate exception: no param sources its options from it, but
+    # a client still needs the list to make sense of a `synthetic_voice_id` entry's `provider_id`.
+    assert option_keys - read == {"voice_provider_id"}
+
+
+@pytest.mark.django_db()
 def test_conditional_params_declare_when_they_apply(team):
     """`ui:visibleWhen` is real semantics wearing a UI name: the param is meaningless unless the
     condition holds. An agent needs it to avoid setting fields that will be ignored."""
