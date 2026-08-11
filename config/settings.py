@@ -479,6 +479,8 @@ REST_FRAMEWORK = {
     "DEFAULT_VERSIONING_CLASS": "apps.api.versioning.URLPathVersioning",
     "DEFAULT_VERSION": "v1",
     "ALLOWED_VERSIONS": ["v1", "v2"],
+    "DEFAULT_THROTTLE_CLASSES": ["apps.api.throttling.APIRateThrottle"],
+    "EXCEPTION_HANDLER": "apps.api.throttling.api_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
