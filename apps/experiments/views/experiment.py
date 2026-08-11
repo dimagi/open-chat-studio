@@ -33,6 +33,8 @@ from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.timesince import timesince
 from django.views.decorators.cache import cache_control, cache_page
+from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django_tables2 import SingleTableView
 from field_audit.models import AuditAction
@@ -324,12 +326,17 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     )
 
 
+@xframe_options_exempt
+@csrf_exempt
 def embed_flow_gone(request, *args, **kwargs):
     """410 stub for the legacy embedded chat flow, removed on 2026-08-03.
 
     Serves both the experiments and chatbots embed URLs. Kept for at least one release
     cycle before the URLs are deleted entirely.
     See https://github.com/dimagi/open-chat-studio/issues/3540
+
+    The old views were `@xframe_options_exempt` + `@csrf_exempt`; the stub keeps both so
+    legacy callers see the 410 rather than a blocked iframe or a CSRF 403.
     """
     return HttpResponseGone(
         f"The legacy embedded chat flow was removed on {EMBED_FLOW_REMOVED_ON.isoformat()}. "
