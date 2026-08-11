@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs) Process
 
-How architectural decisions get recorded, written, and cited in this project.
+What an ADR is, and the lifecycle a design doc follows on its way to becoming one.
 
 ## What's an ADR
 
@@ -15,10 +15,10 @@ Design docs produced by the brainstorming skill (`docs/design/`, `docs/superpowe
 
 When you finish a design doc and ship the work, flip `status` from `active` to `stable`, then run the extraction skill.
 
-## Extracting ADRs
+## Creating an ADR
 
-Use the `/extract-adrs <source-doc>` skill at `.claude/skills/extract-adrs/SKILL.md`. It walks you through identifying candidate decisions, drafting each ADR, wiring up cross-references, and updating `mkdocs.yml` plus `docs/adr/index.md`. The skill never commits — review the diff yourself.
+Use the `/extract-adrs <source-doc>` skill to extract ADRs from a stable design doc, or see [Writing an ADR by Hand](../developer_guides/adr_process.md) to author one directly.
 
 ## Citing an ADR
 
-Use `ADR-NNNN` as the canonical reference in code comments, PR descriptions, and conversations. Link to the docs site URL for human-readable context.
+See [`agents/domain`](domain.md) for the citation convention and for flagging conflicts with existing ADRs.
