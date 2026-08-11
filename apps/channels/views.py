@@ -29,7 +29,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.permissions import verify_hmac
-from apps.channels import meta_webhook, tasks, turn_webhook
+from apps.channels import meta_webhook, sureadhere_webhook, tasks, turn_webhook
 from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsapp_message
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
@@ -121,9 +121,57 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
     set_current_team(channel.team)
     request.experiment = channel.experiment  # used by RequestLoggingMiddleware
+    if not _sureadhere_request_is_authorised(request, channel):
+        return HttpResponse("Invalid webhook secret.", status=401)
+
     message_data = json.loads(request.body)
     tasks.handle_sureadhere_message.delay(sureadhere_tenant_id=sureadhere_tenant_id, message_data=message_data)
     return HttpResponse()
+
+
+def _sureadhere_request_is_authorised(request, channel: ExperimentChannel) -> bool:
+    """Check whether the SureAdhere webhook request is authorised: True if the provider has no
+    secret configured (fail-open, see below) or if the request presents the matching secret.
+
+    SureAdhere does not sign its callbacks, so the credential is a shared secret configured on
+    both sides. It is optional by design, as for Turn.io above: a provider that has not yet had
+    one registered with SureAdhere is left unverified rather than having live patient traffic
+    dropped. Until an operator sets one, that provider's inbound messages stay unauthenticated.
+    """
+    provider = channel.messaging_provider
+    # The provider is optional on a channel, and a channel without one can never deliver a
+    # message (handle_sureadhere_message only resolves channels with a SureAdhere provider),
+    # so there is nothing to verify against.
+    webhook_secret = (provider.config.get("webhook_secret") or "").strip() if provider else ""
+    if not webhook_secret:
+        log.warning(
+            "SureAdhere webhook NOT VERIFIED: no webhook secret is configured for channel %s (team %s), "
+            "so anyone can post inbound messages for this tenant. Set one on the messaging provider.",
+            channel.id,
+            channel.team.slug,
+        )
+        return True
+
+    presented = sureadhere_webhook.get_presented_secret(request.headers)
+    if sureadhere_webhook.verify_secret(presented, webhook_secret):
+        return True
+
+    if not presented:
+        log.warning(
+            "SureAdhere webhook rejected for provider %s (team %s): no secret presented in the %s "
+            "header or as an Authorization bearer token",
+            channel.messaging_provider_id,
+            channel.team.slug,
+            sureadhere_webhook.SECRET_HEADER,
+        )
+    else:
+        log.warning(
+            "SureAdhere webhook rejected for provider %s (team %s): the presented secret did not "
+            "match, the configured secret may be incorrect",
+            channel.messaging_provider_id,
+            channel.team.slug,
+        )
+    return False
 
 
 @csrf_exempt

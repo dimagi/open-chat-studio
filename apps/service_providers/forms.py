@@ -310,7 +310,7 @@ class TurnIOMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
 
 
 class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
-    obfuscate_fields = ["client_secret"]
+    obfuscate_fields = ["client_secret", "webhook_secret"]
     additional_searchable_fields = ["client_id"]
 
     client_id = forms.CharField(
@@ -332,6 +332,22 @@ class SureAdhereMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
         validators=[URLValidator(schemes=["https"])],
         help_text=_("URL of the SureAdhere backend server"),
     )
+    webhook_secret = forms.CharField(
+        label=_("Inbound Webhook Secret"),
+        required=False,
+        help_text=_(
+            "A secret of your choosing that SureAdhere must send with every inbound message, in "
+            "either an 'X-OCS-Webhook-Secret' header or as an 'Authorization: Bearer' token. "
+            "Requests without it are rejected. Leave blank only while you arrange this with "
+            "SureAdhere: while it is blank, anyone who knows the tenant ID can post messages."
+        ),
+    )
+
+    def clean(self):
+        """Normalise webhook_secret so the stored value is always a string."""
+        cleaned_data = super().clean()
+        cleaned_data["webhook_secret"] = (cleaned_data.get("webhook_secret") or "").strip()
+        return cleaned_data
 
 
 class MetaCloudAPIMessagingConfigForm(ObfuscatingMixin, ProviderTypeConfigForm):
