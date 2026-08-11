@@ -6,6 +6,7 @@ import pytest
 from django.core.management import call_command
 from django.utils import timezone
 
+from apps.channels import widget_versions
 from apps.channels.models import ChannelPlatform
 from apps.channels.widget_versions import LATEST_VERSION, UNKNOWN_WIDGET_VERSION, WidgetDeprecation
 from apps.chat.models import ChatMessage, ChatMessageType
@@ -157,6 +158,24 @@ def test_unreported_version_requires_opt_in():
     output = _run(include_unreported=True)
     assert channel.experiment.name in output
     assert "not reported" in output
+    assert "Unreported: 1" in output
+
+
+@pytest.mark.django_db()
+def test_unreported_version_gets_no_deprecation_verdict():
+    """A null version means the recording path never ran, not that the widget is old, so it
+    must not be handed a deprecation status or sunset date."""
+    channel = _widget_channel(None)
+    _add_session(channel)
+
+    output = _run(include_unreported=True)
+
+    assert "unreported" in output
+    assert "deprecated" not in output
+    assert "sunset" not in output
+    # no fabricated sunset date, and excluded from the deprecation-only view
+    assert f"{widget_versions.latest_deprecation().sunset_at:%Y-%m-%d}" not in output
+    assert channel.experiment.name not in _run(include_unreported=True, deprecated_only=True)
 
 
 @pytest.mark.django_db()

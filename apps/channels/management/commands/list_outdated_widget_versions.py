@@ -45,7 +45,8 @@ class Command(BaseCommand):
             action="store_true",
             help=(
                 "Include active channels that have never reported a version. These are excluded by "
-                "default since their widget version cannot be determined."
+                "default since their widget version cannot be determined; when included they are "
+                "listed as 'unreported' rather than being given a deprecation verdict."
             ),
         )
 
@@ -142,7 +143,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  Chatbots: {len(rows)}")
         self.stdout.write(f"  Teams: {len({row['team_slug'] for row in rows})}")
         self.stdout.write(f"  Sessions: {sum(row['session_count'] for row in rows)}")
-        for status in ("sunset", "deprecated", "outdated"):
+        for status in ("sunset", "deprecated", "outdated", "unreported"):
             count = sum(1 for row in rows if row["status"] == status)
             if count:
                 self.stdout.write(f"  {status.title()}: {count}")
@@ -183,13 +184,20 @@ class Command(BaseCommand):
 
 def _classify(version: str | None) -> tuple[str | None, widget_versions.WidgetDeprecation | None]:
     """Categorise a recorded widget version. A None status means the version is current."""
+    # A null version is not evidence of an old widget: record_widget_version stores
+    # "unknown" for header-less requests, so null only means the recording path never
+    # ran and the real version could be anything. Must be checked before consulting
+    # get_deprecation(), which treats an unparseable version as older than everything
+    # and would otherwise hand these channels a definite sunset date.
+    if version is None:
+        return "unreported", None
     deprecation = widget_versions.get_deprecation(version)
     if deprecation:
         status = "sunset" if timezone.now() >= deprecation.sunset_at else "deprecated"
         return status, deprecation
-    # An unreported or unparseable version predates the version header, so it is
-    # older than every release even when no deprecation covers it.
-    if version is None or widget_versions.clean_widget_version(version) is None:
+    # An unparseable version predates the version header, so it is older than every
+    # release even when no deprecation covers it.
+    if widget_versions.clean_widget_version(version) is None:
         return "outdated", None
     if widget_versions.is_outdated(version):
         return "outdated", None

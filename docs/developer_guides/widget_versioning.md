@@ -28,7 +28,9 @@ still supported).
 
 Channels that have never reported a version (`widget_version` is `null`) are
 excluded, since their version can't be determined; `--include-unreported` adds
-them. Note that `unknown` is different — that is what a pre-0.5.1 widget gets
+them under a fourth status, `unreported`. They deliberately get no deprecation
+verdict or sunset date — a null version only means the recording path never ran,
+so the widget could equally be on `LATEST_VERSION`. Note that `unknown` is different — that is what a pre-0.5.1 widget gets
 recorded as, and it always appears in the report: it counts as older than every
 release, so it shows as `deprecated` (or `sunset`) under the configured
 deprecation, and as `outdated` when no deprecation is configured.
