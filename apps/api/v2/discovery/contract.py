@@ -17,7 +17,7 @@ OPTIONS_KEY_RENAMES = {
 # while someone types an LLM or router prompt -- a dropdown's worth of names, with the node's real
 # prompt contract (which variables it accepts, what each holds) living in the param's own
 # description. `assistant` is read by one deprecated node type, which the API does not list, so
-# nothing it does serve can consume the list. The rest belong to a param in `HIDDEN_PARAMS`.
+# nothing it does serve can consume the list. The rest belong to a param marked `api_exclude`.
 HIDDEN_OPTION_KEYS = frozenset(
     {
         "text_editor_autocomplete_vars_llm_node",
@@ -26,11 +26,6 @@ HIDDEN_OPTION_KEYS = frozenset(
         "mcp_tools",
     }
 )
-
-# Node params the API neither describes nor offers values for. A param and its option key are
-# withheld together: a client is told never to construct an option value, so a param served without
-# its list is one it cannot legally fill, and a list served without its param belongs to nothing.
-HIDDEN_PARAMS = frozenset({"mcp_tools"})
 
 # Params the builder renders with a bespoke widget rather than the generic `select`, so it declares
 # no `ui:optionsSource` for them. Their options key is the param name, as everywhere else.

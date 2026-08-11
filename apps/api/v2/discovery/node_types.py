@@ -16,7 +16,6 @@ from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
     HIDDEN_OPTION_KEYS,
-    HIDDEN_PARAMS,
     IMPLIED_OPTION_KEYS,
     MUST_MATCH,
     OPTIONS_KEY_RENAMES,
@@ -104,23 +103,28 @@ def _schema(node_schema: dict) -> dict:
     A hidden param has to leave ``required`` as well as ``properties`` -- a name required but never
     described reads as a field the client failed to receive rather than one it is not offered.
     """
-    served = {key: value for key, value in node_schema.items() if not key.startswith("ui:") and key != "properties"}
+    served = {key: value for key, value in node_schema.items() if ":" not in key and key != "properties"}
     served["properties"] = {
-        name: _property(name, prop) for name, prop in node_schema["properties"].items() if name not in HIDDEN_PARAMS
+        name: _property(name, prop) for name, prop in node_schema["properties"].items() if not prop.get("api:exclude")
     }
     if required := served.get("required"):
-        served["required"] = [name for name in required if name not in HIDDEN_PARAMS]
+        served["required"] = [name for name in required if name in served["properties"]]
     return served
 
 
 def _property(name: str, prop: dict) -> dict:
-    """One node param, as served: `ui:` keys translated or dropped, links made explicit."""
+    """One node param, as served: namespaced keys translated or dropped, links made explicit.
+
+    Every `ui:`/`api:` key is dropped and the two that carry meaning are re-added under client names.
+    Filtering on the namespace separator rather than on a list of prefixes means a new vocabulary needs
+    no edit here.
+    """
     translated = {
         UI_KEY_TRANSLATIONS[key]: value
         for key, value in prop.items()
         if key in UI_KEY_TRANSLATIONS and value is not None
     }
-    plain = {key: value for key, value in prop.items() if not key.startswith("ui:")}
+    plain = {key: value for key, value in prop.items() if ":" not in key}
     return plain | translated | _param_links(name)
 
 

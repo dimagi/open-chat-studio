@@ -200,6 +200,7 @@
       "type": "object"
     },
     "mcp_tools": {
+      "api:exclude": true,
       "description": "MCP tools to enable for the bot",
       "items": {
         "type": "string"

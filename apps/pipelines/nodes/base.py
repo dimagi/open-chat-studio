@@ -509,6 +509,10 @@ class UiSchema(BaseModel):
     options_source: OptionsSource | None = None
     flag_required: str | None = None
 
+    # The v2 discovery API describes neither this param nor its option list. For a param a client must
+    # never construct a value for; the two are withheld together. See ADR-0051.
+    api_exclude: bool = False
+
     # Use this to conditionally show/hide a field based on another field's value.
     # Can be a single condition or a list of conditions (all must be satisfied).
     visible_when: VisibleWhen | list[VisibleWhen] | None = None
@@ -531,6 +535,8 @@ class UiSchema(BaseModel):
             schema["ui:optionsSource"] = self.options_source
         if self.flag_required:
             schema["ui:flagRequired"] = self.flag_required
+        if self.api_exclude:
+            schema["api:exclude"] = True
         if self.rows is not None:
             schema["ui:rows"] = self.rows
         if self.visible_when is not None:

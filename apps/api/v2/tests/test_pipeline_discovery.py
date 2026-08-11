@@ -1,7 +1,6 @@
 import pytest
 from django.urls import reverse
 
-from apps.api.v2.discovery.contract import HIDDEN_PARAMS
 from apps.api.v2.discovery.node_types import _documentation_url, _property, option_keys_for_node_type
 from apps.api.v2.discovery.views import PipelineOptionsView
 from apps.utils.factories.documents import CollectionFactory
@@ -60,17 +59,17 @@ def test_only_addable_node_types_are_listed(team):
 
 
 @pytest.mark.django_db()
-def test_no_ui_key_survives_anywhere(team):
-    """`ui:` is the builder's vocabulary. The API translates the two keys that carry meaning for an
-    agent (`ui:visibleWhen`, `ui:flagRequired`) into `applies_when`/`requires_feature_flag` and drops
-    the rest, so nothing reaches the agent still labelled as a UI concern -- notably
-    `ui:widget: "none"`, which sits on required fields like `llm_provider_model_id` and reads as
-    "do not set this"."""
+def test_no_namespaced_schema_key_survives_anywhere(team):
+    """`ui:` and `api:` are internal vocabularies. The API translates the two keys that carry meaning
+    for a client (`ui:visibleWhen`, `ui:flagRequired`) into `applies_when`/`requires_feature_flag` and
+    drops every other namespaced key -- notably `ui:widget: "none"`, which sits on required fields like
+    `llm_provider_model_id` and reads as "do not set this", and the `api:` flags, which are
+    instructions about what to serve rather than part of what is served."""
     client = ApiTestClient(team.members.first(), team)
     for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
-        assert not [key for key in entry["schema"] if key.startswith("ui:")], entry["type"]
+        assert not [key for key in entry["schema"] if ":" in key], entry["type"]
         for name, prop in entry["schema"]["properties"].items():
-            assert not [key for key in prop if key.startswith("ui:")], f"{entry['type']}.{name}"
+            assert not [key for key in prop if ":" in key], f"{entry['type']}.{name}"
 
 
 @pytest.mark.django_db()
@@ -260,11 +259,12 @@ def test_feature_flagged_params_are_marked():
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("param", sorted(HIDDEN_PARAMS))
+@pytest.mark.parametrize("param", ["mcp_tools"])
 def test_a_withheld_param_reaches_neither_endpoint(team_with_resources, param):
-    """A withheld param has to leave the node schema and the option list together. Either half alone
-    is worse than serving both: a param with no discoverable values, or a key belonging to nothing.
-    It also has to leave `required`, which would otherwise name a field that is never described."""
+    """A param marked `UiSchema(api_exclude=True)` has to leave the node schema and the option list
+    together. Either half alone is worse than serving both: a param with no discoverable values, or a
+    key belonging to nothing. It also has to leave `required`, which would otherwise name a field that
+    is never described."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
