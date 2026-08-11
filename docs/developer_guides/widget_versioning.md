@@ -12,6 +12,29 @@ version policy lives in `apps/channels/widget_versions.py`.
 - The channel button and widget params dialog show upgrade/deprecation badges
   based on `get_widget_update_status()`.
 
+## Auditing which versions are in use
+
+`list_outdated_widget_versions` reports embedded-widget channels running anything
+older than `LATEST_VERSION`, with a session count per chatbot:
+
+        python manage.py list_outdated_widget_versions
+
+Only channels with real recent usage are listed: a session counts when it has at
+least one **human** message inside the activity window (30 days by default), and a
+channel appears only if that count is non-zero — so the session count is exactly
+the traffic that qualified it. Each row is classified `sunset` (past `sunset_at`),
+`deprecated` (covered by a `WidgetDeprecation`) or `outdated` (older than latest,
+still supported).
+
+Channels that have never reported a version (`widget_version` is `null`) are
+excluded, since their version can't be determined; `--include-unreported` adds
+them. Note that `unknown` is different — that is what a pre-0.5.1 widget gets
+recorded as, and it is always treated as outdated.
+
+Useful options: `--days N` to change the window, `--team <slug>` to scope to one
+team, `--deprecated-only` to drop merely-outdated rows, and `--format csv` for a
+spreadsheet-ready dump (adds the chatbot URL and channel ID).
+
 ## Per-channel authentication policy
 
 Each embedded-widget channel stores a durable `ExperimentChannel.required_auth_level`
@@ -126,3 +149,6 @@ entry automatically).
 To preview who would be notified before deploying, run the command manually:
 
         python manage.py notify_deprecated_widget_versions --dry-run
+
+To size up the impact before choosing a `below_version` and sunset date, see
+[which versions are actually in use](#auditing-which-versions-are-in-use).
