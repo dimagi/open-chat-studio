@@ -15,7 +15,7 @@ version policy lives in `apps/channels/widget_versions.py`.
 ## Auditing which versions are in use
 
 `list_outdated_widget_versions` reports embedded-widget channels running anything
-older than `LATEST_VERSION`, with a session count per chatbot:
+older than `LATEST_VERSION`, with a session count per channel:
 
         python manage.py list_outdated_widget_versions
 
