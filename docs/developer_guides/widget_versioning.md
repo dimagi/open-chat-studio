@@ -29,7 +29,9 @@ still supported).
 Channels that have never reported a version (`widget_version` is `null`) are
 excluded, since their version can't be determined; `--include-unreported` adds
 them. Note that `unknown` is different — that is what a pre-0.5.1 widget gets
-recorded as, and it is always treated as outdated.
+recorded as, and it always appears in the report: it counts as older than every
+release, so it shows as `deprecated` (or `sunset`) under the configured
+deprecation, and as `outdated` when no deprecation is configured.
 
 Useful options: `--days N` to change the window, `--team <slug>` to scope to one
 team, `--deprecated-only` to drop merely-outdated rows, and `--format csv` for a

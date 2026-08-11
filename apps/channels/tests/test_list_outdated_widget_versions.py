@@ -90,6 +90,20 @@ def test_sunset_status_for_elapsed_deprecation():
 
 
 @pytest.mark.django_db()
+def test_unparseable_version_still_reported_without_deprecations():
+    """A pre-header widget is older than every release, so it is reported even with no
+    deprecation configured to catch it."""
+    channel = _widget_channel(UNKNOWN_WIDGET_VERSION)
+    _add_session(channel)
+
+    with patch("apps.channels.widget_versions.DEPRECATIONS", []):
+        output = _run()
+
+    assert channel.experiment.name in output
+    assert "outdated" in output
+
+
+@pytest.mark.django_db()
 def test_current_version_excluded():
     channel = _widget_channel(LATEST_VERSION)
     _add_session(channel)
