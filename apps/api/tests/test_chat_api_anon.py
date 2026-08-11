@@ -5,11 +5,15 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.files.models import FilePurpose
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.files import FileFactory
+
+WIDGET_TOKEN = "test_widget_token_123456789012"
 
 
 @pytest.fixture()
@@ -179,12 +183,54 @@ def test_session_poll_with_messages(api_client, session):
     }
 
 
-@pytest.mark.skip("This no longer applies to the chat API until we have proper public access implemented.")
 @pytest.mark.django_db()
-def test_start_chat_session_requires_auth_when_not_public(team_with_users, api_client, experiment):
+def test_start_chat_session_not_startable_when_not_public(team_with_users, api_client, experiment):
+    """An allowlist-restricted chatbot is not startable anonymously and leaks no metadata.
+
+    404 (not 403) to match the web entry points, so a non-public chatbot looks the same to a
+    stranger through the API and the UI.
+    """
     url = reverse("api:chat:start-session")
     experiment.participant_allowlist = ["a", "b"]
     experiment.save()
     data = {"chatbot_id": experiment.public_id}
     response = api_client.post(url, data=data, format="json")
-    assert response.status_code == 403
+    assert response.status_code == 404
+    assert experiment.name not in response.content.decode()
+    assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("participant_allowlist", "status_code"),
+    [
+        pytest.param([], 201, id="public-chatbot-starts"),
+        pytest.param(["someone@example.com"], 404, id="allowlist-restricted-refused"),
+    ],
+)
+def test_start_chat_session_with_embed_key_honours_allowlist(
+    api_client, experiment, participant_allowlist, status_code
+):
+    """The embed key authenticates the widget, not a participant.
+
+    It does not make an allowlist-restricted chatbot startable: the anonymous participant can
+    never be on the allowlist, so the message pipeline would refuse every message in such a
+    session anyway.
+    """
+    experiment.participant_allowlist = participant_allowlist
+    experiment.save(update_fields=["participant_allowlist"])
+    ExperimentChannelFactory.create(
+        experiment=experiment,
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        extra_data={"widget_token": WIDGET_TOKEN, "allowed_domains": ["example.com"]},
+    )
+    url = reverse("api:chat:start-session")
+    data = {"chatbot_id": experiment.public_id, "session_data": {"source": "widget"}}
+    response = api_client.post(
+        url,
+        data=data,
+        format="json",
+        HTTP_X_EMBED_KEY=WIDGET_TOKEN,
+        HTTP_ORIGIN="https://example.com",
+    )
+    assert response.status_code == status_code

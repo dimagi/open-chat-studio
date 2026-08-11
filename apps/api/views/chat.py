@@ -36,6 +36,7 @@ from apps.channels.widget_versions import (
     widget_sunset_headers,
 )
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
@@ -241,6 +242,25 @@ def _resolve_experiment_channel(request, team, session_data):
     return channel
 
 
+def _caller_may_start_session(request, experiment_version) -> bool:
+    """Whether this caller is allowed to chat to `experiment_version`.
+
+    Mirrors the gate the web entry points apply before creating a session
+    (`start_session_public`, `start_session_public_embed`, `start_chatbot_session_public_embed`)
+    and the one the message pipeline applies to every message (`ParticipantValidationStage`):
+    a non-public chatbot only accepts participants on its allowlist (team members included).
+
+    Anonymous callers get an `anon:<uuid>` participant identifier which can never be on an
+    allowlist, so a non-public chatbot is not startable anonymously — matching the fact that
+    such a session could not exchange a single message anyway.
+    """
+    if experiment_version.is_public:
+        return True
+    if request.user.is_authenticated:
+        return experiment_version.is_participant_allowed(request.user.email)
+    return False
+
+
 @extend_schema(
     operation_id="chat_start_session",
     summary="Start a new chat session for a widget",
@@ -350,6 +370,12 @@ def chat_start_session(request):
                 experiment_version = experiment.get_version(version_number)
             except Experiment.DoesNotExist:
                 raise NotFound(f"Experiment with version {version_number} not found") from None
+
+    # Don't create a session on (or disclose the name and version list of) a chatbot the
+    # caller isn't allowed to chat to. The web entry points raise 404 here; match that so a
+    # non-public chatbot looks the same to a stranger through the API and the UI.
+    if not _caller_may_start_session(request, experiment_version or resolve_published_or_working(experiment)):
+        raise NotFound()
 
     team = experiment.team
 
