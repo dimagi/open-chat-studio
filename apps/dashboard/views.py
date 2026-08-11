@@ -35,9 +35,9 @@ def _cost_tracking_context(request, filter_form: DashboardFilterForm) -> dict:
 
 
 def _cost_panel_scope(filter_form: DashboardFilterForm) -> tuple[datetime, datetime, CostFilters]:
-    """Mirror the dashboard's date range and (chatbot / platform / participant)
-    filters so the panel stays in sync with the rest of the charts. Falls back
-    to the last 30 days when no date range is set.
+    """Mirror the dashboard's date range and (chatbot / platform / participant
+    / tag) filters so the panel stays in sync with the rest of the charts.
+    Falls back to the last 30 days when no date range is set.
     """
     start = end = None
     filters = CostFilters()
@@ -49,6 +49,7 @@ def _cost_panel_scope(filter_form: DashboardFilterForm) -> tuple[datetime, datet
             experiment_ids=params.get("experiment_ids"),
             platform_names=params.get("platform_names"),
             participant_ids=params.get("participant_ids"),
+            tag_ids=params.get("tag_ids"),
         )
     if not (start and end):
         end = timezone.now()
