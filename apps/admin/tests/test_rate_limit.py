@@ -1,6 +1,9 @@
 """Rate limiting behaviour for the admin JSON endpoints."""
 
+from datetime import UTC, datetime
+
 import pytest
+import time_machine
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
 from django.test import override_settings
@@ -24,6 +27,18 @@ ADMIN_API_ENDPOINTS = [
     pytest.param("ocs_admin:provider_usage_api", DATE_RANGE, id="provider-usage"),
     pytest.param("ocs_admin:provider_keys_api", DATE_RANGE, id="provider-keys"),
 ]
+
+
+# Counting windows are wall-clock aligned (window_start = now - now % window),
+# so a test whose requests straddle a boundary would see the counter reset
+# mid-run. Pin the clock mid-window so the window never rolls under a test.
+MID_WINDOW = datetime(2026, 8, 11, 12, 0, 30, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _frozen_clock():
+    with time_machine.travel(MID_WINDOW, tick=False):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -64,9 +79,9 @@ def test_over_limit_requests_are_rejected_when_enforcing(superuser_client, url_n
     assert response.status_code == 429
     body = response.json()
     assert body["detail"] == "Rate limit exceeded."
-    # The window is 5 minutes, so the wait is whatever remains of it.
-    assert 1 <= body["available_in"] <= 300
-    assert response["Retry-After"] == str(body["available_in"])
+    # Deterministic under the pinned clock: 30s into a 300s window leaves 270.
+    assert body["available_in"] == 270
+    assert response["Retry-After"] == "270"
 
 
 @pytest.mark.django_db()
