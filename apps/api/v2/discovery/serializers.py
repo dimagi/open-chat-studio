@@ -5,6 +5,7 @@ field's ``help_text`` is the one place a given fact is stated, so the endpoint d
 short.
 """
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 
@@ -53,13 +54,26 @@ class NodeTypeNotFoundSerializer(serializers.Serializer):
     )
 
 
+@extend_schema_field({"oneOf": [{"type": "string"}, {"type": "integer"}]})
+class OptionValueField(serializers.Field):
+    """An option's ``value``, which is an integer for the model-backed keys and a string elsewhere.
+
+    A typed field would coerce one into the other, so this passes the value through untouched and
+    declares the union to the schema by hand.
+    """
+
+    def to_representation(self, value):
+        return value
+
+
 class OptionSerializer(serializers.Serializer):
     """One selectable value. Write `value` into the param; `label` is for humans reading a diff."""
 
-    value = serializers.CharField(
+    value = OptionValueField(
         help_text=(
             "Write this into the node param. Opaque -- copy it verbatim and never construct one. "
-            "`mcp_tools` and `custom_actions` values in particular are composite identifiers."
+            "An integer for the model-backed keys, a string elsewhere; `mcp_tools` and "
+            "`custom_actions` values in particular are composite string identifiers."
         )
     )
     label = serializers.CharField()

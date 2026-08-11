@@ -1893,10 +1893,13 @@ components:
         for humans reading a diff.
       properties:
         value:
-          type: string
+          oneOf:
+          - type: string
+          - type: integer
           description: Write this into the node param. Opaque -- copy it verbatim
-            and never construct one. `mcp_tools` and `custom_actions` values in particular
-            are composite identifiers.
+            and never construct one. An integer for the model-backed keys, a string
+            elsewhere; `mcp_tools` and `custom_actions` values in particular are composite
+            string identifiers.
         label:
           type: string
         type:
