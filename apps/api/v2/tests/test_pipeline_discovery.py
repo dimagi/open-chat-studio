@@ -91,7 +91,7 @@ def test_no_param_carries_an_options_source(team):
         pytest.param(
             "LLMResponseWithPrompt",
             {"llm_provider_id", "llm_provider_model_id", "tool_config", "synthetic_voice_id"},
-            id="params-the-builder-hard-codes-a-widget-for",
+            id="params-rendered-with-a-bespoke-widget",
         ),
         pytest.param(
             "LLMResponseWithPrompt",
@@ -102,9 +102,10 @@ def test_no_param_carries_an_options_source(team):
     ],
 )
 def test_scoping_covers_every_param_that_reads_an_option_list(team_with_resources, node_type, expected_keys):
-    """`?node_type=` has to reach the params the builder never declared a `ui:optionsSource` for --
-    it hard-codes their widgets instead -- as well as the ones it did. Missing one leaves the agent
-    with a param it cannot fill from the scoped response."""
+    """Every param that reads an option list declares it with `ui:optionsSource`, including the ones
+    the builder renders with a bespoke widget rather than a generic `select`. `?node_type=` derives the
+    scoped payload from those declarations, so a missing one leaves the client with a param it cannot
+    fill from the scoped response."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type}).json()

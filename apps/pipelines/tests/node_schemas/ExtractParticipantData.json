@@ -11,12 +11,14 @@
       "description": "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
       "title": "LLM Model",
       "type": "integer",
+      "ui:optionsSource": "llm_provider_id",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
       "description": "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- an OpenAI provider cannot run an Anthropic model.",
       "title": "Llm Provider Model Id",
       "type": "integer",
+      "ui:optionsSource": "llm_provider_model_id",
       "ui:widget": "none"
     },
     "llm_model_parameters": {

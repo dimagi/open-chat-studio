@@ -341,7 +341,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     tool_config: dict[str, ToolConfigModel] | None = Field(
         default_factory=dict,
         description="Configuration for builtin tools",
-        json_schema_extra=UiSchema(widget=Widgets.none),
+        json_schema_extra=UiSchema(widget=Widgets.none, options_source=OptionsSource.tool_config),
     )
     mcp_tools: list[str] = Field(
         default_factory=list,
@@ -367,7 +367,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "provider configured on the chatbot -- each option carries the `provider_id` it needs to "
             "match. Leave unset to reply in text only."
         ),
-        json_schema_extra=UiSchema(widget=Widgets.voice_widget),
+        json_schema_extra=UiSchema(widget=Widgets.voice_widget, options_source=OptionsSource.synthetic_voice_id),
     )
 
     @model_validator(mode="after")

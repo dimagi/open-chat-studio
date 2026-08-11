@@ -24,6 +24,7 @@ from apps.pipelines.models import (
     PipelineChatHistoryTypes,
 )
 from apps.pipelines.nodes.base import (
+    OptionsSource,
     PipelineState,
     UiSchema,
     VisibleWhen,
@@ -75,7 +76,7 @@ class LLMResponseMixin(BaseModel):
         ...,
         title="LLM Model",
         description="The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
-        json_schema_extra=UiSchema(widget=Widgets.llm_provider_model),
+        json_schema_extra=UiSchema(widget=Widgets.llm_provider_model, options_source=OptionsSource.llm_provider_id),
     )
     llm_provider_model_id: int = Field(
         ...,
@@ -83,7 +84,7 @@ class LLMResponseMixin(BaseModel):
             "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- "
             "an OpenAI provider cannot run an Anthropic model."
         ),
-        json_schema_extra=UiSchema(widget=Widgets.none),
+        json_schema_extra=UiSchema(widget=Widgets.none, options_source=OptionsSource.llm_provider_model_id),
     )
     llm_model_parameters: dict[str, Any] = Field(
         default_factory=dict,

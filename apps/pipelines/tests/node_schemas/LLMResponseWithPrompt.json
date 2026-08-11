@@ -11,12 +11,14 @@
       "description": "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
       "title": "LLM Model",
       "type": "integer",
+      "ui:optionsSource": "llm_provider_id",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
       "description": "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- an OpenAI provider cannot run an Anthropic model.",
       "title": "Llm Provider Model Id",
       "type": "integer",
+      "ui:optionsSource": "llm_provider_model_id",
       "ui:widget": "none"
     },
     "llm_model_parameters": {
@@ -196,6 +198,7 @@
     "tool_config": {
       "description": "Configuration for builtin tools",
       "title": "Tool Config",
+      "ui:optionsSource": "tool_config",
       "ui:widget": "none",
       "type": "object"
     },
@@ -215,6 +218,7 @@
       "default": null,
       "description": "The text-to-speech voice this node's reply is spoken in. Must belong to the voice provider configured on the chatbot -- each option carries the `provider_id` it needs to match. Leave unset to reply in text only.",
       "title": "Voice Model",
+      "ui:optionsSource": "synthetic_voice_id",
       "ui:widget": "voice_widget",
       "type": "integer"
     }
