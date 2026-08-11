@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
@@ -50,29 +50,12 @@ class DashboardService:
     def __init__(self, team):
         self.team = team
 
-    def get_filtered_queryset_base(
-        self,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
-        experiment_ids: list[int] | None = None,
-        platform_names: list[str] | None = None,
-        participant_ids: list[int] | None = None,
-        tag_ids: list[int] | None = None,
-        include_archived: bool = False,
-    ) -> dict[str, Any]:
+    def get_filtered_queryset_base(self, **filters) -> dict[str, Any]:
         """Base querysets with common filters applied. The builder lives in
-        apps.usage_metrics (#3905); this delegation keeps the service API
-        stable for the dashboard's charts and tests."""
-        return filtered_querysets(
-            self.team,
-            start_date=start_date,
-            end_date=end_date,
-            experiment_ids=experiment_ids,
-            platform_names=platform_names,
-            participant_ids=participant_ids,
-            tag_ids=tag_ids,
-            include_archived=include_archived,
-        )
+        apps.usage_metrics (#3905) and owns the filter signature - see
+        `filtered_querysets` for the accepted keywords; this delegation keeps
+        the service API stable for the dashboard's charts and tests."""
+        return filtered_querysets(self.team, **filters)
 
     def get_active_participants_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
         """Get active participants chart data"""
