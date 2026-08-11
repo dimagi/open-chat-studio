@@ -357,10 +357,16 @@ def test_decorator_skips_exempt_requests():
 
 
 def test_admin_api_scope_is_configured():
-    """The admin_api scope parses to 100/5m, fail-open."""
+    """The admin_api scope is registered, parses, and fails open.
+
+    The configured rate is env-overridable, so this asserts the properties that
+    hold for any deployment rather than one deployment's numbers.
+    """
     limit, window_seconds, fail_open = _scope_config("admin_api")
 
-    assert (limit, window_seconds, fail_open) == (100, 300, True)
+    assert limit > 0
+    assert window_seconds > 0
+    assert fail_open is True
 
 
 def test_middleware_skips_degraded_results(db):

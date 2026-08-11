@@ -12,6 +12,10 @@ from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG
 
 TINY_LIMITS = {"admin_api": {"rate": "2/5m", "fail_open": True}}
 
+# Pinned so the header assertions test the contract rather than whatever
+# RATE_LIMIT_ADMIN_API happens to be set to in the developer's .env.
+PINNED_LIMITS = {"admin_api": {"rate": "100/5m", "fail_open": True}}
+
 DATE_RANGE = {"range_type": "custom", "start": "2026-05-01", "end": "2026-05-31"}
 
 ADMIN_API_ENDPOINTS = [
@@ -36,6 +40,7 @@ def superuser_client(client):
 
 
 @pytest.mark.django_db()
+@override_settings(RATE_LIMITS=PINNED_LIMITS)
 @pytest.mark.parametrize(("url_name", "params"), ADMIN_API_ENDPOINTS)
 def test_endpoints_report_their_allowance(superuser_client, url_name, params):
     """Every admin JSON endpoint carries the shared rate limit headers."""
@@ -57,8 +62,23 @@ def test_over_limit_requests_are_rejected_when_enforcing(superuser_client, url_n
     response = superuser_client.get(url, params)
 
     assert response.status_code == 429
-    assert response.json() == {"detail": "Rate limit exceeded.", "available_in": pytest.approx(300, abs=300)}
-    assert int(response["Retry-After"]) > 0
+    body = response.json()
+    assert body["detail"] == "Rate limit exceeded."
+    # The window is 5 minutes, so the wait is whatever remains of it.
+    assert 1 <= body["available_in"] <= 300
+    assert response["Retry-After"] == str(body["available_in"])
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_the_four_endpoints_share_one_allowance(superuser_client):
+    """One scope, one bucket per caller: spending it on one endpoint spends it on all."""
+    superuser_client.get(reverse("ocs_admin:teams_api"))
+    superuser_client.get(reverse("ocs_admin:users_api"))
+
+    response = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE)
+
+    assert response.status_code == 429
 
 
 @pytest.mark.django_db()
