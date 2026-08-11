@@ -5,7 +5,7 @@ from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed, ParseError
 
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.utils import get_experiment_session_cached
+from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 
 
 class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
@@ -84,3 +84,34 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         Return the authentication scheme for 401 responses.
         """
         return "X-Embed-Key"
+
+
+def get_embed_key_channel(request, experiment) -> ExperimentChannel | None:
+    """Return the widget channel of `experiment` that this request's X-Embed-Key proves access to.
+
+    `EmbeddedWidgetAuthentication` only runs when no earlier authenticator matched, so a caller
+    that also has a Django session cookie never authenticates as the channel — which is exactly
+    the site help widget, embedded in OCS for a logged-in user. This runs the same key and origin
+    checks as that class plus `WidgetDomainPermission`, so a view can treat a valid embed key as
+    authorization no matter which class authenticated the request.
+
+    Returns None (rather than raising) for every failure mode; the caller decides the response.
+    """
+    embed_key = request.headers.get("X-Embed-Key")
+    if not embed_key:
+        return None
+
+    channel = ExperimentChannel.objects.filter(
+        experiment=experiment,
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        extra_data__widget_token=embed_key,
+    ).first()
+    if channel is None:
+        return None
+
+    origin_domain = extract_domain_from_headers(request)
+    if not origin_domain:
+        return None
+    if not validate_domain(origin_domain, channel.extra_data.get("allowed_domains", [])):
+        return None
+    return channel

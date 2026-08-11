@@ -14,7 +14,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from apps.api.authentication import EmbeddedWidgetAuthentication
+from apps.api.authentication import EmbeddedWidgetAuthentication, get_embed_key_channel
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
@@ -225,18 +225,23 @@ def _issue_or_opt_out_session_token(session, channel):
     return _opt_out_session_token(session)
 
 
-def _resolve_experiment_channel(request, team, session_data):
-    """Return the ExperimentChannel for this request.
+def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
+    """Return the ExperimentChannel that owns this session.
 
-    Embed-key auth resolves to the widget's own channel; for widget traffic we also
-    record the reported version (or a placeholder for pre-0.5.1 widgets that send no
-    header). Recording is gated on `is_widget_request` so a non-widget caller using an
-    embed key isn't tagged with a placeholder version. Everything else (authenticated
-    users) falls back to the team API channel.
+    ADR-0052: a widget's own channel owns the session whenever the request carries that widget's
+    embed key, whether the key authenticated the request (an anonymous embed) or merely
+    accompanied it (the site help widget, where a Django session cookie authenticates first).
+    Attribution therefore tracks the widget, not the authenticator, so one widget cannot produce
+    two channels — and two participants — depending on who is looking at the page.
+
+    For widget traffic we also record the reported version (or a placeholder for pre-0.5.1
+    widgets that send no header). Recording is gated on `is_widget_request` so a non-widget
+    caller using an embed key isn't tagged with a placeholder version. Everything else
+    (authenticated users with no key) falls back to the team API channel.
     """
-    if not isinstance(request.auth, ExperimentChannel):
+    channel = request.auth if isinstance(request.auth, ExperimentChannel) else embed_key_channel
+    if channel is None:
         return ExperimentChannel.objects.get_team_api_channel(team)
-    channel = request.auth
     if is_widget_request(request, session_data):
         channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
     return channel
@@ -337,10 +342,30 @@ def chat_start_session(request):
     # Always look up the working version by public_id
     experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
 
+    # The widget channel this request's embed key proves, if any. Resolved once: it both
+    # authorizes the caller below and owns the session. `request.auth` already holds it when the
+    # key did the authenticating, so this only queries for keys that rode along with another
+    # authenticator.
+    embed_key_channel = (
+        request.auth if isinstance(request.auth, ExperimentChannel) else get_embed_key_channel(request, experiment)
+    )
+
+    is_team_member = request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
+
+    # ADR-0052: being logged in to OCS is not, on its own, access to every chatbot. A
+    # session-authenticated caller needs either team membership or the chatbot's embed key — the
+    # same proof an anonymous embedder must present. The key path is what keeps the site help
+    # widget working, since its users are logged in but are not members of the support bot's team.
+    if request.user.is_authenticated and not is_team_member and embed_key_channel is None:
+        return Response(
+            {"error": "You do not have access to this chatbot"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     experiment_version = None
     if version_number is not None:
-        # Verify the authenticated user belongs to the experiment's team
-        if not experiment.team.members.filter(id=request.user.id).exists():
+        # Choosing a version is a team-member capability; an embed key does not grant it.
+        if not is_team_member:
             return Response(
                 {"error": "You do not have access to this chatbot"},
                 status=status.HTTP_403_FORBIDDEN,
@@ -354,7 +379,7 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    experiment_channel = _resolve_experiment_channel(request, team, session_data)
+    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel)
 
     if request.user.is_authenticated:
         user = request.user
