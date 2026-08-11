@@ -7,6 +7,7 @@ from apps.files.content_type import (
     DEFAULT_CONTENT_TYPE,
     detect_content_type,
     detect_content_type_from_file,
+    ensure_extension,
 )
 
 
@@ -84,3 +85,18 @@ class TestDetectContentTypeFromFile:
                 raise OSError("cannot read")
 
         assert detect_content_type_from_file(Broken()) == "text/plain"
+
+
+class TestEnsureExtension:
+    @pytest.mark.parametrize(
+        ("filename", "content_type", "expected"),
+        [
+            pytest.param("report", "application/pdf", "report.pdf", id="appends-for-bare-name"),
+            pytest.param("report.pdf", "application/pdf", "report.pdf", id="leaves-existing-suffix"),
+            pytest.param("report.txt", "application/pdf", "report.txt", id="never-overrides-a-suffix"),
+            pytest.param("report", "", "report", id="no-content-type-nothing-to-add"),
+            pytest.param("report", "nonsense/unknown", "report", id="unmappable-content-type"),
+        ],
+    )
+    def test_ensure_extension(self, filename, content_type, expected):
+        assert ensure_extension(filename, content_type) == expected

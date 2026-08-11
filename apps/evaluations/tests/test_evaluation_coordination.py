@@ -100,14 +100,14 @@ def test_run_freezes_delta_explicit_list():
 
 
 @pytest.mark.django_db()
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_run_dispatches_nothing_and_waits_for_the_coordinator(delay_mock):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_run_dispatches_nothing_and_waits_for_the_coordinator(dispatch_mock):
     """Creating a run must not dispatch work; only coordinate_evaluation_runs does that."""
     config = EvaluationConfigFactory.create()
 
     run = config.run()
 
-    delay_mock.assert_not_called()
+    dispatch_mock.assert_not_called()
     assert run.status == EvaluationRunStatus.PENDING
     assert run.in_flight == []
     assert run.batch_dispatched_at is None
@@ -232,8 +232,8 @@ def _complete_messages(run, evaluators, messages):
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_pending_run_with_an_unconfigured_evaluator_fails_before_dispatching(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_pending_run_with_an_unconfigured_evaluator_fails_before_dispatching(dispatch_mock, _publish):
     """One error, not one per message: the pre-flight fails the run instead of dispatching."""
     run, evaluators, _messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
     evaluators[0].llm_provider = None
@@ -246,14 +246,14 @@ def test_pending_run_with_an_unconfigured_evaluator_fails_before_dispatching(del
     assert evaluators[0].name in run.error_message
     assert "select a provider and model" in run.error_message
     assert run.finished_at is not None  # or the run renders no finish time and no duration
-    assert delay_mock.call_count == 0
+    assert dispatch_mock.call_count == 0
     assert EvaluationResult.objects.filter(run=run).count() == 0
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_pending_run_with_a_python_evaluator_needs_no_provider(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_pending_run_with_a_python_evaluator_needs_no_provider(dispatch_mock, _publish):
     """PythonEvaluator has no LLM dependency, so the pre-flight must not fail it."""
     team = TeamWithUsersFactory.create()
     config = EvaluationConfigFactory.create(team=team)
@@ -270,13 +270,13 @@ def test_pending_run_with_a_python_evaluator_needs_no_provider(delay_mock, _publ
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
-    assert delay_mock.call_count == 1
+    assert dispatch_mock.call_count == 1
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_pending_dispatches_first_batch(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_pending_dispatches_first_batch(dispatch_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
 
     sweep()
@@ -286,13 +286,13 @@ def test_sweep_pending_dispatches_first_batch(delay_mock, _publish):
     assert set(run.in_flight) == {m.id for m in messages}
     assert run.batch_dispatched_at is not None
     # 5 messages, BATCH_SIZE=3 => 2 batches
-    assert delay_mock.call_count == 2
+    assert dispatch_mock.call_count == 2
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_dispatch_size_capped(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_dispatch_size_capped(dispatch_mock, _publish):
     # 40 messages, dispatch caps at BATCHES_PER_TICK*BATCH_SIZE = 30 => 10 batches
     run, evaluators, messages = _make_run(message_count=40, status=EvaluationRunStatus.PENDING)
 
@@ -300,13 +300,13 @@ def test_sweep_dispatch_size_capped(delay_mock, _publish):
 
     run.refresh_from_db()
     assert len(run.in_flight) == 30
-    assert delay_mock.call_count == 10
+    assert dispatch_mock.call_count == 10
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_dispatches_next_batch_when_current_done(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_dispatches_next_batch_when_current_done(dispatch_mock, _publish):
     run, evaluators, messages = _make_run(message_count=40, status=EvaluationRunStatus.PROCESSING)
     batch1 = messages[:30]
     run.in_flight = [m.id for m in batch1]
@@ -318,13 +318,13 @@ def test_sweep_dispatches_next_batch_when_current_done(delay_mock, _publish):
 
     run.refresh_from_db()
     assert set(run.in_flight) == {m.id for m in messages[30:]}  # remaining 10
-    assert delay_mock.call_count == 4  # 10 messages => ceil(10/3)=4 batches
+    assert dispatch_mock.call_count == 4  # 10 messages => ceil(10/3)=4 batches
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_completes_when_nothing_remains(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_completes_when_nothing_remains(dispatch_mock, _publish):
     run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
     run.batch_dispatched_at = timezone.now()
@@ -336,14 +336,14 @@ def test_sweep_completes_when_nothing_remains(delay_mock, _publish):
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
     assert run.finished_at is not None
-    delay_mock.assert_not_called()
+    dispatch_mock.assert_not_called()
     assert run.aggregates.exists()  # compute_aggregates_for_run ran
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_completion_survives_a_failing_finalization(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_completion_survives_a_failing_finalization(dispatch_mock, _publish):
     """A crash in the completion side effects must not rewind the run to PROCESSING.
 
     When the transition shared the tick's transaction, a side effect that died took the
@@ -391,10 +391,10 @@ def test_beat_fans_out_one_tick_per_active_run(delay_mock):
     ],
 )
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-@patch("apps.evaluations.tasks.finalize_evaluation_run.delay")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.apply_async")
 def test_completion_with_nothing_evaluated_skips_finalization(
-    finalize_mock, _delay, _publish, message_count, clear_evaluators
+    finalize_mock, _dispatch, _publish, message_count, clear_evaluators
 ):
     """A run that completes without evaluating anything has nothing to finalize.
 
@@ -419,9 +419,9 @@ def test_completion_with_nothing_evaluated_skips_finalization(
 
 
 @pytest.mark.django_db()
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.finalize_evaluation_run.delay", side_effect=RuntimeError("broker down"))
+@patch("apps.evaluations.tasks.finalize_evaluation_run.apply_async", side_effect=RuntimeError("broker down"))
 def test_failed_finalize_dispatch_still_publishes_completion(finalize_mock, publish_mock, _delay):
     """The run is terminal by the time finalization is dispatched, so no later tick would
     retry the publish. A broker error dispatching it must not strand the UI poller."""
@@ -435,16 +435,17 @@ def test_failed_finalize_dispatch_still_publishes_completion(finalize_mock, publ
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
-    finalize_mock.assert_called_once_with(run.id)
+    finalize_mock.assert_called_once()
+    assert finalize_mock.call_args.kwargs["args"] == [run.id]
     publish_mock.assert_called_once()
     assert publish_mock.call_args.args[1].terminal == "success"
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-@patch("apps.evaluations.tasks.finalize_evaluation_run.delay")
-def test_run_stays_unfinalized_until_finalization_runs(finalize_mock, _delay, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.apply_async")
+def test_run_stays_unfinalized_until_finalization_runs(finalize_mock, _dispatch, _publish):
     """The completing tick must leave `finalized_at` unset.
 
     That tick also publishes the UI stop signal, so the results page reloads before
@@ -462,7 +463,8 @@ def test_run_stays_unfinalized_until_finalization_runs(finalize_mock, _delay, _p
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
-    finalize_mock.assert_called_once_with(run.id)
+    finalize_mock.assert_called_once()
+    assert finalize_mock.call_args.kwargs["args"] == [run.id]
     assert run.finalized_at is None
     assert run.is_finalizing
 
@@ -498,21 +500,21 @@ def test_finalization_is_a_noop_for_a_run_that_is_not_completed(status):
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_empty_plan_completes_immediately(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_empty_plan_completes_immediately(dispatch_mock, _publish):
     run, evaluators, messages = _make_run(message_count=0, status=EvaluationRunStatus.PENDING)
 
     sweep()
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.COMPLETED
-    delay_mock.assert_not_called()
+    dispatch_mock.assert_not_called()
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_fresh_batch_in_progress_is_noop(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_fresh_batch_in_progress_is_noop(dispatch_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
     run.batch_dispatched_at = timezone.now()
@@ -523,13 +525,13 @@ def test_sweep_fresh_batch_in_progress_is_noop(delay_mock, _publish):
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING
-    delay_mock.assert_not_called()
+    dispatch_mock.assert_not_called()
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_stalled_redispatches_unfinished(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_stalled_redispatches_unfinished(dispatch_mock, _publish):
     run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
     run.batch_dispatched_at = timezone.now() - timedelta(hours=1)  # older than STALL_TIMEOUT
@@ -543,14 +545,14 @@ def test_sweep_stalled_redispatches_unfinished(delay_mock, _publish):
 
     run.refresh_from_db()
     assert set(run.in_flight) == {m.id for m in messages[2:]}
-    assert delay_mock.call_count == 1  # 3 unfinished => 1 batch
+    assert dispatch_mock.call_count == 1  # 3 unfinished => 1 batch
     assert run.stall_count == 1  # progress was made (2 completed) => reset to 1
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_old_batch_with_fresh_results_is_not_stalled(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_old_batch_with_fresh_results_is_not_stalled(dispatch_mock, _publish):
     """The newest-result arm of the staleness floor: an old batch_dispatched_at alone
     must not trigger a re-dispatch while fresh results are still landing."""
     run, evaluators, messages = _make_run(evaluator_count=2, message_count=3, status=EvaluationRunStatus.PROCESSING)
@@ -567,13 +569,13 @@ def test_sweep_old_batch_with_fresh_results_is_not_stalled(delay_mock, _publish)
     assert run.status == EvaluationRunStatus.PROCESSING
     assert set(run.in_flight) == {m.id for m in messages}  # unchanged, no re-dispatch
     assert run.stall_count == 0
-    delay_mock.assert_not_called()
+    dispatch_mock.assert_not_called()
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_counts_partially_evaluated_message_as_remaining(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_counts_partially_evaluated_message_as_remaining(dispatch_mock, _publish):
     """A message with a result from only one of two evaluators is still remaining;
     if a single result were enough the tick below would complete the run."""
     run, evaluators, messages = _make_run(evaluator_count=2, message_count=2, status=EvaluationRunStatus.PROCESSING)
@@ -588,13 +590,13 @@ def test_sweep_counts_partially_evaluated_message_as_remaining(delay_mock, _publ
 
     run.refresh_from_db()
     assert run.status == EvaluationRunStatus.PROCESSING  # not COMPLETED
-    delay_mock.assert_not_called()  # fresh batch still in progress => no-op tick
+    dispatch_mock.assert_not_called()  # fresh batch still in progress => no-op tick
 
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_sweep_fails_after_max_stalls_without_progress(dispatch_mock, _publish):
     run, evaluators, messages = _make_run(message_count=3, status=EvaluationRunStatus.PROCESSING)
     run.in_flight = [m.id for m in messages]
     run.batch_dispatched_at = timezone.now() - timedelta(hours=1)
@@ -609,7 +611,7 @@ def test_sweep_fails_after_max_stalls_without_progress(delay_mock, _publish):
     assert run.error_message
     assert run.finished_at is not None
     assert run.stall_count == 3  # mark_failed must not clobber the counter it is saved alongside
-    delay_mock.assert_not_called()
+    dispatch_mock.assert_not_called()
 
 
 @pytest.mark.django_db()
@@ -627,14 +629,15 @@ def test_full_run_reaches_completion_over_multiple_ticks(evaluator_run_mock, _pu
 
     dispatched: list[list[int]] = []
 
-    def capture(run_id, batch):
+    def capture(args=None, **kwargs):
+        _run_id, batch = args
         dispatched.append(batch)
 
     for _ in range(10):  # safety bound
         run.refresh_from_db()
         if run.status == EvaluationRunStatus.COMPLETED:
             break
-        with patch("apps.evaluations.tasks.evaluate_message_batch.delay", side_effect=capture):
+        with patch("apps.evaluations.tasks.evaluate_message_batch.apply_async", side_effect=capture):
             sweep()
         # a "worker" drains everything dispatched this tick
         pending, dispatched = dispatched, []
@@ -675,6 +678,53 @@ def test_ensure_taskbadger_task_records_run_context():
 
 
 @pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_a_tick_overlapping_the_create_does_not_make_a_second_taskbadger_task(_batch, _publish):
+    """Creating twice would mean two root tasks, not a no-op: the create is not idempotent.
+
+    Interleaves the two ticks at the only point where the empty-id guard cannot help — the
+    first tick has committed, so its row lock is gone, but has not stored the new id yet.
+    Only the PENDING claim keeps the second tick out of the create.
+    """
+    run, _evaluators, _messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
+    overlapped = False
+
+    def drive_again_mid_create(**kwargs):
+        nonlocal overlapped
+        if not overlapped:  # once: the second tick must not recurse back into the create
+            overlapped = True
+            drive_evaluation_run(run.id)
+        return Mock(id="tb-run")
+
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe", side_effect=drive_again_mid_create) as create_mock:
+        drive_evaluation_run(run.id)
+
+    assert overlapped  # the interleaving happened, so the assertion below means something
+    create_mock.assert_called_once()
+    run.refresh_from_db()
+    assert run.taskbadger_task_id == "tb-run"
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_a_run_past_its_first_tick_is_not_given_a_taskbadger_task(_batch, _publish):
+    """Deliberate: retrying the create on a later tick is what let overlapping ticks double up.
+
+    Reachable when the first tick's create failed, or for a run already in flight when this
+    shipped. The run stays unmonitored rather than picking up a task mid-flight.
+    """
+    run, _evaluators, _messages = _make_run(message_count=5, status=EvaluationRunStatus.PROCESSING)
+    assert run.taskbadger_task_id == ""
+
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe") as create_mock:
+        drive_evaluation_run(run.id)
+
+    create_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
 def test_ensure_taskbadger_task_is_free_once_created(django_assert_num_queries):
     """The config lookup must stay below the task-id guard: it runs once per run, not once per tick."""
     run = EvaluationRunFactory.create(taskbadger_task_id="tb-1")
@@ -686,6 +736,45 @@ def test_ensure_taskbadger_task_is_free_once_created(django_assert_num_queries):
         _ensure_taskbadger_task(run, total=5)
 
     create_mock.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.finalize_evaluation_run.apply_async")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_dispatched_tasks_are_nested_under_the_runs_taskbadger_task(batch_mock, finalize_mock, _publish):
+    """The batch and finalize tasks are dispatched as children of the run's Taskbadger task.
+
+    The run's task is created by the same tick that dispatches the first batches, so it has
+    to exist before they go out or that first tick's batches end up unparented.
+    """
+    run, evaluators, messages = _make_run(message_count=5, status=EvaluationRunStatus.PENDING)
+
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe", return_value=Mock(id="tb-run")):
+        drive_evaluation_run(run.id)
+
+        assert batch_mock.call_count == 2  # 5 messages, BATCH_SIZE=3
+        for call in batch_mock.call_args_list:
+            assert call.kwargs["headers"] == {"taskbadger_kwargs": {"parent": "tb-run"}}
+
+        _complete_messages(run, evaluators, messages)
+        drive_evaluation_run(run.id)
+
+    finalize_mock.assert_called_once_with(args=[run.id], headers={"taskbadger_kwargs": {"parent": "tb-run"}})
+
+
+@pytest.mark.django_db()
+@patch("apps.evaluations.tasks._publish_tick")
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_dispatch_omits_parent_when_the_run_has_no_taskbadger_task(batch_mock, _publish):
+    """An explicit `parent=None` would suppress the Celery integration's own nesting."""
+    run, _evaluators, _messages = _make_run(message_count=1, status=EvaluationRunStatus.PENDING)
+
+    with patch("apps.evaluations.tasks.taskbadger.create_task_safe", return_value=None):
+        drive_evaluation_run(run.id)
+
+    batch_mock.assert_called_once()
+    assert "headers" not in batch_mock.call_args.kwargs
 
 
 @pytest.mark.django_db()

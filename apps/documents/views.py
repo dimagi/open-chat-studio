@@ -100,10 +100,14 @@ def single_collection_home(request, team_slug: str, pk: int):
     document_sources = (
         DocumentSource.objects.working_versions_queryset().filter(collection=collection).prefetch_related("sync_logs")
     )
-    file_stats = CollectionFile.objects.filter(collection=collection).aggregate(
-        total=Count("id"),
-        manual=Count("id", filter=Q(document_source__isnull=True)),
-        unsendable=Count("id", filter=~Q(file__unsupported_channels={})),
+    file_stats = (
+        CollectionFile.objects.filter(collection=collection)
+        .exclude(document_source__is_archived=True)
+        .aggregate(
+            total=Count("id"),
+            manual=Count("id", filter=Q(document_source__isnull=True)),
+            unsendable=Count("id", filter=~Q(file__unsupported_channels={})),
+        )
     )
     collection_files_count = file_stats["total"]
     manually_uploaded_files_count = file_stats["manual"]
@@ -122,6 +126,7 @@ def single_collection_home(request, team_slug: str, pk: int):
         "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
         "document_source_types": _visible_source_types(request),
         "read_only": collection.is_a_version,
+        **_indexing_progress(collection),
     }
     return render(request, "documents/single_collection_home.html", context)
 
@@ -517,6 +522,62 @@ def get_collection_file_status(request, team_slug: str, collection_id: int, pk: 
             "collection": collection_file.collection,
             "team": request.team,
         },
+    )
+
+
+def _indexing_progress(collection: Collection) -> dict:
+    """Counts behind the "X of Y files indexed" line.
+
+    Only index collections index their files, so anything else has nothing to report. Failed
+    files are reported separately from the indexed count, since they will never complete.
+
+    Rows with a blank status are excluded outright: they were never put through indexing, so
+    they are neither work in progress nor part of the total. A local index version is where
+    they come from -- it copies its chunks across wholesale rather than re-indexing (see
+    ``Collection.create_new_version``) -- and counting them would report a fully indexed
+    version as "0 of N" and poll every 5s for work that is never coming.
+
+    Files of a removed document source are excluded for the same reason. Removal archives the
+    source and hands the file deletion to ``delete_document_source_task``, so until that task
+    runs the rows are still here -- typically mid-index, since removal does not stop the index
+    run it just made pointless, and the deletion queues up behind it. The page has already
+    dropped the source's card and never listed its files, so counting them leaves a spinner
+    running against a total the user cannot account for.
+
+    Outstanding is counted positively rather than derived as ``total - indexed - failed``, so
+    a status that is neither terminal nor pending can never read as work in progress.
+    """
+    if not collection.is_index:
+        return {}
+
+    stats = (
+        CollectionFile.objects.filter(collection=collection)
+        .exclude(status="")
+        .exclude(document_source__is_archived=True)
+        .aggregate(
+            total=Count("id"),
+            indexed=Count("id", filter=Q(status=FileStatus.COMPLETED)),
+            failed=Count("id", filter=Q(status=FileStatus.FAILED)),
+            outstanding=Count("id", filter=Q(status__in=[FileStatus.PENDING, FileStatus.IN_PROGRESS])),
+        )
+    )
+    return {
+        "progress_total": stats["total"],
+        "progress_indexed": stats["indexed"],
+        "progress_failed": stats["failed"],
+        "progress_outstanding": stats["outstanding"],
+    }
+
+
+@login_and_team_required
+@permission_required("documents.view_collection", raise_exception=True)
+def collection_indexing_progress(request, team_slug: str, collection_id: int):
+    """Aggregate indexing progress for a collection, polled while work is outstanding."""
+    collection = get_object_or_404(Collection, id=collection_id, team=request.team)
+    return render(
+        request,
+        "documents/partials/indexing_progress.html",
+        {"collection": collection, **_indexing_progress(collection)},
     )
 
 

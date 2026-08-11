@@ -6,7 +6,6 @@ from urllib.parse import unquote
 from django.core.files.base import ContentFile
 from django.db import DatabaseError, transaction
 from django.utils import timezone
-from langchain_core.documents import Document
 
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata
 from apps.documents.exceptions import DocumentSourceDeleted
@@ -17,9 +16,10 @@ from apps.documents.models import (
     FileStatus,
     SyncStatus,
 )
-from apps.documents.source_loaders.base import SyncResult
+from apps.documents.source_loaders.base import SourceDocument, SyncResult
 from apps.documents.source_loaders.registry import create_loader
 from apps.documents.utils import bulk_delete_collection_files
+from apps.files.content_type import detect_content_type, ensure_extension
 from apps.files.models import File, FilePurpose
 
 _EXTERNAL_ID_MAX_LENGTH = 255
@@ -218,18 +218,19 @@ class DocumentSourceManager:
         return {_safe_external_id(file.external_id): file for file in existing_files if file.external_id}
 
     def _sync_document(
-        self, document: Document, identifier: str, loader, existing_files_map: dict, result: SyncResult
+        self, document: SourceDocument, identifier: str, loader, existing_files_map: dict, result: SyncResult
     ) -> int | None:
         """Create or update a single document, returning the file id to index (or None).
 
         A single bad document must not abort the whole sync: log it, record it, and
         carry on so the remaining files are still processed and indexed.
         """
-        if not document.page_content.strip():
-            msg = (
-                "Skipping document with empty content "
-                "(file may be a scanned/image-based document with no extractable text)"
-            )
+        # Only bytes the source never served are skipped here. Content that is merely blank
+        # was still served, so it is stored and indexing records it as failed --
+        # skipping it now would leave an already-synced file in place with stale content,
+        # since its identifier is marked as seen and so escapes stale-file removal.
+        if not document.content:
+            msg = "Skipping document with empty content (the source served no bytes)"
             logger.warning(
                 msg,
                 extra={"document_source_id": self.document_source.id, "identifier": identifier},
@@ -271,10 +272,14 @@ class DocumentSourceManager:
                 self._remove_files(files_to_remove)
             result.files_removed += len(files_to_remove)
 
-    def _create_file(self, document: Document, identifier: str):
-        """Create a new file from a document"""
+    def _create_file(self, document: SourceDocument, identifier: str):
+        """Create a new file from a document.
+
+        No content type is passed: ``File.create`` sniffs it from the bytes, which is the
+        only claim about the document we trust.
+        """
         filename = self._extract_filename(document, identifier)
-        content_file = ContentFile(document.page_content.encode("utf-8"))
+        content_file = ContentFile(document.content)
         file = File.create(
             filename=filename,
             file_obj=content_file,
@@ -294,14 +299,24 @@ class DocumentSourceManager:
         )
         return collection_file
 
-    def _update_file(self, collection_file: CollectionFile, document: Document, identifier: str):
-        """Update an existing file with new document content"""
+    def _update_file(self, collection_file: CollectionFile, document: SourceDocument, identifier: str):
+        """Update an existing file with new document content.
+
+        The content type is re-sniffed along with the bytes: the source may now serve a
+        different format under the same identifier, and a stale type would misdescribe
+        what is stored.
+        """
         filename = self._extract_filename(document, identifier)
-        content_file = ContentFile(document.page_content.encode("utf-8"), name=filename)
+        content_type = detect_content_type(document.content, filename=filename)
+        # Match what ``File.create`` does for a new file, or a source document with no
+        # extension would gain one on create and lose it again on the next update.
+        filename = ensure_extension(filename, content_type)
+        content_file = ContentFile(document.content, name=filename)
         existing_file = collection_file.file
         existing_file.name = filename
         existing_file.file = content_file
         existing_file.content_size = content_file.size
+        existing_file.content_type = content_type
         existing_file.metadata = document.metadata
         existing_file.save()
 
@@ -312,7 +327,7 @@ class DocumentSourceManager:
     def _remove_files(self, connection_files: list[CollectionFile]):
         bulk_delete_collection_files(self.collection, connection_files)
 
-    def _extract_filename(self, document: Document, identifier: str) -> str:
+    def _extract_filename(self, document: SourceDocument, identifier: str) -> str:
         """Extract a suitable filename from document metadata or identifier"""
         if path := document.metadata.get("path"):
             return path

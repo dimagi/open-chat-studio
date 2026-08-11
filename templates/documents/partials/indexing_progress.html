@@ -1,0 +1,25 @@
+<div id="collection-indexing-progress"
+     {% if progress_outstanding %}
+       hx-get="{% url 'documents:collection_indexing_progress' request.team.slug collection.id %}"
+       hx-trigger="every 5s"
+       hx-target="this"
+       hx-swap="outerHTML"
+     {% endif %}>
+  {% if progress_total %}
+    <div class="flex items-center gap-2 text-sm text-base-content/60 mt-1"
+         role="progressbar"
+         aria-label="File indexing progress"
+         aria-valuemin="0"
+         aria-valuemax="{{ progress_total }}"
+         aria-valuenow="{{ progress_indexed }}"
+         aria-valuetext="{{ progress_indexed }} of {{ progress_total }} files indexed{% if progress_failed %}, {{ progress_failed }} failed{% endif %}">
+      {% if progress_outstanding %}
+        <span class="loading loading-spinner loading-xs"></span>
+      {% endif %}
+      <span>{{ progress_indexed }} of {{ progress_total }} files indexed</span>
+      {% if progress_failed %}
+        <span class="text-error">· {{ progress_failed }} failed</span>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

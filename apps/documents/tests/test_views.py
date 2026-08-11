@@ -760,3 +760,153 @@ class TestIndexFailureReason:
         assert f'data-tip="{long_reason}"' in content
         assert f'aria-label="{long_reason}"' not in content
         assert 'aria-label="AuthenticationError: ' in content
+
+
+@pytest.mark.django_db()
+class TestCollectionIndexingProgress:
+    """The per-file badges each poll themselves; this is the aggregate 'X of Y' at the top."""
+
+    @pytest.fixture()
+    def collection(self):
+        team = TeamWithUsersFactory.create()
+        return CollectionFactory.create(team=team, is_index=True, is_remote_index=False)
+
+    def _url(self, collection):
+        return reverse("documents:collection_indexing_progress", args=[collection.team.slug, collection.id])
+
+    def _make_files(self, collection, **counts):
+        for status, count in counts.items():
+            for _ in range(count):
+                CollectionFileFactory.create(collection=collection, status=getattr(FileStatus, status.upper()))
+
+    def test_failures_are_reported_alongside_the_count(self, collection, client):
+        """A failed file will never complete, so it must not read as still-pending work."""
+        self._make_files(collection, completed=2, in_progress=1, pending=1, failed=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "2 of 5 files indexed" in content
+        assert "1 failed" in content
+
+    def test_stops_polling_once_nothing_is_pending(self, collection, client):
+        """Left polling, every open collection page would hit the server forever."""
+        self._make_files(collection, completed=2, failed=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "hx-trigger" not in content
+        # A failed file never becomes indexed, so the line settles below the total.
+        assert "2 of 3 files indexed" in content
+        assert "1 failed" in content
+
+    def test_no_counter_for_a_collection_that_is_not_an_index(self, client):
+        """Files in a media collection are never indexed, so there is nothing to count."""
+        team = TeamWithUsersFactory.create()
+        media_collection = CollectionFactory.create(team=team, is_index=False)
+        CollectionFileFactory.create(collection=media_collection, status="")
+        client.force_login(team.members.first())
+
+        content = client.get(self._url(media_collection)).content.decode()
+
+        assert "files indexed" not in content
+
+    def test_another_teams_collection_is_not_visible(self, collection, client):
+        other_team = TeamWithUsersFactory.create()
+        client.force_login(other_team.members.first())
+
+        response = client.get(self._url(collection))
+
+        assert response.status_code == 404
+
+    def test_collection_page_shows_the_counter_on_load(self, collection, client):
+        """The counter has to be there before the first poll fires, or it appears 5s late."""
+        self._make_files(collection, completed=1, pending=2)
+        client.force_login(collection.team.members.first())
+
+        url = reverse("documents:single_collection_home", args=[collection.team.slug, collection.id])
+        content = client.get(url).content.decode()
+
+        assert "1 of 3 files indexed" in content
+
+    def test_untracked_files_are_not_counted(self, collection, client):
+        """A local index version copies its chunks across instead of re-indexing, leaving its
+        CollectionFile rows with a blank status. Counting those would report a fully indexed
+        version as "0 of N" and poll every 5s for work that is never coming."""
+        self._make_files(collection, completed=2)
+        version = collection.create_new_version()
+        assert set(CollectionFile.objects.filter(collection=version).values_list("status", flat=True)) == {""}
+        client.force_login(collection.team.members.first())
+
+        partial = client.get(self._url(version)).content.decode()
+        assert "files indexed" not in partial
+        assert "hx-trigger" not in partial
+
+        page = reverse("documents:single_collection_home", args=[version.team.slug, version.id])
+        assert "files indexed" not in client.get(page).content.decode()
+
+    def test_files_of_a_removed_source_are_not_counted(self, collection, client):
+        """Removing a source archives it and deletes its files in the background. Until that
+        task runs the rows are still there, mid-index -- and counting them leaves the page
+        spinning on a total made up of files the page no longer shows anywhere."""
+        removed = DocumentSourceFactory.create(collection=collection, team=collection.team, is_archived=True)
+        for status in (FileStatus.COMPLETED, FileStatus.IN_PROGRESS, FileStatus.PENDING, FileStatus.FAILED):
+            CollectionFileFactory.create(collection=collection, document_source=removed, status=status)
+        self._make_files(collection, completed=1)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "1 of 1 files indexed" in content
+        assert "failed" not in content
+        assert "hx-trigger" not in content
+
+    def test_files_of_a_live_source_are_counted(self, collection, client):
+        """The counter's whole job is reporting a source's files as they index."""
+        source = DocumentSourceFactory.create(collection=collection, team=collection.team)
+        CollectionFileFactory.create(collection=collection, document_source=source, status=FileStatus.COMPLETED)
+        CollectionFileFactory.create(collection=collection, document_source=source, status=FileStatus.IN_PROGRESS)
+        client.force_login(collection.team.members.first())
+
+        content = client.get(self._url(collection)).content.decode()
+
+        assert "1 of 2 files indexed" in content
+        assert "hx-trigger" in content
+
+
+@pytest.mark.django_db()
+class TestCollectionUploadedFileCount:
+    """The 'N uploaded (max M)' figure beside the progress bar, which also gates the upload
+    buttons -- so a stale total leaves a user unable to add files."""
+
+    @pytest.fixture()
+    def collection(self):
+        team = TeamWithUsersFactory.create()
+        return CollectionFactory.create(team=team, is_index=True, is_remote_index=False)
+
+    def _page(self, client, collection) -> str:
+        url = reverse("documents:single_collection_home", args=[collection.team.slug, collection.id])
+        return client.get(url).content.decode()
+
+    def test_files_of_a_removed_source_are_not_counted(self, collection, client):
+        """Same reason as the progress counter: the source's card is already gone from the
+        page, and its files are only still here until the deletion task runs."""
+        removed = DocumentSourceFactory.create(collection=collection, team=collection.team, is_archived=True)
+        CollectionFileFactory.create(collection=collection, document_source=removed, status=FileStatus.COMPLETED)
+        CollectionFileFactory.create(collection=collection, status=FileStatus.COMPLETED)
+        client.force_login(collection.team.members.first())
+
+        content = self._page(client, collection)
+
+        assert ">1</span> uploaded" in content
+
+    def test_files_of_a_live_source_are_counted(self, collection, client):
+        source = DocumentSourceFactory.create(collection=collection, team=collection.team, source_type="github")
+        CollectionFileFactory.create(collection=collection, document_source=source, status=FileStatus.COMPLETED)
+        CollectionFileFactory.create(collection=collection, status=FileStatus.COMPLETED)
+        client.force_login(collection.team.members.first())
+
+        content = self._page(client, collection)
+
+        assert ">2</span> uploaded" in content

@@ -13,6 +13,7 @@ from pgvector.django import CosineDistance
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
 from apps.documents.models import CollectionFile, FileStatus, chunk_from_indexed_file, format_failure_reason
+from apps.documents.readers import FileReadException
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
@@ -20,6 +21,25 @@ logger = logging.getLogger("ocs.index_manager")
 
 Vector = list[float]
 EmbeddingInputType = Literal["document", "query"]
+
+NO_EXTRACTABLE_TEXT = "No text could be extracted from this file"
+
+
+def _reads_as_empty(file: File) -> bool:
+    """True only when the file was read successfully and yielded no text.
+
+    A read that raises counts as *unknown*, not empty: a remote provider indexes formats
+    our readers do not, so an unreadable file is left for it to judge rather than failed
+    here on our own inability to parse it.
+    """
+    try:
+        return not file.read_content().strip()
+    except Exception:
+        logger.info(
+            "Could not read file locally; deferring to the remote index",
+            extra={"file_id": file.id},
+        )
+        return False
 
 
 class IndexManager(metaclass=ABCMeta):
@@ -121,12 +141,18 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
         uploaded_files: list[File] = []
         for collection_file in collection_files:
             file = collection_file.file
+            if _reads_as_empty(file):
+                # Linking succeeds for a file with no text in it, so the provider's verdict
+                # alone would leave this COMPLETED with nothing indexed -- indistinguishable
+                # from a file that indexed cleanly. Source files are stored unparsed, so a
+                # scanned or image-only document reaches this point.
+                self._fail(collection_file, FileReadException(NO_EXTRACTABLE_TEXT))
+                continue
             try:
                 self._ensure_remote_file_exists(file)
                 uploaded_files.append(file)
-            except FileUploadError:
-                collection_file.status = FileStatus.FAILED
-                collection_file.save(update_fields=["status"])
+            except FileUploadError as e:
+                self._fail(collection_file, e)
 
         try:
             self.link_files_to_remote_index(
@@ -135,13 +161,21 @@ class RemoteIndexManager(IndexManager, metaclass=ABCMeta):
                 chunk_overlap=chunk_overlap,
             )
             CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.COMPLETED
+                # A reason left by an earlier attempt describes an outcome that no longer holds.
+                status=FileStatus.COMPLETED,
+                failure_reason="",
             )
-        except UnableToLinkFileException:
+        except UnableToLinkFileException as e:
             logger.exception("Failed to link files to remote index")
             CollectionFile.objects.filter(file_id__in=[file.id for file in uploaded_files]).update(
-                status=FileStatus.FAILED
+                status=FileStatus.FAILED, failure_reason=format_failure_reason(e)
             )
+
+    @staticmethod
+    def _fail(collection_file: CollectionFile, exc: Exception):
+        collection_file.status = FileStatus.FAILED
+        collection_file.failure_reason = format_failure_reason(exc)
+        collection_file.save(update_fields=["status", "failure_reason"])
 
     def _ensure_remote_file_exists(self, file: File):
         try:
@@ -279,51 +313,22 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         no embeddings behind, since a partial index is not a usable representation of it.
         """
         for collection_file in collection_files:
-            file = collection_file.file
             embeddings = []
             try:
-                document_text = file.read_content()
-                text_chunks = self.chunk_file(document_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-                for idx, chunk in enumerate(text_chunks):
-                    safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
-                    if not safe_chunk:
-                        # Voyage rejects empty input; OpenAI and Google return API errors.
-                        # Skipping avoids aborting the whole file over a NUL-only chunk and
-                        # leaving partial embeddings behind for a CollectionFile marked FAILED.
-                        logger.warning(
-                            "Skipping empty chunk after NUL stripping",
-                            extra={"file_id": file.id, "chunk_index": idx, "total_chunks": len(text_chunks)},
-                        )
-                        continue
-                    context = ""
-                    if self._contextualizer:
-                        context = self._contextualizer.get_context(document=document_text, chunk=safe_chunk)
-                    embed_input = f"{context}\n\n{safe_chunk}" if context else safe_chunk
-                    embedding_vector = self.get_embedding_vector(embed_input, input_type="document")
-                    embeddings.append(
-                        FileChunkEmbedding.objects.create(
-                            team_id=file.team_id,
-                            file=file,
-                            collection_id=collection_file.collection_id,
-                            chunk_number=idx + 1,  # Start chunk numbering from 1
-                            text=safe_chunk,
-                            context=context,
-                            embedding=embedding_vector,
-                            # TODO: Get the page number if possible. Also, what file types are supported?
-                            page_number=0,
-                        )
-                    )
+                embeddings = self._embed_file(collection_file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
                 collection_file.status = FileStatus.COMPLETED
                 # An earlier attempt may have left a reason behind; this attempt supersedes it.
                 collection_file.failure_reason = ""
-            except Exception as e:
-                logger.exception("Failed to index file", extra={"file_id": file.id, "error": str(e)})
+            except FileReadException as e:
+                logger.warning(
+                    "Could not extract text from file", extra={"file_id": collection_file.file_id, "error": str(e)}
+                )
                 collection_file.status = FileStatus.FAILED
                 collection_file.failure_reason = format_failure_reason(e)
-                # A partial index leaves nothing behind: the chunks written before the provider
-                # failed are not a usable representation of the file and must not reach retrieval.
-                FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
-                embeddings = []
+            except Exception as e:
+                logger.exception("Failed to index file", extra={"file_id": collection_file.file_id, "error": str(e)})
+                collection_file.status = FileStatus.FAILED
+                collection_file.failure_reason = format_failure_reason(e)
             try:
                 collection_file.save(update_fields=["status", "failure_reason"])
             except DatabaseError:
@@ -336,6 +341,68 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                     logger.exception(
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
+
+    def _embed_file(
+        self,
+        collection_file: CollectionFile,
+        *,
+        chunk_size: int | None,
+        chunk_overlap: int | None,
+    ) -> list[FileChunkEmbedding]:
+        """Store one embedding per chunk of a file, returning what was written.
+
+        Raises if the file yields no embeddings, and deletes anything already written on the
+        way out: a partial index is not a usable representation of the file, so those chunks
+        must not reach retrieval.
+        """
+        file = collection_file.file
+        embeddings: list[FileChunkEmbedding] = []
+        try:
+            document_text = file.read_content()
+            if not document_text.strip():
+                # Source files are stored unparsed, so a scanned or image-only document
+                # reaches indexing and yields nothing. Without this, it would be
+                # marked COMPLETED with no embeddings -- indistinguishable from a file that
+                # actually indexed.
+                raise FileReadException(NO_EXTRACTABLE_TEXT)
+            text_chunks = self.chunk_file(document_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            for idx, chunk in enumerate(text_chunks):
+                safe_chunk = chunk.replace("\x00", "")  # Remove NUL bytes for Postgres compatibility
+                if not safe_chunk:
+                    # Voyage rejects empty input; OpenAI and Google return API errors.
+                    # Skipping avoids aborting the whole file over a NUL-only chunk and
+                    # leaving partial embeddings behind for a CollectionFile marked FAILED.
+                    logger.warning(
+                        "Skipping empty chunk after NUL stripping",
+                        extra={"file_id": file.id, "chunk_index": idx, "total_chunks": len(text_chunks)},
+                    )
+                    continue
+                context = ""
+                if self._contextualizer:
+                    context = self._contextualizer.get_context(document=document_text, chunk=safe_chunk)
+                embed_input = f"{context}\n\n{safe_chunk}" if context else safe_chunk
+                embedding_vector = self.get_embedding_vector(embed_input, input_type="document")
+                embeddings.append(
+                    FileChunkEmbedding.objects.create(
+                        team_id=file.team_id,
+                        file=file,
+                        collection_id=collection_file.collection_id,
+                        chunk_number=idx + 1,  # Start chunk numbering from 1
+                        text=safe_chunk,
+                        context=context,
+                        embedding=embedding_vector,
+                        # TODO: Get the page number if possible. Also, what file types are supported?
+                        page_number=0,
+                    )
+                )
+            if not embeddings:
+                # Content that is entirely NUL bytes clears the check above but sanitizes away
+                # chunk by chunk. Nothing was indexed, so this is a failure by the same reasoning.
+                raise FileReadException(NO_EXTRACTABLE_TEXT)
+            return embeddings
+        except Exception:
+            FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
+            raise
 
     def chunk_file(self, text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
         """

@@ -57,6 +57,18 @@ def detect_content_type(
     return fallback or DEFAULT_CONTENT_TYPE
 
 
+def ensure_extension(filename: str, content_type: str) -> str:
+    """Append an extension matching ``content_type`` when ``filename`` has none.
+
+    The extension is the fallback every later reader and download path relies on when byte
+    sniffing gives no signal, so a name without one throws away what the content type knows.
+    """
+    if not content_type or pathlib.Path(filename).suffix:
+        return filename
+    extension = mimetypes.guess_extension(content_type)
+    return f"{filename}{extension}" if extension else filename
+
+
 def detect_content_type_from_file(file_obj: BinaryIO) -> str:
     """Detect MIME from a file-like object.
 
