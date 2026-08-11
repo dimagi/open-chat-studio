@@ -6,8 +6,6 @@ How architectural decisions get recorded, written, and cited in this project.
 
 ADRs live at `docs/adr/` and are rendered into the docs site under Architecture → Decisions. Each ADR captures one decision with context, consequences, and rejected alternatives. ADRs are sequentially numbered (`0001-...`, `0002-...`) and immutable once accepted — reversing a decision means writing a new ADR that supersedes the old one.
 
-Split decisions along the *independent supersession* axis: a choice you would revise on its own earns its own ADR; a choice that exists only as a forced consequence of a bigger decision (e.g. a stub library dictated by the type-checker you chose) is folded into that decision's ADR. Use `extends:` to link related-but-separate ADRs — relatedness alone is not a reason to split.
-
 ## Source-doc lifecycle
 Design docs produced by the brainstorming skill (`docs/design/`, `docs/superpowers/specs/`) carry a `status` frontmatter field:
 
