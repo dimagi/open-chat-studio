@@ -4,7 +4,6 @@ Counting, enforcement, and logging live in apps.utils.rate_limit; this module
 resolves the request identity and translates the result into DRF semantics.
 """
 
-from rest_framework.exceptions import Throttled
 from rest_framework.throttling import BaseThrottle
 
 from apps.api.models import UserAPIKey
@@ -48,13 +47,3 @@ class APIRateThrottle(BaseThrottle):
         if user is not None and user.is_authenticated:
             return "user", str(user.pk)
         return "ip", client_ip(request)
-
-
-def api_exception_handler(exc, context):
-    # circular: rest_framework.views resolves DEFAULT_THROTTLE_CLASSES (this module) at import time
-    from rest_framework.views import exception_handler as drf_exception_handler  # noqa: PLC0415
-
-    response = drf_exception_handler(exc, context)
-    if isinstance(exc, Throttled) and response is not None:
-        response.data = {"detail": "Rate limit exceeded.", "available_in": int(exc.wait or 0)}
-    return response
