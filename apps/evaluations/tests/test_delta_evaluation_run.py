@@ -34,8 +34,8 @@ def test_full_run_freezes_all_dataset_messages():
 
 @pytest.mark.django_db()
 @patch("apps.evaluations.tasks._publish_tick")
-@patch("apps.evaluations.tasks.evaluate_message_batch.delay")
-def test_coordinator_dispatches_only_scoped_messages_for_delta(delay_mock, _publish):
+@patch("apps.evaluations.tasks.evaluate_message_batch.apply_async")
+def test_coordinator_dispatches_only_scoped_messages_for_delta(dispatch_mock, _publish):
     config = EvaluationConfigFactory.create()
     evaluator = EvaluatorFactory.create(team=config.team)
     config.evaluators.set([evaluator])
@@ -54,7 +54,7 @@ def test_coordinator_dispatches_only_scoped_messages_for_delta(delay_mock, _publ
 
     sweep()
 
-    dispatched = [message_id for call in delay_mock.call_args_list for message_id in call.args[1]]
+    dispatched = [message_id for call in dispatch_mock.call_args_list for message_id in call.kwargs["args"][1]]
     assert dispatched == [in_scope.id]
 
 
