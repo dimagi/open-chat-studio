@@ -1,6 +1,48 @@
+import html
+import json
+
+import pytest
+from django.template import Context, Template
 from django.utils.safestring import SafeData
 
-from apps.web.templatetags.json_tags import format_participant_data_diff, highlight_json, readable_value
+from apps.web.templatetags.json_tags import format_participant_data_diff, highlight_json, readable_value, to_json
+
+
+def _render_to_json(value):
+    return Template("{% load json_tags %}{{ value|to_json }}").render(Context({"value": value}))
+
+
+class TestToJson:
+    def test_output_is_not_marked_safe(self):
+        # unsafe output means Django's autoescaping runs over the JSON when it is rendered
+        assert not isinstance(to_json({"key": "value"}), SafeData)
+
+    def test_dumps_indented_json(self):
+        assert to_json({"key": "value"}) == '{\n  "key": "value"\n}'
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param('<img src=x onerror="alert(1)">', id="img-onerror"),
+            pytest.param("</script><script>alert(1)</script>", id="script-breakout"),
+            pytest.param("<svg/onload=alert(1)>", id="svg-onload"),
+        ],
+    )
+    def test_html_in_values_is_escaped_when_rendered(self, payload):
+        rendered = _render_to_json({"participant_name": payload})
+        assert "<" not in rendered
+        assert ">" not in rendered
+        assert "&lt;" in rendered
+
+    def test_html_in_keys_is_escaped_when_rendered(self):
+        rendered = _render_to_json({"<img src=x onerror=alert(1)>": "value"})
+        assert "<" not in rendered
+        assert "&lt;" in rendered
+
+    def test_rendered_output_is_readable_json(self):
+        # what the browser displays is unchanged: entities decode back to the original JSON
+        rendered = _render_to_json({"greeting": "<b>hi</b>", "count": 2})
+        assert json.loads(html.unescape(rendered)) == {"greeting": "<b>hi</b>", "count": 2}
 
 
 class TestHighlightJson:
