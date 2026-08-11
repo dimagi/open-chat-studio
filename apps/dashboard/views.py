@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import HttpResponse, JsonResponse
@@ -53,17 +53,27 @@ def _cached(team, cache_key: str, compute, decode, encode=asdict):
     if cached_data is not None:
         try:
             return decode(cached_data)
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, InvalidOperation):
             pass
     value = compute()
     DashboardCache.set_cached_data(team, cache_key, json.loads(json.dumps(encode(value), cls=DjangoJSONEncoder)))
     return value
 
 
+def _cached_datetime(value: str) -> datetime:
+    """`parse_datetime` returns None for an unparseable string rather than
+    raising, which would otherwise let a half-built summary pass as a cache
+    hit. Raise instead, so `_cached` recomputes."""
+    parsed = parse_datetime(value)
+    if parsed is None:
+        raise ValueError(f"unparseable cached timestamp: {value!r}")
+    return parsed
+
+
 def _cost_summary_from_cache(payload: dict) -> CostSummary:
     return CostSummary(
-        period_start=parse_datetime(payload["period_start"]),
-        period_end=parse_datetime(payload["period_end"]),
+        period_start=_cached_datetime(payload["period_start"]),
+        period_end=_cached_datetime(payload["period_end"]),
         total_cost=Decimal(payload["total_cost"]),
         previous_period_cost=Decimal(payload["previous_period_cost"]),
         delta_pct=payload["delta_pct"],

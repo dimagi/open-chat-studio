@@ -344,21 +344,37 @@ class TestCostPanelCaching:
         assert unfiltered.total_cost == Decimal("1.23")
         assert filtered.total_cost == Decimal("0.00")
 
-    def test_a_stale_cache_shape_recomputes_instead_of_erroring(self, authenticated_client, team):
+    @pytest.mark.parametrize(
+        ("cache_key_prefix", "corrupt"),
+        [
+            pytest.param("cost_", lambda payload: {"written_by": "older code"}, id="unrecognised-shape"),
+            pytest.param("cost_summary", lambda payload: payload | {"total_cost": ""}, id="unparseable-decimal"),
+            pytest.param(
+                "cost_summary", lambda payload: payload | {"period_start": "not-a-timestamp"}, id="unparseable-date"
+            ),
+        ],
+    )
+    def test_a_stale_cache_shape_recomputes_instead_of_erroring(
+        self, authenticated_client, team, cache_key_prefix, corrupt
+    ):
         """A deploy can change the cached payload's shape while entries written
         by the previous code are still inside their TTL. Decoding must fall
         back to recomputing (and overwriting the entry), never surface the
-        KeyError/TypeError to the page."""
+        decode failure to the page or hand the panel a half-built summary."""
         _enable_flag_for(team)
         _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
         url = self._url(team)
 
         authenticated_client.get(url)
-        DashboardCache.objects.filter(cache_key__startswith="cost_").update(data={"written_by": "older code"})
+        for entry in DashboardCache.objects.filter(cache_key__startswith=cache_key_prefix):
+            entry.data = corrupt(entry.data)
+            entry.save()
         response = authenticated_client.get(url)
 
         assert response.status_code == 200
-        assert response.context["cost_summary"].total_cost == Decimal("1.23")
+        summary = response.context["cost_summary"]
+        assert summary.total_cost == Decimal("1.23")
+        assert summary.period_start is not None
 
     def test_an_unknown_granularity_shares_the_daily_cache_entry(self, authenticated_client, team):
         """The timeseries cache key folds in the granularity, which arrives
