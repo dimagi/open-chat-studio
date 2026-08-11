@@ -28,16 +28,23 @@ We will treat these two endpoints as a contract read by a model with no other co
 the payload what the prose was explaining:
 
 - **A param's options live under the `/pipeline/options/` key of the same name.** `assistant_id`
-  draws from `assistant`, `collection_index_ids` from `collection_index`. The API renames the keys
-  the builder spells its own way (`LlmProviderId`, `jinja_node`) so the rule holds without
-  exceptions, rather than restating the key on every param.
+  draws from `assistant`, `collection_index_ids` from `collection_index`. The shared helper names every
+  key after the param that reads it, so the rule holds rather than being restated on every param. It
+  has one documented exception, below.
+- **Prompt variables are keyed by prompt flavour, not by param name.** `prompt_variables` serves
+  `template_string`, `llm_prompt_variables` serves an LLM node's `prompt`, `router_prompt_variables` a
+  router's. The exception is forced: two different params are both called `prompt` and each accepts a
+  different variable set, and the payload is one flat dict, so a key per param name would collide.
+  `?node_type=` resolves which list applies. All three are renamed out of the builder's widget
+  vocabulary (`jinja_node`, `text_editor_autocomplete_vars_*`).
 - **Cross-param rules are data.** `must_match` (this value must agree with another param's chosen
   option on a named attribute), `options_keyed_by` (another param's choice selects which sub-list
   applies), `applies_when` and `requires_feature_flag` are emitted per param.
 - **Node types declare their output topology** — how many outputs, and how an edge's `source_handle`
   names one — so discovery is sufficient to build a graph, not only to fill in params.
-- **No `ui:` vocabulary reaches the agent.** The two keys carrying real meaning are renamed
-  (`applies_when`, `requires_feature_flag`); presentation keys are dropped.
+- **No namespaced vocabulary reaches the agent.** The two `ui:` keys carrying real meaning are
+  renamed (`applies_when`, `requires_feature_flag`); every other key with a `namespace:` prefix is
+  dropped, whether it is presentation (`ui:`) or an instruction about the payload (`api:`).
 - **Every param on a listed node type carries a `description`**, enforced by
   `test_every_param_is_described`.
 - **The list is exactly the types an agent may create.** Deprecated types and the server-managed
@@ -45,27 +52,40 @@ the payload what the prose was explaining:
   `can_add: false` flag — the endpoint answers "what can I build", so the answer is the list.
 - **Option keys are snake_case** and errors carry a reason: a 404 lists the valid types, and says
   whether the name was deprecated, server-managed, or genuinely unknown.
-- **Builder-only option lists are not served.** The prompt-editor autocomplete lists
-  (`text_editor_autocomplete_vars_llm_node`, `..._router_node`) are bare variable names whose
-  meaning the param's own description already carries.
+- **A prompt variable is served with a description, not a value.** The builder emits these as
+  `{"label": v, "value": v}`, where the two are always identical. A human reading an autocomplete
+  dropdown infers what `temp_state` holds; a client cannot, so all three lists carry
+  `{"label", "description"}` instead. `PROMPT_VAR_DESCRIPTIONS` must cover every variable any list
+  offers, enforced by `TestPromptVarDescriptions` — a gap is a 500, not a missing field.
+- **The options payload is a whitelist, not a subtraction.** It serves exactly the keys the listed
+  node types reference, derived from their `ui:optionsSource` declarations, plus
+  `API_ONLY_OPTION_KEYS`. A param the API withholds takes its option list with it, and so does a node
+  type that stops being listed.
 
-All of this lives in `apps/api/v2/discovery/`. The shared helpers in
-`apps/pipelines/node_options.py` stay as the builder needs them, so the builder's payload — mixed-case
-option keys, `ui:*` schema keys — is unchanged.
+Most of this lives in `apps/api/v2/discovery/`. The exception is the one decision that belongs to the
+param itself: `UiSchema(api_exclude=True)` withholds a param, and the whitelist then withholds its
+option list too. The shared helpers in `apps/pipelines/nodes/node_metadata.py` name every option key in
+snake_case after the param that reads it, and both the builder and the API read that payload verbatim.
 
 ## Consequences
 
-- An agent follows one naming rule to resolve any param's permitted values, instead of one rule plus
-  a set of exceptions it has to recognise by name.
+- An agent follows one naming rule to resolve any param's permitted values, plus a single stated
+  exception for prompt variables, instead of a set of exceptions it has to recognise by name.
+- The three prompt-variable lists are a standing hazard: a client that reads an LLM node's set and
+  assumes a router accepts the same will write `{source_material}` into a router prompt, which fails
+  validation. `?node_type=` is the intended way to fetch them, and
+  `test_each_prompt_flavour_serves_its_own_variable_set` pins the three sets apart.
 - Descriptions live on the pydantic `Field`, so the builder renders them as help text too.
 - Two vocabularies now exist for the same data, and a new `ui:` key defaults to being dropped from
   the API. A param whose meaning depends on it must be added to `UI_KEY_TRANSLATIONS` deliberately.
 - The name-matching rule is a convention, not a mechanism: renaming an option key without renaming
-  the param that reads it breaks the join silently. `?node_type=` scoping still derives the pairing
-  from the builder's `ui:optionsSource`, and
-  `test_every_key_a_node_type_scopes_to_is_actually_served` catches a dangling target.
-- `IMPLIED_OPTION_KEYS`, `MUST_MATCH` and `OPTIONS_KEYED_BY` are hand-maintained and keyed by param
-  name; a renamed param silently drops out of them.
+  the param that reads it breaks the join silently. `?node_type=` scoping derives the pairing from
+  `ui:optionsSource`, and `test_every_key_a_node_type_scopes_to_is_actually_served` catches a dangling
+  target.
+- Withholding a new param from the API is a one-flag change on the field, not an edit to a set in
+  another app. Because the payload is a whitelist, the param's option list follows automatically.
+- `MUST_MATCH` and `OPTIONS_KEYED_BY` are hand-maintained and keyed by param name; a renamed param
+  silently drops out of them.
 - `?node_type=` lets an agent fetch only the options one node can reference, which is most of the
   payload for most nodes.
 - A type read from an `/inspect/` response may not be in the list. Resolving it is a 404, which is
