@@ -214,6 +214,25 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
         return super().has_permission(request, view)
 
 
+class CanTriggerBotMessage(BasePermission):
+    """Sending a message to a participant as the bot is the API twin of the ``participants:trigger_bot``
+    UI view, which requires ``experiments.change_participant``. Gate the API on the same permission so a
+    role that cannot message a participant from the UI cannot do it through the API either.
+
+    ``has_perm`` resolves against the team the credential is scoped to (the auth layer calls
+    ``set_current_team``), and applies to every auth type — including API keys, which the OAuth scope
+    check alone does not gate.
+
+    Client-credentials (machine) tokens have no user, so authorization is delegated to the OAuth scope
+    (chatbots:interact), enforced by TokenHasOAuthScope.
+    """
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            return True
+        return bool(request.user and request.user.has_perm("experiments.change_participant"))
+
+
 def verify_hmac(view_func):
     """Match the HMAC signature in the request to the calculated HMAC using the request payload."""
 
@@ -221,24 +240,41 @@ def verify_hmac(view_func):
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
         expected_digest = convert_to_bytestring_if_unicode(request.headers.get("X-Mac-Digest"))
-        secret_key_bytes = convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET)
+        # Only the fact that a key is configured may be bound here, never the key itself: the views
+        # this wraps are unauthenticated, so any caller can drive the rejection logging below, and
+        # Sentry attaches this frame's locals to the events it builds (`attach_stacktrace=True`).
+        has_secret_key = bool(settings.COMMCARE_CONNECT_SERVER_SECRET)
 
-        if not (expected_digest and secret_key_bytes):
-            logger.exception(
+        if not (expected_digest and has_secret_key):
+            # Warning, not exception/error: there is no live exception here, and an unauthenticated
+            # caller can trigger this at request rate, which at ERROR would become Sentry events.
+            logger.warning(
                 "Request rejected reason=%s request=%s",
-                "hmac:missing_key" if not secret_key_bytes else "hmac:missing_header",
+                "hmac:missing_key" if not has_secret_key else "hmac:missing_header",
                 request.path,
             )
             return HttpResponse(_("Missing HMAC signature or shared key"), status=401)
 
-        data_digest = get_hmac_digest(key=secret_key_bytes, data_bytes=request.body)
+        data_digest = _get_connect_secret_digest(request.body)
 
         if not hmac.compare_digest(data_digest, expected_digest):
-            logger.exception("Calculated HMAC does not match expected HMAC")
+            logger.warning("Calculated HMAC does not match expected HMAC")
             return HttpResponse(_("Invalid payload"), status=401)
         return view_func(request, *args, **kwargs)
 
     return _inner
+
+
+def _get_connect_secret_digest(data_bytes: bytes) -> bytes:
+    """HMAC ``data_bytes`` with the CommCare Connect shared secret.
+
+    The secret is read and consumed within this frame so that it does not outlive the digest
+    computation. Callers must not hold it themselves: this frame is gone by the time they log a
+    rejection, so the raw secret cannot end up in a stack-frame dump.
+    """
+    return get_hmac_digest(
+        key=convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET), data_bytes=data_bytes
+    )
 
 
 def get_hmac_digest(key: bytes, data_bytes: bytes) -> bytes:

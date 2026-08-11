@@ -53,6 +53,29 @@ def test_start_chat_session(team_with_users, api_client, experiment):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("referer", "expected_embed_source"),
+    [
+        pytest.param("https://embedder.example.com/page", "https://embedder.example.com/page", id="https"),
+        pytest.param("http://embedder.example.com/page", "http://embedder.example.com/page", id="http"),
+        pytest.param("javascript:alert(document.domain)", None, id="javascript"),
+        pytest.param("data:text/html,<script>alert(1)</script>", None, id="data"),
+        pytest.param(None, None, id="no-referer"),
+    ],
+)
+def test_start_chat_session_only_stores_http_embed_source(api_client, experiment, referer, expected_embed_source):
+    """The referer is unauthenticated input and is rendered as a link on the session page,
+    so only absolute http(s) URLs may be stored as the embed source."""
+    url = reverse("api:chat:start-session")
+    headers = {"referer": referer} if referer else {}
+    response = api_client.post(url, data={"chatbot_id": experiment.public_id}, format="json", headers=headers)
+    assert response.status_code == 201
+
+    session = ExperimentSession.objects.get(external_id=response.json()["session_id"])
+    assert session.chat.embed_source == expected_embed_source
+
+
+@pytest.mark.django_db()
 def test_send_message(api_client, session):
     url = reverse("api:chat:send-message", kwargs={"session_id": session.external_id})
     data = {"message": "hi"}
