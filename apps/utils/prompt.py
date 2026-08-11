@@ -66,6 +66,25 @@ PROMPT_VAR_DESCRIPTIONS = {
         "State that survives for the whole session. Use it to remember something between messages, "
         "such as a preference the participant stated earlier. `temp_state` is the per-run equivalent."
     ),
+    "source_material": (
+        "The full text of the source material chosen in `source_material_id`. Use it to give the "
+        "model reference content to answer from. Renders empty if no source material is set."
+    ),
+    "media": (
+        "One line per file in the collection chosen in `collection_id`, each carrying the file's "
+        "id, content type and summary. Use it to let the model refer to the files it can discuss. "
+        "Renders empty if no collection is set."
+    ),
+    "collection_index_summaries": (
+        "One line per index in `collection_index_ids`, each carrying the index's id, name and "
+        "summary. Use it to let the model choose which index to search. Renders empty if none are "
+        "selected."
+    ),
+    "current_datetime": (
+        "The current date and time in the participant's timezone. Use it for anything "
+        "time-relative, such as scheduling a reminder. Rendered to day precision inside the "
+        "cacheable system prompt, with the precise time supplied on the latest message instead."
+    ),
     "input": "The text passed into this node from the preceding one.",
     "node_inputs": (
         "The inputs to this node as a list, for when more than one node feeds it. Use it to combine several branches."

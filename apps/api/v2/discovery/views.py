@@ -26,6 +26,14 @@ from .contract import HIDDEN_OPTION_KEYS, OPTIONS_KEY_RENAMES
 from .node_types import etag, get_node_types, option_keys_for_node_type, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
+# The option lists holding prompt variables rather than referenceable resource ids. Their entries are
+# `{"label": v, "value": v}` pairs, which `_describe_prompt_vars` rewrites into `{label, description}`.
+PROMPT_VAR_OPTION_SOURCES = (
+    OptionsSource.jinja_node,
+    OptionsSource.text_editor_autocomplete_vars_llm_node,
+    OptionsSource.text_editor_autocomplete_vars_router_node,
+)
+
 
 class DiscoveryView(GenericAPIView):
     """Shared auth for the discovery endpoints.
@@ -134,7 +142,12 @@ class PipelineOptionsView(DiscoveryView):
             "The values each node param accepts, scoped to the API key's team.\n\n"
             "A key holds the values for the node param of the same name: write one of "
             "`source_material`'s entries into a node's `source_material_id`, one of "
-            "`collection_index`'s into `collection_index_ids`."
+            "`collection_index`'s into `collection_index_ids`.\n\n"
+            "Prompt variables are the exception, because two different params are both named `prompt` "
+            "and they accept different sets. A template node's `template_string` draws from "
+            "`prompt_variables`, an LLM node's `prompt` from `llm_prompt_variables`, and a router's "
+            "`prompt` from `router_prompt_variables`. Pass `?node_type=` to receive only the list that "
+            "applies -- the sets are not interchangeable."
         ),
         tags=["Pipelines"],
         parameters=[
@@ -183,6 +196,18 @@ class PipelineOptionsView(DiscoveryView):
                         {
                             "label": "input",
                             "description": "The text passed into this node from the preceding one.",
+                        }
+                    ],
+                    "llm_prompt_variables": [
+                        {
+                            "label": "source_material",
+                            "description": "The full text of the source material chosen in `source_material_id`.",
+                        }
+                    ],
+                    "router_prompt_variables": [
+                        {
+                            "label": "session_state",
+                            "description": "State that survives for the whole session.",
                         }
                     ],
                     "default_llm_provider": {"llm_provider_id": 1, "llm_provider_model_id": 5},
@@ -252,17 +277,23 @@ class PipelineOptionsView(DiscoveryView):
 
     @staticmethod
     def _describe_prompt_vars(options: dict) -> dict:
-        """Swap each template variable's redundant ``value`` for a description of what it does.
+        """Swap each prompt variable's redundant ``value`` for a description of what it does.
 
         The builder emits these as ``{"label": v, "value": v}`` -- the two are always identical,
-        since the value is just the name typed into the template. A human reading an autocomplete
+        since the value is just the name typed into the prompt. A human reading an autocomplete
         dropdown infers the rest from the name; a client cannot, so it gets the description instead.
+
+        All three lists get the same treatment, so a client reads one entry shape whichever prompt it
+        is filling. ``PROMPT_VAR_DESCRIPTIONS`` has to cover every variable any of them offers, which
+        ``TestPromptVarDescriptions`` enforces -- a gap here is a 500, not a missing field.
         Mutates a copy of the list, never ``PROMPT_VAR_DESCRIPTIONS``.
         """
-        if entries := options.get(OptionsSource.jinja_node):
-            options[OptionsSource.jinja_node] = [
-                {"label": entry["label"], "description": PROMPT_VAR_DESCRIPTIONS[entry["label"]]} for entry in entries
-            ]
+        for source in PROMPT_VAR_OPTION_SOURCES:
+            if entries := options.get(source):
+                options[source] = [
+                    {"label": entry["label"], "description": PROMPT_VAR_DESCRIPTIONS[entry["label"]]}
+                    for entry in entries
+                ]
         return options
 
     @staticmethod

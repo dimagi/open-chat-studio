@@ -7,25 +7,22 @@ hide the ones a client has no use for, and state the cross-param rules the build
 instead. See ADR-0051.
 """
 
-# `jinja_node` is named for the builder's jinja-template widget rather than for the param that reads it,
-# so it is renamed on the API surface: a param's options always live under a key of the same name.
+# The prompt-variable lists are the one documented exception to "a param's options live under a key of
+# the same name". Three node families have a prompt-shaped param -- `template_string` on the template
+# nodes, `prompt` on the LLM and router nodes -- and each accepts a *different* set of variables, so a
+# key per param name cannot work: the payload is one flat dict, and `prompt` would collide with
+# `prompt`. The key names the prompt flavour instead. The builder's own names for these lists are
+# widget names, which never reach a client.
 OPTIONS_KEY_RENAMES = {
     "jinja_node": "prompt_variables",
+    "text_editor_autocomplete_vars_llm_node": "llm_prompt_variables",
+    "text_editor_autocomplete_vars_router_node": "router_prompt_variables",
 }
 
-# Option lists the API does not serve. The autocomplete keys hold the entries the builder offers
-# while someone types an LLM or router prompt -- a dropdown's worth of names, with the node's real
-# prompt contract (which variables it accepts, what each holds) living in the param's own
-# description. `assistant` is read by one deprecated node type, which the API does not list, so
-# nothing it does serve can consume the list. The rest belong to a param marked `api_exclude`.
-HIDDEN_OPTION_KEYS = frozenset(
-    {
-        "text_editor_autocomplete_vars_llm_node",
-        "text_editor_autocomplete_vars_router_node",
-        "assistant",
-        "mcp_tools",
-    }
-)
+# Option lists the API does not serve. `assistant` is read by one deprecated node type, which the API
+# does not list, so nothing it does serve can consume the list. `mcp_tools` belongs to a param marked
+# `api_exclude`.
+HIDDEN_OPTION_KEYS = frozenset({"assistant", "mcp_tools"})
 
 # Params the builder renders with a bespoke widget rather than the generic `select`, so it declares
 # no `ui:optionsSource` for them. Their options key is the param name, as everywhere else.

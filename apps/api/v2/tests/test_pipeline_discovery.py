@@ -670,19 +670,61 @@ def test_prompt_var_options_carry_a_description_not_a_value(team_with_resources)
 
 @pytest.mark.django_db()
 @pytest.mark.parametrize(
-    "options_key",
+    ("node_type", "option_key", "expected_vars"),
     [
-        pytest.param("text_editor_autocomplete_vars_llm_node", id="llm-node-vars"),
-        pytest.param("text_editor_autocomplete_vars_router_node", id="router-node-vars"),
+        pytest.param(
+            "LLMResponseWithPrompt",
+            "llm_prompt_variables",
+            {
+                "participant_data",
+                "source_material",
+                "current_datetime",
+                "media",
+                "collection_index_summaries",
+                "temp_state",
+                "session_state",
+            },
+            id="llm-node",
+        ),
+        pytest.param(
+            "RouterNode",
+            "router_prompt_variables",
+            {"temp_state", "participant_data", "session_state"},
+            id="router-node",
+        ),
+        pytest.param(
+            "RenderTemplate",
+            "prompt_variables",
+            {
+                "input",
+                "node_inputs",
+                "temp_state",
+                "session_state",
+                "participant_data",
+                "participant_details",
+                "participant_schedules",
+                "input_message_id",
+                "input_message_url",
+            },
+            id="template-node",
+        ),
     ],
 )
-def test_builder_only_autocomplete_lists_are_not_served(team_with_resources, options_key):
-    """These two exist to populate the builder's prompt-editor dropdown. What a prompt may reference
-    is stated in the param's own description, so serving the raw name list adds tokens and no
-    information."""
+def test_each_prompt_flavour_serves_its_own_variable_set(team_with_resources, node_type, option_key, expected_vars):
+    """The three prompt-shaped params accept different variables, which is why they cannot share one
+    key: `prompt` on an LLM node takes `source_material` and `media`, `prompt` on a router takes
+    neither, and `template_string` takes the node-graph variables instead. A client that inferred one
+    set from another would write a prompt that renders empty or fails validation."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    assert options_key not in client.get(reverse("api:v2:pipeline-options")).json()
+    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type}).json()
+
+    assert option_key in scoped, f"{node_type} must be able to resolve its prompt variables"
+    assert {entry["label"] for entry in scoped[option_key]} == expected_vars
+    # Same shape as every other prompt-variable list: described, with no redundant `value`.
+    for entry in scoped[option_key]:
+        assert entry["description"], entry["label"]
+        assert "value" not in entry, entry["label"]
 
 
 @pytest.mark.django_db()

@@ -47,9 +47,20 @@ class TestPromptVarDescriptions:
     ``value``, so a variable without one is a KeyError at request time, not a cosmetic gap."""
 
     def test_every_offered_variable_has_a_description(self):
-        missing = [
-            entry["label"] for entry in PromptVars.get_jinja_vars() if entry["label"] not in PROMPT_VAR_DESCRIPTIONS
-        ]
+        """All three prompt-variable lists are served, so all three need full coverage -- the mirror
+        of `test_no_description_is_orphaned`, which already spans them."""
+        missing = sorted(
+            {
+                entry["label"]
+                for accessor in (
+                    PromptVars.get_all_prompt_vars,
+                    PromptVars.get_router_prompt_vars,
+                    PromptVars.get_jinja_vars,
+                )
+                for entry in accessor()
+                if entry["label"] not in PROMPT_VAR_DESCRIPTIONS
+            }
+        )
         assert not missing, f"Add these to PROMPT_VAR_DESCRIPTIONS in apps/utils/prompt.py: {missing}"
 
     def test_no_description_is_orphaned(self):

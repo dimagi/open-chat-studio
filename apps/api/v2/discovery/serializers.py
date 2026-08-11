@@ -125,7 +125,29 @@ class PipelineOptionsSerializer(serializers.Serializer):
         required=False, help_text="Per-provider, per-tool config field descriptors. Keyed by LLM provider type."
     )
     prompt_variables = PromptVariableSerializer(
-        many=True, required=False, help_text="The variables a node's template params may reference."
+        many=True,
+        required=False,
+        help_text=(
+            "The variables a template node's `template_string` may reference. Each prompt-shaped param "
+            "has its own list -- see `llm_prompt_variables` and `router_prompt_variables` -- because the "
+            "accepted set differs. Use `?node_type=` to get the one that applies."
+        ),
+    )
+    llm_prompt_variables = PromptVariableSerializer(
+        many=True,
+        required=False,
+        help_text=(
+            "The variables an LLM node's `prompt` may reference. A superset of `router_prompt_variables`: "
+            "it adds the ones backed by a param on the same node, such as `source_material` and `media`."
+        ),
+    )
+    router_prompt_variables = PromptVariableSerializer(
+        many=True,
+        required=False,
+        help_text=(
+            "The variables a router node's `prompt` may reference. Narrower than `llm_prompt_variables` "
+            "-- a router has no source material or media to interpolate."
+        ),
     )
     default_llm_provider = DefaultLlmProviderSerializer(
         required=False, help_text="A provider/model pair that already satisfies the `must_match` rule."
