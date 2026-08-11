@@ -19,10 +19,6 @@ When you finish a design doc and ship the work, flip `status` from `active` to `
 
 Use the `/extract-adrs <source-doc>` skill at `.claude/skills/extract-adrs/SKILL.md`. It walks you through identifying candidate decisions, drafting each ADR, wiring up cross-references, and updating `mkdocs.yml` plus `docs/adr/index.md`. The skill never commits — review the diff yourself.
 
-## Writing an ADR by hand
-
-See [Writing an ADR by Hand](../developer_guides/adr_process.md).
-
 ## Citing an ADR
 
 Use `ADR-NNNN` as the canonical reference in code comments, PR descriptions, and conversations. Link to the docs site URL for human-readable context.
