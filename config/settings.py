@@ -136,6 +136,7 @@ PROJECT_APPS = [
     "apps.ocs_notifications",
     "apps.prelogin",
     "apps.cost_tracking",
+    "apps.usage_metrics",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []

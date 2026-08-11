@@ -51,6 +51,15 @@ def test_me_returns_user_and_team(auth_method):
 
 
 @pytest.mark.django_db()
+def test_me_read_only_key_allowed():
+    """/me is read-only, so a read-only key keeps full access (ADR-0021)."""
+    team = TeamWithUsersFactory.create()
+    client = ApiTestClient(team.members.first(), team, read_only=True)
+
+    assert client.get(reverse("api:v2:me")).status_code == 200
+
+
+@pytest.mark.django_db()
 def test_me_email_verified_true():
     team = TeamWithUsersFactory.create()
     user = team.members.first()

@@ -116,6 +116,16 @@ def test_only_experiments_from_the_scoped_team_is_returned():
 
 
 @pytest.mark.django_db()
+def test_read_only_key_can_read_experiments(experiment):
+    """The experiments endpoints are read-only, so a read-only key keeps full access (ADR-0021)."""
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team, read_only=True)
+
+    assert client.get(reverse("api:experiment-list")).status_code == 200
+    assert client.get(reverse("api:experiment-detail", kwargs={"id": experiment.public_id})).status_code == 200
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_create_and_update_participant_data(auth_method):
     identifier = "part1"

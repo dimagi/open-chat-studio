@@ -82,6 +82,7 @@ IGNORE_APPS = {
     "taggit",
     "template_partials",
     "tz_detect",
+    "usage_metrics",  # shared activity-metric read path, no models
     "users",
     "utils_tests",
     "waffle",

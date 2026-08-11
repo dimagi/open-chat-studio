@@ -41,6 +41,17 @@ def test_usage_unauthenticated():
 
 
 @pytest.mark.django_db()
+def test_usage_read_only_key_allowed():
+    """Usage is a read-only endpoint, so a read-only key keeps full access (ADR-0021)."""
+    team = TeamWithUsersFactory.create()
+    client = ApiTestClient(team.members.first(), team, read_only=True)
+
+    response = client.get(reverse(USAGE_URL), {"metric": "messages", "period": "current_month"})
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_messages_metric_counts_current_month(auth_method):
     team = TeamWithUsersFactory.create()

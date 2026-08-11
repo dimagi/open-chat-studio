@@ -45,6 +45,7 @@ from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.utils import safe_link_url
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
     StaticTriggerType,
@@ -379,7 +380,7 @@ def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID
         working_experiment=experiment,
         participant_identifier=participant.identifier,
         timezone=request.session.get("detected_tz", None),
-        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))},
     )
     return redirect("chatbots:chatbot_chat_embed", team_slug, experiment.public_id, session.external_id)
 
