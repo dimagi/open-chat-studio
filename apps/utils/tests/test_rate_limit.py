@@ -18,6 +18,7 @@ from apps.utils.rate_limit import (
     RATE_LIMIT_EXEMPT_FLAG,
     RateLimitHeadersMiddleware,
     RateLimitResult,
+    _scope_config,
     check,
     client_ip,
     is_exempt,
@@ -353,6 +354,13 @@ def test_decorator_skips_exempt_requests():
         response = _run_view(_request())
     assert response.status_code == 200
     assert "X-RateLimit-Limit" not in response.headers
+
+
+def test_admin_api_scope_is_configured():
+    """The admin_api scope parses to 100/5m, fail-open."""
+    limit, window_seconds, fail_open = _scope_config("admin_api")
+
+    assert (limit, window_seconds, fail_open) == (100, 300, True)
 
 
 def test_middleware_skips_degraded_results(db):
