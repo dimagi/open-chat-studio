@@ -9,9 +9,11 @@ import logging
 import re
 import time
 from dataclasses import dataclass
+from functools import wraps
 
 from django.conf import settings
 from django.core.cache import caches
+from django.http import JsonResponse
 from waffle import flag_is_active
 
 logger = logging.getLogger("ocs.rate_limit")
@@ -133,3 +135,44 @@ def _bucket_ip(ip: str) -> str:
 
 def is_exempt(request) -> bool:
     return bool(flag_is_active(request, RATE_LIMIT_EXEMPT_FLAG))
+
+
+def rate_limited(scope: str, key_fn=None):
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if is_exempt(request):
+                return view_func(request, *args, **kwargs)
+            identity_type, identity = (key_fn or _ip_key)(request)
+            team = getattr(request, "team", None)
+            result = check(scope, identity_type, identity, team_id=team.pk if team else None)
+            request.rate_limit_result = result
+            if not result.allowed:
+                response = JsonResponse(
+                    {"detail": "Rate limit exceeded.", "available_in": result.retry_after}, status=429
+                )
+                response["Retry-After"] = str(result.retry_after)
+                return response
+            return view_func(request, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def _ip_key(request) -> tuple[str, str]:
+    return "ip", client_ip(request)
+
+
+class RateLimitHeadersMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        result = getattr(request, "rate_limit_result", None)
+        if result is not None and not result.degraded:
+            response["X-RateLimit-Limit"] = str(result.limit)
+            response["X-RateLimit-Remaining"] = str(result.remaining)
+            response["X-RateLimit-Reset"] = str(result.reset_seconds)
+        return response

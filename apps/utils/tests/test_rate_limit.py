@@ -1,5 +1,6 @@
 """Tests for the rate limiting core (issues #2349 / #2140)."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
 
@@ -7,12 +8,22 @@ import pytest
 from django.conf import settings
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
+from django.http import JsonResponse as DjangoJsonResponse
 from django.test import RequestFactory, override_settings
 from waffle import get_waffle_flag_model
 
 from apps.teams.flags import Flags
 from apps.utils.factories.team import TeamFactory
-from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG, check, client_ip, is_exempt, parse_rate
+from apps.utils.rate_limit import (
+    RATE_LIMIT_EXEMPT_FLAG,
+    RateLimitHeadersMiddleware,
+    RateLimitResult,
+    check,
+    client_ip,
+    is_exempt,
+    parse_rate,
+    rate_limited,
+)
 
 TINY_LIMITS = {"api": {"rate": "3/5m", "fail_open": True}}
 
@@ -271,3 +282,68 @@ def test_is_exempt_for_everyone_acts_as_kill_switch():
     get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG, everyone=True)
     request = RequestFactory().get("/")
     assert is_exempt(request)
+
+
+@rate_limited("api")
+def _limited_view(request):
+    return DjangoJsonResponse({"ok": True})
+
+
+def _run_view(request):
+    middleware = RateLimitHeadersMiddleware(_limited_view)
+    return middleware(request)
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_decorator_allows_under_limit_and_middleware_emits_headers(db):
+    """Success responses carry the X-RateLimit-* headers."""
+    response = _run_view(_request())
+    assert response.status_code == 200
+    assert response.headers["X-RateLimit-Limit"] == "3"
+    assert response.headers["X-RateLimit-Remaining"] == "2"
+    assert int(response.headers["X-RateLimit-Reset"]) > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_decorator_blocks_over_limit_with_contract(db):
+    """Over the limit, plain views return 429 with Retry-After and the pinned JSON body."""
+    for _ in range(3):
+        _run_view(_request())
+    response = _run_view(_request())
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == response.headers["X-RateLimit-Reset"]
+    body = json.loads(response.content)
+    assert body["detail"] == "Rate limit exceeded."
+    assert body["available_in"] > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_decorator_log_only_never_blocks(db):
+    """With enforcement off the view always runs."""
+    for _ in range(5):
+        response = _run_view(_request())
+    assert response.status_code == 200
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+@pytest.mark.django_db()
+def test_decorator_skips_exempt_requests():
+    """An exempt request is never counted or limited."""
+    get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG, everyone=True)
+    for _ in range(5):
+        response = _run_view(_request())
+    assert response.status_code == 200
+    assert "X-RateLimit-Limit" not in response.headers
+
+
+def test_middleware_skips_degraded_results(db):
+    """Backend-failure responses carry no headers (no counter data behind them)."""
+
+    def view(request):
+        request.rate_limit_result = RateLimitResult(
+            allowed=True, limit=3, remaining=3, reset_seconds=300, degraded=True
+        )
+        return DjangoJsonResponse({"ok": True})
+
+    response = RateLimitHeadersMiddleware(view)(_request())
+    assert "X-RateLimit-Limit" not in response.headers

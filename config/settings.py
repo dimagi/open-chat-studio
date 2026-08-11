@@ -169,6 +169,7 @@ MIDDLEWARE = list(
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.web.request_logging_middleware.RequestLoggingMiddleware",
+            "apps.utils.rate_limit.RateLimitHeadersMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
