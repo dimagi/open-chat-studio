@@ -8,10 +8,9 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.test import override_settings
 from django.urls import reverse
-from django.utils.http import http_date
 
 from apps.channels.web_channel import WebChannel
-from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
+from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL
 from apps.experiments.models import (
     Experiment,
     ExperimentSession,
@@ -281,19 +280,30 @@ def test_user_email_used_for_participant_identifier(_trigger_mock, client):
 
 
 @pytest.mark.django_db()
-@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
-def test_start_session_public_embed_returns_deprecation_headers(client):
-    """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
+@pytest.mark.parametrize(
+    ("url_name", "extra_kwargs"),
+    [
+        pytest.param("experiments:start_session_public_embed", {}, id="start-session"),
+        pytest.param(
+            "experiments:experiment_session_message_embed",
+            {"session_id": "abc123", "version_number": 1},
+            id="send-message",
+        ),
+        pytest.param("experiments:poll_messages_embed", {"session_id": "abc123"}, id="poll-messages"),
+        pytest.param("chatbots:start_session_public_embed", {}, id="chatbots-start-session"),
+        pytest.param("chatbots:chatbot_chat_embed", {"session_id": "abc123"}, id="chatbots-chat-ui"),
+    ],
+)
+def test_legacy_embed_flow_urls_are_gone(client, url_name, extra_kwargs):
+    """The legacy embed flow was removed (issue #3540); its URLs answer 410, never a silent 404."""
     experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     url = reverse(
-        "experiments:start_session_public_embed",
-        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+        url_name,
+        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id, **extra_kwargs},
     )
     response = client.get(url)
-    assert response.status_code == 302
-    assert response.headers["Deprecation"] == "true"
-    assert response.headers["Sunset"] == http_date(EMBED_FLOW_SUNSET_AT.timestamp())
-    assert response.headers["Link"] == f'<{EMBED_FLOW_SUCCESSOR_URL}>; rel="successor-version"'
+    assert response.status_code == 410
+    assert EMBED_FLOW_SUCCESSOR_URL in response.content.decode()
 
 
 @pytest.mark.django_db()

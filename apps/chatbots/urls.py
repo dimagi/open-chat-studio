@@ -1,5 +1,7 @@
 from django.urls import include, path
 
+from apps.experiments.views import embed_flow_gone
+
 from . import views
 
 app_name = "chatbots"
@@ -81,14 +83,15 @@ urlpatterns = [
         views.chatbot_chat,
         name="chatbot_chat",
     ),
+    # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stubs, deleted in a later release.
     path(
         "<uuid:experiment_id>/embed/start/",
-        views.start_chatbot_session_public_embed,
+        embed_flow_gone,
         name="start_session_public_embed",
     ),
     path(
         "<uuid:experiment_id>/s/<str:session_id>/embed/chat/",
-        views.chatbot_chat_embed,
+        embed_flow_gone,
         name="chatbot_chat_embed",
     ),
     path(
