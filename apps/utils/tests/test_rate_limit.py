@@ -46,7 +46,7 @@ def test_parse_rate_rejects_malformed_input(rate):
 
 
 def test_rate_limit_settings_defaults():
-    """F9, F11: enforcement ships off; every configured scope rate parses."""
+    """Enforcement ships off; every configured scope rate parses."""
     assert settings.RATE_LIMIT_ENFORCE is False
     assert settings.RATE_LIMIT_CACHE_ALIAS == "rate_limit"
     assert "rate_limit" in settings.CACHES
@@ -58,7 +58,7 @@ def test_rate_limit_settings_defaults():
 
 @override_settings(RATE_LIMITS=TINY_LIMITS)
 def test_check_counts_down_remaining():
-    """F1 (core): each request decrements remaining; reset is seconds to window end."""
+    """Each request decrements remaining; reset is seconds to window end."""
     first = check("api", "team", "42")
     second = check("api", "team", "42")
     assert first.allowed
@@ -70,7 +70,7 @@ def test_check_counts_down_remaining():
 
 @override_settings(RATE_LIMITS=TINY_LIMITS)
 def test_buckets_are_independent_per_identity_and_scope():
-    """F5 (core): one bucket per (scope, identity_type, identity)."""
+    """One bucket per (scope, identity_type, identity)."""
     check("api", "team", "42")
     check("api", "team", "42")
     other_identity = check("api", "team", "43")
@@ -81,7 +81,7 @@ def test_buckets_are_independent_per_identity_and_scope():
 
 @override_settings(RATE_LIMITS=TINY_LIMITS)
 def test_window_reset_starts_fresh(monkeypatch):
-    """F4: a new window starts counting from zero."""
+    """A new window starts counting from zero."""
     monkeypatch.setattr("apps.utils.rate_limit._now", lambda: 1_000_000)
     for _ in range(3):
         check("api", "team", "42")
@@ -93,7 +93,7 @@ def test_window_reset_starts_fresh(monkeypatch):
 
 @override_settings(RATE_LIMITS={"api": {"rate": "2000/5m", "fail_open": True}})
 def test_concurrent_requests_do_not_undercount():
-    """F6: N concurrent increments against one bucket count exactly N."""
+    """N concurrent increments against one bucket count exactly N."""
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(lambda _: check("api", "team", "42"), range(64)))
     final = check("api", "team", "42")
@@ -103,3 +103,41 @@ def test_concurrent_requests_do_not_undercount():
 def test_unknown_scope_raises():
     with pytest.raises(KeyError):
         check("nonexistent", "team", "42")
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_over_limit_blocks_when_enforcing():
+    """The request over the limit is refused with retry_after set."""
+    for _ in range(3):
+        check("api", "team", "42")
+    blocked = check("api", "team", "42")
+    assert not blocked.allowed
+    assert blocked.remaining == 0
+    assert blocked.retry_after == blocked.reset_seconds > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_over_limit_logs_would_block_when_not_enforcing(caplog):
+    """Log-only mode allows the request and emits one structured log."""
+    for _ in range(3):
+        check("api", "team", "42")
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        result = check("api", "team", "42", team_id=7)
+    assert result.allowed
+    assert result.remaining == 0
+    would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
+    assert len(would_block) == 1
+    record = would_block[0]
+    assert record.scope == "api"
+    assert record.identity_type == "team"
+    assert record.count == 4
+    assert record.limit == 3
+    assert record.team_id == 7
+    assert record.key_hash != "42"
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_under_limit_logs_nothing(caplog):
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        check("api", "team", "42")
+    assert not [r for r in caplog.records if r.message == "rate_limit.would_block"]

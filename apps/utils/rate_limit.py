@@ -3,12 +3,16 @@ response contract shared by the DRF throttle adapter and the plain-view decorato
 Log-only unless settings.RATE_LIMIT_ENFORCE is True.
 """
 
+import hashlib
+import logging
 import re
 import time
 from dataclasses import dataclass
 
 from django.conf import settings
 from django.core.cache import caches
+
+logger = logging.getLogger("ocs.rate_limit")
 
 _RATE_RE = re.compile(r"^(?P<count>\d+)/(?P<magnitude>\d*)(?P<unit>[smh])$")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
@@ -68,7 +72,20 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
     count = _count(_cache(), key, timeout=window_seconds + 60)
     remaining = max(0, limit - count)
     if count > limit:
-        return RateLimitResult(
-            allowed=False, limit=limit, remaining=0, reset_seconds=reset_seconds, retry_after=reset_seconds
+        if settings.RATE_LIMIT_ENFORCE:
+            return RateLimitResult(
+                allowed=False, limit=limit, remaining=0, reset_seconds=reset_seconds, retry_after=reset_seconds
+            )
+        logger.info(
+            "rate_limit.would_block",
+            extra={
+                "scope": scope,
+                "identity_type": identity_type,
+                "key_hash": hashlib.sha256(identity.encode()).hexdigest()[:12],
+                "count": count,
+                "limit": limit,
+                "team_id": team_id,
+            },
         )
+        return RateLimitResult(allowed=True, limit=limit, remaining=0, reset_seconds=reset_seconds)
     return RateLimitResult(allowed=True, limit=limit, remaining=remaining, reset_seconds=reset_seconds)
