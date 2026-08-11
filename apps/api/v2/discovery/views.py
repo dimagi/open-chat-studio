@@ -22,8 +22,8 @@ from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
-from .contract import HIDDEN_OPTION_KEYS, OPTIONS_KEY_RENAMES
-from .node_types import etag, get_node_types, option_keys_for_node_type, unknown_node_type
+from .contract import API_ONLY_OPTION_KEYS, OPTIONS_KEY_RENAMES
+from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
 # The option lists holding prompt variables rather than referenceable resource ids. Their entries are
@@ -218,9 +218,12 @@ class PipelineOptionsView(DiscoveryView):
     )
     def get(self, request):
         requested_type = request.query_params.get("node_type")
-        wanted = option_keys_for_node_type(requested_type) if requested_type else None
-        if requested_type and wanted is None:
-            raise unknown_node_type(requested_type)
+        if requested_type:
+            wanted = option_keys_for_node_type(requested_type)
+            if wanted is None:
+                raise unknown_node_type(requested_type)
+        else:
+            wanted = served_option_keys() | API_ONLY_OPTION_KEYS
 
         team = request.team
         llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
@@ -245,16 +248,13 @@ class PipelineOptionsView(DiscoveryView):
             )
         )
         # No node param sources its options from this list -- it is here so a client can resolve the
-        # `provider_id` carried on a `synthetic_voice_id` entry.
+        # `provider_id` carried on a `synthetic_voice_id` entry. See `API_ONLY_OPTION_KEYS`.
         options[OptionsSource.voice_provider_id] = [
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
         options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)
         options = self._to_api_vocabulary(self._describe_prompt_vars(options))
-
-        if wanted is not None:
-            options = {key: value for key, value in options.items() if key in wanted}
-        return Response(options)
+        return Response({key: value for key, value in options.items() if key in wanted})
 
     @classmethod
     def _clean_options(cls, value):
@@ -298,7 +298,9 @@ class PipelineOptionsView(DiscoveryView):
 
     @staticmethod
     def _to_api_vocabulary(options: dict) -> dict:
-        """Drop the builder-only option lists and rename the keys the builder spells its own way."""
-        return {
-            OPTIONS_KEY_RENAMES.get(key, key): value for key, value in options.items() if key not in HIDDEN_OPTION_KEYS
-        }
+        """Rename the option keys named for a builder widget rather than for the param that reads them.
+
+        Which keys are served is decided by the caller's whitelist, not here -- this only has to run
+        first so the whitelist and the payload are comparing the same vocabulary.
+        """
+        return {OPTIONS_KEY_RENAMES.get(key, key): value for key, value in options.items()}

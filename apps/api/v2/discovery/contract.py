@@ -2,9 +2,11 @@
 
 A param's permitted values live under the `/pipeline/options/` key of the same name --
 `source_material_id` draws from `source_material`, `collection_index_ids` from `collection_index`.
-The maps here are what make that hold: they rename the option keys the builder spells differently,
-hide the ones a client has no use for, and state the cross-param rules the builder enforces in JS
-instead. See ADR-0051.
+
+What lives here is only what a node schema cannot state for itself: the prompt-variable keys, whose
+one param name maps to three different vocabularies, the one list no param reads, and the cross-param
+rules the builder enforces in JS instead. Which params the API withholds is declared on the pydantic
+`Field` -- see `UiSchema.api_exclude`. See ADR-0051.
 """
 
 # The prompt-variable lists are the one documented exception to "a param's options live under a key of
@@ -19,14 +21,11 @@ OPTIONS_KEY_RENAMES = {
     "text_editor_autocomplete_vars_router_node": "router_prompt_variables",
 }
 
-# Option lists the API does not serve. `assistant` is read by one deprecated node type, which the API
-# does not list, so nothing it does serve can consume the list. `mcp_tools` belongs to a param marked
-# `api_exclude`.
-HIDDEN_OPTION_KEYS = frozenset({"assistant", "mcp_tools"})
-
-# Params the builder renders with a bespoke widget rather than the generic `select`, so it declares
-# no `ui:optionsSource` for them. Their options key is the param name, as everywhere else.
-IMPLIED_OPTION_KEYS = frozenset({"llm_provider_id", "llm_provider_model_id", "tool_config", "synthetic_voice_id"})
+# The one option list no node param reads. `synthetic_voice_id` entries carry the `provider_id` they
+# have to match, and this is the list that resolves it -- so it is served even though the whitelist
+# derived from the node schemas cannot discover it. Everything else served must be reachable from a
+# param, which `test_every_key_served_is_read_by_some_listed_node_type` enforces.
+API_ONLY_OPTION_KEYS = frozenset({"voice_provider_id"})
 
 # Both the model and the provider carry a `type` ("openai", "anthropic", ...) and the two must agree;
 # `get_node_default_values` silently relies on this when it picks the pair a new node starts with.

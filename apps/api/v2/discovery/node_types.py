@@ -15,8 +15,6 @@ from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
-    HIDDEN_OPTION_KEYS,
-    IMPLIED_OPTION_KEYS,
     MUST_MATCH,
     OPTIONS_KEY_RENAMES,
     OPTIONS_KEYED_BY,
@@ -51,6 +49,16 @@ def get_node_types() -> list[dict]:
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
     """The option keys a single node type reads, or ``None`` if no such type is served."""
     return _option_keys_by_type().get(node_type)
+
+
+def served_option_keys() -> frozenset[str]:
+    """Every option key some listed node type can reference, in API vocabulary.
+
+    The unscoped `/pipeline/options/` payload is exactly this set plus ``API_ONLY_OPTION_KEYS``. Serving
+    the union of what the listed types read, rather than everything the builder happens to build minus a
+    list of exceptions, means a type going deprecated takes its option lists with it.
+    """
+    return frozenset().union(*_option_keys_by_type().values())
 
 
 def unknown_node_type(requested_type: str) -> NotFound:
@@ -159,17 +167,19 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
     """The `/pipeline/options/` keys each node type's params can draw from.
 
     The API does not emit this link per param -- an option key is named for the param that reads it
-    -- but `?node_type=` still needs it to trim the payload to one node, and the builder's
-    ``ui:optionsSource`` is where the pairing is recorded. A known type that reads nothing yields an
-    empty set, which is a different answer from a missing key.
+    -- but `?node_type=` still needs it to trim the payload to one node, and ``ui:optionsSource`` is
+    where the pairing is recorded. A param withheld from the API contributes nothing: that is what
+    makes the union of these sets the whole served payload rather than a subset of it. A known type
+    that reads nothing yields an empty set, which is a different answer from a missing key.
     """
     keys_by_type = {}
     for schema in _addable_schemas():
         properties = schema["properties"]
         keys = set()
-        for name, prop in properties.items():
-            source = prop.get("ui:optionsSource") or (name if name in IMPLIED_OPTION_KEYS else None)
-            if source and source not in HIDDEN_OPTION_KEYS:
+        for prop in properties.values():
+            if prop.get("api:exclude"):
+                continue
+            if source := prop.get("ui:optionsSource"):
                 keys.add(OPTIONS_KEY_RENAMES.get(source, source))
         if "llm_provider_id" in properties:
             keys.add("default_llm_provider")
