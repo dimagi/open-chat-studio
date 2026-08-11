@@ -1050,6 +1050,14 @@ CORS_ALLOW_METHODS = [
     "PUT",
 ]
 
+# Expose rate limit headers so cross-origin chat widget clients can read them
+CORS_EXPOSE_HEADERS = [
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+    "Retry-After",
+]
+
 # Additional CORS settings for security
 CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight for 24 hours
 

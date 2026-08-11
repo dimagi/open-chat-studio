@@ -20,6 +20,11 @@ logger = logging.getLogger("ocs.rate_limit")
 
 RATE_LIMIT_EXEMPT_FLAG = "flag_ignore_rate_limiting"
 
+# Log-only mode never stops counting, so an identity sitting well over its limit keeps
+# incrementing every request; logging each one is unbounded (e.g. 4000 lines/window for
+# a team at 3x its limit). Log the crossing request, then sample every Nth after that.
+WOULD_BLOCK_LOG_INTERVAL = 100
+
 _RATE_RE = re.compile(r"^(?P<count>\d+)/(?P<magnitude>\d*)(?P<unit>[smh])$")
 _UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600}
 
@@ -97,17 +102,18 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
             return RateLimitResult(
                 allowed=False, limit=limit, remaining=0, reset_seconds=reset_seconds, retry_after=reset_seconds
             )
-        logger.info(
-            "rate_limit.would_block",
-            extra={
-                "scope": scope,
-                "identity_type": identity_type,
-                "key_hash": hashlib.sha256(identity.encode()).hexdigest()[:12],
-                "count": count,
-                "limit": limit,
-                "team_id": team_id,
-            },
-        )
+        if count == limit + 1 or count % WOULD_BLOCK_LOG_INTERVAL == 0:
+            logger.info(
+                "rate_limit.would_block",
+                extra={
+                    "scope": scope,
+                    "identity_type": identity_type,
+                    "key_hash": hashlib.sha256(identity.encode()).hexdigest()[:12],
+                    "count": count,
+                    "limit": limit,
+                    "team_id": team_id,
+                },
+            )
         return RateLimitResult(allowed=True, limit=limit, remaining=0, reset_seconds=reset_seconds)
     return RateLimitResult(allowed=True, limit=limit, remaining=remaining, reset_seconds=reset_seconds)
 

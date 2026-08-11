@@ -154,6 +154,20 @@ def test_over_limit_logs_would_block_when_not_enforcing(caplog):
 
 
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_over_limit_would_block_logging_is_sampled_after_the_crossing(caplog):
+    """Log-only mode logs the crossing request, then only every Nth request after that."""
+    over_limit_requests = 250
+    for _ in range(3):
+        check("api", "team", "42")
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        for _ in range(over_limit_requests):
+            check("api", "team", "42")
+    would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
+    assert len(would_block) < over_limit_requests
+    assert would_block[0].count == 4
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
 def test_under_limit_logs_nothing(caplog):
     with caplog.at_level("INFO", logger="ocs.rate_limit"):
         check("api", "team", "42")

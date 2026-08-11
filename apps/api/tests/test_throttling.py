@@ -1,16 +1,20 @@
 """Tests for the api-scope DRF throttle (issues #2349 / #2140)."""
 
 import json
+from datetime import timedelta
 
 import pytest
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.throttling import SimpleRateThrottle
 from waffle import get_waffle_flag_model
 
+from apps.api.models import UserAPIKey
 from apps.api.throttling import APIRateThrottle
+from apps.oauth.models import OAuth2AccessToken, OAuth2Application
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG
@@ -51,6 +55,46 @@ def test_identity_prefers_team_then_falls_through(db):
 
     request = RequestFactory().get("/")
     assert throttle.identity(request)[0] == "ip"
+
+
+@pytest.mark.django_db()
+def test_identity_falls_through_to_api_key():
+    """No resolvable team, but request.auth is a UserAPIKey: keys by the key's pk."""
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    api_key, _ = UserAPIKey.objects.create_key(name="test key", user=user, team=team, read_only=False)
+    throttle = APIRateThrottle()
+
+    request = RequestFactory().get("/")
+    request.auth = api_key
+
+    assert throttle.identity(request) == ("api_key", str(api_key.pk))
+
+
+@pytest.mark.django_db()
+def test_identity_falls_through_to_oauth_client():
+    """No resolvable team, but request.auth is an OAuth2AccessToken: keys by the token's application."""
+    team = TeamWithUsersFactory.create()
+    application = OAuth2Application.objects.create(
+        name="machine-app",
+        client_id="machine-client-id",
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        team=team,
+    )
+    access_token = OAuth2AccessToken.objects.create(
+        application=application,
+        team=team,
+        token="machine-token",
+        scope="sessions:read",
+        expires=timezone.now() + timedelta(days=1),
+    )
+    throttle = APIRateThrottle()
+
+    request = RequestFactory().get("/")
+    request.auth = access_token
+
+    assert throttle.identity(request) == ("oauth_client", str(access_token.application_id))
 
 
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
