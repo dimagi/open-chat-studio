@@ -53,6 +53,7 @@ from apps.teams.flags import get_all_flag_info
 from apps.teams.forms import TeamMetadataForm
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Flag, Team
+from apps.utils.rate_limit import rate_limited
 
 logger = logging.getLogger("ocs.admin")
 
@@ -510,6 +511,7 @@ def flag_history(request, flag_name):
 
 # Staff-level: team names/slugs are already visible to staff via the dashboard's
 # top-teams table and the team_detail page, which drive this search endpoint.
+@rate_limited("admin_api")
 @is_staff
 def teams_api(request):
     query = request.GET.get("q", "").strip()
@@ -529,6 +531,7 @@ def teams_api(request):
     return JsonResponse(data, safe=False)
 
 
+@rate_limited("admin_api")
 @is_superuser
 def users_api(request):
     query = request.GET.get("q", "").strip()
@@ -548,6 +551,7 @@ def users_api(request):
     return JsonResponse(data, safe=False)
 
 
+@rate_limited("admin_api")
 @superuser_or_reporting_token
 def provider_usage_api(request):
     """Cross-team LLM usage over a date range: per-team token + cost totals with
@@ -561,6 +565,7 @@ def provider_usage_api(request):
     return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
 
 
+@rate_limited("admin_api")
 @superuser_or_reporting_token
 def provider_keys_api(request):
     """Masked API-key fingerprint → team mapping across all LLM providers, so a
