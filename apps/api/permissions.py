@@ -190,6 +190,14 @@ class ReadOnlyAPIKeyPermission(BasePermission):
         return True
 
 
+# The non-scope half of REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"] (config/settings.py). Setting
+# ``permission_classes`` on a view replaces the defaults wholesale, which silently drops the
+# read-only API-key gate (ADR-0021), so views that need extra permission classes must build on this
+# list rather than start from an empty one. The OAuth scope class is deliberately excluded: each view
+# pairs its own (TokenHasOAuthScope or TokenHasOAuthResourceScope) with its ``required_scopes``.
+BASE_PERMISSION_CLASSES = [IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission]
+
+
 class ConfigurableKeyParser(KeyParser):
     def __init__(self, keyword: str):
         self.keyword = keyword
