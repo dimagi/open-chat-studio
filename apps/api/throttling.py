@@ -7,6 +7,7 @@ resolves the request identity and translates the result into DRF semantics.
 from rest_framework.throttling import BaseThrottle
 
 from apps.api.models import UserAPIKey
+from apps.channels.models import ExperimentChannel
 from apps.oauth.models import OAuth2AccessToken
 from apps.utils.rate_limit import check, client_ip, is_exempt
 
@@ -18,7 +19,7 @@ class APIRateThrottle(BaseThrottle):
     def allow_request(self, request, view):
         if is_exempt(request):
             return True
-        identity_type, identity = self.identity(request)
+        identity_type, identity = self.identity(request, view)
         team = getattr(request, "team", None)
         result = check(self.scope, identity_type, identity, team_id=team.pk if team else None)
         # Auth attributes live on the DRF Request; the headers middleware reads
@@ -30,7 +31,7 @@ class APIRateThrottle(BaseThrottle):
     def wait(self):
         return self._wait
 
-    def identity(self, request) -> tuple[str, str]:
+    def identity(self, request, view) -> tuple[str, str]:
         # `team` may be a lazily-resolved proxy set by TeamsMiddleware on the underlying
         # HttpRequest (present on every request) rather than a plain Team instance set
         # by our auth classes; a truthiness check evaluates it safely instead of raising
@@ -46,4 +47,24 @@ class APIRateThrottle(BaseThrottle):
         user = getattr(request, "user", None)
         if user is not None and user.is_authenticated:
             return "user", str(user.pk)
+        return "ip", client_ip(request)
+
+
+class WidgetRateThrottle(APIRateThrottle):
+    """Embedded chat widget traffic, bucketed per conversation.
+
+    A per-session bucket keeps one visitor from consuming the allowance of
+    every other visitor to the same chatbot. Session creation has no session
+    to key on yet, so it buckets on the widget channel instead.
+    """
+
+    scope = "widget"
+
+    def identity(self, request, view) -> tuple[str, str]:
+        session_id = getattr(view, "kwargs", {}).get("session_id")
+        if session_id is not None:
+            return "session", str(session_id)
+        auth = getattr(request, "auth", None)
+        if isinstance(auth, ExperimentChannel):
+            return "channel", str(auth.pk)
         return "ip", client_ip(request)
