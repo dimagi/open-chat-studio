@@ -13,6 +13,7 @@ from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
+from apps.experiments.models import Participant
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.usage_metrics.filters import HUMAN_AUTHORED
 from apps.usage_metrics.metrics import (
@@ -319,28 +320,35 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
-        participants = querysets["participants"]
 
-        # Get participant engagement stats
-        date_filter = Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"]) & Q(
-            experimentsession__chat__messages__created_at__lt=querysets["end_date"]
-        )
-
-        participant_stats = (
-            participants.annotate(
-                total_messages=Count(
-                    "experimentsession__chat__messages",
-                    filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
-                ),
-                total_sessions=Count("experimentsession", filter=date_filter, distinct=True),
-                last_activity=Max("experimentsession__last_activity_at"),
+        # Aggregate forward from the canonical message queryset, the same way
+        # `get_active_participants_data` does. Annotating the participant
+        # queryset instead re-enters ExperimentSession from the far side, which
+        # carries none of the SETUP, evaluation or tag exclusions the rest of
+        # the page counts by (ADR-0051).
+        participant_field = "chat__experiment_session__participant"
+        participant_stats = list(
+            querysets["messages"]
+            .filter(HUMAN_AUTHORED)
+            .filter(**{f"{participant_field}__isnull": False})
+            .values(participant_field)
+            .annotate(
+                total_messages=Count("id"),
+                total_sessions=Count("chat__experiment_session", distinct=True),
+                last_activity=Max("created_at"),
             )
-            .filter(total_messages__gt=0)
-            .order_by("-total_messages")
+            .order_by("-total_messages")[:limit]
         )
 
         # Most active participants
-        most_active = [self._format_participant_data(p) for p in participant_stats[:limit]]
+        participants = Participant.objects.filter(team=self.team).in_bulk(
+            [stats[participant_field] for stats in participant_stats]
+        )
+        most_active = [
+            self._format_participant_data(participants[stats[participant_field]], stats)
+            for stats in participant_stats
+            if stats[participant_field] in participants
+        ]
 
         # Session length distribution
         session_lengths = (
@@ -525,8 +533,10 @@ class DashboardService:
         """Format a period object to ISO string"""
         return period.isoformat() if hasattr(period, "isoformat") else str(period)
 
-    def _format_participant_data(self, participant) -> dict[str, Any]:
-        """Format participant data for engagement analysis"""
+    def _format_participant_data(self, participant, stats: dict) -> dict[str, Any]:
+        """Format participant data for engagement analysis. `stats` is one
+        aggregate row keyed on the participant, not annotations on the
+        participant itself."""
         participant_url = reverse(
             "participants:single-participant-home",
             kwargs={"team_slug": self.team.slug, "participant_id": participant.id},
@@ -535,9 +545,9 @@ class DashboardService:
             "participant_id": participant.id,
             "participant_name": participant.name or participant.identifier,
             "participant_url": participant_url,
-            "total_messages": participant.total_messages,
-            "total_sessions": participant.total_sessions,
-            "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
+            "total_messages": stats["total_messages"],
+            "total_sessions": stats["total_sessions"],
+            "last_activity": stats["last_activity"].isoformat() if stats["last_activity"] else None,
         }
 
     @staticmethod

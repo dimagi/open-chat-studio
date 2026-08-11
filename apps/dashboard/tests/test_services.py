@@ -4,6 +4,7 @@ from unittest.mock import ANY
 import pytest
 from django.utils import timezone
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
@@ -407,6 +408,63 @@ class TestGetTagAnalyticsDataTeamScoping:
 
         assert data["tag_categories"] == {tag.label: {tag.name: 1}}
         assert data["total_tagged_messages"] == 1
+
+
+@pytest.mark.django_db()
+class TestUserEngagementUsesTheCanonicalDefinitions:
+    """The engagement panel sits on the same page as the headline totals, so it
+    counts the same universe: no SETUP sessions, no evaluation-harness sessions,
+    and a tag filter narrows it the same way (ADR-0051)."""
+
+    def _totals(self, data):
+        return [(row["total_messages"], row["total_sessions"]) for row in data["most_active_participants"]]
+
+    def test_setup_sessions_do_not_count(self, team, experiment, participant):
+        _engagement_session(team, experiment, participant, messages=2)
+        _engagement_session(team, experiment, participant, status=SessionStatus.SETUP, messages=3)
+
+        data = DashboardService(team).get_user_engagement_data()
+
+        assert self._totals(data) == [(2, 1)]
+
+    def test_evaluation_sessions_do_not_count(self, team, experiment, participant):
+        _engagement_session(team, experiment, participant, messages=2)
+        _engagement_session(team, experiment, participant, platform=ChannelPlatform.EVALUATIONS, messages=3)
+
+        data = DashboardService(team).get_user_engagement_data()
+
+        assert self._totals(data) == [(2, 1)]
+
+    def test_a_tag_filter_narrows_the_panel(self, team, experiment, participant):
+        tagged = _engagement_session(team, experiment, participant, messages=2)
+        _engagement_session(team, experiment, participant, messages=3)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+
+        data = DashboardService(team).get_user_engagement_data(tag_ids=[tag.id])
+
+        assert self._totals(data) == [(2, 1)]
+
+    def test_last_activity_comes_from_in_window_activity(self, team, experiment, participant):
+        """`last_activity_at` is the session's own clock and carries no window
+        bound, so reading it directly can report a date outside the range the
+        page is showing."""
+        session = _engagement_session(team, experiment, participant, messages=1)
+        ExperimentSession.objects.filter(id=session.id).update(last_activity_at=timezone.now() + timedelta(days=40))
+
+        data = DashboardService(team).get_user_engagement_data()
+
+        message = ChatMessage.objects.get(chat=session.chat)
+        assert data["most_active_participants"][0]["last_activity"] == message.created_at.isoformat()
+
+
+def _engagement_session(team, experiment, participant, *, status=SessionStatus.ACTIVE, platform="web", messages=1):
+    session = ExperimentSession.objects.create(
+        experiment=experiment, participant=participant, team=team, status=status, platform=platform
+    )
+    for index in range(messages):
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content=f"m{index}")
+    return session
 
 
 def _create_session(experiment, participant, team, message_date):
