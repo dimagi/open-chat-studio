@@ -5,9 +5,12 @@ import json
 import pytest
 from django.urls import reverse
 
-from apps.experiments.models import ParticipantData
+from apps.events.models import ScheduledMessage
+from apps.experiments.models import Participant, ParticipantData
+from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team
 from apps.utils.factories.experiment import ExperimentFactory, ParticipantFactory
-from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.factories.team import TeamFactory, TeamWithUsersFactory
+from apps.utils.factories.user import UserFactory
 from apps.utils.tests.clients import ApiTestClient
 
 
@@ -208,3 +211,131 @@ def test_read_only_key_can_get_participants():
     client = ApiTestClient(user, team, read_only=True)
     response = client.get(reverse("api:participant-data"))
     assert response.status_code == 200
+
+
+def _client_for_role(team, group_name, **kwargs):
+    """An API client for a new team member holding only `group_name`."""
+    user = UserFactory.create()
+    add_user_to_team(team, user, [group_name])
+    return ApiTestClient(user, team, **kwargs)
+
+
+# Team membership alone must not grant participant access: the caller's role has to hold the same
+# participant model permissions the participant UI requires. Chat Viewer holds none of them,
+# Chatbot Admin holds them all.
+ROLE_CASES = [
+    pytest.param(CHAT_VIEWER_GROUP, 403, id="chat_viewer_denied"),
+    pytest.param(CHATBOT_ADMIN_GROUP, 200, id="chatbot_admin_allowed"),
+]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(("group_name", "expected_status"), ROLE_CASES)
+def test_list_participants_requires_view_permissions(group_name, expected_status):
+    team = TeamFactory.create()
+    experiment = ExperimentFactory.create(team=team)
+    participant = ParticipantFactory.create(team=team, identifier="user1", platform="api")
+    ParticipantData.objects.create(team=team, participant=participant, experiment=experiment, data={"secret": "value"})
+
+    client = _client_for_role(team, group_name)
+    response = client.get(reverse("api:participant-data"))
+
+    assert response.status_code == expected_status
+    if expected_status == 200:
+        assert [p["identifier"] for p in response.json()["results"]] == ["user1"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(("group_name", "expected_status"), ROLE_CASES)
+def test_update_participant_data_requires_write_permissions(group_name, expected_status):
+    team = TeamFactory.create()
+    experiment = ExperimentFactory.create(team=team)
+    client = _client_for_role(team, group_name)
+    data = {
+        "identifier": "part1",
+        "platform": "api",
+        "data": [{"experiment": str(experiment.public_id), "data": {"name": "John"}}],
+    }
+
+    response = client.post(reverse("api:participant-data"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == expected_status
+    assert Participant.objects.filter(team=team, identifier="part1").exists() == (expected_status == 200)
+
+
+@pytest.mark.django_db()
+def test_chatbot_admin_can_create_and_cancel_schedules():
+    """Managing participant schedules needs no events permissions, which Chatbot Admin lacks."""
+    team = TeamFactory.create()
+    experiment = ExperimentFactory.create(team=team)
+    client = _client_for_role(team, CHATBOT_ADMIN_GROUP)
+    url = reverse("api:participant-data")
+
+    create = {
+        "identifier": "part1",
+        "platform": "api",
+        "data": [
+            {
+                "experiment": str(experiment.public_id),
+                "schedules": [
+                    {
+                        "id": "sched1",
+                        "name": "schedule1",
+                        "prompt": "tell ET to phone home",
+                        "date": "2099-01-01T00:00:00Z",
+                    }
+                ],
+            }
+        ],
+    }
+    response = client.post(url, json.dumps(create), content_type="application/json")
+    assert response.status_code == 200, response.content
+    schedule = ScheduledMessage.objects.get(external_id="sched1", experiment=experiment)
+    assert schedule.custom_schedule_params["prompt_text"] == "tell ET to phone home"
+    assert schedule.cancelled_at is None
+
+    cancel = {
+        "identifier": "part1",
+        "platform": "api",
+        "data": [{"experiment": str(experiment.public_id), "schedules": [{"id": "sched1", "delete": True}]}],
+    }
+    response = client.post(url, json.dumps(cancel), content_type="application/json")
+    assert response.status_code == 200, response.content
+    schedule.refresh_from_db()
+    assert schedule.cancelled_at is not None
+
+
+@pytest.mark.django_db()
+def test_machine_token_reads_and_writes_participants():
+    """Machine tokens have no user and so no model permissions; the OAuth scope authorizes them."""
+    team = TeamFactory.create()
+    experiment = ExperimentFactory.create(team=team)
+    # The app owner is deliberately a non-member of the pinned team.
+    client = ApiTestClient(
+        UserFactory.create(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["participants:read", "participants:write"],
+    )
+    url = reverse("api:participant-data")
+
+    data = {
+        "identifier": "part1",
+        "platform": "api",
+        "data": [
+            {
+                "experiment": str(experiment.public_id),
+                "data": {"name": "John"},
+                "schedules": [
+                    {"id": "sched1", "name": "schedule1", "prompt": "phone home", "date": "2099-01-01T00:00:00Z"}
+                ],
+            }
+        ],
+    }
+    response = client.post(url, json.dumps(data), content_type="application/json")
+    assert response.status_code == 200, response.content
+    assert ScheduledMessage.objects.filter(external_id="sched1", experiment=experiment).exists()
+
+    response = client.get(url)
+    assert response.status_code == 200, response.content
+    assert [p["identifier"] for p in response.json()["results"]] == ["part1"]
