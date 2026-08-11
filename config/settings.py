@@ -663,6 +663,7 @@ RATE_LIMIT_CACHE_ALIAS = "rate_limit"
 RATE_LIMITS = {
     "api": {"rate": env("RATE_LIMIT_API", default="2000/5m"), "fail_open": True},
     "admin_api": {"rate": env("RATE_LIMIT_ADMIN_API", default="100/5m"), "fail_open": True},
+    "widget": {"rate": env("RATE_LIMIT_WIDGET", default="300/5m"), "fail_open": True},
 }
 CACHES["rate_limit"] = {
     "BACKEND": "django_redis.cache.RedisCache",
