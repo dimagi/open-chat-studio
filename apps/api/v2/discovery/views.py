@@ -219,7 +219,9 @@ class PipelineOptionsView(DiscoveryView):
                 synthetic_voices=synthetic_voices,
             )
         )
-        options["VoiceProviderId"] = [
+        # No node param sources its options from this list -- it is here so a client can resolve the
+        # `provider_id` carried on a `synthetic_voice_id` entry.
+        options[OptionsSource.voice_provider_id] = [
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
         options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)

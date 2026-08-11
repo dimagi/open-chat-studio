@@ -7,11 +7,9 @@ hide the ones a client has no use for, and state the cross-param rules the build
 instead. See ADR-0051.
 """
 
-# `VoiceProviderId` is written by the discovery view itself, and `jinja_node` is named for the builder's
-# jinja-template widget rather than for the param that reads it. Both are renamed on the API surface so
-# a param's options always live under a key of the same name.
+# `jinja_node` is named for the builder's jinja-template widget rather than for the param that reads it,
+# so it is renamed on the API surface: a param's options always live under a key of the same name.
 OPTIONS_KEY_RENAMES = {
-    "VoiceProviderId": "voice_provider_id",
     "jinja_node": "prompt_variables",
 }
 
