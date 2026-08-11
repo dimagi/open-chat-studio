@@ -328,6 +328,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
 
 @xframe_options_exempt
 @csrf_exempt
+@team_required
 def embed_flow_gone(request, *args, **kwargs):
     """410 stub for the legacy embedded chat flow, removed on 2026-08-03.
 
@@ -336,7 +337,9 @@ def embed_flow_gone(request, *args, **kwargs):
     See https://github.com/dimagi/open-chat-studio/issues/3540
 
     The old views were `@xframe_options_exempt` + `@csrf_exempt`; the stub keeps both so
-    legacy callers see the 410 rather than a blocked iframe or a CSRF 403.
+    legacy callers see the 410 rather than a blocked iframe or a CSRF 403. `@team_required`
+    is kept for the team-auth guard in apps/teams/tests/test_view_auth_guard.py — the stub
+    reads no data, but the views it replaces were team-scoped and it costs nothing.
     """
     return HttpResponseGone(
         f"The legacy embedded chat flow was removed on {EMBED_FLOW_REMOVED_ON.isoformat()}. "
