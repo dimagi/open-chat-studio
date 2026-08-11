@@ -69,8 +69,12 @@ def test_lists_outdated_channel_with_session_count():
 def test_status_classification(version, expected_status):
     channel = _widget_channel(version)
     _add_session(channel)
+    # Pin the deprecation window relative to now; running against the real DEPRECATIONS
+    # entry would flip every "deprecated" case to "sunset" once its date passes.
+    pending = WidgetDeprecation(below_version="0.6.0", sunset_at=timezone.now() + timedelta(days=30))
 
-    output = _run()
+    with patch("apps.channels.widget_versions.DEPRECATIONS", [pending]):
+        output = _run()
 
     assert expected_status in output
     assert "Chatbots: 1" in output
