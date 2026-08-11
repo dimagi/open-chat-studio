@@ -1,7 +1,8 @@
 import pytest
 from django.urls import reverse
 
-from apps.api.v2.discovery.node_types import _documentation_url, option_keys_for_node_type
+from apps.api.v2.discovery.contract import HIDDEN_PARAMS
+from apps.api.v2.discovery.node_types import _agent_property, _documentation_url, option_keys_for_node_type
 from apps.api.v2.discovery.views import PipelineOptionsView
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -95,7 +96,7 @@ def test_no_param_carries_an_options_source(team):
         ),
         pytest.param(
             "LLMResponseWithPrompt",
-            {"source_material", "collection", "collection_index", "agent_tools", "custom_actions", "mcp_tools"},
+            {"source_material", "collection", "collection_index", "agent_tools", "custom_actions"},
             id="params-the-builder-declares-a-source-for",
         ),
         pytest.param("RenderTemplate", {"prompt_variables"}, id="template-vars"),
@@ -227,14 +228,32 @@ def test_provider_keyed_params_say_what_keys_them(team, param):
     assert prop["options_keyed_by"] == {"field": "llm_provider_id", "on": "type"}
 
 
-@pytest.mark.django_db()
-def test_feature_flagged_params_are_marked(team):
-    """`mcp_tools` is inert unless the team has `flag_mcp`. An agent that writes it anyway produces a
-    node whose tools never load, with nothing in the response to explain why."""
-    client = ApiTestClient(team.members.first(), team)
-    by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
+def test_feature_flagged_params_are_marked():
+    """A flag-gated param is inert until the team holds the flag, so it has to reach the agent
+    saying so -- one written anyway produces a node that silently does nothing.
 
-    assert by_type["LLMResponseWithPrompt"]["schema"]["properties"]["mcp_tools"]["requires_feature_flag"] == "flag_mcp"
+    Tested against the translation directly rather than through an endpoint: no param in the served
+    schemas carries `ui:flagRequired` today, so there is nothing there to assert against."""
+    assert _agent_property("some_param", {"type": "array", "ui:flagRequired": "flag_x"}) == {
+        "type": "array",
+        "requires_feature_flag": "flag_x",
+    }
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("param", sorted(HIDDEN_PARAMS))
+def test_a_withheld_param_reaches_neither_endpoint(team_with_resources, param):
+    """A withheld param has to leave the node schema and the option list together. Either half alone
+    is worse than serving both: a param with no discoverable values, or a key belonging to nothing.
+    It also has to leave `required`, which would otherwise name a field that is never described."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+
+    for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
+        schema = entry["schema"]
+        assert param not in schema["properties"], entry["type"]
+        assert param not in schema.get("required", []), entry["type"]
+
+    assert param not in client.get(reverse("api:v2:pipeline-options")).json()
 
 
 @pytest.mark.django_db()

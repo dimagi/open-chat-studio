@@ -16,15 +16,22 @@ OPTIONS_KEY_RENAMES = {
     "jinja_node": "prompt_variables",
 }
 
-# Option lists the API does not serve. Both hold the autocomplete entries the builder offers while
-# someone types an LLM or router prompt -- a dropdown's worth of names, with the node's real prompt
-# contract (which variables it accepts, what each holds) living in the param's own description.
+# Option lists the API does not serve. The autocomplete keys hold the entries the builder offers
+# while someone types an LLM or router prompt -- a dropdown's worth of names, with the node's real
+# prompt contract (which variables it accepts, what each holds) living in the param's own
+# description. The rest are the keys belonging to a param in `HIDDEN_PARAMS`.
 HIDDEN_OPTION_KEYS = frozenset(
     {
         "text_editor_autocomplete_vars_llm_node",
         "text_editor_autocomplete_vars_router_node",
+        "mcp_tools",
     }
 )
+
+# Node params the API neither describes nor offers values for. A param and its option key are
+# withheld together: an agent is told never to construct an option value, so a param served without
+# its list is one it cannot legally fill, and a list served without its param belongs to nothing.
+HIDDEN_PARAMS = frozenset({"mcp_tools"})
 
 # Params the builder renders with a bespoke widget rather than the generic `select`, so it declares
 # no `ui:optionsSource` for them. Their options key is the param name, as everywhere else.

@@ -72,8 +72,8 @@ class OptionSerializer(serializers.Serializer):
     value = OptionValueField(
         help_text=(
             "Write this into the node param. Opaque -- copy it verbatim and never construct one. "
-            "An integer for the model-backed keys, a string elsewhere; `mcp_tools` and "
-            "`custom_actions` values in particular are composite string identifiers."
+            "An integer for the model-backed keys, a string elsewhere; `custom_actions` values in "
+            "particular are composite string identifiers."
         )
     )
     label = serializers.CharField()
@@ -119,7 +119,6 @@ class PipelineOptionsSerializer(serializers.Serializer):
     )
     agent_tools = OptionSerializer(many=True, required=False)
     custom_actions = OptionSerializer(many=True, required=False)
-    mcp_tools = OptionSerializer(many=True, required=False)
     built_in_tools = serializers.DictField(
         child=OptionSerializer(many=True), required=False, help_text="Keyed by LLM provider type."
     )

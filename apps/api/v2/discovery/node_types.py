@@ -16,6 +16,7 @@ from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
     HIDDEN_OPTION_KEYS,
+    HIDDEN_PARAMS,
     IMPLIED_OPTION_KEYS,
     MUST_MATCH,
     OPTIONS_KEY_RENAMES,
@@ -40,12 +41,7 @@ def get_node_types() -> list[dict]:
             "type": schema["title"],
             "description": schema["description"],
             "outputs": _output_topology(schema),
-            "schema": {
-                key: value for key, value in schema.items() if not key.startswith("ui:") and key != "properties"
-            },
-        }
-        entry["schema"]["properties"] = {
-            name: _agent_property(name, prop) for name, prop in schema["properties"].items()
+            "schema": _agent_schema(schema),
         }
         if documentation_url := _documentation_url(schema):
             entry["documentation_url"] = documentation_url
@@ -100,6 +96,21 @@ def _output_topology(schema: dict) -> dict:
     if node_class is not None and issubclass(node_class, PipelineRouterNode):
         return PER_KEYWORD_OUTPUT
     return SINGLE_OUTPUT
+
+
+def _agent_schema(schema: dict) -> dict:
+    """The node's JSON Schema in agent vocabulary, with the params the API withholds taken out.
+
+    A hidden param has to leave ``required`` as well as ``properties`` -- a name required but never
+    described reads as a field the agent failed to receive rather than one it is not offered.
+    """
+    agent_schema = {key: value for key, value in schema.items() if not key.startswith("ui:") and key != "properties"}
+    agent_schema["properties"] = {
+        name: _agent_property(name, prop) for name, prop in schema["properties"].items() if name not in HIDDEN_PARAMS
+    }
+    if required := agent_schema.get("required"):
+        agent_schema["required"] = [name for name in required if name not in HIDDEN_PARAMS]
+    return agent_schema
 
 
 def _agent_property(name: str, prop: dict) -> dict:

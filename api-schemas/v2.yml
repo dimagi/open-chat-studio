@@ -1898,8 +1898,8 @@ components:
           - type: integer
           description: Write this into the node param. Opaque -- copy it verbatim
             and never construct one. An integer for the model-backed keys, a string
-            elsewhere; `mcp_tools` and `custom_actions` values in particular are composite
-            string identifiers.
+            elsewhere; `custom_actions` values in particular are composite string
+            identifiers.
         label:
           type: string
         type:
@@ -2033,10 +2033,6 @@ components:
           items:
             $ref: '#/components/schemas/Option'
         custom_actions:
-          type: array
-          items:
-            $ref: '#/components/schemas/Option'
-        mcp_tools:
           type: array
           items:
             $ref: '#/components/schemas/Option'
