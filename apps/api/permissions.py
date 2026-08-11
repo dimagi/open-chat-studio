@@ -214,6 +214,25 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
         return super().has_permission(request, view)
 
 
+class CanTriggerBotMessage(BasePermission):
+    """Sending a message to a participant as the bot is the API twin of the ``participants:trigger_bot``
+    UI view, which requires ``experiments.change_participant``. Gate the API on the same permission so a
+    role that cannot message a participant from the UI cannot do it through the API either.
+
+    ``has_perm`` resolves against the team the credential is scoped to (the auth layer calls
+    ``set_current_team``), and applies to every auth type — including API keys, which the OAuth scope
+    check alone does not gate.
+
+    Client-credentials (machine) tokens have no user, so authorization is delegated to the OAuth scope
+    (chatbots:interact), enforced by TokenHasOAuthScope.
+    """
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            return True
+        return bool(request.user and request.user.has_perm("experiments.change_participant"))
+
+
 def verify_hmac(view_func):
     """Match the HMAC signature in the request to the calculated HMAC using the request payload."""
 
