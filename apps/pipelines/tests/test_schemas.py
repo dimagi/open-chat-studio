@@ -3,7 +3,7 @@ import pathlib
 
 import pytest
 
-from apps.pipelines.node_options import get_node_schemas
+from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 BASE = pathlib.Path(__file__).parent / "node_schemas"
 

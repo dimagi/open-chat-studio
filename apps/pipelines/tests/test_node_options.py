@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 
-from apps.pipelines.node_options import (
+from apps.pipelines.nodes.node_metadata import (
     get_node_default_values,
     get_node_parameter_values,
     get_node_schemas,

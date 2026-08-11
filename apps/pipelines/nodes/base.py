@@ -430,7 +430,7 @@ def resolve_node_class(node_type: str) -> type[BasePipelineNode] | None:
     helper function, a class that isn't a node. A bare ``getattr`` would hand one of those to
     ``issubclass``/``model_validate``/instantiation and raise; here they all collapse to ``None``,
     which callers already report as an unknown type. The accepted set is exactly the one the editor
-    offers (see ``apps.pipelines.node_options.get_node_schemas``): concrete node classes only, so the
+    offers (see ``apps.pipelines.node_metadata.get_node_schemas``): concrete node classes only, so the
     two abstract bases are rejected as well.
     """
     from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→base
@@ -503,7 +503,7 @@ class UiSchema(BaseModel):
     enum_labels: list[str] | None = None
 
     # Use this with 'select' type fields to indicate where the options should come from
-    # See `apps.pipelines.node_options.get_node_parameter_values`
+    # See `apps.pipelines.node_metadata.get_node_parameter_values`
     options_source: OptionsSource | None = None
     flag_required: str | None = None
 

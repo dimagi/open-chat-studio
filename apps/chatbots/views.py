@@ -53,7 +53,7 @@ from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.exceptions import has_errors
-from apps.pipelines.node_options import (
+from apps.pipelines.nodes.node_metadata import (
     get_node_default_values,
     get_node_parameter_values,
     get_node_schemas,

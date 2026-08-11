@@ -23,7 +23,7 @@ from apps.pipelines.exceptions import MissingNodeDataError
 from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload, split_flow_data
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
-from apps.pipelines.node_options import (
+from apps.pipelines.nodes.node_metadata import (
     get_node_default_values,
     get_node_parameter_values,
     get_node_schemas,

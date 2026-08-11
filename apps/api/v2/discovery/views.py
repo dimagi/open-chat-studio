@@ -1,7 +1,7 @@
 """Team-level discovery endpoints for the chatbot write API.
 
 These tell an agent what it can build (`/pipeline/nodes/`) and which resource ids it may reference
-(`/pipeline/options/`). Both read the shared helpers in ``apps.pipelines.node_options`` and reshape
+(`/pipeline/options/`). Both read the shared helpers in ``apps.pipelines.node_metadata`` and reshape
 them -- the builder consumes those helpers raw, so every agent-facing transform lives in this
 package. See ADR-0051 for why the agent's view diverges from the builder's.
 """
@@ -17,8 +17,8 @@ from apps.api.permissions import DjangoModelPermissionsWithView
 from apps.experiments.models import SyntheticVoice
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
-from apps.pipelines.node_options import get_node_default_values, get_node_parameter_values
 from apps.pipelines.nodes.base import OptionsSource
+from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
@@ -202,10 +202,6 @@ class PipelineOptionsView(DiscoveryView):
         llm_provider_models = LlmProviderModel.objects.for_team(team)
         voice_providers = list(VoiceProvider.objects.filter(team=team))
 
-        # SyntheticVoice.service ("AWS", "Azure", ...) and VoiceProviderType ("aws", "azure", ...) differ
-        # only in case, so a plain `service__in` against the team's provider types matches nothing -- see
-        # the chatbot builder's `service__iexact` for the same pairing. Without a team-owned provider for
-        # a service, its voices are unreachable and must not be listed.
         reachable_services = {provider.type.lower() for provider in voice_providers}
         synthetic_voices = (
             SyntheticVoice.get_for_team(team, [])

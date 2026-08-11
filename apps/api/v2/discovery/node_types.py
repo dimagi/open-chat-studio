@@ -1,6 +1,6 @@
 """Reshaping the builder's node schemas into what an agent reads.
 
-Everything here is API-side: ``apps.pipelines.node_options`` keeps serving the builder its own
+Everything here is API-side: ``apps.pipelines.nodes.node_metadata`` keeps serving the builder its own
 vocabulary untouched.
 """
 
@@ -11,8 +11,8 @@ from functools import cache
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
-from apps.pipelines.node_options import get_node_schemas
 from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
+from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
     HIDDEN_OPTION_KEYS,

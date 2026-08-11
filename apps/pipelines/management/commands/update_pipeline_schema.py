@@ -3,7 +3,7 @@ import json
 from django.conf import settings
 from django.core.management import BaseCommand
 
-from apps.pipelines.node_options import get_node_schemas
+from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 
 class Command(BaseCommand):
