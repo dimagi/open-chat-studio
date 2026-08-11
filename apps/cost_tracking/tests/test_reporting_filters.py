@@ -185,6 +185,77 @@ class TestCostFilters:
 
         assert summary.total_cost == Decimal(0)
 
+    def test_tag_filter_ignores_cross_team_tag_links(self):
+        """The inconsistent-link shape: a CustomTaggedItem row carrying a
+        FOREIGN team_id whose tag is a local tag and whose object_id targets a
+        local chat. The link is not the reading team's, so it must not pull
+        the record into a tag-filtered read."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=session.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    def test_tag_filter_ignores_locally_recorded_link_with_foreign_team_tag_on_chat(self):
+        """The mirror inconsistent-link shape: a CustomTaggedItem row with a
+        LOCAL team_id, whose tag belongs to a FOREIGN team, targeting the
+        session's chat. The tag isn't the reading team's, so it must not
+        pull the record into a tag-filtered read."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=session.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[foreign_tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    def test_tag_filter_ignores_locally_recorded_link_with_foreign_team_tag_on_message(self):
+        """Same mirror shape as above, but the link targets a MESSAGE on the
+        session's chat rather than the chat itself - exercises `tag_on_msg`,
+        which a chat-targeted tag never reaches."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        message = ChatMessageFactory.create(chat=session.chat)
+        foreign_tag = TagFactory.create(team=foreign_team)
+        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[foreign_tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    def test_tag_filter_ignores_foreign_team_link_with_local_tag_on_message(self):
+        """The remaining inconsistent-link shape: a CustomTaggedItem row with
+        a FOREIGN team_id, whose tag IS local, attached to a MESSAGE rather
+        than the chat - exercises `tag_on_msg` in `_scoped_records`
+        specifically. `test_tag_filter_ignores_cross_team_tag_links` targets
+        the chat and never reaches it. The positive control for a local link
+        on a message is `test_cost_summary_filters_by_tag_on_message` above."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        message = ChatMessageFactory.create(chat=session.chat)
+        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=message)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
     def test_tag_filter_counts_chat_spend_only(self):
         """A tag-filtered read is per-entity attribution, so evaluation spend on
         the tagged session is excluded (ADR-0048)."""
