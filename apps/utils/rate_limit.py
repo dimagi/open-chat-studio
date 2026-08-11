@@ -9,7 +9,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from functools import wraps
+from functools import cache, wraps
 
 from django.conf import settings
 from django.core.cache import caches
@@ -58,9 +58,14 @@ def _cache():
     return caches[settings.RATE_LIMIT_CACHE_ALIAS]
 
 
+@cache
+def _parse_rate_cached(rate: str) -> tuple[int, int]:
+    return parse_rate(rate)
+
+
 def _scope_config(scope: str) -> tuple[int, int, bool]:
     config = settings.RATE_LIMITS[scope]
-    limit, window_seconds = parse_rate(config["rate"])
+    limit, window_seconds = _parse_rate_cached(config["rate"])
     return limit, window_seconds, config.get("fail_open", True)
 
 
@@ -75,18 +80,25 @@ def _count(cache, key: str, timeout: int) -> int:
 
 
 def check(scope: str, identity_type: str, identity: str, team_id: int | None = None) -> RateLimitResult:
-    limit, window_seconds, fail_open = _scope_config(scope)
     now = _now()
-    window_start = now - (now % window_seconds)
-    reset_seconds = window_start + window_seconds - now
-    key = f"rl:{scope}:{window_start}:{identity_type}:{identity}"
+    limit = window_seconds = fail_open = None
     try:
+        limit, window_seconds, fail_open = _scope_config(scope)
+        window_start = now - (now % window_seconds)
+        reset_seconds = window_start + window_seconds - now
+        key = f"rl:{scope}:{window_start}:{identity_type}:{identity}"
         count = _count(_cache(), key, timeout=window_seconds + 60)
+    except KeyError:
+        raise
     except Exception:
         logger.exception(
             "rate_limit.backend_error",
             extra={"scope": scope, "identity_type": identity_type},
         )
+        if limit is None:
+            # The configured rate itself could not be parsed, so there is no limit to
+            # enforce; allow the request regardless of the scope's fail_open setting.
+            return RateLimitResult(allowed=True, limit=0, remaining=0, reset_seconds=0, degraded=True)
         blocked = not fail_open and settings.RATE_LIMIT_ENFORCE
         return RateLimitResult(
             allowed=not blocked,

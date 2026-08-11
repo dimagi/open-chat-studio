@@ -654,11 +654,6 @@ CACHES = {
     },
 }
 
-if IS_TESTING:
-    # Use an in-process cache for tests: faster than Redis (no network round-trips) and
-    # naturally isolated per pytest-xdist worker, since each worker is a separate process.
-    CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
-
 # Rate limiting (#2140 / #2349). Counters live in a dedicated cache alias with short
 # socket timeouts so a hung Redis cannot stall request handling. Log-only until
 # RATE_LIMIT_ENFORCE is switched on.
@@ -677,7 +672,11 @@ CACHES["rate_limit"] = {
         "SOCKET_CONNECT_TIMEOUT": 0.5,
     },
 }
+
 if IS_TESTING:
+    # Use an in-process cache for tests: faster than Redis (no network round-trips) and
+    # naturally isolated per pytest-xdist worker, since each worker is a separate process.
+    CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
     CACHES["rate_limit"] = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "rate-limit",

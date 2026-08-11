@@ -146,7 +146,9 @@ def test_api_over_limit_logs_would_block_in_log_only_mode(experiment, caplog):
 @pytest.mark.django_db()
 def test_exempt_team_is_never_blocked(experiment):
     """The flag_ignore_rate_limiting flag bypasses enforcement."""
-    flag = get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG)
+    flag, _ = get_waffle_flag_model().objects.update_or_create(
+        name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": False}
+    )
     flag.teams.add(experiment.team)
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)

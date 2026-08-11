@@ -14,6 +14,7 @@ from apps.utils.rate_limit import check, client_ip, is_exempt
 
 class APIRateThrottle(BaseThrottle):
     scope = "api"
+    _wait = None
 
     def allow_request(self, request, view):
         if is_exempt(request):

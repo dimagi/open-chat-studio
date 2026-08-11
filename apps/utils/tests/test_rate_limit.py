@@ -122,6 +122,20 @@ def test_unknown_scope_raises():
         check("nonexistent", "team", "42")
 
 
+@override_settings(
+    RATE_LIMITS={"api": {"rate": "not-a-rate", "fail_open": True}},
+    RATE_LIMIT_ENFORCE=True,
+)
+def test_malformed_configured_rate_degrades_instead_of_raising(caplog):
+    """A typo'd RATE_LIMIT_* env var allows the request rather than raising for every caller."""
+    with caplog.at_level("ERROR", logger="ocs.rate_limit"):
+        result = check("api", "team", "42")
+    assert result.allowed
+    assert result.degraded
+    errors = [r for r in caplog.records if r.message == "rate_limit.backend_error"]
+    assert len(errors) == 1
+
+
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
 def test_over_limit_blocks_when_enforcing():
     """The request over the limit is refused with retry_after set."""
@@ -277,7 +291,9 @@ def test_exempt_flag_slugs_match():
 @pytest.mark.django_db()
 def test_is_exempt_for_flagged_team():
     """A team with the flag enabled is exempt; others are not."""
-    flag = get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG)
+    flag, _ = get_waffle_flag_model().objects.update_or_create(
+        name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": False}
+    )
     exempt_team = TeamFactory()
     other_team = TeamFactory()
     flag.teams.add(exempt_team)
@@ -293,7 +309,7 @@ def test_is_exempt_for_flagged_team():
 @pytest.mark.django_db()
 def test_is_exempt_for_everyone_acts_as_kill_switch():
     """Everyone-on disables rate limiting globally."""
-    get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG, everyone=True)
+    get_waffle_flag_model().objects.update_or_create(name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": True})
     request = RequestFactory().get("/")
     assert is_exempt(request)
 
@@ -343,7 +359,7 @@ def test_decorator_log_only_never_blocks(db):
 @pytest.mark.django_db()
 def test_decorator_skips_exempt_requests():
     """An exempt request is never counted or limited."""
-    get_waffle_flag_model().objects.create(name=RATE_LIMIT_EXEMPT_FLAG, everyone=True)
+    get_waffle_flag_model().objects.update_or_create(name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": True})
     for _ in range(5):
         response = _run_view(_request())
     assert response.status_code == 200

@@ -10,7 +10,7 @@ Issues #2140/#2349 require rate limiting across two enforcement surfaces: DRF AP
 
 ## Decision
 
-We will count in an in-house core (`apps/utils/rate_limit.py`): atomic fixed-window `INCR` with TTL against a dedicated Redis cache alias, consumed by a custom DRF throttle class and a plain-view decorator so both surfaces share one counter implementation, one keying scheme, and one response contract (`X-RateLimit-*` headers, 429 + `Retry-After` + `available_in` body). Scopes fail open on Redis errors (availability control); a scope can be marked fail-closed, a policy the planned `credentials` brute-force control will use. Enforcement is gated by `RATE_LIMIT_ENFORCE` (log-only first) and the `flag_ignore_rate_limiting` Waffle flag (per-team exemption; everyone-on is a global kill switch).
+We will count in an in-house core (`apps/utils/rate_limit.py`): atomic fixed-window `INCR` with TTL against a dedicated Redis cache alias, consumed by a custom DRF throttle class and a plain-view decorator so both surfaces share one counter implementation, one keying scheme, and one response contract (`X-RateLimit-*` headers, 429 + `Retry-After` + `available_in` body). Scopes fail open on Redis errors (availability control); a scope can be marked fail-closed, a policy the planned `credentials` brute-force control will use - a fail-closed scope only refuses requests when `RATE_LIMIT_ENFORCE` is on. Enforcement is gated by `RATE_LIMIT_ENFORCE` (log-only first) and the `flag_ignore_rate_limiting` Waffle flag (per-team exemption; everyone-on is a global kill switch).
 
 ## Consequences
 
