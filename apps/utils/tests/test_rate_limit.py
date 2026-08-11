@@ -8,6 +8,7 @@ import pytest
 from django.conf import settings
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
+from django.http import HttpResponse
 from django.http import JsonResponse as DjangoJsonResponse
 from django.test import RequestFactory, override_settings
 from waffle import get_waffle_flag_model
@@ -21,6 +22,7 @@ from apps.utils.rate_limit import (
     _scope_config,
     check,
     client_ip,
+    html_limited_response,
     is_exempt,
     parse_rate,
     rate_limited,
@@ -356,6 +358,59 @@ def test_decorator_skips_exempt_requests():
     assert "X-RateLimit-Limit" not in response.headers
 
 
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_key_fn_receives_the_views_url_kwargs(db):
+    """A key function can bucket on a path capture, not just the request."""
+    seen = {}
+
+    def key_fn(request, *args, **kwargs):
+        seen.update(kwargs)
+        return "channel", kwargs["channel_external_id"]
+
+    @rate_limited("api", key_fn=key_fn)
+    def view(request, channel_external_id):
+        return HttpResponse("ok")
+
+    request = RequestFactory().post("/")
+    response = view(request, channel_external_id="abc-123")
+
+    assert response.status_code == 200
+    assert seen == {"channel_external_id": "abc-123"}
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_browser_facing_views_render_the_error_page_over_the_limit(db):
+    """A visitor sees the site's error page rather than an API payload."""
+
+    @rate_limited("api", response_fn=html_limited_response)
+    def view(request):
+        return HttpResponse("ok")
+
+    run = RateLimitHeadersMiddleware(view)
+
+    for _ in range(3):
+        run(_request())
+
+    response = run(_request())
+
+    assert response.status_code == 429
+    assert response.headers["Content-Type"].startswith("text/html")
+    assert int(response.headers["Retry-After"]) > 0
+    assert b"Too many requests" in response.content
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_the_json_body_stays_the_default(db):
+    """API surfaces keep the pinned JSON contract when no renderer is named."""
+    for _ in range(3):
+        _run_view(_request())
+
+    response = _run_view(_request())
+
+    assert response.status_code == 429
+    assert json.loads(response.content)["detail"] == "Rate limit exceeded."
+
+
 def test_admin_api_scope_is_configured():
     """The admin_api scope is registered, parses, and fails open.
 
@@ -376,6 +431,19 @@ def test_widget_scope_is_configured():
     hold for any deployment rather than one deployment's numbers.
     """
     limit, window_seconds, fail_open = _scope_config("widget")
+
+    assert limit > 0
+    assert window_seconds > 0
+    assert fail_open is True
+
+
+def test_public_chat_scope_is_configured():
+    """The public_chat scope is registered, parses, and fails open.
+
+    The configured rate is env-overridable, so this asserts the properties that
+    hold for any deployment rather than one deployment's numbers.
+    """
+    limit, window_seconds, fail_open = _scope_config("public_chat")
 
     assert limit > 0
     assert window_seconds > 0

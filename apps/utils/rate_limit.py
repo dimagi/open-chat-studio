@@ -14,6 +14,7 @@ from functools import cache, wraps
 from django.conf import settings
 from django.core.cache import caches
 from django.http import JsonResponse
+from django.shortcuts import render
 from waffle import flag_is_active
 
 logger = logging.getLogger("ocs.rate_limit")
@@ -155,20 +156,29 @@ def is_exempt(request) -> bool:
     return bool(flag_is_active(request, RATE_LIMIT_EXEMPT_FLAG))
 
 
-def rate_limited(scope: str, key_fn=None):
+def json_limited_response(request, result: RateLimitResult):
+    return JsonResponse({"detail": "Rate limit exceeded.", "available_in": result.retry_after}, status=429)
+
+
+def html_limited_response(request, result: RateLimitResult):
+    """Renders the site's error page, for views a person reaches in a browser."""
+    return render(request, "429.html", status=429)
+
+
+def rate_limited(scope: str, key_fn=None, response_fn=None):
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
             if is_exempt(request):
                 return view_func(request, *args, **kwargs)
-            identity_type, identity = (key_fn or _ip_key)(request)
+            identity_type, identity = (key_fn or _ip_key)(request, *args, **kwargs)
             team = getattr(request, "team", None)
             result = check(scope, identity_type, identity, team_id=team.pk if team else None)
             request.rate_limit_result = result
             if not result.allowed:
                 # Retry-After comes from the headers middleware, which owns it on both
                 # this path and the DRF one.
-                return JsonResponse({"detail": "Rate limit exceeded.", "available_in": result.retry_after}, status=429)
+                return (response_fn or json_limited_response)(request, result)
             return view_func(request, *args, **kwargs)
 
         return wrapper
@@ -176,7 +186,7 @@ def rate_limited(scope: str, key_fn=None):
     return decorator
 
 
-def _ip_key(request) -> tuple[str, str]:
+def _ip_key(request, *args, **kwargs) -> tuple[str, str]:
     return "ip", client_ip(request)
 
 
