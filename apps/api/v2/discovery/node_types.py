@@ -26,6 +26,69 @@ from .contract import (
 )
 
 
+@cache
+def get_node_types() -> list[dict]:
+    """Node types reshaped for agent consumption.
+
+    Cached because the node classes are fixed at import time, so this is static per deploy. The
+    cache also captures ``DOCUMENTATION_BASE_URL``, which is deployment-static for the same reason;
+    a test that overrides it needs ``get_node_types.cache_clear()``.
+    """
+    node_types = []
+    for schema in _addable_schemas():
+        entry = {
+            "type": schema["title"],
+            "description": schema["description"],
+            "outputs": _output_topology(schema),
+            "schema": {
+                key: value for key, value in schema.items() if not key.startswith("ui:") and key != "properties"
+            },
+        }
+        entry["schema"]["properties"] = {
+            name: _agent_property(name, prop) for name, prop in schema["properties"].items()
+        }
+        if documentation_url := _documentation_url(schema):
+            entry["documentation_url"] = documentation_url
+        node_types.append(entry)
+    return node_types
+
+
+def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
+    """The option keys a single node type reads, or ``None`` if no such type is served."""
+    return _option_keys_by_type().get(node_type)
+
+
+def unknown_node_type(requested_type: str) -> NotFound:
+    """A 404 the agent can act on: why the name failed, and what it could have asked for instead."""
+    if (message := _deprecation_messages().get(requested_type)) is not None:
+        advice = f" {message}" if message else ""
+        detail = f"Node type '{requested_type}' is deprecated and can no longer be used.{advice}"
+    elif requested_type in _structural_types():
+        detail = (
+            f"Node type '{requested_type}' is managed by the server and cannot be created or "
+            f"configured. It may appear as a node's `type` in /inspect/ responses."
+        )
+    else:
+        detail = f"Unknown node type: {requested_type}"
+    return NotFound({"detail": detail, "valid_types": _valid_type_names()})
+
+
+def etag(payload) -> str:
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+    return f'W/"{digest[:32]}"'
+
+
+def _addable_schemas() -> list[dict]:
+    """The builder schemas behind the listed node types.
+
+    ``ui:can_add`` covers both the deprecated types and the structural ones the server manages (the
+    deprecation decorator forces it False). The endpoint answers "what can I build", so a type that
+    fails that question is not an entry with a flag on it -- it is absent, and ``unknown_node_type``
+    explains why if the agent asks directly.
+    """
+    return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
+
+
 def _output_topology(schema: dict) -> dict:
     """How edges leave this node type.
 
@@ -76,44 +139,6 @@ def _documentation_url(schema: dict) -> str | None:
     return f"{settings.DOCUMENTATION_BASE_URL}{link}"
 
 
-def _addable_schemas() -> list[dict]:
-    """The builder schemas behind the listed node types.
-
-    ``ui:can_add`` covers both the deprecated types and the structural ones the server manages (the
-    deprecation decorator forces it False). The endpoint answers "what can I build", so a type that
-    fails that question is not an entry with a flag on it -- it is absent, and ``unknown_node_type``
-    explains why if the agent asks directly.
-    """
-    return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
-
-
-@cache
-def get_node_types() -> list[dict]:
-    """Node types reshaped for agent consumption.
-
-    Cached because the node classes are fixed at import time, so this is static per deploy. The
-    cache also captures ``DOCUMENTATION_BASE_URL``, which is deployment-static for the same reason;
-    a test that overrides it needs ``get_node_types.cache_clear()``.
-    """
-    node_types = []
-    for schema in _addable_schemas():
-        entry = {
-            "type": schema["title"],
-            "description": schema["description"],
-            "outputs": _output_topology(schema),
-            "schema": {
-                key: value for key, value in schema.items() if not key.startswith("ui:") and key != "properties"
-            },
-        }
-        entry["schema"]["properties"] = {
-            name: _agent_property(name, prop) for name, prop in schema["properties"].items()
-        }
-        if documentation_url := _documentation_url(schema):
-            entry["documentation_url"] = documentation_url
-        node_types.append(entry)
-    return node_types
-
-
 @cache
 def _option_keys_by_type() -> dict[str, frozenset[str]]:
     """The `/pipeline/options/` keys each node type's params can draw from.
@@ -135,11 +160,6 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)
     return keys_by_type
-
-
-def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
-    """The option keys a single node type reads, or ``None`` if no such type is served."""
-    return _option_keys_by_type().get(node_type)
 
 
 @cache
@@ -168,23 +188,3 @@ def _structural_types() -> frozenset[str]:
 
 def _valid_type_names() -> list[str]:
     return [node["type"] for node in get_node_types()]
-
-
-def unknown_node_type(requested_type: str) -> NotFound:
-    """A 404 the agent can act on: why the name failed, and what it could have asked for instead."""
-    if (message := _deprecation_messages().get(requested_type)) is not None:
-        advice = f" {message}" if message else ""
-        detail = f"Node type '{requested_type}' is deprecated and can no longer be used.{advice}"
-    elif requested_type in _structural_types():
-        detail = (
-            f"Node type '{requested_type}' is managed by the server and cannot be created or "
-            f"configured. It may appear as a node's `type` in /inspect/ responses."
-        )
-    else:
-        detail = f"Unknown node type: {requested_type}"
-    return NotFound({"detail": detail, "valid_types": _valid_type_names()})
-
-
-def etag(payload) -> str:
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
-    return f'W/"{digest[:32]}"'
