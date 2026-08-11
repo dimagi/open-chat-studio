@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins
@@ -38,4 +39,11 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
 
     def get_queryset(self):
         # Only return working experiments
-        return Experiment.objects.filter(team=self.request.team).filter(working_version__isnull=True)
+        return (
+            Experiment.objects.filter(team=self.request.team)
+            .filter(working_version__isnull=True)
+            # `Experiment.Meta.ordering` is by name, which all versions share, so the DB is free to
+            # return them in any order. Order by version number for a stable response.
+            .prefetch_related(Prefetch("versions", queryset=Experiment.objects.order_by("version_number")))
+            .order_by("name", "id")
+        )
