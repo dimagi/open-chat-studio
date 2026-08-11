@@ -61,80 +61,40 @@ class TestTagFilterTeamScoping:
         assert [e.id for e in querysets["experiments"]] == [experiment.id]
         assert [p.id for p in querysets["participants"]] == [session.participant_id]
 
-    def test_cross_team_tag_link_does_not_qualify_a_local_chat(self):
-        """The inconsistent-link shape: a CustomTaggedItem row carrying a
-        FOREIGN team_id, whose tag is a local tag and whose object_id targets
-        a local chat. The link is not the reading team's, so it must not make
-        the session, experiment, or participant match."""
+    @pytest.mark.parametrize(
+        ("failing_conjunct", "target"),
+        [
+            pytest.param("link-team", "chat", id="link-team-conjunct-on-chat"),
+            pytest.param("tag-team", "chat", id="tag-team-conjunct-on-chat"),
+            pytest.param("tag-team", "msg", id="tag-team-conjunct-on-msg"),
+            pytest.param("link-team", "msg", id="link-team-conjunct-on-msg"),
+        ],
+    )
+    def test_link_failing_one_scoping_conjunct_qualifies_nothing(self, failing_conjunct, target):
+        """Every tag site scopes links with two conjuncts, `team_id` and
+        `tag__team_id`, applied on a chat leg and a message leg
+        (`chat_tag_exists_pair` for sessions, `tagged_conversation_exists_pair`
+        for experiments and participants). Each case builds a link where
+        exactly one conjunct fails on one leg while the other three
+        predicates hold; the legs filter on their own content_type, so a
+        chat-targeted link never reaches the `_on_msg` predicates and vice
+        versa. The three assertions cover the three querysets that consume
+        the predicates. Positive controls:
+        `test_own_teams_tag_link_matches` / `test_own_team_link_on_a_message_matches`."""
         team = TeamFactory.create()
         foreign_team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
         session = _active_session(team, experiment)
-        tag = TagFactory.create(team=team)
-        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=session.chat)
-
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
-
-        assert list(querysets["sessions"]) == []
-        assert list(querysets["experiments"]) == []
-        assert list(querysets["participants"]) == []
-
-    def test_locally_recorded_link_with_foreign_team_tag_does_not_qualify_a_chat(self):
-        """The mirror inconsistent-link shape: a CustomTaggedItem row with a
-        LOCAL team_id, whose tag belongs to a FOREIGN team, targeting a local
-        chat. The tag isn't the reading team's, so it must not make the
-        session, experiment, or participant match."""
-        team = TeamFactory.create()
-        foreign_team = TeamFactory.create()
-        experiment = ExperimentFactory.create(team=team)
-        session = _active_session(team, experiment)
-        foreign_tag = TagFactory.create(team=foreign_team)
-        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=session.chat)
-
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[foreign_tag.id])
-
-        assert list(querysets["sessions"]) == []
-        assert list(querysets["experiments"]) == []
-        assert list(querysets["participants"]) == []
-
-    def test_locally_recorded_link_with_foreign_team_tag_does_not_qualify_a_message(self):
-        """Same mirror shape as above, but the link targets a MESSAGE rather
-        than the chat - exercises the `_on_msg` predicates (`tag_on_msg`,
-        `exp_tag_on_msg`, `part_tag_on_msg`), which a chat-targeted tag never
-        reaches."""
-        team = TeamFactory.create()
-        foreign_team = TeamFactory.create()
-        experiment = ExperimentFactory.create(team=team)
-        session = _active_session(team, experiment)
-        message = ChatMessage.objects.create(
-            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+        link_team = foreign_team if failing_conjunct == "link-team" else team
+        tag = TagFactory.create(team=foreign_team if failing_conjunct == "tag-team" else team)
+        link_target = (
+            ChatMessage.objects.create(
+                chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
+            )
+            if target == "msg"
+            else session.chat
         )
-        foreign_tag = TagFactory.create(team=foreign_team)
-        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
-
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[foreign_tag.id])
-
-        assert list(querysets["sessions"]) == []
-        assert list(querysets["experiments"]) == []
-        assert list(querysets["participants"]) == []
-
-    def test_foreign_team_link_with_local_tag_does_not_qualify_via_a_message(self):
-        """The remaining inconsistent-link shape: a CustomTaggedItem row with
-        a FOREIGN team_id, whose tag IS local, attached to a MESSAGE rather
-        than the chat. A chat-targeted foreign-team_id link (see
-        `test_cross_team_tag_link_does_not_qualify_a_local_chat`) never
-        reaches `tag_on_msg`/`exp_tag_on_msg`/`part_tag_on_msg`, since those
-        subqueries filter on `content_type=message_content_type` - this is
-        the test that does."""
-        team = TeamFactory.create()
-        foreign_team = TeamFactory.create()
-        experiment = ExperimentFactory.create(team=team)
-        session = _active_session(team, experiment)
-        message = ChatMessage.objects.create(
-            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
-        )
-        tag = TagFactory.create(team=team)
-        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=message)
+        CustomTaggedItemFactory.create(team=link_team, tag=tag, target=link_target)
 
         querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
 
@@ -169,7 +129,17 @@ class TestMessageTagFilterTeamScoping:
     predicate. It now uses a team-scoped `Exists` against `CustomTaggedItem`
     for the message's own tags, matching the other sites' shape."""
 
-    def test_cross_team_link_with_local_tag_on_a_local_message_does_not_qualify(self):
+    @pytest.mark.parametrize(
+        "failing_conjunct",
+        [
+            pytest.param("link-team", id="link-team-conjunct"),
+            pytest.param("tag-team", id="tag-team-conjunct"),
+        ],
+    )
+    def test_link_failing_one_scoping_conjunct_does_not_qualify_a_message(self, failing_conjunct):
+        """Each case builds a message-targeted link where exactly one of the
+        two scoping conjuncts fails while the other holds. Positive control:
+        `test_own_teams_link_on_a_message_matches`."""
         team = TeamFactory.create()
         foreign_team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
@@ -177,25 +147,11 @@ class TestMessageTagFilterTeamScoping:
         message = ChatMessage.objects.create(
             chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
         )
-        tag = TagFactory.create(team=team)
-        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=message)
+        link_team = foreign_team if failing_conjunct == "link-team" else team
+        tag = TagFactory.create(team=foreign_team if failing_conjunct == "tag-team" else team)
+        CustomTaggedItemFactory.create(team=link_team, tag=tag, target=message)
 
         querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[tag.id])
-
-        assert list(querysets["messages"]) == []
-
-    def test_local_link_with_foreign_team_tag_on_a_local_message_does_not_qualify(self):
-        team = TeamFactory.create()
-        foreign_team = TeamFactory.create()
-        experiment = ExperimentFactory.create(team=team)
-        session = _active_session(team, experiment)
-        message = ChatMessage.objects.create(
-            chat=session.chat, message_type=ChatMessageType.HUMAN, content="tagged", created_at=_MID
-        )
-        foreign_tag = TagFactory.create(team=foreign_team)
-        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
-
-        querysets = filtered_querysets(team, start_date=_START, end_date=_END, tag_ids=[foreign_tag.id])
 
         assert list(querysets["messages"]) == []
 

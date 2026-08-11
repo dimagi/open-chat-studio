@@ -169,7 +169,9 @@ class TestCostFilters:
     def test_tag_filter_ignores_other_teams_tag_links(self):
         """Filtering by a foreign team's tag id matches nothing: the outer
         queryset is team-scoped, and a generic tag link only references the
-        chat it was created for, so it can never point at this team's chats."""
+        chat it was created for, so it can never point at this team's chats.
+        Separate from the conjunct case list below: the target here is
+        foreign, so this pins outer-queryset scoping, not a link conjunct."""
         team = TeamFactory.create()
         other_team = TeamFactory.create()
         other_exp = ExperimentFactory.create(team=other_team)
@@ -185,71 +187,33 @@ class TestCostFilters:
 
         assert summary.total_cost == Decimal(0)
 
-    def test_tag_filter_ignores_cross_team_tag_links(self):
-        """The inconsistent-link shape: a CustomTaggedItem row carrying a
-        FOREIGN team_id whose tag is a local tag and whose object_id targets a
-        local chat. The link is not the reading team's, so it must not pull
-        the record into a tag-filtered read."""
+    @pytest.mark.parametrize(
+        ("failing_conjunct", "target"),
+        [
+            pytest.param("link-team", "chat", id="link-team-conjunct-on-chat"),
+            pytest.param("tag-team", "chat", id="tag-team-conjunct-on-chat"),
+            pytest.param("tag-team", "msg", id="tag-team-conjunct-on-msg"),
+            pytest.param("link-team", "msg", id="link-team-conjunct-on-msg"),
+        ],
+    )
+    def test_tag_filter_rejects_links_failing_one_scoping_conjunct(self, failing_conjunct, target):
+        """`chat_tag_exists_pair` scopes tag links with two conjuncts,
+        `team_id` and `tag__team_id`, applied on each of its two legs
+        (`tag_on_chat`, `tag_on_msg`). Each case builds a link where exactly
+        one conjunct fails on one leg while the other three predicates hold,
+        so deleting any one predicate turns exactly its named case red. Each
+        leg filters on its own content_type, which keeps the mapping 1:1 - a
+        chat-targeted link never reaches `tag_on_msg`, and vice versa.
+        Positive controls: `test_cost_summary_filters_by_tag_on_chat` /
+        `_on_message`."""
         team = TeamFactory.create()
         foreign_team = TeamFactory.create()
         exp = ExperimentFactory.create(team=team)
         session = ExperimentSessionFactory.create(team=team, experiment=exp)
-        tag = TagFactory.create(team=team)
-        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=session.chat)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
-
-        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
-
-        assert summary.total_cost == Decimal(0)
-
-    def test_tag_filter_ignores_locally_recorded_link_with_foreign_team_tag_on_chat(self):
-        """The mirror inconsistent-link shape: a CustomTaggedItem row with a
-        LOCAL team_id, whose tag belongs to a FOREIGN team, targeting the
-        session's chat. The tag isn't the reading team's, so it must not
-        pull the record into a tag-filtered read."""
-        team = TeamFactory.create()
-        foreign_team = TeamFactory.create()
-        exp = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(team=team, experiment=exp)
-        foreign_tag = TagFactory.create(team=foreign_team)
-        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=session.chat)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
-
-        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[foreign_tag.id]))
-
-        assert summary.total_cost == Decimal(0)
-
-    def test_tag_filter_ignores_locally_recorded_link_with_foreign_team_tag_on_message(self):
-        """Same mirror shape as above, but the link targets a MESSAGE on the
-        session's chat rather than the chat itself - exercises `tag_on_msg`,
-        which a chat-targeted tag never reaches."""
-        team = TeamFactory.create()
-        foreign_team = TeamFactory.create()
-        exp = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(team=team, experiment=exp)
-        message = ChatMessageFactory.create(chat=session.chat)
-        foreign_tag = TagFactory.create(team=foreign_team)
-        CustomTaggedItemFactory.create(team=team, tag=foreign_tag, target=message)
-        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
-
-        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[foreign_tag.id]))
-
-        assert summary.total_cost == Decimal(0)
-
-    def test_tag_filter_ignores_foreign_team_link_with_local_tag_on_message(self):
-        """The remaining inconsistent-link shape: a CustomTaggedItem row with
-        a FOREIGN team_id, whose tag IS local, attached to a MESSAGE rather
-        than the chat - exercises `tag_on_msg` in `_scoped_records`
-        specifically. `test_tag_filter_ignores_cross_team_tag_links` targets
-        the chat and never reaches it. The positive control for a local link
-        on a message is `test_cost_summary_filters_by_tag_on_message` above."""
-        team = TeamFactory.create()
-        foreign_team = TeamFactory.create()
-        exp = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(team=team, experiment=exp)
-        tag = TagFactory.create(team=team)
-        message = ChatMessageFactory.create(chat=session.chat)
-        CustomTaggedItemFactory.create(team=foreign_team, tag=tag, target=message)
+        link_team = foreign_team if failing_conjunct == "link-team" else team
+        tag = TagFactory.create(team=foreign_team if failing_conjunct == "tag-team" else team)
+        link_target = ChatMessageFactory.create(chat=session.chat) if target == "msg" else session.chat
+        CustomTaggedItemFactory.create(team=link_team, tag=tag, target=link_target)
         _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
 
         summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
