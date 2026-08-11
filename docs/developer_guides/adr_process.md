@@ -5,7 +5,7 @@ View the list of [Architecture Decisions](https://developers.openchatstudio.com/
 
 Refer to [`agents/adr_process`](../agents/adr_process.md) for the detailed process AI agents follow to create ADRs from design documents.
 
-There are skills (`/extract-adrs`, `/extract-adrs-ci`) that extract ADRs from design docs on request or automatically in CI, so you should not need to write an ADR from scratch, but here are the steps:
+There is an [AI agent skill that extracts ADRs](#manually-extract-adrs-with-ai-agents) from design docs on request or automatically in CI, so you should not need to write an ADR from scratch, but here are the steps:
 
 ## Writing an ADR by Hand
 
@@ -13,3 +13,9 @@ There are skills (`/extract-adrs`, `/extract-adrs-ci`) that extract ADRs from de
 2. Fill your ADR details into your new file.
 3. Append a row to the `docs/adr/index.md` table.
 4. Add a nav entry under `Architecture → Decisions` in `mkdocs.yml`.
+
+## Manually extract ADRs with AI agent
+
+If you have a design document that you want to work with the AI agent to extract the ADRs for your design, then use the `/extract-adrs <source-doc>` skill at `.claude/skills/extract-adrs/SKILL.md`.
+
+It walks you through identifying candidate decisions, drafting each ADR, wiring up cross-references, and updating `mkdocs.yml` plus `docs/adr/index.md`. The skill never commits — review the diff yourself.
