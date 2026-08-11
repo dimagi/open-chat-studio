@@ -292,6 +292,7 @@ def test_type_filter_returns_a_single_element_array(team):
     [
         pytest.param("Frobnicator", id="unknown-type"),
         pytest.param("BooleanNode", id="deprecated-type-is-not-discoverable"),
+        pytest.param("AssistantNode", id="deprecated-type-whose-builder-advice-is-markup"),
     ],
 )
 def test_type_filter_404s(team, node_type):
@@ -299,7 +300,8 @@ def test_type_filter_404s(team, node_type):
     response = client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type})
 
     assert response.status_code == 404
-    # Guards the shape `NodeTypeNotFoundSerializer` documents in the OpenAPI schema.
+    # Guards the shape `NodeTypeNotFoundSerializer` documents in the OpenAPI schema. Exact equality is
+    # the point: a deprecated type must not smuggle extra keys in alongside.
     assert sorted(response.json()) == ["detail", "valid_types"]
 
 
@@ -315,14 +317,11 @@ def test_404_body_lists_the_types_the_agent_could_have_asked_for(team):
 
 
 @pytest.mark.django_db()
-def test_deprecated_type_is_reported_as_deprecated_not_unknown(team):
-    """ "Unknown node type: BooleanNode" sends the agent looking for a typo. The type exists and has a
-    replacement -- saying so is the difference between a retry and a dead end."""
+def test_deprecated_type_is_reported_as_unknown(team):
     client = ApiTestClient(team.members.first(), team)
     detail = client.get(reverse("api:v2:pipeline-nodes"), {"type": "BooleanNode"}).json()["detail"]
 
-    assert "deprecated" in detail.lower()
-    assert "Router" in detail
+    assert detail == "Unknown node type: BooleanNode"
 
 
 @pytest.mark.django_db()

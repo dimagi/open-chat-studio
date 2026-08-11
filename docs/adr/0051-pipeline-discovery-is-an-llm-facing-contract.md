@@ -50,8 +50,10 @@ the payload what the prose was explaining:
 - **The list is exactly the types an agent may create.** Deprecated types and the server-managed
   structural ones (`StartNode`, `EndNode`, `Passthrough`) are absent rather than present behind a
   `can_add: false` flag — the endpoint answers "what can I build", so the answer is the list.
-- **Option keys are snake_case** and errors carry a reason: a 404 lists the valid types, and says
-  whether the name was deprecated, server-managed, or genuinely unknown.
+- **Option keys are snake_case** and errors carry a reason: a 404 lists the valid types, and
+  distinguishes server-managed from unknown. Deprecation gets no branch — a deprecated type reads as
+  unknown. Nothing the API serves reads the builder's deprecation vocabulary, which is rendered markup
+  once a node declares a `docs_link`, and `valid_types` is the same answer either way.
 - **A prompt variable is served with a description, not a value.** The builder emits these as
   `{"label": v, "value": v}`, where the two are always identical. A human reading an autocomplete
   dropdown infers what `temp_state` holds; a client cannot, so all three lists carry
@@ -96,6 +98,12 @@ snake_case after the param that reads it, and both the builder and the API read 
   payload for most nodes.
 - A type read from an `/inspect/` response may not be in the list. Resolving it is a 404, which is
   why that body has to distinguish server-managed from unknown rather than lumping them together.
+- That distinction is not extended to deprecated types, and the gap is accepted knowingly: an existing
+  pipeline may still contain a deprecated node — deprecation only sets `can_add: false` — and
+  `/inspect/` reports its `type` verbatim, so a client can read `AssistantNode` off one endpoint and be
+  told by the other that no such type exists. `valid_types` still carries the corrective answer. The
+  structural types keep their branch because they appear in every pipeline's `/inspect/` output, where
+  a deprecated node is rare and getting rarer.
 
 ## Alternatives considered
 
