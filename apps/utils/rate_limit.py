@@ -4,6 +4,7 @@ Log-only unless settings.RATE_LIMIT_ENFORCE is True.
 """
 
 import hashlib
+import ipaddress
 import logging
 import re
 import time
@@ -104,3 +105,24 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
         )
         return RateLimitResult(allowed=True, limit=limit, remaining=0, reset_seconds=reset_seconds)
     return RateLimitResult(allowed=True, limit=limit, remaining=remaining, reset_seconds=reset_seconds)
+
+
+def client_ip(request) -> str:
+    proxy_count = settings.RATE_LIMIT_TRUSTED_PROXY_COUNT
+    ip = request.META.get("REMOTE_ADDR", "")
+    if proxy_count > 0:
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if len(hops) >= proxy_count:
+            ip = hops[-proxy_count]
+    return _bucket_ip(ip)
+
+
+def _bucket_ip(ip: str) -> str:
+    try:
+        parsed = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if isinstance(parsed, ipaddress.IPv6Address):
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False))
+    return ip

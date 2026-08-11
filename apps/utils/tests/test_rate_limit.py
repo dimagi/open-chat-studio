@@ -6,9 +6,9 @@ from unittest import mock
 import pytest
 from django.conf import settings
 from django.core.cache import caches
-from django.test import override_settings
+from django.test import RequestFactory, override_settings
 
-from apps.utils.rate_limit import check, parse_rate
+from apps.utils.rate_limit import check, client_ip, parse_rate
 
 TINY_LIMITS = {"api": {"rate": "3/5m", "fail_open": True}}
 
@@ -190,3 +190,50 @@ def test_expired_key_between_add_and_incr_recovers():
         result = check("api", "team", "42")
     assert result.allowed
     assert result.remaining == 2
+
+
+def _request(remote_addr="203.0.113.9", forwarded_for=None):
+    headers = {"REMOTE_ADDR": remote_addr}
+    if forwarded_for is not None:
+        headers["HTTP_X_FORWARDED_FOR"] = forwarded_for
+    return RequestFactory().get("/", **headers)
+
+
+def test_client_ip_ignores_forwarded_header_without_trusted_proxies(settings):
+    """X-Forwarded-For is client-controlled unless a proxy is trusted."""
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 0
+    request = _request(remote_addr="203.0.113.9", forwarded_for="198.51.100.1")
+    assert client_ip(request) == "203.0.113.9"
+
+
+def test_client_ip_reads_forwarded_header_behind_trusted_proxy(settings):
+    """With N trusted proxies the client is the Nth-from-right XFF entry."""
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 2
+    request = _request(remote_addr="10.0.0.2", forwarded_for="198.51.100.1, 10.0.0.1")
+    assert client_ip(request) == "198.51.100.1"
+
+
+def test_client_ip_short_forwarded_header_falls_back_to_remote_addr(settings):
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 2
+    request = _request(remote_addr="10.0.0.2", forwarded_for="198.51.100.1")
+    assert client_ip(request) == "10.0.0.2"
+
+
+def test_client_ip_buckets_ipv6_by_64(settings):
+    """A single IPv6 user cannot rotate within their /64 prefix."""
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 0
+    first = client_ip(_request(remote_addr="2001:db8:1:2::aaaa"))
+    second = client_ip(_request(remote_addr="2001:db8:1:2:ffff::1"))
+    assert first == second == "2001:db8:1:2::/64"
+
+
+def test_client_ip_passes_through_unparseable_values(settings):
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 0
+    assert client_ip(_request(remote_addr="unix-socket")) == "unix-socket"
+
+
+def test_client_ip_treats_negative_proxy_count_as_untrusted(settings):
+    """A misconfigured negative proxy count never reads X-Forwarded-For."""
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = -1
+    request = _request(remote_addr="203.0.113.9", forwarded_for="198.51.100.1, 10.0.0.1")
+    assert client_ip(request) == "203.0.113.9"
