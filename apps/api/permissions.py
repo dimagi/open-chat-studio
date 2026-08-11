@@ -214,6 +214,52 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
         return super().has_permission(request, view)
 
 
+PARTICIPANT_READ_PERMISSIONS = ["experiments.view_participant", "experiments.view_participantdata"]
+PARTICIPANT_WRITE_PERMISSIONS = [
+    "experiments.add_participant",
+    "experiments.change_participant",
+    "experiments.add_participantdata",
+    "experiments.change_participantdata",
+]
+
+
+class ParticipantModelPermissions(BasePermission):
+    """Model permission gate for the participants endpoint.
+
+    ``DjangoModelPermissions`` derives its permissions from a single queryset, but this endpoint
+    reads and writes both ``Participant`` and ``ParticipantData``, so the required permissions are
+    listed explicitly. They mirror the UI views that do the same work: the participant export view
+    for reads and ``apps.participants.views.IMPORT_PERMISSIONS`` (the import view performs the same
+    upsert) for writes. Writing a participant's schedules is part of that upsert and is covered by
+    ``experiments.change_participant``, which is what the UI requires to cancel a participant
+    schedule or to trigger a bot message to a participant.
+    """
+
+    perms_map = {
+        "GET": PARTICIPANT_READ_PERMISSIONS,
+        "HEAD": PARTICIPANT_READ_PERMISSIONS,
+        # OPTIONS returns endpoint metadata only, matching DjangoModelPermissions.perms_map
+        "OPTIONS": [],
+        "POST": PARTICIPANT_WRITE_PERMISSIONS,
+    }
+
+    def get_required_permissions(self, method):
+        if method not in self.perms_map:
+            raise exceptions.MethodNotAllowed(method)
+        return self.perms_map[method]
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            # Machine token: no user, so no membership-derived model permissions. Authorization is
+            # delegated to the OAuth scope classes.
+            return True
+
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        return request.user.has_perms(self.get_required_permissions(request.method))
+
+
 def verify_hmac(view_func):
     """Match the HMAC signature in the request to the calculated HMAC using the request payload."""
 
