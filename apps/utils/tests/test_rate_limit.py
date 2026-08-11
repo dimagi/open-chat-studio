@@ -243,24 +243,20 @@ def _request(remote_addr="203.0.113.9", forwarded_for=None):
     return RequestFactory().get("/", **headers)
 
 
-def test_client_ip_ignores_forwarded_header_without_trusted_proxies(settings):
-    """X-Forwarded-For is client-controlled unless a proxy is trusted."""
-    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 0
-    request = _request(remote_addr="203.0.113.9", forwarded_for="198.51.100.1")
-    assert client_ip(request) == "203.0.113.9"
-
-
-def test_client_ip_reads_forwarded_header_behind_trusted_proxy(settings):
-    """With N trusted proxies the client is the Nth-from-right XFF entry."""
-    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 2
-    request = _request(remote_addr="10.0.0.2", forwarded_for="198.51.100.1, 10.0.0.1")
-    assert client_ip(request) == "198.51.100.1"
-
-
-def test_client_ip_short_forwarded_header_falls_back_to_remote_addr(settings):
-    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 2
-    request = _request(remote_addr="10.0.0.2", forwarded_for="198.51.100.1")
-    assert client_ip(request) == "10.0.0.2"
+@pytest.mark.parametrize(
+    ("proxy_count", "remote_addr", "forwarded_for", "expected"),
+    [
+        pytest.param(0, "203.0.113.9", "198.51.100.1", "203.0.113.9", id="untrusted-xff-ignored"),
+        pytest.param(2, "10.0.0.2", "198.51.100.1, 10.0.0.1", "198.51.100.1", id="trusted-proxy-reads-xff"),
+        pytest.param(2, "10.0.0.2", "198.51.100.1", "10.0.0.2", id="short-xff-falls-back"),
+        pytest.param(-1, "203.0.113.9", "198.51.100.1, 10.0.0.1", "203.0.113.9", id="negative-count-untrusted"),
+    ],
+)
+def test_client_ip_proxy_trust(settings, proxy_count, remote_addr, forwarded_for, expected):
+    """X-Forwarded-For is client-controlled unless N proxies are trusted; the client is
+    then the Nth-from-right entry, falling back to REMOTE_ADDR."""
+    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = proxy_count
+    assert client_ip(_request(remote_addr=remote_addr, forwarded_for=forwarded_for)) == expected
 
 
 def test_client_ip_buckets_ipv6_by_64(settings):
@@ -274,13 +270,6 @@ def test_client_ip_buckets_ipv6_by_64(settings):
 def test_client_ip_passes_through_unparseable_values(settings):
     settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = 0
     assert client_ip(_request(remote_addr="unix-socket")) == "unix-socket"
-
-
-def test_client_ip_treats_negative_proxy_count_as_untrusted(settings):
-    """A misconfigured negative proxy count never reads X-Forwarded-For."""
-    settings.RATE_LIMIT_TRUSTED_PROXY_COUNT = -1
-    request = _request(remote_addr="203.0.113.9", forwarded_for="198.51.100.1, 10.0.0.1")
-    assert client_ip(request) == "203.0.113.9"
 
 
 def test_exempt_flag_slugs_match():
