@@ -27,19 +27,19 @@ def _clear_rate_limit_cache():
         pytest.param(
             channel_external_id_key,
             {"channel_external_id": "8b1f0c2e-0000-0000-0000-000000000001"},
-            ("channel", "8b1f0c2e-0000-0000-0000-000000000001"),
+            ("telegram_channel", "8b1f0c2e-0000-0000-0000-000000000001"),
             id="telegram-keys-on-channel",
         ),
         pytest.param(
             experiment_id_key,
             {"experiment_id": "8b1f0c2e-0000-0000-0000-000000000002"},
-            ("channel", "8b1f0c2e-0000-0000-0000-000000000002"),
+            ("turn_experiment", "8b1f0c2e-0000-0000-0000-000000000002"),
             id="turn-keys-on-experiment",
         ),
         pytest.param(
             sureadhere_tenant_key,
             {"sureadhere_tenant_id": "42"},
-            ("channel", "42"),
+            ("sureadhere_tenant", "42"),
             id="sureadhere-keys-on-tenant",
         ),
     ],
@@ -85,9 +85,14 @@ def test_telegram_webhook_buckets_per_channel(client):
 @pytest.mark.django_db()
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
 def test_log_only_mode_serves_over_limit_webhook_deliveries(client):
-    """The shipped default never drops a provider delivery."""
+    """The shipped default never drops a provider delivery, even once the identity
+    has exhausted its allowance: counting still happens, it is simply not enforced.
+    """
     url = reverse("channels:new_telegram_message", args=["8b1f0c2e-0000-0000-0000-000000000003"])
     for _ in range(4):
         response = client.post(url, data="{}", content_type="application/json")
 
     assert response.status_code != 429
+    result = response.wsgi_request.rate_limit_result
+    assert result.allowed is True
+    assert result.remaining == 0
