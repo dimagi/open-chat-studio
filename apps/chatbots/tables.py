@@ -26,19 +26,32 @@ def _show_chat_button(request, record):
     return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
 
-def _version_label(session: ExperimentSession) -> str:
+def _version_label(session: ExperimentSession, version_number: int) -> str:
     """Label for the version badge on a session's chat widget.
 
     Version 0 is the "published version" alias rather than a real version number. Sessions are
     always attached to the working version (``start_experiment_session`` rejects anything else),
     so ``session.experiment.version_number`` is the working version's number and needs no query.
     """
-    version_number = session.get_experiment_version_number()
     if version_number == Experiment.DEFAULT_VERSION_NUMBER:
         return "Published Version"
     if version_number == session.experiment.version_number:
         return f"Working Version (v{version_number})"
     return f"Version {version_number}"
+
+
+def _chat_version(session: ExperimentSession, version_number: int) -> Experiment:
+    """The experiment row whose settings the session's chat runs with.
+
+    ``file_uploads_enabled`` is versioned, so the working row's value can disagree with the snapshot
+    the session actually targets (same reason ``single_chatbot_home`` passes ``published_version``
+    to its launcher). Archived versions are excluded from the default manager, so an old session
+    pointing at one can't be resolved — fall back to the working row rather than dropping the button.
+    """
+    try:
+        return session.experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        return session.experiment
 
 
 @dataclasses.dataclass
@@ -55,14 +68,15 @@ class ContinueChatAction(actions.Action):
 
     def get_context(self, request, record, value):
         ctxt = super().get_context(request, record, value)
+        version_number = record.get_experiment_version_number()
         ctxt.update(
             {
                 "chatbot_id": record.experiment.public_id,
                 "session_external_id": record.external_id,
                 "session_token": issue_session_token(record),
-                "version_number": record.get_experiment_version_number(),
-                "version_label": _version_label(record),
-                "allow_attachments": record.experiment.file_uploads_enabled,
+                "version_number": version_number,
+                "version_label": _version_label(record, version_number),
+                "allow_attachments": _chat_version(record, version_number).file_uploads_enabled,
             }
         )
         return ctxt

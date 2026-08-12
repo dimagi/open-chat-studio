@@ -495,6 +495,75 @@ def test_continue_chat_action_labels_the_session_version(session_version, expect
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("session_version", "expected_attachments"),
+    [
+        pytest.param(0, "true", id="published-alias-follows-snapshot"),
+        pytest.param(1, "true", id="older-version-follows-snapshot"),
+        pytest.param(2, "false", id="working-version-follows-working-row"),
+    ],
+)
+def test_continue_chat_action_uses_the_session_versions_attachment_setting(
+    session_version, expected_attachments, client, team_with_users
+):
+    """``file_uploads_enabled`` is versioned, so the working row can disagree with the snapshot the
+    session is chatting to. The widget must follow the version the session actually targets."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, file_uploads_enabled=True)
+    experiment.create_new_version(make_default=True)
+    # Working version diverges after publishing v1.
+    experiment.file_uploads_enabled = False
+    experiment.save()
+    experiment.refresh_from_db()
+    assert experiment.version_number == 2, "working version should have moved on after snapshotting v1"
+
+    session = ExperimentSessionFactory.create(
+        team=team,
+        experiment=experiment,
+        participant__team=team,
+        participant__user=user,
+        status=SessionStatus.ACTIVE,
+    )
+    session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, session_version)
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    content = client.get(url).content.decode()
+
+    assert f'data-allow-attachments="{expected_attachments}"' in content
+
+
+@pytest.mark.django_db()
+def test_continue_chat_action_falls_back_when_the_session_version_is_archived(client, team_with_users):
+    """An archived version is invisible to the default manager, so resolving it raises. The button
+    still has to render — fall back to the working row's setting."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, file_uploads_enabled=True)
+    version = experiment.create_new_version()
+    experiment.refresh_from_db()
+
+    session = ExperimentSessionFactory.create(
+        team=team,
+        experiment=experiment,
+        participant__team=team,
+        participant__user=user,
+        status=SessionStatus.ACTIVE,
+    )
+    session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, version.version_number)
+    version.is_archived = True
+    version.save()
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert 'data-allow-attachments="true"' in response.content.decode()
+
+
+@pytest.mark.django_db()
 def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
     """The chat dropdown launches the embedded widget rather than posting to start_authed_web_session."""
     team = team_with_users
