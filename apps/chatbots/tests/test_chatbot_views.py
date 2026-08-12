@@ -514,6 +514,27 @@ def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_published_version_launcher_uses_the_published_versions_settings(client, team_with_users):
+    """``file_uploads_enabled`` is versioned, so the published snapshot can disagree with the
+    working row. The version-0 launcher must follow the snapshot it actually chats to."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, owner=user, file_uploads_enabled=True)
+    experiment.create_new_version(make_default=True)
+    # Working version diverges after publishing.
+    experiment.file_uploads_enabled = False
+    experiment.save()
+    experiment.refresh_from_db()
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    content = client.get(url).content.decode()
+
+    assert "openChatWidget(0, {allowAttachments: true })" in content
+    assert f"openChatWidget({experiment.version_number}, {{allowAttachments: false }})" in content
+
+
+@pytest.mark.django_db()
 @pytest.mark.parametrize("fire_end_event", [True, False])
 @patch("apps.events.tasks.enqueue_static_triggers")
 def test_end_chatbot_session_view(enqueue_static_triggers_task, fire_end_event, client, team_with_users):
