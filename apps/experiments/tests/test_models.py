@@ -1135,3 +1135,11 @@ def test_experiment_get_absolute_url_published_version(team_with_users):
     base_url = reverse("chatbots:single_chatbot_home", args=[get_slug_for_team(team.id), experiment.id])
     expected = f"{base_url}?version_id={snapshot.version_number}#versions"
     assert snapshot.get_absolute_url() == expected
+
+
+@pytest.mark.django_db()
+def test_experiment_may_have_no_owner():
+    """A chatbot created by a machine token has no user behind it (apps/api/v2/write)."""
+    experiment = ExperimentFactory.create(owner=None)
+    experiment.refresh_from_db()
+    assert experiment.owner is None
