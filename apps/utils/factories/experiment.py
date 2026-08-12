@@ -121,6 +121,13 @@ class ExperimentSessionFactory(factory.django.DjangoModelFactory):
         "apps.utils.factories.channels.ExperimentChannelFactory", team=factory.SelfAttribute("..team")
     )
     platform = factory.LazyAttribute(lambda obj: obj.experiment_channel.platform)
+    # The model default is SETUP, the state a session occupies only until its
+    # first message: the consent flow moves it to PENDING and then ACTIVE, and
+    # a chatbot without conversational consent activates it straight away. A
+    # session resting at SETUP therefore has no conversation in it, so tests
+    # that give a session messages want ACTIVE. Pass `status` explicitly to
+    # build a pre-conversation session.
+    status = models.SessionStatus.ACTIVE
 
 
 class ChatAttachmentFactory(factory.django.DjangoModelFactory):

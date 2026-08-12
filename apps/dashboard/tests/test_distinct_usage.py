@@ -21,6 +21,7 @@ from django.utils import timezone
 from apps.annotations.models import Tag
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments.models import SessionStatus
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import (
     ExperimentFactory,
@@ -48,6 +49,7 @@ class TestDistinctSessionDuplication:
             experiment=experiment,
             participant=participant,
             team=team,
+            status=SessionStatus.ACTIVE,
         )
 
         # Create 3 messages in the date range for the same session
@@ -169,7 +171,7 @@ class TestDistinctAggregationIssues:
 
     def test_session_analytics_no_duplicate_sessions(self):
         DashboardCache.objects.all().delete()
-        session = ExperimentSessionFactory.create()
+        session = ExperimentSessionFactory.create(status=SessionStatus.ACTIVE)
 
         # Create 3 messages at noon to avoid midnight date boundary issues
         now = timezone.now().replace(hour=12, minute=0, second=0, microsecond=0)
@@ -203,6 +205,7 @@ class TestDistinctAggregationIssues:
             experiment=experiment,
             participant=participant,
             team=team,
+            status=SessionStatus.ACTIVE,
         )
 
         # Create multiple messages
@@ -238,6 +241,7 @@ class TestDistinctAggregationIssues:
             experiment=experiment,
             participant=participant,
             team=team,
+            status=SessionStatus.ACTIVE,
         )
 
         # Create exactly 5 messages
@@ -288,6 +292,7 @@ class TestDistinctComplexFiltering:
             participant=participant,
             team=team,
             experiment_channel=channel,
+            status=SessionStatus.ACTIVE,
         )
 
         # Add messages
@@ -386,6 +391,7 @@ class TestDistinctQueryOptimization:
             experiment=experiment,
             participant=participant,
             team=team,
+            status=SessionStatus.ACTIVE,
         )
 
         # Add messages
@@ -499,6 +505,7 @@ class TestDistinctRegressionCases:
                         experiment=experiment,
                         participant=participant,
                         team=team,
+                        status=SessionStatus.ACTIVE,
                     )
                     sessions.append(session)
 
@@ -549,6 +556,7 @@ class TestDistinctRegressionCases:
             experiment=experiment,
             participant=participant,
             team=team,
+            status=SessionStatus.ACTIVE,
         )
 
         for i in range(4):

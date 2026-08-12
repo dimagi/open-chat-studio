@@ -9,16 +9,14 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Subquery, Sum
+from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
 
-from apps.annotations.models import CustomTaggedItem
-from apps.chat.models import Chat, ChatMessage
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
+from apps.usage_metrics.filters import chat_tag_exists_pair
 
 logger = logging.getLogger("ocs.cost_tracking")
 
@@ -206,29 +204,9 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
     if filters.platform_names:
         qs = qs.filter(session__platform__in=filters.platform_names)
     if filters.tag_ids:
-        # Exists() rather than join+distinct, matching the dashboard's tag filter.
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        message_content_type = ContentType.objects.get_for_model(ChatMessage)
-        tag_on_chat = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=chat_content_type,
-                object_id=OuterRef("session__chat_id"),
-                tag_id__in=filters.tag_ids,
-            )
-        )
-        tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id__in=Subquery(
-                    ChatMessage.objects.filter(chat=OuterRef(OuterRef("session__chat_id"))).values("id")
-                ),
-                tag_id__in=filters.tag_ids,
-            )
-        )
+        # The same chat-or-message match as the dashboard's tag filter, from
+        # its single definition in apps.usage_metrics.
+        tag_on_chat, tag_on_msg = chat_tag_exists_pair(team, filters.tag_ids, "session__chat_id")
         qs = qs.annotate(_tag_on_chat=tag_on_chat, _tag_on_msg=tag_on_msg).filter(
             Q(_tag_on_chat=True) | Q(_tag_on_msg=True)
         )
@@ -259,25 +237,33 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
     period_q = Q(timestamp__gte=start, timestamp__lt=end)
     previous_q = Q(timestamp__gte=previous_start, timestamp__lt=start)
 
-    agg = _scoped_records(team, filters).aggregate(
-        total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
-        previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
-        exact=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        estimated=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
-        # Rows that got recorded but the resolver couldn't price (no matching
-        # PricingRule). Excludes UNKNOWN-confidence rows because those have
-        # their own counter. Distinct row counter, not a sum - these rows
-        # contribute $0 to total_cost.
-        unpriced_rows=Count("id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)),
+    # Bound the scan to the two periods the aggregates below actually read.
+    # Without it this scans the team's whole UsageRecord history on every load.
+    agg = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=previous_start, timestamp__lt=end)
+        .aggregate(
+            total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
+            previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
+            exact=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            estimated=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
+            # Rows that got recorded but the resolver couldn't price (no matching
+            # PricingRule). Excludes UNKNOWN-confidence rows because those have
+            # their own counter. Distinct row counter, not a sum - these rows
+            # contribute $0 to total_cost.
+            unpriced_rows=Count(
+                "id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)
+            ),
+        )
     )
 
     return CostSummary(
