@@ -223,6 +223,20 @@ paths:
                     - value: 1
                       label: Prod OpenAI
                       type: openai
+                    llm_provider_model_id:
+                    - value: 5
+                      label: gpt-4o
+                      type: openai
+                      max_token_limit: 128000
+                    voice_provider_id:
+                    - value: 2
+                      label: Prod Polly
+                      type: aws
+                    synthetic_voice_id:
+                    - value: 11
+                      label: Joanna (English)
+                      type: aws
+                      provider_id: 2
                     source_material:
                     - value: 3
                       label: Returns policy
@@ -232,6 +246,12 @@ paths:
                     collection_index:
                     - value: 9
                       label: Support KB (Remote)
+                    agent_tools:
+                    - value: one-off-reminder
+                      label: One-off Reminder
+                    custom_actions:
+                    - value: 4:getOrderStatus
+                      label: 'Orders API: Look up an order'
                     built_in_tools:
                       openai:
                       - value: web-search
@@ -244,10 +264,6 @@ paths:
                           label: Allowed Domains
                           helpText: Only search these domains. Separate entries with
                             newlines.
-                    voice_provider_id:
-                    - value: 2
-                      label: Prod Polly
-                      type: aws
                     template_variables:
                     - label: input
                       description: The text passed into this node from the preceding
@@ -262,8 +278,8 @@ paths:
                     default_llm_provider:
                       llm_provider_id: 1
                       llm_provider_model_id: 5
-                  summary: A flat option list, a nested built-in-tools block, and
-                    the provider defaults.
+                  summary: Every key the endpoint serves, for a team that has one
+                    of each resource.
           description: ''
         '404':
           content:

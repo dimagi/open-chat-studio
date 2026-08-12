@@ -126,6 +126,45 @@ class PipelineNodesView(DiscoveryView):
         return response
 
 
+# The documented response sample. Kept whole rather than inline so a test can hold it to the
+# serializer -- a key the endpoint serves but the sample omits reads as a key that doesn't exist.
+PIPELINE_OPTIONS_EXAMPLE = {
+    "llm_provider_id": [{"value": 1, "label": "Prod OpenAI", "type": "openai"}],
+    "llm_provider_model_id": [{"value": 5, "label": "gpt-4o", "type": "openai", "max_token_limit": 128000}],
+    "voice_provider_id": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
+    "synthetic_voice_id": [{"value": 11, "label": "Joanna (English)", "type": "aws", "provider_id": 2}],
+    "source_material": [{"value": 3, "label": "Returns policy"}],
+    "collection": [{"value": 7, "label": "Policy docs"}],
+    "collection_index": [{"value": 9, "label": "Support KB (Remote)"}],
+    "agent_tools": [{"value": "one-off-reminder", "label": "One-off Reminder"}],
+    "custom_actions": [{"value": "4:getOrderStatus", "label": "Orders API: Look up an order"}],
+    "built_in_tools": {"openai": [{"value": "web-search", "label": "Web Search"}]},
+    "tool_config": {
+        "anthropic": {
+            "web-search": [
+                {
+                    "name": "allowed_domains",
+                    "type": "expandable_text",
+                    "label": "Allowed Domains",
+                    "helpText": "Only search these domains. Separate entries with newlines.",
+                }
+            ]
+        }
+    },
+    "template_variables": [{"label": "input", "description": "The text passed into this node from the preceding one."}],
+    "llm_prompt_variables": [
+        {
+            "label": "source_material",
+            "description": "The full text of the source material chosen in `source_material_id`.",
+        }
+    ],
+    "router_prompt_variables": [
+        {"label": "session_state", "description": "State that survives for the whole session."}
+    ],
+    "default_llm_provider": {"llm_provider_id": 1, "llm_provider_model_id": 5},
+}
+
+
 class PipelineOptionsView(DiscoveryView):
     @extend_schema(
         operation_id="pipeline_options",
@@ -165,46 +204,8 @@ class PipelineOptionsView(DiscoveryView):
         examples=[
             OpenApiExample(
                 name="PipelineOptions",
-                summary="A flat option list, a nested built-in-tools block, and the provider defaults.",
-                value={
-                    "llm_provider_id": [{"value": 1, "label": "Prod OpenAI", "type": "openai"}],
-                    "source_material": [{"value": 3, "label": "Returns policy"}],
-                    "collection": [{"value": 7, "label": "Policy docs"}],
-                    "collection_index": [{"value": 9, "label": "Support KB (Remote)"}],
-                    "built_in_tools": {"openai": [{"value": "web-search", "label": "Web Search"}]},
-                    "tool_config": {
-                        "anthropic": {
-                            "web-search": [
-                                {
-                                    "name": "allowed_domains",
-                                    "type": "expandable_text",
-                                    "label": "Allowed Domains",
-                                    "helpText": "Only search these domains. Separate entries with newlines.",
-                                }
-                            ]
-                        }
-                    },
-                    "voice_provider_id": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
-                    "template_variables": [
-                        {
-                            "label": "input",
-                            "description": "The text passed into this node from the preceding one.",
-                        }
-                    ],
-                    "llm_prompt_variables": [
-                        {
-                            "label": "source_material",
-                            "description": "The full text of the source material chosen in `source_material_id`.",
-                        }
-                    ],
-                    "router_prompt_variables": [
-                        {
-                            "label": "session_state",
-                            "description": "State that survives for the whole session.",
-                        }
-                    ],
-                    "default_llm_provider": {"llm_provider_id": 1, "llm_provider_model_id": 5},
-                },
+                summary="Every key the endpoint serves, for a team that has one of each resource.",
+                value=PIPELINE_OPTIONS_EXAMPLE,
                 response_only=True,
             )
         ],

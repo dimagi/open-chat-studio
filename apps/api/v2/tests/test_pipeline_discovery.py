@@ -2,7 +2,8 @@ import pytest
 from django.urls import reverse
 
 from apps.api.v2.discovery.node_types import _property, option_keys_for_node_type
-from apps.api.v2.discovery.views import PipelineOptionsView
+from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
+from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE, PipelineOptionsView
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import (
@@ -573,6 +574,12 @@ def test_a_node_type_that_references_nothing_scopes_to_an_empty_object(team_with
 
     assert response.status_code == 200
     assert response.json() == {}
+
+
+def test_the_documented_example_carries_every_key_the_serializer_declares():
+    """A reader takes the response sample for the whole payload, so a key the sample omits reads as
+    a key the endpoint doesn't serve."""
+    assert list(PIPELINE_OPTIONS_EXAMPLE) == list(PipelineOptionsSerializer().fields)
 
 
 @pytest.mark.django_db()
