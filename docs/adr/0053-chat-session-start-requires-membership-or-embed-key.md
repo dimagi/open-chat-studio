@@ -1,4 +1,4 @@
-# ADR-0052: Starting a chat session requires team membership or the embed key
+# ADR-0053: Starting a chat session requires team membership or the embed key
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 

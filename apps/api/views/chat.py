@@ -240,7 +240,7 @@ def _resolve_embed_key_channel(request, experiment) -> ExperimentChannel | None:
 def _check_start_session_access(request, experiment, embed_key_channel, version_number) -> Response | None:
     """A 403 response if this caller may not start the session they asked for, else None.
 
-    ADR-0052: being logged in to OCS is not, on its own, access to every chatbot. A
+    ADR-0053: being logged in to OCS is not, on its own, access to every chatbot. A
     session-authenticated caller needs either team membership or the chatbot's embed key — the
     same proof an anonymous embedder must present. The key path is what keeps the site help
     widget working, since its users are logged in but are not members of the support bot's team.
@@ -274,7 +274,7 @@ def _get_requested_version(experiment, version_number):
 def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
     """Return the ExperimentChannel that owns this session.
 
-    ADR-0052: a widget's own channel owns the session whenever the request carries that widget's
+    ADR-0053: a widget's own channel owns the session whenever the request carries that widget's
     embed key, whether the key authenticated the request (an anonymous embed) or merely
     accompanied it (the site help widget, where a Django session cookie authenticates first).
     Attribution therefore tracks the widget, not the authenticator, so one widget cannot produce

@@ -133,7 +133,7 @@ class SessionAccessPermission(BasePermission):
             # even if the session was (mis)configured with session_token_required=False.
             return level != WidgetAuthLevel.SESSION_TOKEN
 
-        # ADR-0052: a Django session cookie preempts EmbeddedWidgetAuthentication, so a
+        # ADR-0053: a Django session cookie preempts EmbeddedWidgetAuthentication, so a
         # same-origin widget's embed key never reaches `request.auth`. Honour a key that
         # rode along with another authenticator, under the same channel and origin checks
         # as the branch above — otherwise the site help widget could start a session on an

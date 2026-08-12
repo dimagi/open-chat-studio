@@ -205,7 +205,7 @@ def test_embed_key_for_other_channel_denied(api_client, experiment):
 
 @pytest.mark.django_db()
 def test_embed_key_riding_along_with_a_session_cookie_grants_access(api_client, experiment):
-    """ADR-0052: the site help widget is cookie-authenticated, so its embed key never reaches
+    """ADR-0053: the site help widget is cookie-authenticated, so its embed key never reaches
     `request.auth`. An EMBED_KEY channel must still accept it, or the widget starts a session and
     is then denied every follow-up request."""
     experiment.participant_allowlist = ["someone-else@example.com"]
