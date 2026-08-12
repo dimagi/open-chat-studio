@@ -33,7 +33,7 @@
         </div>
       {% endif %}
     </div>
-    
+
     <div class="max-w-5xl mt-4 border rounded-2xl">
       {% include "participants/partials/participant_summary.html" %}
     </div>
@@ -76,4 +76,6 @@
       </div>
     </dialog>
   {% endif %}
+  {# The session tables on this page render Continue Chat buttons, which need ocsContinueSessionChat. #}
+  {% include "chatbots/components/session_chat_widget_launcher.html" %}
 {% endblock app %}
