@@ -1,9 +1,11 @@
 import pytest
 from django.urls import reverse
+from rest_framework import serializers
 
 from apps.api.v2.discovery.node_types import _property, option_keys_for_node_type
 from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
 from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE, PipelineOptionsView
+from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import (
@@ -31,6 +33,25 @@ def team_with_resources(db):
     CollectionFactory.create(
         team=team, name="Policy docs", is_index=False, llm_provider=None, embedding_provider_model=None
     )
+    return team
+
+
+@pytest.fixture()
+def team_with_every_resource(team_with_resources):
+    """One entry in every option list, so a shape assertion has something to look at in each."""
+    team = team_with_resources
+    CollectionFactory.create(
+        team=team,
+        name="Support KB",
+        is_index=True,
+        is_remote_index=True,
+        llm_provider=None,
+        embedding_provider_model=None,
+    )
+    CustomActionFactory.create(team=team, name="Orders API")
+    # One voice tied to the team's provider and one of the shared AWS voices, which carry no provider.
+    SyntheticVoiceFactory.create(name="Joanna", service="AWS", voice_provider=team.voiceprovider_set.first())
+    SyntheticVoiceFactory.create(name="Matthew", service="AWS")
     return team
 
 
@@ -580,6 +601,40 @@ def test_the_documented_example_carries_every_key_the_serializer_declares():
     """A reader takes the response sample for the whole payload, so a key the sample omits reads as
     a key the endpoint doesn't serve."""
     assert list(PIPELINE_OPTIONS_EXAMPLE) == list(PipelineOptionsSerializer().fields)
+
+
+def _documented_option_shapes():
+    """Every key holding a list of options, and the serializer documenting one entry of it."""
+    shapes = {}
+    for key, field in PipelineOptionsSerializer().fields.items():
+        if isinstance(field, serializers.DictField):
+            field = field.child  # `built_in_tools` nests its lists under the provider type
+        entry = getattr(field, "child", None)
+        if isinstance(entry, serializers.Serializer):
+            shapes[key] = entry
+    return shapes
+
+
+@pytest.mark.django_db()
+def test_every_option_list_documents_the_fields_it_serves(team_with_every_resource):
+    """The lists share no single option shape -- `type` belongs to the provider-backed ones,
+    `provider_id` to `synthetic_voice_id`, `max_token_limit` to `llm_provider_model_id` -- so one
+    shape documented for all of them puts fields on lists that will never carry them."""
+    value_types = {serializers.IntegerField: int, serializers.CharField: str}
+    client = ApiTestClient(team_with_every_resource.members.first(), team_with_every_resource)
+    options = client.get(reverse("api:v2:pipeline-options")).json()
+
+    for key, documented in _documented_option_shapes().items():
+        served = options[key]
+        entries = [entry for group in served.values() for entry in group] if isinstance(served, dict) else served
+        assert entries, f"{key} came back empty, so it holds the docs to nothing"
+
+        optional = {name for name, field in documented.fields.items() if not field.required}
+        assert {name for entry in entries for name in entry} == set(documented.fields), key
+        for entry in entries:
+            assert set(documented.fields) - set(entry) <= optional, (key, entry)
+            if "value" in documented.fields:
+                assert isinstance(entry["value"], value_types[type(documented.fields["value"])]), (key, entry)
 
 
 @pytest.mark.django_db()
