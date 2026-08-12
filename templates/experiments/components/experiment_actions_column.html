@@ -1,11 +1,11 @@
 {% if record.is_editable %}
   <a class="btn btn-sm"
-     href="{% url type|add:':edit' record.team.slug record.id %}" title="Edit">
+     href="{% url 'chatbots:edit' record.team.slug record.id %}" title="Edit">
     <i class="fa-solid fa-pencil"></i>
   </a>
 {% else %}
   <a class="btn btn-sm"
-     href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
+     href="{% url 'chatbots:edit' record.team.slug record.id %}" title="View">
     <i class="fa-solid fa-eye"></i>
   </a>
 {% endif %}

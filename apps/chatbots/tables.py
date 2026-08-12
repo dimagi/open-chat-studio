@@ -99,7 +99,6 @@ class ChatbotTable(tables.Table):
     )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
-        extra_context={"type": "chatbots"},
     )
 
     class Meta:
