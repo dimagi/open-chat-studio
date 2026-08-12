@@ -225,6 +225,21 @@ def _issue_or_opt_out_session_token(session, channel):
     return _opt_out_session_token(session)
 
 
+def _may_start_session(request, is_team_member, embed_key_channel) -> bool:
+    """Whether this caller may start a session against the chatbot at all.
+
+    ADR-0052: being logged in to OCS is not, on its own, access to every chatbot. A
+    session-authenticated caller needs either team membership or the chatbot's embed key — the
+    same proof an anonymous embedder must present. The key path is what keeps the site help
+    widget working, since its users are logged in but are not members of the support bot's team.
+
+    Anonymous callers are unaffected; the permission classes are the only gate on that path.
+    """
+    if not request.user.is_authenticated:
+        return True
+    return is_team_member or embed_key_channel is not None
+
+
 def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
     """Return the ExperimentChannel that owns this session.
 
@@ -351,11 +366,7 @@ def chat_start_session(request):
 
     is_team_member = request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
 
-    # ADR-0052: being logged in to OCS is not, on its own, access to every chatbot. A
-    # session-authenticated caller needs either team membership or the chatbot's embed key — the
-    # same proof an anonymous embedder must present. The key path is what keeps the site help
-    # widget working, since its users are logged in but are not members of the support bot's team.
-    if request.user.is_authenticated and not is_team_member and embed_key_channel is None:
+    if not _may_start_session(request, is_team_member, embed_key_channel):
         return Response(
             {"error": "You do not have access to this chatbot"},
             status=status.HTTP_403_FORBIDDEN,
