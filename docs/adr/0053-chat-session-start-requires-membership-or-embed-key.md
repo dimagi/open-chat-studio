@@ -33,7 +33,8 @@ We will treat being logged in as identity, not as access to every chatbot.
 - Attribution follows the widget rather than the viewer, so a support-team member and an ordinary user on the same page produce one channel and one participant identity, not two.
 - Help-widget participants move from `platform=api` to `platform=embedded_widget`. Because `Participant` is keyed on `(team, platform, identifier)`, existing users get a second participant record and their prior conversations stay under the old one.
 - The support bot's widget channel must list the OCS host in `allowed_domains` in every environment, or the help widget cannot start a session. The admin configuration form refuses a chatbot without a widget channel, but cannot check the domain.
-- Any future same-origin embed of an OCS chatbot must carry its embed key *if it leans on the viewer's session cookie*; that cookie alone is no longer enough.
+- A same-origin embed inside OCS may still run on the session cookie alone, as long as its viewers are members of the chatbot's team. `templates/chatbots/single_chatbot_home.html` is exactly that — no `embed-key`, and it picks a version through `openChatWidget(...)`, which only a member may do anyway. The site help widget is the outlier that needs a key, because it renders for every logged-in user regardless of team. An embed whose audience is not guaranteed to be team members must carry the key.
+- Embeds that attach to an already-started session by passing `session-id` and `session-token` — `chatbots/chat/web_chat.html` and `chatbots/components/session_chat_widget_launcher.html` — never reach `chat_start_session`, so nothing here applies to them. Their access is ADR-0039's proof-of-possession, not this ADR's.
 
 ## Alternatives considered
 
