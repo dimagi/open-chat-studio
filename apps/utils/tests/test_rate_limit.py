@@ -463,6 +463,19 @@ def test_webhook_scope_is_configured():
     assert fail_open is True
 
 
+def test_credentials_scope_is_configured_fail_closed():
+    """The credentials scope is registered, parses, and is the one fail-closed scope.
+
+    The configured rate is env-overridable, so this asserts the properties that
+    hold for any deployment rather than one deployment's numbers.
+    """
+    limit, window_seconds, fail_open = _scope_config("credentials")
+
+    assert limit > 0
+    assert window_seconds > 0
+    assert fail_open is False
+
+
 def test_middleware_skips_degraded_results(db):
     """Backend-failure responses carry no headers (no counter data behind them)."""
 
