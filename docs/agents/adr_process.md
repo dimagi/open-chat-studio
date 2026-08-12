@@ -15,6 +15,8 @@ Design docs produced by the brainstorming skill (`docs/design/`, `docs/superpowe
 
 When you finish a design doc and ship the work, flip `status` from `active` to `stable`, then run the extraction skill.
 
+ADRs do not carry this field. They are the extraction output rather than a source, and record status with the pill defined in `docs/adr/_template.md`.
+
 ## Creating an ADR
 
 Use the `/extract-adrs <source-doc>` skill to extract ADRs from a stable design doc, or see [Writing an ADR by Hand](../developer_guides/adr_process.md) to author one directly.
