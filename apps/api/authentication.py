@@ -86,14 +86,35 @@ class EmbeddedWidgetAuthentication(authentication.BaseAuthentication):
         return "X-Embed-Key"
 
 
-def get_embed_key_channel(request, experiment) -> ExperimentChannel | None:
-    """Return the widget channel of `experiment` that this request's X-Embed-Key proves access to.
+def embed_key_authorizes_channel(request, channel: ExperimentChannel | None) -> bool:
+    """Whether this request's X-Embed-Key proves access to `channel`.
 
     `EmbeddedWidgetAuthentication` only runs when no earlier authenticator matched, so a caller
     that also has a Django session cookie never authenticates as the channel — which is exactly
     the site help widget, embedded in OCS for a logged-in user. This runs the same key and origin
-    checks as that class plus `WidgetDomainPermission`, so a view can treat a valid embed key as
-    authorization no matter which class authenticated the request.
+    checks as that class plus `WidgetDomainPermission`, so a view or permission class can treat a
+    valid embed key as authorization no matter which class authenticated the request.
+
+    Takes the channel rather than looking it up, so callers that already hold one (a session's
+    `experiment_channel`, say) spend no query and are not tied to the channel's experiment being
+    the working version.
+    """
+    embed_key = request.headers.get("X-Embed-Key")
+    if not embed_key or channel is None:
+        return False
+    if channel.platform != ChannelPlatform.EMBEDDED_WIDGET:
+        return False
+    if embed_key != channel.extra_data.get("widget_token"):
+        return False
+
+    origin_domain = extract_domain_from_headers(request)
+    if not origin_domain:
+        return False
+    return validate_domain(origin_domain, channel.extra_data.get("allowed_domains", []))
+
+
+def get_embed_key_channel(request, experiment) -> ExperimentChannel | None:
+    """Return the widget channel of `experiment` that this request's X-Embed-Key proves access to.
 
     Returns None (rather than raising) for every failure mode; the caller decides the response.
     """
@@ -101,17 +122,13 @@ def get_embed_key_channel(request, experiment) -> ExperimentChannel | None:
     if not embed_key:
         return None
 
-    channel = ExperimentChannel.objects.filter(
-        experiment=experiment,
-        platform=ChannelPlatform.EMBEDDED_WIDGET,
-        extra_data__widget_token=embed_key,
-    ).first()
-    if channel is None:
-        return None
-
-    origin_domain = extract_domain_from_headers(request)
-    if not origin_domain:
-        return None
-    if not validate_domain(origin_domain, channel.extra_data.get("allowed_domains", [])):
-        return None
-    return channel
+    channel = (
+        ExperimentChannel.objects.select_related("experiment", "team")
+        .filter(
+            experiment=experiment,
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            extra_data__widget_token=embed_key,
+        )
+        .first()
+    )
+    return channel if embed_key_authorizes_channel(request, channel) else None

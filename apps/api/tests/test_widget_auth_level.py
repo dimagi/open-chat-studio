@@ -16,6 +16,7 @@ from apps.channels.models import ChannelPlatform, WidgetAuthLevel
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 WIDGET_TOKEN = "test_widget_token_123456789012"
 
@@ -200,6 +201,28 @@ def test_embed_key_for_other_channel_denied(api_client, experiment):
         HTTP_ORIGIN="https://b.example.com",
     )
     assert allowed.status_code == 200
+
+
+@pytest.mark.django_db()
+def test_embed_key_riding_along_with_a_session_cookie_grants_access(api_client, experiment):
+    """ADR-0052: the site help widget is cookie-authenticated, so its embed key never reaches
+    `request.auth`. An EMBED_KEY channel must still accept it, or the widget starts a session and
+    is then denied every follow-up request."""
+    experiment.participant_allowlist = ["someone-else@example.com"]
+    experiment.save(update_fields=["participant_allowlist"])
+    channel = _widget_channel(experiment, WidgetAuthLevel.EMBED_KEY)
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, experiment_channel=channel, session_token_required=False
+    )
+    user = TeamWithUsersFactory.create().members.first()
+    api_client.login(username=user.email, password="password")
+
+    allowed = api_client.get(poll_url(session), HTTP_X_EMBED_KEY=WIDGET_TOKEN, HTTP_ORIGIN="https://example.com")
+    assert allowed.status_code == 200
+
+    # the ride-along key is held to the same origin check
+    denied = api_client.get(poll_url(session), HTTP_X_EMBED_KEY=WIDGET_TOKEN, HTTP_ORIGIN="https://evil.com")
+    assert denied.status_code == 403
 
 
 # --- migration version → level mapping -------------------------------------------------
