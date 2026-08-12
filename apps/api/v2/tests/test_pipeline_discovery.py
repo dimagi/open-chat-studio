@@ -1,3 +1,10 @@
+"""The contract the discovery endpoints keep: what they serve, how they scope and fail, and how the
+payload is documented.
+
+Which of a team's resources reach the option lists is covered in
+`apps/pipelines/tests/test_node_options.py`, next to the helpers that build them.
+"""
+
 import pytest
 from django.urls import reverse
 from rest_framework import serializers
@@ -58,17 +65,23 @@ def team_with_every_resource(team_with_resources):
 @pytest.mark.django_db()
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_list_node_types(auth_method, team):
+    """Every listed type has to arrive complete: a client picks one off this response and builds from
+    what came with it, so a blank description or an empty `properties` leaves it nothing to go on."""
     client = ApiTestClient(team.members.first(), team, auth_method=auth_method)
     response = client.get(reverse("api:v2:pipeline-nodes"))
 
     assert response.status_code == 200
-    by_type = {entry["type"]: entry for entry in response.json()}
-    assert by_type["LLMResponseWithPrompt"]["description"]
-    assert by_type["LLMResponseWithPrompt"]["schema"]["properties"]
+    entries = response.json()
+    assert "LLMResponseWithPrompt" in {entry["type"] for entry in entries}
+    for entry in entries:
+        assert entry["description"].strip(), entry["type"]
+        assert entry["schema"]["properties"], entry["type"]
 
 
 @pytest.mark.django_db()
 def test_unbuildable_node_types_are_excluded(team):
+    """Deprecated types and the structural ones the server manages are left out entirely, and
+    `can_add` -- the builder's own reason for hiding them -- is not served as a flag to interpret."""
     client = ApiTestClient(team.members.first(), team)
     entries = client.get(reverse("api:v2:pipeline-nodes")).json()
 
@@ -81,6 +94,9 @@ def test_unbuildable_node_types_are_excluded(team):
 
 @pytest.mark.django_db()
 def test_no_namespaced_schema_key_survives_anywhere(team):
+    """The builder's schemas carry `ui:`/`api:` keys. The few that mean anything to a client are
+    re-served under a plain name, so a namespaced key reaching the response is an untranslated one --
+    at the schema level or on any single param."""
     client = ApiTestClient(team.members.first(), team)
     for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
         assert not [key for key in entry["schema"] if ":" in key], entry["type"]
@@ -147,6 +163,8 @@ def test_every_key_served_is_read_by_some_listed_node_type(team_with_resources):
 
 @pytest.mark.django_db()
 def test_conditional_params_declare_when_they_apply(team):
+    """`ui:visibleWhen` is a rendering rule for the builder. A client draws no forms, so it is served
+    the same condition as the answer to "is this param read at all?"."""
     client = ApiTestClient(team.members.first(), team)
     by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
 
@@ -177,6 +195,8 @@ def test_conditional_params_declare_when_they_apply(team):
     ],
 )
 def test_node_types_declare_their_output_topology(team, node_type, expected):
+    """Every edge needs a `source_handle`, and a router's handles depend on its own params, so the
+    client is told either the handle names or the pattern to build them from."""
     client = ApiTestClient(team.members.first(), team)
     by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
 
@@ -204,6 +224,8 @@ def test_documented_node_types_expose_an_absolute_documentation_url(team):
     ],
 )
 def test_the_model_must_match_its_provider(team, node_type):
+    """The builder enforces this pairing in JS and the schema never stated it, so every node type
+    taking both a provider and a model has to carry the rule."""
     client = ApiTestClient(team.members.first(), team)
     by_type = {entry["type"]: entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
 
@@ -251,6 +273,7 @@ def test_a_withheld_param_reaches_neither_endpoint(team_with_resources):
 
 @pytest.mark.django_db()
 def test_type_filter_returns_a_single_element_array(team):
+    """`?type=` narrows the list rather than switching to a bare object, so one parser handles both."""
     client = ApiTestClient(team.members.first(), team)
     response = client.get(reverse("api:v2:pipeline-nodes"), {"type": "RouterNode"})
 
@@ -268,6 +291,8 @@ def test_type_filter_returns_a_single_element_array(team):
     ],
 )
 def test_type_filter_404s(team, node_type):
+    """A name that was never a node type and one that is no longer buildable get the same answer:
+    neither is something a client may build, and the body carries no builder markup either way."""
     client = ApiTestClient(team.members.first(), team)
     response = client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type})
 
@@ -278,6 +303,8 @@ def test_type_filter_404s(team, node_type):
 
 @pytest.mark.django_db()
 def test_404_body_lists_the_types_the_client_could_have_asked_for(team):
+    """`valid_types` is exactly the unfiltered list, so a failed call can be corrected from its own
+    error body rather than a second request."""
     client = ApiTestClient(team.members.first(), team)
     body = client.get(reverse("api:v2:pipeline-nodes"), {"type": "Frobnicator"}).json()
 
@@ -306,6 +333,8 @@ def test_structural_type_is_reported_as_server_managed_not_unknown(team, node_ty
 
 @pytest.mark.django_db()
 def test_node_list_is_revalidatable(team):
+    """The list is static per deploy, so a client holding a current copy is answered 304 and no body
+    rather than the payload again."""
     client = ApiTestClient(team.members.first(), team)
     response = client.get(reverse("api:v2:pipeline-nodes"))
     etag = response.headers["ETag"]
@@ -318,6 +347,7 @@ def test_node_list_is_revalidatable(team):
 
 @pytest.mark.django_db()
 def test_etag_distinguishes_the_filtered_response(team):
+    """One ETag covering both would let a filtered request revalidate against the full list."""
     client = ApiTestClient(team.members.first(), team)
     full = client.get(reverse("api:v2:pipeline-nodes")).headers["ETag"]
 
@@ -328,48 +358,16 @@ def test_etag_distinguishes_the_filtered_response(team):
 
 @pytest.mark.django_db()
 def test_unauthenticated_request_is_rejected(team, client):
+    """Both endpoints answer for the caller's team, so neither serves an anonymous request."""
     assert client.get(reverse("api:v2:pipeline-nodes")).status_code == 401
     assert client.get(reverse("api:v2:pipeline-options")).status_code == 401
 
 
 @pytest.mark.django_db()
 def test_read_only_api_key_may_read(team):
+    """Discovery is a read: a key with no write access still gets it."""
     client = ApiTestClient(team.members.first(), team, read_only=True)
     assert client.get(reverse("api:v2:pipeline-nodes")).status_code == 200
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
-def test_options_lists_team_resources(auth_method, team_with_resources):
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources, auth_method=auth_method)
-    response = client.get(reverse("api:v2:pipeline-options"))
-
-    assert response.status_code == 200
-    options = response.json()
-    assert [option["label"] for option in options["llm_provider_id"]] == ["Prod OpenAI"]
-    assert [option["label"] for option in options["source_material"]] == ["Returns policy"]
-    assert [option["label"] for option in options["collection"]] == ["Policy docs"]
-
-
-@pytest.mark.django_db()
-def test_options_are_team_scoped(team_with_resources):
-    other_team = TeamWithUsersFactory.create()
-    LlmProviderFactory.create(team=other_team, name="Their OpenAI")
-    VoiceProviderFactory.create(team=other_team, name="Their Polly")
-    SourceMaterialFactory.create(team=other_team, topic="Their policy")
-    CollectionFactory.create(
-        team=other_team, name="Their docs", is_index=False, llm_provider=None, embedding_provider_model=None
-    )
-
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    options = client.get(reverse("api:v2:pipeline-options")).json()
-
-    labels = {
-        label
-        for key in ("llm_provider_id", "voice_provider_id", "source_material", "collection")
-        for label in (option["label"] for option in options[key])
-    }
-    assert not {"Their OpenAI", "Their Polly", "Their policy", "Their docs"} & labels
 
 
 @pytest.mark.django_db()
@@ -385,6 +383,7 @@ def test_options_carry_no_placeholder_entries(team_with_resources):
 
 @pytest.mark.django_db()
 def test_options_carry_no_edit_urls(team_with_resources):
+    """`edit_url` links into the Django UI, which an API client has no way to follow."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     assert "edit_url" not in client.get(reverse("api:v2:pipeline-options")).content.decode()
@@ -441,113 +440,8 @@ def test_clean_options_recurses_into_nested_dicts():
 
 
 @pytest.mark.django_db()
-def test_options_include_voice_providers_with_type(team_with_resources):
-    """`type` is the join key for the voice-pairing rule on the chatbot settings endpoint."""
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    voice_providers = client.get(reverse("api:v2:pipeline-options")).json()["voice_provider_id"]
-
-    assert [option["label"] for option in voice_providers] == ["Prod Polly"]
-    assert voice_providers[0]["type"] == "aws"
-
-
-@pytest.mark.django_db()
-def test_options_synthetic_voices_are_filtered_by_team_voice_provider_type(team_with_resources):
-    """`SyntheticVoice.service` ("AWS") and `VoiceProviderType` ("aws") differ only in case, so a
-    naive `service__in` match would return nothing. Azure and OpenAI voices reach every team via
-    `get_for_team`, so only the provider filter excludes them."""
-    SyntheticVoiceFactory.create(name="Aria", service="AWS")
-    SyntheticVoiceFactory.create(name="Elan", service="Azure")
-    SyntheticVoiceFactory.create(name="Coral", service="OpenAI")
-
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    voices = client.get(reverse("api:v2:pipeline-options")).json()["synthetic_voice_id"]
-
-    services = {voice["type"] for voice in voices}
-    assert "aws" in services
-    assert not {"azure", "openai"} & services
-
-
-@pytest.mark.django_db()
-def test_options_synthetic_voices_are_empty_without_a_voice_provider(team):
-    SyntheticVoiceFactory.create(service="AWS")
-    SyntheticVoiceFactory.create(service="Azure")
-
-    client = ApiTestClient(team.members.first(), team)
-    options = client.get(reverse("api:v2:pipeline-options")).json()
-
-    assert options["synthetic_voice_id"] == []
-
-
-@pytest.mark.django_db()
-def test_options_llm_models_are_filtered_by_team_provider_type(team_with_resources):
-    """Global models (`team=None`) reach every team, so without the provider filter a team holding
-    only an OpenAI key is offered the ~60 models it has no provider to call. Every configured type
-    survives, not just the first -- a team can hold providers for several."""
-    # team_with_resources already has an openai provider, so lets add another one
-    LlmProviderFactory.create(team=team_with_resources, type="anthropic", name="Prod Anthropic")
-    LlmProviderModelFactory.create(team=None, type="anthropic", name="claude-sonnet-5")
-    LlmProviderModelFactory.create(team=None, type="google", name="gemini-3-pro")
-    LlmProviderModelFactory.create(team=None, type="openai", name="gpt-5.1")
-
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    models = client.get(reverse("api:v2:pipeline-options")).json()["llm_provider_model_id"]
-
-    assert {model["type"] for model in models} == {"openai", "anthropic"}
-
-
-@pytest.mark.django_db()
-def test_options_omit_deprecated_llm_models(team_with_resources):
-    """Absent rather than flagged, the same as a deprecated node type. The builder still shows these
-    so an existing node keeps rendering; this list is only what a client may build with."""
-    LlmProviderModelFactory.create(team=None, type="openai", name="gpt-3.5-turbo", deprecated=True)
-
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    models = client.get(reverse("api:v2:pipeline-options")).json()["llm_provider_model_id"]
-
-    assert models
-    assert not [model for model in models if "gpt-3.5-turbo" in model["label"]]
-
-
-@pytest.mark.django_db()
-def test_options_tool_config_is_scoped_to_the_teams_provider_types(team_with_resources):
-    """`tool_config` is a hardcoded dict covering every provider type, unlike `built_in_tools`, which
-    is built from the team's providers. Both are keyed by `llm_provider_id.type`, so both are scoped.
-    Anthropic is the only type carrying configs, so it is what the two cases are told apart by."""
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    openai_only = client.get(reverse("api:v2:pipeline-options")).json()
-
-    assert set(openai_only["built_in_tools"]) == {"openai"}
-    assert "anthropic" not in openai_only["tool_config"]
-
-    LlmProviderFactory.create(team=team_with_resources, type="anthropic", name="Prod Anthropic")
-    with_anthropic = client.get(reverse("api:v2:pipeline-options")).json()
-
-    assert "anthropic" in with_anthropic["tool_config"]
-
-
-@pytest.mark.django_db()
-def test_options_llm_models_are_empty_without_an_llm_provider(team):
-    LlmProviderModelFactory.create(team=None, type="openai", name="gpt-5.1")
-
-    client = ApiTestClient(team.members.first(), team)
-    options = client.get(reverse("api:v2:pipeline-options")).json()
-
-    assert options["llm_provider_id"] == []
-    assert options["llm_provider_model_id"] == []
-    assert options["default_llm_provider"] == {"llm_provider_id": None, "llm_provider_model_id": None}
-
-
-@pytest.mark.django_db()
-def test_options_include_a_valid_starting_provider_pair(team_with_resources):
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    defaults = client.get(reverse("api:v2:pipeline-options")).json()["default_llm_provider"]
-
-    assert defaults["llm_provider_id"] is not None
-    assert defaults["llm_provider_model_id"] is not None
-
-
-@pytest.mark.django_db()
 def test_options_can_be_scoped_to_one_node_type(team_with_resources):
+    """`?node_type=` cuts the payload down to the keys that node type's params can read."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "RenderTemplate"}).json()
@@ -576,6 +470,8 @@ def test_scoped_options_keep_the_provider_defaults_for_llm_nodes(team_with_resou
     ],
 )
 def test_scoped_options_404_like_the_node_list(team_with_resources, node_type, expected_detail):
+    """A client walks both endpoints with the same type name, so an unusable name has to fail the
+    same way on each -- body included."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     response = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type})
@@ -615,36 +511,47 @@ def _documented_option_shapes():
     return shapes
 
 
+OPTION_LIST_KEYS = sorted(_documented_option_shapes())
+VALUE_BEARING_OPTION_KEYS = sorted(key for key, shape in _documented_option_shapes().items() if "value" in shape.fields)
+
+
+def _served_entries(served):
+    """The entries under one option key, with the provider-keyed dicts flattened into one list."""
+    if isinstance(served, dict):
+        return [entry for group in served.values() for entry in group]
+    return served
+
+
 @pytest.mark.django_db()
-def test_every_option_list_documents_the_fields_it_serves(team_with_every_resource):
+@pytest.mark.parametrize("key", OPTION_LIST_KEYS)
+def test_every_option_list_documents_the_fields_it_serves(team_with_every_resource, key):
     """The lists share no single option shape -- `type` belongs to the provider-backed ones,
     `provider_id` to `synthetic_voice_id`, `max_token_limit` to `llm_provider_model_id` -- so one
     shape documented for all of them puts fields on lists that will never carry them."""
-    value_types = {serializers.IntegerField: int, serializers.CharField: str}
+    documented = _documented_option_shapes()[key]
     client = ApiTestClient(team_with_every_resource.members.first(), team_with_every_resource)
-    options = client.get(reverse("api:v2:pipeline-options")).json()
 
-    for key, documented in _documented_option_shapes().items():
-        served = options[key]
-        entries = [entry for group in served.values() for entry in group] if isinstance(served, dict) else served
-        assert entries, f"{key} came back empty, so it holds the docs to nothing"
+    entries = _served_entries(client.get(reverse("api:v2:pipeline-options")).json()[key])
 
-        optional = {name for name, field in documented.fields.items() if not field.required}
-        assert {name for entry in entries for name in entry} == set(documented.fields), key
-        for entry in entries:
-            assert set(documented.fields) - set(entry) <= optional, (key, entry)
-            if "value" in documented.fields:
-                assert isinstance(entry["value"], value_types[type(documented.fields["value"])]), (key, entry)
+    assert entries, f"{key} came back empty, so it holds the docs to nothing"
+    required = {name for name, field in documented.fields.items() if field.required}
+    assert {name for entry in entries for name in entry} == set(documented.fields)
+    assert all(required <= set(entry) for entry in entries), entries
 
 
 @pytest.mark.django_db()
-def test_options_never_expose_provider_config(team_with_resources):
-    """Providers are reference-only -- their `config` holds credentials."""
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    body = client.get(reverse("api:v2:pipeline-options")).content.decode()
+@pytest.mark.parametrize("key", VALUE_BEARING_OPTION_KEYS)
+def test_every_option_value_has_the_documented_type(team_with_every_resource, key):
+    """`value` is written straight into a node param, so an id documented as an integer and served as
+    a string is a break even though both are JSON scalars."""
+    documented_value = _documented_option_shapes()[key].fields["value"]
+    expected_type = {serializers.IntegerField: int, serializers.CharField: str}[type(documented_value)]
+    client = ApiTestClient(team_with_every_resource.members.first(), team_with_every_resource)
 
-    assert "openai_api_key" not in body
-    assert "aws_secret_access_key" not in body
+    entries = _served_entries(client.get(reverse("api:v2:pipeline-options")).json()[key])
+
+    assert entries, f"{key} came back empty, so it holds the docs to nothing"
+    assert all(isinstance(entry["value"], expected_type) for entry in entries), entries
 
 
 @pytest.mark.django_db()
