@@ -17,10 +17,11 @@
     };
 
     // Apply the version-specific header text and colour theme to a widget element. Shared by the
-    // new-chat launcher (openChatWidget) and the continue-session launcher below.
-    window.ocsApplyWidgetVersionTheme = function (widget, versionNumber) {
+    // new-chat launcher (openChatWidget) and the continue-session launcher below. Version 0 is the
+    // "published version" alias; callers that target a specific numbered version pass headerText.
+    window.ocsApplyWidgetVersionTheme = function (widget, versionNumber, headerText) {
       const isPublished = versionNumber === 0;
-      widget.setAttribute('header-text', isPublished ? 'Published Version' : `Working Version (v${versionNumber})`);
+      widget.setAttribute('header-text', headerText || (isPublished ? 'Published Version' : `Working Version (v${versionNumber})`));
       const styles = isPublished ? widgetStyles.published : widgetStyles.working;
       for (const [prop, value] of Object.entries(styles)) {
         widget.style.setProperty(prop, value);

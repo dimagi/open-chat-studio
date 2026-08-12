@@ -445,8 +445,8 @@ def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
     assert response.status_code == 200
     content = response.content.decode()
     assert f'chatbot-id="{experiment.public_id}"' in content
-    assert f"openChatWidget({experiment.version_number})" in content
-    assert "openChatWidget(0)" in content
+    assert f"openChatWidget({experiment.version_number}, " in content
+    assert "openChatWidget(0, " in content
     assert reverse("chatbots:start_authed_web_session", args=[team.slug, experiment.id, 0]) not in content
 
 
