@@ -18,17 +18,21 @@ from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
 from django.db.models import Count, F, QuerySet
-from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
 from django.utils import timezone
 
-from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.services import reporting
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.models import Team
 from apps.usage_metrics import metrics as usage_metrics
 from apps.usage_metrics.filters import UsageFilters
-from apps.usage_metrics.metrics import MESSAGE_ANNOTATIONS, MessageCounts, message_counts_from_row
+from apps.usage_metrics.metrics import (
+    GRANULARITY_TRUNC,
+    MESSAGE_ANNOTATIONS,
+    MessageCounts,
+    bucket_date,
+    message_counts_from_row,
+)
 
 # Metric identifiers. Later slices extend SUPPORTED_METRICS; the param serializer validates against it.
 METRIC_MESSAGES = "messages"
@@ -63,13 +67,9 @@ GROUP_BY_CHOICES = (GROUP_PARTICIPANT, GROUP_CHATBOT, GROUP_PLATFORM)
 # :func:`grouped_page_size_cap`.
 MAX_GROUPED_ROWS = 10_000
 
-# DB truncation per bucketed granularity (Django's TruncWeek starts weeks on Monday, matching the
-# Python-side bucket boundaries below).
-_TRUNC = {
-    GRANULARITY_DAILY: TruncDate,
-    GRANULARITY_WEEKLY: TruncWeek,
-    GRANULARITY_MONTHLY: TruncMonth,
-}
+# DB truncation per bucketed granularity lives in apps.usage_metrics
+# (GRANULARITY_TRUNC); Django's TruncWeek starts weeks on Monday, matching the
+# Python-side bucket boundaries below.
 _STEP = {
     GRANULARITY_DAILY: relativedelta(days=1),
     GRANULARITY_WEEKLY: relativedelta(weeks=1),
@@ -190,12 +190,11 @@ def _chatbot_entities(query: "UsageQuery") -> QuerySet:
 def _platform_entities(query: "UsageQuery") -> QuerySet:
     # Platform has no backing model, so return the distinct slugs present, ordered on the ``platform``
     # alias (which also clears ``ChatMessage``'s default ``created_at`` ordering, keeping ``.distinct()``
-    # one row per slug). ``evaluations`` is excluded to match the session metric's exclusion.
+    # one row per slug). Evaluation sessions are already out of the message universe (ADR-0051).
     return (
         _message_queryset(query)
         .exclude(chat__experiment_session__platform__isnull=True)
         .exclude(chat__experiment_session__platform="")
-        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
         .values(platform=F("chat__experiment_session__platform"))
         .distinct()
         .order_by("chat__experiment_session__platform")
@@ -338,9 +337,10 @@ def grouped_page_size_cap(query: UsageQuery) -> int:
 
 def _bucket_key(bucket: datetime | None, tz: ZoneInfo):
     """The local calendar date keying a bucket in the metric index; ``None`` at ``total`` granularity.
-    Delegates to :func:`_bucket_date` so the Python-generated bucket starts and the DB truncation results
+    Delegates to :func:`~apps.usage_metrics.metrics.bucket_date` so the Python-generated bucket starts
+    and the DB truncation results
     normalise to their local date the same way (they must agree for the index and rows to join)."""
-    return None if bucket is None else _bucket_date(bucket, tz)
+    return None if bucket is None else bucket_date(bucket, tz)
 
 
 def _grouped_rows(queryset: QuerySet, *, group_field: str | None, trunc, tz: ZoneInfo, **annotations):
@@ -354,7 +354,7 @@ def _grouped_rows(queryset: QuerySet, *, group_field: str | None, trunc, tz: Zon
         value_fields.append("bucket")
     for row in queryset.values(*value_fields).annotate(**annotations):
         group_key = row[group_field] if group_field else None
-        bucket_key = _bucket_date(row["bucket"], tz) if trunc is not None else None
+        bucket_key = bucket_date(row["bucket"], tz) if trunc is not None else None
         yield group_key, bucket_key, row
 
 
@@ -379,7 +379,7 @@ def _grouped_non_cost_metric_rows(query: UsageQuery, keys: list) -> list:
     """``(metric, (group_key, bucket_key, value) iterator)`` for each requested non-cost metric, built
     conditionally so a metric's query only runs when asked for. Cost/tokens share one UsageRecord read
     and are filled separately by the caller."""
-    trunc = None if query.granularity == GRANULARITY_TOTAL else _TRUNC[query.granularity]
+    trunc = None if query.granularity == GRANULARITY_TOTAL else GRANULARITY_TRUNC[query.granularity]
     spec = _GROUP_SPECS[query.group_by]
 
     def by_group(queryset, group_field, **annotations):
@@ -433,7 +433,7 @@ def _fill_grouped_cost_tokens(query: UsageQuery, keys: list, index: dict) -> Non
         )
     )
     for row in rows:
-        bucket_key = None if granularity is None else _bucket_date(row["bucket"], query.tz)
+        bucket_key = None if granularity is None else bucket_date(row["bucket"], query.tz)
         cell = index.get((row["key"], bucket_key))
         if cell is None:
             continue
@@ -524,7 +524,7 @@ def _cost_tokens_by_bucket(query: UsageQuery) -> dict:
         filters=cost_filter.filters,
     )
     return {
-        _bucket_date(row["bucket"], query.tz): {
+        bucket_date(row["bucket"], query.tz): {
             "cost": CostBlock(total=row["cost"], currency=row["currency"]),
             "tokens": TokenCounts(prompt=row["prompt"], completion=row["completion"], total=row["total"]),
         }
@@ -590,8 +590,9 @@ def _session_count(query: UsageQuery) -> int:
 
 
 def _active_participant_count(query: UsageQuery) -> int:
-    """Distinct participants *active* in the window - those with at least one
-    human/AI message in it, keyed off message activity (not session creation)."""
+    """Distinct participants *active* in the window - those who authored at
+    least one HUMAN message in it, keyed off message activity (not session
+    creation). Receiving AI output is not activity (ADR-0051)."""
     return usage_metrics.active_participants(
         query.team, start=query.start, end=query.end, filters=_usage_filters(query)
     )
@@ -603,8 +604,9 @@ def _message_counts(query: UsageQuery) -> MessageCounts:
 
 
 def _message_queryset(query: UsageQuery) -> QuerySet[ChatMessage]:
-    """The `messages` metric universe - every message type, evaluation
-    sessions included (apps.usage_metrics)."""
+    """The `messages` metric universe - every message type, with
+    evaluation-harness and SETUP-session activity excluded (apps.usage_metrics,
+    ADR-0051)."""
     return usage_metrics.messages_queryset(query.team, start=query.start, end=query.end, filters=_usage_filters(query))
 
 
@@ -665,14 +667,6 @@ def _truncate_local(dt: datetime, granularity: str) -> datetime:
     if granularity == GRANULARITY_WEEKLY:
         return midnight - timedelta(days=midnight.weekday())  # Monday, matching Django's TruncWeek
     return midnight.replace(day=1)  # monthly
-
-
-def _bucket_date(value, tz: ZoneInfo):
-    """Normalise a DB truncation result to its local calendar date. ``TruncDate`` yields a ``date``
-    already; ``TruncWeek``/``TruncMonth`` yield a datetime whose local date is the bucket boundary."""
-    if isinstance(value, datetime):
-        return value.astimezone(tz).date()
-    return value
 
 
 def _month_bounds(period: str, tz: ZoneInfo) -> tuple[datetime, datetime]:
