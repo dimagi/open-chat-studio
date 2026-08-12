@@ -1,6 +1,6 @@
 {% if record.is_editable %}
   <a class="btn btn-sm"
-     href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
+     href="{% url type|add:':edit' record.team.slug record.id %}" title="Edit">
     <i class="fa-solid fa-pencil"></i>
   </a>
 {% else %}
