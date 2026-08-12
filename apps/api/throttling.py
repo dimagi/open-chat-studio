@@ -50,15 +50,17 @@ class APIRateThrottle(BaseThrottle):
         return "ip", client_ip(request)
 
 
-class WidgetRateThrottle(APIRateThrottle):
-    """Embedded chat widget traffic, bucketed per conversation.
+class ChatAPIRateThrottle(APIRateThrottle):
+    """Traffic to the /api/chat/* endpoints, bucketed per conversation.
 
-    A per-session bucket keeps one visitor from consuming the allowance of
-    every other visitor to the same chatbot. Session creation has no session
-    to key on yet, so it buckets on the widget channel instead.
+    The embedded chat widget is the primary caller, but non-widget clients
+    use these endpoints too. A per-session bucket keeps one visitor from
+    consuming the allowance of every other visitor to the same chatbot.
+    Session creation has no session to key on yet, so it buckets on the
+    widget channel instead.
     """
 
-    scope = "widget"
+    scope = "chat_api"
 
     def identity(self, request, view) -> tuple[str, str]:
         session_id = getattr(view, "kwargs", {}).get("session_id")

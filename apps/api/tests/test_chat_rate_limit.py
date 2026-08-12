@@ -7,7 +7,7 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.api.throttling import WidgetRateThrottle
+from apps.api.throttling import ChatAPIRateThrottle
 from apps.api.views.chat import (
     chat_poll_response,
     chat_poll_task_response,
@@ -17,7 +17,7 @@ from apps.api.views.chat import (
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
-TINY_LIMITS = {"widget": {"rate": "2/5m", "fail_open": True}}
+TINY_LIMITS = {"chat_api": {"rate": "2/5m", "fail_open": True}}
 
 CHAT_VIEWS = [
     pytest.param(chat_start_session, id="start-session"),
@@ -50,9 +50,9 @@ def other_widget_session(experiment):
 
 
 @pytest.mark.parametrize("view", CHAT_VIEWS)
-def test_chat_endpoints_use_the_widget_throttle(view):
+def test_chat_endpoints_use_the_chat_api_throttle(view):
     """No chat endpoint is left drawing on the shared api allowance."""
-    assert view.cls.throttle_classes == [WidgetRateThrottle]
+    assert view.cls.throttle_classes == [ChatAPIRateThrottle]
 
 
 @pytest.mark.django_db()

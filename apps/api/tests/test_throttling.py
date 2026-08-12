@@ -13,7 +13,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from waffle import get_waffle_flag_model
 
 from apps.api.models import UserAPIKey
-from apps.api.throttling import APIRateThrottle, WidgetRateThrottle
+from apps.api.throttling import APIRateThrottle, ChatAPIRateThrottle
 from apps.channels.models import ChannelPlatform
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -184,14 +184,14 @@ def test_non_throttle_errors_keep_their_shape(experiment):
     assert "available_in" not in json.loads(response.content)
 
 
-def test_widget_throttle_uses_its_own_scope():
-    """Widget traffic does not draw on the team's interactive api allowance."""
-    assert WidgetRateThrottle.scope == "widget"
+def test_chat_api_throttle_uses_its_own_scope():
+    """Chat API traffic does not draw on the team's interactive api allowance."""
+    assert ChatAPIRateThrottle.scope == "chat_api"
 
 
-def test_widget_throttle_keys_on_the_session_when_present():
+def test_chat_api_throttle_keys_on_the_session_when_present():
     """Each conversation gets its own allowance."""
-    throttle = WidgetRateThrottle()
+    throttle = ChatAPIRateThrottle()
     request = RequestFactory().post("/")
 
     identity = throttle.identity(request, _view_stub(session_id="8b1f0c2e-0000-0000-0000-000000000001"))
@@ -200,21 +200,21 @@ def test_widget_throttle_keys_on_the_session_when_present():
 
 
 @pytest.mark.django_db()
-def test_widget_throttle_keys_on_the_channel_before_a_session_exists(experiment):
+def test_chat_api_throttle_keys_on_the_channel_before_a_session_exists(experiment):
     """Session creation is bounded per chatbot, since there is no session to key on yet."""
     channel = ExperimentChannelFactory.create(
         team=experiment.team, experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET
     )
-    throttle = WidgetRateThrottle()
+    throttle = ChatAPIRateThrottle()
     request = RequestFactory().post("/")
     request.auth = channel
 
     assert throttle.identity(request, _view_stub()) == ("channel", str(channel.pk))
 
 
-def test_widget_throttle_falls_back_to_ip():
+def test_chat_api_throttle_falls_back_to_ip():
     """Legacy clients with neither a session nor a widget channel are still counted."""
-    throttle = WidgetRateThrottle()
+    throttle = ChatAPIRateThrottle()
     request = RequestFactory().post("/", REMOTE_ADDR="203.0.113.9")
 
     assert throttle.identity(request, _view_stub()) == ("ip", "203.0.113.9")
