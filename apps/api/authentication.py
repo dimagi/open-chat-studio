@@ -104,6 +104,10 @@ def embed_key_authorizes_channel(request, channel: ExperimentChannel | None) -> 
         return False
     if channel.platform != ChannelPlatform.EMBEDDED_WIDGET:
         return False
+    # Callers that reach a channel by FK traversal (`session.experiment_channel`) bypass the
+    # default manager's `deleted=False`, so deleting a widget would otherwise not revoke its key.
+    if channel.deleted:
+        return False
     if embed_key != channel.extra_data.get("widget_token"):
         return False
 

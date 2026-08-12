@@ -225,6 +225,22 @@ def test_embed_key_riding_along_with_a_session_cookie_grants_access(api_client, 
     assert denied.status_code == 403
 
 
+@pytest.mark.django_db()
+def test_deleting_the_channel_revokes_a_riding_along_embed_key(api_client, experiment):
+    """Deleting a widget must revoke its key. `session.experiment_channel` is a FK traversal, so it
+    returns the soft-deleted channel where the manager would have filtered it out."""
+    channel = _widget_channel(experiment, WidgetAuthLevel.EMBED_KEY)
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, experiment_channel=channel, session_token_required=False
+    )
+    channel.soft_delete()
+    user = TeamWithUsersFactory.create().members.first()
+    api_client.login(username=user.email, password="password")
+
+    denied = api_client.get(poll_url(session), HTTP_X_EMBED_KEY=WIDGET_TOKEN, HTTP_ORIGIN="https://example.com")
+    assert denied.status_code == 403
+
+
 # --- migration version → level mapping -------------------------------------------------
 
 _migration = importlib.import_module("apps.channels.migrations.0029_experimentchannel_required_auth_level")
