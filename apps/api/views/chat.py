@@ -225,8 +225,20 @@ def _issue_or_opt_out_session_token(session, channel):
     return _opt_out_session_token(session)
 
 
-def _may_start_session(request, is_team_member, embed_key_channel) -> bool:
-    """Whether this caller may start a session against the chatbot at all.
+def _resolve_embed_key_channel(request, experiment) -> ExperimentChannel | None:
+    """The widget channel this request's embed key proves, if any.
+
+    Resolved once: it both authorizes the caller and owns the session. `request.auth` already
+    holds it when the key did the authenticating, so this only queries for keys that rode along
+    with another authenticator.
+    """
+    if isinstance(request.auth, ExperimentChannel):
+        return request.auth
+    return get_embed_key_channel(request, experiment)
+
+
+def _check_start_session_access(request, experiment, embed_key_channel, version_number) -> Response | None:
+    """A 403 response if this caller may not start the session they asked for, else None.
 
     ADR-0052: being logged in to OCS is not, on its own, access to every chatbot. A
     session-authenticated caller needs either team membership or the chatbot's embed key — the
@@ -236,8 +248,23 @@ def _may_start_session(request, is_team_member, embed_key_channel) -> bool:
     Anonymous callers are unaffected; the permission classes are the only gate on that path.
     """
     if not request.user.is_authenticated:
-        return True
-    return is_team_member or embed_key_channel is not None
+        return None
+    if experiment.team.members.filter(id=request.user.id).exists():
+        return None
+    # Not a member: the embed key is the only other proof, and it does not grant version selection.
+    if embed_key_channel is not None and version_number is None:
+        return None
+    return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
+
+
+def _get_requested_version(experiment, version_number):
+    """The explicitly requested version, or None to use the working version."""
+    if version_number is None or version_number == Experiment.DEFAULT_VERSION_NUMBER:
+        return None
+    try:
+        return experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise NotFound(f"Experiment with version {version_number} not found") from None
 
 
 def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
@@ -356,36 +383,13 @@ def chat_start_session(request):
     # Always look up the working version by public_id
     experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
 
-    # The widget channel this request's embed key proves, if any. Resolved once: it both
-    # authorizes the caller below and owns the session. `request.auth` already holds it when the
-    # key did the authenticating, so this only queries for keys that rode along with another
-    # authenticator.
-    embed_key_channel = (
-        request.auth if isinstance(request.auth, ExperimentChannel) else get_embed_key_channel(request, experiment)
-    )
+    embed_key_channel = _resolve_embed_key_channel(request, experiment)
 
-    is_team_member = request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
+    denied = _check_start_session_access(request, experiment, embed_key_channel, version_number)
+    if denied:
+        return denied
 
-    if not _may_start_session(request, is_team_member, embed_key_channel):
-        return Response(
-            {"error": "You do not have access to this chatbot"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    experiment_version = None
-    if version_number is not None:
-        # Choosing a version is a team-member capability; an embed key does not grant it.
-        if not is_team_member:
-            return Response(
-                {"error": "You do not have access to this chatbot"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if version_number != Experiment.DEFAULT_VERSION_NUMBER:
-            try:
-                experiment_version = experiment.get_version(version_number)
-            except Experiment.DoesNotExist:
-                raise NotFound(f"Experiment with version {version_number} not found") from None
+    experiment_version = _get_requested_version(experiment, version_number)
 
     team = experiment.team
 
