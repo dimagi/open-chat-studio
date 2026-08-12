@@ -6,6 +6,7 @@ from django.core.cache import cache as default_cache
 from django.core.cache import caches
 from django.test import override_settings
 from django.urls import resolve, reverse
+from oauth2_provider import views as oauth2_views
 
 # Overrides the credentials scope alone, leaving every other scope at its configured rate.
 TINY_LIMITS = settings.RATE_LIMITS | {"credentials": {"rate": "2/5m", "fail_open": False}}
@@ -18,9 +19,16 @@ def _clear_rate_limit_cache():
 
 
 def test_token_url_still_reverses_to_the_upstream_name():
-    """Shadowing the upstream route must not move the URL or break reverse()."""
+    """Shadowing the upstream route must not move the URL, break reverse(), or drop the shadow itself.
+
+    The upstream `include()` registers `token` under the same view_name, so asserting on
+    `view_name` alone would still pass with the shadowing path() removed. Asserting on the
+    resolved view_class instead requires the decorator to actually be in place.
+    """
     assert reverse("oauth2_provider:token") == "/o/token/"
-    assert resolve("/o/token/").view_name == "oauth2_provider:token"
+    match = resolve("/o/token/")
+    assert match.view_name == "oauth2_provider:token"
+    assert getattr(match.func.__wrapped__, "view_class", None) is oauth2_views.TokenView
 
 
 @pytest.mark.django_db()
