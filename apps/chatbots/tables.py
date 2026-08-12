@@ -43,7 +43,13 @@ def _version_label(session: ExperimentSession) -> str:
 
 @dataclasses.dataclass
 class ContinueChatAction(actions.Action):
-    """Continue Chat action. Opens the session in the embedded widget (a floating popup)."""
+    """Continue Chat action. Opens the session in the embedded widget (a floating popup).
+
+    This action does not navigate, so the ``url_name``/``url_factory`` it is constructed with are
+    vestigial: ``Action.get_context`` always builds ``action_url``, but the template above renders a
+    widget launcher instead of a link. They stay because ``url_name`` is a required field on the base
+    class — don't read them as evidence that the full-page chat route is still reachable from here.
+    """
 
     template: str = "chatbots/components/continue_chat_action.html"
 
