@@ -245,10 +245,14 @@ def _check_start_session_access(request, experiment, embed_key_channel, version_
     same proof an anonymous embedder must present. The key path is what keeps the site help
     widget working, since its users are logged in but are not members of the support bot's team.
 
-    Anonymous callers are unaffected; the permission classes are the only gate on that path.
+    Selecting a version is narrower still: only a team member may do it, so `version_number` must
+    be None on every other route through here. `chat_send_message` gates it the same way.
     """
     if not request.user.is_authenticated:
-        return None
+        # Otherwise unaffected: the permission classes are the only gate on the anonymous path.
+        if version_number is None:
+            return None
+        return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
     if experiment.team.members.filter(id=request.user.id).exists():
         return None
     # Not a member: the embed key is the only other proof, and it does not grant version selection.
@@ -372,13 +376,6 @@ def chat_start_session(request):
     # so deprecated old widgets still receive RFC 8594 sunset headers.
     if is_widget_request(request, session_data):
         mark_widget_request(request)
-
-    # Security check: Only authenticated users can specify version numbers
-    if version_number is not None and not request.user.is_authenticated:
-        return Response(
-            {"error": "Version number requires authentication"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
 
     # Always look up the working version by public_id
     experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
