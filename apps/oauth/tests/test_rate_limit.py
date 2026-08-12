@@ -26,15 +26,21 @@ def test_token_url_still_reverses_to_the_upstream_name():
 @pytest.mark.django_db()
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
 def test_token_requests_are_limited_per_ip(client):
-    """Repeated token attempts from one address are bounded."""
+    """Repeated token attempts from one address are bounded; another address is unaffected."""
     url = reverse("oauth2_provider:token")
-    client.post(url, {"grant_type": "client_credentials"})
-    client.post(url, {"grant_type": "client_credentials"})
 
-    response = client.post(url, {"grant_type": "client_credentials"})
+    first = client.post(url, {"grant_type": "client_credentials"})
+    second = client.post(url, {"grant_type": "client_credentials"})
+    third = client.post(url, {"grant_type": "client_credentials"})
 
-    assert response.status_code == 429
-    assert response.json()["detail"] == "Rate limit exceeded."
+    assert first.status_code != 429
+    assert second.status_code != 429
+    assert third.status_code == 429
+    assert third.json()["detail"] == "Rate limit exceeded."
+
+    other_ip_response = client.post(url, {"grant_type": "client_credentials"}, REMOTE_ADDR="203.0.113.9")
+
+    assert other_ip_response.status_code != 429
 
 
 @pytest.mark.django_db()
