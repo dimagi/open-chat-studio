@@ -71,8 +71,11 @@ def test_chatbot_experiment_table_view(client, team_with_users):
     response = client.get(url)
 
     assert response.status_code == 200
-    assert "Test 2" in response.content.decode()
-    assert "Test 1" not in response.content.decode()
+    content = response.content.decode()
+    assert "Test 2" in content
+    assert "Test 1" not in content
+    # The row actions are edit-only; starting a chat happens from the chatbot's own page.
+    assert "start_authed_web_session" not in content
 
 
 @pytest.mark.django_db()
