@@ -115,7 +115,7 @@ def test_no_namespaced_schema_key_survives_anywhere(team):
         ),
         pytest.param(
             "LLMResponseWithPrompt",
-            {"source_material", "collection", "collection_index", "agent_tools", "custom_actions"},
+            {"source_material", "collection", "collection_index", "tools", "custom_actions"},
             id="params-the-builder-declares-a-source-for",
         ),
         pytest.param("RenderTemplate", {"template_variables"}, id="template-vars"),
@@ -130,6 +130,43 @@ def test_scoping_covers_every_param_that_reads_an_option_list(team_with_resource
     scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type}).json()
 
     assert expected_keys <= set(scoped)
+
+
+@pytest.mark.django_db()
+def test_every_option_key_is_named_for_the_param_that_reads_it(team_with_resources):
+    """The payload's central promise, and the only thing tying a list to a param: `_property()` strips
+    `ui:optionsSource`, so a client has nothing but the name -- give or take an `_id`/`_ids` suffix --
+    to match them up. The variable lists have no param named for them and are documented as the
+    exception; `voice_provider_id` and `default_llm_provider` are read alongside another key rather
+    than written into a param of their own."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    params = {
+        name for entry in client.get(reverse("api:v2:pipeline-nodes")).json() for name in entry["schema"]["properties"]
+    }
+    option_keys = set(client.get(reverse("api:v2:pipeline-options")).json())
+
+    unmatched = {key for key in option_keys if not {key, f"{key}_id", f"{key}_ids"} & params}
+
+    assert unmatched == {
+        "template_variables",
+        "llm_prompt_variables",
+        "router_prompt_variables",
+        "voice_provider_id",
+        "default_llm_provider",
+    }
+
+
+@pytest.mark.django_db()
+def test_scoped_options_carry_the_key_that_resolves_a_voice(team_with_resources):
+    """Each `synthetic_voice_id` entry carries a `provider_id`, and `voice_provider_id` is the only
+    list that resolves it. No param reads that list, so it is not reachable through
+    `ui:optionsSource` and scoping has to bring it along on its own."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+
+    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "LLMResponseWithPrompt"}).json()
+
+    assert "synthetic_voice_id" in scoped
+    assert "voice_provider_id" in scoped
 
 
 @pytest.mark.django_db()

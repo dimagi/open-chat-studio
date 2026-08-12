@@ -6,18 +6,27 @@ What lives here is what a node schema cannot state for itself. Which params the 
 declared on the pydantic `Field` instead -- see `UiSchema.api_exclude`.
 """
 
-# The exception to the same-name rule. No param is named for the variable list it draws on, and
-# `prompt` on an LLM node and `prompt` on a router accept different sets, so these keys name the
-# flavour of text being written rather than the param writing it.
+# `builder option key -> the key the API serves it under`. These are the builder keys that would
+# otherwise break the same-name rule: `agent_tools` holds the values for a param named `tools`, and
+# the variable lists have no param named for them at all -- `prompt` on an LLM node and `prompt` on a
+# router accept different sets, so those keys name the flavour of text being written instead.
 OPTIONS_KEY_RENAMES = {
+    "agent_tools": "tools",
     "jinja_node": "template_variables",
     "text_editor_autocomplete_vars_llm_node": "llm_prompt_variables",
     "text_editor_autocomplete_vars_router_node": "router_prompt_variables",
 }
 
-# Served despite no node param reading them, so the schema-derived whitelist cannot discover them.
-# `voice_provider_id` resolves the `provider_id` carried on a `synthetic_voice_id` entry.
-API_ONLY_OPTION_KEYS = frozenset({"voice_provider_id"})
+# `option key -> the keys a client needs alongside it to make sense of its entries`. A dependency is
+# served whenever the key depending on it is, scoped responses included, and no node param reads one
+# -- which is why the schema-derived whitelist cannot discover them on its own.
+OPTION_KEY_DEPENDENCIES = {
+    # Resolves the `provider_id` carried on each `synthetic_voice_id` entry.
+    "synthetic_voice_id": frozenset({"voice_provider_id"}),
+}
+
+# Served despite no node param reading them.
+API_ONLY_OPTION_KEYS = frozenset().union(*OPTION_KEY_DEPENDENCIES.values())
 
 # Model and provider each carry a `type` ("openai", "anthropic", ...) and the two must agree.
 PROVIDER_TYPE_MATCH = {"field": "llm_provider_id", "on": "type"}

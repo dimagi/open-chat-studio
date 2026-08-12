@@ -149,7 +149,14 @@ class PipelineOptionsSerializer(serializers.Serializer):
     collection_index = ResourceOptionSerializer(
         many=True, required=False, help_text="Searchable indexes a node can retrieve from."
     )
-    agent_tools = ToolOptionSerializer(many=True, required=False)
+    tools = ToolOptionSerializer(
+        many=True,
+        required=False,
+        help_text=(
+            "The bot tools a node's `tools` param may enable. Distinct from `custom_actions` and "
+            "`built_in_tools`, which are separate params drawing on their own lists."
+        ),
+    )
     custom_actions = ToolOptionSerializer(many=True, required=False)
     built_in_tools = serializers.DictField(
         child=ToolOptionSerializer(many=True), required=False, help_text="Keyed by LLM provider type."

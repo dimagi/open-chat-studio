@@ -148,33 +148,33 @@ paths:
               examples:
                 NodeTypes:
                   value:
-                  - - type: RouterNode
-                      description: Routes the input to one of the linked nodes using
-                        an LLM
-                      documentation_url: https://docs.openchatstudio.com/how-to/pipelines/nodes/
-                      outputs:
-                        kind: per_keyword
-                        handles: null
-                        handle_pattern: output_{index}
-                        description: One output per entry in `keywords`.
-                      schema:
-                        title: RouterNode
-                        type: object
-                        required:
-                        - llm_provider_id
-                        - llm_provider_model_id
-                        - name
-                        properties:
-                          llm_provider_id:
-                            type: integer
-                            title: LLM Model
-                            description: The configured LLM service provider this
-                              node calls.
-                          llm_provider_model_id:
-                            type: integer
-                            must_match:
-                              field: llm_provider_id
-                              'on': type
+                  - type: RouterNode
+                    description: Routes the input to one of the linked nodes using
+                      an LLM
+                    documentation_url: https://docs.openchatstudio.com/how-to/pipelines/nodes/
+                    outputs:
+                      kind: per_keyword
+                      handles: null
+                      handle_pattern: output_{index}
+                      description: One output per entry in `keywords`.
+                    schema:
+                      title: RouterNode
+                      type: object
+                      required:
+                      - llm_provider_id
+                      - llm_provider_model_id
+                      - name
+                      properties:
+                        llm_provider_id:
+                          type: integer
+                          title: LLM Model
+                          description: The configured LLM service provider this node
+                            calls.
+                        llm_provider_model_id:
+                          type: integer
+                          must_match:
+                            field: llm_provider_id
+                            'on': type
                   summary: A router, showing the per-keyword outputs and a param-pairing
                     rule.
           description: ''
@@ -246,7 +246,7 @@ paths:
                     collection_index:
                     - value: 9
                       label: Support KB (Remote)
-                    agent_tools:
+                    tools:
                     - value: one-off-reminder
                       label: One-off Reminder
                     custom_actions:
@@ -2045,10 +2045,13 @@ components:
           items:
             $ref: '#/components/schemas/ResourceOption'
           description: Searchable indexes a node can retrieve from.
-        agent_tools:
+        tools:
           type: array
           items:
             $ref: '#/components/schemas/ToolOption'
+          description: The bot tools a node's `tools` param may enable. Distinct from
+            `custom_actions` and `built_in_tools`, which are separate params drawing
+            on their own lists.
         custom_actions:
           type: array
           items:

@@ -12,7 +12,7 @@ from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiRespo
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
-from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.experiments.models import SyntheticVoice
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
@@ -21,7 +21,7 @@ from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
-from .contract import API_ONLY_OPTION_KEYS, OPTIONS_KEY_RENAMES
+from .contract import OPTION_KEY_DEPENDENCIES, OPTIONS_KEY_RENAMES
 from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
@@ -36,7 +36,7 @@ PROMPT_VAR_OPTION_SOURCES = (
 class DiscoveryView(GenericAPIView):
     """Shared auth for the discovery endpoints."""
 
-    permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]  # TokenHasResourceScope maps GET -> chatbots:read
     # Only here so DjangoModelPermissions can derive `pipelines.view_pipeline` from a model.
     queryset = Pipeline.objects.none()
@@ -76,35 +76,34 @@ class PipelineNodesView(DiscoveryView):
             OpenApiExample(
                 name="NodeTypes",
                 summary="A router, showing the per-keyword outputs and a param-pairing rule.",
-                value=[
-                    {
-                        "type": "RouterNode",
-                        "description": "Routes the input to one of the linked nodes using an LLM",
-                        "documentation_url": "https://docs.openchatstudio.com/how-to/pipelines/nodes/",
-                        "outputs": {
-                            "kind": "per_keyword",
-                            "handles": None,
-                            "handle_pattern": "output_{index}",
-                            "description": "One output per entry in `keywords`.",
-                        },
-                        "schema": {
-                            "title": "RouterNode",
-                            "type": "object",
-                            "required": ["llm_provider_id", "llm_provider_model_id", "name"],
-                            "properties": {
-                                "llm_provider_id": {
-                                    "type": "integer",
-                                    "title": "LLM Model",
-                                    "description": "The configured LLM service provider this node calls.",
-                                },
-                                "llm_provider_model_id": {
-                                    "type": "integer",
-                                    "must_match": {"field": "llm_provider_id", "on": "type"},
-                                },
+                # One entry, not a list: drf-spectacular wraps a `many=True` response example itself.
+                value={
+                    "type": "RouterNode",
+                    "description": "Routes the input to one of the linked nodes using an LLM",
+                    "documentation_url": "https://docs.openchatstudio.com/how-to/pipelines/nodes/",
+                    "outputs": {
+                        "kind": "per_keyword",
+                        "handles": None,
+                        "handle_pattern": "output_{index}",
+                        "description": "One output per entry in `keywords`.",
+                    },
+                    "schema": {
+                        "title": "RouterNode",
+                        "type": "object",
+                        "required": ["llm_provider_id", "llm_provider_model_id", "name"],
+                        "properties": {
+                            "llm_provider_id": {
+                                "type": "integer",
+                                "title": "LLM Model",
+                                "description": "The configured LLM service provider this node calls.",
+                            },
+                            "llm_provider_model_id": {
+                                "type": "integer",
+                                "must_match": {"field": "llm_provider_id", "on": "type"},
                             },
                         },
-                    }
-                ],
+                    },
+                },
                 response_only=True,
             )
         ],
@@ -136,7 +135,7 @@ PIPELINE_OPTIONS_EXAMPLE = {
     "source_material": [{"value": 3, "label": "Returns policy"}],
     "collection": [{"value": 7, "label": "Policy docs"}],
     "collection_index": [{"value": 9, "label": "Support KB (Remote)"}],
-    "agent_tools": [{"value": "one-off-reminder", "label": "One-off Reminder"}],
+    "tools": [{"value": "one-off-reminder", "label": "One-off Reminder"}],
     "custom_actions": [{"value": "4:getOrderStatus", "label": "Orders API: Look up an order"}],
     "built_in_tools": {"openai": [{"value": "web-search", "label": "Web Search"}]},
     "tool_config": {
@@ -217,7 +216,9 @@ class PipelineOptionsView(DiscoveryView):
             if wanted is None:
                 raise unknown_node_type(requested_type)
         else:
-            wanted = served_option_keys() | API_ONLY_OPTION_KEYS
+            wanted = served_option_keys()
+        # A key that cannot be read on its own brings its resolver along, whichever branch chose it.
+        wanted = wanted.union(*(OPTION_KEY_DEPENDENCIES.get(key, ()) for key in wanted))
 
         team = request.team
         llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
@@ -253,7 +254,7 @@ class PipelineOptionsView(DiscoveryView):
             for provider_type, config in options[OptionsSource.tool_config].items()
             if provider_type in llm_provider_types
         }
-        # See `API_ONLY_OPTION_KEYS` -- no node param sources its options from this list.
+        # See `OPTION_KEY_DEPENDENCIES` -- no node param sources its options from this list.
         options[OptionsSource.voice_provider_id] = [
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
