@@ -12,6 +12,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
+from apps.api.authentication import embed_key_authorizes_channel
 from apps.api.session_tokens import session_token_expired, validate_session_token
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
@@ -130,6 +131,14 @@ class SessionAccessPermission(BasePermission):
             # A valid embed key + domain check satisfies EMBED_KEY and NONE channels. It
             # never satisfies a SESSION_TOKEN channel — that always requires the token,
             # even if the session was (mis)configured with session_token_required=False.
+            return level != WidgetAuthLevel.SESSION_TOKEN
+
+        # ADR-0053: a Django session cookie preempts EmbeddedWidgetAuthentication, so a
+        # same-origin widget's embed key never reaches `request.auth`. Honour a key that
+        # rode along with another authenticator, under the same channel and origin checks
+        # as the branch above — otherwise the site help widget could start a session on an
+        # EMBED_KEY channel and then be denied every follow-up request.
+        if embed_key_authorizes_channel(request, channel):
             return level != WidgetAuthLevel.SESSION_TOKEN
 
         # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the

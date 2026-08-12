@@ -41,6 +41,7 @@ from apps.experiments.filters import (
 )
 from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
+from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
@@ -796,6 +797,7 @@ def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UU
 
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):

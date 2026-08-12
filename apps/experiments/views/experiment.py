@@ -69,6 +69,7 @@ from apps.experiments.models import (
     Participant,
     SessionStatus,
 )
+from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.experiments.tables import (
     ExperimentVersionsTable,
 )
@@ -100,6 +101,7 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
+@public_chat_rate_limited
 @experiment_session_view()
 @verify_session_access_cookie
 @require_POST
@@ -204,6 +206,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     )
 
 
+@public_chat_rate_limited
 @experiment_session_view()
 @require_GET
 @team_required
@@ -246,6 +249,7 @@ def _poll_messages(request):
     return HttpResponse()
 
 
+@public_chat_rate_limited
 @team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
@@ -378,6 +382,7 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
     )
 
 
+@public_chat_rate_limited
 @team_required
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
     try:
@@ -423,6 +428,7 @@ def _record_consent_and_redirect(
     return set_session_access_cookie(response, experiment, experiment_session)
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     published_version = resolve_published_or_working(request.experiment)
@@ -689,6 +695,7 @@ def redirect_to_messages_view(request, session):
     return HttpResponseRedirect(url)
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 @require_POST
@@ -699,6 +706,7 @@ def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.PENDING_REVIEW])
 @verify_session_access_cookie
 def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -731,6 +739,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
     )
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.COMPLETE])
 @verify_session_access_cookie
 def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):

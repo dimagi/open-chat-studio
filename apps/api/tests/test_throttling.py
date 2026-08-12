@@ -13,8 +13,10 @@ from rest_framework.throttling import SimpleRateThrottle
 from waffle import get_waffle_flag_model
 
 from apps.api.models import UserAPIKey
-from apps.api.throttling import APIRateThrottle
+from apps.api.throttling import APIRateThrottle, ChatAPIRateThrottle
+from apps.channels.models import ChannelPlatform
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
+from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG
@@ -34,6 +36,11 @@ def experiment(db):
     return ExperimentFactory.create(team=TeamWithUsersFactory.create())
 
 
+def _view_stub(**kwargs):
+    """A stand-in for the DRF view, which throttles read URL captures from."""
+    return type("View", (), {"kwargs": kwargs})()
+
+
 def test_throttle_does_not_use_drf_history_storage():
     """Counting goes through the shared core, not SimpleRateThrottle."""
     assert not issubclass(APIRateThrottle, SimpleRateThrottle)
@@ -47,14 +54,14 @@ def test_identity_prefers_team_then_falls_through(db):
 
     request = RequestFactory().get("/")
     request.team = team
-    assert throttle.identity(request) == ("team", str(team.pk))
+    assert throttle.identity(request, _view_stub()) == ("team", str(team.pk))
 
     request = RequestFactory().get("/")
     request.user = user
-    assert throttle.identity(request) == ("user", str(user.pk))
+    assert throttle.identity(request, _view_stub()) == ("user", str(user.pk))
 
     request = RequestFactory().get("/")
-    assert throttle.identity(request)[0] == "ip"
+    assert throttle.identity(request, _view_stub())[0] == "ip"
 
 
 @pytest.mark.django_db()
@@ -68,7 +75,7 @@ def test_identity_falls_through_to_api_key():
     request = RequestFactory().get("/")
     request.auth = api_key
 
-    assert throttle.identity(request) == ("api_key", str(api_key.pk))
+    assert throttle.identity(request, _view_stub()) == ("api_key", str(api_key.pk))
 
 
 @pytest.mark.django_db()
@@ -94,7 +101,7 @@ def test_identity_falls_through_to_oauth_client():
     request = RequestFactory().get("/")
     request.auth = access_token
 
-    assert throttle.identity(request) == ("oauth_client", str(access_token.application_id))
+    assert throttle.identity(request, _view_stub()) == ("oauth_client", str(access_token.application_id))
 
 
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
@@ -175,3 +182,39 @@ def test_non_throttle_errors_keep_their_shape(experiment):
     response = client.get(reverse("api:experiment-detail", args=["00000000-0000-0000-0000-000000000000"]))
     assert response.status_code == 404
     assert "available_in" not in json.loads(response.content)
+
+
+def test_chat_api_throttle_uses_its_own_scope():
+    """Chat API traffic does not draw on the team's interactive api allowance."""
+    assert ChatAPIRateThrottle.scope == "chat_api"
+
+
+def test_chat_api_throttle_keys_on_the_session_when_present():
+    """Each conversation gets its own allowance."""
+    throttle = ChatAPIRateThrottle()
+    request = RequestFactory().post("/")
+
+    identity = throttle.identity(request, _view_stub(session_id="8b1f0c2e-0000-0000-0000-000000000001"))
+
+    assert identity == ("session", "8b1f0c2e-0000-0000-0000-000000000001")
+
+
+@pytest.mark.django_db()
+def test_chat_api_throttle_keys_on_the_channel_before_a_session_exists(experiment):
+    """Session creation is bounded per chatbot, since there is no session to key on yet."""
+    channel = ExperimentChannelFactory.create(
+        team=experiment.team, experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET
+    )
+    throttle = ChatAPIRateThrottle()
+    request = RequestFactory().post("/")
+    request.auth = channel
+
+    assert throttle.identity(request, _view_stub()) == ("channel", str(channel.pk))
+
+
+def test_chat_api_throttle_falls_back_to_ip():
+    """Legacy clients with neither a session nor a widget channel are still counted."""
+    throttle = ChatAPIRateThrottle()
+    request = RequestFactory().post("/", REMOTE_ADDR="203.0.113.9")
+
+    assert throttle.identity(request, _view_stub()) == ("ip", "203.0.113.9")

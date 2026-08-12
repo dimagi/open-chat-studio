@@ -8,6 +8,8 @@ from django_pydantic_field import SchemaField
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 
+from apps.channels.utils import get_widget_embed_key
+
 SITE_CONFIG_CACHE_KEY = "ocs_site_config"
 SITE_CONFIG_CACHE_TIMEOUT = 60 * 60 * 24
 
@@ -36,6 +38,12 @@ class ChatWidgetConfig(PydanticBaseModel):
             "starter-questions": json.dumps(self.starter_questions),
             "position": self.position,
         }
+        # This widget is rendered for every logged-in user, who is generally not a member of the
+        # support bot's team, so it authorizes itself with the bot's embed key like any other
+        # embedded widget (see `apps.api.views.chat.chat_start_session`). The key is looked up from
+        # the configured chatbot rather than stored on the config so there is nothing to keep in sync.
+        if embed_key := get_widget_embed_key(self.chatbot_id):
+            attrs["embed-key"] = embed_key
         return attrs
 
 

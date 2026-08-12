@@ -6,6 +6,7 @@ from django.db.models import TextChoices
 from django.utils import timezone
 
 from apps.admin.models import ChatWidgetConfig, OcsConfiguration, SiteConfig
+from apps.channels.utils import clear_widget_embed_key_cache, fetch_widget_embed_key
 from apps.service_providers.utils import ServiceProvider
 from apps.teams.models import Team
 
@@ -120,7 +121,10 @@ class OcsConfigurationForm(forms.Form):
         max_length=255,
         required=False,
         label="Chatbot ID",
-        help_text="ID of the chatbot to use for the widget",
+        help_text=(
+            "ID of the chatbot to use for the widget. The chatbot needs an 'Embedded Widget' channel "
+            "that allows this site's domain — the widget authorizes itself with that channel's embed key."
+        ),
         widget=forms.TextInput(attrs={"placeholder": "Enter chatbot ID"}),
     )
 
@@ -175,6 +179,15 @@ class OcsConfigurationForm(forms.Form):
             self.fields["starter_questions"].initial = "\n".join(chat_widget.starter_questions)
             self.fields["position"].initial = chat_widget.position
 
+    def clean_chatbot_id(self):
+        chatbot_id = self.cleaned_data["chatbot_id"].strip()
+        if chatbot_id and not fetch_widget_embed_key(chatbot_id):
+            raise forms.ValidationError(
+                "No embedded widget channel with an embed key was found for this chatbot. Add an "
+                "'Embedded Widget' channel to the chatbot, and allow this site's domain on it."
+            )
+        return chatbot_id
+
     def save(self):
         welcome_messages = [msg.strip() for msg in self.cleaned_data["welcome_messages"].split("\n") if msg.strip()]
         starter_questions = [q.strip() for q in self.cleaned_data["starter_questions"].split("\n") if q.strip()]
@@ -200,5 +213,9 @@ class OcsConfigurationForm(forms.Form):
 
         config_instance.config = site_config
         config_instance.save()
+
+        # The embed key is cached per chatbot; drop it so a newly configured (or re-pointed)
+        # widget picks up its key on the next render instead of waiting out the TTL.
+        clear_widget_embed_key_cache(chat_widget_config.chatbot_id)
 
         return config_instance
