@@ -26,6 +26,7 @@ from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat
+from apps.chat.utils import safe_link_url
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
@@ -815,7 +816,7 @@ def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: u
         working_experiment=chatbot,
         participant_identifier=participant.identifier,
         timezone=request.session.get("detected_tz", None),
-        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
+        metadata={Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))},
     )
     return redirect("chatbots:chatbot_chat_embed", team_slug, chatbot.public_id, session.external_id)
 

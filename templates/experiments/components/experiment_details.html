@@ -16,9 +16,14 @@
         <dd class="text-sm col-span-2">
           {{ experiment_session.get_platform_name }}
           {% if experiment_session.chat.embed_source %}
-            (Embedded at <a class="link" href="{{ experiment_session.chat.embed_source }}" target="_blank">
-              {{ experiment_session.chat.embed_source }}
-            </a>)
+            {% if experiment_session.chat.embed_source_url %}
+              (Embedded at <a class="link" href="{{ experiment_session.chat.embed_source_url }}" target="_blank">
+                {{ experiment_session.chat.embed_source }}
+              </a>)
+            {% else %}
+              {# not an http(s) URL: show it as inert text rather than a link target #}
+              (Embedded at {{ experiment_session.chat.embed_source }})
+            {% endif %}
           {% endif %}
         </dd>
       </div>

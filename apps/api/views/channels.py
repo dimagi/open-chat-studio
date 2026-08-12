@@ -13,7 +13,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView, Request
 
-from apps.api.permissions import verify_hmac
+from apps.api.permissions import (
+    CanTriggerBotMessage,
+    IsAuthenticatedOrMachineToken,
+    ReadOnlyAPIKeyPermission,
+    verify_hmac,
+)
 from apps.api.serializers import TriggerBotMessageRequest, TriggerBotMessageResponse
 from apps.api.tasks import (
     DuplicateConnectChannelError,
@@ -26,6 +31,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.registry import get_channel_class_for_platform
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
+from apps.oauth.permissions import TokenHasOAuthScope
 from apps.teams.utils import current_team
 
 connect_logger = logging.getLogger("api.connect_channel")
@@ -199,6 +205,15 @@ def handle_trigger_bot_message(request, response_serializer_class):
 
 
 class TriggerBotMessageView(APIView):
+    # Spelled out rather than inherited from DEFAULT_PERMISSION_CLASSES so the role check is explicit:
+    # the default stack gates on team membership and the OAuth scope only, which for API-key callers
+    # left this endpoint open to any member regardless of their role.
+    permission_classes = [
+        IsAuthenticatedOrMachineToken,
+        ReadOnlyAPIKeyPermission,
+        CanTriggerBotMessage,
+        TokenHasOAuthScope,
+    ]
     required_scopes = ("chatbots:interact",)
 
     @extend_schema(

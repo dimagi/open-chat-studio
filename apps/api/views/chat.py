@@ -36,6 +36,7 @@ from apps.channels.widget_versions import (
     widget_sunset_headers,
 )
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.utils import safe_link_url
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
@@ -389,7 +390,7 @@ def chat_start_session(request):
             participant_data.data["name"] = name
             participant_data.save(update_fields=["data"])
 
-    metadata = {Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)}
+    metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
 
     session = ApiChannel.start_new_session(
         working_experiment=experiment,

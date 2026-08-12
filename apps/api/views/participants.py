@@ -12,7 +12,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
-from apps.api.permissions import IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission
+from apps.api.permissions import (
+    IsAuthenticatedOrMachineToken,
+    ParticipantModelPermissions,
+    ReadOnlyAPIKeyPermission,
+)
 from apps.api.serializers import ParticipantDataUpdateRequest, ParticipantDetailSerializer
 from apps.api.tasks import (
     DuplicateConnectChannelError,
@@ -40,7 +44,14 @@ class ParticipantView(APIView):
     """GET: list participants for the team. POST: update/create participant data."""
 
     pagination_class = CursorPagination
-    permission_classes = [IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission, TokenHasOAuthResourceScope]
+    permission_classes = [
+        IsAuthenticatedOrMachineToken,
+        ReadOnlyAPIKeyPermission,
+        TokenHasOAuthResourceScope,
+        # The caller's role must grant the same participant model permissions the UI requires for
+        # these operations; membership alone is not enough.
+        ParticipantModelPermissions,
+    ]
     # base scope; TokenHasOAuthResourceScope appends :read for safe methods, :write otherwise.
     required_scopes = ("participants",)
 
@@ -323,6 +334,9 @@ def _build_new_scheduled_message(request, experiment, participant, external_id, 
 
 @transaction.atomic()
 def _create_update_schedules(request, experiment, participant, schedule_data):
+    # Only reachable from POST, which ParticipantModelPermissions has already gated on
+    # experiments.change_participant — the same permission the UI requires to cancel a participant
+    # schedule or send them a bot message.
     data_by_id = {
         _schedule_external_id(data, experiment, participant): data for data in schedule_data if not data.get("delete")
     }

@@ -2,12 +2,22 @@ from django.db import transaction
 from drf_spectacular.utils import OpenApiExample, extend_schema
 from rest_framework.views import APIView
 
+from apps.api.permissions import CanTriggerBotMessage, IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission
 from apps.api.serializers import TriggerBotMessageRequest
 from apps.api.v2.serializers import TriggerBotMessageResponse
 from apps.api.views.channels import handle_trigger_bot_message
+from apps.oauth.permissions import TokenHasOAuthScope
 
 
 class TriggerBotMessageView(APIView):
+    # Same explicit permission stack as the v1 view: the role check (CanTriggerBotMessage) is not part
+    # of DEFAULT_PERMISSION_CLASSES, so it has to be named here too.
+    permission_classes = [
+        IsAuthenticatedOrMachineToken,
+        ReadOnlyAPIKeyPermission,
+        CanTriggerBotMessage,
+        TokenHasOAuthScope,
+    ]
     required_scopes = ("chatbots:interact",)
 
     @extend_schema(

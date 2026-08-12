@@ -1,9 +1,10 @@
+from django.db.models import Prefetch
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSerializer
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
@@ -30,7 +31,7 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
     ),
 )
 class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
     serializer_class = ExperimentSerializer
     lookup_field = "public_id"
@@ -38,4 +39,11 @@ class ExperimentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Generi
 
     def get_queryset(self):
         # Only return working experiments
-        return Experiment.objects.filter(team=self.request.team).filter(working_version__isnull=True)
+        return (
+            Experiment.objects.filter(team=self.request.team)
+            .filter(working_version__isnull=True)
+            # `Experiment.Meta.ordering` is by name, which all versions share, so the DB is free to
+            # return them in any order. Order by version number for a stable response.
+            .prefetch_related(Prefetch("versions", queryset=Experiment.objects.order_by("version_number")))
+            .order_by("name", "id")
+        )

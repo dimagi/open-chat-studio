@@ -10,6 +10,7 @@ from django.utils.functional import classproperty
 from langchain_core.messages import BaseMessage, messages_from_dict
 
 from apps.annotations.models import Tag, TagCategories, TaggedModelMixin, UserCommentsMixin
+from apps.chat.utils import safe_link_url
 from apps.files.models import File
 from apps.teams.models import BaseTeamModel
 from apps.teams.utils import get_slug_for_team
@@ -42,6 +43,15 @@ class Chat(BaseTeamModel, TaggedModelMixin, UserCommentsMixin):
     @property
     def embed_source(self):
         return self.metadata.get(Chat.MetadataKeys.EMBED_SOURCE)
+
+    @property
+    def embed_source_url(self):
+        """The embed source as a link target, or ``None`` if it isn't a safe http(s) URL.
+
+        The embed source originates from an unauthenticated ``Referer`` header, so it must
+        never be rendered as an ``href`` without this check.
+        """
+        return safe_link_url(self.embed_source)
 
     def get_metadata(self, key: MetadataKeys):
         return self.metadata.get(key, None)
