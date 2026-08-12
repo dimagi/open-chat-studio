@@ -5,6 +5,7 @@ Both reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which
 raw. The reshaping rules live in ``contract.py`` and ``node_types.py``.
 """
 
+from django.db.models import QuerySet
 from django.db.models.functions import Lower
 from django.http import HttpResponseNotModified
 from drf_spectacular.types import OpenApiTypes
@@ -210,7 +211,13 @@ class PipelineOptionsView(DiscoveryView):
         ],
     )
     def get(self, request):
-        requested_type = request.query_params.get("node_type")
+        wanted = self._wanted_keys(request.query_params.get("node_type"))
+        options = self._options_for_team(request.team)
+        return Response({key: value for key, value in options.items() if key in wanted})
+
+    @staticmethod
+    def _wanted_keys(requested_type: str | None) -> frozenset[str]:
+        """The keys this response carries: everything served, or just what one node type can read."""
         if requested_type:
             wanted = option_keys_for_node_type(requested_type)
             if wanted is None:
@@ -218,9 +225,12 @@ class PipelineOptionsView(DiscoveryView):
         else:
             wanted = served_option_keys()
         # A key that cannot be read on its own brings its resolver along, whichever branch chose it.
-        wanted = wanted.union(*(OPTION_KEY_DEPENDENCIES.get(key, ()) for key in wanted))
+        return wanted.union(*(OPTION_KEY_DEPENDENCIES.get(key, ()) for key in wanted))
 
-        team = request.team
+    @classmethod
+    def _options_for_team(cls, team) -> dict:
+        """Every option list the team can draw on, in API vocabulary and with the builder-only
+        affordances stripped. Scoping to a node type happens after this."""
         llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
         llm_provider_types = {provider["type"] for provider in llm_providers}
         voice_providers = list(VoiceProvider.objects.filter(team=team))
@@ -232,21 +242,12 @@ class PipelineOptionsView(DiscoveryView):
             type__in=llm_provider_types, deprecated=False
         )
 
-        reachable_services = {provider.type.lower() for provider in voice_providers}
-        synthetic_voices = (
-            SyntheticVoice.get_for_team(team, [])
-            .annotate(service_lower=Lower("service"))
-            .filter(service_lower__in=reachable_services)
-            if reachable_services
-            else SyntheticVoice.objects.none()
-        )
-
-        options = self._clean_options(
+        options = cls._clean_options(
             get_node_parameter_values(
                 team=team,
                 llm_providers=llm_providers,
                 llm_provider_models=llm_provider_models,
-                synthetic_voices=synthetic_voices,
+                synthetic_voices=cls._speakable_voices(team, voice_providers),
             )
         )
         options[OptionsSource.tool_config] = {
@@ -259,8 +260,20 @@ class PipelineOptionsView(DiscoveryView):
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
         options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)
-        options = self._to_api_vocabulary(self._describe_prompt_vars(options))
-        return Response({key: value for key, value in options.items() if key in wanted})
+        return cls._to_api_vocabulary(cls._describe_prompt_vars(options))
+
+    @staticmethod
+    def _speakable_voices(team, voice_providers: list) -> QuerySet:
+        """The voices the team has a provider to speak. `SyntheticVoice.service` ("AWS") and the
+        provider type ("aws") differ in case, so the match is made on a lowered annotation."""
+        reachable_services = {provider.type.lower() for provider in voice_providers}
+        if not reachable_services:
+            return SyntheticVoice.objects.none()
+        return (
+            SyntheticVoice.get_for_team(team, [])
+            .annotate(service_lower=Lower("service"))
+            .filter(service_lower__in=reachable_services)
+        )
 
     @classmethod
     def _clean_options(cls, value):
