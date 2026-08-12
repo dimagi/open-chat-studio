@@ -133,6 +133,8 @@ def test_log_only_mode_serves_over_limit_webhook_deliveries(client):
         pytest.param("channels:new_twilio_message", [], id="twilio"),
         pytest.param("channels:new_sureadhere_message", ["42"], id="sureadhere"),
         pytest.param("channels:new_turn_message", ["8b1f0c2e-0000-0000-0000-000000000004"], id="turn"),
+        pytest.param("channels:new_telegram_message", ["8b1f0c2e-0000-0000-0000-000000000005"], id="telegram"),
+        pytest.param("slack_global:events", [], id="slack"),
     ],
 )
 def test_post_only_webhooks_answer_other_methods_without_counting(client, url_name, url_args):

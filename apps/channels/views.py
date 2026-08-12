@@ -67,6 +67,7 @@ log = logging.getLogger("ocs.channels")
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
+@require_POST
 @rate_limited(WEBHOOK_SCOPE, key_fn=channel_external_id_key)
 def new_telegram_message(request, channel_external_id: uuid):
     token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")

@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from slack_bolt.adapter.django.handler import to_bolt_request, to_django_response
 
 from apps.channels.rate_limit_keys import WEBHOOK_SCOPE, slack_ip_key
@@ -42,6 +43,7 @@ def slack_oauth_redirect(request):
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @csrf_exempt
+@require_POST
 @rate_limited(WEBHOOK_SCOPE, key_fn=slack_ip_key)
 def slack_events_handler(request):
     # see `slack_listeners.py`
