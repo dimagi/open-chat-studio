@@ -190,6 +190,24 @@ class ReadOnlyAPIKeyPermission(BasePermission):
         return True
 
 
+class RequiresTeamPermission(BasePermission):
+    """Gate on ``required_permissions`` against the team the credential is scoped to.
+
+    ``has_perms`` resolves against that team because the auth layer calls ``set_current_team``.
+
+    Client-credentials (machine) tokens have no user, so there are no membership-derived model
+    permissions to check; their authorization rests entirely on the OAuth scope and the token's
+    pinned team.
+    """
+
+    required_permissions: list[str] = []
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            return True
+        return bool(request.user and request.user.has_perms(self.required_permissions))
+
+
 # The non-scope half of REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"] (config/settings.py). Setting
 # ``permission_classes`` on a view replaces the defaults wholesale, which silently drops the
 # read-only API-key gate (ADR-0021), so views that need extra permission classes must build on this
