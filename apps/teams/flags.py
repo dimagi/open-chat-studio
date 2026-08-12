@@ -90,6 +90,11 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    IGNORE_RATE_LIMITING = (
+        "flag_ignore_rate_limiting",
+        "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",
+    )
+
     @property
     def docs_url(self):
         docs_link = settings.DOCUMENTATION_LINKS.get(self.docs_slug, None)

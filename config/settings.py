@@ -170,6 +170,7 @@ MIDDLEWARE = list(
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.web.request_logging_middleware.RequestLoggingMiddleware",
+            "apps.utils.rate_limit.RateLimitHeadersMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
@@ -479,6 +480,8 @@ REST_FRAMEWORK = {
     "DEFAULT_VERSIONING_CLASS": "apps.api.versioning.URLPathVersioning",
     "DEFAULT_VERSION": "v1",
     "ALLOWED_VERSIONS": ["v1", "v2"],
+    "DEFAULT_THROTTLE_CLASSES": ["apps.api.throttling.APIRateThrottle"],
+    "EXCEPTION_HANDLER": "apps.api.exception_handlers.api_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
@@ -651,10 +654,33 @@ CACHES = {
     },
 }
 
+# Rate limiting (#2140 / #2349). Counters live in a dedicated cache alias with short
+# socket timeouts so a hung Redis cannot stall request handling. Log-only until
+# RATE_LIMIT_ENFORCE is switched on.
+RATE_LIMIT_ENFORCE = env.bool("RATE_LIMIT_ENFORCE", default=False)
+RATE_LIMIT_TRUSTED_PROXY_COUNT = env.int("RATE_LIMIT_TRUSTED_PROXY_COUNT", default=0)
+RATE_LIMIT_CACHE_ALIAS = "rate_limit"
+RATE_LIMITS = {
+    "api": {"rate": env("RATE_LIMIT_API", default="2000/5m"), "fail_open": True},
+}
+CACHES["rate_limit"] = {
+    "BACKEND": "django_redis.cache.RedisCache",
+    "LOCATION": REDIS_URL,
+    "OPTIONS": {
+        "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        "SOCKET_TIMEOUT": 0.5,
+        "SOCKET_CONNECT_TIMEOUT": 0.5,
+    },
+}
+
 if IS_TESTING:
     # Use an in-process cache for tests: faster than Redis (no network round-trips) and
     # naturally isolated per pytest-xdist worker, since each worker is a separate process.
     CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+    CACHES["rate_limit"] = {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "rate-limit",
+    }
 
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
@@ -1021,6 +1047,14 @@ CORS_ALLOW_METHODS = [
     "PATCH",
     "POST",
     "PUT",
+]
+
+# Expose rate limit headers so cross-origin chat widget clients can read them
+CORS_EXPOSE_HEADERS = [
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+    "Retry-After",
 ]
 
 # Additional CORS settings for security
