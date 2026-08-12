@@ -172,6 +172,40 @@ def test_trace_detail_view_shows_total_cost_when_flag_on(client, team_with_users
 
 
 @pytest.mark.django_db()
+def test_trace_detail_view_shows_zero_cost_for_fully_priced_model(client, team_with_users):
+    """A fully priced model (pricing_rule set) that happens to cost $0 must render "$0.00" in
+    its per-model row, not fall through to blank because `model.cost` is a falsy Decimal 0."""
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    trace = _make_trace(team)
+    rule = PricingRule.objects.create(
+        team=None,
+        provider_type="openai",
+        model_name="test-priced-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        unit_price="0.00015",
+    )
+    UsageRecordFactory.create(
+        team=team,
+        trace=trace,
+        model_name="test-priced-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        cost=Decimal("0"),
+        pricing_rule=rule,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "$0.00" in content
+    assert "unpriced" not in content
+
+
+@pytest.mark.django_db()
 def test_trace_detail_view_shows_no_pricing_data_when_unpriced(client, team_with_users):
     team = team_with_users
     user = team.members.first()

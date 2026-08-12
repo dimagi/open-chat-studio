@@ -107,7 +107,21 @@ class TestCostSummary:
 
         assert summary.exact_cost == Decimal("1.00")
         assert summary.estimated_cost == Decimal("0.20")
+        assert summary.estimated_call_count == 1
         assert summary.unknown_call_count == 2
+
+    def test_estimated_call_count_counts_zero_cost_rows(self):
+        """`estimated_call_count` is a row count, not derived from `estimated_cost` - a $0
+        estimated row (e.g. a zero-priced model) must still register as estimated usage, since
+        a Decimal 0 is falsy and would otherwise be indistinguishable from no estimated usage
+        at all when a caller checks truthiness of the cost instead."""
+        team = TeamFactory.create()
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), confidence=Confidence.ESTIMATED)
+
+        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert summary.estimated_cost == Decimal(0)
+        assert summary.estimated_call_count == 1
 
     def test_counts_unpriced_rows_excluding_unknown(self):
         """EXACT/ESTIMATED rows that the resolver couldn't price (pricing_rule

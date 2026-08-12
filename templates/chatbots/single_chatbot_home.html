@@ -155,7 +155,7 @@
         <div class="card card-border bg-base-100">
           <div class="card-body p-4">
             <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (last 30 days)</span>
-            {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_cost unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" size="lg" %}
+            {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_call_count unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" size="lg" %}
           </div>
         </div>
         <div class="card card-border bg-base-100">

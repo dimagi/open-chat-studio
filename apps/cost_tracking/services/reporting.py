@@ -43,6 +43,11 @@ class CostSummary:
 
     `total_cost` is every source — it's what the team actually spent, evaluations
     included, with no per-source split (ADR-0048).
+
+    `estimated_call_count` is a row count, not derived from `estimated_cost` - a $0 estimated
+    row (e.g. a zero-priced model) must still register as "estimated" for a confidence badge,
+    and a Decimal `0` is falsy so `estimated_cost` alone can't tell "no estimated usage" apart
+    from "estimated usage that happens to cost nothing".
     """
 
     period_start: datetime
@@ -52,6 +57,7 @@ class CostSummary:
     delta_pct: float | None
     exact_cost: Decimal
     estimated_cost: Decimal
+    estimated_call_count: int
     unknown_call_count: int
     unpriced_call_count: int
 
@@ -289,6 +295,7 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
                 _ZERO,
                 output_field=_COST_FIELD,
             ),
+            estimated_rows=Count("id", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
             unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
             # Rows that got recorded but the resolver couldn't price (no matching
             # PricingRule). Excludes UNKNOWN-confidence rows because those have
@@ -308,6 +315,7 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
         delta_pct=_safe_pct(agg["total"] - agg["previous"], agg["previous"]),
         exact_cost=agg["exact"],
         estimated_cost=agg["estimated"],
+        estimated_call_count=agg["estimated_rows"],
         unknown_call_count=agg["unknown_rows"],
         unpriced_call_count=agg["unpriced_rows"],
     )

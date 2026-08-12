@@ -79,6 +79,7 @@ def _cost_summary_from_cache(payload: dict) -> CostSummary:
         delta_pct=payload["delta_pct"],
         exact_cost=Decimal(payload["exact_cost"]),
         estimated_cost=Decimal(payload["estimated_cost"]),
+        estimated_call_count=payload["estimated_call_count"],
         unknown_call_count=payload["unknown_call_count"],
         unpriced_call_count=payload["unpriced_call_count"],
     )

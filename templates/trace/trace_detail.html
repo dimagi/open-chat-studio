@@ -108,10 +108,10 @@
                         <span class="text-base-content/40">· {{ model.cache_write_tokens|intcomma }} cache write</span>
                       {% endif %}
                       {% if cost_tracking_enabled %}
-                        {% if model.cost %}
-                          <span class="text-base-content/40">· ${{ model.cost|cost_display }}</span>
-                        {% elif model.has_unpriced %}
+                        {% if model.has_unpriced %}
                           <span class="text-base-content/40">· unpriced</span>
+                        {% else %}
+                          <span class="text-base-content/40">· ${{ model.cost|cost_display }}</span>
                         {% endif %}
                       {% endif %}
                     </span>
