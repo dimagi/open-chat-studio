@@ -209,6 +209,32 @@ def test_chatbot_versions_table_view(team_with_users):
     assert table.data[0] == experiment
 
 
+@pytest.mark.django_db()
+def test_versions_table_chat_action_opens_widget(client, team_with_users):
+    """The per-version chat button launches the embedded widget pinned to that version number."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, owner=user, file_uploads_enabled=True)
+    version = experiment.create_new_version()
+
+    url = reverse("chatbots:versions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert f"openChatWidget({version.version_number}, " in content
+    assert f"headerText: 'Version {version.version_number}'" in content
+    assert "allowAttachments: true" in content
+    assert (
+        reverse(
+            "chatbots:start_authed_web_session",
+            args=[team.slug, experiment.id, version.version_number],
+        )
+        not in content
+    )
+
+
 def attach_session_middleware_to_request(request):
     session_middleware = SessionMiddleware(lambda req: None)
     session_middleware.process_request(request)
