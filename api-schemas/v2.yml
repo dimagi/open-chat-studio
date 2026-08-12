@@ -1769,6 +1769,26 @@ components:
             type: string
           nullable: true
           description: MCP server tools enabled for the node.
+    LlmProviderModelOption:
+      type: object
+      description: A model the team can call, given the providers it holds.
+      properties:
+        value:
+          type: integer
+          description: The model's id. Write this into the node param.
+        label:
+          type: string
+        type:
+          type: string
+          description: The provider type that serves the model. Must equal the `type`
+            of the chosen `llm_provider_id`.
+        max_token_limit:
+          type: integer
+          description: The model's context window. Absent where none is recorded.
+      required:
+      - label
+      - type
+      - value
     Me:
       type: object
       properties:
@@ -1912,33 +1932,6 @@ components:
       required:
       - detail
       - valid_types
-    Option:
-      type: object
-      description: One selectable value. Write `value` into the param; `label` is
-        for humans reading a diff.
-      properties:
-        value:
-          oneOf:
-          - type: string
-          - type: integer
-          description: Write this into the node param. Opaque -- copy it verbatim
-            and never construct one. An integer for the model-backed keys, a string
-            elsewhere; `custom_actions` values in particular are composite string
-            identifiers.
-        label:
-          type: string
-        type:
-          type: string
-          description: The provider type, where the option belongs to one. The join
-            key for `must_match`.
-        provider_id:
-          type: integer
-          description: The provider this option belongs to.
-        max_token_limit:
-          type: integer
-      required:
-      - label
-      - value
     PaginatedChatbotList:
       type: object
       required:
@@ -2020,49 +2013,50 @@ components:
         llm_provider_id:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/ProviderOption'
         llm_provider_model_id:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/LlmProviderModelOption'
         voice_provider_id:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/ProviderOption'
           description: The team's configured voice providers. No node param sources
-            its options from this.
+            its options from this -- it is here to resolve the `provider_id` on a
+            `synthetic_voice_id` entry.
         synthetic_voice_id:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/SyntheticVoiceOption'
         source_material:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/ResourceOption'
         collection:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/ResourceOption'
           description: Media collections -- files a node can talk about.
         collection_index:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/ResourceOption'
           description: Searchable indexes a node can retrieve from.
         agent_tools:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/ToolOption'
         custom_actions:
           type: array
           items:
-            $ref: '#/components/schemas/Option'
+            $ref: '#/components/schemas/ToolOption'
         built_in_tools:
           type: object
           additionalProperties:
             type: array
             items:
-              $ref: '#/components/schemas/Option'
+              $ref: '#/components/schemas/ToolOption'
           description: Keyed by LLM provider type.
         tool_config:
           type: object
@@ -2157,6 +2151,24 @@ components:
       - id
       - name
       - type
+    ProviderOption:
+      type: object
+      description: One of the team's configured service providers.
+      properties:
+        value:
+          type: integer
+          description: The provider's id. Write this into the node param.
+        label:
+          type: string
+          description: The name the team gave the provider.
+        type:
+          type: string
+          description: What the provider talks to -- `openai`, `anthropic`, `aws`.
+            The join key for `must_match`.
+      required:
+      - label
+      - type
+      - value
     RenderTemplateParams:
       type: object
       properties:
@@ -2166,6 +2178,21 @@ components:
         template_string:
           type: string
           description: Jinja2 template rendered against the node input.
+    ResourceOption:
+      type: object
+      description: |-
+        One of the team's stored resources. Write `value` into the param; `label` is for humans
+        reading a diff.
+      properties:
+        value:
+          type: integer
+          description: The resource's id. Write this into the node param.
+        label:
+          type: string
+          description: What the resource is called.
+      required:
+      - label
+      - value
     RouterNodeParams:
       type: object
       properties:
@@ -2273,6 +2300,28 @@ components:
           type: string
           nullable: true
           description: Key within the data source whose value selects the route.
+    SyntheticVoiceOption:
+      type: object
+      description: A voice, and the voice provider that speaks it.
+      properties:
+        value:
+          type: integer
+          description: The voice's id. Write this into the node param.
+        label:
+          type: string
+        type:
+          type: string
+          description: The service the voice comes from -- `aws`, `azure`, `openai`.
+        provider_id:
+          type: integer
+          nullable: true
+          description: The `voice_provider_id` option this voice belongs to, or null
+            for a shared voice that any provider of the same `type` can speak.
+      required:
+      - label
+      - provider_id
+      - type
+      - value
     Team:
       type: object
       properties:
@@ -2302,6 +2351,21 @@ components:
       - completion
       - prompt
       - total
+    ToolOption:
+      type: object
+      description: One selectable tool. Write `value` into the param; `label` is for
+        humans reading a diff.
+      properties:
+        value:
+          type: string
+          description: Write this into the node param. Opaque -- copy it verbatim
+            and never construct one. `custom_actions` values in particular are composite
+            identifiers rather than names.
+        label:
+          type: string
+      required:
+      - label
+      - value
     TriggerBotChannel:
       type: object
       description: |-
