@@ -7,10 +7,14 @@ from zoneinfo import ZoneInfo
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
+from apps.channels.models import ChannelPlatform
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind, UsageSource
 from apps.cost_tracking.services.reporting import (
     CostFilters,
+    chatbot_usage_summary,
     cost_summary,
     cost_timeseries,
     cost_total,
@@ -193,6 +197,70 @@ class TestCostsByExperiment:
 
 
 @pytest.mark.django_db()
+class TestChatbotUsageSummary:
+    """Cost + session/message counts for one chatbot's usage widget (chatbot home page).
+    Uses real `timezone.now()` rather than the frozen `_NOW` other classes use, since
+    `ExperimentSession.created_at`/`ChatMessage.created_at` are `auto_now_add` and can't be
+    backdated without the same post-generation trick `UsageRecordFactory.at` uses."""
+
+    def _window(self):
+        end = timezone.now()
+        return end - timedelta(days=30), end
+
+    def test_empty_when_no_activity(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        start, end = self._window()
+
+        usage = chatbot_usage_summary(experiment, start=start, end=end)
+
+        assert usage.cost.total_cost == Decimal(0)
+        assert usage.sessions_count == 0
+        assert usage.messages_count == 0
+
+    def test_aggregates_cost_sessions_and_messages(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.50"))
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="hello")
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.SYSTEM, content="sys")
+        start, end = self._window()
+
+        usage = chatbot_usage_summary(experiment, start=start, end=end)
+
+        assert usage.cost.total_cost == Decimal("1.50000000")
+        assert usage.sessions_count == 1
+        assert usage.messages_count == 2  # SYSTEM excluded - not a conversation turn
+
+    def test_scoped_to_experiment(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        other_experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+        other_session = ExperimentSessionFactory.create(experiment=other_experiment, team=team)
+        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.00"))
+        UsageRecordFactory.create(team=team, experiment=other_experiment, session=other_session, cost=Decimal("9.00"))
+        start, end = self._window()
+
+        usage = chatbot_usage_summary(experiment, start=start, end=end)
+
+        assert usage.cost.total_cost == Decimal("1.00000000")
+        assert usage.sessions_count == 1
+
+    def test_excludes_evaluation_sessions(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        ExperimentSessionFactory.create(experiment=experiment, team=team, platform=ChannelPlatform.EVALUATIONS)
+        start, end = self._window()
+
+        usage = chatbot_usage_summary(experiment, start=start, end=end)
+
+        assert usage.sessions_count == 0
+
+
+@pytest.mark.django_db()
 class TestSessionUsage:
     """Per-session, per-model cost/token breakdown and session scoping."""
 
@@ -203,7 +271,11 @@ class TestSessionUsage:
         usage = session_usage(session)
 
         assert usage.total_cost == Decimal(0)
+        assert usage.total_tokens == 0
         assert usage.by_model == []
+        assert usage.has_unpriced is False
+        assert usage.has_estimated is False
+        assert usage.has_unknown is False
 
     def test_groups_by_model_with_total(self):
         team = TeamFactory.create()
@@ -215,6 +287,7 @@ class TestSessionUsage:
         usage = session_usage(session)
 
         assert usage.total_cost == Decimal("3.50000000")
+        assert usage.total_tokens == 350
         assert [(m.model_name, m.cost, m.tokens) for m in usage.by_model] == [
             ("gpt-4o", Decimal("3.00000000"), 300),
             ("gpt-4o-mini", Decimal("0.50000000"), 50),
@@ -232,6 +305,38 @@ class TestSessionUsage:
         assert usage.total_cost == Decimal("1.00000000")
         assert len(usage.by_model) == 1
 
+    def test_no_pricing_data_when_all_rows_unpriced(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        _usage(team, cost="0", when=_NOW, session=session, model_name="gpt-4o", quantity=100)
+
+        usage = session_usage(session)
+
+        assert usage.total_cost == Decimal(0)
+        assert usage.has_unpriced is True
+
+    def test_flags_estimated_and_unknown_confidence(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team)
+        _usage(team, cost="0", when=_NOW, session=session, model_name="gpt-4o", confidence=Confidence.ESTIMATED)
+        _usage(
+            team,
+            cost="0",
+            when=_NOW,
+            session=session,
+            model_name="gpt-4o",
+            quantity=None,
+            confidence=Confidence.UNKNOWN,
+        )
+
+        usage = session_usage(session)
+
+        assert usage.has_estimated is True
+        assert usage.has_unknown is True
+        row = usage.by_model[0]
+        assert row.has_estimated is True
+        assert row.has_unknown is True
+
 
 @pytest.mark.django_db()
 class TestTraceTokenUsage:
@@ -245,6 +350,10 @@ class TestTraceTokenUsage:
 
         assert usage.by_model == []
         assert usage.total == 0
+        assert usage.total_cost == Decimal(0)
+        assert usage.has_unpriced is False
+        assert usage.has_estimated is False
+        assert usage.has_unknown is False
 
     def test_splits_input_and_output(self):
         team = TeamFactory.create()
@@ -331,6 +440,122 @@ class TestTraceTokenUsage:
 
         assert usage.total == 0
         assert len(usage.by_model) == 1
+
+    def test_sums_cost_and_flags_fully_priced_rows(self):
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        rule = PricingRule.objects.create(
+            team=None,
+            provider_type="openai",
+            model_name="test-priced-model",
+            service_kind=ServiceKind.LLM_INPUT,
+            unit_price="0.00015",
+        )
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW,
+            trace=trace,
+            model_name="test-priced-model",
+            service_kind=ServiceKind.LLM_INPUT,
+            quantity=100,
+            pricing_rule=rule,
+        )
+        _usage(
+            team,
+            cost="0.50",
+            when=_NOW,
+            trace=trace,
+            model_name="test-priced-model",
+            service_kind=ServiceKind.LLM_OUTPUT,
+            quantity=50,
+            pricing_rule=rule,
+        )
+
+        usage = trace_token_usage(trace)
+
+        assert usage.total_cost == Decimal("1.50000000")
+        assert usage.has_unpriced is False
+        assert usage.has_estimated is False
+        assert usage.has_unknown is False
+        row = usage.by_model[0]
+        assert row.cost == Decimal("1.50000000")
+        assert row.has_unpriced is False
+
+    def test_no_pricing_data_when_all_rows_unpriced(self):
+        """A row with no matching PricingRule has `cost=0` and `pricing_rule=None` -
+        the trace detail page renders "no pricing data" for this rather than "$0.00"."""
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        _usage(team, cost="0", when=_NOW, trace=trace, service_kind=ServiceKind.LLM_INPUT, quantity=100)
+
+        usage = trace_token_usage(trace)
+
+        assert usage.total_cost == Decimal(0)
+        assert usage.has_unpriced is True
+
+    def test_flags_estimated_and_unknown_confidence(self):
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        _usage(
+            team,
+            cost="0",
+            when=_NOW,
+            trace=trace,
+            service_kind=ServiceKind.LLM_INPUT,
+            quantity=100,
+            confidence=Confidence.ESTIMATED,
+        )
+        _usage(
+            team,
+            cost="0",
+            when=_NOW,
+            trace=trace,
+            service_kind=ServiceKind.LLM_OUTPUT,
+            quantity=None,
+            confidence=Confidence.UNKNOWN,
+        )
+
+        usage = trace_token_usage(trace)
+
+        assert usage.has_estimated is True
+        assert usage.has_unknown is True
+
+    def test_confidence_flags_scoped_per_model(self):
+        """An EXACT row for one model must not be flagged just because a
+        different model in the same trace has an ESTIMATED row."""
+        team = TeamFactory.create()
+        trace = TraceFactory.create(team=team)
+        _usage(
+            team,
+            cost="0",
+            when=_NOW,
+            trace=trace,
+            provider_type="openai",
+            model_name="gpt-4o",
+            service_kind=ServiceKind.LLM_INPUT,
+            quantity=100,
+            confidence=Confidence.EXACT,
+        )
+        _usage(
+            team,
+            cost="0",
+            when=_NOW,
+            trace=trace,
+            provider_type="anthropic",
+            model_name="claude-haiku-4-5",
+            service_kind=ServiceKind.LLM_INPUT,
+            quantity=70,
+            confidence=Confidence.ESTIMATED,
+        )
+
+        usage = trace_token_usage(trace)
+
+        exact_row = next(m for m in usage.by_model if m.model_name == "gpt-4o")
+        estimated_row = next(m for m in usage.by_model if m.model_name == "claude-haiku-4-5")
+        assert exact_row.has_estimated is False
+        assert estimated_row.has_estimated is True
+        assert usage.has_estimated is True
 
 
 @pytest.mark.django_db()

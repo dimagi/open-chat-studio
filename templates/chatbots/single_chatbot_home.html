@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 form_tags static team_tags waffle_tags %}
+{% load django_tables2 form_tags humanize static team_tags waffle_tags %}
 
 {% block page_head %}
   {{ block.super }}
@@ -149,6 +149,28 @@
         {% include "experiments/share/dialog.html" %}
       {% endif %}
       <div id="channel_create_edit_modal_placeholder"></div>
+    {% endif %}
+    {% if cost_tracking_enabled %}
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4" data-testid="chatbot-usage-widget">
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (last 30 days)</span>
+            {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_cost unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" size="lg" %}
+          </div>
+        </div>
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <span class="text-xs uppercase tracking-wide text-base-content/60">Sessions (last 30 days)</span>
+            <div class="text-3xl font-bold mt-2">{{ usage_summary.sessions_count|intcomma }}</div>
+          </div>
+        </div>
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <span class="text-xs uppercase tracking-wide text-base-content/60">Messages (last 30 days)</span>
+            <div class="text-3xl font-bold mt-2">{{ usage_summary.messages_count|intcomma }}</div>
+          </div>
+        </div>
+      </div>
     {% endif %}
   </div>
   <div class="tabs-container">

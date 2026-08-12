@@ -6,11 +6,14 @@ from waffle import flag_is_active
 
 from apps.annotations.models import Tag
 from apps.annotations.prefetch import chat_tagged_items_prefetch
+from apps.cost_tracking.services.reporting import session_usage
 from apps.events.models import StaticTrigger, StaticTriggerType
 from apps.experiments.decorators import experiment_session_view
 from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem
 from apps.teams.flags import Flags
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
 def render_session_details(
@@ -28,6 +31,7 @@ def render_session_details(
                 "queue__name", flat=True
             )
         )
+    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
     return TemplateResponse(
         request,
         template_path,
@@ -36,6 +40,8 @@ def render_session_details(
             "experiment_session": session,
             "active_tab": active_tab,
             "annotation_queue_names": annotation_queue_names,
+            "cost_tracking_enabled": cost_tracking_enabled,
+            "usage_summary": session_usage(session) if cost_tracking_enabled else None,
             "details": [
                 (
                     gettext("Participant"),

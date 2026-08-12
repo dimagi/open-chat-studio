@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load chat_tags humanize json_tags %}
+{% load chat_tags cost_tracking humanize json_tags %}
 {% block page_head %}
   {{ block.super }}
   <style>{% pygments_json_css %}</style>
@@ -81,6 +81,9 @@
                 <span class="text-3xl font-bold">{{ token_usage.total|intcomma }}</span>
                 <span class="text-sm text-base-content/60 ml-1">total</span>
               </div>
+              {% if cost_tracking_enabled %}
+                {% include "cost_tracking/_usage_summary.html" with total_cost=token_usage.total_cost unpriced=token_usage.has_unpriced estimated=token_usage.has_estimated unknown=token_usage.has_unknown testid_prefix="trace" %}
+              {% endif %}
               {% if token_usage.total %}
                 <div class="flex h-1.5 rounded-full overflow-hidden mt-3 bg-base-200" aria-hidden="true">
                   <div class="bg-primary" style="flex: {{ token_usage.input_tokens }};"></div>
@@ -103,6 +106,13 @@
                       {% endif %}
                       {% if model.cache_write_tokens %}
                         <span class="text-base-content/40">· {{ model.cache_write_tokens|intcomma }} cache write</span>
+                      {% endif %}
+                      {% if cost_tracking_enabled %}
+                        {% if model.cost %}
+                          <span class="text-base-content/40">· ${{ model.cost|cost_display }}</span>
+                        {% elif model.has_unpriced %}
+                          <span class="text-base-content/40">· unpriced</span>
+                        {% endif %}
                       {% endif %}
                     </span>
                   </div>
