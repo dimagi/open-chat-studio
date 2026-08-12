@@ -633,6 +633,7 @@ RATE_LIMITS = {
     "api": {"rate": env("RATE_LIMIT_API", default="2000/5m"), "fail_open": True},
     "admin_api": {"rate": env("RATE_LIMIT_ADMIN_API", default="100/5m"), "fail_open": True},
     "chat_api": {"rate": env("RATE_LIMIT_CHAT_API", default="300/5m"), "fail_open": True},
+    "public_chat": {"rate": env("RATE_LIMIT_PUBLIC_CHAT", default="100/5m"), "fail_open": True},
 }
 CACHES["rate_limit"] = {
     "BACKEND": "django_redis.cache.RedisCache",
