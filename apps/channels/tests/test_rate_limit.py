@@ -3,7 +3,8 @@
 import pytest
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
+from django.urls import reverse
 
 from apps.channels.rate_limit_keys import (
     channel_external_id_key,
@@ -63,3 +64,30 @@ def test_key_functions_fall_back_to_ip_without_an_identifier(key_fn, kwargs):
     request = RequestFactory().post("/", REMOTE_ADDR="203.0.113.7")
 
     assert key_fn(request, **kwargs) == ("ip", "203.0.113.7")
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_telegram_webhook_buckets_per_channel(client):
+    """Exhausting one channel's allowance leaves another channel unaffected."""
+    noisy = reverse("channels:new_telegram_message", args=["8b1f0c2e-0000-0000-0000-000000000001"])
+    quiet = reverse("channels:new_telegram_message", args=["8b1f0c2e-0000-0000-0000-000000000002"])
+    client.post(noisy, data="{}", content_type="application/json")
+    client.post(noisy, data="{}", content_type="application/json")
+
+    over_limit = client.post(noisy, data="{}", content_type="application/json")
+    other_channel = client.post(quiet, data="{}", content_type="application/json")
+
+    assert over_limit.status_code == 429
+    assert other_channel.status_code != 429
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_log_only_mode_serves_over_limit_webhook_deliveries(client):
+    """The shipped default never drops a provider delivery."""
+    url = reverse("channels:new_telegram_message", args=["8b1f0c2e-0000-0000-0000-000000000003"])
+    for _ in range(4):
+        response = client.post(url, data="{}", content_type="application/json")
+
+    assert response.status_code != 429

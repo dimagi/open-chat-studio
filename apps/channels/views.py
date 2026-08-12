@@ -34,6 +34,11 @@ from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsa
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.rate_limit_keys import (
+    channel_external_id_key,
+    experiment_id_key,
+    sureadhere_tenant_key,
+)
 from apps.channels.serializers import (
     ApiMessageSerializer,
     ApiResponseMessageSerializer,
@@ -50,6 +55,7 @@ from apps.experiments.views.utils import get_channels_context
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.decorators import login_and_team_required
 from apps.teams.utils import set_current_team
+from apps.utils.rate_limit import rate_limited
 from apps.web.waf import WafRule, waf_allow
 
 log = logging.getLogger("ocs.channels")
@@ -57,6 +63,7 @@ log = logging.getLogger("ocs.channels")
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
+@rate_limited("webhook", key_fn=channel_external_id_key)
 def new_telegram_message(request, channel_external_id: uuid):
     token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if token != settings.TELEGRAM_SECRET_TOKEN:
@@ -74,6 +81,7 @@ def new_telegram_message(request, channel_external_id: uuid):
 
 
 @csrf_exempt
+@rate_limited("webhook")
 @require_POST
 def new_twilio_message(request):
     message_data = request.POST.dict()
@@ -110,6 +118,7 @@ def new_twilio_message(request):
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
+@rate_limited("webhook", key_fn=sureadhere_tenant_key)
 @require_POST
 def new_sureadhere_message(request, sureadhere_tenant_id: int):
     channel = tasks.get_experiment_channel(
@@ -127,6 +136,7 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
 
 @csrf_exempt
+@rate_limited("webhook", key_fn=experiment_id_key)
 @require_POST
 def new_turn_message(request, experiment_id: uuid):
     channel = tasks.get_experiment_channel(
@@ -311,6 +321,7 @@ def _new_api_message(request, experiment_id: uuid, version=None):
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @require_POST
 @csrf_exempt
+@rate_limited("webhook")
 @verify_hmac
 def new_connect_message(request: HttpRequest):
     serializer = CommCareConnectMessageSerializer(data=json.loads(request.body))
@@ -499,6 +510,7 @@ def _clear_remote_webhook(channel: ExperimentChannel):
 
 @method_decorator(waf_allow(WafRule.NoUserAgent_HEADER), name="dispatch")
 @method_decorator(csrf_exempt, name="dispatch")
+@method_decorator(rate_limited("webhook"), name="dispatch")
 class MetaCloudAPIWebhookView(View):
     def get(self, request):
         log.debug("Meta Cloud API webhook verification request received")

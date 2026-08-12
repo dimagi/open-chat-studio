@@ -5,6 +5,7 @@ from slack_bolt.adapter.django.handler import to_bolt_request, to_django_respons
 from apps.slack.models import SlackOAuthState
 from apps.slack.slack_app import app, handler
 from apps.teams.decorators import login_and_team_required
+from apps.utils.rate_limit import rate_limited
 from apps.web.waf import WafRule, waf_allow
 
 from .const import INSTALLATION_CONFIG
@@ -40,6 +41,7 @@ def slack_oauth_redirect(request):
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @csrf_exempt
+@rate_limited("webhook")
 def slack_events_handler(request):
     # see `slack_listeners.py`
     return handler.handle(request)
