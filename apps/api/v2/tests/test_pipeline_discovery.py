@@ -80,7 +80,8 @@ def test_no_namespaced_schema_key_survives_anywhere(team):
             {"source_material", "collection", "collection_index", "agent_tools", "custom_actions"},
             id="params-the-builder-declares-a-source-for",
         ),
-        pytest.param("RenderTemplate", {"prompt_variables"}, id="template-vars"),
+        pytest.param("RenderTemplate", {"template_variables"}, id="template-vars"),
+        pytest.param("SendEmail", {"template_variables"}, id="template-vars-outside-the-template-node"),
     ],
 )
 def test_scoping_covers_every_param_that_reads_an_option_list(team_with_resources, node_type, expected_keys):
@@ -470,7 +471,7 @@ def test_options_can_be_scoped_to_one_node_type(team_with_resources):
 
     scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "RenderTemplate"}).json()
 
-    assert set(scoped) == {"prompt_variables"}
+    assert set(scoped) == {"template_variables"}
 
 
 @pytest.mark.django_db()
@@ -482,7 +483,7 @@ def test_scoped_options_keep_the_provider_defaults_for_llm_nodes(team_with_resou
 
     assert "default_llm_provider" in scoped
     assert "llm_provider_id" in scoped
-    assert "prompt_variables" not in scoped
+    assert "template_variables" not in scoped
 
 
 @pytest.mark.django_db()
@@ -551,7 +552,7 @@ def test_options_never_expose_provider_config(team_with_resources):
         ),
         pytest.param(
             "RenderTemplate",
-            "prompt_variables",
+            "template_variables",
             {
                 "input",
                 "node_inputs",
@@ -567,14 +568,14 @@ def test_options_never_expose_provider_config(team_with_resources):
         ),
     ],
 )
-def test_each_prompt_flavour_serves_its_own_variable_set(team_with_resources, node_type, option_key, expected_vars):
+def test_each_variable_flavour_serves_its_own_set(team_with_resources, node_type, option_key, expected_vars):
     """`prompt` on an LLM node takes `source_material` and `media`, `prompt` on a router takes
-    neither, and `template_string` takes the node-graph variables instead."""
+    neither, and the Jinja params take the node-graph variables instead."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
     scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type}).json()
 
-    assert option_key in scoped, f"{node_type} must be able to resolve its prompt variables"
+    assert option_key in scoped, f"{node_type} must be able to resolve its variables"
     assert {entry["label"] for entry in scoped[option_key]} == expected_vars
     for entry in scoped[option_key]:
         assert sorted(entry) == ["description", "label"], entry

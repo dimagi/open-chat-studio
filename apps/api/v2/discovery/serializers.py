@@ -122,29 +122,31 @@ class PipelineOptionsSerializer(serializers.Serializer):
     tool_config = serializers.DictField(
         required=False, help_text="Per-provider, per-tool config field descriptors. Keyed by LLM provider type."
     )
-    prompt_variables = PromptVariableSerializer(
+    template_variables = PromptVariableSerializer(
         many=True,
         required=False,
         help_text=(
-            "The variables a template node's `template_string` may reference. Each prompt-shaped param "
-            "has its own list -- see `llm_prompt_variables` and `router_prompt_variables` -- because the "
-            "accepted set differs. Use `?node_type=` to get the one that applies."
+            "The variables a Jinja param may reference, written double-braced -- `{{input}}`. Covers "
+            "`RenderTemplate`'s `template_string` and `SendEmail`'s `recipient_list`, `subject` and "
+            "`body`. Distinct from the two prompt lists in both content and syntax: those are "
+            "single-braced. Use `?node_type=` to get the list that applies."
         ),
     )
     llm_prompt_variables = PromptVariableSerializer(
         many=True,
         required=False,
         help_text=(
-            "The variables an LLM node's `prompt` may reference. A superset of `router_prompt_variables`: "
-            "it adds the ones backed by a param on the same node, such as `source_material` and `media`."
+            "The variables an LLM node's `prompt` may reference, written single-braced -- "
+            "`{source_material}`. A superset of `router_prompt_variables`: it adds the ones backed by a "
+            "param on the same node, such as `source_material` and `media`."
         ),
     )
     router_prompt_variables = PromptVariableSerializer(
         many=True,
         required=False,
         help_text=(
-            "The variables a router node's `prompt` may reference. Narrower than `llm_prompt_variables` "
-            "-- a router has no source material or media to interpolate."
+            "The variables a router node's `prompt` may reference, written single-braced. Narrower "
+            "than `llm_prompt_variables` -- a router has no source material or media to interpolate."
         ),
     )
     default_llm_provider = DefaultLlmProviderSerializer(

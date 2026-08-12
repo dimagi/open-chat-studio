@@ -193,7 +193,7 @@ paths:
 
         A key holds the values for the node param of the same name: write one of `source_material`'s entries into a node's `source_material_id`, one of `collection_index`'s into `collection_index_ids`.
 
-        Prompt variables are the exception, because two different params are both named `prompt` and they accept different sets. A template node's `template_string` draws from `prompt_variables`, an LLM node's `prompt` from `llm_prompt_variables`, and a router's `prompt` from `router_prompt_variables`. Pass `?node_type=` to receive only the list that applies -- the sets are not interchangeable.
+        The variable lists are the exception, because no param is named for the list it draws on and two different params are both named `prompt`. Jinja params -- `template_string` and `SendEmail`'s fields -- draw from `template_variables` and are written double-braced (`{{input}}`); an LLM node's `prompt` draws from `llm_prompt_variables` and a router's from `router_prompt_variables`, both written single-braced (`{source_material}`). Pass `?node_type=` to receive only the list that applies -- the sets are not interchangeable.
       summary: List Pipeline Node Options
       parameters:
       - in: query
@@ -248,7 +248,7 @@ paths:
                     - value: 2
                       label: Prod Polly
                       type: aws
-                    prompt_variables:
+                    template_variables:
                     - label: input
                       description: The text passed into this node from the preceding
                         one.
@@ -2053,28 +2053,30 @@ components:
           additionalProperties: {}
           description: Per-provider, per-tool config field descriptors. Keyed by LLM
             provider type.
-        prompt_variables:
+        template_variables:
           type: array
           items:
             $ref: '#/components/schemas/PromptVariable'
-          description: The variables a template node's `template_string` may reference.
-            Each prompt-shaped param has its own list -- see `llm_prompt_variables`
-            and `router_prompt_variables` -- because the accepted set differs. Use
-            `?node_type=` to get the one that applies.
+          description: 'The variables a Jinja param may reference, written double-braced
+            -- `{{input}}`. Covers `RenderTemplate`''s `template_string` and `SendEmail`''s
+            `recipient_list`, `subject` and `body`. Distinct from the two prompt lists
+            in both content and syntax: those are single-braced. Use `?node_type=`
+            to get the list that applies.'
         llm_prompt_variables:
           type: array
           items:
             $ref: '#/components/schemas/PromptVariable'
-          description: 'The variables an LLM node''s `prompt` may reference. A superset
-            of `router_prompt_variables`: it adds the ones backed by a param on the
-            same node, such as `source_material` and `media`.'
+          description: 'The variables an LLM node''s `prompt` may reference, written
+            single-braced -- `{source_material}`. A superset of `router_prompt_variables`:
+            it adds the ones backed by a param on the same node, such as `source_material`
+            and `media`.'
         router_prompt_variables:
           type: array
           items:
             $ref: '#/components/schemas/PromptVariable'
-          description: The variables a router node's `prompt` may reference. Narrower
-            than `llm_prompt_variables` -- a router has no source material or media
-            to interpolate.
+          description: The variables a router node's `prompt` may reference, written
+            single-braced. Narrower than `llm_prompt_variables` -- a router has no
+            source material or media to interpolate.
         default_llm_provider:
           allOf:
           - $ref: '#/components/schemas/DefaultLlmProvider'

@@ -6,10 +6,11 @@ What lives here is what a node schema cannot state for itself. Which params the 
 declared on the pydantic `Field` instead -- see `UiSchema.api_exclude`.
 """
 
-# The exception to the same-name rule: `prompt` on an LLM node and `prompt` on a router accept
-# different variable sets, so these keys name the prompt flavour rather than the param.
+# The exception to the same-name rule. No param is named for the variable list it draws on, and
+# `prompt` on an LLM node and `prompt` on a router accept different sets, so these keys name the
+# flavour of text being written rather than the param writing it.
 OPTIONS_KEY_RENAMES = {
-    "jinja_node": "prompt_variables",
+    "jinja_node": "template_variables",
     "text_editor_autocomplete_vars_llm_node": "llm_prompt_variables",
     "text_editor_autocomplete_vars_router_node": "router_prompt_variables",
 }

@@ -135,11 +135,12 @@ class PipelineOptionsView(DiscoveryView):
             "A key holds the values for the node param of the same name: write one of "
             "`source_material`'s entries into a node's `source_material_id`, one of "
             "`collection_index`'s into `collection_index_ids`.\n\n"
-            "Prompt variables are the exception, because two different params are both named `prompt` "
-            "and they accept different sets. A template node's `template_string` draws from "
-            "`prompt_variables`, an LLM node's `prompt` from `llm_prompt_variables`, and a router's "
-            "`prompt` from `router_prompt_variables`. Pass `?node_type=` to receive only the list that "
-            "applies -- the sets are not interchangeable."
+            "The variable lists are the exception, because no param is named for the list it draws "
+            "on and two different params are both named `prompt`. Jinja params -- `template_string` "
+            "and `SendEmail`'s fields -- draw from `template_variables` and are written double-braced "
+            "(`{{input}}`); an LLM node's `prompt` draws from `llm_prompt_variables` and a router's "
+            "from `router_prompt_variables`, both written single-braced (`{source_material}`). Pass "
+            "`?node_type=` to receive only the list that applies -- the sets are not interchangeable."
         ),
         tags=["Pipelines"],
         parameters=[
@@ -184,7 +185,7 @@ class PipelineOptionsView(DiscoveryView):
                         }
                     },
                     "voice_provider_id": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
-                    "prompt_variables": [
+                    "template_variables": [
                         {
                             "label": "input",
                             "description": "The text passed into this node from the preceding one.",
