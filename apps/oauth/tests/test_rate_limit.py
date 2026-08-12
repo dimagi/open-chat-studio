@@ -2,11 +2,19 @@
 
 import pytest
 from django.conf import settings
+from django.core.cache import cache as default_cache
+from django.core.cache import caches
 from django.test import override_settings
 from django.urls import resolve, reverse
 
 # Overrides the credentials scope alone, leaving every other scope at its configured rate.
 TINY_LIMITS = settings.RATE_LIMITS | {"credentials": {"rate": "2/5m", "fail_open": False}}
+
+
+@pytest.fixture(autouse=True)
+def _clear_rate_limit_cache():
+    caches["rate_limit"].clear()
+    default_cache.clear()
 
 
 def test_token_url_still_reverses_to_the_upstream_name():

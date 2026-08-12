@@ -2,6 +2,8 @@
 
 import pytest
 from django.conf import settings
+from django.core.cache import cache as default_cache
+from django.core.cache import caches
 from django.test import override_settings
 from django.urls import reverse
 
@@ -9,6 +11,12 @@ from django.urls import reverse
 TINY_LIMITS = settings.RATE_LIMITS | {"credentials": {"rate": "2/5m", "fail_open": False}}
 
 INVALID_KEY_HEADERS = {"x-api-key": "not-a-real-key"}
+
+
+@pytest.fixture(autouse=True)
+def _clear_rate_limit_cache():
+    caches["rate_limit"].clear()
+    default_cache.clear()
 
 
 @pytest.mark.django_db()
