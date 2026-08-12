@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
 from slack_bolt.adapter.django.handler import to_bolt_request, to_django_response
 
+from apps.channels.rate_limit_keys import WEBHOOK_SCOPE, slack_ip_key
 from apps.slack.models import SlackOAuthState
 from apps.slack.slack_app import app, handler
 from apps.teams.decorators import login_and_team_required
@@ -41,7 +42,7 @@ def slack_oauth_redirect(request):
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @csrf_exempt
-@rate_limited("webhook")
+@rate_limited(WEBHOOK_SCOPE, key_fn=slack_ip_key)
 def slack_events_handler(request):
     # see `slack_listeners.py`
     return handler.handle(request)

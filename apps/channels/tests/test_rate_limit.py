@@ -1,24 +1,24 @@
 """Rate limiting behaviour for the inbound channel webhooks."""
 
 import pytest
-from django.core.cache import cache as default_cache
-from django.core.cache import caches
+from django.conf import settings
 from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
 from apps.channels.rate_limit_keys import (
     channel_external_id_key,
+    connect_ip_key,
     experiment_id_key,
+    meta_ip_key,
+    slack_ip_key,
     sureadhere_tenant_key,
+    twilio_ip_key,
 )
 
-TINY_LIMITS = {"webhook": {"rate": "2/5m", "fail_open": True}}
+# Overrides the webhook scope alone, leaving every other scope at its configured rate.
+TINY_LIMITS = settings.RATE_LIMITS | {"webhook": {"rate": "2/5m", "fail_open": True}}
 
-
-@pytest.fixture(autouse=True)
-def _clear_rate_limit_cache():
-    caches["rate_limit"].clear()
-    default_cache.clear()
+META_WEBHOOK_URL_NAME = "channels:new_meta_cloud_api_message"
 
 
 @pytest.mark.parametrize(
@@ -66,6 +66,33 @@ def test_key_functions_fall_back_to_ip_without_an_identifier(key_fn, kwargs):
     assert key_fn(request, **kwargs) == ("ip", "203.0.113.7")
 
 
+@pytest.mark.parametrize(
+    ("key_fn", "expected_identity_type"),
+    [
+        pytest.param(twilio_ip_key, "twilio_ip", id="twilio"),
+        pytest.param(meta_ip_key, "meta_ip", id="meta"),
+        pytest.param(connect_ip_key, "connect_ip", id="connect"),
+        pytest.param(slack_ip_key, "slack_ip", id="slack"),
+    ],
+)
+def test_address_keyed_webhooks_carry_their_own_identity_type(key_fn, expected_identity_type):
+    """Identity type is the only namespace separator in the cache key, so a webhook
+    with no URL identifier still needs one of its own.
+    """
+    request = RequestFactory().post("/", REMOTE_ADDR="203.0.113.7")
+
+    assert key_fn(request) == (expected_identity_type, "203.0.113.7")
+
+
+def test_address_keyed_webhooks_do_not_share_a_bucket():
+    """One address arriving at all four webhooks produces four separate counters."""
+    request = RequestFactory().post("/", REMOTE_ADDR="203.0.113.7")
+
+    keys = {key_fn(request) for key_fn in (twilio_ip_key, meta_ip_key, connect_ip_key, slack_ip_key)}
+
+    assert len(keys) == 4
+
+
 @pytest.mark.django_db()
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
 def test_telegram_webhook_buckets_per_channel(client):
@@ -96,3 +123,55 @@ def test_log_only_mode_serves_over_limit_webhook_deliveries(client):
     result = response.wsgi_request.rate_limit_result
     assert result.allowed is True
     assert result.remaining == 0
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+@pytest.mark.parametrize(
+    ("url_name", "url_args"),
+    [
+        pytest.param("channels:new_twilio_message", [], id="twilio"),
+        pytest.param("channels:new_sureadhere_message", ["42"], id="sureadhere"),
+        pytest.param("channels:new_turn_message", ["8b1f0c2e-0000-0000-0000-000000000004"], id="turn"),
+    ],
+)
+def test_post_only_webhooks_answer_other_methods_without_counting(client, url_name, url_args):
+    """The method check runs first, so a GET to a public webhook URL spends no allowance."""
+    response = client.get(reverse(url_name, args=url_args))
+
+    assert response.status_code == 405
+    assert not hasattr(response.wsgi_request, "rate_limit_result")
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_meta_webhook_answers_an_over_limit_delivery_with_an_empty_200(client):
+    """Meta reads a run of non-2xx responses as a broken endpoint and disables the
+    subscription for the whole business account, so a limited delivery is dropped the
+    same way the route drops every other delivery it declines to process.
+    """
+    url = reverse(META_WEBHOOK_URL_NAME)
+    for _ in range(3):
+        response = client.post(url, data="{}", content_type="application/json")
+
+    assert response.wsgi_request.rate_limit_result.allowed is False
+    assert response.status_code == 200
+    assert response.content == b""
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_meta_webhook_verification_handshake_runs_with_an_exhausted_bucket(client, meta_cloud_api_provider):
+    """The handshake is how a disabled subscription is restored, so it is not counted."""
+    url = reverse(META_WEBHOOK_URL_NAME)
+    for _ in range(3):
+        client.post(url, data="{}", content_type="application/json")
+
+    response = client.get(
+        url,
+        {"hub.mode": "subscribe", "hub.verify_token": "test_verify_token", "hub.challenge": "1337"},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"1337"
+    assert not hasattr(response.wsgi_request, "rate_limit_result")
