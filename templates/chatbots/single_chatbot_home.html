@@ -59,28 +59,10 @@
                 </div>
                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                   <li>
-                    {% flag "flag_chat_widget" %}
-                      <button type="button" onclick="openChatWidget({{ experiment.version_number }})">Unreleased version</button>
-                    {% else %}
-                      <form method="post"
-                            action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
-                            class="inline">
-                        {% csrf_token %}
-                        <button type="submit">Unreleased version</button>
-                      </form>
-                    {% endflag %}
+                    <button type="button" onclick="openChatWidget({{ experiment.version_number }})">Unreleased version</button>
                   </li>
                   <li>
-                    {% flag "flag_chat_widget" %}
-                      <button type="button" onclick="openChatWidget(0)">Published version</button>
-                    {% else %}
-                      <form method="post"
-                            action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
-                            class="inline">
-                        {% csrf_token %}
-                        <button type="submit">Published version</button>
-                      </form>
-                    {% endflag %}
+                    <button type="button" onclick="openChatWidget(0)">Published version</button>
                   </li>
                 </ul>
               </div>
@@ -259,27 +241,25 @@
       });
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
-    {% flag "flag_chat_widget" %}
-      <open-chat-studio-widget
-        id="chatbot-widget"
-        show-button="false"
-        visible="false"
-        chatbot-id="{{ experiment.public_id }}"
-        api-base-url="{{ request.scheme }}://{{ request.get_host }}"
-        user-id="{{ request.user.email }}"
-        user-name="{{ request.user.get_full_name }}"
-        position="right"
-        persistent-session="false"
-      ></open-chat-studio-widget>
-      <script>
-        // ocsApplyWidgetVersionTheme is defined in the shared launcher partial included below.
-        function openChatWidget(versionNumber) {
-          const widget = document.getElementById('chatbot-widget');
-          widget.versionNumber = versionNumber;
-          widget.visible = true;
-          ocsApplyWidgetVersionTheme(widget, versionNumber);
-        }
-      </script>
-    {% endflag %}
+    <open-chat-studio-widget
+      id="chatbot-widget"
+      show-button="false"
+      visible="false"
+      chatbot-id="{{ experiment.public_id }}"
+      api-base-url="{{ request.scheme }}://{{ request.get_host }}"
+      user-id="{{ request.user.email }}"
+      user-name="{{ request.user.get_full_name }}"
+      position="right"
+      persistent-session="false"
+    ></open-chat-studio-widget>
+    <script>
+      // ocsApplyWidgetVersionTheme is defined in the shared launcher partial included below.
+      function openChatWidget(versionNumber) {
+        const widget = document.getElementById('chatbot-widget');
+        widget.versionNumber = versionNumber;
+        widget.visible = true;
+        ocsApplyWidgetVersionTheme(widget, versionNumber);
+      }
+    </script>
     {% include "chatbots/components/session_chat_widget_launcher.html" %}
 {% endblock app %}

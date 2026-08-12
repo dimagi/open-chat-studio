@@ -7,7 +7,6 @@ from django.db.models import F
 from django.template.loader import get_template
 from django.urls import reverse
 from django_tables2 import columns
-from waffle import flag_is_active
 
 from apps.api.session_tokens import issue_session_token
 from apps.experiments.models import Experiment, ExperimentSession
@@ -29,24 +28,21 @@ def _show_chat_button(request, record):
 
 @dataclasses.dataclass
 class ContinueChatAction(actions.Action):
-    """Continue Chat action. When the chat widget flag is active it opens the session in the embedded
-    widget (a floating popup) instead of linking to the full-page chat UI."""
+    """Continue Chat action. Opens the session in the embedded widget (a floating popup)."""
 
     template: str = "chatbots/components/continue_chat_action.html"
 
     def get_context(self, request, record, value):
         ctxt = super().get_context(request, record, value)
-        if flag_is_active(request, "flag_chat_widget"):
-            ctxt.update(
-                {
-                    "use_widget": True,
-                    "chatbot_id": record.experiment.public_id,
-                    "session_external_id": record.external_id,
-                    "session_token": issue_session_token(record),
-                    "version_number": record.get_experiment_version_number(),
-                    "allow_attachments": record.experiment.file_uploads_enabled,
-                }
-            )
+        ctxt.update(
+            {
+                "chatbot_id": record.experiment.public_id,
+                "session_external_id": record.external_id,
+                "session_token": issue_session_token(record),
+                "version_number": record.get_experiment_version_number(),
+                "allow_attachments": record.experiment.file_uploads_enabled,
+            }
+        )
         return ctxt
 
 

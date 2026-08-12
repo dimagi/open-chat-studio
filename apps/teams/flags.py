@@ -47,7 +47,7 @@ class Flags(FlagInfo, Enum):
 
     NOTIFICATIONS = ("flag_notifications", "User notifications", "", [], False, True)
 
-    CHAT_WIDGET = ("flag_chat_widget", "Use embedded chat widget instead of full-page chat UI (POC)")
+    CHAT_WIDGET = ("flag_chat_widget", "Use the embedded chat widget on the full-page web chat (POC)")
 
     TESTING_CUSTOM_ACTIONS = (
         "flag_custom_actions_test_endpoints",

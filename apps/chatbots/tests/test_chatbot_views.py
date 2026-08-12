@@ -401,10 +401,8 @@ def test_chatbot_sessions_table_view_applies_both_filters_on_one_column(client, 
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("flag_active", [True, False])
-def test_continue_chat_action_respects_widget_flag(flag_active, client, team_with_users):
-    """With ``flag_chat_widget`` active the Continue Chat action opens the embedded widget;
-    otherwise it links to the full-page chat UI."""
+def test_continue_chat_action_opens_widget(client, team_with_users):
+    """The Continue Chat action opens the session in the embedded widget."""
     team = team_with_users
     user = team.members.first()
     client.force_login(user)
@@ -418,8 +416,7 @@ def test_continue_chat_action_respects_widget_flag(flag_active, client, team_wit
     )
 
     url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
-    with override_flag("flag_chat_widget", active=flag_active):
-        response = client.get(url)
+    response = client.get(url)
     assert response.status_code == 200
     content = response.content.decode()
 
@@ -427,15 +424,30 @@ def test_continue_chat_action_respects_widget_flag(flag_active, client, team_wit
         "chatbots:chatbot_chat_session",
         args=[team.slug, experiment.id, session.get_experiment_version_number(), session.id],
     )
-    if flag_active:
-        assert "ocsContinueSessionChat(this)" in content
-        assert f'data-session-id="{session.external_id}"' in content
-        token = re.search(r'data-session-token="([^"]+)"', content).group(1)
-        assert validate_session_token(token, session.external_id)
-        assert chat_url not in content
-    else:
-        assert "ocsContinueSessionChat" not in content
-        assert chat_url in content
+    assert "ocsContinueSessionChat(this)" in content
+    assert f'data-session-id="{session.external_id}"' in content
+    token = re.search(r'data-session-token="([^"]+)"', content).group(1)
+    assert validate_session_token(token, session.external_id)
+    assert chat_url not in content
+
+
+@pytest.mark.django_db()
+def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
+    """The chat dropdown launches the embedded widget rather than posting to start_authed_web_session."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, owner=user)
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert f'chatbot-id="{experiment.public_id}"' in content
+    assert f"openChatWidget({experiment.version_number})" in content
+    assert "openChatWidget(0)" in content
+    assert reverse("chatbots:start_authed_web_session", args=[team.slug, experiment.id, 0]) not in content
 
 
 @pytest.mark.django_db()
