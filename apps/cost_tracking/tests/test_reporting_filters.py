@@ -1,0 +1,392 @@
+"""Tests for the cost read path's filtering and attribution rules: the dashboard's
+chatbot / platform / participant / tag filters (`CostFilters`) and the ADR-0048
+evaluation-source rule. Per-function aggregation behaviour lives in `test_reporting.py`.
+"""
+
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+
+import pytest
+
+from apps.cost_tracking.models import UsageSource
+from apps.cost_tracking.services.reporting import (
+    CostFilters,
+    GroupBreakdown,
+    cost_summary,
+    cost_timeseries,
+    cost_total,
+    costs_by_experiment,
+    coverage_gaps,
+    session_usage,
+    token_counts,
+    usage_by_group,
+)
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
+from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.utils.factories.experiment import ChatMessageFactory, ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.team import TeamFactory
+
+_NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+# The 30-day window most tests read over, named where a test needs it inside a lambda.
+_START = _NOW - timedelta(days=30)
+
+
+def _usage(team, *, cost, when, **kwargs):
+    """Thin wrapper around UsageRecordFactory that coerces `cost` to Decimal
+    and forwards optional kwargs (confidence, experiment, session, quantity).
+    """
+    return UsageRecordFactory.create(team=team, cost=Decimal(str(cost)), at=when, **kwargs)
+
+
+@pytest.mark.django_db()
+class TestCostFilters:
+    """The cost read path honours the dashboard's chatbot / participant /
+    platform / tag filters. Verified across the public functions.
+    """
+
+    def test_cost_summary_filters_by_experiment(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
+
+        summary = cost_summary(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_cost_summary_filters_prior_period_too(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=45), experiment=keep)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=45), experiment=drop)
+
+        summary = cost_summary(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
+
+        assert summary.previous_period_cost == Decimal("2.00")
+
+    def test_timeseries_filters_by_participant(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        keep = ExperimentSessionFactory.create(experiment=exp, team=team)
+        drop = ExperimentSessionFactory.create(experiment=exp, team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, participant=keep.participant)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, participant=drop.participant)
+
+        series = cost_timeseries(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(participant_ids=[keep.participant_id])
+        )
+
+        assert [point["chat"] for point in series] == [1.0]
+
+    def test_timeseries_filters_by_platform_via_session(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        web = ExperimentSessionFactory.create(experiment=exp, team=team, platform="web")
+        api = ExperimentSessionFactory.create(experiment=exp, team=team, platform="api")
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=web)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=api)
+
+        series = cost_timeseries(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(platform_names=["web"])
+        )
+
+        assert [point["chat"] for point in series] == [1.0]
+
+    def test_costs_by_experiment_filters_by_experiment(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=keep)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=drop)
+
+        costs = costs_by_experiment(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
+
+        assert costs == {keep.id: Decimal("1.00000000")}
+
+    def test_coverage_gaps_filters_by_experiment(self):
+        team = TeamFactory.create()
+        keep = ExperimentFactory.create(team=team)
+        drop = ExperimentFactory.create(team=team)
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=keep, model_name="keep-model")
+        _usage(team, cost="0.00", when=_NOW - timedelta(days=1), experiment=drop, model_name="drop-model")
+
+        gaps = coverage_gaps(
+            team, start=_NOW - timedelta(days=30), end=_NOW, filters=CostFilters(experiment_ids=[keep.id])
+        )
+
+        assert [g.model_name for g in gaps.unpriced] == ["keep-model"]
+
+    def test_tag_filter_narrows_to_entities(self):
+        assert CostFilters().narrows_to_entities is False
+        assert CostFilters(tag_ids=[1]).narrows_to_entities is True
+
+    def test_cost_summary_filters_by_tag_on_chat(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_cost_summary_filters_by_tag_on_message(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        message = ChatMessageFactory.create(chat=tagged.chat)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_tag_filter_excludes_records_without_session(self):
+        team = TeamFactory.create()
+        tag = TagFactory.create(team=team)
+        _usage(team, cost="5.00", when=_NOW - timedelta(days=1))
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    def test_tag_filter_ignores_other_teams_tag_links(self):
+        """Filtering by a foreign team's tag id matches nothing: the outer
+        queryset is team-scoped, and a generic tag link only references the
+        chat it was created for, so it can never point at this team's chats.
+        Separate from the conjunct case list below: the target here is
+        foreign, so this pins outer-queryset scoping, not a link conjunct."""
+        team = TeamFactory.create()
+        other_team = TeamFactory.create()
+        other_exp = ExperimentFactory.create(team=other_team)
+        other_session = ExperimentSessionFactory.create(team=other_team, experiment=other_exp)
+        other_tag = TagFactory.create(team=other_team)
+        CustomTaggedItemFactory.create(team=other_team, tag=other_tag, target=other_session.chat)
+        _usage(other_team, cost="9.00", when=_NOW - timedelta(days=1), experiment=other_exp, session=other_session)
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[other_tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    @pytest.mark.parametrize(
+        ("failing_conjunct", "target"),
+        [
+            pytest.param("link-team", "chat", id="link-team-conjunct-on-chat"),
+            pytest.param("tag-team", "chat", id="tag-team-conjunct-on-chat"),
+            pytest.param("tag-team", "msg", id="tag-team-conjunct-on-msg"),
+            pytest.param("link-team", "msg", id="link-team-conjunct-on-msg"),
+        ],
+    )
+    def test_tag_filter_rejects_links_failing_one_scoping_conjunct(self, failing_conjunct, target):
+        """`chat_tag_exists_pair` scopes tag links with two conjuncts,
+        `team_id` and `tag__team_id`, applied on each of its two legs
+        (`tag_on_chat`, `tag_on_msg`). Each case builds a link where exactly
+        one conjunct fails on one leg while the other three predicates hold,
+        so deleting any one predicate turns exactly its named case red. Each
+        leg filters on its own content_type, which keeps the mapping 1:1 - a
+        chat-targeted link never reaches `tag_on_msg`, and vice versa.
+        Positive controls: `test_cost_summary_filters_by_tag_on_chat` /
+        `_on_message`."""
+        team = TeamFactory.create()
+        foreign_team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=exp)
+        link_team = foreign_team if failing_conjunct == "link-team" else team
+        tag = TagFactory.create(team=foreign_team if failing_conjunct == "tag-team" else team)
+        link_target = ChatMessageFactory.create(chat=session.chat) if target == "msg" else session.chat
+        CustomTaggedItemFactory.create(team=link_team, tag=tag, target=link_target)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=session)
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal(0)
+
+    def test_tag_filter_counts_chat_spend_only(self):
+        """A tag-filtered read is per-entity attribution, so evaluation spend on
+        the tagged session is excluded (ADR-0048)."""
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(
+            team,
+            cost="0.25",
+            when=_NOW - timedelta(days=1),
+            experiment=exp,
+            session=tagged,
+            source=UsageSource.EVALUATION,
+        )
+
+        summary = cost_summary(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert summary.total_cost == Decimal("1.00")
+
+    def test_timeseries_filters_by_tag(self):
+        team = TeamFactory.create()
+        exp = ExperimentFactory.create(team=team)
+        tagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=exp)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=exp, session=tagged)
+        _usage(team, cost="9.00", when=_NOW - timedelta(days=1), experiment=exp, session=untagged)
+
+        series = cost_timeseries(team, start=_START, end=_NOW, filters=CostFilters(tag_ids=[tag.id]))
+
+        assert [point["chat"] for point in series] == [1.0]
+        assert "evaluation" not in series[0]
+
+
+@pytest.mark.django_db()
+class TestCostSummaryWindowBound:
+    """`cost_summary` reads exactly [previous_start, end): a record in the current
+    period lands in `total_cost`, a record in the prior period lands in
+    `previous_period_cost`, and a record far outside both lands in neither. This
+    pins the values a queryset-level bound must preserve (#3905)."""
+
+    def test_reads_exactly_the_current_and_previous_periods(self, team):
+        start = _NOW - timedelta(days=7)
+        end = _NOW
+        _usage(team, cost="1.00", when=start + timedelta(days=1))
+        _usage(team, cost="2.00", when=start - timedelta(days=3))
+        _usage(team, cost="99.00", when=start - timedelta(days=400))
+
+        summary = cost_summary(team, start=start, end=end)
+
+        assert summary.total_cost == Decimal("1.00")
+        assert summary.previous_period_cost == Decimal("2.00")
+
+
+@pytest.mark.django_db()
+class TestEvaluationSourceRule:
+    """ADR-0048: evaluation spend is the team's spend, never a chatbot's, a
+    participant's or a conversation's.
+
+    Every case gives the evaluation row an experiment and a session — the shape a
+    generation run actually produces — so a read that filtered on those columns being
+    null instead of on `source` would fail here.
+    """
+
+    @pytest.fixture()
+    def spend(self):
+        """One chat row and one evaluation row on the same experiment and session."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        when = _NOW - timedelta(days=1)
+        _usage(team, cost="1.00", when=when, experiment=experiment, session=session, quantity=100)
+        _usage(
+            team,
+            cost="0.25",
+            when=when,
+            experiment=experiment,
+            session=session,
+            quantity=40,
+            source=UsageSource.EVALUATION,
+        )
+        return team, experiment, session
+
+    def test_team_total_counts_both_sources(self, spend):
+        team, _, _ = spend
+
+        summary = cost_summary(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert summary.total_cost == Decimal("1.25")
+
+    def test_cost_total_counts_both_sources(self, spend):
+        team, _, _ = spend
+
+        assert cost_total(team, start=_NOW - timedelta(days=30), end=_NOW).total == Decimal("1.25")
+
+    def test_token_counts_count_both_sources(self, spend):
+        team, _, _ = spend
+
+        assert token_counts(team, start=_NOW - timedelta(days=30), end=_NOW).total == 140
+
+    def test_per_experiment_cost_excludes_evaluation(self, spend):
+        team, experiment, _ = spend
+
+        costs = costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert costs == {experiment.id: Decimal("1.00000000")}
+
+    def test_session_usage_excludes_evaluation(self, spend):
+        _, _, session = spend
+
+        assert session_usage(session).total_cost == Decimal("1.00000000")
+
+    @pytest.mark.parametrize(
+        "read",
+        [
+            pytest.param(
+                lambda team, f: cost_summary(team, start=_START, end=_NOW, filters=f).total_cost, id="summary"
+            ),
+            pytest.param(lambda team, f: cost_total(team, start=_START, end=_NOW, filters=f).total, id="total"),
+        ],
+    )
+    def test_filtering_to_one_chatbot_excludes_evaluation(self, spend, read):
+        """A filter narrows the read to an entity just as a grouping does, so it must
+        obey the same rule — otherwise the dashboard filtered to one chatbot bills it
+        for the judge calls that evaluated it.
+        """
+        team, experiment, _ = spend
+
+        assert read(team, CostFilters(experiment_ids=[experiment.id])) == Decimal("1.00")
+
+    def test_timeseries_splits_both_sources_when_unfiltered(self, spend):
+        team, _, _ = spend
+
+        series = cost_timeseries(team, start=_START, end=_NOW)
+
+        assert [(point["chat"], point["evaluation"]) for point in series] == [(1.0, 0.25)]
+
+    def test_timeseries_filtered_to_one_chatbot_drops_the_evaluation_series(self, spend):
+        """Filtering makes it per-entity attribution, so eval spend isn't counted — and the
+        chart omits the series rather than showing a zero that reads as "no eval spend"."""
+        team, experiment, _ = spend
+
+        series = cost_timeseries(team, start=_START, end=_NOW, filters=CostFilters(experiment_ids=[experiment.id]))
+
+        assert series == [{"date": series[0]["date"], "chat": 1.0}]
+
+    def test_unfiltered_read_stays_a_team_total(self, spend):
+        """The flip side: with no filter the same read is a team total, so it counts
+        eval spend."""
+        team, _, _ = spend
+
+        assert cost_total(team, start=_START, end=_NOW).total == Decimal("1.25")
+
+    def test_usage_by_group_excludes_evaluation(self, spend):
+        team, experiment, _ = spend
+
+        rows = usage_by_group(
+            team,
+            start=_NOW - timedelta(days=30),
+            end=_NOW,
+            breakdown=GroupBreakdown(field="experiment_id", keys=[experiment.id]),
+        )
+
+        assert [(row["key"], row["cost"], row["total"]) for row in rows] == [
+            (experiment.id, Decimal("1.00000000"), 100)
+        ]

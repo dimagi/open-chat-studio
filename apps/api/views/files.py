@@ -4,7 +4,13 @@ from drf_spectacular.utils import extend_schema
 from rest_framework.renderers import BaseRenderer
 from rest_framework.views import APIView
 
+from apps.api.permissions import (
+    DjangoModelPermissionsWithView,
+    IsAuthenticatedOrMachineToken,
+    ReadOnlyAPIKeyPermission,
+)
 from apps.files.models import File
+from apps.oauth.permissions import TokenHasOAuthScope
 
 
 class BinaryRenderer(BaseRenderer):
@@ -18,9 +24,19 @@ class BinaryRenderer(BaseRenderer):
 
 
 class FileContentView(APIView):
+    # DjangoModelPermissionsWithView enforces "files.view_file" for GET. It derives that permission
+    # from this queryset's model; the queryset is never used to fetch the file (`get` scopes the
+    # lookup to the request's team). Machine (client-credentials) tokens have no user and are
+    # authorized by the OAuth scope below instead.
+    queryset = File.objects.all()
+    permission_classes = [
+        IsAuthenticatedOrMachineToken,
+        ReadOnlyAPIKeyPermission,
+        DjangoModelPermissionsWithView,
+        TokenHasOAuthScope,
+    ]
     required_scopes = ("files:read",)
     renderer_classes = [BinaryRenderer]
-    permission_required = "files.view_file"
 
     @extend_schema(operation_id="file_content", summary="Download File Content", tags=["Files"], responses=bytes)
     def get(self, request, pk: int):

@@ -1,20 +1,27 @@
 import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Avg, Count, DurationField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Subquery
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q
 from django.db.models.functions import TruncDate, TruncHour, TruncMonth, TruncWeek
 from django.urls import reverse
-from django.utils import timezone
 
 from apps.annotations.models import CustomTaggedItem, TagCategories
-from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.channels.models import ExperimentChannel
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.experiments.models import Participant
+from apps.usage_metrics.dashboard_querysets import filtered_querysets
+from apps.usage_metrics.filters import HUMAN_AUTHORED
+from apps.usage_metrics.metrics import (
+    CONVERSATION_MESSAGE_TYPES,
+    conversation_message_total,
+    conversation_messages,
+    distinct_active_participants,
+)
 
 from ..trace.models import Trace
 from .models import DashboardCache
@@ -44,159 +51,12 @@ class DashboardService:
     def __init__(self, team):
         self.team = team
 
-    def get_filtered_queryset_base(
-        self,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
-        experiment_ids: list[int] | None = None,
-        platform_names: list[str] | None = None,
-        participant_ids: list[int] | None = None,
-        tag_ids: list[int] | None = None,
-    ) -> dict[str, Any]:
-        """Get base querysets with common filters applied"""
-
-        # Default date range (last 30 days)
-        if not end_date:
-            end_date = timezone.now()
-        if not start_date:
-            start_date = end_date - timedelta(days=30)
-
-        base_filters = {"created_at__gte": start_date, "created_at__lte": end_date}
-
-        # Base querysets
-        experiments = Experiment.objects.filter(team=self.team, is_archived=False, working_version=None)
-        # Use Exists() to avoid join+distinct - prevents row explosion upfront for better performance
-        msg_exists = Exists(
-            ChatMessage.objects.filter(
-                chat=OuterRef("chat"),
-                created_at__gte=start_date,
-                created_at__lte=end_date,
-            )
-        )
-        sessions = (
-            ExperimentSession.objects.filter(team=self.team)
-            .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
-            .annotate(_has_msgs=msg_exists)
-            .filter(_has_msgs=True)
-        )
-        messages = ChatMessage.objects.filter(chat__team=self.team, **base_filters).exclude(
-            chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
-        )
-        participants = Participant.objects.filter(team=self.team).exclude(platform=ChannelPlatform.EVALUATIONS)
-
-        # Apply experiment filter
-        if experiment_ids:
-            experiments = experiments.filter(id__in=experiment_ids)
-            sessions = sessions.filter(experiment_id__in=experiment_ids)
-            messages = messages.filter(chat__experiment_session__experiment_id__in=experiment_ids)
-            participants = participants.filter(experimentsession__experiment_id__in=experiment_ids).distinct()
-
-        # Apply platform filter
-        if platform_names:
-            global_platforms = ChannelPlatform.team_global_platforms()
-            if not any(p in global_platforms for p in platform_names):
-                # only filter experiments if we're filtering by non-global platforms since all experiments
-                # will match the global platforms
-                experiments = experiments.filter(
-                    Exists(
-                        ExperimentChannel.objects.filter(
-                            experiment=OuterRef("pk"),
-                            platform__in=platform_names,
-                            deleted=False,
-                        )
-                    )
-                )
-            sessions = sessions.filter(platform__in=platform_names)
-            messages = messages.filter(chat__experiment_session__platform__in=platform_names)
-            participants = participants.filter(platform__in=platform_names)
-
-        if participant_ids:
-            experiments = experiments.filter(sessions__participant__id__in=participant_ids).distinct()
-            sessions = sessions.filter(participant__id__in=participant_ids)
-            messages = messages.filter(chat__experiment_session__participant__id__in=participant_ids)
-            participants = participants.filter(id__in=participant_ids)
-
-        if tag_ids:
-            # Use Exists() to avoid join+distinct - better performance for tag filtering
-            chat_content_type = ContentType.objects.get_for_model(Chat)
-            message_content_type = ContentType.objects.get_for_model(ChatMessage)
-
-            # Sessions: check if chat or any message has tags
-            tag_on_chat = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=chat_content_type, object_id=OuterRef("chat_id"), tag_id__in=tag_ids
-                )
-            )
-            tag_on_msg = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=message_content_type,
-                    object_id__in=Subquery(ChatMessage.objects.filter(chat=OuterRef(OuterRef("chat_id"))).values("id")),
-                    tag_id__in=tag_ids,
-                )
-            )
-            sessions = sessions.annotate(_tchat=tag_on_chat, _tmsg=tag_on_msg).filter(Q(_tchat=True) | Q(_tmsg=True))
-
-            # Experiments: check if any session's chat or messages have tags
-            exp_tag_on_chat = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=chat_content_type,
-                    object_id__in=Subquery(
-                        Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            exp_tag_on_msg = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=message_content_type,
-                    object_id__in=Subquery(
-                        ChatMessage.objects.filter(
-                            chat__experiment_session__experiment=OuterRef(OuterRef("id"))
-                        ).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            experiments = experiments.annotate(_exp_tchat=exp_tag_on_chat, _exp_tmsg=exp_tag_on_msg).filter(
-                Q(_exp_tchat=True) | Q(_exp_tmsg=True)
-            )
-
-            # Participants: check if any of their session's chats or messages have tags
-            part_tag_on_chat = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=chat_content_type,
-                    object_id__in=Subquery(
-                        Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            part_tag_on_msg = Exists(
-                CustomTaggedItem.objects.filter(
-                    content_type=message_content_type,
-                    object_id__in=Subquery(
-                        ChatMessage.objects.filter(
-                            chat__experiment_session__participant=OuterRef(OuterRef("id"))
-                        ).values("id")
-                    ),
-                    tag_id__in=tag_ids,
-                )
-            )
-            participants = participants.annotate(_part_tchat=part_tag_on_chat, _part_tmsg=part_tag_on_msg).filter(
-                Q(_part_tchat=True) | Q(_part_tmsg=True)
-            )
-
-            # Messages can still use the simple filter since we're already on the message model
-            messages = messages.filter(tags__id__in=tag_ids)
-
-        return {
-            "experiments": experiments,
-            "sessions": sessions,
-            "messages": messages,
-            "participants": participants,
-            "start_date": start_date,
-            "end_date": end_date,
-        }
+    def get_filtered_queryset_base(self, **filters) -> dict[str, Any]:
+        """Base querysets with common filters applied. The builder lives in
+        apps.usage_metrics (#3905) and owns the filter signature - see
+        `filtered_querysets` for the accepted keywords; this delegation keeps
+        the service API stable for the dashboard's charts and tests."""
+        return filtered_querysets(self.team, **filters)
 
     def get_active_participants_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
         """Get active participants chart data"""
@@ -237,7 +97,12 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
-        messages = querysets["messages"]
+        # Conversation turns only, so each period's session count is
+        # `sessions_active` restricted to that period and each period's
+        # participant count is `active_participants` restricted to it
+        # (ADR-0051). SETUP-session activity is already out of
+        # `querysets["messages"]`.
+        messages = conversation_messages(querysets["messages"])
 
         trunc_func = self._get_trunc_function(granularity)
 
@@ -247,7 +112,11 @@ class DashboardService:
             .values("period")
             .annotate(
                 total_sessions=Count("chat__experiment_session", distinct=True),
-                unique_participants=Count("chat__experiment_session__participant", distinct=True),
+                unique_participants=Count(
+                    "chat__experiment_session__participant",
+                    distinct=True,
+                    filter=HUMAN_AUTHORED,
+                ),
             )
             .order_by("period")
         )
@@ -280,7 +149,7 @@ class DashboardService:
             .annotate(
                 human_messages=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
                 ai_messages=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-                total_messages=Count("id"),
+                total_messages=Count("id", filter=Q(message_type__in=CONVERSATION_MESSAGE_TYPES)),
             )
             .order_by("period")
         )
@@ -357,6 +226,14 @@ class DashboardService:
     def _compute_bot_performance(self, cache_filters: dict, include_cost: bool) -> list[dict[str, Any]]:
         """Build the (uncached, unordered) per-experiment performance rows."""
         querysets = self.get_filtered_queryset_base(**cache_filters)
+        # Conversation turns inside the window, so this column agrees with the
+        # headline message total rather than counting each chat's whole history
+        # (ADR-0051).
+        in_window_turns = Q(
+            chat__messages__message_type__in=CONVERSATION_MESSAGE_TYPES,
+            chat__messages__created_at__gte=querysets["start_date"],
+            chat__messages__created_at__lt=querysets["end_date"],
+        )
         # Pre-compute session stats.
         # The alternative for better performance would be to use a raw SQL Query
         session_stats = (
@@ -366,7 +243,7 @@ class DashboardService:
             .annotate(
                 participants_count=Count("participant", distinct=True),
                 sessions_count=Count("id", distinct=True),
-                messages_count=Count("chat__messages", distinct=True),
+                messages_count=Count("chat__messages", distinct=True, filter=in_window_turns),
             )
         )
         stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
@@ -394,6 +271,7 @@ class DashboardService:
                     experiment_ids=cache_filters.get("experiment_ids"),
                     platform_names=cache_filters.get("platform_names"),
                     participant_ids=cache_filters.get("participant_ids"),
+                    tag_ids=cache_filters.get("tag_ids"),
                 ),
             )
             if include_cost
@@ -442,28 +320,35 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
-        participants = querysets["participants"]
 
-        # Get participant engagement stats
-        date_filter = Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"]) & Q(
-            experimentsession__chat__messages__created_at__lte=querysets["end_date"]
-        )
-
-        participant_stats = (
-            participants.annotate(
-                total_messages=Count(
-                    "experimentsession__chat__messages",
-                    filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
-                ),
-                total_sessions=Count("experimentsession", filter=date_filter, distinct=True),
-                last_activity=Max("experimentsession__last_activity_at"),
+        # Aggregate forward from the canonical message queryset, the same way
+        # `get_active_participants_data` does. Annotating the participant
+        # queryset instead re-enters ExperimentSession from the far side, which
+        # carries none of the SETUP, evaluation or tag exclusions the rest of
+        # the page counts by (ADR-0051).
+        participant_field = "chat__experiment_session__participant"
+        participant_stats = list(
+            querysets["messages"]
+            .filter(HUMAN_AUTHORED)
+            .filter(**{f"{participant_field}__isnull": False})
+            .values(participant_field)
+            .annotate(
+                total_messages=Count("id"),
+                total_sessions=Count("chat__experiment_session", distinct=True),
+                last_activity=Max("created_at"),
             )
-            .filter(total_messages__gt=0)
-            .order_by("-total_messages")
+            .order_by("-total_messages")[:limit]
         )
 
         # Most active participants
-        most_active = [self._format_participant_data(p) for p in participant_stats[:limit]]
+        participants = Participant.objects.filter(team=self.team).in_bulk(
+            [stats[participant_field] for stats in participant_stats]
+        )
+        most_active = [
+            self._format_participant_data(participants[stats[participant_field]], stats)
+            for stats in participant_stats
+            if stats[participant_field] in participants
+        ]
 
         # Session length distribution
         session_lengths = (
@@ -545,10 +430,18 @@ class DashboardService:
         # Get tags used in messages within the date range
         message_ct = ContentType.objects.get_for_model(ChatMessage)
 
-        # Get tagged messages
+        # Get tagged messages. Both the link row and its tag are constrained to
+        # the reading team (`team_id` and `tag__team_id`), so a `CustomTaggedItem`
+        # row recorded under another team never contributes to this team's
+        # analytics, even when it points at one of this team's own messages.
         tagged_messages = (
             CustomTaggedItem.objects.exclude(tag__category=TagCategories.EXPERIMENT_VERSION)
-            .filter(content_type=message_ct, object_id__in=querysets["messages"].values_list("id", flat=True))
+            .filter(
+                team_id=self.team.id,
+                tag__team_id=self.team.id,
+                content_type=message_ct,
+                object_id__in=querysets["messages"].values_list("id", flat=True),
+            )
             .select_related("tag")
         )
 
@@ -640,8 +533,10 @@ class DashboardService:
         """Format a period object to ISO string"""
         return period.isoformat() if hasattr(period, "isoformat") else str(period)
 
-    def _format_participant_data(self, participant) -> dict[str, Any]:
-        """Format participant data for engagement analysis"""
+    def _format_participant_data(self, participant, stats: dict) -> dict[str, Any]:
+        """Format participant data for engagement analysis. `stats` is one
+        aggregate row keyed on the participant, not annotations on the
+        participant itself."""
         participant_url = reverse(
             "participants:single-participant-home",
             kwargs={"team_slug": self.team.slug, "participant_id": participant.id},
@@ -650,12 +545,13 @@ class DashboardService:
             "participant_id": participant.id,
             "participant_name": participant.name or participant.identifier,
             "participant_url": participant_url,
-            "total_messages": participant.total_messages,
-            "total_sessions": participant.total_sessions,
-            "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
+            "total_messages": stats["total_messages"],
+            "total_sessions": stats["total_sessions"],
+            "last_activity": stats["last_activity"].isoformat() if stats["last_activity"] else None,
         }
 
-    def _cache_key(self, filters: dict) -> str:
+    @staticmethod
+    def _cache_key(filters: dict) -> str:
         def normalize(obj):
             if isinstance(obj, dict):
                 return {k: normalize(obj[k]) for k in sorted(obj)}
@@ -681,12 +577,12 @@ class DashboardService:
             "total_experiments": querysets["experiments"].count(),
             "total_participants": querysets["participants"].count(),
             "total_sessions": querysets["sessions"].count(),
-            "total_messages": querysets["messages"].count(),
+            "total_messages": conversation_message_total(querysets["messages"]),
             "active_experiments": querysets["experiments"]
             .filter(sessions__in=querysets["sessions"])
             .distinct()
             .count(),
-            "active_participants": querysets["sessions"].values("participant").distinct().count(),
+            "active_participants": distinct_active_participants(querysets["messages"]),
             "completed_sessions": querysets["sessions"].filter(ended_at__isnull=False).count(),
         }
 

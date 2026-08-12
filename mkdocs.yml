@@ -126,6 +126,7 @@ nav:
       - 0048 Evaluation spend is team spend, never entity spend: adr/0048-evaluation-spend-is-team-spend-not-entity-spend.md
       - 0049 Node rows own pipeline layout; Pipeline.data keeps only edges and viewport: adr/0049-node-rows-own-pipeline-layout.md
       - 0050 Eval-driven generation is evaluation spend: adr/0050-eval-driven-generation-is-evaluation-spend.md
+      - 0051 One set of activity-metric definitions across usage surfaces: adr/0051-usage-activity-metric-definitions.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md
@@ -135,6 +136,7 @@ nav:
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
       - Deployment: developer_guides/deployment.md
+      - Architecture Decision Records: developer_guides/adr_process.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
       - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md

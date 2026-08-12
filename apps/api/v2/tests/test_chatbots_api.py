@@ -47,6 +47,16 @@ def test_list_chatbots(auth_method, experiment):
 
 
 @pytest.mark.django_db()
+def test_read_only_key_can_read_chatbots(experiment):
+    """The chatbots endpoints are read-only, so a read-only key keeps full access (ADR-0021)."""
+    user = experiment.team.members.first()
+    client = ApiTestClient(user, experiment.team, read_only=True)
+
+    assert client.get(reverse("api:v2:chatbot-list")).status_code == 200
+    assert client.get(reverse("api:v2:chatbot-detail", kwargs={"id": experiment.public_id})).status_code == 200
+
+
+@pytest.mark.django_db()
 def test_retrieve_chatbot_by_public_id(experiment):
     user = experiment.team.members.first()
     client = ApiTestClient(user, experiment.team)

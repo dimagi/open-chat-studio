@@ -1,12 +1,15 @@
 import json
+from datetime import datetime
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.chat.models import ChatMessage, ChatMessageType
 
 from ...utils.factories.team import MembershipFactory, TeamFactory
+from ..forms import DashboardFilterForm
 from ..models import DashboardFilter
 
 User = get_user_model()
@@ -201,3 +204,20 @@ class TestDashboardSecurity:
 
             # Should redirect to login or return 403
             assert response.status_code in [302, 403]
+
+
+class TestFilterFormWindow:
+    """The form resolves a picked date range to the half-open window the
+    querysets read (ADR-0051): the selected end date stays fully included by
+    windowing up to the start of the following day, exclusive."""
+
+    @pytest.mark.django_db()
+    def test_end_date_resolves_to_the_start_of_the_following_day(self, team):
+        form = DashboardFilterForm(
+            data={"date_range": "custom", "start_date": "2026-06-01", "end_date": "2026-06-15"}, team=team
+        )
+
+        params = form.get_filter_params()
+
+        assert params["start_date"] == timezone.make_aware(datetime(2026, 6, 1, 0, 0))
+        assert params["end_date"] == timezone.make_aware(datetime(2026, 6, 16, 0, 0))

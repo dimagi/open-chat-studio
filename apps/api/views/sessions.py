@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from apps.annotations.models import CustomTaggedItem, Tag, TagCategories
-from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.api.serializers import ExperimentSessionCreateSerializer, ExperimentSessionSerializer
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import ExperimentSession
@@ -140,7 +140,7 @@ tags_response_serializer = inline_serializer(
     ),
 )
 class ExperimentSessionViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     serializer_class = ExperimentSessionSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ["created_at"]
