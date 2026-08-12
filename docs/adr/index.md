@@ -8,7 +8,7 @@ hide:
 
 This section captures architectural decisions made on Open Chat Studio as Architecture Decision Records (ADRs). See [ADR-0000](0000-record-architecture-decisions.md) for why this exists.
 
-See the [ADR process guide](../developer_guides/adr_process.md) for the step-by-step instructions to create an ADR by hand.
+See the [ADR process developer guide](../developer_guides/adr_process.md) for the step-by-step instructions to create an ADR by hand or manually extract ADRs with AI agent.
 
 ## Index
 
