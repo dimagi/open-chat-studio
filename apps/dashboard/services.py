@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
@@ -13,7 +13,15 @@ from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
+from apps.experiments.models import Participant
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
+from apps.usage_metrics.filters import HUMAN_AUTHORED
+from apps.usage_metrics.metrics import (
+    CONVERSATION_MESSAGE_TYPES,
+    conversation_message_total,
+    conversation_messages,
+    distinct_active_participants,
+)
 
 from ..trace.models import Trace
 from .models import DashboardCache
@@ -43,27 +51,12 @@ class DashboardService:
     def __init__(self, team):
         self.team = team
 
-    def get_filtered_queryset_base(
-        self,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
-        experiment_ids: list[int] | None = None,
-        platform_names: list[str] | None = None,
-        participant_ids: list[int] | None = None,
-        tag_ids: list[int] | None = None,
-    ) -> dict[str, Any]:
+    def get_filtered_queryset_base(self, **filters) -> dict[str, Any]:
         """Base querysets with common filters applied. The builder lives in
-        apps.usage_metrics (#3905); this delegation keeps the service API
-        stable for the dashboard's charts and tests."""
-        return filtered_querysets(
-            self.team,
-            start_date=start_date,
-            end_date=end_date,
-            experiment_ids=experiment_ids,
-            platform_names=platform_names,
-            participant_ids=participant_ids,
-            tag_ids=tag_ids,
-        )
+        apps.usage_metrics (#3905) and owns the filter signature - see
+        `filtered_querysets` for the accepted keywords; this delegation keeps
+        the service API stable for the dashboard's charts and tests."""
+        return filtered_querysets(self.team, **filters)
 
     def get_active_participants_data(self, granularity: str = "daily", **filters) -> list[dict[str, Any]]:
         """Get active participants chart data"""
@@ -104,7 +97,12 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
-        messages = querysets["messages"]
+        # Conversation turns only, so each period's session count is
+        # `sessions_active` restricted to that period and each period's
+        # participant count is `active_participants` restricted to it
+        # (ADR-0051). SETUP-session activity is already out of
+        # `querysets["messages"]`.
+        messages = conversation_messages(querysets["messages"])
 
         trunc_func = self._get_trunc_function(granularity)
 
@@ -114,7 +112,11 @@ class DashboardService:
             .values("period")
             .annotate(
                 total_sessions=Count("chat__experiment_session", distinct=True),
-                unique_participants=Count("chat__experiment_session__participant", distinct=True),
+                unique_participants=Count(
+                    "chat__experiment_session__participant",
+                    distinct=True,
+                    filter=HUMAN_AUTHORED,
+                ),
             )
             .order_by("period")
         )
@@ -147,7 +149,7 @@ class DashboardService:
             .annotate(
                 human_messages=Count("id", filter=Q(message_type=ChatMessageType.HUMAN)),
                 ai_messages=Count("id", filter=Q(message_type=ChatMessageType.AI)),
-                total_messages=Count("id"),
+                total_messages=Count("id", filter=Q(message_type__in=CONVERSATION_MESSAGE_TYPES)),
             )
             .order_by("period")
         )
@@ -224,6 +226,14 @@ class DashboardService:
     def _compute_bot_performance(self, cache_filters: dict, include_cost: bool) -> list[dict[str, Any]]:
         """Build the (uncached, unordered) per-experiment performance rows."""
         querysets = self.get_filtered_queryset_base(**cache_filters)
+        # Conversation turns inside the window, so this column agrees with the
+        # headline message total rather than counting each chat's whole history
+        # (ADR-0051).
+        in_window_turns = Q(
+            chat__messages__message_type__in=CONVERSATION_MESSAGE_TYPES,
+            chat__messages__created_at__gte=querysets["start_date"],
+            chat__messages__created_at__lt=querysets["end_date"],
+        )
         # Pre-compute session stats.
         # The alternative for better performance would be to use a raw SQL Query
         session_stats = (
@@ -233,7 +243,7 @@ class DashboardService:
             .annotate(
                 participants_count=Count("participant", distinct=True),
                 sessions_count=Count("id", distinct=True),
-                messages_count=Count("chat__messages", distinct=True),
+                messages_count=Count("chat__messages", distinct=True, filter=in_window_turns),
             )
         )
         stats_dict = {stat["experiment_id"]: stat for stat in session_stats}
@@ -310,28 +320,35 @@ class DashboardService:
             return cached_data
 
         querysets = self.get_filtered_queryset_base(**filters)
-        participants = querysets["participants"]
 
-        # Get participant engagement stats
-        date_filter = Q(experimentsession__chat__messages__created_at__gte=querysets["start_date"]) & Q(
-            experimentsession__chat__messages__created_at__lte=querysets["end_date"]
-        )
-
-        participant_stats = (
-            participants.annotate(
-                total_messages=Count(
-                    "experimentsession__chat__messages",
-                    filter=Q(experimentsession__chat__messages__message_type=ChatMessageType.HUMAN) & date_filter,
-                ),
-                total_sessions=Count("experimentsession", filter=date_filter, distinct=True),
-                last_activity=Max("experimentsession__last_activity_at"),
+        # Aggregate forward from the canonical message queryset, the same way
+        # `get_active_participants_data` does. Annotating the participant
+        # queryset instead re-enters ExperimentSession from the far side, which
+        # carries none of the SETUP, evaluation or tag exclusions the rest of
+        # the page counts by (ADR-0051).
+        participant_field = "chat__experiment_session__participant"
+        participant_stats = list(
+            querysets["messages"]
+            .filter(HUMAN_AUTHORED)
+            .filter(**{f"{participant_field}__isnull": False})
+            .values(participant_field)
+            .annotate(
+                total_messages=Count("id"),
+                total_sessions=Count("chat__experiment_session", distinct=True),
+                last_activity=Max("created_at"),
             )
-            .filter(total_messages__gt=0)
-            .order_by("-total_messages")
+            .order_by("-total_messages")[:limit]
         )
 
         # Most active participants
-        most_active = [self._format_participant_data(p) for p in participant_stats[:limit]]
+        participants = Participant.objects.filter(team=self.team).in_bulk(
+            [stats[participant_field] for stats in participant_stats]
+        )
+        most_active = [
+            self._format_participant_data(participants[stats[participant_field]], stats)
+            for stats in participant_stats
+            if stats[participant_field] in participants
+        ]
 
         # Session length distribution
         session_lengths = (
@@ -516,8 +533,10 @@ class DashboardService:
         """Format a period object to ISO string"""
         return period.isoformat() if hasattr(period, "isoformat") else str(period)
 
-    def _format_participant_data(self, participant) -> dict[str, Any]:
-        """Format participant data for engagement analysis"""
+    def _format_participant_data(self, participant, stats: dict) -> dict[str, Any]:
+        """Format participant data for engagement analysis. `stats` is one
+        aggregate row keyed on the participant, not annotations on the
+        participant itself."""
         participant_url = reverse(
             "participants:single-participant-home",
             kwargs={"team_slug": self.team.slug, "participant_id": participant.id},
@@ -526,12 +545,13 @@ class DashboardService:
             "participant_id": participant.id,
             "participant_name": participant.name or participant.identifier,
             "participant_url": participant_url,
-            "total_messages": participant.total_messages,
-            "total_sessions": participant.total_sessions,
-            "last_activity": participant.last_activity.isoformat() if participant.last_activity else None,
+            "total_messages": stats["total_messages"],
+            "total_sessions": stats["total_sessions"],
+            "last_activity": stats["last_activity"].isoformat() if stats["last_activity"] else None,
         }
 
-    def _cache_key(self, filters: dict) -> str:
+    @staticmethod
+    def _cache_key(filters: dict) -> str:
         def normalize(obj):
             if isinstance(obj, dict):
                 return {k: normalize(obj[k]) for k in sorted(obj)}
@@ -557,12 +577,12 @@ class DashboardService:
             "total_experiments": querysets["experiments"].count(),
             "total_participants": querysets["participants"].count(),
             "total_sessions": querysets["sessions"].count(),
-            "total_messages": querysets["messages"].count(),
+            "total_messages": conversation_message_total(querysets["messages"]),
             "active_experiments": querysets["experiments"]
             .filter(sessions__in=querysets["sessions"])
             .distinct()
             .count(),
-            "active_participants": querysets["sessions"].values("participant").distinct().count(),
+            "active_participants": distinct_active_participants(querysets["messages"]),
             "completed_sessions": querysets["sessions"].filter(ended_at__isnull=False).count(),
         }
 

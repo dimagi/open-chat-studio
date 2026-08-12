@@ -52,7 +52,7 @@ def frozen_time():
 @pytest.mark.usefixtures("frozen_time")
 class TestMessages:
     """Reproduces the v2 usage API's current message read: half-open window,
-    every session type (evaluations included), total = human + ai."""
+    evaluation-harness activity excluded (ADR-0051), total = human + ai."""
 
     def test_counts_human_ai_and_total(self):
         team = TeamFactory.create()
@@ -87,7 +87,7 @@ class TestMessages:
         assert counts["total"] == 2
         assert surviving == {_START, _MID}
 
-    def test_includes_evaluation_sessions(self):
+    def test_excludes_evaluation_sessions(self):
         team = TeamFactory.create()
         eval_session = ExperimentSessionFactory.create(
             team=team,
@@ -97,7 +97,7 @@ class TestMessages:
 
         counts = metrics.messages(team, start=_START, end=_END, filters=UsageFilters())
 
-        assert counts["total"] == 1
+        assert counts["total"] == 0
 
     def test_empty_id_list_means_matched_nobody(self):
         team = TeamFactory.create()
@@ -267,28 +267,42 @@ class TestSessionCounts:
 
         assert (started, in_setup) == (2, 1)
 
-    def test_sessions_active_counts_any_message_in_closed_window(self):
-        """The dashboard's current definition, unchanged: any message type
-        qualifies, SETUP sessions count, the window end is inclusive."""
+    def test_sessions_active_empty_id_list_means_matched_nobody_like_its_siblings(self):
+        """`sessions_active` delegates to `filtered_querysets`, whose truthiness
+        check would silently treat `[]` as "no filter" and return the team-wide
+        count. The module has one empty-list semantic: `[]` matched nobody."""
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+        _message(session)
+
+        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters(experiment_ids=[])) == 0
+        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters(participant_ids=[])) == 0
+
+    def test_sessions_active_needs_a_conversation_turn_in_the_half_open_window(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        system_only = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+        system_only = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(system_only, message_type=ChatMessageType.SYSTEM)
-        boundary = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        in_setup = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+        _message(in_setup)
+        boundary = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(boundary, when=_END)
-        ExperimentSessionFactory.create(team=team, experiment=experiment)  # silent
+        counted = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(counted)
 
-        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters()) == 2
+        assert metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters()) == 1
 
 
 @pytest.mark.django_db()
 @pytest.mark.usefixtures("frozen_time")
 class TestActiveParticipants:
-    def test_counts_distinct_human_or_ai_authors(self):
+    def test_counts_distinct_human_authors_only(self):
         team = TeamFactory.create()
         human = ExperimentSessionFactory.create(team=team)
         _message(human, message_type=ChatMessageType.HUMAN)
         _message(human, message_type=ChatMessageType.AI)
+        ai_only = ExperimentSessionFactory.create(team=team)
+        _message(ai_only, message_type=ChatMessageType.AI)
         system_only = ExperimentSessionFactory.create(team=team)
         _message(system_only, message_type=ChatMessageType.SYSTEM)
 
@@ -362,3 +376,43 @@ class TestTimeseries:
         )
 
         assert series == {date(2026, 6, 10): 1}
+
+
+@pytest.mark.django_db()
+@pytest.mark.usefixtures("frozen_time")
+class TestSessionsActiveTimeseries:
+    def test_buckets_on_message_time_so_one_session_spans_buckets(self):
+        team = TeamFactory.create()
+        session = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+        _message(session, when=datetime(2026, 6, 9, 12, 0, tzinfo=UTC))
+        _message(session, when=_MID)
+
+        series = metrics.sessions_active_timeseries(
+            team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
+        )
+
+        assert series == {date(2026, 6, 9): 1, date(2026, 6, 10): 1}
+
+    def test_system_only_and_setup_sessions_are_absent(self):
+        team = TeamFactory.create()
+        system_only = ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE)
+        _message(system_only, message_type=ChatMessageType.SYSTEM)
+        in_setup = ExperimentSessionFactory.create(team=team, status=SessionStatus.SETUP)
+        _message(in_setup)
+
+        series = metrics.sessions_active_timeseries(
+            team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
+        )
+
+        assert series == {}
+
+    def test_sums_to_the_scalar_when_no_session_spans_buckets(self):
+        team = TeamFactory.create()
+        for _ in range(3):
+            _message(ExperimentSessionFactory.create(team=team, status=SessionStatus.ACTIVE))
+
+        series = metrics.sessions_active_timeseries(
+            team, start=_START, end=_END, granularity="daily", tz=_TZ, filters=UsageFilters()
+        )
+
+        assert sum(series.values()) == metrics.sessions_active(team, start=_START, end=_END, filters=UsageFilters())

@@ -126,6 +126,7 @@ nav:
       - 0048 Evaluation spend is team spend, never entity spend: adr/0048-evaluation-spend-is-team-spend-not-entity-spend.md
       - 0049 Node rows own pipeline layout; Pipeline.data keeps only edges and viewport: adr/0049-node-rows-own-pipeline-layout.md
       - 0050 Eval-driven generation is evaluation spend: adr/0050-eval-driven-generation-is-evaluation-spend.md
+      - 0051 One set of activity-metric definitions across usage surfaces: adr/0051-usage-activity-metric-definitions.md
       - 0052 App-layer rate limiting: adr/0052-app-layer-rate-limiting-mechanism.md
   - Developer Guides:
     - Processes:

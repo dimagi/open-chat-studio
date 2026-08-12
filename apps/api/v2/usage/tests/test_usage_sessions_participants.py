@@ -88,7 +88,7 @@ def test_sessions_and_participants_use_different_windows():
 @pytest.mark.django_db()
 def test_participants_excludes_system_only_activity():
     """A participant whose only message is an internal ``system`` message is not "active": the
-    ``participants`` metric counts the same human/AI categories the ``messages`` metric surfaces."""
+    ``participants`` metric counts distinct authors of a ``HUMAN`` message only."""
     team = TeamWithUsersFactory.create()
     user = team.members.first()
     session = ExperimentSessionFactory.create(team=team)

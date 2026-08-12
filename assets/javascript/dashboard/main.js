@@ -402,6 +402,7 @@ function dashboard() {
                     },
                     {
                         label: 'Active Participants',
+                        tooltip: 'Participants who sent a message in the selected date range, out of every participant on this team.',
                         numerator: data.active_participants || 0,
                         denominator: data.total_participants || 0,
                         icon: 'fas fa-users',
@@ -409,6 +410,7 @@ function dashboard() {
                     },
                     {
                         label: 'Completed Sessions',
+                        tooltip: 'Completed sessions out of active sessions - those with a message sent or received in the selected date range.',
                         numerator: data.completed_sessions || 0,
                         denominator: data.total_sessions || 0,
                         icon: 'fas fa-comments',
@@ -416,6 +418,7 @@ function dashboard() {
                     },
                     {
                         label: 'Total Messages',
+                        tooltip: 'Messages sent and received in the selected date range. Internal system messages are not counted.',
                         numerator: data.total_messages || 0,
                         icon: 'fas fa-envelope',
                         color: 'text-orange-500'
