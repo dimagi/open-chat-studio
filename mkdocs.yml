@@ -127,6 +127,8 @@ nav:
       - 0049 Node rows own pipeline layout; Pipeline.data keeps only edges and viewport: adr/0049-node-rows-own-pipeline-layout.md
       - 0050 Eval-driven generation is evaluation spend: adr/0050-eval-driven-generation-is-evaluation-spend.md
       - 0051 One set of activity-metric definitions across usage surfaces: adr/0051-usage-activity-metric-definitions.md
+      - 0052 App-layer rate limiting: adr/0052-app-layer-rate-limiting-mechanism.md
+      - 0053 Starting a chat session requires team membership or the embed key: adr/0053-chat-session-start-requires-membership-or-embed-key.md
   - Developer Guides:
     - Processes:
       - Claude Code Agents: developer_guides/claude_code_agent.md

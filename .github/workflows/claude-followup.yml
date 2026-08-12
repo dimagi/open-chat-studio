@@ -19,6 +19,9 @@ permissions:
 
 jobs:
   check-and-fix:
+    # workflow_run grants this job write permissions on the base repository, so
+    # only act on runs whose head branch lives in this repo — never a fork's.
+    if: github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -64,12 +67,14 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed through the environment, never interpolated into the script
+          # body: branch names and other payload values are untrusted input and
+          # must not be parsed by bash.
+          REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
-          REPO="${{ github.repository }}"
-          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
-          RUN_ID="${{ github.event.workflow_run.id }}"
-          RUN_CONCLUSION="${{ github.event.workflow_run.conclusion }}"
-
           echo "Head branch: $HEAD_BRANCH"
           echo "Run ID: $RUN_ID"
           echo "Run conclusion: $RUN_CONCLUSION"
@@ -210,7 +215,9 @@ jobs:
         if: always() && steps.check.outputs.skip != 'true' && steps.check.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.check.outputs.pr_number }}
         run: |
-          gh pr edit "${{ steps.check.outputs.pr_number }}" \
-            --repo "${{ github.repository }}" \
+          gh pr edit "$PR_NUMBER" \
+            --repo "$REPO" \
             --add-label "claude-followup-done"

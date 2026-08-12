@@ -73,3 +73,5 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0049](0049-node-rows-own-pipeline-layout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Node rows own pipeline layout; `Pipeline.data` keeps only edges |
 | [0050](0050-eval-driven-generation-is-evaluation-spend.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Eval-driven generation is evaluation spend, billed without a trace |
 | [0051](0051-usage-activity-metric-definitions.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | One set of activity-metric definitions across usage surfaces |
+| [0052](0052-app-layer-rate-limiting-mechanism.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | App-layer rate limiting via an in-house fixed-window core |
+| [0053](0053-chat-session-start-requires-membership-or-embed-key.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Starting a chat session requires team membership or the embed key |
