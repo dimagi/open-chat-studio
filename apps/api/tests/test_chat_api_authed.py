@@ -242,11 +242,19 @@ class TestNonMemberAccess:
         assert response.status_code == 403
         assert response.json()["error"] == "You do not have access to this chatbot"
 
-    def test_wrong_embed_key(self, non_member_client, experiment, widget_channel):
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            pytest.param(
+                {"HTTP_X_EMBED_KEY": "wrong_token", "HTTP_ORIGIN": f"https://{WIDGET_DOMAIN}"}, id="wrong_key"
+            ),
+            pytest.param({"HTTP_X_EMBED_KEY": WIDGET_TOKEN, "HTTP_ORIGIN": "https://evil.com"}, id="disallowed_domain"),
+            pytest.param({"HTTP_X_EMBED_KEY": WIDGET_TOKEN}, id="no_origin_or_referer"),
+        ],
+    )
+    def test_embed_key_rejected(self, non_member_client, experiment, widget_channel, extra):
         client, user = non_member_client
-        response = self._start(
-            client, experiment, user, HTTP_X_EMBED_KEY="wrong_token", HTTP_ORIGIN=f"https://{WIDGET_DOMAIN}"
-        )
+        response = self._start(client, experiment, user, **extra)
         assert response.status_code == 403
 
     def test_embed_key_of_another_chatbot(self, non_member_client, experiment, widget_channel):
@@ -263,16 +271,6 @@ class TestNonMemberAccess:
             HTTP_X_EMBED_KEY=other_channel.extra_data["widget_token"],
             HTTP_ORIGIN=f"https://{WIDGET_DOMAIN}",
         )
-        assert response.status_code == 403
-
-    def test_embed_key_from_disallowed_domain(self, non_member_client, experiment, widget_channel):
-        client, user = non_member_client
-        response = self._start(client, experiment, user, HTTP_X_EMBED_KEY=WIDGET_TOKEN, HTTP_ORIGIN="https://evil.com")
-        assert response.status_code == 403
-
-    def test_embed_key_without_origin_or_referer(self, non_member_client, experiment, widget_channel):
-        client, user = non_member_client
-        response = self._start(client, experiment, user, HTTP_X_EMBED_KEY=WIDGET_TOKEN)
         assert response.status_code == 403
 
     def test_embed_key_does_not_grant_version_selection(self, non_member_client, experiment, widget_channel):
