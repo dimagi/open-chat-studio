@@ -137,6 +137,7 @@ nav:
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
       - Deployment: developer_guides/deployment.md
+      - Architecture Decision Records: developer_guides/adr_process.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
       - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
