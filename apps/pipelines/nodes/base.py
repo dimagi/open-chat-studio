@@ -498,6 +498,17 @@ class VisibleWhen(BaseModel):
     operator: Literal["==", "!=", "in", "not_in", "is_empty", "is_not_empty"] = "=="
 
 
+# The UiSchema fields that go straight into the schema under a key of the same meaning, when set.
+_UI_SCHEMA_KEYS = {
+    "widget": "ui:widget",
+    "enum_labels": "ui:enumLabels",
+    "options_source": "ui:optionsSource",
+    "flag_required": "ui:flagRequired",
+    "rows": "ui:rows",
+    "default_on_show": "ui:onShowDefault",
+}
+
+
 class UiSchema(BaseModel):
     widget: Widgets | None = None
 
@@ -526,25 +537,19 @@ class UiSchema(BaseModel):
     rows: int | None = None
 
     def __call__(self, schema: JsonDict):
-        if self.widget:
-            schema["ui:widget"] = self.widget
-        if self.enum_labels:
-            schema["ui:enumLabels"] = self.enum_labels
-        if self.options_source:
-            schema["ui:optionsSource"] = self.options_source
-        if self.flag_required:
-            schema["ui:flagRequired"] = self.flag_required
+        for field, schema_key in _UI_SCHEMA_KEYS.items():
+            value = getattr(self, field)
+            if value is not None:
+                schema[schema_key] = value
         if self.api_exclude:
             schema["api:exclude"] = True
-        if self.rows is not None:
-            schema["ui:rows"] = self.rows
         if self.visible_when is not None:
-            if isinstance(self.visible_when, list):
-                schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]
-            else:
-                schema["ui:visibleWhen"] = self.visible_when.model_dump()
-        if self.default_on_show is not None:
-            schema["ui:onShowDefault"] = self.default_on_show
+            conditions = self.visible_when
+            schema["ui:visibleWhen"] = (
+                [condition.model_dump() for condition in conditions]
+                if isinstance(conditions, list)
+                else conditions.model_dump()
+            )
 
 
 class NodeSchema(BaseModel):
