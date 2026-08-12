@@ -220,8 +220,15 @@ class PipelineOptionsView(DiscoveryView):
 
         team = request.team
         llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
-        llm_provider_models = LlmProviderModel.objects.for_team(team)
+        llm_provider_types = {provider["type"] for provider in llm_providers}
         voice_providers = list(VoiceProvider.objects.filter(team=team))
+
+        # A model the team holds no provider for cannot be called, so it is not an option. Models with
+        # no team are shared with every team, which makes this the only filter that scopes them.
+        # Deprecated models are absent rather than flagged, the same as a deprecated node type.
+        llm_provider_models = LlmProviderModel.objects.for_team(team).filter(
+            type__in=llm_provider_types, deprecated=False
+        )
 
         reachable_services = {provider.type.lower() for provider in voice_providers}
         synthetic_voices = (
@@ -240,6 +247,11 @@ class PipelineOptionsView(DiscoveryView):
                 synthetic_voices=synthetic_voices,
             )
         )
+        options[OptionsSource.tool_config] = {
+            provider_type: config
+            for provider_type, config in options[OptionsSource.tool_config].items()
+            if provider_type in llm_provider_types
+        }
         # See `API_ONLY_OPTION_KEYS` -- no node param sources its options from this list.
         options[OptionsSource.voice_provider_id] = [
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers

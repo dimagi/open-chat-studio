@@ -457,6 +457,65 @@ def test_options_synthetic_voices_are_empty_without_a_voice_provider(team):
 
 
 @pytest.mark.django_db()
+def test_options_llm_models_are_filtered_by_team_provider_type(team_with_resources):
+    """Global models (`team=None`) reach every team, so without the provider filter a team holding
+    only an OpenAI key is offered the ~60 models it has no provider to call. Every configured type
+    survives, not just the first -- a team can hold providers for several."""
+    # team_with_resources already has an openai provider, so lets add another one
+    LlmProviderFactory.create(team=team_with_resources, type="anthropic", name="Prod Anthropic")
+    LlmProviderModelFactory.create(team=None, type="anthropic", name="claude-sonnet-5")
+    LlmProviderModelFactory.create(team=None, type="google", name="gemini-3-pro")
+    LlmProviderModelFactory.create(team=None, type="openai", name="gpt-5.1")
+
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    models = client.get(reverse("api:v2:pipeline-options")).json()["llm_provider_model_id"]
+
+    assert {model["type"] for model in models} == {"openai", "anthropic"}
+
+
+@pytest.mark.django_db()
+def test_options_omit_deprecated_llm_models(team_with_resources):
+    """Absent rather than flagged, the same as a deprecated node type. The builder still shows these
+    so an existing node keeps rendering; this list is only what a client may build with."""
+    LlmProviderModelFactory.create(team=None, type="openai", name="gpt-3.5-turbo", deprecated=True)
+
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    models = client.get(reverse("api:v2:pipeline-options")).json()["llm_provider_model_id"]
+
+    assert models
+    assert not [model for model in models if "gpt-3.5-turbo" in model["label"]]
+
+
+@pytest.mark.django_db()
+def test_options_tool_config_is_scoped_to_the_teams_provider_types(team_with_resources):
+    """`tool_config` is a hardcoded dict covering every provider type, unlike `built_in_tools`, which
+    is built from the team's providers. Both are keyed by `llm_provider_id.type`, so both are scoped.
+    Anthropic is the only type carrying configs, so it is what the two cases are told apart by."""
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+    openai_only = client.get(reverse("api:v2:pipeline-options")).json()
+
+    assert set(openai_only["built_in_tools"]) == {"openai"}
+    assert "anthropic" not in openai_only["tool_config"]
+
+    LlmProviderFactory.create(team=team_with_resources, type="anthropic", name="Prod Anthropic")
+    with_anthropic = client.get(reverse("api:v2:pipeline-options")).json()
+
+    assert "anthropic" in with_anthropic["tool_config"]
+
+
+@pytest.mark.django_db()
+def test_options_llm_models_are_empty_without_an_llm_provider(team):
+    LlmProviderModelFactory.create(team=None, type="openai", name="gpt-5.1")
+
+    client = ApiTestClient(team.members.first(), team)
+    options = client.get(reverse("api:v2:pipeline-options")).json()
+
+    assert options["llm_provider_id"] == []
+    assert options["llm_provider_model_id"] == []
+    assert options["default_llm_provider"] == {"llm_provider_id": None, "llm_provider_model_id": None}
+
+
+@pytest.mark.django_db()
 def test_options_include_a_valid_starting_provider_pair(team_with_resources):
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
     defaults = client.get(reverse("api:v2:pipeline-options")).json()["default_llm_provider"]
