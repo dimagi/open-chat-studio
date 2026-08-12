@@ -1,5 +1,7 @@
 # Deployment Process
 
+This describes how changes are deployed to Dimagi's own openchatstudio.com. If you're deploying a self-hosted instance elsewhere, see [Self-Hosting Open Chat Studio](../hosting/index.md) instead.
+
 ### Continuous Deployment
 
 - All changes merged to the `main` branch trigger an automated deployment.

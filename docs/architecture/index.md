@@ -9,16 +9,20 @@ This section provides an overview of the Open Chat Studio architecture, explaini
 
 Rather than duplicating details that can drift out of date, this page links to the sources engineers keep current: `AGENTS.md`, ADRs, `CONTEXT.md`, and the developer guides.
 
-1. Significant architectural decisions are recorded as ADRs. See the **[ADR index](../adr/index.md)** for the full list.
+1. Significant architectural decisions are recorded as [ADRs](../developer_guides/adr_process.md).
 2. For AI-generated architecture diagrams based on this GitHub repo, visit
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## System Overview
 
 Open Chat Studio is a multi-tenant platform: teams build and configure chatbots through the web UI, then publish them to reach **participants** — the end users who actually chat with a bot. It sits between two external ecosystems it doesn't own:
+
 - **Messaging channels** — participants reach a chatbot over the web widget, Telegram, WhatsApp, Slack, email, CommCare Connect, or the API directly.
 - **LLM service providers** — each team brings its own credentials for the LLM, voice, and tracing providers it wants to use.
-Internally it's a modular Django app: the web process serves the UI, API, and channel webhooks synchronously, while Celery workers handle everything that shouldn't block a request (message processing, evaluations, document/media ingestion, scheduled events). For the production process topology and backing services (PostgreSQL, Redis), see the [Self-Hosting overview](../hosting/index.md#architecture-overview); for the third-party services that keep it observable in production, see [Monitoring & Observability](#monitoring-observability) below.
+
+Internally it's a modular Django app: the web process serves the UI, API, and channel webhooks synchronously, while Celery workers handle everything that shouldn't block a request (message processing, evaluations, document/media ingestion, scheduled events).
+
+For the production process topology and backing services (PostgreSQL, Redis), see the [Self-Hosting overview](../hosting/index.md#architecture-overview); for the third-party services that keep it observable in production, see [Monitoring & Observability](#monitoring-observability) below.
 
 ## Technology Stack
 
@@ -30,9 +34,9 @@ See the [README's Tech Stack](https://github.com/dimagi/open-chat-studio#tech-st
 
 ## Key Concepts
 
-See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for product-facing definitions of Chatbots, Channels, Pipelines, Service Providers, and other concepts — or **[AGENTS.md → Core Concepts](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#core-concepts)** for the same concepts summarized for engineers.
+See the [Concepts User Documentation](https://docs.openchatstudio.com/concepts/) for product-facing definitions of Chatbots, Channels, Pipelines, Service Providers, and other concepts — or **[AGENTS.md → Core Concepts](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#core-concepts)** for the same concepts summarized for engineers and coding agents.
 
-For the precise domain language used in code (and by AI coding agents) — e.g. Chatbot vs. Chatbot Version, Working vs. Published Version, Session vs. Participant vs. User, Trace vs. Span — see **[CONTEXT.md](https://github.com/dimagi/open-chat-studio/blob/main/CONTEXT.md)**, the canonical glossary kept up to date as the domain model evolves.
+For the precise domain language used in code (and by AI coding agents) see **[CONTEXT.md](https://github.com/dimagi/open-chat-studio/blob/main/CONTEXT.md)**, the canonical glossary kept up to date as the domain model evolves.
 
 ## Project structure
 
@@ -47,10 +51,13 @@ A couple of conventions worth knowing:
 
 ## Cross-Cutting Concerns
 
-The architectural patterns underlying these concerns — multi-tenancy, versioning, async tasks, API design, LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. Additional useful pointers below for when working in these areas:
+The architectural patterns underlying these concerns — multi-tenancy, [versioning](../developer_guides/code_systems/versioning.md), async tasks, [API design](../developer_guides/api_documentation.md), LLM/messaging abstractions, and observability — are documented and kept up to date by engineers in **[AGENTS.md → Architecture](https://github.com/dimagi/open-chat-studio/blob/main/AGENTS.md#architecture)**. Additional useful pointers below for when working in these areas:
 
 ### Authentication and Authorization
 See the [multi-tenancy guide](../agents/multi_tenancy.md) and [view security guide](../agents/django_view_security.md) for team-scoping and permission patterns.
+
+### Feature Flags
+See the [feature flags guide](../developer_guides/code_systems/feature_flags.md) for how team-scoped Waffle flags gate feature rollout.
 
 ## Monitoring & Observability
 
