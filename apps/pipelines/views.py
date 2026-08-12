@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import QuerySet, Subquery
+from django.db.models import QuerySet, Subquery, prefetch_related_objects
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -115,6 +115,8 @@ def get_widget_page_context(pipeline, experiment=None):
     if pipeline is None:
         return {}
 
+    # data_without_positions rebuilds every node from its row, reading the collection_indexes M2M.
+    prefetch_related_objects([pipeline], "node_set__collection_indexes")
     context = {
         "pipeline_structure": pipeline.data_without_positions,
     }
@@ -386,10 +388,11 @@ def pipeline_data(request, team_slug: str, pk: int):
     if request.method == "PATCH":
         return _handle_pipeline_patch(request, pk, team_slug)
 
-    try:
-        pipeline = Pipeline.objects.get(pk=pk)
-    except Pipeline.DoesNotExist:
-        pipeline = Pipeline.objects.create(id=pk, team=request.team, data={"edges": []}, name="New Pipeline")
+    # flow_data below rebuilds every node from its row, reading the collection_indexes M2M.
+    pipeline = get_object_or_404(
+        Pipeline.objects.prefetch_related("node_set__collection_indexes"), pk=pk, team=request.team
+    )
+
     return JsonResponse(
         {
             "pipeline": {
@@ -411,7 +414,9 @@ def _handle_pipeline_post(request, pk: int, team_slug: str) -> JsonResponse:
         return JsonResponse({"error": f"Malformed payload: {e}"}, status=400)
 
     with transaction.atomic():
-        pipeline = get_object_or_404(Pipeline.objects.prefetch_related("node_set"), pk=pk, team=request.team)
+        pipeline = get_object_or_404(
+            Pipeline.objects.prefetch_related("node_set__collection_indexes"), pk=pk, team=request.team
+        )
         pipeline.name = data.name
         edge_data, node_data = split_flow_data(data.data)
         pipeline.data = edge_data.model_dump()
@@ -443,7 +448,7 @@ def _handle_pipeline_patch(request, pk: int, team_slug: str) -> JsonResponse:
 
     with transaction.atomic():
         pipeline = get_object_or_404(
-            Pipeline.objects.select_for_update().prefetch_related("node_set"),
+            Pipeline.objects.select_for_update().prefetch_related("node_set__collection_indexes"),
             pk=pk,
             team=request.team,
         )

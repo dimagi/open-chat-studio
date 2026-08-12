@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from apps.api.permissions import DjangoModelPermissionsWithView
+from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, ReadOnlyAPIKeyPermission
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
@@ -39,7 +39,7 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
     ),
 )
 class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericViewSet):
-    permission_classes = [DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
+    permission_classes = [*BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
     serializer_class = ChatbotSerializer
     lookup_field = "public_id"
@@ -91,7 +91,9 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
 class MeView(APIView):
     """Return info about the authenticated user and their scoped team."""
 
-    permission_classes = [IsAuthenticated, TokenHasOAuthResourceScope]
+    # Not BASE_PERMISSION_CLASSES: /me describes a human user, so a machine token (which has no user)
+    # is refused by IsAuthenticated rather than admitted by IsAuthenticatedOrMachineToken.
+    permission_classes = [IsAuthenticated, ReadOnlyAPIKeyPermission, TokenHasOAuthResourceScope]
     required_scopes = []  # Any valid OAuth token is accepted; no specific scope required.
 
     @extend_schema(

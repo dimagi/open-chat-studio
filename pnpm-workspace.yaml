@@ -1,0 +1,11 @@
+# Supply-chain cooldown: refuse to resolve a version published less than 3 days
+# ago. Compromised releases are typically unpublished within hours, so a short
+# maturity window blocks automatic adoption of a malicious version without
+# meaningfully slowing normal dependency work.
+#
+# Only affects resolution (`pnpm add`, `pnpm update`, unfrozen `pnpm install`).
+# `pnpm install --frozen-lockfile` skips resolution and is unaffected.
+#
+# To take an urgent release inside the window, add it to minimumReleaseAgeExclude
+# (supports `pkg@version` and `@scope/*` patterns) rather than lowering the floor.
+minimumReleaseAge: 4320

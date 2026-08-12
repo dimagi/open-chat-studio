@@ -11,11 +11,12 @@ from django.template.response import TemplateResponse
 from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
-from django.utils.http import http_date
+from django.utils.html import escape
 from waffle.testutils import override_flag
 
 from apps.annotations.models import Tag
 from apps.api.session_tokens import validate_session_token
+from apps.chat.models import Chat
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
     ChatbotExperimentTableView,
@@ -27,7 +28,6 @@ from apps.chatbots.views import (
     home,
 )
 from apps.events.models import StaticTriggerType
-from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
@@ -767,22 +767,6 @@ def test_session_table_session_query_uses_limit(team_with_users):
 
 
 @pytest.mark.django_db()
-@patch("apps.experiments.services.enqueue_static_triggers", Mock())
-def test_start_chatbot_session_public_embed_returns_deprecation_headers(client):
-    """The legacy embed flow is sunset (see issue #3540); responses must carry RFC 8594 headers."""
-    chatbot = ExperimentFactory.create()
-    url = reverse(
-        "chatbots:start_session_public_embed",
-        kwargs={"team_slug": chatbot.team.slug, "experiment_id": chatbot.public_id},
-    )
-    response = client.get(url)
-    assert response.status_code == 302
-    assert response.headers["Deprecation"] == "true"
-    assert response.headers["Sunset"] == http_date(EMBED_FLOW_SUNSET_AT.timestamp())
-    assert response.headers["Link"] == f'<{EMBED_FLOW_SUCCESSOR_URL}>; rel="successor-version"'
-
-
-@pytest.mark.django_db()
 def test_chatbot_chat_ui_includes_valid_session_token():
     experiment = ExperimentFactory()
     session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
@@ -881,3 +865,38 @@ def test_version_operation_status_polling(client, team_with_users):
     content = response.content.decode()
     assert "Create Version" in content
     assert "version-changed" in content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("embed_source", "expect_link"),
+    [
+        pytest.param("https://embedder.example.com/page", True, id="https-is-a-link"),
+        pytest.param("javascript:alert(document.domain)", False, id="javascript-is-text"),
+        pytest.param("data:text/html,<script>alert(1)</script>", False, id="data-is-text"),
+    ],
+)
+def test_session_view_only_links_http_embed_source(client, team_with_users, embed_source, expect_link):
+    """The embed source is captured from an unauthenticated referer header, so the session page
+    must never render it as a link target unless it is an http(s) URL."""
+    team = team_with_users
+    user = team.members.first()
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    session.chat.set_metadata(Chat.MetadataKeys.EMBED_SOURCE, embed_source)
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+    assert response.status_code == 200
+    content = response.content.decode()
+
+    hrefs = re.findall(r'href="([^"]*)"', content)
+    assert not [href for href in hrefs if href.lower().startswith(("javascript:", "data:"))]
+    if expect_link:
+        assert embed_source in hrefs
+    else:
+        assert embed_source not in hrefs
+        assert escape(embed_source) in content  # still displayed, as inert text

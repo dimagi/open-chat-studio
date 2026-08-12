@@ -772,3 +772,56 @@ def test_delete_session_tags_does_not_remove_system_tags(auth_method, session):
     # Verify response shows the system tag
     response_data = response.json()
     assert response_data["tags"] == ["important"]
+
+
+def _create_session_request(session):
+    return reverse("api:session-list"), {"experiment": str(session.experiment.public_id)}
+
+
+def _end_session_request(session):
+    return f"/api/sessions/{session.external_id}/end_experiment_session/", None
+
+
+def _update_state_request(session):
+    return f"/api/sessions/{session.external_id}/update_state/", {"state": {"injected": True}}
+
+
+def _tags_request(session):
+    return f"/api/sessions/{session.external_id}/tags/", {"tags": ["injected"]}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("method", "build_request"),
+    [
+        pytest.param("post", _create_session_request, id="create"),
+        pytest.param("post", _end_session_request, id="end_experiment_session"),
+        pytest.param("patch", _update_state_request, id="update_state"),
+        pytest.param("post", _tags_request, id="add_tags"),
+        pytest.param("delete", _tags_request, id="remove_tags"),
+    ],
+)
+def test_read_only_key_cannot_write_to_sessions(method, build_request, session):
+    """A key issued as read-only must not write through any session endpoint (ADR-0021)."""
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team, read_only=True)
+    url, data = build_request(session)
+    original_status = session.status
+
+    response = getattr(client, method)(url, data=data, format="json")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    session.refresh_from_db()
+    assert session.status == original_status
+    assert session.state == {}
+    assert session.chat.tags.count() == 0
+    assert ExperimentSession.objects.count() == 1
+
+
+@pytest.mark.django_db()
+def test_read_only_key_can_read_sessions(session):
+    user = session.team.members.first()
+    client = ApiTestClient(user, session.team, read_only=True)
+
+    assert client.get(reverse("api:session-list")).status_code == 200
+    assert client.get(reverse("api:session-detail", kwargs={"id": session.external_id})).status_code == 200

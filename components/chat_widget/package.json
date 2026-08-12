@@ -39,8 +39,7 @@
     "@stencil/core": "^4.27.0",
     "dompurify": "^3.0.5",
     "js-cookie": "^3.0.5",
-    "marked": "^18.0.7",
-    "npmrc": "^1.1.1"
+    "marked": "^18.0.7"
   },
   "devDependencies": {
     "@stencil-community/postcss": "^2.2.0",
@@ -54,7 +53,6 @@
     "jsdom": "^30.0.1",
     "postcss-import": "^16.1.0",
     "prettier": "^3.9.6",
-    "puppeteer": "^25.4.0",
     "stencil-tailwind-plugin": "^2.0.5",
     "tailwindcss": "^4.1.12",
     "typescript": "^5.7.3"
@@ -63,8 +61,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
-      "postcss-combine-duplicated-selectors",
-      "puppeteer"
+      "postcss-combine-duplicated-selectors"
     ]
   }
 }

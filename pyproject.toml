@@ -44,7 +44,7 @@ dependencies = [
     "langchain_google_genai",
     "langchain-voyageai",
     "langchain-community>=0.4.2",
-    "langfuse>=4.5.0",
+    "langfuse>=4.14.1",
     "langgraph>=1.2.9",
     "loguru",
     "mail-parser-reply>=0.20",
@@ -61,7 +61,7 @@ dependencies = [
     "RestrictedPython",
     "sentry-sdk",
     "slack-bolt",
-    "taskbadger>=2.4.0",
+    "taskbadger>=2.5.2",
     "tenacity",
     "tiktoken",
     "turn-python>=1.0.0",
@@ -111,6 +111,11 @@ norecursedirs = ".* build dist venv node_modules compose assets static"
 markers = [
     "integration: marks tests as integration tests (deselected by default)",
     "eval: marks tests as LLM evaluation tests (deselected by default, requires API keys)",
+]
+filterwarnings = [
+    # pytest 10 turns these into hard errors. Fail on them now so they get fixed as they appear,
+    # rather than as a wall of breakage at upgrade time.
+    "error::pytest.PytestRemovedIn10Warning",
 ]
 
 [tool.ruff]
@@ -178,7 +183,7 @@ dev = [
     "pytest-cov",
     "pytest-xdist",
     "django-debug-toolbar>=7.0.0",
-    "prek>=0.3.2",
+    "prek>=0.4.11",
     "django-types",
     "ty>=0.0.65",
     "honcho>=2.0.0",

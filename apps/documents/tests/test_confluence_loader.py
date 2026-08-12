@@ -79,7 +79,7 @@ class TestConfluenceDocumentLoader:
             documents = list(loader.load_documents())
 
         expected_raw_docs = _get_mock_documents()
-        assert [doc.page_content for doc in documents] == [doc.page_content for doc in expected_raw_docs]
+        assert [doc.content for doc in documents] == [doc.page_content.encode() for doc in expected_raw_docs]
         assert all("source_type" in doc.metadata for doc in documents)
 
 

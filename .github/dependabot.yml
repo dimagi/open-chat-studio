@@ -1,15 +1,35 @@
 version: 2
+
+# A note on `cooldown`: it delays *version* update PRs so a freshly published
+# release has time to be found malicious and unpublished before we adopt it.
+# It deliberately does not apply to Dependabot *security* updates, so advisory
+# fixes still land immediately. The npm ecosystems are additionally floored by
+# `minimumReleaseAge` in pnpm-workspace.yaml, which catches transitive bumps
+# that Dependabot never opens a PR for. uv has a client-side equivalent
+# (`tool.uv.exclude-newer` in pyproject.toml) that we don't currently set;
+# actions and pre-commit have no such lever, so cooldown is the only guard
+# there.
 updates:
   - package-ecosystem: "npm"
     directory: "/"
     open-pull-requests-limit: 5
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
   - package-ecosystem: "npm"
     directory: "/components/chat_widget"
     open-pull-requests-limit: 5
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
   - package-ecosystem: "uv"
     directory: "/"
     open-pull-requests-limit: 5
@@ -20,11 +40,20 @@ updates:
     # so floors stay at the version we actually need rather than ratcheting to
     # the latest release and needlessly narrowing the resolver's options.
     versioning-strategy: "increase-if-necessary"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7

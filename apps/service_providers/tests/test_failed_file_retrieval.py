@@ -57,7 +57,9 @@ def index_manager():
 
 def _index_file_failing_on_last_chunk(collection, index_manager):
     """Index a file where embedding succeeds for chunks 1-2 and fails on chunk 3."""
-    file = FileFactory.create(team=collection.team)
+    # Real content matters: indexing a file no text can be extracted from fails outright,
+    # which would mask the partial-failure path under test.
+    file = FileFactory.create(team=collection.team, file__data=b"document text")
     collection.files.add(file)
     collection_file = CollectionFile.objects.get(collection=collection, file=file)
     collection_file.status = FileStatus.PENDING

@@ -14,6 +14,10 @@ def sweep():
     are run inline here to leave the same end state a worker would reach.
     """
     run_ids = list(EvaluationRun.objects.filter(status__in=NON_TERMINAL_RUN_STATUSES).values_list("id", flat=True))
-    with patch("apps.evaluations.tasks.finalize_evaluation_run.delay", side_effect=finalize_evaluation_run):
+
+    def finalize_inline(args=None, **kwargs):
+        finalize_evaluation_run(*(args or ()))
+
+    with patch("apps.evaluations.tasks.finalize_evaluation_run.apply_async", side_effect=finalize_inline):
         for run_id in run_ids:
             drive_evaluation_run(run_id)

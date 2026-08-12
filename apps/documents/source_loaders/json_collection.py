@@ -1,17 +1,15 @@
 import json
 import logging
 from collections.abc import Iterator
-from io import BytesIO
 from typing import Any, Self
 
 import httpx
 from django.conf import settings
-from langchain_core.documents import Document
 
 from apps.documents.datamodels import JSONCollectionSourceConfig
 from apps.documents.models import Collection, DocumentSource
-from apps.documents.readers import read_file_content
-from apps.documents.source_loaders.base import BaseDocumentLoader
+from apps.documents.source_loaders.base import BaseDocumentLoader, SourceDocument
+from apps.documents.source_loaders.http import read_capped
 from apps.utils.urlvalidate import InvalidURL, validate_user_input_url
 
 logger = logging.getLogger(__name__)
@@ -31,7 +29,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             return {}
         return self.auth_provider.get_auth_service().get_auth_headers()
 
-    def load_documents(self) -> Iterator[Document]:
+    def load_documents(self) -> Iterator[SourceDocument]:
         """Load documents from a JSON indexed-collections feed."""
         items = self._fetch_json_list()
         for item in items:
@@ -48,7 +46,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             raise ValueError(f"expected a JSON list at the top level, got {type(data).__name__}")
         return data
 
-    def _process_item(self, item: dict[str, Any]) -> Iterator[Document]:
+    def _process_item(self, item: dict[str, Any]) -> Iterator[SourceDocument]:
         title = item.get("title")
         uri = item.get("URI")
         if not title and not uri:
@@ -116,7 +114,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
         item_metadata: dict[str, Any],
         fetchable: list[dict[str, Any]],
         item_uri: str | None,
-    ) -> Iterator[Document]:
+    ) -> Iterator[SourceDocument]:
         for attachment in fetchable:
             link = attachment["link"]
             file_type = attachment.get("file_type")
@@ -129,7 +127,7 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
                 )
                 continue
             try:
-                text = self._fetch_and_extract(link)
+                content = self._fetch(link)
             except Exception as exc:  # noqa: BLE001 -- caught and logged per design
                 logger.warning(
                     "Skipping attachment %s for item %s: %s",
@@ -147,18 +145,19 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
                 if src_key in attachment:
                     attachment_metadata[dst_key] = attachment[src_key]
             metadata = {**item_metadata, **attachment_metadata}
-            yield Document(page_content=text, metadata=metadata)
+            yield SourceDocument(content=content, metadata=metadata)
 
-    def _fetch_and_extract(self, url: str) -> str:
+    def _fetch(self, url: str) -> bytes:
+        """Download the attachment and hand on its bytes unparsed.
+
+        Nothing here inspects the payload: the feed's `file_type` is a third party's claim,
+        and the reader that can be trusted to pick a parser runs at index time.
+        """
         try:
             validate_user_input_url(url, strict=not settings.DEBUG)
         except InvalidURL as exc:
             raise ValueError(f"Refusing to fetch attachment URL: {exc}") from exc
-        content = self._read_with_size_limit(url)
-        # No trustworthy content type here -- the feed's `file_type` is a third party's claim --
-        # so let the bytes pick the reader. A damaged PDF is refused in milliseconds instead of
-        # occupying the worker for minutes; the caller records it as failed and moves on.
-        return read_file_content(BytesIO(content)).get_contents_as_string()
+        return self._read_with_size_limit(url)
 
     def _read_with_size_limit(self, url: str) -> bytes:
         """GET `url` and return the body, raising ValueError if it exceeds the size cap.
@@ -173,22 +172,15 @@ class JSONCollectionLoader(BaseDocumentLoader[JSONCollectionSourceConfig]):
             headers=self._get_auth_headers(),
         ) as response:
             response.raise_for_status()
-            chunks: list[bytes] = []
-            total = 0
-            for chunk in response.iter_bytes():
-                total += len(chunk)
-                if total > MAX_RESPONSE_BYTES:
-                    raise ValueError(f"Response from {url} exceeds {MAX_RESPONSE_BYTES} byte cap")
-                chunks.append(chunk)
-            return b"".join(chunks)
+            return read_capped(response, MAX_RESPONSE_BYTES, url)
 
-    def get_document_identifier(self, document: Document) -> str:
+    def get_document_identifier(self, document: SourceDocument) -> str:
         link = document.metadata.get("link")
         if link:
             return link
         return super().get_document_identifier(document)
 
-    def should_update_document(self, document: Document, existing_file) -> bool:
+    def should_update_document(self, document: SourceDocument, existing_file) -> bool:
         new_date = document.metadata.get("date")
         old_date = existing_file.file.metadata.get("date") if existing_file.file else None
         if new_date and old_date:

@@ -447,20 +447,28 @@ def _drive_run(run_id: int) -> None:
         )
         if run is None:
             return  # locked by another driver, or already terminal/gone
+        # Read before coordinating, which moves the run off PENDING. Doubles as the claim on
+        # creating the run's Taskbadger task: the transition happens under this row lock, so
+        # exactly one tick ever sees PENDING, and a rolled-back tick leaves the claim open.
+        first_tick = run.status == EvaluationRunStatus.PENDING
         with current_team(run.team):
             result = _coordinate_locked_run(run)
 
     with current_team(run.team):
+        # Ahead of the dispatches so the run's task exists to nest them under on the
+        # first tick, which is the tick that dispatches the first batches.
+        if first_tick:
+            _ensure_taskbadger_task(run, result.total)
+        tb_parent = _taskbadger_parent_kwargs(run)
         for batch in result.batches:
-            evaluate_message_batch.delay(run.id, batch)
-        _ensure_taskbadger_task(run, result.total)
+            evaluate_message_batch.apply_async(args=[run.id, batch], **tb_parent)
         _publish_tick(run, result)
         # Dispatched last on purpose. The run is terminal by now, so no later tick repeats
         # this block — a broker error here would otherwise cost the run its completion
         # signal (stopping the UI poll) as well as its aggregates. `done == 0` means there
         # is nothing to aggregate and no applied tags to reverse against.
         if result.terminal == "success" and result.done > 0:
-            finalize_evaluation_run.delay(run.id)
+            finalize_evaluation_run.apply_async(args=[run.id], **tb_parent)
 
 
 @shared_task(ignore_result=True, queue=Queues.BACKGROUND)
@@ -548,11 +556,16 @@ def _publish_progress(job_id: str, current: int, total: int, *, stop: bool = Fal
 
 
 def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
-    """Create the run's Taskbadger task once, after the tick's transaction has committed.
+    """Create the run's Taskbadger task, after the tick's transaction has committed.
 
-    Called outside the coordination lock so the blocking HTTP request never stalls
-    other runs in the sweep. The taskbadger_task_id check keeps it effectively
-    once-per-run; a rare duplicate under overlapping sweeps is harmless for monitoring.
+    Called outside the coordination lock so the blocking HTTP request never stalls other
+    runs in the sweep. Nothing here is idempotent against a concurrent caller — a second
+    create would be a second root task, not a no-op — so `_drive_run` calls this only on
+    the tick that claimed PENDING under the lock.
+
+    Consequently the create is never retried: if it fails, or the worker dies before the id
+    is stored, the run spends its life without a task. Every Taskbadger call site no-ops on
+    an empty id, so that costs monitoring only.
     """
     if run.taskbadger_task_id:
         return
@@ -576,6 +589,26 @@ def _ensure_taskbadger_task(run: EvaluationRun, total: int) -> None:
     if task is not None:
         run.taskbadger_task_id = task.id
         run.save(update_fields=["taskbadger_task_id"])
+
+
+def _taskbadger_parent_kwargs(run: EvaluationRun) -> dict:
+    """`apply_async` kwargs that nest a dispatched task under the run's Taskbadger task.
+
+    The header form rather than the `taskbadger_parent=` one: that spelling requires
+    `base=taskbadger.celery.Task`, and these tasks use the plain base class, so Celery would
+    swallow it as an unknown option. Both are documented — see "Subtasks" and "Customization
+    without the task base class" at https://docs.taskbadger.net/python-celery/.
+
+    The run's own task is created by `taskbadger.create_task_safe`, which does not auto-nest,
+    so it is a root task — a requirement for it to be a parent, as tasks nest a single level.
+
+    Empty when the run has no task. Omitting the key leaves the integration's automatic
+    nesting in place (under `drive_evaluation_run`, the tracked task this runs inside);
+    an explicit `parent: None` would instead publish the child as a root task.
+    """
+    if not run.taskbadger_task_id:
+        return {}
+    return {"headers": {"taskbadger_kwargs": {"parent": run.taskbadger_task_id}}}
 
 
 def _update_taskbadger(run: EvaluationRun, *, value: int, value_max: int, status: StatusEnum | None = None) -> None:

@@ -19,6 +19,12 @@ jobs:
       matrix:
         node-version: [24.x]
     steps:
+      # Audit only: records egress without blocking. Flip to `block` plus an
+      # `allowed-endpoints` list once the recorded traffic looks stable.
+      - name: Harden the runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6.0.9
       - name: Use Node.js ${{ matrix.node-version }}
@@ -27,14 +33,6 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
           cache-dependency-path: components/chat_widget/pnpm-lock.yaml
-      - name: Disable AppArmor
-        # Ubuntu >= 23 has AppArmor enabled by default, which breaks Puppeteer.
-        # See https://github.com/puppeteer/puppeteer/issues/12818 "No usable sandbox!"
-        # this is taken from the solution used in Puppeteer's own CI: https://github.com/puppeteer/puppeteer/pull/13196
-        # The alternative is to pin Ubuntu 22 or to use aa-exec to disable AppArmor for commands that need Puppeteer.
-        # This is also suggested by Chromium https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md
-        run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
-        shell: bash
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         working-directory: ./components/chat_widget
