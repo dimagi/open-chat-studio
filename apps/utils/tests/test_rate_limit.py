@@ -366,3 +366,18 @@ def test_middleware_skips_degraded_results(db):
 
     response = RateLimitHeadersMiddleware(view)(_request())
     assert "X-RateLimit-Limit" not in response.headers
+
+
+def test_middleware_gives_degraded_blocks_a_retry_after(db):
+    """A fail-closed scope blocks when the backend fails, so the 429 still says when to
+    retry even though there is no counter data behind the X-RateLimit-* headers."""
+
+    def view(request):
+        request.rate_limit_result = RateLimitResult(
+            allowed=False, limit=3, remaining=0, reset_seconds=300, retry_after=300, degraded=True
+        )
+        return DjangoJsonResponse({"detail": "Rate limit exceeded."}, status=429)
+
+    response = RateLimitHeadersMiddleware(view)(_request())
+    assert response.headers["Retry-After"] == "300"
+    assert "X-RateLimit-Limit" not in response.headers

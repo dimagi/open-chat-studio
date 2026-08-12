@@ -166,11 +166,9 @@ def rate_limited(scope: str, key_fn=None):
             result = check(scope, identity_type, identity, team_id=team.pk if team else None)
             request.rate_limit_result = result
             if not result.allowed:
-                response = JsonResponse(
-                    {"detail": "Rate limit exceeded.", "available_in": result.retry_after}, status=429
-                )
-                response["Retry-After"] = str(result.retry_after)
-                return response
+                # Retry-After comes from the headers middleware, which owns it on both
+                # this path and the DRF one.
+                return JsonResponse({"detail": "Rate limit exceeded.", "available_in": result.retry_after}, status=429)
             return view_func(request, *args, **kwargs)
 
         return wrapper
@@ -183,14 +181,25 @@ def _ip_key(request) -> tuple[str, str]:
 
 
 class RateLimitHeadersMiddleware:
+    """Sole owner of the rate limiting response headers, for both the plain-view
+    decorator and the DRF throttle. On the DRF path this overwrites the Retry-After
+    that rest_framework sets from `Throttled.wait`, with the same value.
+    """
+
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         response = self.get_response(request)
         result = getattr(request, "rate_limit_result", None)
-        if result is not None and not result.degraded:
+        if result is None:
+            return response
+        if not result.degraded:
             response["X-RateLimit-Limit"] = str(result.limit)
             response["X-RateLimit-Remaining"] = str(result.remaining)
             response["X-RateLimit-Reset"] = str(result.reset_seconds)
+        if result.retry_after is not None:
+            # Outside the degraded guard: a fail-closed scope blocks on backend failure,
+            # and that 429 needs a retry hint even with no counter data to report.
+            response["Retry-After"] = str(result.retry_after)
         return response
