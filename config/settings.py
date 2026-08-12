@@ -23,6 +23,7 @@ from kombu import Queue
 from pythonjsonlogger.json import JsonFormatter
 
 from apps.utils.celery import Queues
+from config.db import get_database_config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -229,39 +230,7 @@ FORMS_URLFIELD_ASSUME_HTTPS = True
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-if "DATABASE_URL" in env:
-    DATABASES = {"default": env.db()}
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": env("DJANGO_DATABASE_NAME", default="open_chat_studio"),
-            "USER": env("DJANGO_DATABASE_USER", default="postgres"),
-            "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
-            "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
-            "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
-            "CONN_HEALTH_CHECKS": True,
-            "DISABLE_SERVER_SIDE_CURSORS": env.bool("DJANGO_DISABLE_SERVER_SIDE_CURSORS", default=False),
-        }
-    }
-
-db_options: dict = DATABASES["default"].setdefault("OPTIONS", {})  # ty: ignore[invalid-assignment]
-if env.bool("DJANGO_DATABASE_USE_POOL", True):
-    DATABASES["default"].pop("CONN_MAX_AGE", None)
-    # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
-    db_options["pool"] = {
-        "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
-        "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=35),
-        "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
-    }
-else:
-    DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
-
-# RDS Proxy requires TLS. psycopg3 defaults to sslmode=prefer which falls back to
-# non-SSL on handshake failure, which the proxy rejects. sslmode=require forces SSL
-# without the non-SSL fallback. Override with DJANGO_DATABASE_SSLMODE if needed
-# (e.g. set to "prefer" for local dev without TLS).
-db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="prefer" if DEBUG else "require")
+DATABASES = get_database_config(env, debug=DEBUG)
 
 # Auth / login stuff
 

@@ -21,9 +21,20 @@ All configuration is via environment variables. In production, set `DJANGO_SETTI
 | `DJANGO_DATABASE_PASSWORD` | — | Database password |
 | `DJANGO_DATABASE_HOST` | `localhost` | Database host |
 | `DJANGO_DATABASE_PORT` | `5432` | Database port |
-| `DJANGO_DATABASE_POOL_MIN_SIZE` | — | Connection pool minimum size |
-| `DJANGO_DATABASE_POOL_MAX_SIZE` | — | Connection pool maximum size |
-| `DJANGO_DATABASE_POOL_TIMEOUT` | — | Connection pool timeout (seconds) |
+
+## Connection behaviour
+
+These apply whether the connection comes from `DATABASE_URL` or the variables above.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DJANGO_DATABASE_USE_POOL` | `True` | Use a psycopg connection pool. When disabled, `DJANGO_DATABASE_CONN_MAX_AGE` applies instead |
+| `DJANGO_DATABASE_POOL_MIN_SIZE` | `2` | Connection pool minimum size |
+| `DJANGO_DATABASE_POOL_MAX_SIZE` | `35` | Connection pool maximum size |
+| `DJANGO_DATABASE_POOL_TIMEOUT` | `10` | Connection pool timeout (seconds) |
+| `DJANGO_DATABASE_CONN_MAX_AGE` | `0` | Persistent connection lifetime, in seconds. Ignored when the pool is enabled |
+| `DJANGO_DATABASE_SSLMODE` | `require` (`prefer` when `DEBUG`) | psycopg `sslmode`. AWS RDS Proxy requires TLS |
+| `DJANGO_DISABLE_SERVER_SIDE_CURSORS` | `False` | Set to `True` to stop Django using server-side cursors for `QuerySet.iterator()`. Behind a connection proxy in transaction-pooling mode (e.g. AWS RDS Proxy) these are declared `WITH HOLD` and pin the session to a backend connection. Disabling them costs memory: each `iterator()` call then buffers its whole result set client-side |
 
 ## Redis (alternative to REDIS_URL)
 
