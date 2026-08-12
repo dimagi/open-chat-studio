@@ -9,7 +9,13 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    parser_classes,
+    permission_classes,
+    throttle_classes,
+)
 from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -25,6 +31,7 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token
+from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
@@ -134,6 +141,7 @@ def validate_file_upload(file):
     ],
 )
 @api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 @parser_classes([MultiPartParser])
@@ -308,6 +316,7 @@ def _resolve_experiment_channel(request, team, session_data):
 )
 @widget_sunset_headers
 @api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([WidgetDomainPermission])
 def chat_start_session(request):
@@ -460,6 +469,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
 )
 @widget_sunset_headers
 @api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_send_message(request, session_id):
@@ -606,6 +616,7 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
     ],
 )
 @api_view(["GET"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_task_response(request, session_id, task_id):
@@ -673,6 +684,7 @@ def chat_poll_task_response(request, session_id, task_id):
     ],
 )
 @api_view(["GET"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_response(request, session_id):
