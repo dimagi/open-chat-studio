@@ -450,6 +450,13 @@ def test_public_chat_scope_is_configured():
     assert fail_open is True
 
 
+def test_webhook_scope_is_configured():
+    """The webhook scope parses to the design's 3000/5m, fail-open."""
+    limit, window_seconds, fail_open = _scope_config("webhook")
+
+    assert (limit, window_seconds, fail_open) == (3000, 300, True)
+
+
 def test_middleware_skips_degraded_results(db):
     """Backend-failure responses carry no headers (no counter data behind them)."""
 
