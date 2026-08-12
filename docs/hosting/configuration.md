@@ -21,9 +21,20 @@ All configuration is via environment variables. In production, set `DJANGO_SETTI
 | `DJANGO_DATABASE_PASSWORD` | — | Database password |
 | `DJANGO_DATABASE_HOST` | `localhost` | Database host |
 | `DJANGO_DATABASE_PORT` | `5432` | Database port |
-| `DJANGO_DATABASE_POOL_MIN_SIZE` | — | Connection pool minimum size |
-| `DJANGO_DATABASE_POOL_MAX_SIZE` | — | Connection pool maximum size |
-| `DJANGO_DATABASE_POOL_TIMEOUT` | — | Connection pool timeout (seconds) |
+
+## Connection behaviour
+
+These apply whether the connection comes from `DATABASE_URL` or the variables above.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DJANGO_DATABASE_USE_POOL` | `True` | Use a psycopg connection pool. When disabled, `DJANGO_DATABASE_CONN_MAX_AGE` applies instead |
+| `DJANGO_DATABASE_POOL_MIN_SIZE` | `2` | Connection pool minimum size |
+| `DJANGO_DATABASE_POOL_MAX_SIZE` | `35` | Connection pool maximum size |
+| `DJANGO_DATABASE_POOL_TIMEOUT` | `10` | Connection pool timeout (seconds) |
+| `DJANGO_DATABASE_CONN_MAX_AGE` | `0` | Persistent connection lifetime, in seconds. Ignored when the pool is enabled |
+| `DJANGO_DATABASE_SSLMODE` | `require` (`prefer` when `DEBUG`) | psycopg `sslmode`. AWS RDS Proxy requires TLS |
+| `DJANGO_DISABLE_SERVER_SIDE_CURSORS` | `False` | Set to `True` to stop Django using server-side cursors for `QuerySet.iterator()`. Behind a connection proxy in transaction-pooling mode (e.g. AWS RDS Proxy) these are declared `WITH HOLD` and pin the session to a backend connection. Disabling them costs memory: each `iterator()` call then buffers its whole result set client-side |
 
 ## Redis (alternative to REDIS_URL)
 
@@ -44,6 +55,15 @@ All configuration is via environment variables. In production, set `DJANGO_SETTI
 | `OIDC_RSA_PRIVATE_KEY` | — | RSA private key (PEM format) for the built-in OAuth2/OIDC provider. Required if you enable OAuth2 token issuance. |
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. |
+
+## Rate Limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATE_LIMIT_ENFORCE` | `False` | When `False`, over-limit requests are served and logged as `rate_limit.would_block` (sampled after the first crossing, not every request); when `True`, they receive HTTP 429. |
+| `RATE_LIMIT_API` | `2000/5m` | Request limit for the `api` scope, format `count/window` with `s`/`m`/`h` units. Fails open: if the limiter's cache is unreachable, requests are served. |
+| `RATE_LIMIT_ADMIN_API` | `100/5m` | Request limit for the `admin_api` scope (the `/admin/api/*` autocomplete and provider-reporting endpoints). Keyed by authenticated user, then the provider-reporting token, then client IP, so anonymous traffic cannot spend a staff member's allowance. Set `RATE_LIMIT_TRUSTED_PROXY_COUNT` before enforcing, or all anonymous callers behind a proxy share one bucket. Fails open: if the limiter's cache is unreachable, requests are served. |
+| `RATE_LIMIT_TRUSTED_PROXY_COUNT` | `0` | Number of trusted reverse proxies; required for correct client IPs behind a proxy or tunnel before enabling any IP-keyed scope. |
 
 ## Email
 
