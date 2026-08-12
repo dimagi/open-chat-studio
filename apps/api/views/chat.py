@@ -239,12 +239,11 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
     caller using an embed key isn't tagged with a placeholder version. Everything else
     (authenticated users with no key) falls back to the team API channel.
     """
-    channel = request.auth if isinstance(request.auth, ExperimentChannel) else embed_key_channel
-    if channel is None:
+    if embed_key_channel is None:
         return ExperimentChannel.objects.get_team_api_channel(team)
     if is_widget_request(request, session_data):
-        channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
-    return channel
+        embed_key_channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
+    return embed_key_channel
 
 
 @extend_schema(
