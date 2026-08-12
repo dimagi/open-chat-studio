@@ -158,7 +158,8 @@ def _option(value, label, type_=None, edit_url: str | None = None, max_token_lim
     data = {"value": value, "label": label}
     data = data | ({"type": type_} if type_ else {})
     data = data | ({"edit_url": edit_url} if edit_url else {})
-    data = data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
+    # 0 is a real limit -- it disables history compression -- so only an absent one is dropped.
+    data = data | ({"max_token_limit": max_token_limit} if max_token_limit is not None else {})
     return data
 
 

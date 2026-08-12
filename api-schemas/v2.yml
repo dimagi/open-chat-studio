@@ -1784,7 +1784,9 @@ components:
             of the chosen `llm_provider_id`.
         max_token_limit:
           type: integer
-          description: The model's context window. Absent where none is recorded.
+          description: The token count beyond which a session's message history is
+            compressed. `0` means compression is off for this model. Absent where
+            no limit is recorded.
       required:
       - label
       - type

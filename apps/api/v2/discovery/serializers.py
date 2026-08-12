@@ -91,7 +91,11 @@ class LlmProviderModelOptionSerializer(serializers.Serializer):
         help_text="The provider type that serves the model. Must equal the `type` of the chosen `llm_provider_id`."
     )
     max_token_limit = serializers.IntegerField(
-        required=False, help_text="The model's context window. Absent where none is recorded."
+        required=False,
+        help_text=(
+            "The token count beyond which a session's message history is compressed. `0` means "
+            "compression is off for this model. Absent where no limit is recorded."
+        ),
     )
 
 
