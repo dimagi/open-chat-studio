@@ -4,6 +4,7 @@ import json
 from datetime import timedelta
 
 import pytest
+from django.conf import settings
 from django.core.cache import cache as default_cache
 from django.core.cache import caches
 from django.test import RequestFactory, override_settings
@@ -22,7 +23,7 @@ from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG
 from apps.utils.tests.clients import ApiTestClient
 
-TINY_LIMITS = {"api": {"rate": "3/5m", "fail_open": True}}
+TINY_LIMITS = settings.RATE_LIMITS | {"api": {"rate": "3/5m", "fail_open": True}}
 
 
 @pytest.fixture(autouse=True)
