@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -7,11 +8,12 @@ from django.core.cache import cache
 from django.core.validators import validate_domain_name  # ty: ignore[unresolved-import]
 
 from apps.channels.exceptions import ExperimentChannelException
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import Experiment, ExperimentSession
 
 ALL_DOMAINS = "*"
 WIDGET_SESSION_CACHE_TTL = 300
+WIDGET_EMBED_KEY_CACHE_TTL = 300
 
 
 def match_domain_pattern(origin_domain: str, allowed_pattern: str) -> bool:
@@ -118,3 +120,49 @@ def get_experiment_session_cached(session_id: str) -> ExperimentSession | None:
         return session
     except ExperimentSession.DoesNotExist:
         return None
+
+
+def _get_widget_embed_key_cache_key(chatbot_id: str) -> str:
+    return f"WIDGET_EMBED_KEY:{chatbot_id}"
+
+
+def get_widget_embed_key(chatbot_id: str) -> str:
+    """Cached variant of `fetch_widget_embed_key`, for the page-render path.
+
+    The site help widget resolves its embed key on every page render, so the lookup is cached.
+    Misses are cached too, so a chatbot without a widget channel doesn't cost a query per render.
+    A rotated token propagates within the TTL; `clear_widget_embed_key_cache` shortens that for
+    changes we know about.
+    """
+    if not chatbot_id:
+        return ""
+
+    cache_key = _get_widget_embed_key_cache_key(chatbot_id)
+    embed_key = cache.get(cache_key)
+    if embed_key is None:
+        embed_key = fetch_widget_embed_key(chatbot_id)
+        cache.set(cache_key, embed_key, WIDGET_EMBED_KEY_CACHE_TTL)
+    return embed_key
+
+
+def fetch_widget_embed_key(chatbot_id: str) -> str:
+    """Return the embed key of the chatbot's embedded widget channel, or "" if it has none.
+
+    `chatbot_id` is an experiment's `public_id`; anything that isn't a UUID has no channel.
+    """
+    try:
+        uuid.UUID(str(chatbot_id))
+    except (ValueError, TypeError):
+        return ""
+
+    widget_token = (
+        ExperimentChannel.objects.filter(experiment__public_id=chatbot_id, platform=ChannelPlatform.EMBEDDED_WIDGET)
+        .values_list("extra_data__widget_token", flat=True)
+        .first()
+    )
+    return widget_token or ""
+
+
+def clear_widget_embed_key_cache(chatbot_id: str) -> None:
+    if chatbot_id:
+        cache.delete(_get_widget_embed_key_cache_key(chatbot_id))
