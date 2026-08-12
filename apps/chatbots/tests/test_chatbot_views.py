@@ -458,6 +458,40 @@ def test_continue_chat_action_opens_widget(client, team_with_users):
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("session_version", "expected_label"),
+    [
+        pytest.param(0, "Published Version", id="published-alias"),
+        pytest.param(2, "Working Version (v2)", id="working-version"),
+        pytest.param(1, "Version 1", id="older-version"),
+    ],
+)
+def test_continue_chat_action_labels_the_session_version(session_version, expected_label, client, team_with_users):
+    """The widget's version badge must not call an older snapshot the working version."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team)
+    experiment.create_new_version()
+    experiment.refresh_from_db()
+    assert experiment.version_number == 2, "working version should have moved on after snapshotting v1"
+
+    session = ExperimentSessionFactory.create(
+        team=team,
+        experiment=experiment,
+        participant__team=team,
+        participant__user=user,
+        status=SessionStatus.ACTIVE,
+    )
+    session.chat.set_metadata(Chat.MetadataKeys.EXPERIMENT_VERSION, session_version)
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    content = client.get(url).content.decode()
+
+    assert f'data-version-label="{expected_label}"' in content
+
+
+@pytest.mark.django_db()
 def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
     """The chat dropdown launches the embedded widget rather than posting to start_authed_web_session."""
     team = team_with_users

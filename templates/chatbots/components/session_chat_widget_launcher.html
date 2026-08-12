@@ -18,7 +18,9 @@
 
     // Apply the version-specific header text and colour theme to a widget element. Shared by the
     // new-chat launcher (openChatWidget) and the continue-session launcher below. Version 0 is the
-    // "published version" alias; callers that target a specific numbered version pass headerText.
+    // "published version" alias. The default label assumes any other number is the working version,
+    // which only holds for the chatbot-home dropdown; callers that can target an older version
+    // (the versions table, an existing session) pass headerText instead.
     window.ocsApplyWidgetVersionTheme = function (widget, versionNumber, headerText) {
       const isPublished = versionNumber === 0;
       widget.setAttribute('header-text', headerText || (isPublished ? 'Published Version' : `Working Version (v${versionNumber})`));
@@ -55,7 +57,7 @@
       if (userName) {
         widget.setAttribute('user-name', userName);
       }
-      ocsApplyWidgetVersionTheme(widget, parseInt(button.dataset.versionNumber, 10));
+      ocsApplyWidgetVersionTheme(widget, parseInt(button.dataset.versionNumber, 10), button.dataset.versionLabel);
       document.body.appendChild(widget);
     };
   })();
