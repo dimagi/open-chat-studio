@@ -1,8 +1,8 @@
-"""Characterisation tests for #3905: pin what the dashboard and the v2 usage API
-compute TODAY for the same team and window, including where they diverge. The
-extraction PR must keep every one of these green; only the definition-switch PR
-may change an assertion here, and each change there maps to a row in the design's
-divergence table.
+"""Cross-surface definition tests for #3905: the dashboard and the v2 usage API
+compute the same activity metrics the same way (ADR-0051). Each class here
+covers one row of the design's former divergence table, asserting the converged
+behaviour on both surfaces. These started life as characterisation tests pinning
+the divergence; they now pin its absence.
 """
 
 from datetime import UTC, datetime
@@ -16,6 +16,8 @@ from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.dashboard.services import DashboardService
 from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.usage_metrics import metrics
+from apps.usage_metrics.filters import UsageFilters
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
@@ -56,15 +58,14 @@ def _api_results(team, metrics):
     return api_usage.usage_query(query).results
 
 
-class TestSessionWindowDivergence:
-    """Dashboard sessions = any message in the window; API sessions = created in
-    the window (design section 2, row 1)."""
+class TestSessionMetricsAreTwoNamedDefinitions:
+    """`sessions_active` (a conversation turn in the window) and
+    `sessions_started` (created in the window) are two different questions, so
+    they legitimately differ - but each is now computed one way, and each
+    surface labels which one it shows (ADR-0051). The dashboard shows active;
+    the API's `sessions` metric is started."""
 
     def _team(self):
-        # status=ACTIVE on every session here: the factory default is SETUP, which the API excludes for a
-        # different reason (TestSetupSessionDivergence). Without pinning ACTIVE, `old_but_active` would be
-        # dropped by the status exclusion regardless of its created_at, and this class's API assertion would
-        # pass without actually exercising the created_at window filter it exists to pin.
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
         old_but_active = _backdate(
@@ -79,15 +80,16 @@ class TestSessionWindowDivergence:
         )  # created in window, silent
         return team
 
-    def test_dashboard_counts_sessions_with_message_activity_in_window(self):
+    def test_dashboard_shows_sessions_active(self):
         assert _overview(self._team())["total_sessions"] == 1
 
-    def test_api_counts_sessions_created_in_window(self):
+    def test_api_shows_sessions_started(self):
         assert _api_results(self._team(), ["sessions"])["sessions"] == 2
 
 
-class TestSetupSessionDivergence:
-    """The API excludes status=SETUP; the dashboard does not (design section 2, row 2)."""
+class TestSetupSessionsCountOnNeitherSurface:
+    """A session created but never engaged is not active and was not started
+    (ADR-0051); `sessions_in_setup` is where it stays countable."""
 
     def _team(self):
         team = TeamFactory.create()
@@ -96,16 +98,60 @@ class TestSetupSessionDivergence:
         _message(setup_session)
         return team
 
-    def test_dashboard_counts_setup_sessions(self):
-        assert _overview(self._team())["total_sessions"] == 1
+    def test_dashboard_excludes_setup_sessions(self):
+        assert _overview(self._team())["total_sessions"] == 0
 
     def test_api_excludes_setup_sessions(self):
         assert _api_results(self._team(), ["sessions"])["sessions"] == 0
 
+    def test_setup_sessions_stay_countable_as_sessions_in_setup(self):
+        assert metrics.sessions_in_setup(self._team(), start=_START, end=_END, filters=UsageFilters()) == 1
 
-class TestEvaluationMessageDivergence:
-    """The API counts evaluation messages; the dashboard excludes them
-    (design section 2, row 3)."""
+
+class TestSetupSessionActivityCountsNowhere:
+    """A session still in `SETUP` was never engaged, so nothing inside it
+    counts on any metric (ADR-0051) - not its turns, not its author. Counting
+    its messages while `sessions_active` drops the session would put a ratio's
+    numerator and denominator on different universes, which is exactly what
+    the ADR's ratios rule forbids."""
+
+    def _team(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        in_setup = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.SETUP)
+        _message(in_setup, message_type=ChatMessageType.HUMAN)
+        _message(in_setup, message_type=ChatMessageType.AI)
+        return team
+
+    def test_dashboard_messages_exclude_setup_session_turns(self):
+        assert _overview(self._team())["total_messages"] == 0
+
+    def test_dashboard_participants_exclude_setup_session_authors(self):
+        assert _overview(self._team())["active_participants"] == 0
+
+    def test_api_messages_exclude_setup_session_turns(self):
+        assert _api_results(self._team(), ["messages"])["messages"] == {"human": 0, "ai": 0, "total": 0}
+
+    def test_api_participants_exclude_setup_session_authors(self):
+        assert _api_results(self._team(), ["participants"])["participants"] == 0
+
+
+class TestSessionsActiveNeedsAConversationTurn:
+    """A session whose only in-window activity is a `system` message was not
+    active (ADR-0051)."""
+
+    def test_system_only_session_is_not_active(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(session, message_type=ChatMessageType.SYSTEM)
+
+        assert _overview(team)["total_sessions"] == 0
+
+
+class TestEvaluationActivityIsExcludedEverywhere:
+    """Evaluation-harness activity counts on neither surface (ADR-0051), and
+    the API's grouped rows now sum to its ungrouped total."""
 
     def _team(self):
         team = TeamFactory.create()
@@ -113,6 +159,7 @@ class TestEvaluationMessageDivergence:
         eval_session = ExperimentSessionFactory.create(
             team=team,
             experiment=experiment,
+            status=SessionStatus.ACTIVE,
             experiment_channel=ExperimentChannelFactory(
                 team=team, experiment=experiment, platform=ChannelPlatform.EVALUATIONS
             ),
@@ -123,13 +170,24 @@ class TestEvaluationMessageDivergence:
     def test_dashboard_excludes_evaluation_messages(self):
         assert _overview(self._team())["total_messages"] == 0
 
-    def test_api_counts_evaluation_messages(self):
-        assert _api_results(self._team(), ["messages"])["messages"] == {"human": 1, "ai": 0, "total": 1}
+    def test_api_excludes_evaluation_messages(self):
+        assert _api_results(self._team(), ["messages"])["messages"] == {"human": 0, "ai": 0, "total": 0}
 
-    def test_api_platform_grouping_excludes_evaluations_while_total_counts_them(self):
-        """The API-internal inconsistency the design's problem statement names:
-        grouped rows shrink their universe, the ungrouped total does not."""
+    def test_api_excludes_evaluation_participants(self):
+        assert _api_results(self._team(), ["participants"])["participants"] == 0
+
+    def test_api_platform_grouping_and_total_agree(self):
+        """The API-internal inconsistency the design's problem statement named:
+        grouped rows shrank their universe while the ungrouped total did not.
+        Both now exclude evaluations, so the two reconcile. The team here also
+        runs a non-evaluation session, so agreement on a non-zero total is what
+        is under test - an evaluation-only team reconciles trivially."""
         team = self._team()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(session, message_type=ChatMessageType.HUMAN)
+        _message(session, message_type=ChatMessageType.AI)
+
         query = api_usage.resolve_query_filters(
             api_usage.UsageQuery(
                 team=team,
@@ -140,87 +198,96 @@ class TestEvaluationMessageDivergence:
                 group_by=api_usage.GROUP_PLATFORM,
             )
         )
-        assert list(api_usage.group_entities(query)) == []
-        assert _api_results(team, ["messages"])["messages"]["total"] == 1
+        rows = api_usage.group_rows(query, list(api_usage.group_entities(query)))
+
+        total = _api_results(team, ["messages"])["messages"]["total"]
+        assert total == 2
+        assert sum(row["messages"]["total"] for row in rows) == total
 
 
-class TestMessageTypeTotalDivergence:
-    """Dashboard message totals include SYSTEM messages; the API total is
-    human + ai (design section 2, row 7)."""
+class TestMessageTotalIsHumanPlusAi:
+    """`system` messages are internal and are not conversation turns, so both
+    surfaces count human + ai (ADR-0051)."""
 
     def _team(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(session, message_type=ChatMessageType.HUMAN)
         _message(session, message_type=ChatMessageType.AI)
         _message(session, message_type=ChatMessageType.SYSTEM)
         return team
 
-    def test_dashboard_total_includes_system_messages(self):
-        assert _overview(self._team())["total_messages"] == 3
+    def test_dashboard_total_excludes_system_messages(self):
+        assert _overview(self._team())["total_messages"] == 2
 
     def test_api_total_is_human_plus_ai(self):
         assert _api_results(self._team(), ["messages"])["messages"] == {"human": 1, "ai": 1, "total": 2}
 
 
-class TestWindowBoundaryDivergence:
-    """Dashboard windows are closed (lte); API windows are half-open (lt)
-    (design section 2, row 6). A message at the boundary instant counts on the
-    dashboard side only."""
+class TestWindowBoundaryIsHalfOpen:
+    """Windows are half-open [start, end) on both surfaces (ADR-0051), so an
+    instant exactly on the boundary belongs to the next period, not this one,
+    and is never counted twice across adjacent periods."""
 
     def _team(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(session, when=_END)
         return team
 
-    def test_dashboard_includes_the_end_boundary_instant(self):
-        assert _overview(self._team())["total_messages"] == 1
+    def test_dashboard_excludes_the_end_boundary_instant(self):
+        assert _overview(self._team())["total_messages"] == 0
 
     def test_api_excludes_the_end_boundary_instant(self):
         assert _api_results(self._team(), ["messages"])["messages"]["total"] == 0
 
+    def test_both_surfaces_include_the_start_boundary_instant(self):
+        """The other half of half-open: [start is inclusive."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
+        _message(session, when=_START)
 
-class TestActiveParticipantsFourImplementations:
-    """The four current implementations define "active participant" differently
-    (design section 2, row 4): the dashboard chart counts HUMAN-message authors
-    only; the dashboard session-analytics series and overview stat count
-    participants with any message type (including SYSTEM-only sessions); the API
-    counts HUMAN+AI. One participant per activity shape (human, AI-only,
-    system-only) pins all four definitions, though this fixture only separates
-    the chart and the API from the other two — session-analytics and overview
-    agree here and diverge only in edge cases this fixture doesn't construct."""
+        assert _overview(team)["total_messages"] == 1
+        assert _api_results(team, ["messages"])["messages"]["total"] == 1
+
+
+class TestActiveParticipantsIsOneDefinition:
+    """What was four implementations is one (ADR-0051): a participant is active
+    when they authored a HUMAN message in the window. Receiving AI output is
+    not activity, and neither is a `system` message. One participant per
+    activity shape pins every surface to the same answer."""
 
     def _team(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        human = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        human = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(human, message_type=ChatMessageType.HUMAN)
-        ai_only = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        ai_only = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(ai_only, message_type=ChatMessageType.AI)
-        system_only = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        system_only = ExperimentSessionFactory.create(team=team, experiment=experiment, status=SessionStatus.ACTIVE)
         _message(system_only, message_type=ChatMessageType.SYSTEM)
         return team
 
-    def test_dashboard_chart_counts_human_authors_only(self):
+    def test_dashboard_chart_counts_human_authors(self):
         data = DashboardService(self._team()).get_active_participants_data(
             granularity="daily", start_date=_START, end_date=_END
         )
         assert sum(point["active_participants"] for point in data) == 1
 
-    def test_dashboard_session_analytics_counts_any_message_type(self):
+    def test_dashboard_session_analytics_counts_human_authors(self):
         data = DashboardService(self._team()).get_session_analytics_data(
             granularity="daily", start_date=_START, end_date=_END
         )
-        assert sum(point["active_participants"] for point in data["participants"]) == 3
+        assert sum(point["active_participants"] for point in data["participants"]) == 1
 
-    def test_dashboard_overview_counts_participants_of_active_sessions(self):
-        assert _overview(self._team())["active_participants"] == 3
+    def test_dashboard_overview_counts_human_authors(self):
+        assert _overview(self._team())["active_participants"] == 1
 
-    def test_api_counts_human_and_ai_authors(self):
-        assert _api_results(self._team(), ["participants"])["participants"] == 2
+    def test_api_counts_human_authors(self):
+        assert _api_results(self._team(), ["participants"])["participants"] == 1
 
 
 class TestArchivedExperimentActivity:

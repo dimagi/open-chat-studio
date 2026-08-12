@@ -65,9 +65,10 @@ urlpatterns = [
         views.experiment_session_message,
         name="experiment_session_message",
     ),
+    # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stub, deleted in a later release.
     path(
         "e/<uuid:experiment_id>/v/<int:version_number>/session/<str:session_id>/embed/message/",
-        views.experiment_session_message_embed,
+        views.embed_flow_gone,
         name="experiment_session_message_embed",
     ),
     path(
@@ -80,9 +81,10 @@ urlpatterns = [
         views.poll_messages,
         name="poll_messages",
     ),
+    # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stub, deleted in a later release.
     path(
         "e/<uuid:experiment_id>/session/<str:session_id>/poll_messages/embed/",
-        views.poll_messages_embed,
+        views.embed_flow_gone,
         name="poll_messages_embed",
     ),
     # events
@@ -117,7 +119,8 @@ urlpatterns = [
     ),
     # public link
     path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
-    path("e/<uuid:experiment_id>/embed/start/", views.start_session_public_embed, name="start_session_public_embed"),
+    # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stub, deleted in a later release.
+    path("e/<uuid:experiment_id>/embed/start/", views.embed_flow_gone, name="start_session_public_embed"),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
     path("<int:session_id>/image/<int:pk>/html/", views.get_image_html, name="get_image_html"),
     path(

@@ -4,13 +4,16 @@ from django.core import signing
 from django.urls import reverse
 
 from apps.experiments.decorators import CHAT_SESSION_ACCESS_COOKIE, CHAT_SESSION_ACCESS_SALT
-from apps.experiments.models import Participant
+from apps.experiments.models import Participant, SessionStatus
 from apps.utils.factories.experiment import ExperimentSessionFactory
 
 
 @pytest.fixture()
 def session():
-    session = ExperimentSessionFactory.create()
+    # These tests drive the pre-chat flow, which starts at the consent form and
+    # only activates the session once consent is recorded, so the session has to
+    # begin in SETUP rather than the factory's activated default.
+    session = ExperimentSessionFactory.create(status=SessionStatus.SETUP)
     participant = Participant.objects.create(team=session.team, identifier="test@test.com", platform="web")
     session.participant = participant
     session.save()

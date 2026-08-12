@@ -1,10 +1,20 @@
 """The dashboard's filtered activity querysets, moved here from
-apps/dashboard/services.py (#3905) so the filter logic has one home. These
-reproduce the dashboard's CURRENT semantics - closed [start_date, end_date]
-window, sessions = any message in window, message totals include SYSTEM,
-evaluation activity excluded - which differ from the v2 usage API semantics in
-metrics.py. The definition-switch PR converges the two; until then both live
-here side by side.
+apps/dashboard/services.py (#3905) so the filter logic has one home.
+
+These are the canonical definitions per ADR-0051, the same ones metrics.py
+computes for the v2 usage API: a half-open [start_date, end_date) window,
+`sessions` = a session with a human or AI message in the window, and
+evaluation-harness and SETUP-session activity excluded from both the session
+and the message querysets.
+
+The `messages` queryset deliberately keeps every message *type*, SYSTEM
+included, because `get_tag_analytics_data` reads it to find tagged messages
+and a SYSTEM message can carry a tag. Narrowing to conversation turns is the
+job of the metrics that count them - see `conversation_messages` in filters.py.
+
+Evaluation-harness activity is decided on ``ExperimentSession.platform``
+everywhere in this app. ``ExperimentChannel.platform`` is a separate nullable
+column and the two can disagree on a row (ADR-0051).
 
 One deliberate exception: tag-link matching here is narrower than the
 dashboard's original (unscoped) match. Every `CustomTaggedItem` lookup in this
@@ -17,17 +27,15 @@ CodeRabbit finding on PR #4132.
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from apps.annotations.models import CustomTaggedItem
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.chat.models import Chat, ChatMessage
-from apps.experiments.models import Experiment, ExperimentSession, Participant
+from apps.chat.models import ChatMessage
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.teams.models import Team
 
-from .filters import chat_tag_exists_pair
+from .filters import CONVERSATION_MESSAGE_TYPES, chat_tag_exists_pair, tagged_conversation_exists_pair
 
 
 def filtered_querysets(
@@ -39,35 +47,46 @@ def filtered_querysets(
     platform_names: list[str] | None = None,
     participant_ids: list[int] | None = None,
     tag_ids: list[int] | None = None,
+    include_archived: bool = False,
 ) -> dict[str, Any]:
     """Base querysets with the dashboard's common filters applied. Returns
     `experiments`, `sessions`, `messages`, `participants` querysets plus the
-    resolved `start_date`/`end_date` (defaulting to the last 30 days)."""
+    resolved `start_date`/`end_date` (defaulting to the last 30 days).
+
+    `include_archived` applies to the `experiments` enumeration only. The
+    activity querysets count archived-chatbot activity either way (ADR-0051)."""
 
     if not end_date:
         end_date = timezone.now()
     if not start_date:
         start_date = end_date - timedelta(days=30)
 
-    base_filters = {"created_at__gte": start_date, "created_at__lte": end_date}
+    base_filters = {"created_at__gte": start_date, "created_at__lt": end_date}
 
-    experiments = Experiment.objects.filter(team=team, is_archived=False, working_version=None)
+    # `Experiment.objects` already filters `is_archived=False` (VersionsObjectManagerMixin);
+    # `get_all()` is the archived-inclusive manager.
+    experiment_manager = Experiment.objects.get_all() if include_archived else Experiment.objects.all()
+    experiments = experiment_manager.filter(team=team, working_version=None)
     # Use Exists() to avoid join+distinct - prevents row explosion upfront for better performance
     msg_exists = Exists(
         ChatMessage.objects.filter(
             chat=OuterRef("chat"),
+            message_type__in=CONVERSATION_MESSAGE_TYPES,
             created_at__gte=start_date,
-            created_at__lte=end_date,
+            created_at__lt=end_date,
         )
     )
     sessions = (
         ExperimentSession.objects.filter(team=team)
-        .exclude(experiment_channel__platform=ChannelPlatform.EVALUATIONS)
+        .exclude(platform=ChannelPlatform.EVALUATIONS)
+        .exclude(status=SessionStatus.SETUP)
         .annotate(_has_msgs=msg_exists)
         .filter(_has_msgs=True)
     )
-    messages = ChatMessage.objects.filter(chat__team=team, **base_filters).exclude(
-        chat__experiment_session__platform=ChannelPlatform.EVALUATIONS
+    messages = (
+        ChatMessage.objects.filter(chat__team=team, **base_filters)
+        .exclude(chat__experiment_session__platform=ChannelPlatform.EVALUATIONS)
+        .exclude(chat__experiment_session__status=SessionStatus.SETUP)
     )
     participants = Participant.objects.filter(team=team).exclude(platform=ChannelPlatform.EVALUATIONS)
 
@@ -102,89 +121,34 @@ def filtered_querysets(
         participants = participants.filter(id__in=participant_ids)
 
     if tag_ids:
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        message_content_type = ContentType.objects.get_for_model(ChatMessage)
-
-        # Sessions: chat or any message in it carries the tag (both the link row and its tag
-        # must belong to the reading team)
+        # One tag-match rule for every leg (chat-or-message, team-scoped links):
+        # sessions and messages resolve it from their chat id, experiments and
+        # participants from their sessions' chats.
         tag_on_chat, tag_on_msg = chat_tag_exists_pair(team, tag_ids, "chat_id")
         sessions = sessions.annotate(_tchat=tag_on_chat, _tmsg=tag_on_msg).filter(Q(_tchat=True) | Q(_tmsg=True))
 
-        # Experiments: any session's chat or messages carry the tag (both the link row and
-        # its tag must belong to the reading team)
-        exp_tag_on_chat = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=chat_content_type,
-                object_id__in=Subquery(
-                    Chat.objects.filter(experiment_session__experiment=OuterRef(OuterRef("id"))).values("id")
-                ),
-                tag_id__in=tag_ids,
-            )
-        )
-        exp_tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id__in=Subquery(
-                    ChatMessage.objects.filter(chat__experiment_session__experiment=OuterRef(OuterRef("id"))).values(
-                        "id"
-                    )
-                ),
-                tag_id__in=tag_ids,
-            )
+        exp_tag_on_chat, exp_tag_on_msg = tagged_conversation_exists_pair(
+            team, tag_ids, "experiment_session__experiment"
         )
         experiments = experiments.annotate(_exp_tchat=exp_tag_on_chat, _exp_tmsg=exp_tag_on_msg).filter(
             Q(_exp_tchat=True) | Q(_exp_tmsg=True)
         )
 
-        # Participants: any of their sessions' chats or messages carry the tag (both the
-        # link row and its tag must belong to the reading team)
-        part_tag_on_chat = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=chat_content_type,
-                object_id__in=Subquery(
-                    Chat.objects.filter(experiment_session__participant=OuterRef(OuterRef("id"))).values("id")
-                ),
-                tag_id__in=tag_ids,
-            )
-        )
-        part_tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id__in=Subquery(
-                    ChatMessage.objects.filter(chat__experiment_session__participant=OuterRef(OuterRef("id"))).values(
-                        "id"
-                    )
-                ),
-                tag_id__in=tag_ids,
-            )
+        part_tag_on_chat, part_tag_on_msg = tagged_conversation_exists_pair(
+            team, tag_ids, "experiment_session__participant"
         )
         participants = participants.annotate(_part_tchat=part_tag_on_chat, _part_tmsg=part_tag_on_msg).filter(
             Q(_part_tchat=True) | Q(_part_tmsg=True)
         )
 
-        # Messages: the message's own tags carry the tag (both the link row and its tag must
-        # belong to the reading team). Message-only match - a tag on the chat (rather than the
-        # message itself) does not pull the chat's messages in here; that broader chat-or-message
-        # match is what the sessions/experiments/participants legs above use via
-        # `chat_tag_exists_pair`, not this one.
-        msg_tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id=OuterRef("id"),
-                tag_id__in=tag_ids,
-            )
+        # Messages: the same chat-or-message match as every other leg and as
+        # `usage_metrics.messages_queryset`, so a chat-level tag narrows the
+        # message counts to the tagged conversations it narrows the session
+        # counts to, and the dashboard agrees with the API under the filter.
+        msg_tag_on_chat, msg_tag_on_msg = chat_tag_exists_pair(team, tag_ids, "chat_id")
+        messages = messages.annotate(_msg_tchat=msg_tag_on_chat, _msg_tmsg=msg_tag_on_msg).filter(
+            Q(_msg_tchat=True) | Q(_msg_tmsg=True)
         )
-        messages = messages.filter(msg_tag_on_msg)
 
     return {
         "experiments": experiments,
