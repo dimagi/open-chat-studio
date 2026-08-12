@@ -1,5 +1,4 @@
 import json
-from json import JSONDecodeError
 
 from django import template
 from django.core.serializers.json import DjangoJSONEncoder
@@ -38,20 +37,21 @@ def pygments_json_css() -> str:
 
 @register.filter
 def to_json(obj):
-    """Source: https://gist.github.com/czue/90e287c9818ae726f73f5850c1b00f7f"""
+    """Render a Python value as indented JSON text.
 
-    def escape_script_tags(unsafe_str):
-        # seriously: http://stackoverflow.com/a/1068548/8207
-        return unsafe_str.replace("</script>", '<" + "/script>')
-
+    The returned string is deliberately *not* marked safe: the data may contain
+    attacker-controlled values (e.g. participant data or session state supplied
+    through the API), so Django's autoescaping must run over the JSON to prevent
+    stored HTML from being parsed by the browser.
+    """
     # json.dumps does not properly convert QueryDict array parameter to json
     if isinstance(obj, QueryDict):
         obj = dict(obj)
     try:
-        json_string = json.dumps(obj, indent=2, cls=DjangoJSONEncoder)
-        return mark_safe(escape_script_tags(json_string))
-    except JSONDecodeError:
-        return mark_safe("Unable to decode JSON data")
+        return json.dumps(obj, indent=2, cls=DjangoJSONEncoder)
+    except (TypeError, ValueError):
+        # TypeError: value is not serializable; ValueError: circular reference
+        return "Unable to encode JSON data"
 
 
 @register.filter

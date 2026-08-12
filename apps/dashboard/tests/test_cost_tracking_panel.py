@@ -4,10 +4,13 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from time_machine import travel
 
 from apps.cost_tracking.models import Confidence, UsageSource
+from apps.dashboard.models import DashboardCache
 from apps.teams.models import Flag
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -295,3 +298,97 @@ class TestBotPerformanceCostColumns:
 
         row = next(r for r in response.json()["results"] if r["experiment_id"] == experiment.id)
         assert row["cost"] == 1.0
+
+
+@pytest.mark.django_db()
+class TestCostPanelCaching:
+    """The cost panel's three reads are cached like every other dashboard
+    metric, accepting the same up-to-30-minutes staleness (#3905)."""
+
+    def _url(self, team):
+        return reverse("dashboard:index", kwargs={"team_slug": team.slug})
+
+    def test_summary_is_served_from_cache_on_the_second_read(self, authenticated_client, team):
+        _enable_flag_for(team)
+        url = self._url(team)
+
+        authenticated_client.get(url)
+        with CaptureQueriesContext(connection) as captured:
+            second = authenticated_client.get(url)
+
+        assert second.status_code == 200
+        summary_queries = [q for q in captured.captured_queries if "usagerecord" in q["sql"].lower()]
+        assert summary_queries == []
+
+    def test_cached_summary_round_trips_its_decimals(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        url = self._url(team)
+
+        authenticated_client.get(url)
+        response = authenticated_client.get(url)
+
+        summary = response.context["cost_summary"]
+        assert summary.total_cost == Decimal("1.23")
+        assert isinstance(summary.total_cost, Decimal)
+
+    def test_a_different_filter_gets_its_own_cache_entry(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        experiment = ExperimentFactory.create(team=team)
+        url = self._url(team)
+
+        unfiltered = authenticated_client.get(url).context["cost_summary"]
+        filtered = authenticated_client.get(url, {"experiments": [experiment.id]}).context["cost_summary"]
+
+        assert unfiltered.total_cost == Decimal("1.23")
+        assert filtered.total_cost == Decimal("0.00")
+
+    @pytest.mark.parametrize(
+        ("cache_key_prefix", "corrupt"),
+        [
+            pytest.param("cost_", lambda payload: {"written_by": "older code"}, id="unrecognised-shape"),
+            pytest.param("cost_summary", lambda payload: payload | {"total_cost": ""}, id="unparseable-decimal"),
+            pytest.param(
+                "cost_summary", lambda payload: payload | {"period_start": "not-a-timestamp"}, id="unparseable-date"
+            ),
+        ],
+    )
+    def test_a_stale_cache_shape_recomputes_instead_of_erroring(
+        self, authenticated_client, team, cache_key_prefix, corrupt
+    ):
+        """A deploy can change the cached payload's shape while entries written
+        by the previous code are still inside their TTL. Decoding must fall
+        back to recomputing (and overwriting the entry), never surface the
+        decode failure to the page or hand the panel a half-built summary."""
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        url = self._url(team)
+
+        authenticated_client.get(url)
+        for entry in DashboardCache.objects.filter(cache_key__startswith=cache_key_prefix):
+            entry.data = corrupt(entry.data)
+            entry.save()
+        response = authenticated_client.get(url)
+
+        assert response.status_code == 200
+        summary = response.context["cost_summary"]
+        assert summary.total_cost == Decimal("1.23")
+        assert summary.period_start is not None
+
+    def test_an_unknown_granularity_shares_the_daily_cache_entry(self, authenticated_client, team):
+        """The timeseries cache key folds in the granularity, which arrives
+        raw from the query string. An unrecognised value computes the daily
+        series anyway (reporting falls back to TruncDate), so it must reuse
+        the daily key rather than mint an unbounded row per distinct string."""
+        _enable_flag_for(team)
+        _usage(team, cost="1.23", when=_NOW - timedelta(days=1))
+        url = reverse("dashboard:api_cost_timeseries", kwargs={"team_slug": team.slug})
+
+        daily = authenticated_client.get(url, {"granularity": "daily"})
+        bogus = authenticated_client.get(url, {"granularity": "bogus-123"})
+
+        assert daily.status_code == bogus.status_code == 200
+        assert bogus.json() == daily.json()
+        keys = set(DashboardCache.objects.values_list("cache_key", flat=True))
+        assert not any("bogus" in key for key in keys)
