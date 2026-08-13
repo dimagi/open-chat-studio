@@ -182,6 +182,14 @@ def test_a_version_snapshot_is_a_404(client, chatbot):
 
 
 @pytest.mark.django_db()
+def test_a_malformed_chatbot_id_is_a_404(client):
+    """The router's lookup regex admits any non-slash string, so a non-UUID reaches the queryset
+    and `UUIDField.to_python` raises. Unhandled that is a 500 -- a server fault reported for what
+    is only a bad id."""
+    assert client.patch("/api/v2/chatbots/not-a-uuid/", {"name": "Nope"}, format="json").status_code == 404
+
+
+@pytest.mark.django_db()
 def test_put_is_not_routed(client, chatbot):
     """PATCH only: a whole-chatbot replace is not part of the spec."""
     assert client.put(_url(chatbot), {"name": "Nope"}, format="json").status_code == 405

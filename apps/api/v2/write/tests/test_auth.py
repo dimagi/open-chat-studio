@@ -89,6 +89,16 @@ def test_get_chatbot_404s_on_another_teams_chatbot():
 
 
 @pytest.mark.django_db()
+def test_get_chatbot_404s_on_a_malformed_id():
+    """`public_id` is a UUIDField, so a non-UUID raises ValidationError rather than missing the
+    queryset. Every sub-resource in #4140-#4145 resolves its chatbot through here, so letting that
+    escape would make one 500 per endpoint."""
+    view = _View(_FakeRequest(UserFactory.create(), TeamFactory.create()), "not-a-uuid")
+    with pytest.raises(Http404):
+        view.get_chatbot()
+
+
+@pytest.mark.django_db()
 def test_get_chatbot_404s_on_a_version_snapshot():
     """Snapshots are immutable; writes only ever target the working version."""
     working = ExperimentFactory.create()

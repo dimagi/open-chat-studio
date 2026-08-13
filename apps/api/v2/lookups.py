@@ -5,7 +5,7 @@ tenancy predicate is the security boundary, so it is written once rather than on
 """
 
 from django.db.models import QuerySet
-from django.shortcuts import get_object_or_404
+from rest_framework.generics import get_object_or_404
 
 from apps.experiments.models import Experiment
 
@@ -24,6 +24,11 @@ def get_working_chatbot(team, public_id, *, lock: bool = False) -> Experiment:
 
     ``lock`` takes a row lock for the rest of the transaction, which a writer needs and a reader
     does not.
+
+    DRF's ``get_object_or_404``, not Django's: ``public_id`` is a ``UUIDField`` and the router's
+    lookup regex admits any non-slash string, so a malformed id reaches ``UUIDField.to_python`` and
+    raises ``ValidationError``. Django's helper catches only ``DoesNotExist`` and would let that
+    surface as a 500; DRF's also catches ``TypeError``, ``ValueError`` and ``ValidationError``.
     """
     queryset = working_chatbots(team)
     if lock:
