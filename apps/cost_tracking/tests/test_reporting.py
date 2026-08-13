@@ -269,25 +269,19 @@ class TestChatbotUsageSummary:
         assert usage.cost.total_cost == Decimal("1.00000000")
         assert usage.sessions_count == 1
 
-    def test_excludes_evaluation_sessions(self):
+    @pytest.mark.parametrize(
+        "session_kwargs",
+        [
+            pytest.param({"platform": ChannelPlatform.EVALUATIONS}, id="evaluation-platform"),
+            pytest.param({"status": SessionStatus.SETUP}, id="setup-status"),
+        ],
+    )
+    def test_excludes_non_conversation_sessions(self, session_kwargs):
+        """Evaluation runs aren't real conversations, and SETUP sessions have no real conversation
+        yet - both excluded per ADR-0051, same as the dashboard's Bot Performance table."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(
-            experiment=experiment, team=team, platform=ChannelPlatform.EVALUATIONS
-        )
-        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
-        start, end = self._window()
-
-        usage = chatbot_usage_summary(experiment, start=start, end=end)
-
-        assert usage.sessions_count == 0
-
-    def test_excludes_setup_sessions(self):
-        """SETUP sessions have no real conversation yet - excluded per ADR-0051, same as the
-        dashboard's Bot Performance table."""
-        team = TeamFactory.create()
-        experiment = ExperimentFactory.create(team=team)
-        session = ExperimentSessionFactory.create(experiment=experiment, team=team, status=SessionStatus.SETUP)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team, **session_kwargs)
         ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
         start, end = self._window()
 
