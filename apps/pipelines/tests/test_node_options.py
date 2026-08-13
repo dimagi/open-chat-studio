@@ -8,7 +8,7 @@ response shaping -- lives in `apps/api/v2/tests/test_pipeline_discovery.py`.
 import pytest
 from django.urls import reverse
 
-from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values
+from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -75,6 +75,32 @@ def test_every_option_key_is_snake_case():
     )
 
     assert [key for key in values if key != key.lower()] == []
+
+
+@pytest.mark.django_db()
+def test_every_declared_options_source_has_a_list_to_draw_on():
+    """Both consumers look a param's `ui:optionsSource` up in this payload by name -- the builder
+    indexes it directly (`assets/javascript/apps/pipeline/utils.tsx`), and `/pipeline/options/`
+    serves it under that name. Sharing the `OptionsSource` enum keeps the two spellings in step; what
+    it cannot catch is a member no builder populates, which is a silently empty dropdown, not an
+    error."""
+    team = TeamWithUsersFactory.create()
+
+    values = get_node_parameter_values(
+        team=team,
+        llm_providers=list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
+        llm_provider_models=LlmProviderModel.objects.for_team(team),
+        synthetic_voices=[],
+    )
+    declared = {
+        prop["ui:optionsSource"]
+        for schema in get_node_schemas()
+        for prop in schema["properties"].values()
+        if prop.get("ui:optionsSource")
+    }
+
+    assert declared, "no param declares an options source -- the assertion below would pass vacuously"
+    assert sorted(declared - set(values)) == []
 
 
 @pytest.mark.django_db()
