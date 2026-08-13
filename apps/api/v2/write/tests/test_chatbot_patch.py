@@ -97,6 +97,19 @@ def test_response_settings_path_matches_the_request_path(client, chatbot):
 
 
 @pytest.mark.django_db()
+def test_the_allowlist_is_normalized_the_way_the_form_normalizes_it(client, chatbot):
+    """`is_participant_allowed` matches identifiers exactly, and the UI form strips spaces on the
+    way in. Stored as written, a human-formatted phone number -- which is what an LLM produces --
+    gives an allowlist that looks configured and admits nobody, with no error to say so."""
+    response = client.patch(_url(chatbot), {"settings": {"participant_allowlist": ["+27 82 000 0000"]}}, format="json")
+
+    assert response.status_code == 200
+    chatbot.refresh_from_db()
+    assert chatbot.participant_allowlist == ["+27820000000"]
+    assert chatbot.is_participant_allowed("+27820000000")
+
+
+@pytest.mark.django_db()
 def test_patch_sets_a_consent_form_by_id(client, chatbot):
     consent_form = ConsentFormFactory.create(team=chatbot.team)
 

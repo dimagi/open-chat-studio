@@ -16,6 +16,7 @@ from django.db import transaction
 from rest_framework import serializers
 
 from apps.api.v2.write.fields import TeamScopedRelatedField
+from apps.experiments.helpers import normalize_participant_allowlist
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import TraceProvider, VoiceProvider
@@ -111,6 +112,11 @@ class ChatbotSettingsSerializer(RejectsUnknownKeys, serializers.ModelSerializer)
             "file_uploads_enabled",
             "participant_allowlist",
         ]
+
+    def validate_participant_allowlist(self, value):
+        # Same normalisation the UI form applies, for the same reason: identifiers are matched
+        # exactly, so an unstripped one silently matches nothing.
+        return normalize_participant_allowlist(value)
 
 
 class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):

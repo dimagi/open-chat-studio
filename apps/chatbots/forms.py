@@ -2,6 +2,7 @@ from django import forms
 from django.db import transaction
 from waffle import flag_is_active
 
+from apps.experiments.helpers import normalize_participant_allowlist
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
@@ -94,11 +95,7 @@ class ChatbotSettingsForm(forms.ModelForm):
         }
 
     def clean_participant_allowlist(self):
-        cleaned_identifiers = []
-        identifiers = filter(None, self.cleaned_data["participant_allowlist"].split(","))
-        for identifier in identifiers:
-            cleaned_identifiers.append(identifier.replace(" ", ""))
-        return cleaned_identifiers
+        return normalize_participant_allowlist(self.cleaned_data["participant_allowlist"].split(","))
 
     @transaction.atomic()
     def save(self, commit=True):
