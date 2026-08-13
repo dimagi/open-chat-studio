@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 from apps.api.openai import ChatCompletionsView
 from apps.api.permissions import BASE_PERMISSION_CLASSES, ReadOnlyAPIKeyPermission, RequiresTeamPermission
@@ -79,6 +80,17 @@ def test_requires_team_permission_allows_a_holder():
 
 def test_requires_team_permission_denies_a_non_holder():
     assert _NeedsChange().has_permission(_request(has_perms=False), view=None) is False
+
+
+class _DeclaresNothing(RequiresTeamPermission):
+    """The mistake this guards against: a subclass that forgets `required_permissions`."""
+
+
+def test_requires_team_permission_refuses_a_subclass_that_declares_nothing():
+    """`has_perms([])` is `all([])`, so a forgotten declaration would silently admit everyone.
+    #4140-#4145 all subclass this, so the failure has to be loud rather than permissive."""
+    with pytest.raises(ImproperlyConfigured):
+        _DeclaresNothing().has_permission(_request(has_perms=False), view=None)
 
 
 def test_requires_team_permission_defers_machine_tokens_to_the_scope(monkeypatch):

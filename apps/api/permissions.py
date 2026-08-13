@@ -5,6 +5,7 @@ import logging
 from functools import wraps
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.utils.translation import gettext as _
 from rest_framework import exceptions
@@ -200,9 +201,17 @@ class RequiresTeamPermission(BasePermission):
     pinned team.
     """
 
-    required_permissions: list[str] = []
+    # Annotation only, deliberately with no default: ``has_perms([])`` is ``all([])``, so an empty
+    # or absent list would turn this gate into an open door for every request. Subclasses must say
+    # what they require.
+    required_permissions: list[str]
 
     def has_permission(self, request, view):
+        if not getattr(self, "required_permissions", None):
+            raise ImproperlyConfigured(
+                f"{type(self).__name__} must declare a non-empty `required_permissions`; an empty "
+                "one grants access to everyone."
+            )
         if is_client_credentials_request(request):
             return True
         return bool(request.user and request.user.has_perms(self.required_permissions))
