@@ -264,7 +264,16 @@ def test_chatbot_home_shows_no_pricing_data_when_unpriced(client, team_with_user
 
 
 @pytest.mark.django_db()
-def test_chatbot_home_shows_confidence_badge_for_estimated_rows(client, team_with_users):
+@pytest.mark.parametrize(
+    "cost",
+    [
+        pytest.param(Decimal("0.10"), id="nonzero-cost"),
+        pytest.param(Decimal("0"), id="zero-cost-decimal-is-falsy"),
+    ],
+)
+def test_chatbot_home_shows_confidence_badge_for_estimated_rows(client, team_with_users, cost):
+    """The badge condition can't be derived from `estimated_cost` alone - a $0 estimated row
+    (e.g. a zero-priced model) is a Decimal 0, which is falsy, but must still show the badge."""
     team = team_with_users
     user = team.members.first()
     user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
@@ -278,36 +287,7 @@ def test_chatbot_home_shows_confidence_badge_for_estimated_rows(client, team_wit
         session=session,
         service_kind=ServiceKind.LLM_INPUT,
         quantity=100,
-        cost=Decimal("0.10"),
-        confidence=Confidence.ESTIMATED,
-    )
-
-    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
-    response = client.get(url)
-
-    assert response.status_code == 200
-    assert b'data-testid="chatbot-usage-confidence-badge"' in response.content
-    assert "Estimated" in response.content.decode()
-
-
-@pytest.mark.django_db()
-def test_chatbot_home_shows_confidence_badge_for_zero_cost_estimated_rows(client, team_with_users):
-    """A $0 estimated row (e.g. a zero-priced model) must still show the confidence badge - the
-    badge condition can't be derived from `estimated_cost` alone, since a Decimal 0 is falsy."""
-    team = team_with_users
-    user = team.members.first()
-    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    _enable_cost_tracking_flag_for(team)
-    client.force_login(user)
-    experiment = _create_chatbot(team, user)
-    session = ExperimentSessionFactory.create(experiment=experiment, team=team)
-    UsageRecordFactory.create(
-        team=team,
-        experiment=experiment,
-        session=session,
-        service_kind=ServiceKind.LLM_INPUT,
-        quantity=100,
-        cost=Decimal("0"),
+        cost=cost,
         confidence=Confidence.ESTIMATED,
     )
 
