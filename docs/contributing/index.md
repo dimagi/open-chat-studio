@@ -24,7 +24,7 @@ Thank you for your interest in contributing to Open Chat Studio! This guide will
     For non-trivial or complex changes, please discuss your design plan before writing code. The GitHub issue is the best place to start — add a comment outlining your approach and get feedback from maintainers. For broader ideas without a dedicated issue, open a [GitHub Discussion](https://github.com/dimagi/open-chat-studio/discussions). Aligning on design early avoids wasted effort and makes reviews much smoother.
 
 !!! info "Agentic development workflow"
-    We recommend using an agentic coding tool like Claude Code for development on this project. Our workflow follows a **design-first approach**: produce a design, post it to the GitHub issue for core team review, then implement once approved. See the [AI-Assisted Development](../developer_guides/ai_development.md) guide for the full workflow and setup instructions.
+    We recommend using an agentic coding tool like Claude Code for development on this project. Our workflow follows a **design-first approach**: produce a design, post it to the GitHub issue for core team review, then implement once approved. See the [Development Workflow](../getting-started/dev-workflow.md) guide for the full loop, and [AI Tool Setup](../getting-started/ai-setup.md) for setup instructions.
 
 ### Improve Documentation
 

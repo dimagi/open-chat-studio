@@ -68,7 +68,7 @@ nav:
     - Overview: getting-started/index.md
     - Local Setup: getting-started/local-setup.md
     - Docker Setup: getting-started/docker-setup.md
-    - Common Tasks: getting-started/common-tasks.md
+    - Development Workflow: getting-started/dev-workflow.md
     - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
@@ -131,8 +131,7 @@ nav:
       - 0053 Starting a chat session requires team membership or the embed key: adr/0053-chat-session-start-requires-membership-or-embed-key.md
   - Developer Guides:
     - Processes:
-      - Claude Code Agents: developer_guides/claude_code_agent.md
-      - AI-Assisted Development: developer_guides/ai_development.md
+      - Claude GitHub Automation: developer_guides/claude_github_automation.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
       - Pull Requests: contributing/pull_requests.md
