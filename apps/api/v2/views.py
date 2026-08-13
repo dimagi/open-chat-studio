@@ -62,13 +62,24 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         return working_chatbots(self.team).select_related("team").prefetch_related("versions")
 
     def get_serializer_class(self):
-        # The actions below build their serializers directly, but OPTIONS metadata and any future
-        # `self.get_serializer()` call resolve the class through here, so it has to be right.
+        # The actions below build their serializers directly, but any `self.get_serializer()` call
+        # resolves the class through here, so it has to be right.
+        action = self.action
+        if action == "metadata":
+            # `self.action` is "metadata" for the whole of an OPTIONS request, so the mapping below
+            # would answer the *read* serializer for every method being described. DRF's
+            # `SimpleMetadata.determine_actions` swaps in a `clone_request` carrying the method it
+            # is describing before calling `get_serializer()`, so read the method instead. Without
+            # this, OPTIONS advertises a POST body whose keys `RejectsUnknownKeys` then 400s -- and
+            # OPTIONS is exactly how the agent this API is built for discovers the body.
+            # Only POST needs mapping: `determine_actions` describes PUT and POST alone, and this
+            # viewset has no `update`, so PATCH is never described.
+            action = {"POST": "create"}.get(self.request.method, action)
         return {
             "create": ChatbotCreateSerializer,
             "partial_update": ChatbotWriteSerializer,
             "inspect": ChatbotInspectSerializer,
-        }.get(self.action, super().get_serializer_class())
+        }.get(action, super().get_serializer_class())
 
     @extend_schema(
         operation_id="chatbot_create",
