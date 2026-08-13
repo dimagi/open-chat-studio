@@ -86,6 +86,26 @@ def _count(cache, key: str, timeout: int) -> int:
         return cache.incr(key)
 
 
+def _degraded_result(limit: int | None, window_seconds: int | None, fail_open: bool, refuses: bool) -> RateLimitResult:
+    """Answers for a request the limiter could not count.
+
+    `limit` is None when the configured rate itself would not parse, so there is no
+    limit to enforce and the request is allowed whatever the scope's fail_open says.
+    Otherwise a fail-closed scope refuses, unless it is one that never refuses.
+    """
+    if limit is None:
+        return RateLimitResult(allowed=True, limit=0, remaining=0, reset_seconds=0, degraded=True)
+    blocked = not fail_open and refuses and settings.RATE_LIMIT_ENFORCE
+    return RateLimitResult(
+        allowed=not blocked,
+        limit=limit,
+        remaining=0 if blocked else limit,
+        reset_seconds=window_seconds,
+        retry_after=window_seconds if blocked else None,
+        degraded=True,
+    )
+
+
 def check(scope: str, identity_type: str, identity: str, team_id: int | None = None) -> RateLimitResult:
     now = _now()
     limit = window_seconds = fail_open = None
@@ -103,20 +123,7 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
             "rate_limit.backend_error",
             extra={"scope": scope, "identity_type": identity_type},
         )
-        if limit is None:
-            # The configured rate itself could not be parsed, so there is no limit to
-            # enforce; allow the request regardless of the scope's fail_open setting.
-            return RateLimitResult(allowed=True, limit=0, remaining=0, reset_seconds=0, degraded=True)
-        blocked = not fail_open and settings.RATE_LIMIT_ENFORCE and refuses
-        return RateLimitResult(
-            allowed=not blocked,
-            limit=limit,
-            remaining=0 if blocked else limit,
-            reset_seconds=window_seconds,
-            retry_after=window_seconds if blocked else None,
-            degraded=True,
-        )
-    remaining = max(0, limit - count)
+        return _degraded_result(limit, window_seconds, fail_open, refuses)
     if count > limit:
         if settings.RATE_LIMIT_ENFORCE and refuses:
             return RateLimitResult(
@@ -138,7 +145,7 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
                 },
             )
         return RateLimitResult(allowed=True, limit=limit, remaining=0, reset_seconds=reset_seconds)
-    return RateLimitResult(allowed=True, limit=limit, remaining=remaining, reset_seconds=reset_seconds)
+    return RateLimitResult(allowed=True, limit=limit, remaining=limit - count, reset_seconds=reset_seconds)
 
 
 def client_ip(request) -> str:
