@@ -11,6 +11,7 @@ from django.core.cache import caches
 from django.http import HttpResponse
 from django.http import JsonResponse as DjangoJsonResponse
 from django.test import RequestFactory, override_settings
+from rest_framework.request import Request as DRFRequest
 from waffle import get_waffle_flag_model
 
 from apps.teams.flags import Flags
@@ -22,6 +23,7 @@ from apps.utils.rate_limit import (
     _scope_config,
     check,
     client_ip,
+    count_request,
     html_limited_response,
     is_exempt,
     parse_rate,
@@ -489,3 +491,150 @@ def test_middleware_gives_degraded_blocks_a_retry_after(db):
     response = RateLimitHeadersMiddleware(view)(_request())
     assert response.headers["Retry-After"] == "300"
     assert "X-RateLimit-Limit" not in response.headers
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_counts_the_identity_it_is_given(db):
+    """The caller supplies a resolved identity, so nothing is read off the request."""
+    request = _request()
+
+    first = count_request(request, "api", "channel", "17")
+    second = count_request(request, "api", "channel", "17")
+
+    assert (first.limit, first.remaining) == (3, 2)
+    assert second.remaining == 1
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_keeps_identities_in_separate_buckets(db):
+    """Two channels counted in the same request do not spend each other's allowance."""
+    request = _request()
+
+    count_request(request, "api", "channel", "17")
+    other = count_request(request, "api", "channel", "18")
+
+    assert other.remaining == 2
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_records_the_result_for_the_headers_middleware(db):
+    """Counting in a view still emits X-RateLimit-*, as the decorator path does."""
+
+    def view(request):
+        count_request(request, "api", "channel", "17")
+        return DjangoJsonResponse({"ok": True})
+
+    response = RateLimitHeadersMiddleware(view)(_request())
+
+    assert response.headers["X-RateLimit-Limit"] == "3"
+    assert response.headers["X-RateLimit-Remaining"] == "2"
+    assert int(response.headers["X-RateLimit-Reset"]) > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_records_the_latest_identity_while_all_are_allowed(db):
+    """One response cannot describe several buckets, so the newest allowed count wins."""
+    request = _request()
+
+    count_request(request, "api", "channel", "17")
+    count_request(request, "api", "channel", "18")
+
+    assert request.rate_limit_result.remaining == 2
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_keeps_a_refusal_when_a_later_identity_is_allowed(db):
+    """A 429 needs its Retry-After, so a later allowance does not displace the refusal
+    that the response is being built from.
+    """
+    request = _request()
+    for _ in range(4):
+        count_request(request, "api", "channel", "17")
+
+    count_request(request, "api", "channel", "18")
+
+    assert request.rate_limit_result.allowed is False
+    assert request.rate_limit_result.retry_after > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_reports_over_the_limit_without_refusing(db):
+    """The helper answers the question and leaves the response to the caller."""
+    request = _request()
+    for _ in range(3):
+        count_request(request, "api", "channel", "17")
+
+    result = count_request(request, "api", "channel", "17")
+
+    assert result.allowed is False
+    assert result.retry_after == result.reset_seconds > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_records_on_the_underlying_request_for_drf_views(db):
+    """A DRF Request proxies reads but not writes, so the middleware would never see a
+    result attached to the wrapper.
+    """
+    underlying = _request()
+
+    count_request(DRFRequest(underlying), "api", "channel", "17")
+
+    assert underlying.rate_limit_result.remaining == 2
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_count_request_accepts_a_non_string_identity(db):
+    """Callers pass a resolved primary key. The crossing request hashes the identity, so
+    an int would only fail once a bucket went over, in the shipped log-only default.
+    """
+    request = _request()
+
+    for _ in range(5):
+        result = count_request(request, "api", "channel", 17)
+
+    assert result.allowed is True
+    assert result.remaining == 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_count_request_allows_over_the_limit_in_log_only_mode(db):
+    """The shipped default counts without ever refusing."""
+    request = _request()
+
+    for _ in range(5):
+        result = count_request(request, "api", "channel", "17")
+
+    assert result.allowed is True
+    assert result.remaining == 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+@pytest.mark.django_db()
+def test_count_request_skips_exempt_requests():
+    """An exempt request is neither counted nor refused, and reports no headers."""
+    get_waffle_flag_model().objects.update_or_create(name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": True})
+    request = _request()
+
+    for _ in range(5):
+        result = count_request(request, "api", "channel", "17")
+
+    assert result.allowed is True
+    assert not hasattr(request, "rate_limit_result")
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+@pytest.mark.django_db()
+def test_count_request_attributes_would_block_to_the_resolved_team(caplog):
+    """The team the view resolved reaches the log line, which the decorator path cannot
+    do on these routes because request.team is None there.
+    """
+    team = TeamFactory()
+    request = _request()
+    for _ in range(3):
+        count_request(request, "api", "channel", "17", team_id=team.pk)
+
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        count_request(request, "api", "channel", "17", team_id=team.pk)
+
+    would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
+    assert [r.team_id for r in would_block] == [team.pk]

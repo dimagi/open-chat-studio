@@ -186,6 +186,45 @@ def rate_limited(scope: str, key_fn=None, response_fn=None):
     return decorator
 
 
+def count_request(
+    request, scope: str, identity_type: str, identity: str, team_id: int | None = None
+) -> RateLimitResult:
+    """Counts one request against `scope` for an identity the view has already resolved.
+
+    `rate_limited` keys off what the request carries, so the identity is whatever the
+    caller supplied. A view that resolves its channel before counting calls this
+    instead: the identity is then a local primary key nobody can forge, the team is in
+    hand for `would_block` attribution and the per-team exemption, and the count can sit
+    after a signature check rather than in front of it.
+
+    This reports rather than refuses, so the caller owns what happens when `allowed` is
+    False. A view that ignores the return value stays unenforced once
+    RATE_LIMIT_ENFORCE is switched on.
+
+    The result is recorded on the request so `RateLimitHeadersMiddleware` emits the same
+    headers here as on the decorator and DRF paths. One response cannot describe more
+    than one bucket, so a view counting several identities keeps the most restrictive
+    result; a refusal is never overwritten by a later allowance, which would strip
+    Retry-After off a 429.
+
+    An exempt request is not counted and records nothing, so it reports no headers. Its
+    result carries the allow decision and no counter data. `team_id` reaches the
+    would_block log line for attribution; the exemption flag still resolves through
+    `request.team`, which is unset on the routes this serves, so only the global kill
+    switch reaches them.
+    """
+    if is_exempt(request):
+        return RateLimitResult(allowed=True, limit=0, remaining=0, reset_seconds=0)
+    result = check(scope, identity_type, str(identity), team_id=team_id)
+    # Auth attributes live on the DRF Request; the headers middleware reads the
+    # underlying HttpRequest, so the result is attached there, as in APIRateThrottle.
+    target = getattr(request, "_request", request)
+    recorded = getattr(target, "rate_limit_result", None)
+    if recorded is None or recorded.allowed:
+        target.rate_limit_result = result
+    return result
+
+
 def _ip_key(request, *args, **kwargs) -> tuple[str, str]:
     return "ip", client_ip(request)
 
