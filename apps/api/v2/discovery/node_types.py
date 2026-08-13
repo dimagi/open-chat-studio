@@ -11,14 +11,7 @@ from rest_framework.exceptions import NotFound
 from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
-from .contract import (
-    MUST_MATCH,
-    OPTIONS_KEY_RENAMES,
-    OPTIONS_KEYED_BY,
-    PER_KEYWORD_OUTPUT,
-    SINGLE_OUTPUT,
-    UI_KEY_TRANSLATIONS,
-)
+from .contract import MUST_MATCH, OPTIONS_KEYED_BY, PER_KEYWORD_OUTPUT, SINGLE_OUTPUT, UI_KEY_TRANSLATIONS
 
 
 @cache
@@ -45,7 +38,7 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
 
 
 def served_option_keys() -> frozenset[str]:
-    """Every option key some listed node type can reference, in API vocabulary."""
+    """Every option key some listed node type can reference."""
     return frozenset().union(*_option_keys_by_type().values())
 
 
@@ -138,7 +131,7 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
             if prop.get("api:exclude"):
                 continue
             if source := prop.get("ui:optionsSource"):
-                keys.add(OPTIONS_KEY_RENAMES.get(source, source))
+                keys.add(source)
         if "llm_provider_id" in properties:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)

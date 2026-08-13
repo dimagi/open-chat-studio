@@ -115,7 +115,7 @@
       "description": "The system prompt. May reference template variables in single braces -- `{participant_data}`, `{current_datetime}` -- each of which must appear at most once. Literal braces have to be doubled.",
       "title": "Prompt",
       "type": "string",
-      "ui:optionsSource": "text_editor_autocomplete_vars_llm_node",
+      "ui:optionsSource": "llm_prompt_variables",
       "ui:widget": "text_editor_widget"
     },
     "collection_id": {
@@ -167,7 +167,7 @@
       },
       "title": "Tools",
       "type": "array",
-      "ui:optionsSource": "agent_tools",
+      "ui:optionsSource": "tools",
       "ui:widget": "multiselect"
     },
     "custom_actions": {

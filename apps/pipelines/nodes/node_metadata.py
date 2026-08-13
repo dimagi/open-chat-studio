@@ -114,7 +114,7 @@ def _tool_options(team):
     ]
 
     return {
-        OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
+        OptionsSource.tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
         OptionsSource.mcp_tools: [_option(value, label) for value, label in mcp_tools],
         OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
     }
@@ -136,9 +136,9 @@ def _built_in_tool_options(llm_providers: list[dict]):
 
 def _prompt_var_options():
     return {
-        OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
-        OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
-        OptionsSource.jinja_node: PromptVars.get_jinja_vars(),
+        OptionsSource.llm_prompt_variables: PromptVars.get_all_prompt_vars(),
+        OptionsSource.router_prompt_variables: PromptVars.get_router_prompt_vars(),
+        OptionsSource.template_variables: PromptVars.get_jinja_vars(),
     }
 
 

@@ -6,17 +6,6 @@ What lives here is what a node schema cannot state for itself. Which params the 
 declared on the pydantic `Field` instead -- see `UiSchema.api_exclude`.
 """
 
-# `builder option key -> the key the API serves it under`. These are the builder keys that would
-# otherwise break the same-name rule: `agent_tools` holds the values for a param named `tools`, and
-# the variable lists have no param named for them at all -- `prompt` on an LLM node and `prompt` on a
-# router accept different sets, so those keys name the flavour of text being written instead.
-OPTIONS_KEY_RENAMES = {
-    "agent_tools": "tools",
-    "jinja_node": "template_variables",
-    "text_editor_autocomplete_vars_llm_node": "llm_prompt_variables",
-    "text_editor_autocomplete_vars_router_node": "router_prompt_variables",
-}
-
 # `option key -> the keys a client needs alongside it to make sense of its entries`. A dependency is
 # served whenever the key depending on it is, scoped responses included, and no node param reads one
 # -- which is why the schema-derived whitelist cannot discover them on its own.

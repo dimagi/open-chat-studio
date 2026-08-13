@@ -22,15 +22,15 @@ from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
-from .contract import OPTION_KEY_DEPENDENCIES, OPTIONS_KEY_RENAMES
+from .contract import OPTION_KEY_DEPENDENCIES
 from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
 # The option lists holding prompt variables rather than referenceable resource ids.
 PROMPT_VAR_OPTION_SOURCES = (
-    OptionsSource.jinja_node,
-    OptionsSource.text_editor_autocomplete_vars_llm_node,
-    OptionsSource.text_editor_autocomplete_vars_router_node,
+    OptionsSource.template_variables,
+    OptionsSource.llm_prompt_variables,
+    OptionsSource.router_prompt_variables,
 )
 
 
@@ -229,8 +229,8 @@ class PipelineOptionsView(DiscoveryView):
 
     @classmethod
     def _options_for_team(cls, team) -> dict:
-        """Every option list the team can draw on, in API vocabulary and with the builder-only
-        affordances stripped. Scoping to a node type happens after this."""
+        """Every option list the team can draw on, with the builder-only affordances stripped.
+        Scoping to a node type happens after this."""
         llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
         llm_provider_types = {provider["type"] for provider in llm_providers}
         voice_providers = list(VoiceProvider.objects.filter(team=team))
@@ -260,7 +260,7 @@ class PipelineOptionsView(DiscoveryView):
             {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
         ]
         options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)
-        return cls._to_api_vocabulary(cls._describe_prompt_vars(options))
+        return cls._describe_prompt_vars(options)
 
     @staticmethod
     def _speakable_voices(team, voice_providers: list) -> QuerySet:
@@ -302,9 +302,3 @@ class PipelineOptionsView(DiscoveryView):
                     for entry in entries
                 ]
         return options
-
-    @staticmethod
-    def _to_api_vocabulary(options: dict) -> dict:
-        """Rename the option keys named for a builder widget rather than for the param that reads
-        them. Runs before the whitelist filter so both compare the same vocabulary."""
-        return {OPTIONS_KEY_RENAMES.get(key, key): value for key, value in options.items()}
