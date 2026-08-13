@@ -18,6 +18,7 @@ from field_audit.models import AuditingManager
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
+from apps.files.models import FileChunkEmbedding
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.flags import Flags
@@ -569,8 +570,6 @@ class Collection(BaseTeamModel, VersionsMixin):
 
         Returns the number of chunks updated.
         """
-        from apps.files.models import FileChunkEmbedding  # noqa: PLC0415 - circular: files.models imports documents
-
         return FileChunkEmbedding.objects.filter(collection_id=self.id).update(
             search_vector=SearchVector("context", "text", config=self.search_language)
         )
