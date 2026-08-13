@@ -1,6 +1,6 @@
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
-from rest_framework import mixins
+from rest_framework import mixins, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
@@ -12,6 +12,7 @@ from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissions
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
+from apps.api.v2.write.serializers import ChatbotCreatedSerializer, ChatbotCreateSerializer
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
@@ -51,6 +52,25 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             .select_related("team")
             .prefetch_related("versions")
         )
+
+    @extend_schema(
+        operation_id="chatbot_create",
+        summary="Create Chatbot",
+        description=(
+            "Create a chatbot's working (draft) version, seeded with a Start -> LLM -> End "
+            "pipeline. Nothing is published: use POST /chatbots/{id}/versions/ for that. On a team "
+            "with no LLM provider the seed is Start + End with no edge between them, so the new "
+            "chatbot reports pipeline_valid: false until you wire it."
+        ),
+        tags=["Chatbots"],
+        request=ChatbotCreateSerializer,
+        responses={201: ChatbotCreatedSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        serializer = ChatbotCreateSerializer(data=request.data, context=self.get_serializer_context())
+        serializer.is_valid(raise_exception=True)
+        chatbot = serializer.save()
+        return Response(ChatbotCreatedSerializer(chatbot).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         operation_id="chatbot_inspect",

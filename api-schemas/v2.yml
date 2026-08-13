@@ -36,6 +36,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedChatbotList'
           description: ''
+    post:
+      operationId: chatbot_create
+      description: 'Create a chatbot''s working (draft) version, seeded with a Start
+        -> LLM -> End pipeline. Nothing is published: use POST /chatbots/{id}/versions/
+        for that. On a team with no LLM provider the seed is Start + End with no edge
+        between them, so the new chatbot reports pipeline_valid: false until you wire
+        it.'
+      summary: Create Chatbot
+      tags:
+      - Chatbots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatbotCreate'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotCreated'
+          description: ''
   /api/v2/chatbots/{id}/:
     get:
       operationId: chatbot_retrieve
@@ -823,6 +851,37 @@ components:
       - name
       - url
       - versions
+    ChatbotCreate:
+      type: object
+      description: 'The create request: a working draft and its seeded pipeline, nothing
+        published.'
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          default: ''
+      required:
+      - name
+    ChatbotCreated:
+      type: object
+      description: 'The create response: spec 5.1''s three keys and nothing more.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        pipeline_id:
+          type: integer
+          readOnly: true
+        version_number:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - pipeline_id
+      - version_number
     ChatbotIdentity:
       type: object
       properties:
@@ -2561,6 +2620,7 @@ components:
           tokenUrl: /o/token/
           scopes:
             chatbots:read: List and Retrieve Chatbot Data
+            chatbots:write: Create and modify Chatbots
             chatbots:interact: Converse with a Chatbot and trigger bot messages
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions
