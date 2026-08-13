@@ -11,9 +11,10 @@ from apps.api.permissions import ReadOnlyAPIKeyPermission
 from apps.api.v2.write.base import ChatbotCompositionPermission, ChatbotWriteMixin
 from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.teams.utils import set_current_team, unset_current_team
-from apps.utils.factories.experiment import ExperimentFactory
+from apps.utils.factories.experiment import ChatbotFactory, ExperimentFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.user import UserFactory
+from apps.utils.tests.clients import ApiTestClient
 
 
 class _FakeRequest:
@@ -106,3 +107,39 @@ def test_get_chatbot_404s_on_a_version_snapshot():
     view = _View(_FakeRequest(UserFactory.create(), working.team), snapshot.public_id)
     with pytest.raises(Http404):
         view.get_chatbot()
+
+
+# The two shipped endpoints are gated by `DjangoModelPermissionsWithView` on `ChatbotViewSet`, not
+# by `ChatbotCompositionPermission` above -- nothing uses that class yet. Team membership alone must
+# not be enough to write: the caller's role has to hold the same model permissions the chatbot UI
+# requires. Chat Viewer holds neither add_experiment nor change_experiment; Chatbot Admin holds both.
+ROLE_CASES = [
+    pytest.param(CHATBOT_ADMIN_GROUP, True, id="chatbot-admin-may-write"),
+    pytest.param(CHAT_VIEWER_GROUP, False, id="chat-viewer-may-not"),
+]
+
+
+def _client_for_role(team, group):
+    """An API client for a new team member holding only `group`."""
+    user = UserFactory.create()
+    add_user_to_team(team, user, [group])
+    return ApiTestClient(user, team)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(("group", "allowed"), ROLE_CASES)
+def test_create_requires_add_experiment(team_with_roles, group, allowed):
+    response = _client_for_role(team_with_roles, group).post("/api/v2/chatbots/", {"name": "Role gated"}, format="json")
+
+    assert response.status_code == (201 if allowed else 403), response.content
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(("group", "allowed"), ROLE_CASES)
+def test_patch_requires_change_experiment(team_with_roles, group, allowed):
+    chatbot = ChatbotFactory.create(team=team_with_roles)
+    response = _client_for_role(team_with_roles, group).patch(
+        f"/api/v2/chatbots/{chatbot.public_id}/", {"name": "Role gated"}, format="json"
+    )
+
+    assert response.status_code == (200 if allowed else 403), response.content

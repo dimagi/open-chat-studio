@@ -40,6 +40,30 @@ def test_create_url_is_the_registered_list_route():
 
 
 @pytest.mark.django_db()
+def test_options_on_the_collection_describes_it(client):
+    """DRF's OPTIONS metadata re-checks permissions against a `clone_request`, which does not carry
+    the team the authenticator pinned on the DRF request. Adding POST to this viewset put that path
+    in reach for the first time, and `DjangoModelPermissions` calls `get_queryset()` on it."""
+    response = client.options(CREATE_URL)
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Chatbot List"
+
+
+@pytest.mark.django_db()
+def test_options_advertises_the_body_that_post_actually_accepts(client):
+    """OPTIONS is how an agent discovers the request body, and `self.action` is "metadata" for the
+    whole of an OPTIONS request -- so without resolving on the described method instead, this
+    advertises the *read* serializer: `id`, `url`, `version_number` and `versions`, four keys POST
+    then rejects as unrecognised, and no `description`, the one optional key it does take."""
+    body = client.options(CREATE_URL).json()["actions"]["POST"]
+
+    assert set(body) == {"name", "description"}
+    assert body["name"]["required"] is True
+    assert body["description"]["required"] is False
+
+
+@pytest.mark.django_db()
 def test_create_returns_exactly_the_three_spec_keys(client):
     response = client.post(CREATE_URL, {"name": "Connect Interviews Bot"}, format="json")
 
@@ -108,8 +132,38 @@ def test_create_normalizes_the_name_to_nfc(client):
 
 
 @pytest.mark.django_db()
+def test_a_name_that_nfc_lengthens_past_the_column_is_a_400(client):
+    """NFC can make a string *longer*: U+0958 is a composition exclusion, so it normalises to the
+    two code points U+0915 U+093C. Normalising after `max_length` ran would clear the check and then
+    overflow `varchar(128)` on insert -- a 500 for what is only an over-long name."""
+    over_long = "क़" * 128
+    assert len(unicodedata.normalize("NFC", over_long)) > 128  # guards the guard
+
+    assert client.post(CREATE_URL, {"name": over_long}, format="json").status_code == 400
+
+
+@pytest.mark.django_db()
 def test_create_requires_a_name(client):
     assert client.post(CREATE_URL, {}, format="json").status_code == 400
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({}, id="omitted"),
+        pytest.param({"description": ""}, id="blank"),
+        pytest.param({"description": None}, id="null"),
+    ],
+)
+def test_create_stores_an_absent_description_as_blank(client, sent):
+    """`Experiment.description` is nullable for historical reasons, but the UI form only ever writes
+    "". Accepting null and normalising it keeps one representation in the column -- and keeps the
+    PATCH twin, which has to accept a null echoed back from a legacy row, symmetrical with this."""
+    response = client.post(CREATE_URL, {"name": "Bot", **sent}, format="json")
+
+    assert response.status_code == 201, response.content
+    assert Experiment.objects.get(public_id=response.json()["id"]).description == ""
 
 
 @pytest.mark.django_db()

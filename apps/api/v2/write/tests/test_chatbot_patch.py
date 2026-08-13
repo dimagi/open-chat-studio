@@ -13,6 +13,8 @@ from django.test.utils import CaptureQueriesContext
 
 from apps.experiments.models import Experiment
 from apps.service_providers.models import VoiceProviderType
+from apps.teams.flags import Flags
+from apps.teams.models import Flag
 from apps.utils.factories.experiment import ChatbotFactory, ConsentFormFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -45,7 +47,46 @@ def test_patch_updates_top_level_fields(client, chatbot):
     assert response.json()["name"] == "Renamed"
 
 
-@pytest.mark.django_db(transaction=False)
+@pytest.mark.django_db()
+def test_the_response_can_be_sent_straight_back_as_a_request(client, chatbot):
+    """The consumer here is an agent, for which read-modify-write is the ordinary way to edit, so
+    everything this endpoint returns other than the read-only identity keys has to be accepted
+    back. `description` is the one that breaks it: the column is `TextField(null=True, default="")`
+    with no `blank=True`, so ModelSerializer generates `allow_blank=False` and the endpoint refuses
+    its own response for every chatbot POST /chatbots/ created."""
+    first = client.patch(_url(chatbot), {"name": "Support bot"}, format="json")
+    assert first.status_code == 200
+    assert first.json()["description"] == ""
+
+    read_only = {"id", "pipeline_id", "version_number"}
+    echoed = {key: value for key, value in first.json().items() if key not in read_only}
+
+    assert client.patch(_url(chatbot), echoed, format="json").status_code == 200, echoed
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("sent", "stored"),
+    [
+        pytest.param("Rewritten", "Rewritten", id="text-is-kept"),
+        pytest.param("", "", id="blank-clears-it"),
+        pytest.param(None, "", id="null-is-normalised-to-blank"),
+    ],
+)
+def test_description_accepts_blank_and_null(client, chatbot, sent, stored):
+    """Null is accepted because rows predating this endpoint may hold SQL NULL and their own
+    response has to be echoable; it is stored as "" so only one representation is ever written."""
+    chatbot.description = "Original"
+    chatbot.save()
+
+    response = client.patch(_url(chatbot), {"description": sent}, format="json")
+
+    assert response.status_code == 200, response.content
+    chatbot.refresh_from_db()
+    assert chatbot.description == stored
+
+
+@pytest.mark.django_db()
 def test_patch_locks_the_chatbot_row(client, chatbot):
     """Model.save() writes every column, so without the lock two concurrent PATCHes naming
     different fields would clobber one another. Query capture rather than threads: a real
@@ -68,6 +109,16 @@ def test_patch_normalizes_the_name_to_nfc(client, chatbot):
 
     chatbot.refresh_from_db()
     assert chatbot.name == composed
+
+
+@pytest.mark.django_db()
+def test_a_name_that_nfc_lengthens_past_the_column_is_a_400(client, chatbot):
+    """NFC can make a string *longer*, so normalising after `max_length` ran would clear the check
+    and then overflow `varchar(128)` on save. Create-side twin in test_chatbot_create.py."""
+    over_long = "क़" * 128
+    assert len(unicodedata.normalize("NFC", over_long)) > 128  # guards the guard
+
+    assert client.patch(_url(chatbot), {"name": over_long}, format="json").status_code == 400
 
 
 @pytest.mark.django_db()
@@ -468,6 +519,65 @@ def test_only_the_voice_ids_are_writable(client, chatbot, key):
 
     assert response.status_code == 400
     assert key in response.json()
+
+
+def _activate_for_the_team(flag, team):
+    flag.teams.add(team)
+
+
+def _activate_for_everyone(flag, team):
+    flag.everyone = True
+    flag.save()
+
+
+@pytest.fixture()
+def openai_voice_engine_flag(db):
+    """The flag row, with waffle's cache flushed either side.
+
+    Waffle caches a flag outside the test transaction, so without this one parametrised case's
+    activation survives the rollback and the next case reads it -- the "off" case passes or fails
+    on test order alone. An existing-but-unactivated row is equivalent to no row here: both leave
+    ``is_active`` false.
+    """
+    flag, _ = Flag.objects.get_or_create(name=Flags.OPEN_AI_VOICE_ENGINE.slug)
+    flag.flush()
+    yield flag
+    flag.flush()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("activate", "expected_status"),
+    [
+        pytest.param(_activate_for_the_team, 200, id="on-for-the-team-accepts-the-voice"),
+        pytest.param(_activate_for_everyone, 200, id="on-for-everyone-accepts-it-too"),
+        pytest.param(None, 400, id="off-refuses-it"),
+    ],
+)
+def test_the_voice_fields_honour_the_openai_voice_engine_flag(
+    client, chatbot, openai_voice_engine_flag, activate, expected_status
+):
+    """`ChatbotSettingsForm` offers neither OpenAI Voice Engine voices nor their providers unless the
+    flag is on. Accepting one here would wire the chatbot to a voice the settings form's own
+    querysets exclude, and saving that page would then fail on a field the user never touched.
+
+    The `everyone` case is the one that matters for parity: the form asks waffle's full predicate --
+    `everyone`, `percent`, the user and group lists -- *or* our team override, so checking only the
+    team half would leave the settings page offering voices this endpoint rejects the moment the
+    flag is switched on any other way, which is exactly what a normal rollout does."""
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.openai_voice_engine)
+    voice = SyntheticVoiceFactory.create(service="OpenAIVoiceEngine", voice_provider=provider)
+    if activate:
+        activate(openai_voice_engine_flag, chatbot.team)
+        openai_voice_engine_flag.flush()
+
+    response = client.patch(
+        _url(chatbot),
+        {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id},
+        format="json",
+    )
+
+    assert response.status_code == expected_status, response.content
 
 
 @pytest.mark.django_db()
