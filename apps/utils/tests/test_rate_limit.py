@@ -419,11 +419,12 @@ def test_admin_api_scope_is_configured():
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("admin_api")
+    limit, window_seconds, fail_open, refuses = _scope_config("admin_api")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is True
+    assert refuses is True
 
 
 def test_chat_api_scope_is_configured():
@@ -432,11 +433,12 @@ def test_chat_api_scope_is_configured():
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("chat_api")
+    limit, window_seconds, fail_open, refuses = _scope_config("chat_api")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is True
+    assert refuses is True
 
 
 def test_public_chat_scope_is_configured():
@@ -445,11 +447,12 @@ def test_public_chat_scope_is_configured():
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("public_chat")
+    limit, window_seconds, fail_open, refuses = _scope_config("public_chat")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is True
+    assert refuses is True
 
 
 def test_channels_scope_is_configured():
@@ -458,11 +461,12 @@ def test_channels_scope_is_configured():
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("channels")
+    limit, window_seconds, fail_open, refuses = _scope_config("channels")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is True
+    assert refuses is True
 
 
 def test_middleware_skips_degraded_results(db):
@@ -638,3 +642,59 @@ def test_count_request_attributes_would_block_to_the_resolved_team(caplog):
 
     would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
     assert [r.team_id for r in would_block] == [team.pk]
+
+
+NEVER_REFUSING_LIMITS = {"api": {"rate": "3/5m", "fail_open": True, "refuse": False}}
+
+
+def test_scopes_refuse_by_default():
+    """Omitting the key leaves a scope refusing, so the landed scopes are untouched."""
+    _, _, _, refuses = _scope_config("api")
+
+    assert refuses is True
+
+
+@override_settings(RATE_LIMITS=NEVER_REFUSING_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_a_never_refusing_scope_serves_over_limit_requests_under_enforcement():
+    """Some traffic costs more to drop than to serve. Refusing a provider delivery
+    discards a participant's message, so this scope counts and lets it through even
+    once the global enforcement switch is on.
+    """
+    for _ in range(3):
+        check("api", "channel", "17")
+
+    result = check("api", "channel", "17")
+
+    assert result.allowed is True
+    assert result.remaining == 0
+    assert result.retry_after is None
+
+
+@override_settings(RATE_LIMITS=NEVER_REFUSING_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_a_never_refusing_scope_still_reports_crossings_under_enforcement(caplog):
+    """The log line is the only signal this scope ever produces, so it has to survive
+    the enforcement flip that silences it everywhere else.
+    """
+    for _ in range(3):
+        check("api", "channel", "17")
+
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        check("api", "channel", "17", team_id=7)
+
+    would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
+    assert [r.team_id for r in would_block] == [7]
+
+
+@override_settings(
+    RATE_LIMITS={"api": {"rate": "3/5m", "fail_open": False, "refuse": False}},
+    RATE_LIMIT_ENFORCE=True,
+)
+def test_a_never_refusing_scope_serves_requests_when_the_backend_fails():
+    """A fail-closed setting cannot smuggle a refusal into a scope that promises never
+    to refuse, so the two settings cannot combine into a dropped message.
+    """
+    with mock.patch("apps.utils.rate_limit._count", side_effect=ConnectionError("redis down")):
+        result = check("api", "channel", "17")
+
+    assert result.allowed is True
+    assert result.degraded is True
