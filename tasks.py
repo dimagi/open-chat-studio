@@ -38,12 +38,13 @@ def down(c: Context):
 
 
 @task(
+    aliases=["requirements"],
     help={
         "upgrade_all": "Upgrade all packages to latest versions",
         "upgrade_package": "Upgrade specific package (e.g. --upgrade-package django)",
-    }
+    },
 )
-def requirements(c: Context, upgrade_all=False, upgrade_package=None):
+def uv(c: Context, upgrade_all=False, upgrade_package=None):
     """Update Python dependencies using uv lock and optionally sync environment."""
     if upgrade_all and upgrade_package:
         raise Exit("Cannot specify both upgrade and upgrade-package", -1)
