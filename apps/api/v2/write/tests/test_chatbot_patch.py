@@ -12,8 +12,9 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from apps.experiments.models import Experiment
-from apps.utils.factories.experiment import ChatbotFactory, ConsentFormFactory
-from apps.utils.factories.service_provider_factories import TraceProviderFactory
+from apps.service_providers.models import VoiceProviderType
+from apps.utils.factories.experiment import ChatbotFactory, ConsentFormFactory, SyntheticVoiceFactory
+from apps.utils.factories.service_provider_factories import TraceProviderFactory, VoiceProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
 
@@ -198,3 +199,125 @@ def test_oauth_token_without_the_write_scope_cannot_patch(chatbot):
     client = ApiTestClient(chatbot.team.members.first(), chatbot.team, auth_method="oauth", scopes=["chatbots:read"])
 
     assert client.patch(_url(chatbot), {"name": "Nope"}, format="json").status_code == 403
+
+
+@pytest.mark.django_db()
+def test_patch_sets_a_general_voice(client, chatbot):
+    """A general voice (voice_provider_id: null) pairs with any provider of the matching type."""
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    voice = SyntheticVoiceFactory.create(service="AWS", voice_provider=None)
+
+    response = client.patch(
+        _url(chatbot),
+        {"voice": {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id}},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    chatbot.refresh_from_db()
+    assert (chatbot.voice_provider, chatbot.synthetic_voice) == (provider, voice)
+    assert response.json()["voice"] == {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id}
+
+
+@pytest.mark.django_db()
+def test_patch_sets_a_provider_owned_voice(client, chatbot):
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    voice = SyntheticVoiceFactory.create(service="AWS", voice_provider=provider)
+
+    response = client.patch(
+        _url(chatbot),
+        {"voice": {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id}},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    chatbot.refresh_from_db()
+    assert chatbot.synthetic_voice == voice
+
+
+@pytest.mark.django_db()
+def test_patch_rejects_a_voice_of_the_wrong_type(client, chatbot):
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    voice = SyntheticVoiceFactory.create(service="Azure", voice_provider=None)
+
+    response = client.patch(
+        _url(chatbot),
+        {"voice": {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "voice" in response.json()
+
+
+@pytest.mark.django_db()
+def test_patch_rejects_a_voice_owned_by_another_provider(client, chatbot):
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    other_provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    voice = SyntheticVoiceFactory.create(service="AWS", voice_provider=other_provider)
+
+    response = client.patch(
+        _url(chatbot),
+        {"voice": {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db()
+def test_patch_rejects_another_teams_voice_provider(client, chatbot):
+    other_team = TeamWithUsersFactory.create()
+    provider = VoiceProviderFactory.create(team=other_team, type=VoiceProviderType.aws)
+    voice = SyntheticVoiceFactory.create(service="AWS", voice_provider=None)
+
+    response = client.patch(
+        _url(chatbot),
+        {"voice": {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("supplied", ["voice_provider_id", "synthetic_voice_id"])
+def test_patch_rejects_half_a_voice_pair(client, chatbot, supplied):
+    """The root PATCH is partial, and partial propagates into nested serializers -- without an
+    explicit presence check, half a pair would slip through."""
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    voice = SyntheticVoiceFactory.create(service="AWS", voice_provider=None)
+    values = {"voice_provider_id": provider.id, "synthetic_voice_id": voice.id}
+
+    response = client.patch(_url(chatbot), {"voice": {supplied: values[supplied]}}, format="json")
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db()
+def test_null_voice_clears_both_columns(client, chatbot):
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    chatbot.voice_provider = provider
+    chatbot.synthetic_voice = SyntheticVoiceFactory.create(service="AWS", voice_provider=None)
+    chatbot.save()
+
+    response = client.patch(_url(chatbot), {"voice": None}, format="json")
+
+    assert response.status_code == 200
+    chatbot.refresh_from_db()
+    assert chatbot.voice_provider is None
+    assert chatbot.synthetic_voice is None
+    assert response.json()["voice"] is None
+
+
+@pytest.mark.django_db()
+def test_omitting_voice_leaves_it_untouched(client, chatbot):
+    provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
+    chatbot.voice_provider = provider
+    chatbot.synthetic_voice = SyntheticVoiceFactory.create(service="AWS", voice_provider=None)
+    chatbot.save()
+
+    client.patch(_url(chatbot), {"name": "Renamed"}, format="json")
+
+    chatbot.refresh_from_db()
+    assert chatbot.voice_provider == provider

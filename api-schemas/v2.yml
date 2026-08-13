@@ -951,6 +951,11 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        voice:
+          allOf:
+          - $ref: '#/components/schemas/VoicePair'
+          nullable: true
+          readOnly: true
       required:
       - consent_form_id
       - id
@@ -959,6 +964,7 @@ components:
       - settings
       - trace_provider_id
       - version_number
+      - voice
     ChatbotIdentity:
       type: object
       properties:
@@ -2176,6 +2182,10 @@ components:
         trace_provider_id:
           type: integer
           nullable: true
+        voice:
+          allOf:
+          - $ref: '#/components/schemas/VoicePair'
+          nullable: true
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects
@@ -2753,6 +2763,21 @@ components:
       - type: array
         items:
           $ref: '#/components/schemas/UsageBucketResult'
+    VoicePair:
+      type: object
+      description: |-
+        A (voice provider, synthetic voice) pair.
+
+        The two columns are only meaningful together, so both keys are required whenever ``voice`` is
+        present at all; ``"voice": null`` on the parent clears both.
+      properties:
+        voice_provider_id:
+          type: integer
+        synthetic_voice_id:
+          type: integer
+      required:
+      - synthetic_voice_id
+      - voice_provider_id
     VoiceResponseBehaviourEnum:
       enum:
       - always
