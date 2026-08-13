@@ -1,8 +1,8 @@
 """Request and response serializers for the chatbot write endpoints (#4139).
 
-Key paths mirror ``GET /chatbots/{id}/inspect/``; references are named the way
-``GET /pipeline/options/`` names them, so an agent reads structure from inspect and lifts ids
-straight out of discovery.
+Key paths mirror ``GET /chatbots/{id}/inspect/``; references are addressed by id using the same
+``<resource>_id`` convention the discovery endpoints use, so an agent reads structure from inspect
+and lifts ids straight out of discovery.
 """
 
 import unicodedata

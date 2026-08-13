@@ -1,12 +1,15 @@
 """PATCH /api/v2/chatbots/{id}/ -- settings and wiring by id (#4139, spec 5.1).
 
 Key paths mirror GET /chatbots/{id}/inspect/, so a read-modify-write loop needs no remapping
-except for references, which are named the way GET /pipeline/options/ names them.
+except for references, which are addressed by id using the same ``<resource>_id`` convention the
+discovery endpoints use.
 """
 
 import unicodedata
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.experiments.models import Experiment
 from apps.utils.factories.experiment import ChatbotFactory, ConsentFormFactory
@@ -41,7 +44,17 @@ def test_patch_updates_top_level_fields(client, chatbot):
     assert response.json()["name"] == "Renamed"
 
 
-@pytest.mark.django_db()
+@pytest.mark.django_db(transaction=False)
+def test_patch_locks_the_chatbot_row(client, chatbot):
+    """Model.save() writes every column, so without the lock two concurrent PATCHes naming
+    different fields would clobber one another. Query capture rather than threads: a real
+    concurrency test would be slow and flaky."""
+    with CaptureQueriesContext(connection) as captured:
+        assert client.patch(_url(chatbot), {"name": "Locked"}, format="json").status_code == 200
+
+    assert any("FOR UPDATE" in query["sql"] for query in captured.captured_queries)
+
+
 @pytest.mark.django_db()
 def test_patch_normalizes_the_name_to_nfc(client, chatbot):
     """Built with `unicodedata` for the same reason as the create-side twin: written as literals,
