@@ -128,7 +128,9 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             "given as ids (listed by GET /pipeline/options/). GET /chatbots/{id}/inspect/ returns "
             "more than this -- names, types and resolved values that describe a reference rather "
             "than address it -- so it is not a template for this body. Only the keys you send are "
-            "changed, and a key that is not listed below is rejected rather than ignored."
+            "changed, and a key that is not listed below is rejected rather than ignored. The "
+            "response includes read-only fields (id, pipeline_id, version_number) that the request "
+            "does not accept."
         ),
         tags=["Chatbots"],
         parameters=[

@@ -1,8 +1,8 @@
 """PATCH /api/v2/chatbots/{id}/ -- settings and wiring by id (#4139, spec 5.1).
 
-Key paths mirror GET /chatbots/{id}/inspect/, so a read-modify-write loop needs no remapping
-except for references, which are addressed by id using the same ``<resource>_id`` convention the
-discovery endpoints use.
+The writable surface is the same field set the UI's ChatbotSettingsForm exposes, with references
+as ``<field>_id`` keys. The ``settings`` block's nesting matches the inspect response. Unrecognised
+keys are rejected with 400.
 """
 
 import unicodedata
