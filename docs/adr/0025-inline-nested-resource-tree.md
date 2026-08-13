@@ -1,6 +1,6 @@
 # ADR-0025: Inline nested resource tree for the inspect payload
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-05-29</p>
 <p class="adr-meta">Extends: <a href="0024-inspect-denormalized-readonly-projection.md">ADR-0024</a></p>

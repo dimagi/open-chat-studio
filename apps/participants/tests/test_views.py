@@ -62,6 +62,9 @@ def test_single_participant_home_with_experiment_renders_session_table(client, t
     )
     response = client.get(url)
     assert response.status_code == 200
+    # The table's Continue Chat button calls ocsContinueSessionChat, which only exists if this
+    # page includes the launcher partial. Any page rendering ChatbotSessionsTable must include it.
+    assert "ocsContinueSessionChat = function" in response.content.decode()
 
 
 @pytest.mark.django_db()
