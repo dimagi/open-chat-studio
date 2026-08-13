@@ -27,7 +27,30 @@ def normalize_chatbot_name(value: str) -> str:
     return unicodedata.normalize("NFC", value)
 
 
-class ChatbotCreateSerializer(serializers.Serializer):
+class RejectsUnknownKeys:
+    """Refuse a request body carrying keys this serializer does not declare.
+
+    DRF's default is to drop them silently, which for a human is a typo they spot in the echoed
+    response and for an agent is a 200 that wrote nothing. The consumer here is an agent, so a
+    misspelled key has to be an error it can act on.
+
+    Hooked into ``to_internal_value`` rather than ``validate`` because that is the only place a
+    *nested* serializer sees its own raw input: ``initial_data`` is set on the root serializer
+    alone, so a ``validate``-based check could not reach ``settings`` or ``voice``.
+    """
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            unknown = sorted(set(data) - set(self.fields))
+            if unknown:
+                accepted = ", ".join(sorted(self.fields))
+                raise serializers.ValidationError(
+                    {key: f"Unrecognised field. Accepted here: {accepted}." for key in unknown}
+                )
+        return super().to_internal_value(data)
+
+
+class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
     """The create request: a working draft and its seeded pipeline, nothing published."""
 
     name = serializers.CharField(max_length=128)
@@ -68,7 +91,7 @@ class ChatbotCreatedSerializer(serializers.Serializer):
     version_number = serializers.IntegerField(read_only=True)
 
 
-class ChatbotSettingsSerializer(serializers.ModelSerializer):
+class ChatbotSettingsSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     """The writable half of the inspect ``settings`` block.
 
     Read-side twin: ``apps.api.v2.inspect.serializers.InspectSettingsSerializer``. Mounted with
@@ -90,7 +113,7 @@ class ChatbotSettingsSerializer(serializers.ModelSerializer):
         ]
 
 
-class ChatbotWriteSerializer(serializers.ModelSerializer):
+class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     """The PATCH request body.
 
     The writable set is exactly what ``ChatbotSettingsForm`` edits in the UI -- one API field per

@@ -164,6 +164,50 @@ def test_a_nonexistent_reference_is_a_400_on_that_field(client, chatbot, field):
 
 
 @pytest.mark.django_db()
+def test_an_unrecognised_key_is_a_400_naming_it(client, chatbot):
+    """DRF drops undeclared keys silently, so a typo is a 200 that wrote nothing. A human notices
+    that from the echoed body; an agent reads the 200 and moves on."""
+    response = client.patch(_url(chatbot), {"nmae": "Typo"}, format="json")
+
+    assert response.status_code == 400
+    assert "nmae" in response.json()
+    chatbot.refresh_from_db()
+    assert chatbot.name == "Support bot"
+
+
+@pytest.mark.django_db()
+def test_an_unrecognised_settings_key_is_a_400_naming_it(client, chatbot):
+    """`settings` needs the check too, and cannot get it from `initial_data`, which is set on the
+    root serializer alone."""
+    response = client.patch(_url(chatbot), {"settings": {"seed_mesage": "Hi!"}}, format="json")
+
+    assert response.status_code == 400
+    assert "seed_mesage" in response.json()["settings"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("owner", None, id="owner"),
+        pytest.param("team", None, id="team"),
+        pytest.param("is_archived", True, id="is-archived"),
+    ],
+)
+def test_a_protected_model_field_stays_unwritable(client, chatbot, field, value):
+    """These columns were already refused by being undeclared. Rejecting unknown keys must keep
+    them refused rather than promote them to an accepted spelling."""
+    before = getattr(chatbot, field)
+
+    response = client.patch(_url(chatbot), {field: value}, format="json")
+
+    assert response.status_code == 400
+    assert field in response.json()
+    chatbot.refresh_from_db()
+    assert getattr(chatbot, field) == before
+
+
+@pytest.mark.django_db()
 def test_another_teams_chatbot_is_a_404(chatbot):
     other = TeamWithUsersFactory.create()
     client = ApiTestClient(other.members.first(), other)
@@ -382,6 +426,17 @@ def test_a_patch_that_leaves_the_voice_alone_does_not_validate_it(client, chatbo
     assert response.status_code == 200
     chatbot.refresh_from_db()
     assert (chatbot.name, chatbot.voice_provider) == ("Renamed", provider)
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize("key", ["provider_name", "voice_name", "type", "language", "neural"])
+def test_only_the_voice_ids_are_writable(client, chatbot, key):
+    """Inspect's voice object describes the voice as well as addressing it. Those descriptive keys
+    are not part of the write surface, so they are refused rather than quietly dropped."""
+    response = client.patch(_url(chatbot), {key: "whatever"}, format="json")
+
+    assert response.status_code == 400
+    assert key in response.json()
 
 
 @pytest.mark.django_db()

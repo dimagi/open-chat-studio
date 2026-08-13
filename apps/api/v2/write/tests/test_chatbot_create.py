@@ -113,6 +113,16 @@ def test_create_requires_a_name(client):
 
 
 @pytest.mark.django_db()
+def test_an_unrecognised_key_is_a_400_naming_it(client):
+    """Silently dropping it would create the chatbot minus the description, and report success."""
+    response = client.post(CREATE_URL, {"name": "Typo", "descriptoin": "oops"}, format="json")
+
+    assert response.status_code == 400
+    assert "descriptoin" in response.json()
+    assert not Experiment.objects.filter(name="Typo").exists()
+
+
+@pytest.mark.django_db()
 def test_read_only_key_cannot_create(team):
     client = ApiTestClient(team.members.first(), team, read_only=True)
     assert client.post(CREATE_URL, {"name": "Nope"}, format="json").status_code == 403
