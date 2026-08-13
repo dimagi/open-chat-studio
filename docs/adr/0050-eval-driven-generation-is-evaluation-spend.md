@@ -1,6 +1,6 @@
 # ADR-0050: Eval-driven generation is evaluation spend, billed without a trace
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Open Chat Studio · Created: 2026-07-29</p>
 

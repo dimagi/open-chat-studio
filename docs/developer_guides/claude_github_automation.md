@@ -1,4 +1,4 @@
-# Claude Code Agents
+# Claude GitHub Automation
 
 This project has GitHub Actions workflows that use Claude Code for [autonomous issue implementation](#1-implementing-a-single-issue), [incremental task progress](#2-working-through-a-multi-task-project), and [CI follow-up](#automatic-follow-up). Additionally, Claude Code is used to review PRs and [Dependabot PRs](#dependabot-pr-review).
 
@@ -126,7 +126,7 @@ This workflow can also be triggered manually via **Actions > Claude Dependabot P
 
 Every non-draft, non-fork, non-Dependabot PR triggers an automated Claude code review. Claude reads the PR diff and posts findings as **inline comments** directly on the changed lines.
 
-There is no manual trigger for this workflow. To get a fresh review, push a new commit.
+It runs when a PR is opened, when it is marked **ready for review**, and on every push. Drafts are skipped — which is why the [development workflow](../getting-started/dev-workflow.md#then-hand-it-over) has you clean up the PR as a draft first, then flip it to ready to get this review. There is no manual trigger; to get a fresh review, push a new commit.
 
 !!! note
     For a fork, pull requests do **not** run the Claude Code Review workflow due to permission restrictions.

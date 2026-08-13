@@ -1,6 +1,6 @@
 # ADR-0048: Evaluation spend is team spend, never entity spend
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Open Chat Studio · Created: 2026-07-28</p>
 

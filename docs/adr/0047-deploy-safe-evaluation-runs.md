@@ -1,6 +1,6 @@
 # ADR-0047: Deploy-safe evaluation runs via a beat coordinator over a frozen plan
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Open Chat Studio · Created: 2026-07-24</p>
 

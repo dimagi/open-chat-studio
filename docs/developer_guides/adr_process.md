@@ -1,6 +1,6 @@
 # Creating Architecture Decision Records
 
-See [`agents/adr_process`](../agents/adr_process.md) for what an ADR is and the source-doc lifecycle. View the list of [Architecture Decisions](https://developers.openchatstudio.com/adr/).
+See [`agents/adr_process`](../agents/adr_process.md) for what an ADR is and the source-doc lifecycle. View the list of [Architecture Decisions](../adr/index.md).
 
 An AI agent skill can extract ADRs from a design doc, either on request or automatically in CI, so you shouldn't often need to write one from scratch. Both paths are below, along with what stays a manual decision either way.
 

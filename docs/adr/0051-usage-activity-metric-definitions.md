@@ -1,6 +1,6 @@
 # ADR-0051: One set of activity-metric definitions across usage surfaces
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Open Chat Studio · Created: 2026-08-06</p>
 
