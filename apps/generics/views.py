@@ -31,7 +31,7 @@ def render_session_details(
                 "queue__name", flat=True
             )
         )
-    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
+    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG) and bool(request.team_membership)
     return TemplateResponse(
         request,
         template_path,
