@@ -3,9 +3,8 @@
 Ships ahead of the sub-resource views that consume it (#4140-#4145).
 """
 
-from django.shortcuts import get_object_or_404
-
 from apps.api.permissions import BASE_PERMISSION_CLASSES, RequiresTeamPermission
+from apps.api.v2.lookups import get_working_chatbot
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
@@ -38,11 +37,5 @@ class ChatbotWriteMixin:
     required_scopes = ["chatbots"]
 
     def get_chatbot(self) -> Experiment:
-        """The working (draft) chatbot named by the URL, scoped to the request's team.
-
-        The default manager already excludes archived rows, so an archived chatbot 404s too.
-        """
-        return get_object_or_404(
-            Experiment.objects.filter(team=self.request.team, working_version__isnull=True),
-            public_id=self.kwargs["id"],
-        )
+        """The working (draft) chatbot named by the URL, scoped to the request's team."""
+        return get_working_chatbot(self.request.team, self.kwargs["id"])

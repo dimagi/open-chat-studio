@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, status
@@ -13,6 +12,7 @@ from rest_framework.viewsets import GenericViewSet
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, ReadOnlyAPIKeyPermission
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
+from apps.api.v2.lookups import get_working_chatbot, working_chatbots
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.api.v2.write.serializers import (
     ChatbotCreatedSerializer,
@@ -20,7 +20,6 @@ from apps.api.v2.write.serializers import (
     ChatbotDetailSerializer,
     ChatbotWriteSerializer,
 )
-from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
 
@@ -54,11 +53,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     lookup_url_kwarg = "id"
 
     def get_queryset(self):
-        return (
-            Experiment.objects.filter(team=self.request.team, working_version__isnull=True)
-            .select_related("team")
-            .prefetch_related("versions")
-        )
+        return working_chatbots(self.request.team).select_related("team").prefetch_related("versions")
 
     @extend_schema(
         operation_id="chatbot_create",
@@ -135,10 +130,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         with transaction.atomic():
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
             # naming different fields would silently clobber one another (spec W7).
-            chatbot = get_object_or_404(
-                Experiment.objects.filter(team=request.team, working_version__isnull=True).select_for_update(),
-                public_id=self.kwargs[self.lookup_url_kwarg],
-            )
+            chatbot = get_working_chatbot(request.team, self.kwargs[self.lookup_url_kwarg], lock=True)
             serializer = ChatbotWriteSerializer(
                 chatbot, data=request.data, partial=True, context=self.get_serializer_context()
             )
