@@ -6,17 +6,6 @@ What lives here is what a node schema cannot state for itself. Which params the 
 declared on the pydantic `Field` instead -- see `UiSchema.api_exclude`.
 """
 
-# `option key -> the keys a client needs alongside it to make sense of its entries`. A dependency is
-# served whenever the key depending on it is, scoped responses included, and no node param reads one
-# -- which is why the schema-derived whitelist cannot discover them on its own.
-OPTION_KEY_DEPENDENCIES = {
-    # Resolves the `provider_id` carried on each `synthetic_voice_id` entry.
-    "synthetic_voice_id": frozenset({"voice_provider_id"}),
-}
-
-# Served despite no node param reading them.
-API_ONLY_OPTION_KEYS = frozenset().union(*OPTION_KEY_DEPENDENCIES.values())
-
 # Model and provider each carry a `type` ("openai", "anthropic", ...) and the two must agree.
 PROVIDER_TYPE_MATCH = {"field": "llm_provider_id", "on": "type"}
 

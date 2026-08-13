@@ -22,7 +22,6 @@ from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node
 from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
-from .contract import OPTION_KEY_DEPENDENCIES
 from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
@@ -131,7 +130,6 @@ class PipelineNodesView(DiscoveryView):
 PIPELINE_OPTIONS_EXAMPLE = {
     "llm_provider_id": [{"value": 1, "label": "Prod OpenAI", "type": "openai"}],
     "llm_provider_model_id": [{"value": 5, "label": "gpt-4o", "type": "openai", "max_token_limit": 128000}],
-    "voice_provider_id": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
     "synthetic_voice_id": [{"value": 11, "label": "Joanna (English)", "type": "aws", "provider_id": 2}],
     "source_material": [{"value": 3, "label": "Returns policy"}],
     "collection": [{"value": 7, "label": "Policy docs"}],
@@ -218,14 +216,12 @@ class PipelineOptionsView(DiscoveryView):
     @staticmethod
     def _wanted_keys(requested_type: str | None) -> frozenset[str]:
         """The keys this response carries: everything served, or just what one node type can read."""
-        if requested_type:
-            wanted = option_keys_for_node_type(requested_type)
-            if wanted is None:
-                raise unknown_node_type(requested_type)
-        else:
-            wanted = served_option_keys()
-        # A key that cannot be read on its own brings its resolver along, whichever branch chose it.
-        return wanted.union(*(OPTION_KEY_DEPENDENCIES.get(key, ()) for key in wanted))
+        if not requested_type:
+            return served_option_keys()
+        wanted = option_keys_for_node_type(requested_type)
+        if wanted is None:
+            raise unknown_node_type(requested_type)
+        return wanted
 
     @classmethod
     def _options_for_team(cls, team) -> dict:
@@ -255,10 +251,6 @@ class PipelineOptionsView(DiscoveryView):
             for provider_type, config in options[OptionsSource.tool_config].items()
             if provider_type in llm_provider_types
         }
-        # See `OPTION_KEY_DEPENDENCIES` -- no node param sources its options from this list.
-        options[OptionsSource.voice_provider_id] = [
-            {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
-        ]
         options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)
         return cls._describe_prompt_vars(options)
 

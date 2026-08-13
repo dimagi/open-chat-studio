@@ -108,8 +108,9 @@ class SyntheticVoiceOptionSerializer(serializers.Serializer):
     provider_id = serializers.IntegerField(
         allow_null=True,
         help_text=(
-            "The `voice_provider_id` option this voice belongs to, or null for a shared voice that "
-            "any provider of the same `type` can speak."
+            "The voice provider that owns this voice, or null for a shared voice any provider of the "
+            "same `type` can speak. The chatbot's own provider is its `voice.provider_id` -- see the "
+            "chatbot detail endpoint."
         ),
     )
 
@@ -133,14 +134,6 @@ class PipelineOptionsSerializer(serializers.Serializer):
 
     llm_provider_id = ProviderOptionSerializer(many=True, required=False)
     llm_provider_model_id = LlmProviderModelOptionSerializer(many=True, required=False)
-    voice_provider_id = ProviderOptionSerializer(
-        many=True,
-        required=False,
-        help_text=(
-            "The team's configured voice providers. No node param sources its options from this -- "
-            "it is here to resolve the `provider_id` on a `synthetic_voice_id` entry."
-        ),
-    )
     synthetic_voice_id = SyntheticVoiceOptionSerializer(many=True, required=False)
     source_material = ResourceOptionSerializer(many=True, required=False)
     collection = ResourceOptionSerializer(

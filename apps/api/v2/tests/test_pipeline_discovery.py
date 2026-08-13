@@ -137,8 +137,7 @@ def test_every_option_key_is_named_for_the_param_that_reads_it(team_with_resourc
     """The payload's central promise, and the only thing tying a list to a param: `_property()` strips
     `ui:optionsSource`, so a client has nothing but the name -- give or take an `_id`/`_ids` suffix --
     to match them up. The variable lists have no param named for them and are documented as the
-    exception; `voice_provider_id` and `default_llm_provider` are read alongside another key rather
-    than written into a param of their own."""
+    exception; `default_llm_provider` is a starting pair for two params rather than a list of its own."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
     params = {
         name for entry in client.get(reverse("api:v2:pipeline-nodes")).json() for name in entry["schema"]["properties"]
@@ -151,22 +150,8 @@ def test_every_option_key_is_named_for_the_param_that_reads_it(team_with_resourc
         "template_variables",
         "llm_prompt_variables",
         "router_prompt_variables",
-        "voice_provider_id",
         "default_llm_provider",
     }
-
-
-@pytest.mark.django_db()
-def test_scoped_options_carry_the_key_that_resolves_a_voice(team_with_resources):
-    """Each `synthetic_voice_id` entry carries a `provider_id`, and `voice_provider_id` is the only
-    list that resolves it. No param reads that list, so it is not reachable through
-    `ui:optionsSource` and scoping has to bring it along on its own."""
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "LLMResponseWithPrompt"}).json()
-
-    assert "synthetic_voice_id" in scoped
-    assert "voice_provider_id" in scoped
 
 
 @pytest.mark.django_db()
@@ -185,7 +170,8 @@ def test_every_key_a_node_type_scopes_to_is_actually_served(team_with_resources)
 
 @pytest.mark.django_db()
 def test_every_key_served_is_read_by_some_listed_node_type(team_with_resources):
-    """Pins the size of `API_ONLY_OPTION_KEYS` -- every other key must be reachable from a param."""
+    """The other half of the promise above: a key no param can reach is one a client has nothing to
+    write into, so the unscoped payload holds no more than the scoped ones add up to."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
     option_keys = set(client.get(reverse("api:v2:pipeline-options")).json())
 
@@ -195,7 +181,7 @@ def test_every_key_served_is_read_by_some_listed_node_type(team_with_resources):
         assert scoped_keys is not None, f"{entry['type']} is listed but cannot be scoped to"
         read |= scoped_keys
 
-    assert option_keys - read == {"voice_provider_id"}
+    assert not option_keys - read
 
 
 @pytest.mark.django_db()

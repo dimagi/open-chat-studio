@@ -174,7 +174,9 @@ def test_options_are_team_scoped(team_with_resources):
     """Nothing another team owns is offered, in any of the lists."""
     other_team = TeamWithUsersFactory.create()
     LlmProviderFactory.create(team=other_team, name="Their OpenAI")
-    VoiceProviderFactory.create(team=other_team, name="Their Polly")
+    their_voice = SyntheticVoiceFactory.create(
+        name="Nicole", service="AWS", voice_provider=VoiceProviderFactory.create(team=other_team, name="Their Polly")
+    )
     SourceMaterialFactory.create(team=other_team, topic="Their policy")
     CollectionFactory.create(
         team=other_team, name="Their docs", is_index=False, llm_provider=None, embedding_provider_model=None
@@ -185,20 +187,13 @@ def test_options_are_team_scoped(team_with_resources):
 
     labels = {
         label
-        for key in ("llm_provider_id", "voice_provider_id", "source_material", "collection")
+        for key in ("llm_provider_id", "source_material", "collection")
         for label in (option["label"] for option in options[key])
     }
-    assert not {"Their OpenAI", "Their Polly", "Their policy", "Their docs"} & labels
-
-
-@pytest.mark.django_db()
-def test_options_include_voice_providers_with_type(team_with_resources):
-    """`type` is the join key for the voice-pairing rule on the chatbot settings endpoint."""
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-    voice_providers = client.get(reverse("api:v2:pipeline-options")).json()["voice_provider_id"]
-
-    assert [option["label"] for option in voice_providers] == ["Prod Polly"]
-    assert voice_providers[0]["type"] == "aws"
+    assert not {"Their OpenAI", "Their policy", "Their docs"} & labels
+    # A voice owned by another team's provider is neither general nor this team's to speak, so
+    # `get_for_team` leaves it out -- checked on the id because the label carries gender and language.
+    assert their_voice.id not in {option["value"] for option in options["synthetic_voice_id"]}
 
 
 @pytest.mark.django_db()

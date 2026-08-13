@@ -228,10 +228,6 @@ paths:
                       label: gpt-4o
                       type: openai
                       max_token_limit: 128000
-                    voice_provider_id:
-                    - value: 2
-                      label: Prod Polly
-                      type: aws
                     synthetic_voice_id:
                     - value: 11
                       label: Joanna (English)
@@ -2020,13 +2016,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LlmProviderModelOption'
-        voice_provider_id:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProviderOption'
-          description: The team's configured voice providers. No node param sources
-            its options from this -- it is here to resolve the `provider_id` on a
-            `synthetic_voice_id` entry.
         synthetic_voice_id:
           type: array
           items:
@@ -2320,8 +2309,9 @@ components:
         provider_id:
           type: integer
           nullable: true
-          description: The `voice_provider_id` option this voice belongs to, or null
-            for a shared voice that any provider of the same `type` can speak.
+          description: The voice provider that owns this voice, or null for a shared
+            voice any provider of the same `type` can speak. The chatbot's own provider
+            is its `voice.provider_id` -- see the chatbot detail endpoint.
       required:
       - label
       - provider_id
