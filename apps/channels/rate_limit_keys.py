@@ -12,7 +12,7 @@ from django.http import HttpResponse
 
 from apps.utils.rate_limit import RateLimitResult, client_ip, rate_limited
 
-WEBHOOK_SCOPE = "webhook"
+CHANNELS_SCOPE = "channels"
 
 
 def _url_identifier_key(request, kwarg_name, kwargs, identity_type):
@@ -62,4 +62,4 @@ def meta_limited_response(request, result: RateLimitResult) -> HttpResponse:
 
 def meta_webhook_rate_limited(view_func):
     """Applies the webhook scope, Meta's address keying and its 200 over-limit response."""
-    return rate_limited(WEBHOOK_SCOPE, key_fn=meta_ip_key, response_fn=meta_limited_response)(view_func)
+    return rate_limited(CHANNELS_SCOPE, key_fn=meta_ip_key, response_fn=meta_limited_response)(view_func)

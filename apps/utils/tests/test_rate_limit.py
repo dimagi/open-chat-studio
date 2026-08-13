@@ -450,13 +450,13 @@ def test_public_chat_scope_is_configured():
     assert fail_open is True
 
 
-def test_webhook_scope_is_configured():
-    """The webhook scope is registered, parses, and fails open.
+def test_channels_scope_is_configured():
+    """The channels scope is registered, parses, and fails open.
 
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("webhook")
+    limit, window_seconds, fail_open = _scope_config("channels")
 
     assert limit > 0
     assert window_seconds > 0
