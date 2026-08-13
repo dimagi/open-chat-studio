@@ -475,11 +475,12 @@ def test_credentials_scope_is_configured_fail_closed():
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("credentials")
+    limit, window_seconds, fail_open, refuses = _scope_config("credentials")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is False
+    assert refuses is True
 
 
 def test_middleware_skips_degraded_results(db):
