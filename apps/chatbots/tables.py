@@ -9,7 +9,7 @@ from django.urls import reverse
 from django_tables2 import columns
 
 from apps.api.session_tokens import issue_session_token
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, last_activity_expression
 from apps.generics import actions, chips
 from apps.generics.actions import chip_action
 from apps.generics.tables import ArrayColumn, ColumnWithHelp, TimeAgoColumn
@@ -177,7 +177,7 @@ class ChatbotSessionsTable(tables.Table):
         accessor="message_count",
         orderable=True,
     )
-    last_message = TimeAgoColumn(accessor="last_activity_at", verbose_name="Last activity", orderable=True)
+    last_activity = TimeAgoColumn(accessor="last_activity", verbose_name="Last activity", orderable=True)
     tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html")
     versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions")
     state = columns.Column(verbose_name="State", accessor="status", orderable=True)
@@ -199,6 +199,15 @@ class ChatbotSessionsTable(tables.Table):
         ],
         align="right",
     )
+
+    def order_last_activity(self, queryset, is_descending):
+        """Sort by the same coalesced expression the column renders.
+
+        Without this, django-tables2 would order by the `last_activity` accessor, which is a
+        model property and not a database field.
+        """
+        order = last_activity_expression()
+        return queryset.order_by(order.desc() if is_descending else order.asc()), True
 
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
@@ -225,7 +234,7 @@ class ChatbotSessionsTable(tables.Table):
     class Meta:
         model = ExperimentSession
         # Ensure that chatbot is shown first
-        fields = ["chatbot", "participant", "message_count", "last_message"]
+        fields = ["chatbot", "participant", "message_count", "last_activity"]
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"
