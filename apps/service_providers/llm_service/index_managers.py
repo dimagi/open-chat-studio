@@ -6,6 +6,7 @@ from typing import Literal
 
 import openai
 from django.conf import settings
+from django.contrib.postgres.search import SearchVector
 from django.db import DatabaseError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -336,6 +337,20 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
+    @staticmethod
+    def _build_search_vectors(embeddings: list[FileChunkEmbedding], collection: Collection):
+        """Populate the lexical `search_vector` for chunks just written.
+
+        Done in one statement so Postgres builds the tsvectors itself rather than round-tripping
+        the text through Python. The configuration comes from the collection, and
+        `apps.documents.retrieval` parses queries with the same one: a chunk indexed as `spanish`
+        and queried as `english` matches nothing, which is indistinguishable from having no
+        lexical hits at all.
+        """
+        FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).update(
+            search_vector=SearchVector("context", "text", config=collection.search_language)
+        )
+
     def _embed_file(
         self,
         collection_file: CollectionFile,
@@ -393,6 +408,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 # Content that is entirely NUL bytes clears the check above but sanitizes away
                 # chunk by chunk. Nothing was indexed, so this is a failure by the same reasoning.
                 raise FileReadException(NO_EXTRACTABLE_TEXT)
+            self._build_search_vectors(embeddings, collection_file.collection)
             return embeddings
         except Exception:
             FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
@@ -444,7 +460,10 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             list[FileChunkEmbedding]: List of FileChunkEmbedding instances matching the query.
         """
 
-        collection = Collection.objects.get(id=index_id)
+        # `get_all()` bypasses the default manager's is_archived filter. Retrieval used to select
+        # chunks by collection id alone, so an archived collection still returned its chunks;
+        # going through the default manager would turn that into Collection.DoesNotExist.
+        collection = Collection.objects.get_all().get(id=index_id)
         # This manager can already embed the query; passing the vector avoids `search_collection`
         # building a second index manager (and its contextualizer) just to do the same work.
         embedding_vector = self.get_embedding_vector(query, input_type="query")

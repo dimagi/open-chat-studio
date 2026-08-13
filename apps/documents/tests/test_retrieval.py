@@ -3,10 +3,12 @@ from unittest import mock
 import pytest
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.template.loader import render_to_string
 from waffle.testutils import override_flag
 
-from apps.documents.models import CollectionFile, FileStatus
-from apps.documents.retrieval import reciprocal_rank_fusion, search_collection
+from apps.documents.models import CollectionFile, FileStatus, SearchLanguage
+from apps.documents.retrieval import _lexical_candidate_ids, reciprocal_rank_fusion, search_collection
+from apps.service_providers.llm_service.index_managers import LocalIndexManager
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
 
@@ -96,7 +98,7 @@ def _make_indexed_collection(**kwargs):
 
 
 def _add_chunk(collection, file, text, embedding, context=""):
-    return FileChunkEmbeddingFactory.create(
+    chunk = FileChunkEmbeddingFactory.create(
         team=collection.team,
         collection=collection,
         file=file,
@@ -104,6 +106,11 @@ def _add_chunk(collection, file, text, embedding, context=""):
         context=context,
         embedding=embedding,
     )
+    # Build the lexical vector through the same helper the indexing pipeline uses, so these tests
+    # exercise the production path rather than a reimplementation of it.
+    LocalIndexManager._build_search_vectors([chunk], collection)
+    chunk.refresh_from_db()
+    return chunk
 
 
 def _unit_vector(index: int) -> list[float]:
@@ -139,6 +146,23 @@ class TestSearchCollection:
                 results = search_collection(collection, "quokka", top_k=1)
 
         assert [chunk.id for chunk in results] == [keyword_hit.id]
+        assert dense_hit.id not in {chunk.id for chunk in results}
+
+    def test_multi_word_question_promotes_the_keyword_match(self):
+        """End to end version of the multi-word case, through the tool's actual entry point.
+
+        The LLM search tool passes a natural-language question, not a single keyword, so this is
+        the shape of every real call.
+        """
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        dense_hit = _add_chunk(collection, file, "totally unrelated prose", _unit_vector(0))
+        answer = _add_chunk(collection, file, "Paris is the capital of France.", _unit_vector(1))
+
+        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+            with override_flag(HYBRID_FLAG, active=True):
+                results = search_collection(collection, "what is the capital of France", top_k=1)
+
+        assert [chunk.id for chunk in results] == [answer.id]
         assert dense_hit.id not in {chunk.id for chunk in results}
 
     def test_hybrid_still_returns_dense_hit_when_lexical_misses(self):
@@ -277,6 +301,145 @@ class TestSearchCollection:
         collection = CollectionFactory.create()
         assert collection.search_dense_weight == settings.DOCUMENT_SEARCH_DENSE_WEIGHT
         assert collection.search_fetch_k == settings.DOCUMENT_SEARCH_FETCH_K
+
+
+@pytest.mark.django_db()
+class TestLexicalSearchLanguage:
+    """The configuration used to build a chunk's vector and to parse the query must agree, and it
+    decides whether a multi-word question can match at all.
+    """
+
+    ANSWER = "Paris is the capital of France."
+    QUESTION = "what is the capital of France"
+
+    def test_multi_word_question_matches_under_a_language_config(self):
+        """The regression this suite previously missed entirely.
+
+        Every earlier test used a single-token query, which satisfies websearch's AND trivially.
+        A real question is several words, and under a language config the stopwords are stripped
+        at parse time and the rest are stemmed, so it matches.
+        """
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        chunk = _add_chunk(collection, file, self.ANSWER, _unit_vector(0))
+
+        assert _lexical_candidate_ids(collection, self.QUESTION, 10) == [chunk.id]
+
+    def test_partially_matching_question_still_matches_under_a_language_config(self):
+        """OR-combining, specifically. Requiring every term (websearch's AND) fails as soon as one
+        word of the question is absent from the chunk, which is the normal case for a real
+        question. Only the terms the chunk does contain should be needed.
+        """
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        chunk = _add_chunk(collection, file, "Paris is the capital of France. Population 2.1 million.", _unit_vector(0))
+
+        # "2024" and "census" appear nowhere in the chunk; AND semantics would return nothing.
+        assert _lexical_candidate_ids(collection, "capital of France population 2024 census", 10) == [chunk.id]
+
+    def test_simple_keeps_and_semantics(self):
+        """`simple` strips nothing, so every stopword must be present. That is precise but weak,
+        and is the honest behaviour when the collection's language is unknown. It must not be
+        quietly turned into an OR, which would rank stopword-heavy chunks first.
+        """
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.SIMPLE)
+        chunk = _add_chunk(collection, file, self.ANSWER, _unit_vector(0))
+
+        assert _lexical_candidate_ids(collection, self.QUESTION, 10) == []
+        # The exact tokens it does hold still match.
+        assert _lexical_candidate_ids(collection, "capital France", 10) == [chunk.id]
+
+    @pytest.mark.parametrize(
+        ("language", "document", "question"),
+        [
+            pytest.param(SearchLanguage.ENGLISH, "Paris is the capital of France.", "capitals of France", id="english"),
+            pytest.param(
+                SearchLanguage.SPANISH, "Paris es la capital de Francia.", "cual es la capital de Francia", id="spanish"
+            ),
+            pytest.param(
+                SearchLanguage.RUSSIAN, "Париж — столица Франции.", "какая столица Франции", id="russian-non-latin"
+            ),
+        ],
+    )
+    def test_round_trip_per_language(self, language, document, question):
+        """Stemming and stopword handling differ per configuration, including non-Latin scripts."""
+        collection, file = _make_indexed_collection(search_language=language)
+        chunk = _add_chunk(collection, file, document, _unit_vector(0))
+
+        assert _lexical_candidate_ids(collection, question, 10) == [chunk.id]
+
+    def test_language_change_without_a_rebuild_finds_nothing_until_rebuilt(self):
+        """The drift trap: chunks keep the configuration they were indexed with.
+
+        A collection indexed as Spanish but queried as English returns no lexical hits, which is
+        indistinguishable from a query that simply has none. `rebuild_search_vectors` is the
+        supported way back.
+        """
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.SPANISH)
+        chunk = _add_chunk(collection, file, "Paris es la capital de Francia.", _unit_vector(0))
+
+        collection.search_language = SearchLanguage.ENGLISH
+        collection.save()
+        assert _lexical_candidate_ids(collection, "capital of Francia", 10) == []
+
+        assert collection.rebuild_search_vectors() == 1
+        assert _lexical_candidate_ids(collection, "capital of Francia", 10) == [chunk.id]
+
+    def test_stopword_only_query_falls_back_to_dense(self):
+        """Every term is stripped, so the tsquery is empty and matches nothing."""
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        chunk = _add_chunk(collection, file, self.ANSWER, _unit_vector(0))
+
+        assert _lexical_candidate_ids(collection, "what is the", 10) == []
+
+        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+            with override_flag(HYBRID_FLAG, active=True):
+                results = search_collection(collection, "what is the", top_k=5)
+        assert [result.id for result in results] == [chunk.id]
+
+
+@pytest.mark.django_db()
+class TestQueryPreviewScore:
+    """The preview renders a per-chunk number. The hybrid path re-fetches chunks by id, which
+    drops the CosineDistance annotation, so it has to carry the fused score instead.
+    """
+
+    def test_hybrid_results_carry_a_fused_score(self):
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        _add_chunk(collection, file, "Paris is the capital of France.", _unit_vector(0))
+
+        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+            with override_flag(HYBRID_FLAG, active=True):
+                results = search_collection(collection, "capital of France", top_k=5)
+
+        assert [result.fused_score for result in results] == [pytest.approx(result.fused_score) for result in results]
+        assert all(result.fused_score is not None and result.fused_score > 0 for result in results)
+
+    def test_dense_only_results_keep_their_distance(self):
+        collection, file = _make_indexed_collection(search_language=SearchLanguage.ENGLISH)
+        _add_chunk(collection, file, "Paris is the capital of France.", _unit_vector(0))
+
+        with mock.patch.object(type(collection), "get_query_vector", return_value=_unit_vector(0)):
+            with override_flag(HYBRID_FLAG, active=False):
+                results = search_collection(collection, "capital of France", top_k=5)
+
+        assert all(result.distance is not None for result in results)
+
+    @pytest.mark.parametrize(
+        ("context", "expected", "absent"),
+        [
+            pytest.param({"hybrid_search": True}, "Score:", "Distance:", id="hybrid-renders-score"),
+            pytest.param({"hybrid_search": False}, "Distance:", "Score:", id="dense-renders-distance"),
+        ],
+    )
+    def test_template_renders_the_right_number(self, context, expected, absent):
+        collection, file = _make_indexed_collection()
+        chunk = _add_chunk(collection, file, "some prose", _unit_vector(0))
+        chunk.distance = 0.25
+        chunk.fused_score = 0.0123 if context["hybrid_search"] else None
+
+        html = render_to_string("documents/collection_query_results.html", {"chunks": [chunk], **context})
+
+        assert expected in html
+        assert absent not in html
 
 
 @pytest.mark.django_db()

@@ -132,9 +132,11 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     # slug may already be taken by another team on the target. TagBase.save() regenerates a
     # collision-free slug when it's absent.
     "annotations.tag": ["slug"],
-    # search_vector is a stored generated column derived from context + text. Postgres recomputes it
-    # on insert, so shipping the tsvector would bloat every chunk in the payload for nothing -- and
-    # unlike `embedding` (which costs a provider API call to rebuild) it cannot be written back.
+    # search_vector is a tsvector derived from context + text, both of which are exported. Shipping
+    # it would bloat every chunk in the payload to carry data the target can rebuild for free from
+    # what it already has, with no provider call (unlike `embedding`). The target does have to
+    # rebuild it: `Collection.rebuild_search_vectors()` does so for a collection, and until it runs
+    # imported chunks are invisible to lexical search while dense retrieval works normally.
     "files.filechunkembedding": ["search_vector"],
 }
 

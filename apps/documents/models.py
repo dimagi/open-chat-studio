@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.postgres.search import SearchVector
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models.expressions import Combinable
@@ -35,6 +36,46 @@ logger = logging.getLogger("ocs.documents")
 
 class CollectionObjectManager(VersionsObjectManagerMixin, AuditingManager):
     pass
+
+
+class SearchLanguage(models.TextChoices):
+    """Postgres text search configurations available for lexical search.
+
+    These are the configurations shipped by Postgres (`select cfgname from pg_ts_config`).
+    `SIMPLE` applies no stemming and strips no stopwords, so it matches exact tokens only; every
+    other entry stems and strips stopwords for its language. The same configuration must be used
+    to build a chunk's `search_vector` and to parse the query, or the two never match.
+    """
+
+    SIMPLE = "simple", _("Simple (no stemming, exact tokens)")
+    ARABIC = "arabic", _("Arabic")
+    ARMENIAN = "armenian", _("Armenian")
+    BASQUE = "basque", _("Basque")
+    CATALAN = "catalan", _("Catalan")
+    DANISH = "danish", _("Danish")
+    DUTCH = "dutch", _("Dutch")
+    ENGLISH = "english", _("English")
+    FINNISH = "finnish", _("Finnish")
+    FRENCH = "french", _("French")
+    GERMAN = "german", _("German")
+    GREEK = "greek", _("Greek")
+    HINDI = "hindi", _("Hindi")
+    HUNGARIAN = "hungarian", _("Hungarian")
+    INDONESIAN = "indonesian", _("Indonesian")
+    IRISH = "irish", _("Irish")
+    ITALIAN = "italian", _("Italian")
+    LITHUANIAN = "lithuanian", _("Lithuanian")
+    NEPALI = "nepali", _("Nepali")
+    NORWEGIAN = "norwegian", _("Norwegian")
+    PORTUGUESE = "portuguese", _("Portuguese")
+    ROMANIAN = "romanian", _("Romanian")
+    RUSSIAN = "russian", _("Russian")
+    SERBIAN = "serbian", _("Serbian")
+    SPANISH = "spanish", _("Spanish")
+    SWEDISH = "swedish", _("Swedish")
+    TAMIL = "tamil", _("Tamil")
+    TURKISH = "turkish", _("Turkish")
+    YIDDISH = "yiddish", _("Yiddish")
 
 
 class FileStatus(models.TextChoices):
@@ -197,6 +238,18 @@ class Collection(BaseTeamModel, VersionsMixin):
         null=True,
         related_name="+",
         help_text="The LLM provider used with contextualizer_llm_model to generate context headers.",
+    )
+    search_language = models.CharField(
+        max_length=32,
+        choices=SearchLanguage.choices,
+        default=SearchLanguage.SIMPLE,
+        help_text=(
+            "Postgres text search configuration used for keyword search over this collection's "
+            "documents. Picking the language of the documents enables stemming and stopword "
+            "removal, which multi-word questions need. 'Simple' does neither and matches exact "
+            "tokens only, so it suits mixed-language or unknown-language collections. Changing "
+            "this requires rebuilding the collection's search vectors."
+        ),
     )
     # Hybrid search tuning, seeded from the DOCUMENT_SEARCH_* settings so every collection holds a
     # usable value and callers can read the field directly. These are deliberately kept off the
@@ -504,6 +557,23 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_remote_index:
             return False
         return self._flag_active_for_team(Flags.HYBRID_SEARCH)
+
+    def rebuild_search_vectors(self) -> int:
+        """Recompute every chunk's `search_vector` using this collection's search language.
+
+        Chunks store their lexical vector built with the language that was set when they were
+        indexed. Changing `search_language` afterwards leaves them built with the old
+        configuration, and a query parsed with the new one then matches nothing, which looks
+        exactly like "no lexical results" rather than like a misconfiguration. Call this after
+        changing the language to bring the stored vectors back in step.
+
+        Returns the number of chunks updated.
+        """
+        from apps.files.models import FileChunkEmbedding  # noqa: PLC0415 - circular: files.models imports documents
+
+        return FileChunkEmbedding.objects.filter(collection_id=self.id).update(
+            search_vector=SearchVector("context", "text", config=self.search_language)
+        )
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
