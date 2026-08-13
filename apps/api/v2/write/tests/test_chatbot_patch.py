@@ -266,6 +266,24 @@ def test_oauth_token_without_the_write_scope_cannot_patch(chatbot):
     assert client.patch(_url(chatbot), {"name": "Nope"}, format="json").status_code == 403
 
 
+@pytest.mark.django_db()
+def test_machine_token_can_patch(chatbot):
+    """A client-credentials token has no user, so every user-derived permission gate defers to the
+    OAuth scope. That path is what a headless agent uses, and only create was covering it."""
+    client = ApiTestClient(
+        chatbot.team.members.first(),
+        chatbot.team,
+        auth_method="oauth_client_credentials",
+        scopes=["chatbots:write"],
+    )
+
+    response = client.patch(_url(chatbot), {"name": "Headless edit"}, format="json")
+
+    assert response.status_code == 200
+    chatbot.refresh_from_db()
+    assert chatbot.name == "Headless edit"
+
+
 def _aws_pair(chatbot, *, owned_by_provider=False):
     """A voice provider on the chatbot's team and an AWS voice it can speak."""
     provider = VoiceProviderFactory.create(team=chatbot.team, type=VoiceProviderType.aws)
