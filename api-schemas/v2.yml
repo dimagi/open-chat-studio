@@ -94,9 +94,11 @@ paths:
     patch:
       operationId: chatbot_update
       description: Update the working (draft) chatbot's settings and its wiring to
-        existing resources. Key paths mirror the inspect response; references are
-        named the way GET /pipeline/options/ names them. Only the keys you send are
-        changed.
+        existing resources. The writable fields are the ones the chatbot settings
+        page edits, with references given as ids (listed by GET /pipeline/options/).
+        GET /chatbots/{id}/inspect/ returns more than this -- names, types and resolved
+        values that describe a reference rather than address it -- so it is not a
+        template for this body. Only the keys you send are changed.
       summary: Update Chatbot
       parameters:
       - in: path
@@ -951,20 +953,24 @@ components:
           type: integer
           readOnly: true
           nullable: true
-        voice:
-          allOf:
-          - $ref: '#/components/schemas/VoicePair'
-          nullable: true
+        voice_provider_id:
+          type: integer
           readOnly: true
+          nullable: true
+        synthetic_voice_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - consent_form_id
       - id
       - name
       - pipeline_id
       - settings
+      - synthetic_voice_id
       - trace_provider_id
       - version_number
-      - voice
+      - voice_provider_id
     ChatbotIdentity:
       type: object
       properties:
@@ -2164,8 +2170,10 @@ components:
       description: |-
         The PATCH request body.
 
-        The writable set is exactly ``Experiment.VERSIONED_CONTENT_FIELDS`` minus ``pipeline``, which
-        has its own façade -- so what inspect shows you is what you can write.
+        The writable set is exactly what ``ChatbotSettingsForm`` edits in the UI -- one API field per
+        form field, with references narrowed to ids. It is also ``Experiment.VERSIONED_CONTENT_FIELDS``
+        minus ``pipeline``, which has its own façade; ``apps/api/v2/write/tests/test_writable_fields.py``
+        pins both. Inspect returns more than this, because inspecting and editing are different jobs.
       properties:
         name:
           type: string
@@ -2182,9 +2190,11 @@ components:
         trace_provider_id:
           type: integer
           nullable: true
-        voice:
-          allOf:
-          - $ref: '#/components/schemas/VoicePair'
+        voice_provider_id:
+          type: integer
+          nullable: true
+        synthetic_voice_id:
+          type: integer
           nullable: true
     PipelineBuildErrors:
       type: object
@@ -2763,21 +2773,6 @@ components:
       - type: array
         items:
           $ref: '#/components/schemas/UsageBucketResult'
-    VoicePair:
-      type: object
-      description: |-
-        A (voice provider, synthetic voice) pair.
-
-        The two columns are only meaningful together, so both keys are required whenever ``voice`` is
-        present at all; ``"voice": null`` on the parent clears both.
-      properties:
-        voice_provider_id:
-          type: integer
-        synthetic_voice_id:
-          type: integer
-      required:
-      - synthetic_voice_id
-      - voice_provider_id
     VoiceResponseBehaviourEnum:
       enum:
       - always

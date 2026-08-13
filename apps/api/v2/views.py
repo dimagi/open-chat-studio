@@ -114,8 +114,11 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         summary="Update Chatbot",
         description=(
             "Update the working (draft) chatbot's settings and its wiring to existing resources. "
-            "Key paths mirror the inspect response; references are named the way "
-            "GET /pipeline/options/ names them. Only the keys you send are changed."
+            "The writable fields are the ones the chatbot settings page edits, with references "
+            "given as ids (listed by GET /pipeline/options/). GET /chatbots/{id}/inspect/ returns "
+            "more than this -- names, types and resolved values that describe a reference rather "
+            "than address it -- so it is not a template for this body. Only the keys you send are "
+            "changed."
         ),
         tags=["Chatbots"],
         parameters=[

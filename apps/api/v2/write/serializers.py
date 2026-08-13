@@ -1,14 +1,18 @@
 """Request and response serializers for the chatbot write endpoints (#4139).
 
-Key paths mirror ``GET /chatbots/{id}/inspect/``; references are addressed by id using the same
-``<resource>_id`` convention the discovery endpoints use, so an agent reads structure from inspect
-and lifts ids straight out of discovery.
+The write surface mirrors what the UI's own forms accept -- ``ChatbotForm`` for create and
+``ChatbotSettingsForm`` for update -- rather than the shape of ``GET /chatbots/{id}/inspect/``.
+Inspecting and editing are different jobs, so inspect returns plenty that is not writable
+(provider names, voice languages, resolved node parameters); anything not listed here is refused.
+
+Each field carries its form field's name, with references narrowed to ids under the same
+``<resource>_id`` convention the discovery endpoints use, so an agent lifts ids straight out of
+discovery. ``settings`` is the one nested block, because it is dict-shaped in the API already.
 """
 
 import unicodedata
 
 from django.db import transaction
-from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.api.v2.write.fields import TeamScopedRelatedField
@@ -86,60 +90,13 @@ class ChatbotSettingsSerializer(serializers.ModelSerializer):
         ]
 
 
-# Sentinel distinguishing "voice was omitted" from an explicit "voice": null.
-_MISSING = object()
-
-
-class VoicePairSerializer(serializers.Serializer):
-    """A (voice provider, synthetic voice) pair.
-
-    The two columns are only meaningful together, so both keys are required whenever ``voice`` is
-    present at all; ``"voice": null`` on the parent clears both.
-    """
-
-    # `pk_field` is what lets drf-spectacular type these as integers: this is a plain Serializer
-    # with no Meta.model, so it cannot infer the pk type from a relation the way it can on
-    # ChatbotWriteSerializer's reference fields.
-    voice_provider_id = TeamScopedRelatedField(
-        source="voice_provider",
-        get_team_queryset=lambda team: VoiceProvider.objects.filter(team=team),
-        pk_field=serializers.IntegerField(),
-    )
-    synthetic_voice_id = TeamScopedRelatedField(
-        source="synthetic_voice",
-        # The team's own voices plus the general ones -- the same set /pipeline/options/ draws on.
-        get_team_queryset=lambda team: SyntheticVoice.get_for_team(team, []),
-        pk_field=serializers.IntegerField(),
-    )
-
-    def validate(self, attrs):
-        # A partial PATCH on the parent propagates into this serializer (Field.validate_empty_values
-        # consults self.root.partial), so a missing key would be skipped rather than required.
-        missing = {
-            name: "This field is required."
-            for name, source in (("voice_provider_id", "voice_provider"), ("synthetic_voice_id", "synthetic_voice"))
-            if source not in attrs
-        }
-        if missing:
-            raise serializers.ValidationError(missing)
-
-        provider, voice = attrs["voice_provider"], attrs["synthetic_voice"]
-        # SyntheticVoice.service is "AWS"; VoiceProvider.type is "aws".
-        if voice.service.lower() != provider.type.lower():
-            raise serializers.ValidationError(
-                f"Voice '{voice.name}' is a {voice.service} voice and cannot be spoken by "
-                f"the {provider.type} provider '{provider.name}'."
-            )
-        if voice.voice_provider_id not in (None, provider.id):
-            raise serializers.ValidationError(f"Voice '{voice.name}' belongs to a different voice provider.")
-        return attrs
-
-
 class ChatbotWriteSerializer(serializers.ModelSerializer):
     """The PATCH request body.
 
-    The writable set is exactly ``Experiment.VERSIONED_CONTENT_FIELDS`` minus ``pipeline``, which
-    has its own façade -- so what inspect shows you is what you can write.
+    The writable set is exactly what ``ChatbotSettingsForm`` edits in the UI -- one API field per
+    form field, with references narrowed to ids. It is also ``Experiment.VERSIONED_CONTENT_FIELDS``
+    minus ``pipeline``, which has its own façade; ``apps/api/v2/write/tests/test_writable_fields.py``
+    pins both. Inspect returns more than this, because inspecting and editing are different jobs.
     """
 
     settings = ChatbotSettingsSerializer(source="*", required=False)
@@ -155,23 +112,82 @@ class ChatbotWriteSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    voice = VoicePairSerializer(required=False, allow_null=True)
+    voice_provider_id = TeamScopedRelatedField(
+        source="voice_provider",
+        get_team_queryset=lambda team: VoiceProvider.objects.filter(team=team),
+        required=False,
+        allow_null=True,
+    )
+    synthetic_voice_id = TeamScopedRelatedField(
+        source="synthetic_voice",
+        # The team's own voices plus the general ones -- the same set /pipeline/options/ draws on.
+        get_team_queryset=lambda team: SyntheticVoice.get_for_team(team, []),
+        required=False,
+        allow_null=True,
+    )
+
+    # The two voice columns are written independently but are only meaningful together, so they are
+    # checked as a pair against whatever the row already holds.
+    VOICE_FIELDS = (("voice_provider_id", "voice_provider"), ("synthetic_voice_id", "synthetic_voice"))
 
     class Meta:
         model = Experiment
-        fields = ["name", "description", "settings", "consent_form_id", "trace_provider_id", "voice"]
+        fields = [
+            "name",
+            "description",
+            "settings",
+            "consent_form_id",
+            "trace_provider_id",
+            "voice_provider_id",
+            "synthetic_voice_id",
+        ]
 
     def validate_name(self, value):
         return normalize_chatbot_name(value)
 
-    def update(self, instance, validated_data):
-        # `voice` has no source, so ModelSerializer.update would set a junk attribute; apply the
-        # pair explicitly. The sentinel separates "omitted" (leave alone) from null (clear both).
-        voice = validated_data.pop("voice", _MISSING)
-        if voice is not _MISSING:
-            instance.voice_provider = voice["voice_provider"] if voice else None
-            instance.synthetic_voice = voice["synthetic_voice"] if voice else None
-        return super().update(instance, validated_data)
+    def validate(self, attrs):
+        supplied = [name for name, source in self.VOICE_FIELDS if source in attrs]
+        if not supplied:
+            # Neither half was sent. The stored pair is deliberately not re-checked here: a row
+            # that predates this endpoint may hold a half-set voice, and validating it would fail
+            # a PATCH that has nothing to do with the voice.
+            return attrs
+
+        # The pair as it would be *after* this request: the incoming value where one was sent, the
+        # stored one otherwise. An explicit null arrives as a present key holding None, so `get`
+        # with a default keeps "sent as null" (clear it) distinct from "not sent" (keep it).
+        provider = attrs.get("voice_provider", self.instance.voice_provider)
+        voice = attrs.get("synthetic_voice", self.instance.synthetic_voice)
+
+        error = self._voice_pair_error(provider, voice)
+        if error:
+            raise serializers.ValidationError(dict.fromkeys(supplied, error))
+        return attrs
+
+    @staticmethod
+    def _voice_pair_error(provider, voice) -> str | None:
+        """Why this (provider, voice) pair cannot be spoken, or None if it can.
+
+        Both-null is a valid pair: it means the chatbot has no voice.
+        """
+        if provider is None and voice is None:
+            return None
+        if provider is None or voice is None:
+            present = "synthetic_voice_id" if provider is None else "voice_provider_id"
+            missing = "voice_provider_id" if provider is None else "synthetic_voice_id"
+            return (
+                "voice_provider_id and synthetic_voice_id must be set together or both be null. "
+                f"This change would leave {present} set with no {missing}."
+            )
+        # SyntheticVoice.service is "AWS"; VoiceProvider.type is "aws".
+        if voice.service.lower() != provider.type.lower():
+            return (
+                f"Voice '{voice.name}' is a {voice.service} voice and cannot be spoken by "
+                f"the {provider.type} provider '{provider.name}'."
+            )
+        if voice.voice_provider_id not in (None, provider.id):
+            return f"Voice '{voice.name}' belongs to a different voice provider."
+        return None
 
 
 class ChatbotDetailSerializer(serializers.ModelSerializer):
@@ -185,7 +201,8 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
     settings = ChatbotSettingsSerializer(source="*", read_only=True)
     consent_form_id = serializers.IntegerField(read_only=True, allow_null=True)
     trace_provider_id = serializers.IntegerField(read_only=True, allow_null=True)
-    voice = serializers.SerializerMethodField()
+    voice_provider_id = serializers.IntegerField(read_only=True, allow_null=True)
+    synthetic_voice_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Experiment
@@ -198,16 +215,6 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "settings",
             "consent_form_id",
             "trace_provider_id",
-            "voice",
+            "voice_provider_id",
+            "synthetic_voice_id",
         ]
-
-    @extend_schema_field(VoicePairSerializer(allow_null=True))
-    def get_voice(self, experiment) -> dict | None:
-        # Experiment has no `voice` attribute; build the pair, mirroring how the inspect
-        # serializer's get_voice emits null when either half is unset.
-        if not (experiment.voice_provider_id and experiment.synthetic_voice_id):
-            return None
-        return {
-            "voice_provider_id": experiment.voice_provider_id,
-            "synthetic_voice_id": experiment.synthetic_voice_id,
-        }
