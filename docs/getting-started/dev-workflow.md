@@ -240,7 +240,7 @@ inv ruff --unsafe-fixes           # also apply ruff's unsafe fixes
 TypeScript. Both run even if the first fails, so one invocation shows you every type error:
 
 ```bash
-inv typecheck                     # both, whole project
+inv typecheck                     # both; the Python check covers apps/
 inv typecheck --paths apps/web    # limit the Python check to a path
 inv typecheck --python            # Python only
 inv typecheck --js                # TypeScript only
