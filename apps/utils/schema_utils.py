@@ -31,3 +31,15 @@ def _resolve_ref(node: dict, spec: dict) -> dict:
 
     extra = {key: value for key, value in node.items() if key != "$ref"}
     return {**deepcopy(target), **extra}
+
+
+def collapse_optional_types(schema: dict) -> None:
+    """Rewrites each `X | None` property of `schema` as a plain `X`, in place.
+
+    Pydantic renders an optional field as `anyOf: [{"type": "x"}, {"type": "null"}]`, which says
+    "x or null" where `required` already says whether the field may be omitted.
+    """
+    for prop in schema.get("properties", {}).values():
+        if "anyOf" in prop:
+            any_of = prop.pop("anyOf")
+            prop["type"] = [member["type"] for member in any_of if member["type"] != "null"][0]

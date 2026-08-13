@@ -17,7 +17,7 @@ from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.nodes.base import OptionsSource
 from apps.utils.prompt import PromptVars
-from apps.utils.schema_utils import resolve_references
+from apps.utils.schema_utils import collapse_optional_types, resolve_references
 
 
 def get_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
@@ -197,10 +197,5 @@ def get_node_schemas():
 def _get_node_schema(node_class):
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
-
-    # Remove type ambiguity for optional fields
-    for _key, value in schema["properties"].items():
-        if "anyOf" in value:
-            any_of = value.pop("anyOf")
-            value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
+    collapse_optional_types(schema)
     return schema
