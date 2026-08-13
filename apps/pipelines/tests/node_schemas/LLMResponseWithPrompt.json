@@ -216,7 +216,7 @@
     },
     "synthetic_voice_id": {
       "default": null,
-      "description": "The text-to-speech voice this node's reply is spoken in. Must belong to the voice provider configured on the chatbot -- each option carries the `provider_id` it needs to match. Leave unset to reply in text only.",
+      "description": "The text-to-speech voice this node's reply is spoken in. Only applies where the chatbot has a voice provider configured, and the voice has to be one that provider can speak -- each option carries the `type` and `provider_id` to match it against. Leave unset to reply in text only.",
       "title": "Voice Model",
       "ui:optionsSource": "synthetic_voice_id",
       "ui:widget": "voice_widget",

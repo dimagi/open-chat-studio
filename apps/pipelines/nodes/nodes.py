@@ -361,9 +361,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         None,
         title="Voice Model",
         description=(
-            "The text-to-speech voice this node's reply is spoken in. Must belong to the voice "
-            "provider configured on the chatbot -- each option carries the `provider_id` it needs to "
-            "match. Leave unset to reply in text only."
+            "The text-to-speech voice this node's reply is spoken in. Only applies where the chatbot "
+            "has a voice provider configured, and the voice has to be one that provider can speak -- "
+            "each option carries the `type` and `provider_id` to match it against. Leave unset to "
+            "reply in text only."
         ),
         json_schema_extra=UiSchema(widget=Widgets.voice_widget, options_source=OptionsSource.synthetic_voice_id),
     )
