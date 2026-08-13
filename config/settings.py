@@ -23,6 +23,7 @@ from kombu import Queue
 from pythonjsonlogger.json import JsonFormatter
 
 from apps.utils.celery import Queues
+from config.db import get_database_config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -136,6 +137,7 @@ PROJECT_APPS = [
     "apps.ocs_notifications",
     "apps.prelogin",
     "apps.cost_tracking",
+    "apps.usage_metrics",
 ]
 
 SPECIAL_APPS = ["debug_toolbar"] if USE_DEBUG_TOOLBAR else []
@@ -169,6 +171,7 @@ MIDDLEWARE = list(
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.web.request_logging_middleware.RequestLoggingMiddleware",
+            "apps.utils.rate_limit.RateLimitHeadersMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
@@ -227,39 +230,7 @@ FORMS_URLFIELD_ASSUME_HTTPS = True
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-if "DATABASE_URL" in env:
-    DATABASES = {"default": env.db()}
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": env("DJANGO_DATABASE_NAME", default="open_chat_studio"),
-            "USER": env("DJANGO_DATABASE_USER", default="postgres"),
-            "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
-            "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
-            "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
-            "CONN_HEALTH_CHECKS": True,
-            "DISABLE_SERVER_SIDE_CURSORS": env.bool("DJANGO_DISABLE_SERVER_SIDE_CURSORS", default=False),
-        }
-    }
-
-db_options: dict = DATABASES["default"].setdefault("OPTIONS", {})  # ty: ignore[invalid-assignment]
-if env.bool("DJANGO_DATABASE_USE_POOL", True):
-    DATABASES["default"].pop("CONN_MAX_AGE", None)
-    # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
-    db_options["pool"] = {
-        "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
-        "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=35),
-        "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
-    }
-else:
-    DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
-
-# RDS Proxy requires TLS. psycopg3 defaults to sslmode=prefer which falls back to
-# non-SSL on handshake failure, which the proxy rejects. sslmode=require forces SSL
-# without the non-SSL fallback. Override with DJANGO_DATABASE_SSLMODE if needed
-# (e.g. set to "prefer" for local dev without TLS).
-db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="prefer" if DEBUG else "require")
+DATABASES = get_database_config(env, debug=DEBUG)
 
 # Auth / login stuff
 
@@ -478,6 +449,8 @@ REST_FRAMEWORK = {
     "DEFAULT_VERSIONING_CLASS": "apps.api.versioning.URLPathVersioning",
     "DEFAULT_VERSION": "v1",
     "ALLOWED_VERSIONS": ["v1", "v2"],
+    "DEFAULT_THROTTLE_CLASSES": ["apps.api.throttling.APIRateThrottle"],
+    "EXCEPTION_HANDLER": "apps.api.exception_handlers.api_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
@@ -650,10 +623,36 @@ CACHES = {
     },
 }
 
+# Rate limiting (#2140 / #2349). Counters live in a dedicated cache alias with short
+# socket timeouts so a hung Redis cannot stall request handling. Log-only until
+# RATE_LIMIT_ENFORCE is switched on.
+RATE_LIMIT_ENFORCE = env.bool("RATE_LIMIT_ENFORCE", default=False)
+RATE_LIMIT_TRUSTED_PROXY_COUNT = env.int("RATE_LIMIT_TRUSTED_PROXY_COUNT", default=0)
+RATE_LIMIT_CACHE_ALIAS = "rate_limit"
+RATE_LIMITS = {
+    "api": {"rate": env("RATE_LIMIT_API", default="2000/5m"), "fail_open": True},
+    "admin_api": {"rate": env("RATE_LIMIT_ADMIN_API", default="100/5m"), "fail_open": True},
+    "chat_api": {"rate": env("RATE_LIMIT_CHAT_API", default="300/5m"), "fail_open": True},
+    "public_chat": {"rate": env("RATE_LIMIT_PUBLIC_CHAT", default="100/5m"), "fail_open": True},
+}
+CACHES["rate_limit"] = {
+    "BACKEND": "django_redis.cache.RedisCache",
+    "LOCATION": REDIS_URL,
+    "OPTIONS": {
+        "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        "SOCKET_TIMEOUT": 0.5,
+        "SOCKET_CONNECT_TIMEOUT": 0.5,
+    },
+}
+
 if IS_TESTING:
     # Use an in-process cache for tests: faster than Redis (no network round-trips) and
     # naturally isolated per pytest-xdist worker, since each worker is a separate process.
     CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+    CACHES["rate_limit"] = {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "rate-limit",
+    }
 
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
@@ -1037,6 +1036,14 @@ CORS_ALLOW_METHODS = [
     "PATCH",
     "POST",
     "PUT",
+]
+
+# Expose rate limit headers so cross-origin chat widget clients can read them
+CORS_EXPOSE_HEADERS = [
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+    "Retry-After",
 ]
 
 # Additional CORS settings for security

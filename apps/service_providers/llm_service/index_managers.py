@@ -320,6 +320,12 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 collection_file.status = FileStatus.COMPLETED
                 # An earlier attempt may have left a reason behind; this attempt supersedes it.
                 collection_file.failure_reason = ""
+            except FileReadException as e:
+                logger.warning(
+                    "Could not extract text from file", extra={"file_id": collection_file.file_id, "error": str(e)}
+                )
+                collection_file.status = FileStatus.FAILED
+                collection_file.failure_reason = format_failure_reason(e)
             except Exception as e:
                 logger.exception("Failed to index file", extra={"file_id": collection_file.file_id, "error": str(e)})
                 collection_file.status = FileStatus.FAILED

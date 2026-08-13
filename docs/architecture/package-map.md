@@ -24,7 +24,7 @@ foundation. The foundation depends on nothing above it.
 flowchart TD
     EP["Entry points<br/>api · web · admin · dashboard · prelogin · users · oauth · sso"]
     DOM["Domain & runtime<br/>experiments · chatbots · pipelines · assistants · custom_actions · service_providers<br/>chat · channels · participants · slack · documents · files"]
-    FEAT["Evaluation, analytics & support<br/>evaluations · human_annotations · annotations · assessments<br/>trace · events · cost_tracking · analysis · ocs_notifications · banners · help · filters · mcp_integrations"]
+    FEAT["Evaluation, analytics & support<br/>evaluations · human_annotations · annotations · assessments<br/>trace · events · cost_tracking · usage_metrics · analysis · ocs_notifications · banners · help · filters · mcp_integrations"]
     FND["Foundation<br/>teams · utils · generics · web · audit · data_migrations"]
 
     EP --> DOM
@@ -81,6 +81,7 @@ Features layered on top of the domain, plus supporting services.
 | `trace` | `Trace`/`Span` observability records for requests and pipeline steps. |
 | `events` | Event triggers and scheduled actions. |
 | `cost_tracking` | LLM usage and cost accounting. |
+| `usage_metrics` | Shared activity-metric read path (sessions, messages, participants) for the dashboard and usage API. Definitions in ADR-0051. Models-free. |
 | `analysis` | Analysis pipelines over conversation data. |
 | `ocs_notifications` | In-app notifications. |
 | `banners` | Site banners. |

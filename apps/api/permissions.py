@@ -12,6 +12,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
+from apps.api.authentication import embed_key_authorizes_channel
 from apps.api.session_tokens import session_token_expired, validate_session_token
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
@@ -132,6 +133,14 @@ class SessionAccessPermission(BasePermission):
             # even if the session was (mis)configured with session_token_required=False.
             return level != WidgetAuthLevel.SESSION_TOKEN
 
+        # ADR-0053: a Django session cookie preempts EmbeddedWidgetAuthentication, so a
+        # same-origin widget's embed key never reaches `request.auth`. Honour a key that
+        # rode along with another authenticator, under the same channel and origin checks
+        # as the branch above — otherwise the site help widget could start a session on an
+        # EMBED_KEY channel and then be denied every follow-up request.
+        if embed_key_authorizes_channel(request, channel):
+            return level != WidgetAuthLevel.SESSION_TOKEN
+
         # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the
         # public / allowlist fallback is only reachable for NONE-level widget channels
         # (and non-widget sessions, where level is None).
@@ -190,6 +199,14 @@ class ReadOnlyAPIKeyPermission(BasePermission):
         return True
 
 
+# The non-scope half of REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"] (config/settings.py). Setting
+# ``permission_classes`` on a view replaces the defaults wholesale, which silently drops the
+# read-only API-key gate (ADR-0021), so views that need extra permission classes must build on this
+# list rather than start from an empty one. The OAuth scope class is deliberately excluded: each view
+# pairs its own (TokenHasOAuthScope or TokenHasOAuthResourceScope) with its ``required_scopes``.
+BASE_PERMISSION_CLASSES = [IsAuthenticatedOrMachineToken, ReadOnlyAPIKeyPermission]
+
+
 class ConfigurableKeyParser(KeyParser):
     def __init__(self, keyword: str):
         self.keyword = keyword
@@ -214,6 +231,71 @@ class DjangoModelPermissionsWithView(DjangoModelPermissions):
         return super().has_permission(request, view)
 
 
+PARTICIPANT_READ_PERMISSIONS = ["experiments.view_participant", "experiments.view_participantdata"]
+PARTICIPANT_WRITE_PERMISSIONS = [
+    "experiments.add_participant",
+    "experiments.change_participant",
+    "experiments.add_participantdata",
+    "experiments.change_participantdata",
+]
+
+
+class ParticipantModelPermissions(BasePermission):
+    """Model permission gate for the participants endpoint.
+
+    ``DjangoModelPermissions`` derives its permissions from a single queryset, but this endpoint
+    reads and writes both ``Participant`` and ``ParticipantData``, so the required permissions are
+    listed explicitly. They mirror the UI views that do the same work: the participant export view
+    for reads and ``apps.participants.views.IMPORT_PERMISSIONS`` (the import view performs the same
+    upsert) for writes. Writing a participant's schedules is part of that upsert and is covered by
+    ``experiments.change_participant``, which is what the UI requires to cancel a participant
+    schedule or to trigger a bot message to a participant.
+    """
+
+    perms_map = {
+        "GET": PARTICIPANT_READ_PERMISSIONS,
+        "HEAD": PARTICIPANT_READ_PERMISSIONS,
+        # OPTIONS returns endpoint metadata only, matching DjangoModelPermissions.perms_map
+        "OPTIONS": [],
+        "POST": PARTICIPANT_WRITE_PERMISSIONS,
+    }
+
+    def get_required_permissions(self, method):
+        if method not in self.perms_map:
+            raise exceptions.MethodNotAllowed(method)
+        return self.perms_map[method]
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            # Machine token: no user, so no membership-derived model permissions. Authorization is
+            # delegated to the OAuth scope classes.
+            return True
+
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        return request.user.has_perms(self.get_required_permissions(request.method))
+
+
+class CanTriggerBotMessage(BasePermission):
+    """Sending a message to a participant as the bot is the API twin of the ``participants:trigger_bot``
+    UI view, which requires ``experiments.change_participant``. Gate the API on the same permission so a
+    role that cannot message a participant from the UI cannot do it through the API either.
+
+    ``has_perm`` resolves against the team the credential is scoped to (the auth layer calls
+    ``set_current_team``), and applies to every auth type — including API keys, which the OAuth scope
+    check alone does not gate.
+
+    Client-credentials (machine) tokens have no user, so authorization is delegated to the OAuth scope
+    (chatbots:interact), enforced by TokenHasOAuthScope.
+    """
+
+    def has_permission(self, request, view):
+        if is_client_credentials_request(request):
+            return True
+        return bool(request.user and request.user.has_perm("experiments.change_participant"))
+
+
 def verify_hmac(view_func):
     """Match the HMAC signature in the request to the calculated HMAC using the request payload."""
 
@@ -221,24 +303,41 @@ def verify_hmac(view_func):
     @wraps(view_func)
     def _inner(request, *args, **kwargs):
         expected_digest = convert_to_bytestring_if_unicode(request.headers.get("X-Mac-Digest"))
-        secret_key_bytes = convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET)
+        # Only the fact that a key is configured may be bound here, never the key itself: the views
+        # this wraps are unauthenticated, so any caller can drive the rejection logging below, and
+        # Sentry attaches this frame's locals to the events it builds (`attach_stacktrace=True`).
+        has_secret_key = bool(settings.COMMCARE_CONNECT_SERVER_SECRET)
 
-        if not (expected_digest and secret_key_bytes):
-            logger.exception(
+        if not (expected_digest and has_secret_key):
+            # Warning, not exception/error: there is no live exception here, and an unauthenticated
+            # caller can trigger this at request rate, which at ERROR would become Sentry events.
+            logger.warning(
                 "Request rejected reason=%s request=%s",
-                "hmac:missing_key" if not secret_key_bytes else "hmac:missing_header",
+                "hmac:missing_key" if not has_secret_key else "hmac:missing_header",
                 request.path,
             )
             return HttpResponse(_("Missing HMAC signature or shared key"), status=401)
 
-        data_digest = get_hmac_digest(key=secret_key_bytes, data_bytes=request.body)
+        data_digest = _get_connect_secret_digest(request.body)
 
         if not hmac.compare_digest(data_digest, expected_digest):
-            logger.exception("Calculated HMAC does not match expected HMAC")
+            logger.warning("Calculated HMAC does not match expected HMAC")
             return HttpResponse(_("Invalid payload"), status=401)
         return view_func(request, *args, **kwargs)
 
     return _inner
+
+
+def _get_connect_secret_digest(data_bytes: bytes) -> bytes:
+    """HMAC ``data_bytes`` with the CommCare Connect shared secret.
+
+    The secret is read and consumed within this frame so that it does not outlive the digest
+    computation. Callers must not hold it themselves: this frame is gone by the time they log a
+    rejection, so the raw secret cannot end up in a stack-frame dump.
+    """
+    return get_hmac_digest(
+        key=convert_to_bytestring_if_unicode(settings.COMMCARE_CONNECT_SERVER_SECRET), data_bytes=data_bytes
+    )
 
 
 def get_hmac_digest(key: bytes, data_bytes: bytes) -> bytes:

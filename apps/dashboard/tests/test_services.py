@@ -4,8 +4,11 @@ from unittest.mock import ANY
 import pytest
 from django.utils import timezone
 
+from apps.channels.models import ChannelPlatform
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus
+from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
+from apps.utils.factories.team import TeamFactory
 
 from ..models import DashboardCache
 from ..services import DashboardService
@@ -142,6 +145,26 @@ class TestDashboardService:
         for key in ["human_messages", "ai_messages", "totals"]:
             assert isinstance(data[key], list)
 
+    def test_get_message_volume_data_total_excludes_system_messages(
+        self, team, experiment, participant, experiment_session, chat
+    ):
+        """The chart's per-period total is human + ai, not every message type
+        (ADR-0051): a SYSTEM message must not inflate it."""
+        service = DashboardService(team)
+
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="Human message")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.AI, content="AI message")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.SYSTEM, content="System message")
+
+        data = service.get_message_volume_data(granularity="daily")
+
+        assert len(data["totals"]) == 1
+        period = data["totals"][0]
+        assert period["human_messages"] == 1
+        assert period["ai_messages"] == 1
+        assert period["total_messages"] == 2
+        assert period["total_messages"] == period["human_messages"] + period["ai_messages"]
+
     def test_get_bot_performance_summary(self, team, experiment, participant, experiment_session, chat):
         """Test bot performance summary generation"""
         service = DashboardService(team)
@@ -167,6 +190,31 @@ class TestDashboardService:
             ]
             for field in expected_fields:
                 assert field in item
+
+    @pytest.mark.django_db()
+    def test_bot_performance_messages_obey_the_window_and_message_types(self, team, experiment, participant):
+        """The per-chatbot Messages column counts the same rows the headline
+        total does: conversation turns inside the window (ADR-0051)."""
+        now = timezone.now()
+        session = ExperimentSession.objects.create(
+            experiment=experiment, participant=participant, team=team, status="active"
+        )
+        chat = session.chat
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="in window")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.AI, content="in window")
+        ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.SYSTEM, content="not a turn")
+        ChatMessage.objects.create(
+            chat=chat,
+            message_type=ChatMessageType.HUMAN,
+            content="before the window",
+            created_at=now - timedelta(days=90),
+        )
+
+        data = DashboardService(team).get_bot_performance_summary(
+            start_date=now - timedelta(days=1), end_date=now + timedelta(days=1)
+        )
+
+        assert data["results"][0]["messages"] == 2
 
     def test_get_channel_breakdown_data(self, team, experiment, participant, experiment_channel):
         """Test channel breakdown data generation"""
@@ -292,9 +340,138 @@ class TestDashboardService:
         assert data1 == data2
 
 
+@pytest.mark.django_db()
+class TestGetTagAnalyticsDataTeamScoping:
+    """`get_tag_analytics_data` reads `CustomTaggedItem` rows directly (not
+    via a team-scoped queryset like the other dashboard reads), so it needs
+    its own team-scoping pin. Both the link's own `team_id` and its tag's
+    `team_id` must match the reading team, or a foreign team's tag - and its
+    user-authored name - leaks into this team's breakdown.
+
+    Each test uses its own `team` fixture instance (function-scoped, so a
+    fresh team and a fresh `DashboardCache` key every time) to guarantee a
+    cached value from another test can never serve a result here.
+    """
+
+    @pytest.mark.parametrize(
+        "failing_conjunct",
+        [
+            pytest.param("link-team", id="link-team-conjunct"),
+            pytest.param("tag-team", id="tag-team-conjunct"),
+        ],
+    )
+    def test_link_failing_one_scoping_conjunct_is_excluded(self, team, chat, failing_conjunct):
+        """The read scopes tag links with two conjuncts, the link row's
+        `team_id` and its tag's `team_id`. Each case builds a link where
+        exactly one conjunct fails while the other holds, so deleting either
+        predicate turns exactly its named case red. Message links only -
+        this read has no chat leg. Positive control:
+        `test_own_teams_link_and_tag_are_counted`."""
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
+        foreign_team = TeamFactory.create()
+        link_team = foreign_team if failing_conjunct == "link-team" else team
+        tag = TagFactory.create(team=foreign_team if failing_conjunct == "tag-team" else team)
+        CustomTaggedItemFactory.create(team=link_team, tag=tag, target=message)
+
+        data = DashboardService(team).get_tag_analytics_data()
+
+        assert data["tag_categories"] == {}
+        assert data["total_tagged_messages"] == 0
+
+    def test_foreign_teams_tag_never_renders_in_the_breakdown(self, team, chat):
+        """The reported shape (see the PR demo): a `CustomTaggedItem` owned
+        by another team, carrying that team's tag, points at one of this
+        team's messages. Both conjuncts fail at once, so the conjunct case
+        list above already rejects it; this test pins the user-visible
+        property instead - the breakdown renders the reading team's tags and
+        nothing else, so the foreign tag's user-authored name never appears
+        beside them."""
+        secret = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
+        foreign_team = TeamFactory.create()
+        foreign_tag = TagFactory.create(team=foreign_team, name="OTHER-TEAMS-SECRET-TAG")
+        CustomTaggedItemFactory.create(team=foreign_team, tag=foreign_tag, target=secret)
+        ours = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="ours")
+        local_tag = TagFactory.create(team=team, name="our-own-tag")
+        CustomTaggedItemFactory.create(team=team, tag=local_tag, target=ours)
+
+        data = DashboardService(team).get_tag_analytics_data()
+
+        assert data["tag_categories"] == {local_tag.label: {local_tag.name: 1}}
+        assert data["total_tagged_messages"] == 1
+
+    def test_own_teams_link_and_tag_are_counted(self, team, chat):
+        message = ChatMessage.objects.create(chat=chat, message_type=ChatMessageType.HUMAN, content="hi")
+        tag = TagFactory.create(team=team, name="our-own-tag")
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=message)
+
+        data = DashboardService(team).get_tag_analytics_data()
+
+        assert data["tag_categories"] == {tag.label: {tag.name: 1}}
+        assert data["total_tagged_messages"] == 1
+
+
+@pytest.mark.django_db()
+class TestUserEngagementUsesTheCanonicalDefinitions:
+    """The engagement panel sits on the same page as the headline totals, so it
+    counts the same universe: no SETUP sessions, no evaluation-harness sessions,
+    and a tag filter narrows it the same way (ADR-0051)."""
+
+    def _totals(self, data):
+        return [(row["total_messages"], row["total_sessions"]) for row in data["most_active_participants"]]
+
+    def test_setup_sessions_do_not_count(self, team, experiment, participant):
+        _engagement_session(team, experiment, participant, messages=2)
+        _engagement_session(team, experiment, participant, status=SessionStatus.SETUP, messages=3)
+
+        data = DashboardService(team).get_user_engagement_data()
+
+        assert self._totals(data) == [(2, 1)]
+
+    def test_evaluation_sessions_do_not_count(self, team, experiment, participant):
+        _engagement_session(team, experiment, participant, messages=2)
+        _engagement_session(team, experiment, participant, platform=ChannelPlatform.EVALUATIONS, messages=3)
+
+        data = DashboardService(team).get_user_engagement_data()
+
+        assert self._totals(data) == [(2, 1)]
+
+    def test_a_tag_filter_narrows_the_panel(self, team, experiment, participant):
+        tagged = _engagement_session(team, experiment, participant, messages=2)
+        _engagement_session(team, experiment, participant, messages=3)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+
+        data = DashboardService(team).get_user_engagement_data(tag_ids=[tag.id])
+
+        assert self._totals(data) == [(2, 1)]
+
+    def test_last_activity_comes_from_in_window_activity(self, team, experiment, participant):
+        """`last_activity_at` is the session's own clock and carries no window
+        bound, so reading it directly can report a date outside the range the
+        page is showing."""
+        session = _engagement_session(team, experiment, participant, messages=1)
+        ExperimentSession.objects.filter(id=session.id).update(last_activity_at=timezone.now() + timedelta(days=40))
+
+        data = DashboardService(team).get_user_engagement_data()
+
+        message = ChatMessage.objects.get(chat=session.chat)
+        assert data["most_active_participants"][0]["last_activity"] == message.created_at.isoformat()
+
+
+def _engagement_session(team, experiment, participant, *, status=SessionStatus.ACTIVE, platform="web", messages=1):
+    session = ExperimentSession.objects.create(
+        experiment=experiment, participant=participant, team=team, status=status, platform=platform
+    )
+    for index in range(messages):
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content=f"m{index}")
+    return session
+
+
 def _create_session(experiment, participant, team, message_date):
-    session = ExperimentSession.objects.create(experiment=experiment, participant=participant, team=team)
-    message = ChatMessage.objects.create(chat=session.chat)
+    session = ExperimentSession.objects.create(
+        experiment=experiment, participant=participant, team=team, status=SessionStatus.ACTIVE
+    )
+    message = ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN)
     message.created_at = message_date
     message.save()
     return session

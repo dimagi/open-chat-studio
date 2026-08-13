@@ -16,6 +16,7 @@ from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, Usag
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
+from apps.usage_metrics.filters import chat_tag_exists_pair
 
 logger = logging.getLogger("ocs.cost_tracking")
 
@@ -147,20 +148,23 @@ class CoverageGaps:
 @dataclass(frozen=True)
 class CostFilters:
     """The dashboard filters the cost read path honours, bundled so the
-    reporting functions take one argument instead of three parallel lists.
-    Tags are intentionally absent - usage records aren't tagged directly.
+    reporting functions take one argument instead of four parallel lists.
+    Tags match via the record's session's chat - a record counts when the
+    chat or any of its messages carries one of the tags - so records with
+    no session are excluded under a tag filter.
     """
 
     experiment_ids: list[int] | None = None
     platform_names: list[str] | None = None
     participant_ids: list[int] | None = None
+    tag_ids: list[int] | None = None
 
     @property
     def narrows_to_entities(self) -> bool:
         """True when any filter restricts the read to particular chatbots, participants
         or conversations — which makes the result per-entity attribution, not a team
         total, and so subject to the chat-only rule (ADR-0048)."""
-        return bool(self.experiment_ids or self.platform_names or self.participant_ids)
+        return bool(self.experiment_ids or self.platform_names or self.participant_ids or self.tag_ids)
 
 
 @dataclass(frozen=True)
@@ -177,9 +181,14 @@ class GroupBreakdown:
 
 def _scoped_records(team: Team, filters: CostFilters | None = None):
     """Team-scoped UsageRecords with the dashboard's chatbot / participant /
-    platform filters applied (mirrors the cost panel's other charts). Platform
-    is matched via the record's session, so records with no session are excluded
-    when a platform filter is set.
+    platform / tag filters applied (mirrors the cost panel's other charts).
+    Platform and tags are matched via the record's session, so records with no
+    session are excluded when either filter is set. A tag matches when the
+    session's chat or any message in it carries the tag - the same semantics
+    as the dashboard's session tag filter (`apps/usage_metrics/dashboard_querysets.py`).
+    Both the link row and its tag must belong to the reading team, so a
+    cross-team `CustomTaggedItem` row - whether its own `team_id` is foreign or
+    its `tag` belongs to another team - never widens the read.
 
     A filtered read is per-entity attribution, so it counts chat only; only an
     unfiltered read is a team total and counts every source (ADR-0048). Without that,
@@ -194,6 +203,13 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
         qs = qs.filter(participant_id__in=filters.participant_ids)
     if filters.platform_names:
         qs = qs.filter(session__platform__in=filters.platform_names)
+    if filters.tag_ids:
+        # The same chat-or-message match as the dashboard's tag filter, from
+        # its single definition in apps.usage_metrics.
+        tag_on_chat, tag_on_msg = chat_tag_exists_pair(team, filters.tag_ids, "session__chat_id")
+        qs = qs.annotate(_tag_on_chat=tag_on_chat, _tag_on_msg=tag_on_msg).filter(
+            Q(_tag_on_chat=True) | Q(_tag_on_msg=True)
+        )
     if filters.narrows_to_entities:
         qs = qs.filter(source=UsageSource.CHAT)
     return qs
@@ -221,25 +237,33 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
     period_q = Q(timestamp__gte=start, timestamp__lt=end)
     previous_q = Q(timestamp__gte=previous_start, timestamp__lt=start)
 
-    agg = _scoped_records(team, filters).aggregate(
-        total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
-        previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
-        exact=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        estimated=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
-        # Rows that got recorded but the resolver couldn't price (no matching
-        # PricingRule). Excludes UNKNOWN-confidence rows because those have
-        # their own counter. Distinct row counter, not a sum - these rows
-        # contribute $0 to total_cost.
-        unpriced_rows=Count("id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)),
+    # Bound the scan to the two periods the aggregates below actually read.
+    # Without it this scans the team's whole UsageRecord history on every load.
+    agg = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=previous_start, timestamp__lt=end)
+        .aggregate(
+            total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
+            previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
+            exact=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            estimated=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
+            # Rows that got recorded but the resolver couldn't price (no matching
+            # PricingRule). Excludes UNKNOWN-confidence rows because those have
+            # their own counter. Distinct row counter, not a sum - these rows
+            # contribute $0 to total_cost.
+            unpriced_rows=Count(
+                "id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)
+            ),
+        )
     )
 
     return CostSummary(

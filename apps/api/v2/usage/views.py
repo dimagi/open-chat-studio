@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.pagination import CursorPagination
-from apps.api.permissions import IsAuthenticatedOrMachineToken
+from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.usage import services
 from apps.api.v2.usage.param_serializers import UsageQuerySerializer
 from apps.api.v2.usage.permissions import CanViewUsage
@@ -32,7 +32,7 @@ class UsageView(APIView):
     # and narrowed by participant/chatbot/platform.
     # See docs/design/usage-api.md.
 
-    permission_classes = [IsAuthenticatedOrMachineToken, CanViewUsage, TokenHasOAuthResourceScope]
+    permission_classes = [*BASE_PERMISSION_CLASSES, CanViewUsage, TokenHasOAuthResourceScope]
     required_scopes = ["usage"]
 
     @extend_schema(

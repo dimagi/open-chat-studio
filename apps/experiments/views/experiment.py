@@ -21,6 +21,7 @@ from django.http import (
     HttpResponse,
     HttpResponseBadRequest,
     HttpResponseForbidden,
+    HttpResponseGone,
     HttpResponseRedirect,
     JsonResponse,
 )
@@ -44,12 +45,12 @@ from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ChannelPlatform
 from apps.channels.web_channel import WebChannel
-from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
+from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import (
     StaticTriggerType,
 )
-from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
+from apps.experiments.const import EMBED_FLOW_REMOVED_ON, EMBED_FLOW_SUCCESSOR_URL
 from apps.experiments.decorators import (
     experiment_session_view,
     get_chat_session_access_cookie_data,
@@ -68,6 +69,7 @@ from apps.experiments.models import (
     Participant,
     SessionStatus,
 )
+from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.experiments.tables import (
     ExperimentVersionsTable,
 )
@@ -83,7 +85,6 @@ from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
-from apps.utils.decorators import sunset
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -100,26 +101,12 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
 
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
+@public_chat_rate_limited
 @experiment_session_view()
 @verify_session_access_cookie
 @require_POST
 def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
     return _experiment_session_message(request, version_number)
-
-
-@waf_allow(WafRule.SizeRestrictions_BODY)
-@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
-@experiment_session_view()
-@require_POST
-@xframe_options_exempt
-@csrf_exempt
-def experiment_session_message_embed(
-    request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int
-):
-    if not request.experiment_session.participant.is_anonymous:
-        return HttpResponseForbidden()
-
-    return _experiment_session_message(request, version_number, embedded=True)
 
 
 def _process_uploaded_files(request, session):
@@ -149,7 +136,7 @@ def _process_uploaded_files(request, session):
     return attachments, created_files
 
 
-def _experiment_session_message(request, version_number: int, embedded=False):
+def _experiment_session_message(request, version_number: int):
     working_experiment = request.experiment
     session = request.experiment_session
 
@@ -189,7 +176,6 @@ def _experiment_session_message(request, version_number: int, embedded=False):
             "message_text": message_text,
             "task_id": result.task_id,
             "created_files": created_files,
-            "embedded": embedded,
             **version_specific_vars,
         },
     )
@@ -220,18 +206,7 @@ def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, sess
     )
 
 
-@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
-@experiment_session_view()
-@require_GET
-@xframe_options_exempt
-@team_required
-def poll_messages_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    if not request.experiment_session.participant.is_anonymous:
-        return HttpResponseForbidden()
-
-    return _poll_messages(request)
-
-
+@public_chat_rate_limited
 @experiment_session_view()
 @require_GET
 @team_required
@@ -274,6 +249,7 @@ def _poll_messages(request):
     return HttpResponse()
 
 
+@public_chat_rate_limited
 @team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     try:
@@ -354,34 +330,25 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     )
 
 
-@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
 @xframe_options_exempt
+@csrf_exempt
 @team_required
-def start_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting sessions from embedded widgets. This will ignore consent and
-    will ALWAYS create anonymous participants.
+def embed_flow_gone(request, *args, **kwargs):
+    """410 stub for the legacy embedded chat flow, removed on 2026-08-03.
 
-    Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
+    Serves both the experiments and chatbots embed URLs. Kept for at least one release
+    cycle before the URLs are deleted entirely.
     See https://github.com/dimagi/open-chat-studio/issues/3540
+
+    The old views were `@xframe_options_exempt` + `@csrf_exempt`; the stub keeps both so
+    legacy callers see the 410 rather than a blocked iframe or a CSRF 403. `@team_required`
+    is kept for the team-auth guard in apps/teams/tests/test_view_auth_guard.py — the stub
+    reads no data, but the views it replaces were team-scoped and it costs nothing.
     """
-    try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    except ValidationError:
-        # old links dont have uuids
-        raise Http404() from None
-
-    experiment_version = resolve_published_or_working(experiment)
-    if not experiment_version.is_public:
-        raise Http404
-
-    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_identifier=participant.identifier,
-        timezone=request.session.get("detected_tz", None),
-        metadata={Chat.MetadataKeys.EMBED_SOURCE: request.headers.get("referer", None)},
+    return HttpResponseGone(
+        f"The legacy embedded chat flow was removed on {EMBED_FLOW_REMOVED_ON.isoformat()}. "
+        f"Use the Open Chat Studio chat widget instead: {EMBED_FLOW_SUCCESSOR_URL}"
     )
-    return redirect("chatbots:chatbot_chat_embed", team_slug, experiment.public_id, session.external_id)
 
 
 def _verify_user_or_start_session(identifier, request, experiment, session):
@@ -415,6 +382,7 @@ def _verify_user_or_start_session(identifier, request, experiment, session):
     )
 
 
+@public_chat_rate_limited
 @team_required
 def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
     try:
@@ -460,6 +428,7 @@ def _record_consent_and_redirect(
     return set_session_access_cookie(response, experiment, experiment_session)
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
 def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     published_version = resolve_published_or_working(request.experiment)
@@ -726,6 +695,7 @@ def redirect_to_messages_view(request, session):
     return HttpResponseRedirect(url)
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 @require_POST
@@ -736,6 +706,7 @@ def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id
     return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.PENDING_REVIEW])
 @verify_session_access_cookie
 def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
@@ -768,6 +739,7 @@ def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session
     )
 
 
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.COMPLETE])
 @verify_session_access_cookie
 def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):

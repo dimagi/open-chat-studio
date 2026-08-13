@@ -147,9 +147,11 @@ class DashboardFilterForm(forms.Form):
             )
 
         if data.get("end_date"):
-            # Convert to datetime for filtering (end of day)
+            # Half-open [start, end) to match the querysets (ADR-0051): the selected
+            # end date stays fully included by windowing up to the start of the
+            # following day, exclusive.
             params["end_date"] = timezone.make_aware(
-                timezone.datetime.combine(data["end_date"], timezone.datetime.max.time())
+                timezone.datetime.combine(data["end_date"] + timedelta(days=1), timezone.datetime.min.time())
             )
 
         if data.get("experiments"):
