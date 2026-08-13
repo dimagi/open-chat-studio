@@ -15,8 +15,8 @@ from apps.channels.rate_limit_keys import (
     twilio_ip_key,
 )
 
-# Overrides the webhook scope alone, leaving every other scope at its configured rate.
-TINY_LIMITS = settings.RATE_LIMITS | {"webhook": {"rate": "2/5m", "fail_open": True}}
+# Overrides the channels scope alone, leaving every other scope at its configured rate.
+TINY_LIMITS = settings.RATE_LIMITS | {"channels": {"rate": "2/5m", "fail_open": True}}
 
 META_WEBHOOK_URL_NAME = "channels:new_meta_cloud_api_message"
 
