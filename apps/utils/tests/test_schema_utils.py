@@ -119,6 +119,23 @@ def test_preserve_description():
     assert resolved_spec["examples"][0]["description"] == "An example of a pet"
 
 
+def test_a_reference_cycle_terminates_rather_than_recursing():
+    """Substitution is one level deep: a `$ref` inside a substituted target is left alone, so a
+    schema that points back at itself has nothing to loop on. Resolving deeply instead would need a
+    visited set to terminate here, and would inline a caller's whole spec into every reference to
+    it -- `resolve_references` runs over user-supplied OpenAPI specs in `apps/custom_actions`."""
+    spec = {
+        "definitions": {"Pet": {"type": "object", "properties": {"friend": {"$ref": "#/definitions/Pet"}}}},
+        "paths": {"/pets": {"get": {"responses": {"200": {"$ref": "#/definitions/Pet"}}}}},
+    }
+
+    resolved = resolve_references(spec)
+
+    pet = resolved["paths"]["/pets"]["get"]["responses"]["200"]
+    assert pet["type"] == "object"
+    assert pet["properties"]["friend"] == {"$ref": "#/definitions/Pet"}
+
+
 def _schema_for(annotation) -> dict:
     """The schema pydantic writes for a model holding one optional field of this type."""
     return resolve_references(create_model("Probe", field=(annotation, None)).model_json_schema())

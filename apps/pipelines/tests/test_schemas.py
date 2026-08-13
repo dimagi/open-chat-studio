@@ -25,6 +25,31 @@ def test_every_param_is_described(schema):
     )
 
 
+@pytest.mark.parametrize("schema", get_node_schemas(), ids=lambda schema: schema["title"])
+def test_no_param_points_at_a_definition_that_was_dropped(schema):
+    """`_get_node_schema` inlines the `$ref`s and then drops `$defs`, so a surviving `$ref` points at
+    nothing a reader can follow. `resolve_references` substitutes one level deep, which leaves the
+    inner `$ref` behind for a param whose model nests another model two deep -- add one and this
+    fails rather than shipping a dangling pointer to the builder and to agents."""
+    dangling = list(_reference_paths(schema))
+    assert not dangling, (
+        f"{schema['title']} keeps unresolved references at {dangling}. `$defs` is gone by then, so "
+        f"nothing resolves them. Flatten the nesting, or teach `resolve_references` to recurse."
+    )
+
+
+def _reference_paths(node, path=""):
+    """Every `$ref` left in `node`, by the path it sits at."""
+    if isinstance(node, dict):
+        if "$ref" in node:
+            yield f"{path} -> {node['$ref']}"
+        for key, value in node.items():
+            yield from _reference_paths(value, f"{path}.{key}")
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _reference_paths(value, f"{path}[{index}]")
+
+
 def test_schemas():
     schemas = get_node_schemas()
     for schema in schemas:
