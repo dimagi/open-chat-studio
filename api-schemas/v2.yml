@@ -900,6 +900,7 @@ components:
           maxLength: 128
         description:
           type: string
+          nullable: true
           default: ''
       required:
       - name

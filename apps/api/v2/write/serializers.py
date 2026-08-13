@@ -10,22 +10,15 @@ Each field carries its form field's name, with references narrowed to ids under 
 discovery. ``settings`` is the one nested block, because it is dict-shaped in the API already.
 """
 
-import unicodedata
-
 from django.db import transaction
 from rest_framework import serializers
 
-from apps.api.v2.write.fields import TeamScopedRelatedField
-from apps.experiments.helpers import normalize_participant_allowlist
+from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
+from apps.experiments.helpers import excluded_voice_services, normalize_participant_allowlist
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.models import TraceProvider, VoiceProvider
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
-
-
-def normalize_chatbot_name(value: str) -> str:
-    """Mirrors ``CreateChatbot.form_valid`` so API- and UI-created names compare equal."""
-    return unicodedata.normalize("NFC", value)
 
 
 class RejectsUnknownKeys:
@@ -54,11 +47,8 @@ class RejectsUnknownKeys:
 class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
     """The create request: a working draft and its seeded pipeline, nothing published."""
 
-    name = serializers.CharField(max_length=128)
-    description = serializers.CharField(required=False, allow_blank=True, default="")
-
-    def validate_name(self, value):
-        return normalize_chatbot_name(value)
+    name = NfcCharField(max_length=128)
+    description = OptionalTextField(default="")
 
     @transaction.atomic()
     def create(self, validated_data):
@@ -67,7 +57,7 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
         request = self.context["request"]
         team = request.team
         llm_provider = get_first_llm_provider_by_team(team.id)
-        llm_provider_model = get_first_llm_provider_model(llm_provider, team.id) if llm_provider else None
+        llm_provider_model = get_first_llm_provider_model(llm_provider, team.id)
         pipeline = Pipeline.create_default_pipeline_with_name(
             team,
             validated_data["name"],
@@ -128,29 +118,37 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     pins both. Inspect returns more than this, because inspecting and editing are different jobs.
     """
 
+    name = NfcCharField(max_length=128)
+    # Labelled from the model because declaring the field explicitly drops the label ModelSerializer
+    # would have derived, and that label is the field's `title` in the published OpenAPI schema.
+    description = OptionalTextField(label=Experiment._meta.get_field("description").verbose_name)
     settings = ChatbotSettingsSerializer(source="*", required=False)
     consent_form_id = TeamScopedRelatedField(
         source="consent_form",
-        get_team_queryset=lambda team: ConsentForm.objects.working_versions_queryset().filter(team=team),
+        scoped_queryset=lambda request: ConsentForm.objects.working_versions_queryset().filter(team=request.team),
         required=False,
         allow_null=True,
     )
     trace_provider_id = TeamScopedRelatedField(
         source="trace_provider",
-        get_team_queryset=lambda team: TraceProvider.objects.filter(team=team),
+        scoped_queryset=lambda request: TraceProvider.objects.filter(team=request.team),
         required=False,
         allow_null=True,
     )
+    # Both voice fields apply the same feature-flag exclusion ChatbotSettingsForm applies, so the API
+    # cannot wire a voice the settings page would refuse to re-save.
     voice_provider_id = TeamScopedRelatedField(
         source="voice_provider",
-        get_team_queryset=lambda team: VoiceProvider.objects.filter(team=team),
+        scoped_queryset=lambda request: VoiceProvider.objects.filter(team=request.team).exclude(
+            syntheticvoice__service__in=excluded_voice_services(request)
+        ),
         required=False,
         allow_null=True,
     )
     synthetic_voice_id = TeamScopedRelatedField(
         source="synthetic_voice",
         # The team's own voices plus the general ones -- the same set /pipeline/options/ draws on.
-        get_team_queryset=lambda team: SyntheticVoice.get_for_team(team, []),
+        scoped_queryset=lambda request: SyntheticVoice.get_for_team(request.team, excluded_voice_services(request)),
         required=False,
         allow_null=True,
     )
@@ -171,9 +169,6 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
             "synthetic_voice_id",
         ]
 
-    def validate_name(self, value):
-        return normalize_chatbot_name(value)
-
     def validate(self, attrs):
         supplied = [name for name, source in self.VOICE_FIELDS if source in attrs]
         if not supplied:
@@ -185,8 +180,11 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
         # The pair as it would be *after* this request: the incoming value where one was sent, the
         # stored one otherwise. An explicit null arrives as a present key holding None, so `get`
         # with a default keeps "sent as null" (clear it) distinct from "not sent" (keep it).
-        provider = attrs.get("voice_provider", self.instance.voice_provider)
-        voice = attrs.get("synthetic_voice", self.instance.synthetic_voice)
+        # `getattr` rather than attribute access: only PATCH builds this serializer today, but an
+        # instance-less use would otherwise be an AttributeError -- a 500 -- rather than a check
+        # against an empty pair.
+        provider = attrs.get("voice_provider", getattr(self.instance, "voice_provider", None))
+        voice = attrs.get("synthetic_voice", getattr(self.instance, "synthetic_voice", None))
 
         error = self._voice_pair_error(provider, voice)
         if error:
