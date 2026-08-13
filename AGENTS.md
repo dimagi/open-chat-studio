@@ -43,13 +43,12 @@ Open Chat Studio is a comprehensive platform for building, deploying, and evalua
 ## Useful commands
 
 * Run python tests: `uv run pytest path/to/test.py -v` (all tests in a file)
-* Lint python: `uv run ruff check path/to/file.py --fix`
-* Format python: `uv run ruff format path/to/file.py`
-* Type check python: `uv run ty check apps/`
+* Lint & format python: `uv run inv ruff --paths path/to/file.py` (runs `ruff check --fix` then `ruff format`)
+* Type check: `uv run inv typecheck` (runs both `ty` and `tsc`; `--paths` scopes the Python check, `--python`/`--js` limit it to one)
 * Build JS & CSS: `pnpm run dev`
 * Lint JS: `pnpm run lint path/to/file.js`
-* TypeScript type checking: `pnpm run type-check path/to/file.ts`
 * Run Django dev server: `uv run inv runserver` (uses `portless` if available, otherwise falls back to `uv run python manage.py runserver`)
+* Run Django, Celery and the asset watcher together: `uv run inv dev`
 * Django migrations: `uv run python manage.py migrate`
 * Create migration: `uv run python manage.py makemigrations <app_name>`
 
