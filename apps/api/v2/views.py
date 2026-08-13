@@ -12,7 +12,7 @@ from rest_framework.viewsets import GenericViewSet
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, ReadOnlyAPIKeyPermission
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
-from apps.api.v2.lookups import get_working_chatbot, working_chatbots
+from apps.api.v2.lookups import get_working_chatbot, request_team, working_chatbots
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.api.v2.write.serializers import (
     ChatbotCreatedSerializer,
@@ -21,6 +21,7 @@ from apps.api.v2.write.serializers import (
     ChatbotWriteSerializer,
 )
 from apps.oauth.permissions import TokenHasOAuthResourceScope
+from apps.teams.models import Team
 
 
 @extend_schema_view(
@@ -52,8 +53,13 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     lookup_field = "public_id"
     lookup_url_kwarg = "id"
 
+    @property
+    def team(self) -> Team | None:
+        """The team the credential authenticated with. See ``request_team``."""
+        return request_team(self.request)
+
     def get_queryset(self):
-        return working_chatbots(self.request.team).select_related("team").prefetch_related("versions")
+        return working_chatbots(self.team).select_related("team").prefetch_related("versions")
 
     def get_serializer_class(self):
         # The actions below build their serializers directly, but OPTIONS metadata and any future
@@ -145,7 +151,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         with transaction.atomic():
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
             # naming different fields would silently clobber one another (spec W7).
-            chatbot = get_working_chatbot(request.team, self.kwargs[self.lookup_url_kwarg], lock=True)
+            chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
             serializer = ChatbotWriteSerializer(
                 chatbot, data=request.data, partial=True, context=self.get_serializer_context()
             )

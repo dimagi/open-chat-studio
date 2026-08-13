@@ -4,7 +4,7 @@ Ships ahead of the sub-resource views that consume it (#4140-#4145).
 """
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, RequiresTeamPermission
-from apps.api.v2.lookups import get_working_chatbot
+from apps.api.v2.lookups import get_working_chatbot, request_team
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
@@ -37,5 +37,10 @@ class ChatbotWriteMixin:
     required_scopes = ["chatbots"]
 
     def get_chatbot(self) -> Experiment:
-        """The working (draft) chatbot named by the URL, scoped to the request's team."""
-        return get_working_chatbot(self.request.team, self.kwargs["id"])
+        """The working (draft) chatbot named by the URL, scoped to the request's team.
+
+        Resolved through ``request_team`` rather than ``self.request.team``, which is ``None``
+        whenever DRF hands a view a ``clone_request`` -- OPTIONS metadata being the path that
+        already caught out the top-level viewset.
+        """
+        return get_working_chatbot(request_team(self.request), self.kwargs["id"])
