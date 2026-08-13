@@ -4,7 +4,12 @@ from copy import deepcopy
 
 
 def resolve_references(openapi_spec: dict) -> dict:
-    """Returns a copy of `openapi_spec` with every internal `$ref` replaced by what it points at."""
+    """Returns a copy of `openapi_spec` with every internal `$ref` replaced by what it points at.
+
+    Substitution is one level deep: a target is inserted as `openapi_spec` wrote it, so a `$ref`
+    nested inside one survives. That is what makes a self-referencing schema terminate here, and it
+    is why a caller that drops `$defs` afterwards should check nothing still points into it.
+    """
     return _resolve(deepcopy(openapi_spec), openapi_spec)
 
 
