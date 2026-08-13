@@ -1,6 +1,6 @@
 # ADR-0023: Rename experiment to chatbot in the v2 API
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-05-29</p>
 <p class="adr-meta">Extends: <a href="0022-url-path-api-versioning.md">ADR-0022</a></p>

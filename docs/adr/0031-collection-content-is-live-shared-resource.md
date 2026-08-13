@@ -1,6 +1,6 @@
 # ADR-0031: Collection content is a live shared resource
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-06-01</p>
 
