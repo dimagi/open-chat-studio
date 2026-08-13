@@ -84,36 +84,63 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
         ./manage.py createsuperuser
         ```
 
-4. **Start the development server**
+4. **Start everything**
 
     ```bash
-    ./manage.py runserver
+    inv dev
     ```
 
-5. **Run Celery for background tasks**
+    See [Running the dev environment](#running-the-dev-environment) below.
 
-    Celery is required to handle LLM interactions. Run it using:
+## Running the dev environment
 
-    ```bash
-    inv celery
-    ```
+`inv dev` is the command you want for day-to-day work. It runs Django, the Celery worker and the
+webpack asset watcher together in one terminal (via [honcho](https://github.com/nickstenning/honcho)
+and `Procfile.dev`), and all three restart on code changes:
 
-    For a production-like setup, use:
+```bash
+inv dev
+```
 
-    ```bash
-    inv celery --threads
-    ```
+| Process | What it does |
+|---|---|
+| `web` | Django dev server |
+| `worker` | Celery worker — **required** for LLM interactions and other background tasks |
+| `assets` | webpack watcher for JavaScript and CSS |
 
-    Either form consumes all [task queues](../hosting/index.md#task-queues). To reproduce the
-    production split — where chat, background and evaluation work get separate workers — run one
-    process per queue:
+### Named URLs with portless
 
-    ```bash
-    inv celery --queues=celery
-    inv celery --queues=background
-    inv celery --queues=evaluations
-    ```
+If [portless](https://www.npmjs.com/package/portless) is installed and its proxy is running, the
+Django server is exposed on a stable named URL — `https://ocs.localhost` — instead of a port
+number. Started on a non-privileged port (`portless proxy start -p 1355`) the URL becomes
+`http://ocs.localhost:1355`.
+
+Names are allocated per running server, so a second worktree does not collide: if `ocs` is already
+taken, the next one becomes `ocs1`, then `ocs2`, and so on. Run `portless list` to see which name
+maps to which worktree.
+
+Without portless, Django falls back to `http://127.0.0.1:8000` as usual.
+
+### Running services individually
+
+`inv dev` is a convenience wrapper — each process can also be run on its own:
+
+```bash
+inv runserver   # alias: inv django
+inv celery
+pnpm run dev-watch
+```
+
+`inv celery` consumes all [task queues](../hosting/index.md#task-queues). For a production-like
+setup use `inv celery --threads`. To reproduce the production split — where chat, background and
+evaluation work get separate workers — run one process per queue:
+
+```bash
+inv celery --queues=celery
+inv celery --queues=background
+inv celery --queues=evaluations
+```
 
 ---
 
-Next: [Common Development Tasks](common-tasks.md)
+Next: [Development Workflow](dev-workflow.md)
