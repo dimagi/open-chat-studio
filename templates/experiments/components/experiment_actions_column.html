@@ -1,18 +1,11 @@
 {% if record.is_editable %}
-  {# version 0 = the published version (falls back to the working version when nothing is published) #}
-  <form method="post" action="{% url type|add:':start_authed_web_session' record.team.slug record.id 0 %}" class="inline">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-sm" title="New Session">
-      <i class="fas fa-comment"></i>
-    </button>
-  </form>
   <a class="btn btn-sm"
-     href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
+     href="{% url 'chatbots:edit' record.team.slug record.id %}" title="Edit">
     <i class="fa-solid fa-pencil"></i>
   </a>
 {% else %}
   <a class="btn btn-sm"
-     href="{% url type|add:':edit' record.team.slug record.id %}" title="View">
+     href="{% url 'chatbots:edit' record.team.slug record.id %}" title="View">
     <i class="fa-solid fa-eye"></i>
   </a>
 {% endif %}

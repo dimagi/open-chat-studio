@@ -7,7 +7,6 @@ from django.db.models import F
 from django.template.loader import get_template
 from django.urls import reverse
 from django_tables2 import columns
-from waffle import flag_is_active
 
 from apps.api.session_tokens import issue_session_token
 from apps.experiments.models import Experiment, ExperimentSession
@@ -27,26 +26,59 @@ def _show_chat_button(request, record):
     return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
 
+def _version_label(session: ExperimentSession, version_number: int) -> str:
+    """Label for the version badge on a session's chat widget.
+
+    Version 0 is the "published version" alias rather than a real version number. Sessions are
+    always attached to the working version (``start_experiment_session`` rejects anything else),
+    so ``session.experiment.version_number`` is the working version's number and needs no query.
+    """
+    if version_number == Experiment.DEFAULT_VERSION_NUMBER:
+        return "Published Version"
+    if version_number == session.experiment.version_number:
+        return f"Working Version (v{version_number})"
+    return f"Version {version_number}"
+
+
+def _chat_version(session: ExperimentSession, version_number: int) -> Experiment:
+    """The experiment row whose settings the session's chat runs with.
+
+    ``file_uploads_enabled`` is versioned, so the working row's value can disagree with the snapshot
+    the session actually targets (same reason ``single_chatbot_home`` passes ``published_version``
+    to its launcher). Archived versions are excluded from the default manager, so an old session
+    pointing at one can't be resolved — fall back to the working row rather than dropping the button.
+    """
+    try:
+        return session.experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        return session.experiment
+
+
 @dataclasses.dataclass
 class ContinueChatAction(actions.Action):
-    """Continue Chat action. When the chat widget flag is active it opens the session in the embedded
-    widget (a floating popup) instead of linking to the full-page chat UI."""
+    """Continue Chat action. Opens the session in the embedded widget (a floating popup).
+
+    This action does not navigate, so the ``url_name``/``url_factory`` it is constructed with are
+    vestigial: ``Action.get_context`` always builds ``action_url``, but the template above renders a
+    widget launcher instead of a link. They stay because ``url_name`` is a required field on the base
+    class — don't read them as evidence that the full-page chat route is still reachable from here.
+    """
 
     template: str = "chatbots/components/continue_chat_action.html"
 
     def get_context(self, request, record, value):
         ctxt = super().get_context(request, record, value)
-        if flag_is_active(request, "flag_chat_widget"):
-            ctxt.update(
-                {
-                    "use_widget": True,
-                    "chatbot_id": record.experiment.public_id,
-                    "session_external_id": record.external_id,
-                    "session_token": issue_session_token(record),
-                    "version_number": record.get_experiment_version_number(),
-                    "allow_attachments": record.experiment.file_uploads_enabled,
-                }
-            )
+        version_number = record.get_experiment_version_number()
+        ctxt.update(
+            {
+                "chatbot_id": record.experiment.public_id,
+                "session_external_id": record.external_id,
+                "session_token": issue_session_token(record),
+                "version_number": version_number,
+                "version_label": _version_label(record, version_number),
+                "allow_attachments": _chat_version(record, version_number).file_uploads_enabled,
+            }
+        )
         return ctxt
 
 
@@ -87,7 +119,6 @@ class ChatbotTable(tables.Table):
     )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
-        extra_context={"type": "chatbots"},
     )
 
     class Meta:

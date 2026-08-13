@@ -58,7 +58,10 @@ function getWidgetPageContext() {
 }
 
 export function initChatWidgetPageContext(serverContext = {}) {
-  const widget = document.querySelector('open-chat-studio-widget');
+  // Target the support widget by id: pages such as the chatbot home render their own
+  // `open-chat-studio-widget` earlier in the document, and a bare tag selector would pick that
+  // one up — leaving the support bot without context and leaking app context into a user's chat.
+  const widget = document.getElementById('ocs-support-widget');
   if (widget) {
     const clientContext = getClientPageContext();
     const widgetPageContext = getWidgetPageContext();
