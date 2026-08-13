@@ -7,9 +7,20 @@
         {% endblock table %}
 
         {% block pagination %}
-            <div class="flex pagination justify-end">
+            <div class="flex pagination items-center">
+                {% if table.paginator and not lazy_pagination %}
+                    {% with total=table.paginator.count %}
+                        <span class="text-sm text-neutral-500">
+                            {% blocktranslate count total=total %}
+                                {{ total }} record
+                            {% plural %}
+                                {{ total }} records
+                            {% endblocktranslate %}
+                        </span>
+                    {% endwith %}
+                {% endif %}
                 {% if table.page and table.paginator.num_pages > 1 %}
-                    <div class="join">
+                    <div class="join ml-auto">
                         <a class="join-item btn"
                            {% if table.page.has_previous %}
                                {% block prev-page-link-attr %}
