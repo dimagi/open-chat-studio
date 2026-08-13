@@ -12,6 +12,7 @@ from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.html import escape
+from time_machine import travel
 from waffle.testutils import override_flag
 
 from apps.annotations.models import Tag
@@ -427,6 +428,29 @@ def test_chatbot_sessions_table_view_applies_both_filters_on_one_column(client, 
     assert response.status_code == 200
     assert list(response.context_data["table"].data.data) == [in_range]
     assert str(out_of_range.external_id) not in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_chatbot_sessions_table_view_last_activity_filter(client, team_with_users):
+    """The Last Activity filter matches a never-messaged session on its creation time, and the
+    rendered row shows that time rather than an empty cell."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team)
+    with travel("2026-05-15 10:00:00", tick=False):
+        never_messaged = ExperimentSessionFactory.create(team=team, experiment=experiment, participant__team=team)
+    with travel("2026-01-15 10:00:00", tick=False):
+        older = ExperimentSessionFactory.create(team=team, experiment=experiment, participant__team=team)
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    response = client.get(url, {"f_last_activity": "2026-04-30", "op_last_activity": "after"})
+
+    assert response.status_code == 200
+    assert list(response.context_data["table"].data.data) == [never_messaged]
+    content = response.content.decode()
+    assert never_messaged.created_at.isoformat() in content
+    assert str(older.external_id) not in content
 
 
 @pytest.mark.django_db()
