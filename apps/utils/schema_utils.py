@@ -37,9 +37,20 @@ def collapse_optional_types(schema: dict) -> None:
     """Rewrites each `X | None` property of `schema` as a plain `X`, in place.
 
     Pydantic renders an optional field as `anyOf: [{"type": "x"}, {"type": "null"}]`, which says
-    "x or null" where `required` already says whether the field may be omitted.
+    "x or null" where `required` already says whether the field may be omitted. A union that holds
+    no single named type -- `Any | None`, `Literal["a", 1] | None`, `list[str] | int | None` -- is
+    left exactly as pydantic wrote it: there is nothing to collapse to, and naming one member's
+    type would rule out values the field accepts.
     """
     for prop in schema.get("properties", {}).values():
-        if "anyOf" in prop:
-            any_of = prop.pop("anyOf")
-            prop["type"] = [member["type"] for member in any_of if member["type"] != "null"][0]
+        if sole_type := _sole_type(prop.get("anyOf", ())):
+            prop.pop("anyOf")
+            prop["type"] = sole_type
+
+
+def _sole_type(any_of) -> str | None:
+    """The one type a union permits besides `null`, or None where it permits more than one or names
+    none. A member can carry no `type` at all -- `Any` renders as `{}`, a mixed-value `Literal` as a
+    bare `enum` -- so this reads them defensively."""
+    types = [member.get("type") for member in any_of if member.get("type") != "null"]
+    return types[0] if len(types) == 1 and types[0] else None

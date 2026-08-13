@@ -1,6 +1,9 @@
-import pytest
+from typing import Any, Literal
 
-from apps.utils.schema_utils import resolve_references
+import pytest
+from pydantic import create_model
+
+from apps.utils.schema_utils import collapse_optional_types, resolve_references
 
 
 def test_resolve_simple_reference():
@@ -114,3 +117,49 @@ def test_preserve_description():
     }
     resolved_spec = resolve_references(spec)
     assert resolved_spec["examples"][0]["description"] == "An example of a pet"
+
+
+def _schema_for(annotation) -> dict:
+    """The schema pydantic writes for a model holding one optional field of this type."""
+    return resolve_references(create_model("Probe", field=(annotation, None)).model_json_schema())
+
+
+@pytest.mark.parametrize(
+    ("annotation", "expected_type"),
+    [
+        pytest.param(int | None, "integer", id="int"),
+        pytest.param(str | None, "string", id="str"),
+        pytest.param(list[str] | None, "array", id="list"),
+        pytest.param(dict[str, int] | None, "object", id="dict"),
+        pytest.param(Literal["a", "b"] | None, "string", id="literal-of-one-type"),
+    ],
+)
+def test_an_optional_field_collapses_to_the_type_it_holds(annotation, expected_type):
+    """Pydantic writes every optional field as an `anyOf` against `null`, which tells a client
+    nothing `required` hasn't already told it. What the client needs is the one type it may send."""
+    schema = _schema_for(annotation)
+
+    collapse_optional_types(schema)
+
+    assert schema["properties"]["field"]["type"] == expected_type
+    assert "anyOf" not in schema["properties"]["field"]
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    [
+        pytest.param(Any | None, id="a-member-carrying-no-type-at-all"),
+        pytest.param(Literal["a", 1] | None, id="an-enum-whose-values-span-two-types"),
+        pytest.param(list[str] | int | None, id="two-non-null-members-either-of-which-is-valid"),
+    ],
+)
+def test_a_union_with_no_single_type_is_left_as_pydantic_wrote_it(annotation):
+    """There is no one type to collapse to, so the `anyOf` stands. Naming one member's type would
+    rule out values the field accepts, and the member may carry no `type` to read in the first
+    place -- which used to raise a `KeyError` and take the whole schema down with it."""
+    schema = _schema_for(annotation)
+
+    collapse_optional_types(schema)
+
+    assert "anyOf" in schema["properties"]["field"]
+    assert "type" not in schema["properties"]["field"]
