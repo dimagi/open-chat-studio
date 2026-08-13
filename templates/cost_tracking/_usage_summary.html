@@ -12,22 +12,17 @@
       unpriced: some usage has no matching PricingRule ("No pricing data" / "(partial pricing)").
       estimated: some usage is Confidence.ESTIMATED, not provider-reported.
       unknown: some usage is Confidence.UNKNOWN (no usage data recorded at all).
-    size - "lg" for a headline stat-tile figure (chatbot home); omit for an inline figure
-      (trace/session, which sit inside a denser row).
 {% endcomment %}
-<div class="flex items-center gap-2 flex-wrap{% if size == "lg" %} mt-2{% endif %}">
+<div class="flex items-center gap-2 flex-wrap">
   {% if total_cost %}
-    <span class="{% if size == "lg" %}text-3xl font-bold{% else %}font-semibold{% endif %}"
-          data-testid="{{ testid_prefix }}-cost">${{ total_cost|cost_display }}</span>
+    <span class="font-semibold" data-testid="{{ testid_prefix }}-cost">${{ total_cost|cost_display }}</span>
     {% if unpriced %}
       <span class="text-xs text-base-content/40">(partial pricing)</span>
     {% endif %}
   {% elif unpriced %}
-    <span class="{% if size == "lg" %}text-3xl font-bold {% endif %}text-base-content/40"
-          data-testid="{{ testid_prefix }}-cost">No pricing data</span>
+    <span class="text-base-content/40" data-testid="{{ testid_prefix }}-cost">No pricing data</span>
   {% else %}
-    <span class="{% if size == "lg" %}text-3xl font-bold{% else %}font-semibold{% endif %}"
-          data-testid="{{ testid_prefix }}-cost">$0.00</span>
+    <span class="font-semibold" data-testid="{{ testid_prefix }}-cost">$0.00</span>
   {% endif %}
   {% if estimated or unknown %}
     <span class="badge badge-warning badge-xs tooltip"

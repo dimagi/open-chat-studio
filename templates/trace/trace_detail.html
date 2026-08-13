@@ -81,9 +81,6 @@
                 <span class="text-3xl font-bold">{{ token_usage.total|intcomma }}</span>
                 <span class="text-sm text-base-content/60 ml-1">total</span>
               </div>
-              {% if cost_tracking_enabled %}
-                {% include "cost_tracking/_usage_summary.html" with total_cost=token_usage.total_cost unpriced=token_usage.has_unpriced estimated=token_usage.has_estimated unknown=token_usage.has_unknown testid_prefix="trace" %}
-              {% endif %}
               {% if token_usage.total %}
                 <div class="flex h-1.5 rounded-full overflow-hidden mt-3 bg-base-200" aria-hidden="true">
                   <div class="bg-primary" style="flex: {{ token_usage.input_tokens }};"></div>
@@ -147,6 +144,12 @@
 
       {# Metadata pill row #}
       <div class="flex flex-wrap gap-2 mt-4">
+        {% if cost_tracking_enabled and token_usage.by_model %}
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
+            <span class="text-xs text-base-content/60">Cost</span>
+            {% include "cost_tracking/_usage_summary.html" with total_cost=token_usage.total_cost unpriced=token_usage.has_unpriced estimated=token_usage.has_estimated unknown=token_usage.has_unknown testid_prefix="trace" %}
+          </div>
+        {% endif %}
         {% if trace.experiment %}
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
             <span class="text-xs text-base-content/60">Experiment</span>

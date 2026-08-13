@@ -151,24 +151,18 @@
       <div id="channel_create_edit_modal_placeholder"></div>
     {% endif %}
     {% if cost_tracking_enabled %}
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4" data-testid="chatbot-usage-widget">
-        <div class="card card-border bg-base-100">
-          <div class="card-body p-4">
-            <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (last 30 days)</span>
-            {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_call_count unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" size="lg" %}
-          </div>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm" data-testid="chatbot-usage-widget">
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (30d)</span>
+          {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_call_count unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" %}
         </div>
-        <div class="card card-border bg-base-100">
-          <div class="card-body p-4">
-            <span class="text-xs uppercase tracking-wide text-base-content/60">Sessions (last 30 days)</span>
-            <div class="text-3xl font-bold mt-2">{{ usage_summary.sessions_count|intcomma }}</div>
-          </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Sessions (30d)</span>
+          <span class="font-semibold">{{ usage_summary.sessions_count|intcomma }}</span>
         </div>
-        <div class="card card-border bg-base-100">
-          <div class="card-body p-4">
-            <span class="text-xs uppercase tracking-wide text-base-content/60">Messages (last 30 days)</span>
-            <div class="text-3xl font-bold mt-2">{{ usage_summary.messages_count|intcomma }}</div>
-          </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Messages (30d)</span>
+          <span class="font-semibold">{{ usage_summary.messages_count|intcomma }}</span>
         </div>
       </div>
     {% endif %}
