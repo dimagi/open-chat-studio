@@ -1,4 +1,8 @@
-"""Rate limiting behaviour for failed API-key authentication."""
+"""Rate limiting behaviour for the credentials scope: failed API-key authentication
+and the CommCare Connect key exchange.
+"""
+
+import uuid
 
 import pytest
 from django.conf import settings
@@ -42,3 +46,49 @@ def test_log_only_mode_still_returns_the_authentication_error(client):
         response = client.get(url, headers=INVALID_KEY_HEADERS)
 
     assert response.status_code == 401
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_generate_key_stops_before_the_outbound_call_once_over_limit(client, httpx_mock):
+    """This limit exists to bound a request we make to CommCare Connect under our own
+    name, which any non-empty Authorization header triggers. The refusal has to land in
+    front of that call rather than after it.
+    """
+    httpx_mock.add_response(
+        method="GET",
+        url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL,
+        json={"sub": uuid.uuid4().hex},
+        is_reusable=True,
+    )
+    url = reverse("api:commcare-connect:generate_key")
+    headers = {"Authorization": f"Bearer {uuid.uuid4()}"}
+    data = {"channel_id": uuid.uuid4().hex}
+    for _ in range(2):
+        client.post(url, data=data, headers=headers)
+
+    response = client.post(url, data=data, headers=headers)
+
+    assert response.status_code == 429
+    assert len(httpx_mock.get_requests()) == 2
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_generate_key_still_reaches_connect_in_log_only_mode(client, httpx_mock):
+    """The shipped default counts without changing what the device gets back."""
+    httpx_mock.add_response(
+        method="GET",
+        url=settings.COMMCARE_CONNECT_GET_CONNECT_ID_URL,
+        json={"sub": uuid.uuid4().hex},
+        is_reusable=True,
+    )
+    url = reverse("api:commcare-connect:generate_key")
+    headers = {"Authorization": f"Bearer {uuid.uuid4()}"}
+    data = {"channel_id": uuid.uuid4().hex}
+
+    for _ in range(4):
+        response = client.post(url, data=data, headers=headers)
+
+    assert response.status_code != 429
+    assert len(httpx_mock.get_requests()) == 4

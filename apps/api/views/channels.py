@@ -33,14 +33,23 @@ from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.oauth.permissions import TokenHasOAuthScope
 from apps.teams.utils import current_team
+from apps.utils.rate_limit import rate_limited
 
 connect_logger = logging.getLogger("api.connect_channel")
 
 
 @csrf_exempt
 @require_POST
+@rate_limited("credentials")
 def generate_key(request: Request):
-    """Generates a key for a specific channel to use for secure communication"""
+    """Generates a key for a specific channel to use for secure communication.
+
+    Counted at the door by client IP, ahead of the outbound call below. The view
+    accepts any non-empty Authorization header and lets CommCare Connect decide
+    whether it was valid, so an unauthenticated caller can make us issue that request.
+    `channel_id` arrives before the call but the caller supplies it, so keying on it
+    would let someone drain a known channel's budget or evade the counter by varying it.
+    """
     token = request.META.get("HTTP_AUTHORIZATION")
     if not (token and "channel_id" in request.POST):
         return HttpResponse("Missing token or data", status=400)
