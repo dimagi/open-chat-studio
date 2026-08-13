@@ -55,6 +55,15 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     def get_queryset(self):
         return working_chatbots(self.request.team).select_related("team").prefetch_related("versions")
 
+    def get_serializer_class(self):
+        # The actions below build their serializers directly, but OPTIONS metadata and any future
+        # `self.get_serializer()` call resolve the class through here, so it has to be right.
+        return {
+            "create": ChatbotCreateSerializer,
+            "partial_update": ChatbotWriteSerializer,
+            "inspect": ChatbotInspectSerializer,
+        }.get(self.action, super().get_serializer_class())
+
     @extend_schema(
         operation_id="chatbot_create",
         summary="Create Chatbot",
