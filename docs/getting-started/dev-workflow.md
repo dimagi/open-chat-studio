@@ -230,7 +230,7 @@ options you want by default:
 ```bash
 inv ruff                          # check --fix + format, whole project
 inv ruff --paths apps/web         # limit to a file or directory
-inv ruff --no-fix                 # report only, change nothing
+inv ruff --no-fix                 # skip lint autofixes (still reformats)
 inv ruff --unsafe-fixes           # also apply ruff's unsafe fixes
 ```
 
