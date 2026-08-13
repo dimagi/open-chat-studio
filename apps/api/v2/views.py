@@ -1,3 +1,5 @@
+from django.db import transaction
+from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, status
@@ -12,7 +14,12 @@ from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissions
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
-from apps.api.v2.write.serializers import ChatbotCreatedSerializer, ChatbotCreateSerializer
+from apps.api.v2.write.serializers import (
+    ChatbotCreatedSerializer,
+    ChatbotCreateSerializer,
+    ChatbotDetailSerializer,
+    ChatbotWriteSerializer,
+)
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 
@@ -106,6 +113,38 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             raise NotFound("Requested chatbot version was not found.") from err
         serializer = ChatbotInspectSerializer(target, context={"team": target.team})
         return Response(serializer.data)
+
+    @extend_schema(
+        operation_id="chatbot_update",
+        summary="Update Chatbot",
+        description=(
+            "Update the working (draft) chatbot's settings and its wiring to existing resources. "
+            "Key paths mirror the inspect response; references are named the way "
+            "GET /pipeline/options/ names them. Only the keys you send are changed."
+        ),
+        tags=["Chatbots"],
+        parameters=[
+            OpenApiParameter(
+                name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
+            ),
+        ],
+        request=ChatbotWriteSerializer,
+        responses={200: ChatbotDetailSerializer},
+    )
+    def partial_update(self, request, *args, **kwargs):
+        with transaction.atomic():
+            # Model.save() writes every column, so without the row lock two concurrent PATCHes
+            # naming different fields would silently clobber one another (spec W7).
+            chatbot = get_object_or_404(
+                Experiment.objects.filter(team=request.team, working_version__isnull=True).select_for_update(),
+                public_id=self.kwargs[self.lookup_url_kwarg],
+            )
+            serializer = ChatbotWriteSerializer(
+                chatbot, data=request.data, partial=True, context=self.get_serializer_context()
+            )
+            serializer.is_valid(raise_exception=True)
+            chatbot = serializer.save()
+        return Response(ChatbotDetailSerializer(chatbot).data)
 
 
 class MeView(APIView):

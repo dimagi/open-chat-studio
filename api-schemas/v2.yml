@@ -91,6 +91,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Chatbot'
           description: ''
+    patch:
+      operationId: chatbot_update
+      description: Update the working (draft) chatbot's settings and its wiring to
+        existing resources. Key paths mirror the inspect response; references are
+        named the way GET /pipeline/options/ names them. Only the keys you send are
+        changed.
+      summary: Update Chatbot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedChatbotWrite'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotDetail'
+          description: ''
   /api/v2/chatbots/{id}/inspect/:
     get:
       operationId: chatbot_inspect
@@ -882,6 +916,49 @@ components:
       - id
       - pipeline_id
       - version_number
+    ChatbotDetail:
+      type: object
+      description: 'The PATCH response: the same shape the request accepts, plus read-only
+        identity.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        pipeline_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        version_number:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        settings:
+          allOf:
+          - $ref: '#/components/schemas/ChatbotSettings'
+          readOnly: true
+        consent_form_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        trace_provider_id:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - consent_form_id
+      - id
+      - name
+      - pipeline_id
+      - settings
+      - trace_provider_id
+      - version_number
     ChatbotIdentity:
       type: object
       properties:
@@ -991,6 +1068,48 @@ components:
       - unwired_handles
       - version_description
       - voice
+    ChatbotSettings:
+      type: object
+      description: |-
+        The writable half of the inspect ``settings`` block.
+
+        Read-side twin: ``apps.api.v2.inspect.serializers.InspectSettingsSerializer``. Mounted with
+        ``source="*"`` on the parent, so DRF merges these straight onto the experiment (``set_value``
+        with empty ``source_attrs`` does a ``dict.update``) and an omitted key under a partial PATCH is
+        skipped rather than reset -- which is the whole merge semantics, with no custom code.
+      properties:
+        seed_message:
+          type: string
+          description: If set, send this message to the bot when the session starts,
+            and prompt the user with the initial response.
+        conversational_consent_enabled:
+          type: boolean
+          description: 'If enabled, the consent form will be sent at the start of
+            a conversation for external channels. Note: This requires the experiment
+            to have a seed message.'
+        voice_response_behaviour:
+          allOf:
+          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
+          description: |-
+            This tells the bot when to reply with voice messages
+
+            * `always` - Always
+            * `reciprocal` - Reciprocal
+            * `never` - Never
+        echo_transcript:
+          type: boolean
+          description: Whether or not the bot should tell the user what it heard when
+            the user sends voice messages
+        debug_mode_enabled:
+          type: boolean
+        file_uploads_enabled:
+          type: boolean
+          description: Enables file attachments in the web chat interface.
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+            maxLength: 128
     ChatbotVersion:
       type: object
       properties:
@@ -2034,6 +2153,29 @@ components:
       - identifier
       - platform
       - public_id
+    PatchedChatbotWrite:
+      type: object
+      description: |-
+        The PATCH request body.
+
+        The writable set is exactly ``Experiment.VERSIONED_CONTENT_FIELDS`` minus ``pipeline``, which
+        has its own façade -- so what inspect shows you is what you can write.
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        settings:
+          $ref: '#/components/schemas/ChatbotSettings'
+        consent_form_id:
+          type: integer
+          nullable: true
+        trace_provider_id:
+          type: integer
+          nullable: true
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects
@@ -2611,6 +2753,16 @@ components:
       - type: array
         items:
           $ref: '#/components/schemas/UsageBucketResult'
+    VoiceResponseBehaviourEnum:
+      enum:
+      - always
+      - reciprocal
+      - never
+      type: string
+      description: |-
+        * `always` - Always
+        * `reciprocal` - Reciprocal
+        * `never` - Never
   securitySchemes:
     OAuth2:
       type: oauth2
