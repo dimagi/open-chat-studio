@@ -26,13 +26,17 @@ Regardless of automated tests, ensure the quality of your changes:
 
 1. Create your PR in draft state.
 2. Add a clear description of your changes and link any related issues.
-3. Request AI review by commenting `@coderabbit review` on your PR.
-4. Address any AI-suggested improvements.
-5. When ready, change PR state to "Ready for review" and assign reviewers.
-6. Address reviewer feedback.
-7. Once approved, your changes can be merged.
+3. **Read your own diff on GitHub before anyone else does.**
+4. Address CI failures and the automated review feedback. CodeRabbit reviews drafts automatically;
+   you can also request a pass with `@coderabbit review`.
+5. When it's clean, change PR state to "Ready for review". This triggers a
+   [Claude code review](../developer_guides/claude_github_automation.md#pr-code-review) — resolve
+   its findings too.
+6. Only once the automated feedback is resolved, assign a human reviewer.
+7. Address reviewer feedback.
+8. Once approved, your changes can be merged.
 
-**Note:** The AI review stage is optional but recommended for larger changes.
+The OCS team automates most of steps 3–6 — see the [Development Workflow](../getting-started/dev-workflow.md).
 
 ## Test Policy
 

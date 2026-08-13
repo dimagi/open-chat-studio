@@ -321,6 +321,9 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
+        # Settings differ between the working and published rows (both are in VERSIONED_FIELDS), so
+        # the "chat to the published version" launcher must read them off this, not `experiment`.
+        "published_version": published,
         "highlight_version_id": request.GET.get("version_id"),
         **_get_events_context(experiment, team_slug),
     }
