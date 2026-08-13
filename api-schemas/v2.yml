@@ -937,9 +937,10 @@ components:
           readOnly: true
         name:
           type: string
-          maxLength: 128
+          readOnly: true
         description:
           type: string
+          readOnly: true
           nullable: true
           title: A longer description of the experiment.
         settings:
@@ -964,6 +965,7 @@ components:
           nullable: true
       required:
       - consent_form_id
+      - description
       - id
       - name
       - pipeline_id

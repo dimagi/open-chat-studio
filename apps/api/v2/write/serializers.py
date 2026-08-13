@@ -247,3 +247,7 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "voice_provider_id",
             "synthetic_voice_id",
         ]
+        # Nothing here is writable: this serializer only ever renders a response. `name` and
+        # `description` are the two ModelSerializer generates, and generated clients would
+        # otherwise model them as writable on a response-only component.
+        read_only_fields = ["name", "description"]
