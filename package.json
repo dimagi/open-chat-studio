@@ -11,9 +11,7 @@
     "dev-watch": "webpack --mode development --watch",
     "type-check": "tsc --noEmit",
     "type-check-watch": "pnpm type-check -- --watch",
-    "lint": "eslint --fix assets/javascript",
-    "cypress:open": "cypress open",
-    "cypress:run": "cypress run"
+    "lint": "eslint --fix assets/javascript"
   },
   "author": "",
   "homepage": "http://example.com/",
@@ -90,13 +88,9 @@
     "tom-select": "^2.6.0",
     "zustand": "^5.0.13"
   },
-  "optionalDependencies": {
-    "cypress": "^15.15.0"
-  },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@sentry/cli",
-      "cypress"
+      "@sentry/cli"
     ]
   }
 }
