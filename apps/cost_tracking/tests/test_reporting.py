@@ -25,6 +25,7 @@ from apps.cost_tracking.services.reporting import (
     trace_token_usage,
     usage_timeseries,
 )
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
@@ -213,9 +214,12 @@ class TestCostsByExperiment:
 @pytest.mark.django_db()
 class TestChatbotUsageSummary:
     """Cost + session/message counts for one chatbot's usage widget (chatbot home page).
-    Uses real `timezone.now()` rather than the frozen `_NOW` other classes use, since
-    `ExperimentSession.created_at`/`ChatMessage.created_at` are `auto_now_add` and can't be
-    backdated without the same post-generation trick `UsageRecordFactory.at` uses."""
+    Session/message counts come from `filtered_querysets` (ADR-0051's canonical activity
+    definitions), so a session only counts if it has an in-window conversation message - same
+    as the dashboard's Bot Performance table. Uses real `timezone.now()` rather than the frozen
+    `_NOW` other classes use, since `ExperimentSession.created_at` is `auto_now_add` and can't be
+    backdated without the same post-generation trick `UsageRecordFactory.at` uses; `ChatMessage.created_at`
+    accepts an explicit value directly (it isn't `auto_now_add`)."""
 
     def _window(self):
         end = timezone.now()
@@ -254,6 +258,8 @@ class TestChatbotUsageSummary:
         other_experiment = ExperimentFactory.create(team=team)
         session = ExperimentSessionFactory.create(experiment=experiment, team=team)
         other_session = ExperimentSessionFactory.create(experiment=other_experiment, team=team)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+        ChatMessage.objects.create(chat=other_session.chat, message_type=ChatMessageType.HUMAN, content="hi")
         UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.00"))
         UsageRecordFactory.create(team=team, experiment=other_experiment, session=other_session, cost=Decimal("9.00"))
         start, end = self._window()
@@ -266,12 +272,48 @@ class TestChatbotUsageSummary:
     def test_excludes_evaluation_sessions(self):
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
-        ExperimentSessionFactory.create(experiment=experiment, team=team, platform=ChannelPlatform.EVALUATIONS)
+        session = ExperimentSessionFactory.create(
+            experiment=experiment, team=team, platform=ChannelPlatform.EVALUATIONS
+        )
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
         start, end = self._window()
 
         usage = chatbot_usage_summary(experiment, start=start, end=end)
 
         assert usage.sessions_count == 0
+
+    def test_excludes_setup_sessions(self):
+        """SETUP sessions have no real conversation yet - excluded per ADR-0051, same as the
+        dashboard's Bot Performance table."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team, status=SessionStatus.SETUP)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+        start, end = self._window()
+
+        usage = chatbot_usage_summary(experiment, start=start, end=end)
+
+        assert usage.sessions_count == 0
+
+    def test_counts_sessions_active_in_window_regardless_of_when_created(self):
+        """A session's activity is what makes it "in the window," not its `created_at` - a
+        long-lived session (e.g. a WhatsApp thread `channel_base.py` reuses indefinitely) created
+        long before the window still counts if it had turns inside it. A naive `created_at` filter
+        on the session queryset would drop it entirely: the join to its messages can't re-admit rows
+        the outer session filter already excluded."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+        start, end = self._window()
+        ExperimentSession.objects.filter(pk=session.pk).update(created_at=start - timedelta(days=15))
+        ChatMessage.objects.create(
+            chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi", created_at=end - timedelta(days=1)
+        )
+
+        usage = chatbot_usage_summary(experiment, start=start, end=end)
+
+        assert usage.sessions_count == 1
+        assert usage.messages_count == 1
 
 
 @pytest.mark.django_db()
