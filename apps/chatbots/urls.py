@@ -52,24 +52,9 @@ urlpatterns = [
         name="chatbot_new_session",
     ),
     path(
-        "<int:experiment_id>/v/<int:version_number>/session/<int:session_id>/",
-        views.chatbot_chat_session,
-        name="chatbot_chat_session",
-    ),
-    path(
         "<uuid:experiment_id>/s/<str:session_id>/paginate/",
         views.chatbot_session_pagination_view,
         name="chatbot_session_pagination_view",
-    ),
-    path(
-        "<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
-        name="start_authed_web_session",
-    ),
-    path(
-        "<int:experiment_id>/v/<int:version_number>/start_authed_web_session/",
-        views.start_authed_web_session,
-        name="start_authed_web_session",
     ),
     path("<uuid:experiment_id>/start/", views.start_chatbot_session_public, name="start_session_public"),
     path(

@@ -16,12 +16,6 @@ from apps.generics.tables import ArrayColumn, ColumnWithHelp, TimeAgoColumn
 from apps.teams.utils import get_slug_for_team
 
 
-def session_chat_url(url_name, request, record, value):
-    return reverse(
-        url_name, args=[request.team.slug, record.experiment_id, record.get_experiment_version_number(), record.id]
-    )
-
-
 def _show_chat_button(request, record):
     return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
@@ -58,12 +52,11 @@ def _chat_version(session: ExperimentSession, version_number: int) -> Experiment
 class ContinueChatAction(actions.Action):
     """Continue Chat action. Opens the session in the embedded widget (a floating popup).
 
-    This action does not navigate, so the ``url_name``/``url_factory`` it is constructed with are
-    vestigial: ``Action.get_context`` always builds ``action_url``, but the template above renders a
-    widget launcher instead of a link. They stay because ``url_name`` is a required field on the base
-    class — don't read them as evidence that the full-page chat route is still reachable from here.
+    This action does not navigate: the template renders a widget launcher rather than a link, so it
+    carries no ``url_name``.
     """
 
+    url_name: str = ""
     template: str = "chatbots/components/continue_chat_action.html"
 
     def get_context(self, request, record, value):
@@ -186,8 +179,6 @@ class ChatbotSessionsTable(tables.Table):
     actions = actions.ActionsColumn(
         actions=[
             ContinueChatAction(
-                url_name="chatbots:chatbot_chat_session",
-                url_factory=session_chat_url,
                 icon_class="fa-solid fa-comment",
                 title="Continue Chat",
                 display_condition=_show_chat_button,

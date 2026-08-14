@@ -23,7 +23,6 @@ from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.session_tokens import issue_session_token
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
-from apps.channels.web_channel import WebChannel
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
@@ -675,36 +674,6 @@ def _end_session_from_request(session: ExperimentSession, request) -> None:
 
 
 @login_and_team_required
-def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_number: int, session_id: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = get_object_or_404(
-        ExperimentSession, participant__user=request.user, experiment_id=experiment_id, id=session_id
-    )
-    try:
-        experiment_version = experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_name": experiment_version.name,
-        "experiment_version": experiment_version,
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "chatbots/chat/web_chat.html",
-        {
-            "experiment": experiment,
-            "session": session,
-            "session_token": issue_session_token(session),
-            "active_tab": "chatbots",
-            **version_specific_vars,
-        },
-    )
-
-
-@login_and_team_required
 def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return paginate_session(
         request,
@@ -712,22 +681,6 @@ def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid
         experiment_id,
         session_id,
         view_name="chatbots:chatbot_session_view",
-    )
-
-
-@require_POST
-@login_and_team_required
-def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_user=request.user,
-        participant_identifier=request.user.email,
-        timezone=request.session.get("detected_tz", None),
-        version=version_number,
-    )
-    return HttpResponseRedirect(
-        reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
     )
 
 
