@@ -30,6 +30,8 @@ EXPERIMENT_CHANNEL_FIELDS = [
     "platform",
     "messaging_provider",
     "required_auth_level",
+    "enabled",
+    "disabled_message",
 ]
 
 NO_ACTIVITY_CONFIG_FIELDS = ["message_for_bot", "name", "max_pings", "ping_after", "team"]

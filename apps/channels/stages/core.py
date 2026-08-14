@@ -107,6 +107,42 @@ def get_or_create_participant(
 
 
 # ---------------------------------------------------------------------------
+# ChannelDisabledStage
+# ---------------------------------------------------------------------------
+
+
+class ChannelDisabledStage(ProcessingStage):
+    """Blocks inbound messages on a channel an admin has switched off.
+
+    Runs first so a disabled channel does no work at all: no participant record,
+    no session, no bot invocation. When a static ``disabled_message`` is configured
+    it is returned to the user via the terminal stages; otherwise the pipeline halts
+    silently and the user gets no reply.
+
+    Nothing is persisted either way -- neither the inbound message nor the static
+    reply -- because the stages that create them never run.
+    """
+
+    span_input_fields = ("experiment_channel.enabled",)
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return not ctx.experiment_channel.enabled
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        channel = ctx.experiment_channel
+        logger.info("Ignoring message for disabled channel %s (%s)", channel.id, channel.platform)
+
+        # ParticipantValidationStage never runs, so set the recipient the terminal
+        # sending stage needs to deliver the static reply.
+        if ctx.message is not None:
+            ctx.participant_identifier = ctx.message.participant_id
+
+        if channel.disabled_message:
+            raise EarlyExitResponse(channel.disabled_message)
+        raise EarlyAbort()
+
+
+# ---------------------------------------------------------------------------
 # ParticipantValidationStage
 # ---------------------------------------------------------------------------
 

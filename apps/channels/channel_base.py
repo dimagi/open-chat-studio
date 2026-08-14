@@ -9,6 +9,7 @@ from apps.channels.pipeline import MessageProcessingContext, MessageProcessingPi
 from apps.channels.stages.core import (
     AttachmentHydrationStage,
     BotInteractionStage,
+    ChannelDisabledStage,
     ChatMessageCreationStage,
     ConsentCheckStage,
     ConsentFlowStage,
@@ -125,6 +126,7 @@ class ChannelBase(ABC):
         """
         return MessageProcessingPipeline(
             core_stages=[
+                ChannelDisabledStage(),
                 ParticipantValidationStage(),
                 ParticipantResolverStage(),
                 ConsentCheckStage(),
