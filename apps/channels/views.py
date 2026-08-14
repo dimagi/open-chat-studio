@@ -34,15 +34,7 @@ from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsa
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
-from apps.channels.rate_limit_keys import (
-    CHANNELS_SCOPE,
-    channel_external_id_key,
-    connect_ip_key,
-    experiment_id_key,
-    meta_ip_key,
-    sureadhere_tenant_key,
-    twilio_ip_key,
-)
+from apps.channels.rate_limiting import count_channel_delivery
 from apps.channels.serializers import (
     ApiMessageSerializer,
     ApiResponseMessageSerializer,
@@ -59,7 +51,6 @@ from apps.experiments.views.utils import get_channels_context
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.decorators import login_and_team_required
 from apps.teams.utils import set_current_team
-from apps.utils.rate_limit import rate_limited
 from apps.web.waf import WafRule, waf_allow
 
 log = logging.getLogger("ocs.channels")
@@ -68,7 +59,6 @@ log = logging.getLogger("ocs.channels")
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
 @require_POST
-@rate_limited(CHANNELS_SCOPE, key_fn=channel_external_id_key)
 def new_telegram_message(request, channel_external_id: uuid):
     token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if token != settings.TELEGRAM_SECRET_TOKEN:
@@ -80,6 +70,7 @@ def new_telegram_message(request, channel_external_id: uuid):
 
     set_current_team(channel.team)
     request.experiment = channel.experiment  # used by RequestLoggingMiddleware
+    count_channel_delivery(request, channel)
     data = json.loads(request.body)
     tasks.handle_telegram_message.delay(message_data=data, channel_external_id=channel_external_id)
     return HttpResponse()
@@ -87,7 +78,6 @@ def new_telegram_message(request, channel_external_id: uuid):
 
 @csrf_exempt
 @require_POST
-@rate_limited(CHANNELS_SCOPE, key_fn=twilio_ip_key)
 def new_twilio_message(request):
     message_data = request.POST.dict()
 
@@ -117,6 +107,7 @@ def new_twilio_message(request):
     ):
         return HttpResponseBadRequest("Invalid signature.")
 
+    count_channel_delivery(request, experiment_channel)
     tasks.handle_twilio_message.delay(message_data=message_data)
     return HttpResponse()
 
@@ -124,7 +115,6 @@ def new_twilio_message(request):
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
 @require_POST
-@rate_limited(CHANNELS_SCOPE, key_fn=sureadhere_tenant_key)
 def new_sureadhere_message(request, sureadhere_tenant_id: int):
     channel = tasks.get_experiment_channel(
         ChannelPlatform.SUREADHERE,
@@ -135,6 +125,7 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
     set_current_team(channel.team)
     request.experiment = channel.experiment  # used by RequestLoggingMiddleware
+    count_channel_delivery(request, channel)
     message_data = json.loads(request.body)
     tasks.handle_sureadhere_message.delay(sureadhere_tenant_id=sureadhere_tenant_id, message_data=message_data)
     return HttpResponse()
@@ -142,7 +133,6 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
 @csrf_exempt
 @require_POST
-@rate_limited(CHANNELS_SCOPE, key_fn=experiment_id_key)
 def new_turn_message(request, experiment_id: uuid):
     channel = tasks.get_experiment_channel(
         ChannelPlatform.WHATSAPP,
@@ -180,6 +170,7 @@ def new_turn_message(request, experiment_id: uuid):
     if not _turn_request_is_authorised(request, channel):
         return HttpResponse("Invalid signature.", status=401)
 
+    count_channel_delivery(request, channel)
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
     return HttpResponse()
 
@@ -326,7 +317,6 @@ def _new_api_message(request, experiment_id: uuid, version=None):
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @require_POST
 @csrf_exempt
-@rate_limited(CHANNELS_SCOPE, key_fn=connect_ip_key)
 @verify_hmac
 def new_connect_message(request: HttpRequest):
     serializer = CommCareConnectMessageSerializer(data=json.loads(request.body))
@@ -350,6 +340,7 @@ def new_connect_message(request: HttpRequest):
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
+    count_channel_delivery(request, channel)
     tasks.handle_commcare_connect_message.delay(
         experiment_id=participant_data.experiment_id,
         participant_data_id=participant_data.id,
@@ -515,7 +506,6 @@ def _clear_remote_webhook(channel: ExperimentChannel):
 
 @method_decorator(waf_allow(WafRule.NoUserAgent_HEADER), name="dispatch")
 @method_decorator(csrf_exempt, name="dispatch")
-@method_decorator(rate_limited(CHANNELS_SCOPE, key_fn=meta_ip_key), name="post")
 class MetaCloudAPIWebhookView(View):
     def get(self, request):
         log.debug("Meta Cloud API webhook verification request received")
@@ -567,10 +557,10 @@ class MetaCloudAPIWebhookView(View):
             log.warning("Meta Cloud API webhook signature verification failed for channel")
             return HttpResponse()
 
-        self._dispatch_message_values(message_values, channel_map)
+        self._dispatch_message_values(request, message_values, channel_map)
         return HttpResponse()
 
-    def _dispatch_message_values(self, message_values: list[dict], channel_map: dict) -> None:
+    def _dispatch_message_values(self, request, message_values: list[dict], channel_map: dict) -> None:
         """Queue a task for each conversational message value, routing it to its channel."""
         for value in message_values:
             phone_number_id = value["metadata"]["phone_number_id"]
@@ -582,6 +572,9 @@ class MetaCloudAPIWebhookView(View):
                 log.info("Ignoring non-conversational Meta Cloud API webhook value")
                 continue
 
+            # One payload may carry values for several phone numbers, each belonging to
+            # a different team, so each value is billed to the channel it routes to.
+            count_channel_delivery(request, ch)
             tasks.handle_meta_cloud_api_message.delay(
                 channel_id=ch.id,
                 team_slug=ch.team.slug,

@@ -16,6 +16,7 @@ from slack_bolt import BoltContext, BoltResponse
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.datamodels import SlackMessage
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.rate_limiting import count_channel_message
 from apps.channels.slack_channel import SlackChannel
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import ExperimentSession
@@ -59,6 +60,8 @@ def respond_to_message(event, context: BoltContext, session=None):
     if not experiment_channel:
         context.say("Unable to find a bot to respond to your message.", thread_ts=thread_ts)
         return
+
+    count_channel_message(experiment_channel)
 
     experiment = experiment_channel.experiment
     if session and session.team_id != experiment.team_id:
