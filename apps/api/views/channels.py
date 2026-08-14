@@ -31,7 +31,7 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.registry import get_channel_class_for_platform
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
-from apps.oauth.permissions import TokenHasOAuthScope
+from apps.oauth.permissions import TokenHasOAuthScope, enforce_application_chatbot_access
 from apps.teams.utils import current_team
 
 connect_logger = logging.getLogger("api.connect_channel")
@@ -167,6 +167,8 @@ def handle_trigger_bot_message(request, response_serializer_class):
     data = dict(data)
     data["identifier"] = identifier
     experiment = get_object_or_404(Experiment, public_id=data["experiment"], team=request.team)
+    # Before _get_or_create_participant_data below, which creates participant data as a side effect.
+    enforce_application_chatbot_access(request, experiment)
 
     channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
     if not channel:
@@ -224,6 +226,7 @@ class TriggerBotMessageView(APIView):
         responses={
             200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
+            403: {"description": "The OAuth application is not authorized for this chatbot"},
             404: {"description": "Not Found"},
         },
         examples=[

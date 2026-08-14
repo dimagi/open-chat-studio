@@ -1,7 +1,9 @@
 import pytest
 
+from apps.experiments.models import Experiment
 from apps.oauth.forms import AuthorizationForm, RegisterApplicationForm, RegisterGlobalApplicationForm
 from apps.oauth.models import OAuth2Application
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 
 
@@ -104,6 +106,102 @@ def test_global_form_saves_as_authorization_code():
     form = RegisterGlobalApplicationForm(data=_form_data(redirect_uris="https://example.com/callback"))
     assert form.is_valid(), form.errors
     assert form.cleaned_data["authorization_grant_type"] == OAuth2Application.GRANT_AUTHORIZATION_CODE
+
+
+def _client_credentials_app(team, name="machine-app"):
+    return OAuth2Application.objects.create(
+        name=name,
+        team=team,
+        client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+        authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+    )
+
+
+@pytest.mark.django_db()
+def test_allowed_chatbots_offers_only_the_teams_working_versions(user_with_team):
+    _user, team = user_with_team
+    mine = ExperimentFactory.create(team=team)
+    version = mine.create_new_version()
+    archived = ExperimentFactory.create(team=team, is_archived=True)
+    other_team = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+
+    offered = set(RegisterApplicationForm(team=team).fields["allowed_chatbots"].queryset)
+
+    assert offered == {mine}
+    assert version not in offered
+    assert archived not in offered
+    assert other_team not in offered
+
+
+@pytest.mark.django_db()
+def test_allowed_chatbots_saved_for_client_credentials(user_with_team):
+    _user, team = user_with_team
+    chatbot = ExperimentFactory.create(team=team)
+    form = RegisterApplicationForm(
+        team=team,
+        data=_form_data(
+            authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+            allowed_chatbots=[chatbot.pk],
+        ),
+    )
+
+    assert form.is_valid(), form.errors
+    form.instance.team = team
+    app = form.save()
+    assert list(app.allowed_chatbots.all()) == [chatbot]
+
+
+@pytest.mark.django_db()
+def test_allowed_chatbots_cleared_for_authorization_code(user_with_team):
+    """An authorization-code token carries a user, so it keeps team-membership semantics."""
+    _user, team = user_with_team
+    chatbot = ExperimentFactory.create(team=team)
+    form = RegisterApplicationForm(
+        team=team,
+        data=_form_data(
+            authorization_grant_type=OAuth2Application.GRANT_AUTHORIZATION_CODE,
+            redirect_uris="https://example.com/callback",
+            allowed_chatbots=[chatbot.pk],
+        ),
+    )
+
+    assert form.is_valid(), form.errors
+    form.instance.team = team
+    app = form.save()
+    assert list(app.allowed_chatbots.all()) == []
+
+
+@pytest.mark.django_db()
+def test_archived_chatbot_survives_an_unrelated_save(user_with_team):
+    """A ModelMultipleChoiceField drops selections outside its queryset -- archived ones included."""
+    _user, team = user_with_team
+    archived = ExperimentFactory.create(team=team, is_archived=True)
+    app = _client_credentials_app(team)
+    app.allowed_chatbots.add(archived)
+
+    form = RegisterApplicationForm(instance=app, team=team)
+    assert form.initial["allowed_chatbots"] == [archived.pk]
+
+    form = RegisterApplicationForm(
+        instance=app,
+        team=team,
+        data=_form_data(
+            name="renamed",
+            authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+            allowed_chatbots=[archived.pk],
+        ),
+    )
+    assert form.is_valid(), form.errors
+    form.save()
+
+    # Read through get_all(): the related manager filters archived rows out of its own queryset.
+    assert list(Experiment.objects.get_all().filter(oauth_applications=app)) == [archived]
+
+
+@pytest.mark.django_db()
+def test_global_form_omits_allowed_chatbots():
+    """A global application has no team whose chatbots could be offered."""
+    assert "allowed_chatbots" not in RegisterGlobalApplicationForm().fields
 
 
 def _authorization_form_data(team_slug=None):

@@ -42,6 +42,7 @@ class TriggerBotMessageView(APIView):
         responses={
             200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
+            403: {"description": "The OAuth application is not authorized for this chatbot"},
             404: {"description": "Not Found"},
         },
         examples=[

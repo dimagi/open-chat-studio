@@ -366,6 +366,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
+          description: ''
   /api/openai/{experiment_id}/v{version}/chat/completions:
     post:
       operationId: openai_chat_completions_versioned
@@ -434,6 +440,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
           description: ''
   /api/participants:
     get:
@@ -896,6 +908,12 @@ paths:
                     detail: User has not given consent
                   summary: User has not given consent
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
+          description: ''
         '404':
           content:
             application/json:
@@ -939,6 +957,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponseMessage'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
+          description: ''
   /channels/api/{experiment_id}/v{version}/incoming_message:
     post:
       operationId: new_api_message_versioned
@@ -979,6 +1003,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
           description: ''
 components:
   schemas:
