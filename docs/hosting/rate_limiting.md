@@ -55,7 +55,9 @@ Everything goes to the `ocs.rate_limit` logger.
 ### rate_limit.would_block
 
 An identity went over its limit and was served anyway. While `RATE_LIMIT_ENFORCE` is `False` this
-is what every crossing produces.
+is what every crossing produces. On the `channels` scope it is what every crossing produces
+permanently, since that scope never refuses, so these lines continuing after the flip is expected
+rather than a sign that enforcement is not working.
 
 | Field | Meaning |
 | --- | --- |
@@ -107,6 +109,12 @@ Every limit is an environment variable, so thresholds can move without a code ch
 
 Set `RATE_LIMIT_ENFORCE=True`. Requests over budget are refused from then on.
 
+One exception: the `channels` scope counts but never refuses, in either state. An over-limit
+inbound delivery is logged and still processed, because counting happens after the view has
+answered the provider, so refusing it would discard a participant's message rather than delay it.
+Inbound provider traffic is therefore not bounded by this switch, and the WAF remains the only
+backstop for it.
+
 A refused caller gets:
 
 - `429` with `{"detail": "Rate limit exceeded.", "available_in": <seconds>}` on the JSON surfaces
@@ -117,8 +125,9 @@ Responses also carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLim
 whenever the limiter has counts to report. They are omitted when it does not, because there would
 be nothing behind them.
 
-One switch covers every scope. There is no per-scope enforcement flag, so calibrate all of them
-before flipping it.
+One switch covers every scope that refuses. There is no per-scope enforcement flag, so calibrate
+all of them before flipping it. It makes no difference to `channels`, which behaves the same
+either side of the flip.
 
 ## Failure Modes
 
@@ -134,12 +143,24 @@ it needs a restart.
 [Feature Flags](../admin_guides/feature_flags.md)).
 
 Turn it on for specific teams to lift limits for one customer, for instance while you look into a
-legitimate spike. Turn it on for everyone as a kill switch, which stops counting and enforcement
-without a deploy or a restart.
+legitimate spike. Turn it on for everyone as a near-global kill switch, which stops counting and
+enforcement without a deploy or a restart.
 
 The per-team form resolves the team from the request. Surfaces that only learn the team after the
 view has done its own lookup, the provider webhooks among them, are not reached by it, and only
 the everyone-on form applies there.
+
+Two paths consult neither form, because both count from a place with no request to resolve the
+flag against:
+
+- Rejected API key and bearer presentations are counted from inside an authentication class, so
+  they keep being counted against `credentials` and keep receiving `429` while enforcement is on.
+  This is the one that matters in an incident, since `credentials` is the scope that refuses when
+  the limiter cannot count.
+- Slack deliveries are counted from the Bolt listener. They keep being counted, though nothing is
+  refused there in any case, since `channels` does not refuse.
+
+`RATE_LIMIT_ENFORCE=False` plus a restart remains the only complete off switch.
 
 ## What This Does Not Cover
 
