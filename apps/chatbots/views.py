@@ -28,7 +28,7 @@ from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
-from apps.experiments.decorators import experiment_session_view
+from apps.experiments.decorators import experiment_session_view, require_transcript_access
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
@@ -595,8 +595,8 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
 
 
 @login_and_team_required
-@permission_required("chat.view_chat", raise_exception=True)
-@experiment_session_view()
+@experiment_session_view
+@require_transcript_access
 def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return render_session_details(
         request,
@@ -669,7 +669,10 @@ def _end_session_from_request(session: ExperimentSession, request) -> None:
 
 
 @login_and_team_required
+@permission_required("chat.view_chat", raise_exception=True)
 def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
+    # Stricter than the transcript views: this redirects to the *next* session, which the
+    # caller may have no claim on, so owning the current one is not enough.
     return paginate_session(
         request,
         team_slug,

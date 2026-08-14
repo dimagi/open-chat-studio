@@ -66,7 +66,7 @@ def render_session_details(
     )
 
 
-@experiment_session_view()
+@experiment_session_view
 def paginate_session(request, team_slug, experiment_id, session_id, view_name):
     session = request.experiment_session
     experiment = request.experiment

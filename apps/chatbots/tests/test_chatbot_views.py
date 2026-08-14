@@ -28,7 +28,7 @@ from apps.chatbots.views import (
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
-from apps.teams.backends import CHAT_VIEWER_GROUP, add_user_to_team, create_default_groups
+from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -239,6 +239,8 @@ def attach_session_middleware_to_request(request):
 def test_chatbot_session_pagination_view(team_with_users):
     team = team_with_users
     user = team.members.first()
+    # Paginating between sessions needs chat.view_chat, not just membership.
+    user.user_permissions.add(Permission.objects.get(codename="view_chat"))
     experiment = Experiment.objects.create(
         name="Test Experiment",
         description="Test description",
@@ -1004,6 +1006,7 @@ def test_session_view_only_links_http_embed_source(client, team_with_users, embe
     ("identity", "expected_status"),
     [
         pytest.param("chat_viewer", 200, id="team-member-with-chat-view-chat"),
+        pytest.param("chatbot_admin_own_session", 200, id="chatbot-admin-reading-own-conversation"),
         pytest.param("no_perm_member", 403, id="team-member-without-chat-view-chat"),
         pytest.param("non_member", 404, id="authenticated-non-member"),
         pytest.param("anonymous", 302, id="anonymous-redirects-to-login"),
@@ -1012,9 +1015,10 @@ def test_session_view_only_links_http_embed_source(client, team_with_users, embe
 def test_session_transcript_views_require_team_membership(client, view_name, identity, expected_status):
     """Session transcripts are team-internal.
 
-    The public chat is gone, so there is no participant-facing path into these views any more:
-    access is team membership plus `chat.view_chat`, and the participant-owns-the-session
-    bypass (which used to serve the removed chat UI) no longer applies.
+    The public chat is gone, so there is no participant-facing path into these views any more.
+    Access needs team membership plus either `chat.view_chat` or being the session's own
+    participant — `Chatbot Admin` has no `chat` permissions, so the second branch is what keeps
+    the build-and-test loop (chat to your bot via the widget, then read it back) working.
     """
     create_default_groups()
     team = TeamFactory.create()
@@ -1024,17 +1028,50 @@ def test_session_transcript_views_require_team_membership(client, view_name, ide
         user = UserFactory.create()
         add_user_to_team(team, user, groups=[CHAT_VIEWER_GROUP])
         client.force_login(user)
+    elif identity == "chatbot_admin_own_session":
+        user = UserFactory.create()
+        add_user_to_team(team, user, groups=[CHATBOT_ADMIN_GROUP])
+        assert not user.has_perm("chat.view_chat")  # not vacuous: access comes from ownership
+        session.participant.user = user
+        session.participant.save()
+        client.force_login(user)
     elif identity == "no_perm_member":
         user = UserFactory.create()
         add_user_to_team(team, user, groups=[])
         client.force_login(user)
     elif identity == "non_member":
-        # A participant who owns the session but has no team membership: the old
-        # access check let this through, team auth does not.
+        # Owning the session is not enough on its own: team membership is still required.
         user = UserFactory.create()
         session.participant.user = user
         session.participant.save()
         client.force_login(user)
 
     url = reverse(view_name, args=[team.slug, session.experiment.public_id, session.external_id])
+    assert client.get(url).status_code == expected_status
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("groups", "expected_status"),
+    [
+        pytest.param([CHAT_VIEWER_GROUP], 302, id="chat-viewer-may-paginate"),
+        pytest.param([CHATBOT_ADMIN_GROUP], 403, id="owning-one-session-does-not-grant-the-next"),
+    ],
+)
+def test_session_pagination_requires_chat_view_chat(client, groups, expected_status):
+    """Pagination redirects to the *next* session, so owning the current one is not enough."""
+    create_default_groups()
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    ExperimentSessionFactory.create(experiment=session.experiment, team=team)
+    user = UserFactory.create()
+    add_user_to_team(team, user, groups=groups)
+    session.participant.user = user
+    session.participant.save()
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_pagination_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
     assert client.get(url).status_code == expected_status
