@@ -20,8 +20,10 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
+from waffle import flag_is_active
 
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
+from apps.evaluations.cost import evaluation_config_cost_summary, evaluation_run_cost, evaluation_run_costs
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
@@ -46,6 +48,11 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.time import seconds_to_human
 
 logger = logging.getLogger(__name__)
+
+# Gates the same cost-tracking UI surface as the dashboard and LLM provider page
+# (apps.dashboard.views.COST_TRACKING_FLAG / apps.service_providers.views.COST_TRACKING_FLAG).
+# UsageRecord rows are always written regardless of this flag; it only gates display.
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
 class EvaluationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -160,12 +167,17 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team=self.request.team)
 
-        return {
+        cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
+        context = {
             **super().get_context_data(**kwargs),
             "config": config,
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
+            "cost_tracking_enabled": cost_tracking_enabled,
         }
+        if cost_tracking_enabled:
+            context["cost_summary"] = evaluation_config_cost_summary(config)
+        return context
 
 
 class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
@@ -249,6 +261,22 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
             .order_by("-created_at")
         )
 
+    def get_table_kwargs(self):
+        return {"cost_tracking_enabled": flag_is_active(self.request, COST_TRACKING_FLAG)}
+
+    def get_table_data(self):
+        """Stamp each row with its cost so the table's `cost` column can render it.
+
+        Reads `self.object_list` (set by `ListView.get` before this runs) rather than
+        calling `get_queryset()` again, so listing runs costs one query, not two.
+        """
+        runs = list(self.object_list) if hasattr(self, "object_list") else list(self.get_queryset())
+        if runs and flag_is_active(self.request, COST_TRACKING_FLAG):
+            costs = evaluation_run_costs(self.kwargs["evaluation_pk"], [run.id for run in runs])
+            for run in runs:
+                run.cost = costs.get(run.id)  # ty: ignore[invalid-assignment]
+        return runs
+
 
 class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "evaluations.view_evaluationrun"
@@ -262,13 +290,17 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         title = (
             "Evaluation Run Preview" if evaluation_run.type == EvaluationRunType.PREVIEW else "Evaluation Run Results"
         )
+        cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
         context: dict[str, Any] = {
             "active_tab": "evaluations",
             "title": title,
             "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
+            "cost_tracking_enabled": cost_tracking_enabled,
         }
+        if cost_tracking_enabled:
+            context["run_cost"] = evaluation_run_cost(evaluation_run)
 
         # Calculate duration if finished
         if evaluation_run.finished_at:

@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load static %}
+{% load cost_tracking humanize static %}
 
 {% block page_head %}
   {{ block.super }}
@@ -101,6 +101,48 @@
             <p><strong>Error:</strong> <span class="text-error">{{ evaluation_run.error_message }}</span></p>
           {% endif %}
         </div>
+        {% if cost_tracking_enabled %}
+          <div>
+            <h2 class="text-lg font-semibold mb-2">Cost</h2>
+            {% if run_cost.by_model %}
+              <p>
+                <strong>Total:</strong>
+                ${{ run_cost.total_cost|cost_display }} {{ run_cost.currency }}
+                <span class="text-base-content/60">({{ run_cost.total_tokens|intcomma }} tokens)</span>
+              </p>
+              <div class="mt-3">
+                <h3 class="text-sm font-semibold text-base-content/70 mb-1">By evaluator</h3>
+                <table class="table table-sm">
+                  <tbody>
+                    {% for row in run_cost.by_evaluator %}
+                      <tr>
+                        <td>{{ row.evaluator_name }}</td>
+                        <td class="text-right">${{ row.cost|cost_display }}</td>
+                        <td class="text-right text-base-content/60">{{ row.tokens|intcomma }} tokens</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <div class="mt-3">
+                <h3 class="text-sm font-semibold text-base-content/70 mb-1">By model</h3>
+                <table class="table table-sm">
+                  <tbody>
+                    {% for row in run_cost.by_model %}
+                      <tr>
+                        <td>{{ row.model_name }}</td>
+                        <td class="text-right">${{ row.cost|cost_display }}</td>
+                        <td class="text-right text-base-content/60">{{ row.tokens|intcomma }} tokens</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="text-base-content/60">No LLM cost recorded for this run.</p>
+            {% endif %}
+          </div>
+        {% endif %}
       </div>
     </div>
 

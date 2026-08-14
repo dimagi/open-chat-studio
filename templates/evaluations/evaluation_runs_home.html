@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load static %}
+{% load cost_tracking static %}
 
 {% block page_js %}
   {{ block.super }}
@@ -64,6 +64,30 @@
         {% endif %}
       </div>
     </div>
+
+    {% if cost_tracking_enabled %}
+      <div class="mb-8">
+        <h2 class="text-lg font-semibold mb-4">Cost</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="card card-border bg-base-100">
+            <div class="card-body p-4">
+              <span class="text-xs uppercase tracking-wide text-base-content/60">Last 30 days</span>
+              <div class="text-3xl font-bold mt-2">
+                ${{ cost_summary.last_30_days|cost_display }} <span class="text-sm font-normal">{{ cost_summary.currency }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body p-4">
+              <span class="text-xs uppercase tracking-wide text-base-content/60">All time</span>
+              <div class="text-3xl font-bold mt-2">
+                ${{ cost_summary.all_time|cost_display }} <span class="text-sm font-normal">{{ cost_summary.currency }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
 
     <div class="mb-8">
       <div class="flex justify-between items-center mb-4">
