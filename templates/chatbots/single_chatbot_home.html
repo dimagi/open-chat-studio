@@ -116,13 +116,6 @@
                   <span><i class="fa-solid fa-share-nodes"></i> Share</span>
                 </li>
               {% endif %}
-              {% if perms.experiments.invite_participants %}
-                <li>
-                  <a href="{% url 'chatbots:chatbots_invitations' team.slug experiment.id %}">
-                    <i class="fa-regular fa-envelope"></i> Invitations
-                  </a>
-                </li>
-              {% endif %}
             </ul>
           </div>
           <div id="dynamic-channels" class="inline">

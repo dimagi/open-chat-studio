@@ -28,12 +28,6 @@ class ConsentForm(forms.Form):
             del self.fields["identifier"]
 
 
-class ExperimentInvitationForm(forms.Form):
-    experiment_id = forms.IntegerField(widget=forms.HiddenInput())
-    email = forms.EmailField(required=True, label="Participant Email")
-    invite_now = forms.BooleanField(label="Send Participant Invitation Immediately?", required=False)
-
-
 class ExperimentVersionForm(forms.Form):
     version_description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     is_default_version = forms.BooleanField(required=False, label="Set as Published Version")

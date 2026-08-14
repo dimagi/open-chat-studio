@@ -8,30 +8,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from apps.experiments.models import ExperimentSession, SessionStatus
+from apps.experiments.models import ExperimentSession
 from apps.web.meta import absolute_url
-
-
-def send_experiment_invitation(experiment_session: ExperimentSession):
-    if not experiment_session.participant:
-        raise Exception("Session has no participant!")
-
-    experiment_version_name = experiment_session.experiment_version.name
-    email_context = {
-        "session": experiment_session,
-        "experiment_name": experiment_version_name,
-    }
-    send_mail(
-        subject=_("You're invited to {}!").format(experiment_version_name),
-        message=render_to_string("experiments/email/invitation.txt", context=email_context),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[experiment_session.participant.email],
-        fail_silently=False,
-        html_message=render_to_string("experiments/email/invitation.html", context=email_context),
-    )
-    if experiment_session.status == SessionStatus.SETUP:
-        experiment_session.status = SessionStatus.PENDING
-        experiment_session.save()
 
 
 def send_chat_link_email(experiment_session: ExperimentSession) -> datetime:

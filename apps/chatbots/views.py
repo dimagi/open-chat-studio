@@ -31,12 +31,11 @@ from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
-from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
-from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
+from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
 from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.experiments.tables import ExperimentVersionsTable
@@ -732,52 +731,6 @@ def start_authed_web_session(request, team_slug: str, experiment_id: int, versio
     )
 
 
-@login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
-def chatbot_invitations(request, team_slug: str, experiment_id: int):
-    chatbot = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    chatbot_version = resolve_published_or_working(chatbot)
-    sessions = chatbot.sessions.order_by("-created_at").filter(
-        status__in=["setup", "pending"],
-        participant__isnull=False,
-    )
-
-    form = ExperimentInvitationForm(initial={"experiment_id": experiment_id})
-    if request.method == "POST":
-        post_form = ExperimentInvitationForm(request.POST)
-        if post_form.is_valid():
-            if ExperimentSession.objects.filter(
-                team=request.team,
-                experiment_id=experiment_id,
-                status__in=["setup", "pending"],
-                participant__identifier=post_form.cleaned_data["email"],
-            ).exists():
-                participant_email = post_form.cleaned_data["email"]
-                messages.info(request, f"{participant_email} already has a pending invitation.")
-            else:
-                with transaction.atomic():
-                    session = WebChannel.start_new_session(
-                        chatbot,
-                        participant_identifier=post_form.cleaned_data["email"],
-                        session_status=SessionStatus.SETUP,
-                        timezone=request.session.get("detected_tz", None),
-                    )
-                if post_form.cleaned_data["invite_now"]:
-                    send_experiment_invitation(session)
-        else:
-            form = post_form
-
-    version_specific_vars = {
-        "chatbot_name": chatbot_version.name,
-        "chatbot_description": chatbot_version.description,
-    }
-    return TemplateResponse(
-        request,
-        "chatbots/chatbot_invitations.html",
-        {"invitation_form": form, "experiment": chatbot, "sessions": sessions, **version_specific_vars},
-    )
-
-
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @team_required
 def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UUID):
@@ -894,19 +847,6 @@ class AllSessionsHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Templa
             "use_dynamic_filters": True,
             **filter_context,
         }
-
-
-@login_and_team_required
-@permission_required("experiments.invite_participants", raise_exception=True)
-def send_chatbot_invitation(request, team_slug: str, experiment_id: int, session_id: str):
-    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = ExperimentSession.objects.get(experiment=experiment, external_id=session_id)
-    send_experiment_invitation(session)
-    return TemplateResponse(
-        request,
-        "chatbots/manage/invite_row.html",
-        context={"request": request, "experiment": experiment, "session": session},
-    )
 
 
 def _get_events_context(experiment: Experiment, team_slug: str):

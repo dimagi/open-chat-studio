@@ -1473,14 +1473,6 @@ class ExperimentSession(BaseTeamModel):
         else:
             return Chip(label="Anonymous", url="")
 
-    def get_invite_url(self) -> str:
-        return absolute_url(
-            reverse(
-                "experiments:start_session_from_invite",
-                args=[get_slug_for_team(self.team_id), self.experiment.public_id, self.external_id],
-            )
-        )
-
     def user_already_engaged(self) -> bool:
         return ChatMessage.objects.filter(chat=self.chat, message_type=ChatMessageType.HUMAN).exists()
 
