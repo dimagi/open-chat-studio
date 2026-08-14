@@ -13,26 +13,31 @@
       estimated: some usage is Confidence.ESTIMATED, not provider-reported.
       unknown: some usage is Confidence.UNKNOWN (no usage data recorded at all).
 {% endcomment %}
-<div class="flex items-center gap-2 flex-wrap">
-  {% if total_cost %}
-    <span class="font-semibold" data-testid="{{ testid_prefix }}-cost">${{ total_cost|cost_display }}</span>
-    {% if unpriced %}
-      <span class="text-xs text-base-content/40">(partial pricing)</span>
+{% with cost_tip="Estimated from recorded token usage multiplied by the configured price for each model. Treat as a guide to relative spend, not an exact bill." %}
+  <div class="flex items-center gap-2 flex-wrap">
+    {% if total_cost %}
+      <span class="font-semibold tooltip" data-tip="{{ cost_tip }}" data-testid="{{ testid_prefix }}-cost">${{ total_cost|cost_display }}</span>
+      {% if unpriced %}
+        <span class="text-xs text-base-content/40 tooltip"
+              data-tip="Some of this usage has no matching price configured, so this total is incomplete.">(partial pricing)</span>
+      {% endif %}
+    {% elif unpriced %}
+      <span class="text-base-content/40 tooltip"
+            data-tip="None of this usage has a matching price configured yet."
+            data-testid="{{ testid_prefix }}-cost">No pricing data</span>
+    {% else %}
+      <span class="font-semibold tooltip" data-tip="{{ cost_tip }}" data-testid="{{ testid_prefix }}-cost">$0.00</span>
     {% endif %}
-  {% elif unpriced %}
-    <span class="text-base-content/40" data-testid="{{ testid_prefix }}-cost">No pricing data</span>
-  {% else %}
-    <span class="font-semibold" data-testid="{{ testid_prefix }}-cost">$0.00</span>
-  {% endif %}
-  {% if estimated or unknown %}
-    <span class="badge badge-warning badge-xs tooltip"
-          data-testid="{{ testid_prefix }}-confidence-badge"
-          {% if unknown %}
-            data-tip="Some LLM calls have no recorded usage data"
-          {% else %}
-            data-tip="Some token counts are estimated, not provider-reported"
-          {% endif %}>
-      {% if unknown %}Unknown{% else %}Estimated{% endif %}
-    </span>
-  {% endif %}
-</div>
+    {% if estimated or unknown %}
+      <span class="badge badge-warning badge-xs tooltip"
+            data-testid="{{ testid_prefix }}-confidence-badge"
+            {% if unknown %}
+              data-tip="Some LLM calls have no recorded usage data"
+            {% else %}
+              data-tip="Some token counts are estimated, not provider-reported"
+            {% endif %}>
+        {% if unknown %}Unknown{% else %}Estimated{% endif %}
+      </span>
+    {% endif %}
+  </div>
+{% endwith %}
