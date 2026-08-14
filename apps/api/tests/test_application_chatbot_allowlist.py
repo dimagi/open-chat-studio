@@ -9,6 +9,7 @@ team-membership semantics untouched.
 """
 
 import json
+import uuid
 from unittest.mock import patch
 
 import pytest
@@ -219,6 +220,15 @@ def test_denied_trigger_bot_creates_no_participant_data(trigger_bot_message_task
     assert response.status_code == 403, response.content
     assert not ParticipantData.objects.filter(experiment=experiment).exists()
     trigger_bot_message_task.delay_on_commit.assert_not_called()
+
+
+@pytest.mark.django_db()
+def test_unknown_chatbot_is_a_404(experiment):
+    """Resolving the chatbot up front means an unknown id reports as a 404, not a validation error."""
+    client = _machine_client(experiment.team, allowed_chatbots=[experiment])
+    response = _post_chat_completions(client, experiment, public_id=uuid.uuid4())
+
+    assert response.status_code == 404, response.content
 
 
 @pytest.mark.django_db()

@@ -372,6 +372,12 @@ paths:
               schema:
                 description: The OAuth application is not authorized for this chatbot
           description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: No chatbot with the given ID exists in the team
+          description: ''
   /api/openai/{experiment_id}/v{version}/chat/completions:
     post:
       operationId: openai_chat_completions_versioned
@@ -446,6 +452,12 @@ paths:
             application/json:
               schema:
                 description: The OAuth application is not authorized for this chatbot
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: No chatbot with the given ID exists in the team
           description: ''
   /api/participants:
     get:

@@ -283,6 +283,11 @@ def _new_api_message(request, experiment_id: uuid, version=None):
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
 
+    # Ahead of `request.user.email` below, which is what makes the denial observable at all: a
+    # client-credentials caller is an AnonymousUser, which has no `email`, so reaching that line
+    # raises. This endpoint has no way to supply a participant identifier (see ApiMessageSerializer),
+    # so a machine token has no success path here -- only this denial. Left as-is rather than
+    # widened: giving machine callers a working path is a separate decision. See issue #4197.
     enforce_application_chatbot_access(request, experiment)
 
     participant_id = session.participant.identifier if session else request.user.email

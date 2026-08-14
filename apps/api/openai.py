@@ -2,6 +2,7 @@ import textwrap
 import time
 import uuid
 
+from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers
@@ -111,6 +112,7 @@ def chat_completions_schema(versioned: bool):
         responses={
             200: create_chat_completion_response,
             403: {"description": "The OAuth application is not authorized for this chatbot"},
+            404: {"description": "No chatbot with the given ID exists in the team"},
         },
         parameters=parameters,
     )
@@ -134,11 +136,9 @@ class ChatCompletionsVersionView(APIView):
 
 def _chat_completions(request, experiment_id: uuid.UUID, version=None):
     # Resolved here rather than left to ExperimentSessionCreateSerializer: checking after
-    # `serializer.save()` would create a session and only then reject it. A miss is left to the
-    # serializer so an unknown chatbot still reports as a 400 rather than a 404.
-    experiment = Experiment.objects.filter(public_id=experiment_id, team=request.team).first()
-    if experiment:
-        enforce_application_chatbot_access(request, experiment)
+    # `serializer.save()` would create a session and only then reject it.
+    experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
+    enforce_application_chatbot_access(request, experiment)
 
     try:
         messages = [_convert_message(message) for message in request.data.get("messages", [])]
