@@ -39,7 +39,7 @@ from apps.channels.rate_limit_keys import (
     channel_external_id_key,
     connect_ip_key,
     experiment_id_key,
-    meta_webhook_rate_limited,
+    meta_ip_key,
     sureadhere_tenant_key,
     twilio_ip_key,
 )
@@ -515,7 +515,7 @@ def _clear_remote_webhook(channel: ExperimentChannel):
 
 @method_decorator(waf_allow(WafRule.NoUserAgent_HEADER), name="dispatch")
 @method_decorator(csrf_exempt, name="dispatch")
-@method_decorator(meta_webhook_rate_limited, name="post")
+@method_decorator(rate_limited(CHANNELS_SCOPE, key_fn=meta_ip_key), name="post")
 class MetaCloudAPIWebhookView(View):
     def get(self, request):
         log.debug("Meta Cloud API webhook verification request received")

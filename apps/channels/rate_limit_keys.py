@@ -1,4 +1,4 @@
-"""Rate limit keying and over-limit responses for the inbound channel webhooks.
+"""Rate limit keying for the inbound channel webhooks.
 
 Each route counts under its own identity type, so no two routes share a keyspace.
 A route whose URL carries a channel identifier buckets on that identifier, so one
@@ -8,9 +8,7 @@ address under an identity type of its own. A route reached without the identifie
 its URL normally carries falls back to the plain address bucket.
 """
 
-from django.http import HttpResponse
-
-from apps.utils.rate_limit import RateLimitResult, client_ip, rate_limited
+from apps.utils.rate_limit import client_ip
 
 CHANNELS_SCOPE = "channels"
 
@@ -47,19 +45,3 @@ twilio_ip_key = _client_address_key("twilio_ip")
 meta_ip_key = _client_address_key("meta_ip")
 connect_ip_key = _client_address_key("connect_ip")
 slack_ip_key = _client_address_key("slack_ip")
-
-
-def meta_limited_response(request, result: RateLimitResult) -> HttpResponse:
-    """Answers an over-limit Meta delivery with 200 and an empty body, matching every
-    other delivery that route drops.
-
-    Meta disables the webhook subscription for a whole WhatsApp Business Account after
-    sustained non-2xx responses, which stops inbound WhatsApp for every team that
-    account serves. Counting and the log-only signal are unaffected.
-    """
-    return HttpResponse()
-
-
-def meta_webhook_rate_limited(view_func):
-    """Applies the webhook scope, Meta's address keying and its 200 over-limit response."""
-    return rate_limited(CHANNELS_SCOPE, key_fn=meta_ip_key, response_fn=meta_limited_response)(view_func)

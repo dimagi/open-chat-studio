@@ -16,7 +16,8 @@ from apps.channels.rate_limit_keys import (
 )
 
 # Overrides the channels scope alone, leaving every other scope at its configured rate.
-TINY_LIMITS = settings.RATE_LIMITS | {"channels": {"rate": "2/5m", "fail_open": True}}
+# Mirrors the shipped scope's policy so these tests exercise what deployments run.
+TINY_LIMITS = settings.RATE_LIMITS | {"channels": {"rate": "2/5m", "fail_open": True, "refuse": False}}
 
 META_WEBHOOK_URL_NAME = "channels:new_meta_cloud_api_message"
 
@@ -96,7 +97,7 @@ def test_address_keyed_webhooks_do_not_share_a_bucket():
 @pytest.mark.django_db()
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
 def test_telegram_webhook_buckets_per_channel(client):
-    """Exhausting one channel's allowance leaves another channel unaffected."""
+    """Exhausting one channel's allowance leaves another channel's untouched."""
     noisy = reverse("channels:new_telegram_message", args=["8b1f0c2e-0000-0000-0000-000000000001"])
     quiet = reverse("channels:new_telegram_message", args=["8b1f0c2e-0000-0000-0000-000000000002"])
     client.post(noisy, data="{}", content_type="application/json")
@@ -105,8 +106,25 @@ def test_telegram_webhook_buckets_per_channel(client):
     over_limit = client.post(noisy, data="{}", content_type="application/json")
     other_channel = client.post(quiet, data="{}", content_type="application/json")
 
-    assert over_limit.status_code == 429
-    assert other_channel.status_code != 429
+    assert over_limit.wsgi_request.rate_limit_result.remaining == 0
+    assert other_channel.wsgi_request.rate_limit_result.remaining == 1
+
+
+@pytest.mark.django_db()
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_enforcement_does_not_refuse_an_over_limit_channel_delivery(client):
+    """This scope counts and never refuses, so the enforcement flip does not reach it.
+
+    A refusal here discards a participant's message: the provider is answered either
+    way and does not retry what it considers delivered. The over-limit signal is the
+    would_block log line, which monitoring alerts on.
+    """
+    url = reverse("channels:new_telegram_message", args=["8b1f0c2e-0000-0000-0000-000000000006"])
+    for _ in range(4):
+        response = client.post(url, data="{}", content_type="application/json")
+
+    assert response.status_code != 429
+    assert response.wsgi_request.rate_limit_result.allowed is True
 
 
 @pytest.mark.django_db()
@@ -147,18 +165,17 @@ def test_post_only_webhooks_answer_other_methods_without_counting(client, url_na
 
 @pytest.mark.django_db()
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
-def test_meta_webhook_answers_an_over_limit_delivery_with_an_empty_200(client):
-    """Meta reads a run of non-2xx responses as a broken endpoint and disables the
-    subscription for the whole business account, so a limited delivery is dropped the
-    same way the route drops every other delivery it declines to process.
+def test_meta_webhook_serves_an_over_limit_delivery(client):
+    """Meta is the sharp case for never refusing. It answers a delivery it considers
+    made and does not send it again, so an over-limit refusal would lose a
+    participant's WhatsApp message with nothing left holding it.
     """
     url = reverse(META_WEBHOOK_URL_NAME)
     for _ in range(3):
         response = client.post(url, data="{}", content_type="application/json")
 
-    assert response.wsgi_request.rate_limit_result.allowed is False
+    assert response.wsgi_request.rate_limit_result.allowed is True
     assert response.status_code == 200
-    assert response.content == b""
 
 
 @pytest.mark.django_db()
