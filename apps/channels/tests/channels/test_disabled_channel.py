@@ -43,6 +43,19 @@ class TestDisabledChannel:
         assert channel._sender.text_messages[0][1] == "123"
         get_bot.assert_not_called()
 
+    def test_static_message_is_sent_to_the_remote_id_when_the_identifier_is_not_sendable(self):
+        """A WhatsApp participant_id can be a BSUID, which providers reject as a recipient."""
+        session = ExperimentSessionFactory.create()
+        _disable(session, "The bot is offline for maintenance")
+        channel = _make_channel(session)
+        message = base_messages.text_message(participant_id="bsuid-abc123")
+        message.remote_id = "+27820001111"
+
+        with patch("apps.channels.stages.core.get_bot"):
+            channel.new_user_message(message)
+
+        assert channel._sender.text_messages[0][1] == "+27820001111"
+
     def test_no_message_means_no_reply(self):
         session = ExperimentSessionFactory.create()
         _disable(session)

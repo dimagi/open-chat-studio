@@ -133,9 +133,12 @@ class ChannelDisabledStage(ProcessingStage):
         logger.info("Ignoring message for disabled channel %s (%s)", channel.id, channel.platform)
 
         # ParticipantValidationStage never runs, so set the recipient the terminal
-        # sending stage needs to deliver the static reply.
+        # sending stage needs to deliver the static reply. Prefer remote_id: the
+        # participant_id may be a BSUID that WhatsApp won't accept as an outbound
+        # recipient, and ParticipantResolverStage hasn't run to supply the phone
+        # number the senders normally fall back to.
         if ctx.message is not None:
-            ctx.participant_identifier = ctx.message.participant_id
+            ctx.participant_identifier = ctx.message.remote_id or ctx.message.participant_id
 
         if channel.disabled_message:
             raise EarlyExitResponse(channel.disabled_message)

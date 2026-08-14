@@ -68,3 +68,20 @@ class TestChannelDisabledStageProcess:
             self.stage(ctx)
 
         assert ctx.participant_identifier == "+27820001111"
+
+    def test_recipient_prefers_remote_id_over_a_non_sendable_identifier(self):
+        """WhatsApp participant_ids may be BSUIDs, which cannot be used as an outbound
+        recipient. ParticipantResolverStage -- which normally stores the phone number the
+        senders fall back to -- never runs here, so the phone must come off the message."""
+        message = text_message(participant_id="bsuid-abc123")
+        message.remote_id = "+27820001111"
+        ctx = make_context(
+            message=message,
+            experiment_channel=make_channel(enabled=False, disabled_message="Closed"),
+            participant_identifier=None,
+        )
+
+        with pytest.raises(EarlyExitResponse):
+            self.stage(ctx)
+
+        assert ctx.participant_identifier == "+27820001111"
