@@ -14,7 +14,6 @@ from functools import cache, wraps
 from django.conf import settings
 from django.core.cache import caches
 from django.http import JsonResponse
-from django.shortcuts import render
 from waffle import flag_is_active
 
 logger = logging.getLogger("ocs.rate_limit")
@@ -158,11 +157,6 @@ def is_exempt(request) -> bool:
 
 def json_limited_response(request, result: RateLimitResult):
     return JsonResponse({"detail": "Rate limit exceeded.", "available_in": result.retry_after}, status=429)
-
-
-def html_limited_response(request, result: RateLimitResult):
-    """Renders the site's error page, for views a person reaches in a browser."""
-    return render(request, "429.html", status=429)
 
 
 def rate_limited(scope: str, key_fn=None, response_fn=None):

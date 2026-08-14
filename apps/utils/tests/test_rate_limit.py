@@ -22,7 +22,6 @@ from apps.utils.rate_limit import (
     _scope_config,
     check,
     client_ip,
-    html_limited_response,
     is_exempt,
     parse_rate,
     rate_limited,
@@ -376,27 +375,6 @@ def test_key_fn_receives_the_views_url_kwargs(db):
 
     assert response.status_code == 200
     assert seen == {"channel_external_id": "abc-123"}
-
-
-@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
-def test_browser_facing_views_render_the_error_page_over_the_limit(db):
-    """A visitor sees the site's error page rather than an API payload."""
-
-    @rate_limited("api", response_fn=html_limited_response)
-    def view(request):
-        return HttpResponse("ok")
-
-    run = RateLimitHeadersMiddleware(view)
-
-    for _ in range(3):
-        run(_request())
-
-    response = run(_request())
-
-    assert response.status_code == 429
-    assert response.headers["Content-Type"].startswith("text/html")
-    assert int(response.headers["Retry-After"]) > 0
-    assert b"Too many requests" in response.content
 
 
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
