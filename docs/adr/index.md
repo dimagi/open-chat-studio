@@ -61,7 +61,7 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0037](0037-row-multiplying-filters-use-exists-not-distinct.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Row-multiplying list filters use EXISTS, not a blanket DISTINCT |
 | [0038](0038-redirect-version-snapshot-urls-to-working-version.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Redirect version snapshot URLs to the working version |
 | [0039](0039-require-proof-of-possession-for-chat-session-access.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Require proof of possession for chat session access |
-| [0040](0040-stateless-signed-session-tokens-with-inactivity-expiry.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Stateless signed session tokens with server-side inactivity expiry |
+| [0040](0040-stateless-signed-session-tokens-with-inactivity-expiry.md) | <span class="adr-status adr-status-superseded">SUPERSEDED</span> | Stateless signed session tokens with server-side inactivity expiry |
 | [0041](0041-fail-closed-session-token-enforcement-rollout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Fail-closed session-token enforcement rollout |
 | [0042](0042-settings-driven-internal-team-metadata.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Settings-driven internal team metadata in a JSON field |
 | [0043](0043-whatsapp-bsuid-participant-identity.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | BSUID participant identity for WhatsApp |
@@ -75,3 +75,4 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0051](0051-usage-activity-metric-definitions.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | One set of activity-metric definitions across usage surfaces |
 | [0052](0052-app-layer-rate-limiting-mechanism.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | App-layer rate limiting via an in-house fixed-window core |
 | [0053](0053-chat-session-start-requires-membership-or-embed-key.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Starting a chat session requires team membership or the embed key |
+| [0054](0054-chat-session-tokens-expire-on-absolute-age.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Chat session tokens expire on absolute age, not inactivity |
