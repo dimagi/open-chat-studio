@@ -3832,7 +3832,8 @@ components:
           description: Uncheck to temporarily block access to this bot on this channel.
         disabled_message:
           type: string
-          description: Optional message sent to anyone who messages this channel while it is disabled. Leave blank for the bot to stay silent.
+          description: Optional message sent to anyone who messages this channel while
+            it is disabled. Leave blank for the bot to stay silent.
         external_id:
           type: string
           format: uuid
