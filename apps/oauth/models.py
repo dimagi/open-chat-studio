@@ -7,6 +7,7 @@ Related thread: https://github.com/django-oauth/django-oauth-toolkit/issues/634
 
 from django.db import models
 from django.urls import reverse
+from field_audit import audit_fields
 from oauth2_provider.models import (
     AbstractAccessToken,
     AbstractApplication,
@@ -21,12 +22,25 @@ from apps.teams.models import Team
 from apps.teams.utils import get_slug_for_team
 
 
+@audit_fields("allowed_chatbots")
 class OAuth2Application(AbstractApplication):
     # The team is pinned here at registration and every token the application issues is scoped to it.
     # Null means the application is *global*: only superusers may register those (from the site admin
     # area), and only with the authorization-code grant, where the team is instead chosen by the
     # authorizing user and threaded via the Grant.
     team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)
+
+    # Client-credentials applications reach only the chatbots named here: the team boundary is too
+    # coarse on its own, since a machine token would otherwise converse with every chatbot in the
+    # team. Holds working versions only; the check normalises versioned callers to the family head.
+    # No `limit_choices_to` -- the valid set depends on the application's team, so the form and the
+    # check enforce it (see apps.oauth.permissions.application_allows_chatbot).
+    allowed_chatbots = models.ManyToManyField(
+        "experiments.Experiment",
+        blank=True,
+        related_name="oauth_applications",
+        help_text="Chatbots this application may start chat sessions with. Empty means none.",
+    )
 
     objects = ApplicationManager()
 
