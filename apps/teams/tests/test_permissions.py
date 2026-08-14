@@ -267,7 +267,7 @@ def test_chat_viewer_isolation_can_reach_transcripts_but_not_config(client):
     assert client.get(reverse("chatbots:all_sessions_list", args=[team.slug])).status_code == 200
     assert client.get(reverse("chatbots:sessions-list", args=[team.slug, experiment.id])).status_code == 200
 
-    # The transcript (session detail) is reachable — gated by chat.view_chat via the access-cookie fallback.
+    # The transcript (session detail) is reachable — gated by chat.view_chat.
     transcript_url = reverse(
         "chatbots:chatbot_session_view",
         args=[team.slug, experiment.public_id, session.external_id],

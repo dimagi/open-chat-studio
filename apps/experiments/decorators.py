@@ -5,7 +5,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.teams.decorators import ENFORCES_TEAM_AUTH_ATTR, TeamAccessDenied
+from apps.teams.decorators import ENFORCES_TEAM_AUTH_ATTR
 
 
 def experiment_session_view():
@@ -34,34 +34,10 @@ def experiment_session_view():
             return view_func(request, team_slug, experiment_id, session_id, **kwargs)
 
         # These views are team-scoped: they require request.team and scope the experiment/session
-        # lookups to it. Mark them so the team-auth guard recognises it.
+        # lookups to it. Mark them so the team-auth guard recognises it. Callers stack
+        # `login_and_team_required` + a `chat.view_chat` permission check on top; this decorator
+        # only resolves the objects.
         setattr(decorated_view, ENFORCES_TEAM_AUTH_ATTR, True)
         return decorated_view
 
     return decorator
-
-
-def require_session_access(view):
-    """View decorator for views that display an experiment session.
-
-    Access is granted to the participant who owns the session and to team members with
-    `chat.view_chat`. This decorator must be applied after the `experiment_session_view`
-    decorator:
-
-    @experiment_session_view()
-    @require_session_access
-    def my_view(request, team_slug, experiment_id, session_id):
-        ...
-    """
-
-    @wraps(view)
-    def _inner(request, *args, **kwargs):
-        if request.user.is_authenticated:
-            is_own_session = request.experiment_session.participant.user_id == request.user.id
-            is_team_viewer = request.team_membership and request.user.has_perm("chat.view_chat")
-            if is_own_session or is_team_viewer:
-                return view(request, *args, **kwargs)
-
-        raise TeamAccessDenied() if request.user.is_superuser else Http404()
-
-    return _inner

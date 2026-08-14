@@ -28,7 +28,7 @@ from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
-from apps.experiments.decorators import experiment_session_view, require_session_access
+from apps.experiments.decorators import experiment_session_view
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
@@ -594,8 +594,9 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
         return table
 
 
+@login_and_team_required
+@permission_required("chat.view_chat", raise_exception=True)
 @experiment_session_view()
-@require_session_access
 def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return render_session_details(
         request,

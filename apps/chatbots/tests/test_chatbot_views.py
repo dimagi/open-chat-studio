@@ -28,10 +28,11 @@ from apps.chatbots.views import (
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
+from apps.teams.backends import CHAT_VIEWER_GROUP, add_user_to_team, create_default_groups
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
-from apps.utils.factories.team import MembershipFactory
+from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
 
 
@@ -989,3 +990,51 @@ def test_session_view_only_links_http_embed_source(client, team_with_users, embe
     else:
         assert embed_source not in hrefs
         assert escape(embed_source) in content  # still displayed, as inert text
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "view_name",
+    [
+        pytest.param("chatbots:chatbot_session_view", id="session-detail"),
+        pytest.param("experiments:experiment_session_messages_view", id="session-messages"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("identity", "expected_status"),
+    [
+        pytest.param("chat_viewer", 200, id="team-member-with-chat-view-chat"),
+        pytest.param("no_perm_member", 403, id="team-member-without-chat-view-chat"),
+        pytest.param("non_member", 404, id="authenticated-non-member"),
+        pytest.param("anonymous", 302, id="anonymous-redirects-to-login"),
+    ],
+)
+def test_session_transcript_views_require_team_membership(client, view_name, identity, expected_status):
+    """Session transcripts are team-internal.
+
+    The public chat is gone, so there is no participant-facing path into these views any more:
+    access is team membership plus `chat.view_chat`, and the participant-owns-the-session
+    bypass (which used to serve the removed chat UI) no longer applies.
+    """
+    create_default_groups()
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(experiment__team=team)
+
+    if identity == "chat_viewer":
+        user = UserFactory.create()
+        add_user_to_team(team, user, groups=[CHAT_VIEWER_GROUP])
+        client.force_login(user)
+    elif identity == "no_perm_member":
+        user = UserFactory.create()
+        add_user_to_team(team, user, groups=[])
+        client.force_login(user)
+    elif identity == "non_member":
+        # A participant who owns the session but has no team membership: the old
+        # access check let this through, team auth does not.
+        user = UserFactory.create()
+        session.participant.user = user
+        session.participant.save()
+        client.force_login(user)
+
+    url = reverse(view_name, args=[team.slug, session.experiment.public_id, session.external_id])
+    assert client.get(url).status_code == expected_status

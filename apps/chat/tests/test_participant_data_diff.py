@@ -13,9 +13,11 @@ from apps.utils.factories.traces import TraceFactory
 @pytest.mark.django_db()
 class TestParticipantDataDiffInSessionMessages:
     def test_messages_queryset_includes_participant_data_diff(self, client, experiment):
+        # The transcript view is team-internal: reached by a team member with `chat.view_chat`.
+        viewer = experiment.team.members.first()
         session = ExperimentSessionFactory.create(
             experiment=experiment,
-            participant=ParticipantFactory.create(team=experiment.team, user=experiment.owner),
+            participant=ParticipantFactory.create(team=experiment.team),
         )
 
         messages = []
@@ -49,7 +51,7 @@ class TestParticipantDataDiffInSessionMessages:
             output_message=messages[3],
         )
 
-        client.force_login(experiment.owner)
+        client.force_login(viewer)
         url = reverse(
             "experiments:experiment_session_messages_view",
             kwargs={

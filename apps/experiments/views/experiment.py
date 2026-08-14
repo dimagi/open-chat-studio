@@ -38,7 +38,7 @@ from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.chat.models import ChatMessage
 from apps.experiments.const import EMBED_FLOW_REMOVED_ON, EMBED_FLOW_SUCCESSOR_URL
-from apps.experiments.decorators import experiment_session_view, require_session_access
+from apps.experiments.decorators import experiment_session_view
 from apps.experiments.forms import TranslateMessagesForm
 from apps.experiments.models import Experiment
 from apps.experiments.tables import (
@@ -135,8 +135,9 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
     return enhanced_messages
 
 
+@login_and_team_required
+@permission_required("chat.view_chat", raise_exception=True)
 @experiment_session_view()
-@require_session_access
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     """View for loading paginated messages with HTMX"""
     session = request.experiment_session
@@ -257,8 +258,9 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
     )
 
 
+@login_and_team_required
+@permission_required("chat.view_chat", raise_exception=True)
 @experiment_session_view()
-@require_session_access
 def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     session = request.experiment_session
     provider_id = request.POST.get("llm_provider", "")
