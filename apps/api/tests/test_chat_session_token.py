@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from apps.api.session_tokens import issue_session_token
 from apps.channels.models import ChannelPlatform
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
@@ -64,8 +65,17 @@ def test_token_for_other_session_denied(api_client, session):
 
 
 @pytest.mark.django_db()
-def test_inactive_session_expired(api_client, session, token):
-    with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
+def test_dormant_session_within_lifetime_allowed(api_client, session, token):
+    with time_machine.travel(timezone.now() + timedelta(days=6)):
+        assert api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=token).status_code == 200
+
+
+@pytest.mark.django_db()
+def test_session_expired_past_lifetime(api_client, session, token):
+    """Chatting does not extend the lifetime: an old session expires however active it is."""
+    with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)) as traveller:
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+        traveller.shift(timedelta(minutes=1))
         response = api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=token)
     assert response.status_code == 403
     assert response.json()["code"] == "session_expired"
@@ -180,6 +190,20 @@ def test_start_session_issues_token_by_default(api_client, experiment):
 
 
 @pytest.mark.django_db()
+def test_expired_session_can_start_a_new_one(api_client, experiment, session, token):
+    """Once the lifetime fires the caller goes back through chat/start/ and is re-admitted."""
+    with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
+        assert api_client.get(poll_url(session), HTTP_X_SESSION_TOKEN=token).status_code == 403
+
+        response = start_session(api_client, experiment)
+        assert response.status_code == 201
+        body = response.json()
+        assert body["session_id"] != str(session.external_id)
+        new_url = reverse("api:chat:poll-response", kwargs={"session_id": body["session_id"]})
+        assert api_client.get(new_url, HTTP_X_SESSION_TOKEN=body["session_token"]).status_code == 200
+
+
+@pytest.mark.django_db()
 def test_authenticated_start_then_poll_without_token(api_client, experiment, team_with_users):
     """Authenticated users rely on the auth bypass, not the returned token."""
     user = team_with_users.members.first()
@@ -190,3 +214,18 @@ def test_authenticated_start_then_poll_without_token(api_client, experiment, tea
     assert body["session_token"]  # token still issued
     url = reverse("api:chat:poll-response", kwargs={"session_id": body["session_id"]})
     assert api_client.get(url).status_code == 200  # no token header needed
+
+
+@pytest.mark.django_db()
+def test_participant_user_bypass_outlives_the_lifetime(api_client, experiment, team_with_users):
+    """The lifetime bounds token holders, not the session's own user.
+
+    "Continue Chat" and the logged-in chat page re-mint a token for an arbitrarily old session;
+    they keep working because the participant-user bypass runs before the expiry check.
+    """
+    user = team_with_users.members.first()
+    api_client.force_login(user)
+    body = start_session(api_client, experiment, {"participant_remote_id": user.email}).json()
+    url = reverse("api:chat:poll-response", kwargs={"session_id": body["session_id"]})
+    with time_machine.travel(timezone.now() + timedelta(days=7, hours=1)):
+        assert api_client.get(url, HTTP_X_SESSION_TOKEN=body["session_token"]).status_code == 200
