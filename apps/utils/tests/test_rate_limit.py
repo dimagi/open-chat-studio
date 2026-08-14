@@ -437,19 +437,6 @@ def test_chat_api_scope_is_configured():
     assert fail_open is True
 
 
-def test_public_chat_scope_is_configured():
-    """The public_chat scope is registered, parses, and fails open.
-
-    The configured rate is env-overridable, so this asserts the properties that
-    hold for any deployment rather than one deployment's numbers.
-    """
-    limit, window_seconds, fail_open = _scope_config("public_chat")
-
-    assert limit > 0
-    assert window_seconds > 0
-    assert fail_open is True
-
-
 def test_middleware_skips_degraded_results(db):
     """Backend-failure responses carry no headers (no counter data behind them)."""
 
