@@ -456,17 +456,22 @@ def test_public_chat_scope_is_configured():
 
 
 def test_channels_scope_is_configured():
-    """The channels scope is registered, parses, and fails open.
+    """The channels scope is registered, parses, fails open, and never refuses.
 
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
+
+    Refusing an inbound channel delivery discards a participant's message: the
+    provider has already been answered, and there is nobody to retry. Counting is
+    what this scope is for, and the would_block line is what carries an over-limit
+    identity to monitoring.
     """
     limit, window_seconds, fail_open, refuses = _scope_config("channels")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is True
-    assert refuses is True
+    assert refuses is False
 
 
 def test_credentials_scope_is_configured_fail_closed():
