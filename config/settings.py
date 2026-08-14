@@ -631,8 +631,9 @@ RATE_LIMIT_TRUSTED_PROXY_COUNT = env.int("RATE_LIMIT_TRUSTED_PROXY_COUNT", defau
 RATE_LIMIT_CACHE_ALIAS = "rate_limit"
 RATE_LIMITS = {
     "api": {"rate": env("RATE_LIMIT_API", default="2000/5m"), "fail_open": True},
-    # Counts and reports, never refuses: an inbound delivery has no sender left to
-    # retry it, so refusing one discards a participant's message.
+    # Counts and reports, never refuses. Counting happens after the view has answered
+    # the provider, so refusing means dropping the dispatch on a delivery the provider
+    # considers made: the participant's message is lost rather than delayed.
     "channels": {"rate": env("RATE_LIMIT_CHANNELS", default="3000/5m"), "fail_open": True, "refuse": False},
     "admin_api": {"rate": env("RATE_LIMIT_ADMIN_API", default="100/5m"), "fail_open": True},
     "chat_api": {"rate": env("RATE_LIMIT_CHAT_API", default="300/5m"), "fail_open": True},
