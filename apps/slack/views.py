@@ -3,11 +3,9 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from slack_bolt.adapter.django.handler import to_bolt_request, to_django_response
 
-from apps.channels.rate_limit_keys import CHANNELS_SCOPE, slack_ip_key
 from apps.slack.models import SlackOAuthState
 from apps.slack.slack_app import app, handler
 from apps.teams.decorators import login_and_team_required
-from apps.utils.rate_limit import rate_limited
 from apps.web.waf import WafRule, waf_allow
 
 from .const import INSTALLATION_CONFIG
@@ -44,9 +42,9 @@ def slack_oauth_redirect(request):
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @csrf_exempt
 @require_POST
-@rate_limited(CHANNELS_SCOPE, key_fn=slack_ip_key)
 def slack_events_handler(request):
-    # see `slack_listeners.py`
+    # see `slack_listeners.py`, which counts a message against its channel once Bolt
+    # has verified the request and resolved one
     return handler.handle(request)
 
 

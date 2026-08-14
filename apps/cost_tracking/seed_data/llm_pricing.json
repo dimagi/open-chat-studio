@@ -574,6 +574,24 @@
     ]
   },
   {
+    "provider_type": "google",
+    "model_name": "gemini-3.7-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00075"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00375"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000075"
+      }
+    ]
+  },
+  {
     "provider_type": "google_vertex_ai",
     "model_name": "gemini-2.5-flash",
     "rules": [
@@ -714,6 +732,24 @@
       {
         "service_kind": "llm_cached_input",
         "unit_price": "0.000025"
+      }
+    ]
+  },
+  {
+    "provider_type": "google_vertex_ai",
+    "model_name": "gemini-3.7-flash",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00075"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00375"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000075"
       }
     ]
   },

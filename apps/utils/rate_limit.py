@@ -230,9 +230,11 @@ def count_request(
 
     The result is recorded on the request so `RateLimitHeadersMiddleware` emits the same
     headers here as on the decorator and DRF paths. One response cannot describe more
-    than one bucket, so a view counting several identities keeps the most restrictive
-    result; a refusal is never overwritten by a later allowance, which would strip
-    Retry-After off a 429.
+    than one bucket, so a view counting several identities reports the most recent
+    count, except that a refusal is never overwritten by a later allowance, which would
+    strip Retry-After off a 429. On a scope that never refuses every count is an
+    allowance, so its headers describe the identity counted last rather than the one
+    closest to its limit.
 
     An exempt request is not counted and records nothing, so it reports no headers. Its
     result carries the allow decision and no counter data. `team_id` reaches the

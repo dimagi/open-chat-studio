@@ -138,6 +138,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("MiniMax-M2", 200000),
     ],
     "google": [
+        Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576),
         Model("gemini-3.5-flash", 1048576),
         Model("gemini-3.5-flash-lite", 1048576),
@@ -146,6 +147,7 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("gemini-2.0-flash", 1048576, deprecated=True),
     ],
     "google_vertex_ai": [
+        Model("gemini-3.7-flash", 1048576),
         Model("gemini-3.6-flash", 1048576, is_translation_default=True),
         Model("gemini-3.5-flash", 1048576, is_default=True),
         Model("gemini-3.5-flash-lite", 1048576),
