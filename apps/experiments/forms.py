@@ -1,31 +1,8 @@
 from django import forms
-from django.core import validators
 
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProviderTypes
 from apps.service_providers.utils import get_llm_provider_by_team, get_models_by_provider
-
-
-class ConsentForm(forms.Form):
-    identifier = forms.CharField(required=False)
-    consent_agreement = forms.BooleanField(required=True, label="I Agree")
-    participant_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
-
-    def __init__(self, consent, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if consent.capture_identifier:
-            self.fields["identifier"].required = True
-            self.fields["identifier"].label = consent.identifier_label
-
-            if consent.identifier_type == "email":
-                self.fields["identifier"].widget = forms.EmailInput()
-                self.fields["identifier"].validators = [validators.validate_email]  # ty: ignore[invalid-assignment]
-
-            if self.initial.get("participant_id", None) or self.initial.get("identifier", None):
-                # don't allow participants to change their email
-                self.fields["identifier"].disabled = True
-        else:
-            del self.fields["identifier"]
 
 
 class ExperimentVersionForm(forms.Form):

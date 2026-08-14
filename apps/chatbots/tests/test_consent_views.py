@@ -8,7 +8,7 @@ from apps.experiments.models import Experiment
 from apps.pipelines.models import Pipeline
 from apps.utils.factories.experiment import ConsentFormFactory
 
-ALL_STATES = {"disabled", "web-only", "enabled"}
+ALL_STATES = {"disabled", "not-collected", "enabled"}
 
 
 @pytest.mark.django_db()
@@ -17,7 +17,7 @@ class TestConsentDetailIndicator:
 
     Three states:
     - No consent form → disabled state
-    - Form attached, conversational consent disabled → web-only state
+    - Form attached, conversational consent disabled → not-collected state
     - Form attached, conversational consent enabled → enabled state
     """
 
@@ -25,7 +25,7 @@ class TestConsentDetailIndicator:
         ("consent_form", "conversational_consent_enabled", "expected_state"),
         [
             pytest.param(False, False, "disabled", id="no-consent-form"),
-            pytest.param(True, False, "web-only", id="form-attached-conversational-disabled"),
+            pytest.param(True, False, "not-collected", id="form-attached-conversational-disabled"),
             pytest.param(True, True, "enabled", id="form-attached-conversational-enabled"),
         ],
     )

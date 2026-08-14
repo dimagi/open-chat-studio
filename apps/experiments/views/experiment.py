@@ -1,15 +1,13 @@
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from urllib.parse import urlencode, urlparse
 
-import jwt
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import CharField, Count, F, Prefetch, Q, Subquery, Value
@@ -19,8 +17,6 @@ from django.http import (
     FileResponse,
     Http404,
     HttpResponse,
-    HttpResponseBadRequest,
-    HttpResponseForbidden,
     HttpResponseGone,
     HttpResponseRedirect,
     JsonResponse,
@@ -28,9 +24,7 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.html import format_html
-from django.utils.safestring import mark_safe
 from django.utils.timesince import timesince
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.clickjacking import xframe_options_exempt
@@ -42,50 +36,22 @@ from field_audit.models import AuditAction
 from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
-from apps.channels.datamodels import Attachment
-from apps.channels.models import ChannelPlatform
-from apps.channels.web_channel import WebChannel
-from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
-from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.events.models import (
-    StaticTriggerType,
-)
+from apps.chat.models import ChatMessage
 from apps.experiments.const import EMBED_FLOW_REMOVED_ON, EMBED_FLOW_SUCCESSOR_URL
-from apps.experiments.decorators import (
-    experiment_session_view,
-    get_chat_session_access_cookie_data,
-    set_session_access_cookie,
-    verify_session_access_cookie,
-)
-from apps.experiments.email import send_chat_link_email
-from apps.experiments.forms import (
-    ConsentForm,
-    TranslateMessagesForm,
-)
-from apps.experiments.helpers import get_real_user_or_none
-from apps.experiments.models import (
-    Experiment,
-    ExperimentSession,
-    Participant,
-    SessionStatus,
-)
-from apps.experiments.rate_limit_keys import public_chat_rate_limited
+from apps.experiments.decorators import experiment_session_view, require_session_access
+from apps.experiments.forms import TranslateMessagesForm
+from apps.experiments.models import Experiment
 from apps.experiments.tables import (
     ExperimentVersionsTable,
 )
-from apps.experiments.task_utils import get_message_task_response
-from apps.experiments.tasks import (
-    async_export_chat,
-    get_response_for_webchat_task,
-)
-from apps.files.models import File, FilePurpose
+from apps.experiments.tasks import async_export_chat
+from apps.files.models import File
 from apps.service_providers.llm_service.default_models import get_default_translation_models_by_provider
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_models_by_team_grouped_by_provider
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.trace.models import Trace
-from apps.web.waf import WafRule, waf_allow
 
 
 class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
@@ -98,236 +64,6 @@ class ExperimentVersionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredM
         experiment_row = Experiment.objects.get_all().filter(id=self.kwargs["experiment_id"])
         other_versions = Experiment.objects.get_all().filter(working_version=self.kwargs["experiment_id"]).all()
         return (experiment_row | other_versions).order_by("-version_number")
-
-
-@waf_allow(WafRule.SizeRestrictions_BODY)
-@public_chat_rate_limited
-@experiment_session_view()
-@verify_session_access_cookie
-@require_POST
-def experiment_session_message(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, version_number: int):
-    return _experiment_session_message(request, version_number)
-
-
-def _process_uploaded_files(request, session):
-    uploaded_files = request.FILES
-    attachments = []
-    created_files = []
-    for resource_type in ["code_interpreter", "file_search", "ocs_attachments"]:
-        if resource_type not in uploaded_files:
-            continue
-
-        tool_resource, _created = ChatAttachment.objects.get_or_create(
-            chat_id=session.chat_id,
-            tool_type=resource_type,
-        )
-
-        # Participant uploads within a conversation are message media, regardless of
-        # which tool they feed. ASSISTANT is reserved for bot-configuration files.
-        for uploaded_file in uploaded_files.getlist(resource_type):
-            new_file = File.objects.create(
-                name=uploaded_file.name, file=uploaded_file, team=request.team, purpose=FilePurpose.MESSAGE_MEDIA
-            )
-            attachments.append(Attachment.from_file(new_file, resource_type, session.id))
-            created_files.append(new_file)
-
-        tool_resource.files.add(*created_files)
-
-    return attachments, created_files
-
-
-def _experiment_session_message(request, version_number: int):
-    working_experiment = request.experiment
-    session = request.experiment_session
-
-    if working_experiment.is_archived:
-        raise PermissionDenied("Cannot chat with an archived experiment.")
-
-    try:
-        experiment_version = working_experiment.get_version(version_number)
-    except Experiment.DoesNotExist:
-        raise Http404() from None
-
-    message_text = request.POST.get("message", "")
-    attachments, created_files = _process_uploaded_files(request, session)
-
-    if not message_text and not attachments:
-        return HttpResponseBadRequest("A message or attachment is required.")
-
-    if attachments and not message_text:
-        message_text = "Please look at the attachments and respond appropriately"
-
-    result = get_response_for_webchat_task.delay(
-        experiment_session_id=session.id,
-        experiment_id=experiment_version.id,
-        message_text=message_text,
-        attachments=[att.model_dump() for att in attachments],
-    )
-    version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
-        "experiment_version_number": experiment_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/chat/experiment_response_htmx.html",
-        {
-            "experiment": working_experiment,
-            "session": session,
-            "message_text": message_text,
-            "task_id": result.task_id,
-            "created_files": created_files,
-            **version_specific_vars,
-        },
-    )
-
-
-@experiment_session_view()
-def get_message_response(request, team_slug: str, experiment_id: uuid.UUID, session_id: str, task_id: str):
-    experiment = request.experiment
-    session = request.experiment_session
-    last_message = ChatMessage.objects.filter(chat=session.chat).order_by("-created_at").first()
-    message_details = get_message_task_response(experiment, task_id)
-    if not message_details:
-        # don't render empty messages
-        return HttpResponse()
-
-    attachments = message_details.pop("attachments", [])
-    return TemplateResponse(
-        request,
-        "experiments/chat/chat_message_response.html",
-        {
-            "experiment": experiment,
-            "session": session,
-            "task_id": task_id,
-            "message_details": message_details,
-            "last_message_datetime": last_message and last_message.created_at,
-            "attachments": attachments,
-        },
-    )
-
-
-@public_chat_rate_limited
-@experiment_session_view()
-@require_GET
-@team_required
-def poll_messages(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    user = get_real_user_or_none(request.user)
-    if user and request.experiment_session.participant.user != user:
-        return HttpResponseForbidden()
-
-    return _poll_messages(request)
-
-
-def _poll_messages(request):
-    params = request.GET.dict()
-    since_param = params.get("since")
-
-    since = timezone.now()
-    if since_param and since_param != "null":
-        try:
-            since = datetime.fromisoformat(since_param)
-        except ValueError as e:
-            logging.exception(f"Unexpected `since` parameter value. Error: {e}")
-
-    messages = (
-        ChatMessage.objects.filter(
-            message_type=ChatMessageType.AI, chat=request.experiment_session.chat, created_at__gt=since
-        )
-        .order_by("created_at")
-        .all()
-    )
-
-    if messages:
-        return TemplateResponse(
-            request,
-            "experiments/chat/system_message.html",
-            {
-                "messages": [message.content for message in messages],
-                "last_message_datetime": messages[0].created_at,
-            },
-        )
-    return HttpResponse()
-
-
-@public_chat_rate_limited
-@team_required
-def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
-    try:
-        experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    except ValidationError:
-        # old links dont have uuids
-        raise Http404() from None
-
-    experiment_version = resolve_published_or_working(experiment)
-    if not experiment_version.is_public:
-        raise Http404
-
-    consent = experiment_version.consent_form
-    user = get_real_user_or_none(request.user)
-    if not consent:
-        identifier = user.email if user else str(uuid.uuid4())
-        session = WebChannel.start_new_session(
-            working_experiment=experiment,
-            participant_user=user,
-            participant_identifier=identifier,
-            timezone=request.session.get("detected_tz", None),
-        )
-        return _record_consent_and_redirect(team_slug, experiment, session)
-
-    if request.method == "POST":
-        form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
-        if form.is_valid():
-            verify_user = True
-            if consent.capture_identifier:
-                identifier = form.cleaned_data.get("identifier", None)
-            else:
-                # The identifier field will be disabled, so we must generate one
-                verify_user = False
-                if user:
-                    identifier = user.email
-                else:
-                    identifier = Participant.create_anonymous(request.team, ChannelPlatform.WEB).identifier
-
-            session = WebChannel.start_new_session(
-                working_experiment=experiment,
-                participant_user=user,
-                participant_identifier=identifier,
-                timezone=request.session.get("detected_tz", None),
-            )
-            if verify_user and consent.identifier_type == "email":
-                return _verify_user_or_start_session(
-                    identifier=identifier,
-                    request=request,
-                    experiment=experiment,
-                    session=session,
-                )
-            else:
-                return _record_consent_and_redirect(team_slug, experiment, session)
-    else:
-        form = ConsentForm(
-            consent,
-            initial={
-                "experiment_id": experiment_version.id,
-                "identifier": user.email if user else None,
-            },
-        )
-
-    consent_notice = consent.get_rendered_content()
-    version_specific_vars = {
-        "experiment_name": experiment_version.name,
-        "experiment_description": experiment_version.description,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/start_experiment_session.html",
-        {
-            "active_tab": "experiments",
-            "experiment": experiment,
-            "consent_notice": mark_safe(consent_notice),
-            "form": form,
-            **version_specific_vars,
-        },
-    )
 
 
 @xframe_options_exempt
@@ -351,52 +87,6 @@ def embed_flow_gone(request, *args, **kwargs):
     )
 
 
-def _verify_user_or_start_session(identifier, request, experiment, session):
-    """
-    Verifies if the user is allowed to access the chat.
-
-    Process:
-    1. If the user is currently logged in, they are considered verified.
-    2. If not logged in, check for a session cookie from a prior public chat:
-        - The session cookie should contain a `participant_id` field.
-        - Match the specified `identifier` to the one of the participant from the session cookie.
-        - If the identifiers match, the user previously verified their email and can proceed.
-    3. If there is no match or if the session has expired, the user has to verify their email address.
-    """
-    team_slug = session.team.slug
-    if request.user.is_authenticated:
-        return _record_consent_and_redirect(team_slug, experiment, session)
-
-    if not session.requires_participant_data():
-        return _record_consent_and_redirect(team_slug, experiment, session)
-
-    if session_data := get_chat_session_access_cookie_data(request, fail_silently=True):
-        if Participant.objects.filter(
-            id=session_data["participant_id"], identifier=identifier, team_id=session.team_id
-        ).exists():
-            return _record_consent_and_redirect(team_slug, experiment, session)
-
-    token_expiry: datetime = send_chat_link_email(session)
-    return TemplateResponse(
-        request=request, template="account/participant_email_verify.html", context={"token_expiry": token_expiry}
-    )
-
-
-@public_chat_rate_limited
-@team_required
-def verify_public_chat_token(request, team_slug: str, experiment_id: uuid.UUID, token: str):
-    try:
-        claims = jwt.decode(token, settings.SECRET_KEY, algorithms="HS256")
-        session = ExperimentSession.objects.select_related("experiment").get(external_id=claims["session"])
-        return _record_consent_and_redirect(team_slug, session.experiment, session)
-    except jwt.exceptions.ExpiredSignatureError:
-        messages.warning(request=request, message="This link has expired")
-        return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
-    except Exception:
-        messages.warning(request=request, message="This link could not be verified")
-        return redirect(reverse("experiments:start_session_public", args=(team_slug, experiment_id)))
-
-
 @require_POST
 @permission_required("experiments.download_chats", raise_exception=True)
 @login_and_team_required
@@ -407,66 +97,6 @@ def generate_chat_export(request, team_slug: str, experiment_id: str):
     task_id = async_export_chat.delay(experiment_id, parsed_url.query, timezone)
     return TemplateResponse(
         request, "experiments/components/exports.html", {"experiment": experiment, "task_id": task_id}
-    )
-
-
-def _record_consent_and_redirect(
-    team_slug: str,
-    experiment: Experiment,
-    experiment_session: ExperimentSession,
-):
-    # record consent, update status
-    experiment_session.consent_date = timezone.now()
-    experiment_session.status = SessionStatus.ACTIVE
-    experiment_session.save()
-    response = HttpResponseRedirect(
-        reverse(
-            "chatbots:chatbot_chat",
-            args=[team_slug, experiment_session.experiment.public_id, experiment_session.external_id],
-        )
-    )
-    return set_session_access_cookie(response, experiment, experiment_session)
-
-
-@public_chat_rate_limited
-@experiment_session_view(allowed_states=[SessionStatus.SETUP, SessionStatus.PENDING])
-def start_session_from_invite(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    published_version = resolve_published_or_working(request.experiment)
-    consent = published_version.consent_form
-
-    initial = {
-        "participant_id": request.experiment_session.participant.id,
-        "identifier": request.experiment_session.participant.identifier,
-    }
-    if not request.experiment_session.participant:
-        raise Http404()
-
-    if not consent:
-        return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
-
-    if request.method == "POST":
-        form = ConsentForm(consent, request.POST, initial=initial)
-        if form.is_valid():
-            return _record_consent_and_redirect(team_slug, request.experiment, request.experiment_session)
-
-    else:
-        form = ConsentForm(consent, initial=initial)
-
-    consent_notice = consent.get_rendered_content()
-    version_specific_vars = {
-        "experiment_name": published_version.name,
-        "experiment_description": published_version.description,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/start_experiment_session.html",
-        {
-            "active_tab": "experiments",
-            "experiment": published_version,
-            "consent_notice": mark_safe(consent_notice),
-            "form": form,
-            **version_specific_vars,
-        },
     )
 
 
@@ -506,7 +136,7 @@ def _add_time_gap_info(messages, gap_threshold_hours=4):
 
 
 @experiment_session_view()
-@verify_session_access_cookie
+@require_session_access
 def experiment_session_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     """View for loading paginated messages with HTMX"""
     session = request.experiment_session
@@ -628,7 +258,7 @@ def experiment_session_messages_view(request, team_slug: str, experiment_id: uui
 
 
 @experiment_session_view()
-@verify_session_access_cookie
+@require_session_access
 def translate_messages_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     session = request.experiment_session
     provider_id = request.POST.get("llm_provider", "")
@@ -693,65 +323,6 @@ def redirect_to_messages_view(request, session):
         url += "?" + urlencode(params)
 
     return HttpResponseRedirect(url)
-
-
-@public_chat_rate_limited
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@verify_session_access_cookie
-@require_POST
-def end_experiment(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    experiment_session = request.experiment_session
-    experiment_session.update_status(SessionStatus.PENDING_REVIEW, commit=False)
-    experiment_session.end(commit=True, trigger_type=StaticTriggerType.CONVERSATION_ENDED_BY_USER)
-    return HttpResponseRedirect(reverse("experiments:experiment_review", args=[team_slug, experiment_id, session_id]))
-
-
-@public_chat_rate_limited
-@experiment_session_view(allowed_states=[SessionStatus.PENDING_REVIEW])
-@verify_session_access_cookie
-def experiment_review(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    form = None
-    experiment_version = resolve_published_or_working(request.experiment)
-    if request.method == "POST":
-        # no validation needed
-        request.experiment_session.status = SessionStatus.COMPLETE
-        request.experiment_session.reviewed_at = timezone.now()
-        request.experiment_session.save()
-        return HttpResponseRedirect(
-            reverse("experiments:experiment_complete", args=[team_slug, experiment_id, session_id])
-        )
-
-    version_specific_vars = {
-        "experiment_name": experiment_version.name,
-    }
-    return TemplateResponse(
-        request,
-        "experiments/experiment_review.html",
-        {
-            "experiment": request.experiment,
-            "experiment_session": request.experiment_session,
-            "messages": ChatMessage.objects.filter(chat_id=request.experiment_session.chat_id).all(),
-            "active_tab": "experiments",
-            "form": form,
-            "available_tags": [t.name for t in Tag.objects.filter(team=request.team, is_system_tag=False).all()],
-            **version_specific_vars,
-        },
-    )
-
-
-@public_chat_rate_limited
-@experiment_session_view(allowed_states=[SessionStatus.COMPLETE])
-@verify_session_access_cookie
-def experiment_complete(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return TemplateResponse(
-        request,
-        "experiments/experiment_complete.html",
-        {
-            "experiment": request.experiment,
-            "experiment_session": request.experiment_session,
-            "active_tab": "experiments",
-        },
-    )
 
 
 @team_required

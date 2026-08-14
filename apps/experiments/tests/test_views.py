@@ -1,15 +1,13 @@
 from contextlib import nullcontext as does_not_raise
-from io import BytesIO
 from unittest import mock
 
-import jwt
 import pytest
 from django.core.exceptions import ValidationError
-from django.http import HttpResponse
 from django.test import Client, override_settings
 from django.urls import reverse
 
-from apps.channels.web_channel import WebChannel
+from apps.channels.api_channel import ApiChannel
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL
 from apps.experiments.models import (
     Experiment,
@@ -18,19 +16,25 @@ from apps.experiments.models import (
     ParticipantData,
     VoiceResponseBehaviours,
 )
-from apps.experiments.views.experiment import _verify_user_or_start_session
-from apps.files.models import FilePurpose
 from apps.teams.backends import add_user_to_team
 from apps.utils.factories.experiment import (
     ConsentFormFactory,
     ExperimentFactory,
-    ExperimentSessionFactory,
-    ParticipantFactory,
 )
-from apps.utils.factories.pipelines import NodeFactory, PipelineFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, LlmProviderModelFactory
 from apps.utils.factories.team import TeamWithUsersFactory, UserFactory
 from apps.utils.prompt import get_root_var, validate_prompt_variables
+
+
+def _start_session(experiment, participant_identifier, participant_user=None, timezone=None):
+    """Start a session the way the surviving chat API does."""
+    return ApiChannel.start_new_session(
+        experiment,
+        experiment_channel=ExperimentChannel.objects.get_team_api_channel(experiment.team),
+        participant_identifier=participant_identifier,
+        participant_user=participant_user,
+        timezone=timezone,
+    )
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
@@ -125,11 +129,7 @@ def test_new_participant_created_on_session_start(_trigger_mock, is_user):
         user = experiment.team.members.first()
         identifier = user.email
 
-    session = WebChannel.start_new_session(
-        experiment,
-        participant_user=user,
-        participant_identifier=identifier,
-    )
+    session = _start_session(experiment, identifier, participant_user=user)
 
     assert Participant.objects.filter(team=experiment.team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=experiment.team).count() == 1
@@ -151,11 +151,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
         user = team.members.first()
         identifier = user.email
 
-    session = WebChannel.start_new_session(
-        experiment1,
-        participant_user=user,
-        participant_identifier=identifier,
-    )
+    session = _start_session(experiment1, identifier, participant_user=user)
 
     assert Participant.objects.filter(team=team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=team).count() == 1
@@ -164,11 +160,7 @@ def test_participant_reused_within_team(_trigger_mock, is_user):
     # user starts a second session in the same team
     experiment2 = ExperimentFactory.create(team=team)
 
-    session = WebChannel.start_new_session(
-        experiment2,
-        participant_user=user,
-        participant_identifier=identifier,
-    )
+    session = _start_session(experiment2, identifier, participant_user=user)
 
     assert Participant.objects.filter(team=team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=team).count() == 2
@@ -188,11 +180,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
         user = team.members.first()
         identifier = user.email
 
-    session = WebChannel.start_new_session(
-        experiment1,
-        participant_user=user,
-        participant_identifier=identifier,
-    )
+    session = _start_session(experiment1, identifier, participant_user=user)
 
     assert Participant.objects.filter(team=team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=team).count() == 1
@@ -206,11 +194,7 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
 
     experiment2 = ExperimentFactory.create(team=new_team)
 
-    session = WebChannel.start_new_session(
-        experiment2,
-        participant_user=user,
-        participant_identifier=identifier,
-    )
+    session = _start_session(experiment2, identifier, participant_user=user)
 
     assert Participant.objects.filter(team=new_team, identifier=identifier).count() == 1
     assert ExperimentSession.objects.filter(team=new_team).count() == 1
@@ -222,26 +206,16 @@ def test_new_participant_created_for_different_teams(_trigger_mock, is_user):
 
 @pytest.mark.django_db()
 @mock.patch("apps.experiments.services.enqueue_static_triggers")
-def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
+def test_participant_gets_user_when_they_signed_up(_trigger_mock):
     """When a non platform user starts a session, a participant without a user is created. When they then sign up
     and start another session, their participant user should be populated
     """
     experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
     assert Participant.objects.filter(team=experiment.team).count() == 0
     email = "test@user.com"
-    post_data = {
-        "identifier": email,
-        "consent_agreement": True,
-        "experiment_id": str(experiment.id),
-        "participant_id": "",
-    }
-    url = reverse(
-        "experiments:start_session_public",
-        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
-    )
 
     # Non platform user creates a session
-    client.post(url, data=post_data)
+    _start_session(experiment, email)
     participant = Participant.objects.get(team=experiment.team, identifier=email)
     assert participant.user is None
 
@@ -249,34 +223,10 @@ def test_participant_gets_user_when_they_signed_up(_trigger_mock, client):
     user = UserFactory.create(email=email)
     add_user_to_team(experiment.team, user=user)
     # Now the platform user creates a session
-    client.login(username=user.username, password="password")
-    client.post(url, data=post_data)
+    _start_session(experiment, email, participant_user=user)
 
     participant = Participant.objects.get(team=experiment.team, identifier=email)
     assert participant.user is not None
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.experiments.services.enqueue_static_triggers")
-def test_user_email_used_for_participant_identifier(_trigger_mock, client):
-    """With the `capture_identifier` field enabled on the consent record, logged in users' consent form will
-    not contain the `identifier` field, so we pass it as initial data to the form. This test simulates a logged
-    in user submitting the consent form
-    """
-    experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create(), consent_form__capture_identifier=True)
-    assert Participant.objects.filter(team=experiment.team).count() == 0
-
-    user = experiment.team.members.first()
-    client.login(username=user.username, password="password")
-
-    post_data = {"consent_agreement": True, "experiment_id": str(experiment.id), "participant_id": ""}
-
-    url = reverse(
-        "experiments:start_session_public",
-        kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
-    )
-    client.post(url, data=post_data)
-    assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
 
 
 @pytest.mark.django_db()
@@ -322,277 +272,17 @@ def test_timezone_saved_in_participant_data(_trigger_mock):
     team = experiment.team
     experiment2 = ExperimentFactory.create(team=team)
     identifier = "someone@example.com"
-    participant = Participant.objects.create(identifier=identifier, team=team, platform="web")
+    # Participants are keyed per platform, so this must match the platform `_start_session` uses.
+    participant = Participant.objects.create(identifier=identifier, team=team, platform=ChannelPlatform.API)
     part_data1 = ParticipantData.objects.create(team=team, participant=participant, experiment=experiment)
     part_data2 = ParticipantData.objects.create(team=experiment2.team, participant=participant, experiment=experiment2)
 
-    WebChannel.start_new_session(
-        experiment,
-        participant_identifier=identifier,
-        timezone="Africa/Johannesburg",
-    )
+    _start_session(experiment, identifier, timezone="Africa/Johannesburg")
 
     part_data1.refresh_from_db()
     part_data2.refresh_from_db()
     assert part_data1.data["timezone"] == "Africa/Johannesburg"
     assert part_data2.data["timezone"] == "Africa/Johannesburg"
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("version", [Experiment.DEFAULT_VERSION_NUMBER, 1])
-@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
-@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
-def test_experiment_session_message_view_creates_files(delay_mock, version, experiment, client):
-    task = mock.Mock()
-    task.task_id = 1
-    delay_mock.return_value = task
-    session = ExperimentSessionFactory.create(
-        experiment=experiment, participant=ParticipantFactory.create(user=experiment.owner)
-    )
-    url_kwargs = {
-        "team_slug": experiment.team.slug,
-        "experiment_id": experiment.public_id,
-        "session_id": session.external_id,
-        "version_number": version,
-    }
-    url = reverse("experiments:experiment_session_message", kwargs=url_kwargs)
-
-    client.force_login(experiment.owner)
-    file_search_file = BytesIO(b"some content")
-    file_search_file.name = "fs.text"
-    code_interpreter_file = BytesIO(b"some content")
-    code_interpreter_file.name = "ci.text"
-    ocs_attachment_file = BytesIO(b"some content")
-    ocs_attachment_file.name = "ocs.text"
-    data = {
-        "message": "Hi there",
-        "file_search": [file_search_file],
-        "code_interpreter": [code_interpreter_file],
-        "ocs_attachments": [ocs_attachment_file],
-    }
-    client.post(url, data=data)
-    # Tool resources are created with the files. Participant uploads are conversation
-    # media regardless of which tool they feed; ASSISTANT is reserved for bot config.
-    ci_resource = session.chat.attachments.get(tool_type="code_interpreter")
-    ci_file = ci_resource.files.get(name="ci.text")
-    assert ci_file.purpose == FilePurpose.MESSAGE_MEDIA
-
-    fs_resource = session.chat.attachments.get(tool_type="file_search")
-    fs_file = fs_resource.files.get(name="fs.text")
-    assert fs_file.purpose == FilePurpose.MESSAGE_MEDIA
-
-    ocs_resource = session.chat.attachments.get(tool_type="ocs_attachments")
-    ocs_file = ocs_resource.files.get(name="ocs.text")
-    assert ocs_file.purpose == FilePurpose.MESSAGE_MEDIA
-
-
-@pytest.mark.django_db()
-@mock.patch("apps.experiments.services.enqueue_static_triggers", mock.Mock())
-@mock.patch("apps.experiments.views.experiment.get_response_for_webchat_task.delay")
-def test_experiment_session_message_view_missing_message(delay_mock, experiment, client):
-    """A POST without a 'message' field or attachments returns 400 instead of raising."""
-    session = ExperimentSessionFactory.create(
-        experiment=experiment, participant=ParticipantFactory.create(user=experiment.owner)
-    )
-    url = reverse(
-        "experiments:experiment_session_message",
-        kwargs={
-            "team_slug": experiment.team.slug,
-            "experiment_id": experiment.public_id,
-            "session_id": session.external_id,
-            "version_number": Experiment.DEFAULT_VERSION_NUMBER,
-        },
-    )
-    client.force_login(experiment.owner)
-
-    response = client.post(url, data={})
-
-    assert response.status_code == 400
-    delay_mock.assert_not_called()
-
-
-@pytest.mark.django_db()
-class TestPublicSessions:
-    @pytest.mark.parametrize("is_user", [False, True])
-    @mock.patch("apps.experiments.services.enqueue_static_triggers")
-    def test_start_session_public_with_emtpy_identifier(self, _trigger_mock, is_user, client):
-        """Identifiers can be empty if we choose not to capture it. In this case, use the logged in user's email or in
-        the case where it's an external user, use a UUID as the identifier"""
-        experiment = ExperimentFactory.create(
-            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=False
-        )
-        assert Participant.objects.filter(team=experiment.team).count() == 0
-
-        user = None
-        if is_user:
-            user = experiment.team.members.first()
-            client.login(username=user.username, password="password")
-
-        post_data = {
-            "identifier": "",
-            "consent_agreement": True,
-            "experiment_id": str(experiment.id),
-            "participant_id": "",
-        }
-
-        url = reverse(
-            "experiments:start_session_public",
-            kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
-        )
-        client.post(url, data=post_data)
-        assert Participant.objects.filter(team=experiment.team).count() == 1
-        if is_user:
-            assert Participant.objects.filter(team=experiment.team, identifier=user.email).exists()
-
-    @pytest.mark.parametrize(("capture_identifier", "expect_user_verified"), [(True, True), (False, False)])
-    @mock.patch("apps.experiments.views.experiment._verify_user_or_start_session")
-    def test_user_is_verified_if_identifier_is_captured_and_participant_data_injected(
-        self, verify_user, capture_identifier, expect_user_verified, client
-    ):
-        verify_user.return_value = HttpResponse()
-        experiment = ExperimentFactory.create(
-            team=TeamWithUsersFactory.create(), consent_form__capture_identifier=capture_identifier
-        )
-        post_data = {
-            "identifier": "someone@gmail.com",
-            "consent_agreement": True,
-            "experiment_id": str(experiment.id),
-            "participant_id": "",
-        }
-
-        url = reverse(
-            "experiments:start_session_public",
-            kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
-        )
-        client.post(url, data=post_data)
-        if expect_user_verified:
-            verify_user.assert_called()
-        else:
-            verify_user.assert_not_called()
-
-    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
-    def test_do_not_verify_authenticated_users(self, record_consent_and_redirect_mock, request):
-        experiment_session = ExperimentSessionFactory.create()
-        request.user = experiment_session.experiment.owner
-
-        _verify_user_or_start_session("something", request, experiment_session.experiment, experiment_session)
-        record_consent_and_redirect_mock.assert_called()
-
-    @pytest.mark.parametrize(("participant_match"), [True, False])
-    @mock.patch("apps.experiments.models.ExperimentSession.requires_participant_data")
-    @mock.patch("apps.experiments.views.experiment.send_chat_link_email")
-    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
-    @mock.patch("apps.experiments.views.experiment.get_chat_session_access_cookie_data")
-    def test_user_has_session_cookie(
-        self,
-        get_chat_session_access_cookie_data,
-        record_consent_and_redirect_mock,
-        send_chat_link_email,
-        requires_participant_data,
-        participant_match,
-        request,
-    ):
-        """
-        When a signed-out user wants to chat to a bot and has a session cookie from a prior chat, the following
-        scenarios are expected:
-        - If the specified email match that of the participant in the session, the user's email should not be verified
-            again.
-        - If the specified email do not match that of the participant in the session, it should be verified
-        """
-        requires_participant_data.return_value = True
-        request_user = mock.Mock()
-        request_user.is_authenticated = False
-        request.user = request_user
-        experiment_session = ExperimentSessionFactory.create()
-        participant = experiment_session.participant
-        get_chat_session_access_cookie_data.return_value = {
-            "participant_id": participant.id if participant_match else participant.id + 1
-        }
-        _verify_user_or_start_session(
-            identifier=participant.identifier,
-            request=request,
-            experiment=experiment_session.experiment,
-            session=experiment_session,
-        )
-
-        if participant_match:
-            record_consent_and_redirect_mock.assert_called()
-            send_chat_link_email.assert_not_called()
-        else:
-            record_consent_and_redirect_mock.assert_not_called()
-            send_chat_link_email.assert_called()
-
-    @pytest.mark.parametrize(("participant_data_injected"), [True, False])
-    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
-    @mock.patch("apps.experiments.views.experiment.send_chat_link_email")
-    @mock.patch("apps.experiments.views.experiment.get_chat_session_access_cookie_data")
-    def test_user_does_not_have_session_cookie(
-        self,
-        get_chat_session_access_cookie_data,
-        send_chat_link_email,
-        _record_consent_and_redirect,
-        participant_data_injected,
-        request,
-    ):
-        """
-        When a signed-out user wants to chat to a bot and does not have a session cookie from a prior chat, we should
-        verify the specified email first.
-        """
-        get_chat_session_access_cookie_data.return_value = None
-        prompt = "Data: {participant_data}" if participant_data_injected else "Data"
-        request_user = mock.Mock()
-        request_user.is_authenticated = False
-        request.user = request_user
-
-        pipeline = PipelineFactory.create()
-        NodeFactory.create(pipeline=pipeline, type="LLMResponseWithPrompt", params={"prompt": prompt})
-        session = ExperimentSessionFactory.create(experiment__pipeline=pipeline)
-        assert session.requires_participant_data() == participant_data_injected
-
-        _verify_user_or_start_session(
-            identifier="someone@gmail.com",
-            request=request,
-            experiment=session.experiment,
-            session=session,
-        )
-        if participant_data_injected:
-            _record_consent_and_redirect.assert_not_called()
-            send_chat_link_email.assert_called()
-        else:
-            send_chat_link_email.assert_not_called()
-            _record_consent_and_redirect.assert_called()
-
-
-@pytest.mark.django_db()
-class TestVerifyPublicChatToken:
-    @override_settings(SECRET_KEY="test_key_that_is_at_least_32_bytes_long")
-    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
-    def test_valid_token_redirects_to_chat(self, record_consent_and_redirect, client):
-        record_consent_and_redirect.return_value = HttpResponse()
-        session = ExperimentSessionFactory.create()
-        experiment = session.experiment
-        token = jwt.encode(
-            {
-                "session": str(session.external_id),
-            },
-            "test_key_that_is_at_least_32_bytes_long",
-            algorithm="HS256",
-        )
-        client.get(
-            reverse("experiments:verify_public_chat_token", args=(session.team.slug, experiment.public_id, token))
-        )
-        record_consent_and_redirect.assert_called()
-
-    @mock.patch("apps.experiments.views.experiment._record_consent_and_redirect")
-    def test_invalid_token_redirects_to_consent_form(self, record_consent_and_redirect, experiment, client):
-        team_slug = experiment.team.slug
-        token = "blah"
-        expected_redirect_url = reverse("experiments:start_session_public", args=(team_slug, experiment.public_id))
-        response = client.get(
-            reverse("experiments:verify_public_chat_token", args=(team_slug, experiment.public_id, token))
-        )
-        assert response.url == expected_redirect_url
-        record_consent_and_redirect.assert_not_called()
 
 
 @pytest.mark.django_db()

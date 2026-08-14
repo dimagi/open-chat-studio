@@ -56,12 +56,6 @@ urlpatterns = [
         views.chatbot_session_pagination_view,
         name="chatbot_session_pagination_view",
     ),
-    path("<uuid:experiment_id>/start/", views.start_chatbot_session_public, name="start_session_public"),
-    path(
-        "<uuid:experiment_id>/s/<str:session_id>/chat/",
-        views.chatbot_chat,
-        name="chatbot_chat",
-    ),
     # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stubs, deleted in a later release.
     path(
         "<uuid:experiment_id>/embed/start/",

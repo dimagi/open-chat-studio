@@ -20,7 +20,6 @@ from django_tables2 import SingleTableView
 from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
-from apps.api.session_tokens import issue_session_token
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
@@ -29,20 +28,16 @@ from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
-from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
+from apps.experiments.decorators import experiment_session_view, require_session_access
 from apps.experiments.filters import (
     ExperimentSessionFilter,
     get_filter_context_data,
 )
 from apps.experiments.forms import ExperimentVersionForm
 from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
-from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
-from apps.experiments.views.experiment import (
-    start_session_public,
-)
 from apps.experiments.views.utils import get_channels_context
 from apps.filters.models import FilterSet
 from apps.generics import actions
@@ -57,13 +52,12 @@ from apps.pipelines.views import (
     llm_model_parameter_context,
 )
 from apps.service_providers.models import LlmProvider, LlmProviderModel
-from apps.teams.decorators import login_and_team_required, team_required
+from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.trace.models import Trace
 from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
-from apps.web.waf import WafRule, waf_allow
 
 
 def _get_alpine_context(request, experiment=None):
@@ -601,7 +595,7 @@ class ChatbotSessionsTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixi
 
 
 @experiment_session_view()
-@verify_session_access_cookie
+@require_session_access
 def chatbot_session_details_view(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return render_session_details(
         request,
@@ -681,41 +675,6 @@ def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid
         experiment_id,
         session_id,
         view_name="chatbots:chatbot_session_view",
-    )
-
-
-@waf_allow(WafRule.NoUserAgent_HEADER)
-@team_required
-def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UUID):
-    return start_session_public(request, team_slug, experiment_id)
-
-
-@waf_allow(WafRule.NoUserAgent_HEADER)
-@public_chat_rate_limited
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@verify_session_access_cookie
-def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    return _chatbot_chat_ui(request)
-
-
-def _chatbot_chat_ui(request):
-    chatbot_version = resolve_published_or_working(request.experiment)
-    version_specific_vars = {
-        "assistant": chatbot_version.get_assistant(),
-        "chatbot_name": chatbot_version.name,
-        "experiment_version": chatbot_version,
-        "experiment_version_number": chatbot_version.version_number,
-    }
-    return TemplateResponse(
-        request,
-        "chatbots/chat/web_chat.html",
-        {
-            "experiment": request.experiment,
-            "session": request.experiment_session,
-            "session_token": issue_session_token(request.experiment_session),
-            "active_tab": "chatbots",
-            **version_specific_vars,
-        },
     )
 
 

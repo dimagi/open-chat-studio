@@ -60,26 +60,11 @@ urlpatterns = [
         RedirectView.as_view(pattern_name="chatbots:create_version"),
         name="create_version",
     ),
-    path(
-        "e/<uuid:experiment_id>/v/<int:version_number>/session/<str:session_id>/message/",
-        views.experiment_session_message,
-        name="experiment_session_message",
-    ),
     # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stub, deleted in a later release.
     path(
         "e/<uuid:experiment_id>/v/<int:version_number>/session/<str:session_id>/embed/message/",
         views.embed_flow_gone,
         name="experiment_session_message_embed",
-    ),
-    path(
-        "e/<uuid:experiment_id>/session/<str:session_id>/get_response/<slug:task_id>/",
-        views.get_message_response,
-        name="get_message_response",
-    ),
-    path(
-        "e/<uuid:experiment_id>/session/<str:session_id>/poll_messages/",
-        views.poll_messages,
-        name="poll_messages",
     ),
     # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stub, deleted in a later release.
     path(
@@ -91,48 +76,15 @@ urlpatterns = [
     path("e/<int:experiment_id>/events/", include("apps.events.urls")),
     # superuser tools
     path("e/<int:experiment_id>/exports/generate", views.generate_chat_export, name="generate_chat_export"),
-    # public links
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/",
-        views.start_session_from_invite,
-        name="start_session_from_invite",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/end/",
-        views.end_experiment,
-        name="end_experiment",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/review/",
-        views.experiment_review,
-        name="experiment_review",
-    ),
-    path(
-        "e/<uuid:experiment_id>/s/<str:session_id>/complete/",
-        views.experiment_complete,
-        name="experiment_complete",
-    ),
     path(
         "e/<uuid:experiment_id>/s/<str:session_id>/messages/",
         views.experiment_session_messages_view,
         name="experiment_session_messages_view",
     ),
-    # public link
-    path("e/<uuid:experiment_id>/start/", views.start_session_public, name="start_session_public"),
     # Removed 2026-08-03 (issue #3540): legacy embed flow. 410 stub, deleted in a later release.
     path("e/<uuid:experiment_id>/embed/start/", views.embed_flow_gone, name="start_session_public_embed"),
     path("<int:session_id>/file/<int:pk>/", views.download_file, name="download_file"),
     path("<int:session_id>/image/<int:pk>/html/", views.get_image_html, name="get_image_html"),
-    path(
-        "e/<uuid:experiment_id>/verify_token/<str:token>/",
-        views.verify_public_chat_token,
-        name="verify_public_chat_token",
-    ),
-    path(
-        "messages/<int:message_id>/rate/<str:rating>/",
-        views.rate_message,
-        name="rate_message",
-    ),
     path(
         "e/<int:experiment_id>/release_status_badge",
         views.get_release_status_badge,

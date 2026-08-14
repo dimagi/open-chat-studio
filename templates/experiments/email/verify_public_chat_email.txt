@@ -1,3 +1,0 @@
-You have requested to chat to {{ experiment_name }}.
-
-To start chatting, follow this link: {{ verify_link }}

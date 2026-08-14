@@ -22,7 +22,6 @@ from apps.chatbots.views import (
     ChatbotSessionsTableView,
     ChatbotVersionsTableView,
     CreateChatbotVersion,
-    _chatbot_chat_ui,
     chatbot_session_pagination_view,
     home,
 )
@@ -567,6 +566,22 @@ def test_single_chatbot_home_renders_chat_widget(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_single_chatbot_home_has_no_web_channel_entry_points(client, team_with_users):
+    """The web channel was removed: no public share link and no participant invitations."""
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="invite_participants"))
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team, owner=user)
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    content = client.get(url).content.decode()
+
+    assert "sharing_modal" not in content
+    assert "Invitations" not in content
+
+
+@pytest.mark.django_db()
 def test_published_version_launcher_uses_the_published_versions_settings(client, team_with_users):
     """``file_uploads_enabled`` is versioned, so the published snapshot can disagree with the
     working row. The version-0 launcher must follow the snapshot it actually chats to."""
@@ -913,23 +928,6 @@ def test_session_table_session_query_uses_limit(team_with_users):
         "Session list ran an unbounded SELECT on experiments_experimentsession (no LIMIT) — "
         "pagination is not being applied at the SQL level. Session selects captured:\n" + "\n\n".join(session_selects)
     )
-
-
-@pytest.mark.django_db()
-def test_chatbot_chat_ui_includes_valid_session_token():
-    experiment = ExperimentFactory()
-    session = ExperimentSessionFactory(experiment=experiment, team=experiment.team)
-
-    request = RequestFactory().get("/")
-    request.team = experiment.team
-    request.experiment = experiment
-    request.experiment_session = session
-
-    response = _chatbot_chat_ui(request)
-
-    token = response.context_data["session_token"]
-    assert token
-    assert validate_session_token(token, session.external_id)
 
 
 @pytest.mark.django_db()
