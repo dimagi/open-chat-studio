@@ -396,13 +396,6 @@ def chatbot_usage_summary(experiment: Experiment, *, start: datetime, end: datet
     page's usage widget. Session/message counts come from `filtered_querysets` - the same canonical,
     ADR-0051 activity definitions the dashboard's Bot Performance table uses - narrowed to this
     experiment, rather than re-deriving the session base here.
-
-    That matters because "active in the window" is not "created in the window": `filtered_querysets`
-    counts a session if it has an in-window conversation message (via `Exists`), so a long-lived session
-    (e.g. a WhatsApp thread `channel_base.py` keeps reusing indefinitely) still counts when it was created
-    well before `start` but has turns inside [start, end). A `created_at` filter on the session would drop
-    that session's messages entirely - the join to its messages can't re-admit rows the outer session
-    filter already excluded. `filtered_querysets` also excludes SETUP sessions, per ADR-0051.
     """
     cost = cost_summary(experiment.team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment.id]))
     querysets = filtered_querysets(experiment.team, start_date=start, end_date=end, experiment_ids=[experiment.id])
