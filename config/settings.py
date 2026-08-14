@@ -974,18 +974,10 @@ EMBEDDING_VECTOR_SIZE = 1024
 
 # Hybrid search: lexical retrieval fused with dense retrieval by Reciprocal Rank Fusion.
 # Gated per-team by the `flag_hybrid_search` waffle flag; when inactive, retrieval stays dense-only.
-# The text search configuration is per collection (`Collection.search_language`) rather than a
-# setting, because collections hold documents in different languages and the configuration used to
-# build a chunk's vector must be the one used to parse the query.
-#
-# These two seed the matching Collection fields when a collection is created. Django bakes the
-# value into the migration, so changing one here needs an AlterField migration, and retuning
-# existing collections needs a data migration. Both must stay within the range enforced by the
-# check constraints on Collection, or every insert fails.
-# Weight given to the dense ranking in fusion; the lexical ranking gets (1 - weight). Range 0..1.
-DOCUMENT_SEARCH_DENSE_WEIGHT = 0.7
-# Candidates pulled from each branch before fusion. Larger values trade latency for recall. Min 1.
-DOCUMENT_SEARCH_FETCH_K = 40
+# The per-collection knobs (search language, dense weight, candidate pool) live on Collection
+# rather than here: a setting used as a field default is copied into each row at creation, so
+# changing it would need a migration to take effect and would not be a setting in any useful sense.
+# This one is read on every call, so it is a genuine runtime knob.
 # RRF smoothing constant. 60 is the value from the original RRF paper and the common default.
 DOCUMENT_SEARCH_RRF_K = 60
 SUPPORTED_FILE_TYPES = {

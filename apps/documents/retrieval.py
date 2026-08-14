@@ -75,36 +75,26 @@ def search_collection(
     return _load_chunks_in_order(fused_ids, scores)
 
 
-def reciprocal_rank_fusion(
+def _rrf_scores(
     ranked_lists: Sequence[Sequence[int]],
     weights: Sequence[float],
     k: int | None = None,
-) -> list[int]:
-    """Fuse ranked ID lists into one ranking by weighted Reciprocal Rank Fusion.
+) -> dict[int, float]:
+    """Weighted Reciprocal Rank Fusion: the fused score for each ID.
 
     Each list contributes `weight / (k + rank)` to every ID it contains, where `rank` is
     1-based. An ID missing from a list simply receives no contribution from it, which is how
     one-sided candidates are handled -- no imputation required.
+
+    Kept separate from the ranking so callers can surface the score as well as the order; the
+    collection query preview renders it.
 
     Args:
         ranked_lists: Ranked ID lists, best first. IDs may repeat across lists.
         weights: One weight per list, positionally matched.
         k: RRF smoothing constant. Larger values flatten the influence of top ranks.
             Defaults to `settings.DOCUMENT_SEARCH_RRF_K`.
-
-    Returns:
-        Deduplicated IDs ordered by descending fused score. Ties break on ascending ID so
-        results are deterministic for a given candidate set.
     """
-    return _rank_by_score(_rrf_scores(ranked_lists, weights, k))
-
-
-def _rrf_scores(
-    ranked_lists: Sequence[Sequence[int]],
-    weights: Sequence[float],
-    k: int | None = None,
-) -> dict[int, float]:
-    """Fused score per ID. Separate from the ranking so callers can surface the score itself."""
     if k is None:
         k = settings.DOCUMENT_SEARCH_RRF_K
 

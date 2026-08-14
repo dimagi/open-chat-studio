@@ -206,8 +206,9 @@ def query_collection(request, team_slug: str, pk: int):
         "chunks": chunks,
         # Derived from the results rather than from the flag: hybrid search falls back to a
         # dense-only ranking when the query has no lexical matches, and those chunks carry a
-        # distance rather than a fused score.
-        "hybrid_search": any(getattr(chunk, "fused_score", None) is not None for chunk in chunks),
+        # distance rather than a fused score. Every chunk in a result set comes from the same
+        # branch, so the first one settles it.
+        "hybrid_search": bool(chunks) and getattr(chunks[0], "fused_score", None) is not None,
     }
     return render(request, "documents/collection_query_results.html", context)
 

@@ -7,7 +7,7 @@ from django.template.loader import render_to_string
 from waffle.testutils import override_flag
 
 from apps.documents.models import CollectionFile, FileStatus, SearchLanguage
-from apps.documents.retrieval import _lexical_candidate_ids, reciprocal_rank_fusion, search_collection
+from apps.documents.retrieval import _lexical_candidate_ids, _rank_by_score, _rrf_scores, search_collection
 from apps.service_providers.llm_service.index_managers import LocalIndexManager
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
@@ -15,18 +15,27 @@ from apps.utils.factories.files import FileChunkEmbeddingFactory, FileFactory
 HYBRID_FLAG = "flag_hybrid_search"
 
 
+def _fuse(ranked_lists, weights, k=None) -> list[int]:
+    """Score then rank, which is what `search_collection` does with the two separately.
+
+    It needs the scores as well as the order, so there is no single production function to call
+    here; composing them in the tests keeps the assertions about ordering readable.
+    """
+    return _rank_by_score(_rrf_scores(ranked_lists, weights, k))
+
+
 class TestReciprocalRankFusion:
     """RRF is pure ranking arithmetic, so it is tested without touching the database."""
 
     def test_fuses_two_lists_by_rank(self):
         # b is 2nd then 1st, a is 1st then 3rd. With equal weights b's combined rank wins.
-        fused = reciprocal_rank_fusion([[1, 2, 3], [2, 3, 1]], weights=[0.5, 0.5], k=60)
+        fused = _fuse([[1, 2, 3], [2, 3, 1]], weights=[0.5, 0.5], k=60)
         assert fused == [2, 1, 3]
 
     def test_dense_weight_decides_disjoint_winner(self):
         """With no overlap, the top of the heavier-weighted list must rank first."""
-        dense_first = reciprocal_rank_fusion([[1], [2]], weights=[0.7, 0.3], k=60)
-        lexical_first = reciprocal_rank_fusion([[1], [2]], weights=[0.3, 0.7], k=60)
+        dense_first = _fuse([[1], [2]], weights=[0.7, 0.3], k=60)
+        lexical_first = _fuse([[1], [2]], weights=[0.3, 0.7], k=60)
         assert dense_first == [1, 2]
         assert lexical_first == [2, 1]
 
@@ -41,18 +50,18 @@ class TestReciprocalRankFusion:
         ],
     )
     def test_one_sided_and_empty_candidates(self, ranked_lists, weights, expected):
-        assert reciprocal_rank_fusion(ranked_lists, weights=weights, k=60) == expected
+        assert _fuse(ranked_lists, weights=weights, k=60) == expected
 
     def test_deduplicates_across_and_within_lists(self):
         """An id repeated inside one list must not be scored twice, and must appear once."""
-        fused = reciprocal_rank_fusion([[1, 1, 2], [1]], weights=[0.5, 0.5], k=60)
+        fused = _fuse([[1, 1, 2], [1]], weights=[0.5, 0.5], k=60)
         assert fused == [1, 2]
         assert len(fused) == len(set(fused))
 
     def test_repeated_id_keeps_its_best_rank(self):
         """A duplicate later in a list must not drag its own score down."""
-        with_duplicate = reciprocal_rank_fusion([[1, 2, 1]], weights=[1.0], k=60)
-        without_duplicate = reciprocal_rank_fusion([[1, 2]], weights=[1.0], k=60)
+        with_duplicate = _fuse([[1, 2, 1]], weights=[1.0], k=60)
+        without_duplicate = _fuse([[1, 2]], weights=[1.0], k=60)
         assert with_duplicate == without_duplicate == [1, 2]
 
     def test_k_trades_rank_influence_against_weight(self):
@@ -65,8 +74,8 @@ class TestReciprocalRankFusion:
         lexical_ids = [99]  # rank 1, the lighter weight
         weights = [0.7, 0.3]
 
-        small_k = reciprocal_rank_fusion([dense_ids, lexical_ids], weights=weights, k=1)
-        large_k = reciprocal_rank_fusion([dense_ids, lexical_ids], weights=weights, k=100_000)
+        small_k = _fuse([dense_ids, lexical_ids], weights=weights, k=1)
+        large_k = _fuse([dense_ids, lexical_ids], weights=weights, k=100_000)
 
         # k=1: rank 1 in the lighter list still outranks the dense tail.
         assert small_k.index(99) < small_k.index(10)
@@ -76,17 +85,17 @@ class TestReciprocalRankFusion:
 
     def test_ties_break_deterministically_on_id(self):
         """Equal scores must produce a stable order regardless of input ordering."""
-        assert reciprocal_rank_fusion([[3, 1, 2]], weights=[0.0], k=60) == [1, 2, 3]
-        assert reciprocal_rank_fusion([[2, 3, 1]], weights=[0.0], k=60) == [1, 2, 3]
+        assert _fuse([[3, 1, 2]], weights=[0.0], k=60) == [1, 2, 3]
+        assert _fuse([[2, 3, 1]], weights=[0.0], k=60) == [1, 2, 3]
 
     def test_defaults_k_to_setting(self):
-        explicit = reciprocal_rank_fusion([[1, 2], [2]], weights=[0.5, 0.5], k=settings.DOCUMENT_SEARCH_RRF_K)
-        assert reciprocal_rank_fusion([[1, 2], [2]], weights=[0.5, 0.5]) == explicit
+        explicit = _fuse([[1, 2], [2]], weights=[0.5, 0.5], k=settings.DOCUMENT_SEARCH_RRF_K)
+        assert _fuse([[1, 2], [2]], weights=[0.5, 0.5]) == explicit
 
     def test_mismatched_weights_are_rejected(self):
         """A weight-per-list mismatch is a programming error, not something to silently absorb."""
         with pytest.raises(ValueError, match="zip"):
-            reciprocal_rank_fusion([[1], [2]], weights=[1.0])
+            _fuse([[1], [2]], weights=[1.0])
 
 
 def _make_indexed_collection(**kwargs):
@@ -296,11 +305,11 @@ class TestSearchCollection:
         assert collection.search_dense_weight == 0.25
         assert collection.search_fetch_k == 7
 
-    def test_new_collections_are_seeded_from_the_settings(self):
+    def test_new_collections_get_the_default_knobs(self):
         """Every collection holds a usable value, so callers read the field directly."""
         collection = CollectionFactory.create()
-        assert collection.search_dense_weight == settings.DOCUMENT_SEARCH_DENSE_WEIGHT
-        assert collection.search_fetch_k == settings.DOCUMENT_SEARCH_FETCH_K
+        assert collection.search_dense_weight == 0.7
+        assert collection.search_fetch_k == 40
 
 
 @pytest.mark.django_db()

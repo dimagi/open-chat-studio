@@ -2,7 +2,6 @@ import logging
 from collections.abc import Iterator
 from datetime import timedelta
 
-from django.conf import settings
 from django.contrib.postgres.search import SearchVector
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
@@ -252,12 +251,12 @@ class Collection(BaseTeamModel, VersionsMixin):
             "this requires rebuilding the collection's search vectors."
         ),
     )
-    # Hybrid search tuning, seeded from the DOCUMENT_SEARCH_* settings so every collection holds a
-    # usable value and callers can read the field directly. These are deliberately kept off the
-    # pipeline node UI for now to avoid overwhelming bot builders. Changing a setting only affects
-    # collections created afterwards; retuning existing ones takes a data migration.
+    # Hybrid search tuning. The defaults are literals rather than settings: a field default is
+    # copied into each row at creation, so a setting behind one would need a migration to change
+    # and a data migration to reach existing collections, which is not what a setting is for.
+    # These are deliberately kept off the pipeline node UI for now to avoid overwhelming builders.
     search_dense_weight = models.FloatField(
-        default=settings.DOCUMENT_SEARCH_DENSE_WEIGHT,
+        default=0.7,
         validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
         help_text=(
             "Weight of dense (semantic) results when fusing with lexical results, between 0 and 1. "
@@ -265,7 +264,7 @@ class Collection(BaseTeamModel, VersionsMixin):
         ),
     )
     search_fetch_k = models.PositiveIntegerField(
-        default=settings.DOCUMENT_SEARCH_FETCH_K,
+        default=40,
         validators=[MinValueValidator(1)],
         help_text=("How many candidates to retrieve from each of the dense and lexical searches before fusing them."),
     )
