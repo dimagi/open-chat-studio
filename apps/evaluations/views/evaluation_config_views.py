@@ -264,18 +264,20 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
     def get_table_kwargs(self):
         return {"cost_tracking_enabled": flag_is_active(self.request, COST_TRACKING_FLAG)}
 
-    def get_table_data(self):
-        """Stamp each row with its cost so the table's `cost` column can render it.
-
-        Reads `self.object_list` (set by `ListView.get` before this runs) rather than
-        calling `get_queryset()` again, so listing runs costs one query, not two.
+    def get_table(self, **kwargs):
+        """Stamp cost onto the rows of the *current page* only, after pagination has
+        already sliced them. Leaving `get_table_data` at its default (the lazy
+        `get_queryset()`) keeps pagination at the DB level (COUNT + LIMIT/OFFSET) rather
+        than loading every run for the config on every request.
         """
-        runs = list(self.object_list) if hasattr(self, "object_list") else list(self.get_queryset())
-        if runs and flag_is_active(self.request, COST_TRACKING_FLAG):
-            costs = evaluation_run_costs(self.kwargs["evaluation_pk"], [run.id for run in runs])
-            for run in runs:
-                run.cost = costs.get(run.id)  # ty: ignore[invalid-assignment]
-        return runs
+        table = super().get_table(**kwargs)
+        if kwargs.get("cost_tracking_enabled"):
+            page_runs = [row.record for row in table.paginated_rows]
+            if page_runs:
+                costs = evaluation_run_costs(self.kwargs["evaluation_pk"], [run.id for run in page_runs])
+                for run in page_runs:
+                    run.cost = costs.get(run.id)
+        return table
 
 
 class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

@@ -5,10 +5,12 @@ and the LLM provider page.
 """
 
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 from django.urls import reverse
 
+from apps.evaluations.cost import evaluation_run_costs
 from apps.evaluations.models import EvaluationRunStatus
 from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -65,6 +67,28 @@ class TestRunListCostColumn:
         content = client.get(url).content.decode()
 
         assert "—" in content
+
+    def test_cost_lookup_is_scoped_to_the_current_page_not_the_whole_config(self, client, team_with_users, config):
+        """Regression: cost must be stamped after pagination slices the queryset, not
+        before — otherwise every run for the config is loaded and priced on every
+        request instead of just the page being rendered (default page size is 25)."""
+        _enable_flag_for(team_with_users)
+        runs = EvaluationRunFactory.create_batch(30, team=team_with_users, config=config)
+        for run in runs:
+            UsageRecordFactory.create(
+                team=team_with_users, evaluation_config=config, cost=Decimal("1"), extra={"evaluation_run_id": run.id}
+            )
+        client.force_login(team_with_users.members.first())
+        url = reverse("evaluations:evaluation_runs_table", args=[team_with_users.slug, config.id])
+
+        with mock.patch(
+            "apps.evaluations.views.evaluation_config_views.evaluation_run_costs", wraps=evaluation_run_costs
+        ) as spy:
+            response = client.get(url)
+
+        assert response.status_code == 200
+        requested_run_ids = spy.call_args.args[1]
+        assert len(requested_run_ids) == 25
 
 
 @pytest.mark.django_db()
