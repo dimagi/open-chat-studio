@@ -53,9 +53,13 @@ class Action:
     def get_context(self, request, record, value):
         if self.url_factory:
             action_url = self.url_factory(self.url_name, request, record, value)
-        else:
+        elif self.url_name:
             args = [request.team.slug, record.pk] if record else [request.team.slug]
             action_url = reverse(self.url_name, args=args)
+        else:
+            # Actions whose template renders something other than a link (e.g. a widget launcher)
+            # don't navigate and so have no URL to build.
+            action_url = ""
 
         label = self.label
         if not label and self.label_factory:
