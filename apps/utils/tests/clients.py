@@ -9,7 +9,7 @@ from apps.oauth.models import OAuth2AccessToken, OAuth2Application
 
 
 class ApiTestClient(APIClient):
-    def __init__(self, user, team, auth_method="api_key", read_only=False, scopes=None):
+    def __init__(self, user, team, auth_method="api_key", read_only=False, scopes=None, allowed_chatbots=None):
         super().__init__()
         self.user = user
         self.auth_method = auth_method
@@ -32,6 +32,9 @@ class ApiTestClient(APIClient):
                 client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
                 authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
             )
+            # A client-credentials application reaches only the chatbots it is pinned to.
+            application.allowed_chatbots.set(allowed_chatbots or [])
+            self.application = application
             access_token = OAuth2AccessToken.objects.create(
                 application=application,
                 team=team,

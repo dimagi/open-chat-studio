@@ -47,6 +47,7 @@ from apps.chatbots.version_resolver import (
 )
 from apps.experiments.models import Experiment, ExperimentSession, ParticipantData
 from apps.experiments.views.utils import get_channels_context
+from apps.oauth.permissions import enforce_application_chatbot_access
 from apps.service_providers.models import MessagingProviderType
 from apps.teams.decorators import login_and_team_required
 from apps.teams.utils import set_current_team
@@ -235,7 +236,10 @@ def new_api_message_schema(versioned: bool):
         summary=summary,
         tags=["Channels"],
         request=ApiMessageSerializer(),
-        responses={200: ApiResponseMessageSerializer()},
+        responses={
+            200: ApiResponseMessageSerializer(),
+            403: {"description": "The OAuth application is not authorized for this chatbot"},
+        },
         parameters=parameters,
     )
 
@@ -259,7 +263,6 @@ class NewApiMessageVersionedView(APIView):
 def _new_api_message(request, experiment_id: uuid, version=None):
     """Chat with an experiment."""
     message_data = request.data.copy()
-    participant_id = request.user.email
 
     session = None
     if session_id := message_data.get("session"):
@@ -274,12 +277,20 @@ def _new_api_message(request, experiment_id: uuid, version=None):
             )
         except ExperimentSession.DoesNotExist:
             raise Http404() from None
-        participant_id = session.participant.identifier
         experiment_channel = session.experiment_channel
         experiment = session.experiment
     else:
         experiment = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
         experiment_channel = ExperimentChannel.objects.get_team_api_channel(request.team)
+
+    # Ahead of `request.user.email` below, which is what makes the denial observable at all: a
+    # client-credentials caller is an AnonymousUser, which has no `email`, so reaching that line
+    # raises. This endpoint has no way to supply a participant identifier (see ApiMessageSerializer),
+    # so a machine token has no success path here -- only this denial. Left as-is rather than
+    # widened: giving machine callers a working path is a separate decision. See issue #4197.
+    enforce_application_chatbot_access(request, experiment)
+
+    participant_id = session.participant.identifier if session else request.user.email
     if version:
         experiment_version = resolve_chatbot_version(experiment, VersionSelectionRule.SPECIFIC, version_number=version)
     else:

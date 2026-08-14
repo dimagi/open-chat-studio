@@ -207,6 +207,12 @@ paths:
                     detail: User has not given consent
                   summary: User has not given consent
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
+          description: ''
         '404':
           content:
             application/json:
