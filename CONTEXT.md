@@ -37,8 +37,27 @@ _Avoid_: "version selection type" (the legacy field name on `EvaluationConfig`).
 ### Runtime
 
 **Channel**:
-A binding between a Chatbot and an external messaging platform (Telegram, WhatsApp, Slack, web widget, email, CommCare Connect). One Chatbot has many Channels. Backed by the `ExperimentChannel` model — that's a legacy code name only.
+A binding between a Chatbot and a way of reaching it (Telegram, WhatsApp, Slack, email, CommCare Connect, and the **Chat API Channel**). One Chatbot has many Channels. Backed by the `ExperimentChannel` model — that's a legacy code name only.
+_Note_: most Channels are messaging platforms, but the Chat API Channel is not — what all Channels share is that a team admin creates one to **expose** a Chatbot to some audience.
 _Avoid_: "ExperimentChannel" outside of code.
+
+**Chat API Channel**:
+The Channel that exposes a Chatbot over the chat API (`/api/chat/`), created from the Channels tab and shown as **Chat Widget & API**. Its main client is the embedded chat widget, but not its only one. Until a Chatbot has one, it is unreachable over the chat API — exposure is a deliberate admin act, not a default.
+
+A Chat API Channel carries two independent settings that are easy to confuse:
+
+- **Credential Mode** — the *admin's* choice of what a caller must present: the **Embed Key**, or an OAuth token. Under the OAuth mode an Embed Key is simply ignored, so an existing embed snippet keeps working unchanged. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
+- **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin wants required.
+
+An admin's policy must never be switched on by a widget upgrade, which is why these are two fields and not rungs of one ladder.
+
+Under the OAuth mode, exposure takes **two** admin acts that must agree: the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
+_Backed by_: `ChannelPlatform.EMBEDDED_WIDGET` — the stored value stays `embedded_widget` because it is also a `Participant.platform` value.
+_Avoid_: "the Embedded Widget channel" when the channel is serving a server integration; "the widget channel" is fine when a widget really is the client.
+
+**Embed Key**:
+The per-Channel secret an embedded widget presents (`X-Embed-Key`) to prove it may talk to a Chatbot. Validated together with the request's origin against the Channel's allowed domains — the key alone is not enough. Rotatable, and revoked when the Channel is deleted. Not a secret from the *page* (it ships in the embed snippet); it is a secret from everyone who was not given the snippet.
+_Avoid_: "widget token" (the `extra_data` key name) and "API key" (a different, user-scoped credential).
 
 **Session**:
 A single conversation between a Participant and a Chatbot Version, conducted via a Channel (or via the API entry point, web widget, or an evaluation run). Materialised in code as an `ExperimentSession` row paired 1:1 with a `Chat` row that holds the message log; treat them as one domain concept.
@@ -80,6 +99,10 @@ _Avoid_: conflating "Provider" and "Model" — choosing a bot's LLM means choosi
 **OpenAI Assistant**:
 A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. Pipelines invoke one via an `AssistantNode`.
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
+
+**OAuth Application**:
+A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents). A machine application also names the Chatbots it may start chat sessions with; naming none means it may start none.
+_Avoid_: "API key" (a separate, user-scoped credential), and "the OAuth app's user" for a machine application — it has none.
 
 **Custom Action**:
 A Team-scoped HTTP API that a Chatbot can call, described by an OpenAPI schema. Provides one or more **Custom Action Operations**.
@@ -143,5 +166,6 @@ The output of one Evaluator scoring one Evaluation Message within an Evaluation 
 - "Chatbot" vs "Experiment" — resolved: **Chatbot** is the canonical domain term. **Experiment** survives as the historical model/app name in code and migrations only; user-facing copy, issues, PRDs, and new docs should use **Chatbot**.
 - "Chatbot" used for both the family and a specific version row — resolved: **Chatbot** = the family; **Chatbot Version** = a snapshot. When in doubt, say which.
 - "Default Version" (code) vs "Published Version" (UI) — resolved: same concept; **Published Version** is canonical. The model field stays `is_default_version`; new writing says published.
-- **API / WEB / EVALUATIONS pseudo-platforms**: rows in the `ExperimentChannel.platform` enum that share the channel storage but aren't user-configurable Channels (excluded from the platform dropdown). When discussing entry points for messages, distinguish "a Channel" (real platform) from "the API entry point", "the web widget", and "an evaluation run" — these are not Channels in the domain sense.
+- **API / WEB / EVALUATIONS pseudo-platforms**: rows in the `ExperimentChannel.platform` enum that share the channel storage but aren't user-configurable Channels (excluded from the platform dropdown). When discussing entry points for messages, distinguish "a Channel" (real platform) from "the API entry point", "the web widget", and "an evaluation run" — these are not Channels in the domain sense. Note the near-collision: the team-global **API** pseudo-platform is *not* the **Chat API Channel**, which is a real, per-Chatbot, admin-created Channel.
+- "The chat API" vs "the API" — the **chat API** (`/api/chat/`) is the conversational surface the widget and browser callers use, gated by a Chat API Channel. "The API" plainly means the management REST API (`/api/`), gated by team membership, API keys, or OAuth scopes. A machine caller can converse over *either*; only the chat API requires a Channel.
 - **Participant ≠ Person, Participant ≠ User**: a Participant is platform-bound, so one human can be many Participants. A **User** is a registered platform user (auth, login). When the audience might collapse them, name which one you mean explicitly.
