@@ -19,8 +19,8 @@ If you have a design document and want the AI agent to extract ADRs from it, use
 
 The skills automate drafting, formatting, cross-referencing, and code verification, but a few calls stay with you:
 
-* **Deciding a design doc is settled.** Flipping `status` from `active` to `stable` is what unblocks extraction — see the [source-doc lifecycle](../agents/adr_process.md#source-doc-lifecycle). Nothing extracts ADRs from a doc you haven't marked stable.
-* **Making the editorial calls inside an interactive `/extract-adrs` run.** Which candidates are real decisions, merges/splits, each ADR's status, the `Extends:` graph — the skill stops and asks; see its gate/decision logic in `.claude/skills/extract-adrs/SKILL.md`.
-* **Reviewing and committing.** The interactive skill never commits; the CI variant (`.claude/skills/extract-adrs-ci/SKILL.md`) opens a PR but never merges. A human is the only path to `main` either way.
-* **Confirming before editing an already-`accepted` ADR.** Reversing a decision means writing a new superseding ADR, not rewriting the old one — called out in the repo's `AGENTS.md` "Ask first" list.
-* **Citing ADRs and flagging conflicts while designing new work.** See [`agents/domain`](../agents/domain.md#cite-adrs).
+- **Deciding a design doc is settled.** Flipping `status` from `active` to `stable` is what unblocks extraction — see the [source-doc lifecycle](../agents/adr_process.md#source-doc-lifecycle). Nothing extracts ADRs from a doc you haven't marked stable.
+- **Making the editorial calls inside an interactive `/extract-adrs` run.** Which candidates are real decisions, merges/splits, each ADR's status, the `Extends:` graph — the skill stops and asks; see its gate/decision logic in `.claude/skills/extract-adrs/SKILL.md`.
+- **Reviewing and committing.** The interactive skill never commits; the CI variant (`.claude/skills/extract-adrs-ci/SKILL.md`) opens a PR but never merges. A human is the only path to `main` either way.
+- **Confirming before editing an already-`accepted` ADR.** Reversing a decision means writing a new superseding ADR, not rewriting the old one — called out in the repo's `AGENTS.md` "Ask first" list.
+- **Citing ADRs and flagging conflicts while designing new work.** See [`agents/domain`](../agents/domain.md#cite-adrs).

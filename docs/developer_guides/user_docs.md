@@ -46,9 +46,9 @@ This creates a way for users to get notified of changes by subscribing to the re
 
 The automated releases are created in `draft` state, which allows a developer to review the generated text before publishing. The releases should contain the following sections:
 
-* New Features: new features added to the product
-* Improvements: changes to existing features that don't classify as 'new features'
-* Bug Fixes
+- New Features: new features added to the product
+- Improvements: changes to existing features that don't classify as 'new features'
+- Bug Fixes
 
 It should not contain a top-level summary, upgrade recommendations, etc.
 
