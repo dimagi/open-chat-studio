@@ -15,7 +15,7 @@ The system supports two indexing strategies:
 
 The index manager system follows an abstract base class pattern with two main hierarchies:
 
-```
+```text
 RemoteIndexManager (ABC)
 ├── OpenAIRemoteIndexManager
 

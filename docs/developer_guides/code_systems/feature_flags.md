@@ -153,7 +153,7 @@ python manage.py check_flag_usage --flag-name flag_new_feature
 ```
 
 **Output example:**
-```
+```text
 Found 5 flags in database
 
 Flags found in code (3):
