@@ -1,0 +1,72 @@
+default: true
+
+# Disable rules that are NOT important for AI agent parsing - structural integrity and link/reference correctness
+
+# List markers can be either - or *
+MD004: false
+
+# Ignore unordered list indentation check
+MD007: false
+
+MD012: false
+
+# Line length — reduce progressively after long lines are fixed
+MD013:
+  line_length: 2000
+  code_blocks: false
+  tables: false
+  headings: false
+
+# Ignore need for blank lines around headings
+MD022: false
+
+MD024:
+  siblings_only: true
+
+# Only one H1 per page (frontmatter title doesn't count, so a real H1 isn't a duplicate)
+MD025:
+  front_matter_title: ""
+
+MD026: false
+MD029: false
+MD030: false
+MD031: false
+
+# Ignore need for blank lines around lists
+MD032: false
+
+# Inline HTML: MkDocs Material uses <br>, <kbd>, attribute lists, etc.
+MD033:
+  allowed_elements:
+    - a
+    - br
+    - details
+    - div
+    - figcaption
+    - figure
+    - iframe
+    - kbd
+    - small
+    - span
+    - sub
+    - summary
+    - sup
+
+MD034: false
+
+# Enable this for fenced-code language as important for AI Agent instructions
+MD040: true
+
+# Every page must open with an H1 (frontmatter title does not substitute)
+MD041:
+  front_matter_title: ""
+
+MD046: false
+MD049: false
+MD050: false
+MD051: false
+MD053: false
+MD054: false
+MD058: false
+MD059: false
+MD060: false
