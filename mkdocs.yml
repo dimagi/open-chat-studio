@@ -67,12 +67,12 @@ nav:
   - Getting Started:
     - Overview: getting-started/index.md
     - Local Setup: getting-started/local-setup.md
-    - Docker Setup: getting-started/docker-setup.md
+    - Docker-Only Setup: getting-started/docker-setup.md
     - Development Workflow: getting-started/dev-workflow.md
     - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
-    - Package map: architecture/package-map.md
+    - Package Map: architecture/package-map.md
     - Decisions:
       - Index: adr/index.md
       - 0000 Record architecture decisions: adr/0000-record-architecture-decisions.md

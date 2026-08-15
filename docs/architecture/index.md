@@ -9,8 +9,8 @@ This section provides an overview of the Open Chat Studio architecture, explaini
 
 Rather than duplicating details that can drift out of date, this page links to the sources engineers keep current: `AGENTS.md`, ADRs, `CONTEXT.md`, and the developer guides.
 
-1. Significant architectural decisions are recorded as [ADRs](../developer_guides/adr_process.md).
-2. For AI-generated architecture diagrams based on this GitHub repo, visit
+- Significant architectural decisions are recorded as [ADRs](../developer_guides/adr_process.md).
+- For AI-generated architecture diagrams based on this GitHub repo, visit
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/open-chat-studio)
 
 ## System Overview
