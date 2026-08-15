@@ -4,8 +4,8 @@ The OCS REST API is primarily documented via its OpenAPI schema. The schema is c
 
 The current production schema is available at https://www.openchatstudio.com/api/schema/. It is also kept in the code repository in the `api-schemas/v1.yml` file. This file serves two purposes:
 
-1. Provide an easy way to visually inspect changes to the schema.
-2. Provide a reference for generating API documentation in the docs repo (see below).
+- Provide an easy way to visually inspect changes to the schema.
+- Provide a reference for generating API documentation in the docs repo (see below).
 
 The schema can be generated locally by running:
 

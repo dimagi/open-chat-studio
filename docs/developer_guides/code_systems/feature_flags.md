@@ -29,7 +29,7 @@ flag.is_active_for_team(my_team)
 
 !!! tip
 
-    Flags are created automatically in the database when referenced in code or templates so it is not necessary to create them manually.
+    Flags are created automatically in the database when referenced in code or templates, so it is not necessary to create them manually.
 
 ## Registering a Flag
 
@@ -135,7 +135,7 @@ When a feature is stable and should be on for all users, remove the flag entirel
 1. Run `check_flag_usage` to find every reference.
 2. Remove all `flag_is_active` / `{% flag %}` / `override_flag` guards, keeping the guarded code.
 3. Delete the `Flags` enum entry from `apps/teams/flags.py`.
-4. Update or remove tests that used `override_flag` for this flag — test the behaviour unconditionally.
+4. Update or remove tests that used `override_flag` for this flag — test the behavior unconditionally.
 5. The flag row in the database becomes orphaned and can be deleted via the Django admin.
 
 ## Management Commands

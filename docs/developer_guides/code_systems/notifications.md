@@ -202,7 +202,7 @@ with self.trace_service.span(
 
 ### When to Use Span-Driven Notifications
 
-- Preferrably always when you use a span and want users to be notified if that specific span encounters an error.
+- Preferably always when you use a span and want users to be notified if that specific span encounters an error.
 
 Use direct `create_notification()` calls when:
 - The error occurs outside of a trace context (e.g., background tasks, health checks)

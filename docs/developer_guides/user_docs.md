@@ -8,7 +8,7 @@ LLM-based automation (with Claude) helps draft changelog entries **and** user do
 
 ## Guidelines
 
-All user-facing changes should ideally be accompanied by documentation and changelog updates. However, use discretion: purely internal changes or very minor updates may not require docs. In general, treat documentation as part of the feature—this avoids shipping UI that points users to outdated or missing documentation.
+All user-facing changes should ideally be accompanied by documentation and changelog updates. However, use discretion: purely internal changes or very minor updates may not require docs. In general, treat documentation as part of the feature — this avoids shipping UI that points users to outdated or missing documentation.
 
 
 ## Changelog process

@@ -6,7 +6,7 @@ An AI agent skill can extract ADRs from a design doc, either on request or autom
 
 ## Manually extract ADRs with AI agent
 
-If you have a design document that you want to work with the AI agent to extract the ADRs for your design, use the `/extract-adrs <source-doc>` skill at `.claude/skills/extract-adrs/SKILL.md`.
+If you have a design document and want the AI agent to extract ADRs from it, use the `/extract-adrs <source-doc>` skill at `.claude/skills/extract-adrs/SKILL.md`.
 
 ## Writing an ADR by hand
 
