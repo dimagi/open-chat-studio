@@ -14,6 +14,7 @@ from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem, AnnotationQueue
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.csv_export import neutralize_csv_formula
 
 _SESSION_MODE = EvaluationMode.SESSION
 
@@ -370,8 +371,8 @@ def export_concordance_csv(request: HttpRequest, team_slug: str) -> HttpResponse
                 row.kind,
                 row.session_external_id,
                 row.experiment_public_id,
-                row.judge_value,
-                row.human_value,
+                neutralize_csv_formula(row.judge_value),
+                neutralize_csv_formula(row.human_value),
                 row.agree,
                 row.eval_run_id,
                 row.eval_result_id,
