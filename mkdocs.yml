@@ -130,6 +130,7 @@ nav:
       - 0052 App-layer rate limiting: adr/0052-app-layer-rate-limiting-mechanism.md
       - 0053 Starting a chat session requires team membership or the embed key: adr/0053-chat-session-start-requires-membership-or-embed-key.md
       - 0054 Chat session tokens expire on absolute age, not inactivity: adr/0054-chat-session-tokens-expire-on-absolute-age.md
+      - 0055 Binary field type extends the field definition union: adr/0055-binary-field-type-extends-the-field-definition-union.md
   - Developer Guides:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md
