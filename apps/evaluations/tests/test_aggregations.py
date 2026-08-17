@@ -244,6 +244,49 @@ class TestBuildTrendData:
         assert categorical_data["points"][0]["value"] == "good"
 
 
+@pytest.mark.django_db()
+class TestBinaryAggregationDispatch:
+    def _make_run_with_results(self, evaluator, outputs):
+        run = EvaluationRunFactory.create(team=evaluator.team)
+        for output in outputs:
+            EvaluationResultFactory.create(
+                team=evaluator.team,
+                run=run,
+                evaluator=evaluator,
+                output={"result": output},
+            )
+        return run
+
+    def test_binary_field_routes_to_binary_aggregator(self):
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        run = self._make_run_with_results(evaluator, [{"correct": 1}, {"correct": 0}, {"correct": 1}])
+        (aggregate,) = compute_aggregates_for_run(run)
+        assert aggregate.aggregates["correct"] == {
+            "type": "binary",
+            "count": 3,
+            "mean": 0.6667,
+            "true_count": 2,
+        }
+
+    def test_field_absent_from_schema_falls_back_to_value_dispatch(self):
+        # A renamed or removed field aggregates as it does today (numeric for ints).
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        run = self._make_run_with_results(evaluator, [{"old_name": 1}, {"old_name": 0}])
+        (aggregate,) = compute_aggregates_for_run(run)
+        assert aggregate.aggregates["old_name"]["type"] == "numeric"
+
+    def test_python_evaluator_without_output_schema_unchanged(self):
+        evaluator = EvaluatorFactory.create(
+            type="PythonEvaluator",
+            llm_provider=None,
+            llm_provider_model=None,
+            params={"code": "pass"},
+        )
+        run = self._make_run_with_results(evaluator, [{"score": 1}, {"score": 0}])
+        (aggregate,) = compute_aggregates_for_run(run)
+        assert aggregate.aggregates["score"]["type"] == "numeric"
+
+
 class TestAggregateBinaryField:
     @pytest.mark.parametrize(
         ("values", "expected"),
