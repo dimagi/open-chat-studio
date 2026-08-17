@@ -86,6 +86,7 @@ class TestSendingErrorHandlerStage:
             session=session,
             platform_title="Telegram",
             context="text message",
+            recipient=ctx.participant_identifier,
         )
 
     def test_unknown_exception_reraises(self):

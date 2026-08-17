@@ -207,6 +207,21 @@ class ExperimentChannel(BaseTeamModel):
     name = models.CharField(max_length=255, help_text="The name of this channel")
     experiment = models.ForeignKey(Experiment, on_delete=models.CASCADE, null=True, blank=True)
     deleted = models.BooleanField(default=False)
+    # Admin kill-switch for temporarily blocking access on this channel without deleting it
+    # (maintenance, incidents, content freezes). Enforced by ChannelDisabledStage.
+    enabled = models.BooleanField(
+        default=True,
+        help_text="Uncheck to temporarily block access to this bot on this channel.",
+    )
+    disabled_message = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Disabled message",
+        help_text=(
+            "Optional message sent to anyone who messages this channel while it is disabled. "
+            "Leave blank for the bot to stay silent."
+        ),
+    )
     extra_data = JSONField(default=dict, help_text="Fields needed for channel authorization. Format is JSON")
     external_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     platform = models.CharField(max_length=32, choices=ChannelPlatform.choices, default="telegram")
@@ -260,6 +275,11 @@ class ExperimentChannel(BaseTeamModel):
     @property
     def platform_enum(self):
         return ChannelPlatform(self.platform)
+
+    @property
+    def is_disabled(self) -> bool:
+        """True when an admin has switched this channel off. Inbound messages are not processed."""
+        return not self.enabled
 
     @property
     def widget_update_status(self) -> widget_versions.WidgetUpdateStatus | None:

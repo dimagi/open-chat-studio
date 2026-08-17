@@ -371,3 +371,56 @@ def test_telegram_post_save_falls_back_to_warning_on_failure(set_incoming_webhoo
 
     assert channel.webhook_url in form.warning_message
     assert form.success_message == ""
+
+
+@pytest.mark.django_db()
+class TestChannelEnabledToggle:
+    """The disable switch and its optional static message (issue #4200)."""
+
+    def _form(self, experiment, channel, **data):
+        form_data = {"name": channel.name, "platform": channel.platform, **data}
+        return ChannelForm(experiment=experiment, instance=channel, data=form_data)
+
+    def test_new_channels_start_enabled(self, experiment):
+        form = ChannelForm(initial={"platform": ChannelPlatform.TELEGRAM}, experiment=experiment)
+        assert form.initial.get("enabled") is not False
+        assert '"channelEnabled": true' in form.form_attrs["x-data"]
+
+    def test_disabling_saves_the_static_message(self, experiment):
+        channel = ExperimentChannelFactory.create(experiment=experiment, team=experiment.team)
+        form = self._form(experiment, channel, disabled_message="Back on Monday")
+
+        assert form.is_valid(), form.errors
+        form.save(experiment, config_data=channel.extra_data)
+
+        channel.refresh_from_db()
+        assert channel.enabled is False
+        assert channel.disabled_message == "Back on Monday"
+
+    def test_disabling_without_a_message_is_allowed(self, experiment):
+        channel = ExperimentChannelFactory.create(experiment=experiment, team=experiment.team)
+        form = self._form(experiment, channel)
+
+        assert form.is_valid(), form.errors
+        form.save(experiment, config_data=channel.extra_data)
+
+        channel.refresh_from_db()
+        assert channel.enabled is False
+        assert channel.disabled_message == ""
+
+    def test_re_enabling_a_channel(self, experiment):
+        channel = ExperimentChannelFactory.create(
+            experiment=experiment, team=experiment.team, enabled=False, disabled_message="Back on Monday"
+        )
+        form = self._form(experiment, channel, enabled="on")
+
+        assert form.is_valid(), form.errors
+        form.save(experiment, config_data=channel.extra_data)
+
+        channel.refresh_from_db()
+        assert channel.enabled is True
+
+    def test_alpine_state_follows_a_disabled_channel(self, experiment):
+        channel = ExperimentChannelFactory.create(experiment=experiment, team=experiment.team, enabled=False)
+        form = ChannelForm(experiment=experiment, instance=channel)
+        assert '"channelEnabled": false' in form.form_attrs["x-data"]
