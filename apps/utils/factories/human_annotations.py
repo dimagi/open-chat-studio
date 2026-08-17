@@ -11,6 +11,20 @@ class AnnotationQueueFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = AnnotationQueue
 
+    class Params:
+        binary_schema = factory.Trait(
+            schema=factory.LazyFunction(
+                lambda: {
+                    "correct": {
+                        "type": "binary",
+                        "description": "Was the response correct?",
+                        "true_label": "Correct",
+                        "false_label": "Incorrect",
+                    },
+                }
+            )
+        )
+
     team = factory.SubFactory(TeamFactory)
     name = factory.Sequence(lambda n: f"Queue {n}")
     schema = factory.LazyFunction(

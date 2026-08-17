@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from django.db.models import Prefetch
 
-from apps.evaluations.aggregators import aggregate_field
+from apps.evaluations.aggregators import aggregate_binary_field, aggregate_field
 
 from .models import Annotation, AnnotationQueueAggregate, AnnotationStatus
 
@@ -37,7 +37,14 @@ def compute_aggregates_for_queue(queue) -> AnnotationQueueAggregate:
                 if field_name in aggregatable_fields and value is not None:
                     field_values[field_name].append(value)
 
-    agg_data = {field_name: aggregate_field(values) for field_name, values in field_values.items()}
+    agg_data = {
+        field_name: (
+            aggregate_binary_field(values)
+            if (queue.schema.get(field_name) or {}).get("type") == "binary"
+            else aggregate_field(values)
+        )
+        for field_name, values in field_values.items()
+    }
 
     obj, _ = AnnotationQueueAggregate.objects.update_or_create(
         queue=queue,
