@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from apps.users.middleware import RequireMfaForStaffMiddleware
 from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.tests.clients import ApiTestClient
 
 PASSWORD = "sekr1t-passw0rd"
 
@@ -282,12 +283,35 @@ def test_returning_user_can_reauthenticate_and_enrol(client, user, gated_page):
     assert resumed.redirect_chain[-1][0] == reverse("mfa_activate_totp")
 
 
-def test_api_requests_are_not_redirected(client, user):
-    """API callers authenticate per request and can't act on a redirect, so the gate skips them."""
+@pytest.mark.parametrize(
+    ("method", "url_name"),
+    [
+        pytest.param("get", "api:experiment-list", id="experiments"),
+        # /api/chat/ enables DRF's SessionAuthentication, so a staff session really does authenticate
+        # here -- exempting the prefix would have been a way around the requirement.
+        pytest.param("post", "api:chat:start-session", id="chat"),
+    ],
+)
+def test_session_authenticated_api_requests_are_refused(client, user, method, url_name):
+    """Gated, but with a 403: an API caller can't act on a redirect to an HTML setup page."""
     user.is_superuser = True
     user.save()
     client.force_login(user)
 
-    response = client.get(reverse("api:experiment-list"))
+    response = getattr(client, method)(reverse(url_name))
 
-    assert response.status_code != 302
+    assert response.status_code == 403
+
+
+def test_api_key_requests_are_unaffected(db, user):
+    """The gate reads the session; DRF authenticates keys inside the view, long after it runs.
+
+    So a staff user's integrations keep working while they enrol -- only their browser is gated.
+    """
+    user.is_superuser = True
+    user.save()
+    api_client = ApiTestClient(user, user.teams.first())
+
+    response = api_client.get(reverse("api:experiment-list"))
+
+    assert response.status_code == 200

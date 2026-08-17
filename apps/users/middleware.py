@@ -5,7 +5,7 @@ from allauth.mfa import app_settings as mfa_settings
 from allauth.mfa.utils import is_mfa_enabled
 from django.conf import settings
 from django.contrib import messages
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.urls import reverse
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.translation import gettext_lazy as _
@@ -23,9 +23,10 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
     pattern documented by django-allauth-2fa:
     https://django-allauth-2fa.readthedocs.io/en/latest/advanced/
 
-    Only the session-authenticated web UI is gated. The API and webhook surfaces authenticate per
-    request (API key, OAuth token, platform signature) and can't act on a redirect, so a redirect
-    there would break integrations rather than prompt anyone to enrol.
+    The gate keys off the session, which is the only thing ``AuthenticationMiddleware`` populates
+    ``request.user`` from. API-key, OAuth-token and webhook callers are anonymous here -- DRF
+    authenticates them inside the view, long after this runs -- so integrations never reach the gate
+    and keep working while their owner enrols.
     """
 
     MESSAGE = _("Two-factor authentication is required for staff accounts. Please set it up to continue.")
@@ -46,18 +47,24 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
     #: ``LOGIN_REDIRECT_URL``, which the gate sends back here, so any gated URL under ``/accounts/``
     #: is a redirect cycle waiting to happen.
     #:
-    #: The remaining prefixes are surfaces that don't use session auth (they authenticate per
-    #: request with an API key, OAuth token, or platform signature), where redirecting the caller
-    #: achieves nothing -- plus ``/__reload__/``, whose event stream the dev server's browser-reload
-    #: worker reconnects to and reloads the page over if it is ever redirected.
+    #: ``/__reload__/`` is the dev server's browser-reload event stream: redirect it and the reload
+    #: worker reconnects and reloads the page, forever. ``/tz_detect/`` records a timezone from every
+    #: page load, including the setup page, and refusing it would log a warning each time.
     EXEMPT_PATH_PREFIXES = (
         "/accounts/",
+        "/tz_detect/",
+        "/__reload__/",
+    )
+
+    #: Gated, but answered with a 403 rather than a redirect: the caller is code, and a redirect to
+    #: an HTML setup page is no use to it. These are *not* exempt, because a staff user's session
+    #: authenticates some of them -- ``/api/chat/`` enables DRF's ``SessionAuthentication``
+    #: (apps/api/views/chat.py) -- and exempting them would leave a way around the requirement.
+    PROGRAMMATIC_PATH_PREFIXES = (
         "/api/",
         "/channels/",
         "/anymail/",
         "/celery-progress/",
-        "/tz_detect/",
-        "/__reload__/",
     )
 
     def process_view(self, request, view_func, view_args, view_kwargs):
@@ -79,6 +86,9 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
         return not (is_mfa_enabled(user) or self._is_exempt(request))
 
     def _gate(self, request):
+        if request.path.startswith(self.PROGRAMMATIC_PATH_PREFIXES):
+            return HttpResponseForbidden(str(self.MESSAGE))
+
         if request.htmx and self._is_exempt_path(_path_of(request.htmx.current_url)):
             # This is a background request fired by a page the gate already lets through -- the
             # banner poll on the setup page, say. Telling htmx to navigate would send the browser
