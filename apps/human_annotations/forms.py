@@ -3,6 +3,7 @@ import json
 from django import forms
 from django.core.exceptions import ValidationError
 from pydantic import TypeAdapter
+from pydantic import ValidationError as PydanticValidationError
 
 from apps.evaluations.field_definitions import (
     BinaryFieldDefinition,
@@ -15,6 +16,21 @@ from apps.evaluations.field_definitions import (
 from apps.evaluations.models import DatasetCreationStatus, EvaluationDataset
 
 from .models import AnnotationQueue
+
+_FIELD_ADAPTER = TypeAdapter(FieldDefinition)
+
+
+def _canonical_field_definition(defn: dict) -> dict:
+    """Return the pydantic-normalized form of a stored field definition.
+
+    Stored schemas may predate normalization or come from non-form writers; a
+    definition that no longer validates is returned as-is so the locked-schema
+    comparison still has something to compare against.
+    """
+    try:
+        return _FIELD_ADAPTER.validate_python(defn).model_dump(exclude_none=True)
+    except PydanticValidationError:
+        return defn
 
 
 class AnnotationQueueForm(forms.ModelForm):
@@ -66,21 +82,26 @@ class AnnotationQueueForm(forms.ModelForm):
         if not data:
             raise ValidationError("Schema must have at least one field")
 
-        adapter = TypeAdapter(FieldDefinition)
+        # Store the pydantic-normalized dump, not the raw submission: a stored dict that
+        # diverges from the builder's serialization (missing label keys, untrimmed labels)
+        # would fail the locked-schema comparison on every subsequent save.
+        normalized = {}
         for name, defn in data.items():
             try:
-                adapter.validate_python(defn)
+                normalized[name] = _FIELD_ADAPTER.validate_python(defn).model_dump(exclude_none=True)
             except Exception as e:
                 raise ValidationError(f"Invalid field '{name}': {e}") from e
 
         if self._schema_locked:
-            self._validate_locked_schema_change(data)
+            self._validate_locked_schema_change(normalized)
 
-        return data
+        return normalized
 
     def _validate_locked_schema_change(self, new_schema):
         """When annotations exist, only the 'required' property may change."""
-        existing = self.instance.schema
+        # The submission is already normalized; canonicalize the stored side too so
+        # schemas stored before normalization compare on structure, not key-set shape.
+        existing = {name: _canonical_field_definition(defn) for name, defn in self.instance.schema.items()}
 
         if set(new_schema.keys()) != set(existing.keys()):
             raise ValidationError("Cannot add or remove fields after annotations have started.")

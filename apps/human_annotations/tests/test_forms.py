@@ -95,7 +95,7 @@ def test_queue_form_preserves_required_false(team):
 
     queue.refresh_from_db()
     assert queue.schema["notes"]["required"] is False
-    assert "required" not in queue.schema["score"]  # not included when true (default)
+    assert queue.schema["score"]["required"] is True  # normalized storage makes the default explicit
 
 
 @pytest.mark.django_db()
@@ -161,6 +161,84 @@ def test_queue_schema_accepts_binary_definition():
                 }
             ),
         }
+    )
+    assert form.is_valid(), form.errors
+
+
+@pytest.mark.parametrize(
+    ("submitted", "expected_true", "expected_false"),
+    [
+        pytest.param(
+            {"type": "binary", "description": "Was it correct?"},
+            "True",
+            "False",
+            id="missing-labels-stored-with-defaults",
+        ),
+        pytest.param(
+            {"type": "binary", "description": "Was it correct?", "true_label": " Yes ", "false_label": " No "},
+            "Yes",
+            "No",
+            id="padded-labels-stored-trimmed",
+        ),
+    ],
+)
+@pytest.mark.django_db()
+def test_queue_schema_stores_normalized_binary_definition(submitted, expected_true, expected_false):
+    # The stored schema must be the pydantic-normalized form, not the raw submission:
+    # a raw dict diverging from what the builder serializes makes a locked queue uneditable.
+    form = AnnotationQueueForm(
+        data={
+            "name": "Binary queue",
+            "num_reviews_required": 1,
+            "schema": json.dumps({"correct": submitted}),
+        }
+    )
+    assert form.is_valid(), form.errors
+    stored = form.cleaned_data["schema"]["correct"]
+    assert stored["true_label"] == expected_true
+    assert stored["false_label"] == expected_false
+
+
+@pytest.mark.django_db()
+def test_locked_queue_with_label_free_stored_schema_accepts_builder_schema():
+    # A binary schema stored without label keys (written before normalization, or via a
+    # non-builder client) must still accept the builder's canonical serialization once
+    # locked, otherwise the whole settings form becomes uneditable.
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    queue = AnnotationQueue.objects.create(
+        team=team,
+        name="Queue",
+        schema={"correct": {"type": "binary", "description": "Was it correct?"}},
+        created_by=user,
+    )
+    item = AnnotationItemFactory.create(queue=queue, team=team)
+    Annotation.objects.create(
+        item=item,
+        team=team,
+        reviewer=user,
+        data={"correct": 1},
+        status=AnnotationStatus.SUBMITTED,
+    )
+    item.refresh_from_db()
+    assert item.review_count == 1
+
+    form = AnnotationQueueForm(
+        instance=queue,
+        data={
+            "name": queue.name,
+            "num_reviews_required": queue.num_reviews_required,
+            "schema": json.dumps(
+                {
+                    "correct": {
+                        "type": "binary",
+                        "description": "Was it correct?",
+                        "true_label": "True",
+                        "false_label": "False",
+                    }
+                }
+            ),
+        },
     )
     assert form.is_valid(), form.errors
 
