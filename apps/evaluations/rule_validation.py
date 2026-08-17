@@ -16,6 +16,7 @@ from pydantic import TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.evaluations.field_definitions import (
+    BinaryFieldDefinition,
     ChoiceFieldDefinition,
     FieldDefinition,
     FloatFieldDefinition,
@@ -49,6 +50,8 @@ class ConditionType(models.TextChoices):
             return int(raw)
         if field_type == "float":
             return float(raw)
+        if field_type == "binary":
+            return int(raw)
         return raw
 
     def matches(self, condition_value: dict, field_value) -> bool:
@@ -68,7 +71,7 @@ class ConditionType(models.TextChoices):
 
 def parse_field_definition(field_def: dict | FieldDefinition) -> FieldDefinition:
     """Parse a raw dict into a typed FieldDefinition, or return as-is if already one."""
-    if isinstance(field_def, (IntFieldDefinition, FloatFieldDefinition, ChoiceFieldDefinition)):
+    if isinstance(field_def, (IntFieldDefinition, FloatFieldDefinition, ChoiceFieldDefinition, BinaryFieldDefinition)):
         return field_def
     return _FIELD_DEFINITION_ADAPTER.validate_python(field_def)
 
@@ -142,6 +145,12 @@ def _validate_equals_condition(condition_value: dict, field_definition: FieldDef
                     )
                 }
             )
+        return
+    if isinstance(field_definition, BinaryFieldDefinition):
+        coerced = _coerce_numeric(condition_value["value"], int)
+        if coerced not in (0, 1):
+            raise ValidationError({"condition_value": "Value must be 0 or 1 for a binary field."})
+        condition_value["value"] = coerced
         return
     if isinstance(field_definition, _NUMERIC_FIELD_TYPES):
         condition_value["value"] = _coerce_numeric(condition_value["value"], field_definition.python_type)
