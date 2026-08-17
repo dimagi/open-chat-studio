@@ -10,7 +10,7 @@ from unittest import mock
 import pytest
 from django.urls import reverse
 
-from apps.evaluations.cost import evaluation_run_costs
+from apps.cost_tracking.services.reporting import evaluation_run_costs
 from apps.evaluations.models import EvaluationRunStatus
 from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory

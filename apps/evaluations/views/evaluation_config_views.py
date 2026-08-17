@@ -22,8 +22,12 @@ from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
 from waffle import flag_is_active
 
+from apps.cost_tracking.services.reporting import (
+    evaluation_config_cost_summary,
+    evaluation_run_cost,
+    evaluation_run_costs,
+)
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
-from apps.evaluations.cost import evaluation_config_cost_summary, evaluation_run_cost, evaluation_run_costs
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.export import write_evaluation_csv
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices

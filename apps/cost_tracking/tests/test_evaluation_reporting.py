@@ -1,4 +1,6 @@
-"""Tests for the evaluation-scoped cost read path (apps/evaluations/cost.py)."""
+"""Tests for the evaluation-scoped cost read path (`services/reporting.py`):
+`evaluation_run_cost`, `evaluation_run_costs`, `evaluation_config_cost_summary`.
+"""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -6,7 +8,11 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
-from apps.evaluations.cost import evaluation_config_cost_summary, evaluation_run_cost, evaluation_run_costs
+from apps.cost_tracking.services.reporting import (
+    evaluation_config_cost_summary,
+    evaluation_run_cost,
+    evaluation_run_costs,
+)
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationRunFactory, EvaluatorFactory
 

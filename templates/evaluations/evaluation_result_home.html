@@ -105,11 +105,11 @@
           <div>
             <h2 class="text-lg font-semibold mb-2">Cost</h2>
             {% if run_cost.by_model %}
-              <p>
+              <div class="flex items-center gap-2">
                 <strong>Total:</strong>
-                ${{ run_cost.total_cost|cost_display }} {{ run_cost.currency }}
+                {% include "cost_tracking/_usage_summary.html" with total_cost=run_cost.total_cost testid_prefix="eval-run-cost" %}
                 <span class="text-base-content/60">({{ run_cost.total_tokens|intcomma }} tokens)</span>
-              </p>
+              </div>
               <div class="mt-3">
                 <h3 class="text-sm font-semibold text-base-content/70 mb-1">By evaluator</h3>
                 <table class="table table-sm">
