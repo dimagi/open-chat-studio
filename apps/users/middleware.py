@@ -61,19 +61,24 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
     )
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        if not settings.REQUIRE_MFA_FOR_STAFF:
+        if not self._must_enrol(request):
             return None
+        return self._gate(request)
+
+    def _must_enrol(self, request) -> bool:
+        if not settings.REQUIRE_MFA_FOR_STAFF:
+            return False
 
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
-            return None
+            return False
 
         if not (user.is_staff or user.is_superuser):
-            return None
+            return False
 
-        if is_mfa_enabled(user) or self._is_exempt(request):
-            return None
+        return not (is_mfa_enabled(user) or self._is_exempt(request))
 
+    def _gate(self, request):
         if request.htmx and self._is_exempt_path(_path_of(request.htmx.current_url)):
             # This is a background request fired by a page the gate already lets through -- the
             # banner poll on the setup page, say. Telling htmx to navigate would send the browser
@@ -82,7 +87,7 @@ class RequireMfaForStaffMiddleware(MiddlewareMixin):
             # page load.
             return HttpResponse(status=204)
 
-        target, message = self._next_step(user)
+        target, message = self._next_step(request.user)
         messages.error(request, message)
         if request.htmx:
             # Swapping the setup form into a fragment would strand the user, so move the whole page.
