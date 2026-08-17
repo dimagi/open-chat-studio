@@ -1,7 +1,7 @@
 import pytest
 
 from apps.evaluations.aggregation import compute_aggregates_for_run
-from apps.evaluations.aggregators import aggregate_field, get_aggregators_for_value
+from apps.evaluations.aggregators import aggregate_binary_field, aggregate_field, get_aggregators_for_value
 from apps.evaluations.models import EvaluationRunStatus
 from apps.evaluations.utils import build_trend_data
 from apps.utils.factories.evaluations import EvaluationResultFactory, EvaluationRunFactory, EvaluatorFactory
@@ -242,3 +242,49 @@ class TestBuildTrendData:
         assert categorical_data["type"] == "categorical"
         assert len(categorical_data["points"]) == 1
         assert categorical_data["points"][0]["value"] == "good"
+
+
+class TestAggregateBinaryField:
+    @pytest.mark.parametrize(
+        ("values", "expected"),
+        [
+            pytest.param(
+                [1, 1, 1],
+                {"type": "binary", "count": 3, "mean": 1.0, "true_count": 3},
+                id="all-true",
+            ),
+            pytest.param(
+                [0, 0],
+                {"type": "binary", "count": 2, "mean": 0.0, "true_count": 0},
+                id="all-false-keeps-zero-stats",
+            ),
+            pytest.param(
+                [1, 0, 1, 0],
+                {"type": "binary", "count": 4, "mean": 0.5, "true_count": 2},
+                id="mixed",
+            ),
+            pytest.param(
+                [True, False, 1],
+                {"type": "binary", "count": 3, "mean": 0.6667, "true_count": 2},
+                id="bools-count-as-their-integer-values",
+            ),
+            pytest.param(
+                [1, 2, "yes", 0],
+                {"type": "binary", "count": 2, "mean": 0.5, "true_count": 1, "excluded_count": 2},
+                id="non-binary-values-excluded-and-reported",
+            ),
+            pytest.param(
+                [2, "maybe"],
+                {"type": "binary", "count": 0, "excluded_count": 2},
+                id="all-excluded-returns-count-0-without-mean",
+            ),
+            pytest.param([], {"type": "binary", "count": 0}, id="empty-input"),
+            pytest.param(
+                [None, 1, 0],
+                {"type": "binary", "count": 2, "mean": 0.5, "true_count": 1},
+                id="none-filtered-silently-like-aggregate-field",
+            ),
+        ],
+    )
+    def test_aggregate_binary_field(self, values, expected):
+        assert aggregate_binary_field(values) == expected
