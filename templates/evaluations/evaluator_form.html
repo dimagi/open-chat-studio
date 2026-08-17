@@ -216,6 +216,7 @@
                           <option value="int">{% translate "Integer" %}</option>
                           <option value="float">{% translate "Float" %}</option>
                           <option value="choice">{% translate "Choice" %}</option>
+                          <option value="binary">{% translate "Binary" %}</option>
                         </select>
                       </div>
 
@@ -367,6 +368,35 @@
                         </div>
                       </details>
 
+                      <!-- Binary Labels -->
+                      <details x-show="pair.type === 'binary'" class="mb-2" open>
+                        <summary class="cursor-pointer text-sm font-medium mb-2">
+                          {% translate "Labels" %}
+                        </summary>
+                        <div class="ml-4 grid grid-cols-2 gap-2">
+                          <div>
+                            <label class="label py-0">
+                              <span class="label-text text-xs">{% translate "True label" %}</span>
+                            </label>
+                            <input type="text"
+                                   x-model="pair.true_label"
+                                   @input="updateKeyValuePairs(fieldName)"
+                                   placeholder="True"
+                                   class="input input-bordered w-full input-sm">
+                          </div>
+                          <div>
+                            <label class="label py-0">
+                              <span class="label-text text-xs">{% translate "False label" %}</span>
+                            </label>
+                            <input type="text"
+                                   x-model="pair.false_label"
+                                   @input="updateKeyValuePairs(fieldName)"
+                                   placeholder="False"
+                                   class="input input-bordered w-full input-sm">
+                          </div>
+                        </div>
+                      </details>
+
                       <!-- Aggregations Toggle -->
                       <div class="form-control mt-2">
                         <label class="label cursor-pointer justify-start gap-2">
@@ -502,7 +532,7 @@
       </button>
       {{ available_tags|json_script:"tag-rule-available-tags" }}
       <p class="text-xs text-gray-500 mt-1" x-show="!hasAnyUsableField()">
-        {% translate "Define at least one output field (choice with choices, int, float, or string) before adding tag rules." %}
+        {% translate "Define at least one output field (choice with choices, int, float, string, or binary) before adding tag rules." %}
       </p>
     </div>
   </div>
@@ -652,6 +682,8 @@
               max_length: null,
               pattern: null,
               choices: [],
+              true_label: null,
+              false_label: null,
               use_in_aggregations: false,
             }];
           }
@@ -672,6 +704,8 @@
             max_length: null,
             pattern: null,
             choices: [],
+            true_label: null,
+            false_label: null,
             use_in_aggregations: false,
           });
         },
@@ -755,6 +789,9 @@
                       fieldDef.choices = validChoices;
                     }
                   }
+                } else if (pair.type === 'binary') {
+                  fieldDef.true_label = pair.true_label && pair.true_label.trim() ? pair.true_label.trim() : 'True';
+                  fieldDef.false_label = pair.false_label && pair.false_label.trim() ? pair.false_label.trim() : 'False';
                 }
 
                 fieldDef.use_in_aggregations = pair.use_in_aggregations !== false;
@@ -794,6 +831,8 @@
                       max_length: value.max_length !== undefined ? value.max_length : null,
                       pattern: value.pattern || null,
                       choices: value.choices || [],
+                      true_label: value.true_label !== undefined ? value.true_label : null,
+                      false_label: value.false_label !== undefined ? value.false_label : null,
                       use_in_aggregations: value.use_in_aggregations !== undefined ? value.use_in_aggregations : defaultAgg
                     };
                   });
@@ -828,6 +867,7 @@
             case 'int':
             case 'float': return ['equals', 'range'];
             case 'string': return ['equals'];
+            case 'binary': return ['equals'];
             default: return [];
           }
         },
@@ -842,10 +882,19 @@
           return ((schema[fieldName] || {}).choices || []).filter(c => c && String(c).trim() !== '');
         },
 
+        fieldBinaryLabels(fieldName) {
+          const schema = (this.params && this.params.output_schema) || {};
+          const def = schema[fieldName] || {};
+          return [
+            {value: '1', label: def.true_label || 'True'},
+            {value: '0', label: def.false_label || 'False'},
+          ];
+        },
+
         isUsableField(fieldName) {
           const type = this.fieldType(fieldName);
           if (type === 'choice') return this.fieldChoices(fieldName).length > 0;
-          return ['int', 'float', 'string'].includes(type);
+          return ['int', 'float', 'string', 'binary'].includes(type);
         },
 
         hasAnyUsableField() {

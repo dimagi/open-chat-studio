@@ -79,7 +79,17 @@
           </template>
         </select>
       </template>
-      <template x-if="fieldType(fieldName) !== 'choice'">
+      <template x-if="fieldType(fieldName) === 'binary'">
+        <select id="{{ form.condition_value_single.id_for_label }}" name="{{ form.condition_value_single.html_name }}"
+                class="select select-bordered w-full select-sm">
+          <option value="">{% translate "Select a value..." %}</option>
+          <template x-for="option in fieldBinaryLabels(fieldName)" :key="option.value">
+            <option :value="option.value" x-text="option.label"
+                    :selected="option.value === '{{ form.condition_value_single.value|default_if_none:''|escapejs }}'"></option>
+          </template>
+        </select>
+      </template>
+      <template x-if="!['choice', 'binary'].includes(fieldType(fieldName))">
         <input :type="['int','float'].includes(fieldType(fieldName)) ? 'number' : 'text'"
                step="any"
                id="{{ form.condition_value_single.id_for_label }}"
