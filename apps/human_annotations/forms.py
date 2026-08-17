@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from pydantic import TypeAdapter
 
 from apps.evaluations.field_definitions import (
+    BinaryFieldDefinition,
     ChoiceFieldDefinition,
     FieldDefinition,
     FloatFieldDefinition,
@@ -132,6 +133,17 @@ def build_annotation_form(queue):
             if defn.le is not None:
                 kwargs["max_value"] = defn.le
             form_fields[name] = forms.FloatField(**kwargs)
+
+        elif isinstance(defn, BinaryFieldDefinition):
+            choices = [("", "---"), ("1", defn.true_label), ("0", defn.false_label)]
+            form_fields[name] = forms.TypedChoiceField(
+                label=name,
+                help_text=defn.description,
+                choices=choices,
+                coerce=int,
+                empty_value=None,
+                required=defn.required,
+            )
 
         elif isinstance(defn, ChoiceFieldDefinition):
             choices = [("", "---")] + [(c, c) for c in defn.choices]
