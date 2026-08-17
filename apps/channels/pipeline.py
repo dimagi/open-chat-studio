@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.utils import timezone
+
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.chat.bots import EventBot
 from apps.chat.exceptions import ChatException
@@ -108,7 +110,18 @@ class MessageProcessingContext:
 
     @property
     def last_activity_at(self):
-        return self.experiment_session.last_activity_at if self.experiment_session else None
+        """When the participant was last active, for platform service-window checks.
+
+        With no session resolved yet, an inbound message is still proof of activity: the
+        user messaged us during this very run, so any reply we send is inside the window.
+        Reporting None there would push replies sent from an early exit (e.g. a disabled
+        channel's static message) down the WhatsApp template path, which costs money and
+        fails outright when the team has no template configured. Ad hoc sends have no
+        inbound message and no such guarantee, so they still report None.
+        """
+        if self.experiment_session is not None:
+            return self.experiment_session.last_activity_at
+        return timezone.now() if self.message is not None else None
 
 
 # ---------------------------------------------------------------------------
