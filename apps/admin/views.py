@@ -30,6 +30,7 @@ from apps.admin.imports import import_team_metadata_from_csv
 from apps.admin.models import OcsConfiguration
 from apps.admin.provider_keys import get_provider_key_fingerprints, get_trace_provider_records
 from apps.admin.queries import (
+    build_tracing_volume_report,
     build_usage_report,
     get_message_stats,
     get_participant_stats,
@@ -599,6 +600,20 @@ def provider_keys_api(request):
             "metadata_fields": metadata_fields,
         }
     )
+
+
+@rate_limited("admin_api", key_fn=admin_api_key)
+@superuser_or_reporting_token
+def tracing_usage_api(request):
+    """Cross-team tracing volume over a date range, for apportioning a tracing bill
+    that arrives with no per-team breakdown. Requires `range_type`, `start`, and `end`
+    query params (as the dashboard date-range form).
+    """
+    result = _validated_range(request)
+    if result is None:
+        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
+    _, _, start_timestamp, end_timestamp = result
+    return JsonResponse(build_tracing_volume_report(start_timestamp, end_timestamp))
 
 
 @is_superuser
