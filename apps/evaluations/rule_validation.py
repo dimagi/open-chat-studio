@@ -42,9 +42,9 @@ class ConditionType(models.TextChoices):
     def coerce_value(raw, field_type: str | None):
         """Coerce a raw equals-value input to the target field's python type.
 
-        Returns the input unchanged when `field_type` isn't numeric; raises
-        (TypeError, ValueError) on failed int/float conversion so the form can
-        surface a user-facing error.
+        Returns the input unchanged when `field_type` isn't numeric or binary;
+        raises (TypeError, ValueError) on failed int/float conversion so the form
+        can surface a user-facing error.
         """
         if field_type == "int":
             return int(raw)

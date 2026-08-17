@@ -92,7 +92,7 @@ class BinaryFieldDefinition(BaseFieldDefinition):
     def _label_not_blank(cls, value: str) -> str:
         if not value or not value.strip():
             raise ValueError("Binary labels cannot be empty or whitespace-only")
-        return value
+        return value.strip()
 
     @model_validator(mode="after")
     def _labels_distinct(self):

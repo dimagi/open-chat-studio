@@ -16,8 +16,17 @@ def compute_aggregates_for_queue(queue) -> AnnotationQueueAggregate:
     """Compute and store aggregates for all submitted annotations in a queue.
 
     Per item: use authoritative annotation if one exists, else fall back to all
-    submitted annotations. Numeric / categorical aggregators are applied per field.
-    Text (string) fields are excluded from aggregation.
+    submitted annotations. Fields are aggregated per the schema: binary fields
+    dispatch to `aggregate_binary_field`, everything else to the numeric /
+    categorical `aggregate_field`. Text (string) fields are excluded from
+    aggregation.
+
+    Unlike the evaluation-run side (`apps.evaluations.aggregation`), which gates
+    value collection on `get_aggregators_for_value` before dispatch, this function
+    collects any non-None value regardless of shape. A value of an unsupported
+    shape (a dict or list) therefore reaches `aggregate_binary_field` and is
+    counted in `excluded_count`, where the evaluation-run side would have dropped
+    it before it was ever counted.
     """
     aggregatable_fields = _get_aggregatable_fields(queue)
     field_values = defaultdict(list)

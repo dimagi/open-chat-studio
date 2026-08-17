@@ -35,8 +35,11 @@ schema no longer names.
 ## Consequences
 
 - Renaming or swapping labels is free for stored data but changes what
-  historical values display as - the stored integers carry no vocabulary.
-  This is the reverse of `choice` (stored strings, rename orphans history).
+  historical values display as - the stored integers carry no vocabulary -
+  except `Score.value_string`, which snapshots the label at write time so
+  historical concordance rows keep the vocabulary in force when they were
+  scored. This is the reverse of `choice` (stored strings, rename orphans
+  history).
 - Existing two-choice `choice` fields are not converted or retroactively
   rendered as rates (declined on the issue).
 - A schema containing a binary field does not validate on instances that
