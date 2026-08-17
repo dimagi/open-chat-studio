@@ -42,6 +42,15 @@ def _score_from_field(
     if schema_type == "choice":
         data_type = Score.DataType.CATEGORICAL
         value_string = sanitize_control_chars(str(raw_value))
+    elif schema_type == "binary":
+        if raw_value not in (0, 1):
+            logger.warning("Score field %s: binary value %r is not 0 or 1; skipping", name, raw_value)
+            return None
+        data_type = Score.DataType.BOOLEAN
+        value_numeric = Decimal(int(raw_value))
+        label_key = "true_label" if int(raw_value) == 1 else "false_label"
+        default = "True" if int(raw_value) == 1 else "False"
+        value_string = sanitize_control_chars(str((schema_field or {}).get(label_key, default)))
     elif isinstance(raw_value, bool):
         data_type = Score.DataType.BOOLEAN
         value_numeric = Decimal(1) if raw_value else Decimal(0)

@@ -440,6 +440,49 @@ def test_annotation_save_survives_score_writer_failure(annotation_on_session, ca
     assert any(rec.levelname == "ERROR" and "Failed to write Score rows" in rec.message for rec in caplog.records)
 
 
+def _make_binary_eval_result(raw_value):
+    """Build an EvaluationResult whose evaluator carries the `binary_schema` trait
+    (output_schema: {"correct": {type: binary, true_label: Correct, false_label:
+    Incorrect}}) and whose output is {"result": {"correct": raw_value}}. Mirrors the
+    eval_result_on_session fixture's shape above, parametrized over raw_value."""
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    message = EvaluationMessageFactory.create(session=session)
+    evaluator = EvaluatorFactory.create(team=team, binary_schema=True)
+    run = EvaluationRunFactory.create(team=team)
+    return EvaluationResultFactory.create(
+        team=team,
+        evaluator=evaluator,
+        message=message,
+        run=run,
+        output={"result": {"correct": raw_value}},
+    )
+
+
+@pytest.mark.django_db()
+class TestBinaryScoreWriting:
+    @pytest.mark.parametrize(
+        ("raw_value", "expected_numeric", "expected_string"),
+        [
+            pytest.param(1, Decimal(1), "Correct", id="one-writes-true-label"),
+            pytest.param(0, Decimal(0), "Incorrect", id="zero-writes-false-label"),
+        ],
+    )
+    def test_binary_field_writes_boolean_with_label(self, raw_value, expected_numeric, expected_string):
+        result = _make_binary_eval_result(raw_value)
+        write_scores_from_evaluation_result(result)
+
+        score = Score.objects.get(automated_result=result, name="correct")
+        assert score.data_type == Score.DataType.BOOLEAN
+        assert score.value_numeric == expected_numeric
+        assert score.value_string == expected_string
+
+    def test_non_binary_value_skipped_with_no_score_row(self):
+        result = _make_binary_eval_result(5)
+        write_scores_from_evaluation_result(result)
+        assert not Score.objects.filter(automated_result=result, name="correct").exists()
+
+
 @pytest.mark.django_db()
 @patch("apps.evaluations.models.Evaluator.run")
 def test_evaluation_task_survives_score_writer_failure(evaluator_run_mock, caplog, monkeypatch):
