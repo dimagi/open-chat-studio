@@ -170,7 +170,17 @@ def _bucket_ip(ip: str) -> str:
 
 
 def is_exempt(request) -> bool:
-    return bool(flag_is_active(request, RATE_LIMIT_EXEMPT_FLAG))
+    """Whether this request bypasses rate limiting entirely.
+
+    Resolving the flag reads a cache the limiter does not own and cannot bound.
+    A failure here answers "not exempt", which leaves each scope to its own
+    configured failure mode rather than raising past it.
+    """
+    try:
+        return bool(flag_is_active(request, RATE_LIMIT_EXEMPT_FLAG))
+    except Exception:
+        logger.exception("rate_limit.exemption_check_error")
+        return False
 
 
 def json_limited_response(request, result: RateLimitResult):

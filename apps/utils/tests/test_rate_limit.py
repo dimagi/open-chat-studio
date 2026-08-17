@@ -474,6 +474,20 @@ def test_channels_scope_is_configured():
     assert refuses is False
 
 
+def test_credentials_scope_is_configured_fail_closed():
+    """The credentials scope is registered, parses, and is the one fail-closed scope.
+
+    The configured rate is env-overridable, so this asserts the properties that
+    hold for any deployment rather than one deployment's numbers.
+    """
+    limit, window_seconds, fail_open, refuses = _scope_config("credentials")
+
+    assert limit > 0
+    assert window_seconds > 0
+    assert fail_open is False
+    assert refuses is True
+
+
 def test_middleware_skips_degraded_results(db):
     """Backend-failure responses carry no headers (no counter data behind them)."""
 
@@ -500,6 +514,19 @@ def test_middleware_gives_degraded_blocks_a_retry_after(db):
     response = RateLimitHeadersMiddleware(view)(_request())
     assert response.headers["Retry-After"] == "300"
     assert "X-RateLimit-Limit" not in response.headers
+
+
+def test_exemption_check_treats_a_broken_flag_backend_as_not_exempt(rf, monkeypatch):
+    """The exemption lookup runs before the limiter's own failure handling, so it
+    must not turn a backend outage into a 500 on a scope that promises to refuse.
+    """
+
+    def _explode(*args, **kwargs):
+        raise ConnectionError("flag backend unreachable")
+
+    monkeypatch.setattr("apps.utils.rate_limit.flag_is_active", _explode)
+
+    assert is_exempt(rf.get("/")) is False
 
 
 @override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)

@@ -638,6 +638,9 @@ RATE_LIMITS = {
     "admin_api": {"rate": env("RATE_LIMIT_ADMIN_API", default="100/5m"), "fail_open": True},
     "chat_api": {"rate": env("RATE_LIMIT_CHAT_API", default="300/5m"), "fail_open": True},
     "public_chat": {"rate": env("RATE_LIMIT_PUBLIC_CHAT", default="100/5m"), "fail_open": True},
+    # Fail-closed: a counter the limiter cannot read must not become a way to
+    # brute force credentials unobserved.
+    "credentials": {"rate": env("RATE_LIMIT_CREDENTIALS", default="100/5m"), "fail_open": False},
 }
 CACHES["rate_limit"] = {
     "BACKEND": "django_redis.cache.RedisCache",
