@@ -49,9 +49,6 @@ from apps.utils.time import seconds_to_human
 
 logger = logging.getLogger(__name__)
 
-# Gates the same cost-tracking UI surface as the dashboard and LLM provider page
-# (apps.dashboard.views.COST_TRACKING_FLAG / apps.service_providers.views.COST_TRACKING_FLAG).
-# UsageRecord rows are always written regardless of this flag; it only gates display.
 COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
