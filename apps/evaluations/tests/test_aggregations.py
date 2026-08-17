@@ -4,7 +4,12 @@ from apps.evaluations.aggregation import compute_aggregates_for_run
 from apps.evaluations.aggregators import aggregate_binary_field, aggregate_field, get_aggregators_for_value
 from apps.evaluations.models import EvaluationRunStatus
 from apps.evaluations.utils import build_trend_data
-from apps.utils.factories.evaluations import EvaluationResultFactory, EvaluationRunFactory, EvaluatorFactory
+from apps.utils.factories.evaluations import (
+    EvaluationResultFactory,
+    EvaluationRunAggregateFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
 
 
 class TestAggregators:
@@ -242,6 +247,26 @@ class TestBuildTrendData:
         assert categorical_data["type"] == "categorical"
         assert len(categorical_data["points"]) == 1
         assert categorical_data["points"][0]["value"] == "good"
+
+    def test_binary_field_uses_mean_points(self):
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        runs = []
+        for mean, true_count, count in [(1.0, 2, 2), (0.5, 1, 2)]:
+            run = EvaluationRunFactory.create(team=evaluator.team)
+            EvaluationRunAggregateFactory.create(
+                run=run,
+                evaluator=evaluator,
+                aggregates={"correct": {"type": "binary", "count": count, "mean": mean, "true_count": true_count}},
+            )
+            runs.append(run)
+
+        trend_data = build_trend_data(runs)
+
+        field = trend_data[evaluator.name]["correct (binary)"]
+        assert field["type"] == "binary"
+        assert [p["value"] for p in field["points"]] == [1.0, 0.5]
+        assert field["mean"] == 0.75
+        assert "categories" not in field
 
 
 @pytest.mark.django_db()

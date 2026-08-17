@@ -585,10 +585,10 @@ def build_trend_data(runs: list) -> dict:
         {
             "evaluator_name": {
                 "field_name (type)": {
-                    "type": "numeric" | "categorical",
+                    "type": "numeric" | "categorical" | "binary",
                     "points": [{"run_id": int, "date": str, "value": any, ...}],
                     "categories": ["cat1", "cat2"],  # for categorical only
-                    "mean": float,  # for numeric only
+                    "mean": float,  # for numeric and binary only
                 }
             }
         }
@@ -634,7 +634,7 @@ def build_trend_data(runs: list) -> dict:
                     "date": run.created_at.strftime("%b %d"),
                 }
 
-                if field_type == "numeric":
+                if field_type in ("numeric", "binary"):
                     point["value"] = stats.get("mean")
                 else:
                     point["value"] = stats.get("mode")
