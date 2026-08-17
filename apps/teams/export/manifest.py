@@ -133,10 +133,10 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     # collision-free slug when it's absent.
     "annotations.tag": ["slug"],
     # search_vector is a tsvector derived from context + text, both of which are exported. Shipping
-    # it would bloat every chunk in the payload to carry data the target can rebuild for free from
-    # what it already has, with no provider call (unlike `embedding`). The target does have to
-    # rebuild it: `Collection.rebuild_search_vectors()` does so for a collection, and until it runs
-    # imported chunks are invisible to lexical search while dense retrieval works normally.
+    # it would bloat every chunk in the payload to carry data the target can rebuild from what it
+    # already has, with no provider call (unlike `embedding`). It does have to be rebuilt though:
+    # re-indexing the collection on the target repopulates it, and until that happens imported
+    # chunks are invisible to keyword search while dense retrieval works normally.
     "files.filechunkembedding": ["search_vector"],
 }
 

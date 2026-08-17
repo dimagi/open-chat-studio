@@ -420,6 +420,9 @@ class TestQueryPreviewScore:
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "capital of France", top_k=5)
 
+        # Assert the count first: `all()` over an empty list is True, so without this the test
+        # would still pass if retrieval returned nothing at all.
+        assert len(results) == 1
         assert all(result.fused_score is not None and result.fused_score > 0 for result in results)
 
     def test_dense_only_results_keep_their_distance(self):
@@ -430,6 +433,7 @@ class TestQueryPreviewScore:
             with override_flag(HYBRID_FLAG, active=False):
                 results = search_collection(collection, "capital of France", top_k=5)
 
+        assert len(results) == 1
         assert all(result.distance is not None for result in results)
 
     @pytest.mark.parametrize(
