@@ -1,21 +1,16 @@
+import json
+
 import pytest
 from django.urls import reverse
 
 from apps.admin.provider_keys import mask_secret
 from apps.service_providers.models import LlmProviderTypes
 from apps.users.models import CustomUser
-from apps.utils.factories.service_provider_factories import LlmProviderFactory
+from apps.utils.factories.service_provider_factories import LlmProviderFactory, TraceProviderFactory
 from apps.utils.factories.team import TeamFactory
 
 OPENAI_KEY = "sk-abcdefghijklJrYA"
 ANTHROPIC_KEY = "sk-ant-api03-cLVxxxxxxxxxxlAAA"
-
-
-@pytest.fixture()
-def superuser_client(client):
-    user = CustomUser.objects.create(username="admin@acme.com", is_staff=True, is_superuser=True)
-    client.force_login(user)
-    return client
 
 
 @pytest.mark.parametrize(
@@ -105,3 +100,70 @@ def test_vertex_dict_credentials_do_not_crash(superuser_client):
     assert response.status_code == 200
     vertex = {p["provider_type"]: p for p in response.json()["providers"]}["google_vertex_ai"]
     assert vertex["masked_key"] == ""
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("credentials", "expected"),
+    [
+        pytest.param({"type": "service_account", "project_id": "ocs-vertex"}, "ocs-vertex", id="dict"),
+        pytest.param('{"project_id": "ocs-vertex"}', "ocs-vertex", id="json-string"),
+        pytest.param({"type": "service_account"}, None, id="no-project-id"),
+        pytest.param("not json", None, id="unparseable"),
+        pytest.param(None, None, id="missing"),
+    ],
+)
+def test_vertex_exposes_gcp_project(superuser_client, credentials, expected):
+    """Vertex has no key fingerprint to join on, so the GCP project is the join key
+    against Cloud Billing. It is an identifier, not a credential."""
+    LlmProviderFactory(
+        type=str(LlmProviderTypes.google_vertex_ai),
+        config={"credentials_json": credentials},
+    )
+    response = superuser_client.get(reverse("ocs_admin:provider_keys_api"))
+
+    vertex = {p["provider_type"]: p for p in response.json()["providers"]}["google_vertex_ai"]
+    assert vertex["cloud_project"] == expected
+
+
+@pytest.mark.django_db()
+def test_lists_trace_providers_with_project_mapping(superuser_client):
+    team = TeamFactory(name="Alpha")
+    TraceProviderFactory(
+        team=team,
+        name="Langfuse",
+        config={"public_key": "pk-lf-1", "secret_key": "sk-lf-1", "host": "https://cloud.langfuse.com"},
+        metadata={
+            "project_id": "proj-123",
+            "project_name": "alpha-bot",
+            "organization_id": "org-dimagi",
+            "organization_name": "Dimagi",
+        },
+    )
+
+    response = superuser_client.get(reverse("ocs_admin:provider_keys_api"))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["trace_providers"]) == 1
+    record = payload["trace_providers"][0]
+    assert record["team_name"] == "Alpha"
+    assert record["project_id"] == "proj-123"
+    assert record["organization_id"] == "org-dimagi"
+    assert record["host"] == "https://cloud.langfuse.com"
+    # The key pair is the whole reason config is encrypted; it must not ride along.
+    assert "secret_key" not in json.dumps(record)
+    assert "pk-lf-1" not in json.dumps(record)
+
+
+@pytest.mark.django_db()
+def test_trace_provider_without_metadata_reports_blank_project(superuser_client):
+    """Metadata is best-effort at save time (a Langfuse outage leaves it empty), so the
+    record still appears — with no project to join on — rather than vanishing."""
+    TraceProviderFactory(team=TeamFactory(name="Alpha"), metadata={})
+
+    response = superuser_client.get(reverse("ocs_admin:provider_keys_api"))
+
+    record = response.json()["trace_providers"][0]
+    assert record["project_id"] == ""
+    assert record["organization_id"] == ""
