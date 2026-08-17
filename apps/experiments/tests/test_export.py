@@ -1,4 +1,5 @@
 import csv
+import gc
 import io
 import json
 from unittest.mock import MagicMock, Mock, patch
@@ -480,3 +481,18 @@ def test_export_rows_correct_when_sessions_exceed_cache_ceiling():
         expected_idx = int(row[content_index].split("-")[0].removeprefix("s"))
         assert json.loads(row[state_index]) == {"idx": expected_idx}
         assert row[identifier_index] == f"user{expected_idx}"
+
+
+@pytest.mark.django_db()
+def test_generate_export_rows_holds_only_one_chunk_of_messages():
+    """Spent chunks must not accumulate: ORM reference cycles need an explicit collection."""
+    session = _make_session_with_messages(25)
+    live_counts = []
+
+    with patch("apps.experiments.export.EXPORT_CHUNK_SIZE", 5):
+        for _ in generate_export_rows(session.experiment, session.experiment.sessions.all()):
+            live_counts.append(sum(1 for o in gc.get_objects() if type(o) is ChatMessage))
+
+    # Without the per-chunk collect this climbs toward the full 25; bounded, it stays
+    # within a chunk (plus the row currently being yielded).
+    assert max(live_counts) <= 10, f"spent chunks are accumulating: peak live={max(live_counts)}"
