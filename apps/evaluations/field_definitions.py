@@ -6,7 +6,7 @@ Uses discriminated unions to ensure type-specific constraints are enforced.
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class BaseFieldDefinition(BaseModel):
@@ -80,4 +80,40 @@ class ChoiceFieldDefinition(BaseFieldDefinition):
         return Literal[tuple(self.choices)]
 
 
-FieldDefinition = StringFieldDefinition | IntFieldDefinition | FloatFieldDefinition | ChoiceFieldDefinition
+class BinaryFieldDefinition(BaseFieldDefinition):
+    """Binary field stored as integer 1/0; labels are display vocabulary only."""
+
+    type: Literal["binary"]
+    true_label: str = "True"
+    false_label: str = "False"
+
+    @field_validator("true_label", "false_label")
+    @classmethod
+    def _label_not_blank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Binary labels cannot be empty or whitespace-only")
+        return value
+
+    @model_validator(mode="after")
+    def _labels_distinct(self):
+        if self.true_label.strip() == self.false_label.strip():
+            raise ValueError("Binary labels must be distinct")
+        return self
+
+    @property
+    def python_type(self) -> type:
+        return Literal[0, 1]  # ty: ignore[invalid-return-type]
+
+    @property
+    def pydantic_fields(self) -> dict:
+        fields = self.model_dump(
+            exclude={"type", "use_in_aggregations", "required", "true_label", "false_label"},
+            exclude_none=True,
+        )
+        fields["description"] = f"{self.description}. 1 = {self.true_label}, 0 = {self.false_label}"
+        return fields
+
+
+FieldDefinition = (
+    StringFieldDefinition | IntFieldDefinition | FloatFieldDefinition | ChoiceFieldDefinition | BinaryFieldDefinition
+)
