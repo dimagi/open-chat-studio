@@ -7,7 +7,9 @@ import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.export import (
+    SESSION_CACHE_MAX_ENTRIES,
     UTF8_BOM,
+    _SessionCache,
     count_export_messages,
     export_rows_to_csv_stream,
     generate_export_rows,
@@ -415,3 +417,66 @@ def test_generate_export_rows_progress_interval_independent_of_chunk_size():
         )
 
     assert calls == [5]
+
+
+def test_session_cache_evicts_oldest_beyond_max_entries():
+    """The cache is an LRU with a hard ceiling, so it can't grow with the session count."""
+    cache = _SessionCache(max_entries=2)
+    sessions = [Mock(id=i, external_id=f"s{i}", state={}, get_platform_name=Mock(return_value="Web")) for i in range(3)]
+    for session in sessions:
+        session.participant = Mock(name=f"p{session.id}", identifier=f"p{session.id}", public_id=f"pub{session.id}")
+        session.chat = Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[])))
+
+    first = cache.get(sessions[0])
+    cache.get(sessions[1])
+    assert cache.get(sessions[0]) is first, "a cache hit must reuse the existing entry"
+
+    # session 0 was just used, so session 1 is the least-recently-used and gets evicted.
+    cache.get(sessions[2])
+    assert len(cache) == 2
+    assert cache.get(sessions[0]) is first
+    assert cache.get(sessions[1]) is not None, "an evicted session is simply recomputed"
+    assert len(cache) == 2
+
+
+def test_session_cache_default_ceiling_comes_from_module_constant():
+    assert _SessionCache()._max_entries == SESSION_CACHE_MAX_ENTRIES
+
+
+@pytest.mark.django_db()
+def test_export_rows_correct_when_sessions_exceed_cache_ceiling():
+    """Rows stay correct for sessions evicted from the cache and re-encountered later.
+
+    Messages are ordered by global message pk, so sessions interleave: with a ceiling
+    below the session count, entries get evicted and rebuilt mid-export. Each row must
+    still carry its own session's values, not a neighbour's.
+    """
+    experiment = ExperimentFactory.create()
+    sessions = [
+        ExperimentSessionFactory.create(
+            experiment=experiment, team=experiment.team, participant__identifier=f"user{i}", state={"idx": i}
+        )
+        for i in range(4)
+    ]
+    # Interleave: one message per session per round, so pk order cycles through sessions.
+    for round_no in range(3):
+        for i, session in enumerate(sessions):
+            ChatMessage.objects.create(
+                chat=session.chat, content=f"s{i}-r{round_no}", message_type=ChatMessageType.HUMAN
+            )
+
+    with patch("apps.experiments.export.SESSION_CACHE_MAX_ENTRIES", 2):
+        csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
+        rows = list(csv_reader)
+
+    header = rows[0]
+    state_index = header.index("Session State")
+    identifier_index = header.index("Participant Identifier")
+    content_index = header.index("Message Content")
+
+    assert len(rows) == 1 + 4 * 3
+    for row in rows[1:]:
+        # "s<i>-r<n>" encodes the owning session, so each row's own values must match it.
+        expected_idx = int(row[content_index].split("-")[0].removeprefix("s"))
+        assert json.loads(row[state_index]) == {"idx": expected_idx}
+        assert row[identifier_index] == f"user{expected_idx}"
