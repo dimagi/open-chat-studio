@@ -162,6 +162,7 @@ nav:
   - Self-Hosting:
     - Overview: hosting/index.md
     - Configuration: hosting/configuration.md
+    - Rate Limiting: hosting/rate_limiting.md
     - Docker Compose: hosting/docker.md
     - Heroku: hosting/heroku.md
     - AWS Fargate: hosting/aws.md
