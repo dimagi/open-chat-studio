@@ -2,10 +2,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from apps.channels.channel_base import ChannelBase
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
-from apps.channels.stages.core import ChannelDisabledStage
+from apps.channels.stages.core import (
+    ChannelDisabledStage,
+    ConsentCheckStage,
+    ParticipantResolverStage,
+    SessionResolutionStage,
+)
 from apps.channels.tests.channels.conftest import make_context
-from apps.channels.tests.message_examples.base_messages import text_message
 
 
 def make_channel(*, enabled=True, disabled_message=""):
@@ -55,33 +60,27 @@ class TestChannelDisabledStageProcess:
         with pytest.raises(EarlyAbort):
             self.stage(ctx)
 
-    def test_sets_recipient_for_the_sending_stage(self):
-        """ParticipantValidationStage never runs, so this stage must set the recipient itself."""
-        channel = make_channel(enabled=False, disabled_message="Closed")
-        ctx = make_context(
-            message=text_message(participant_id="+27820001111"),
-            experiment_channel=channel,
-            participant_identifier=None,
-        )
 
-        with pytest.raises(EarlyExitResponse):
-            self.stage(ctx)
+class TestStagePlacement:
+    """The stage has to sit behind the participant stages and ahead of session/bot work.
 
-        assert ctx.participant_identifier == "+27820001111"
+    Running it first would leave ``participant``/``participant_data`` unset -- CommCare
+    Connect cannot send at all without the latter -- and would skip the platform consent
+    gate, pushing the static reply at someone who blocked the bot.
+    """
 
-    def test_recipient_prefers_remote_id_over_a_non_sendable_identifier(self):
-        """WhatsApp participant_ids may be BSUIDs, which cannot be used as an outbound
-        recipient. ParticipantResolverStage -- which normally stores the phone number the
-        senders fall back to -- never runs here, so the phone must come off the message."""
-        message = text_message(participant_id="bsuid-abc123")
-        message.remote_id = "+27820001111"
-        ctx = make_context(
-            message=message,
-            experiment_channel=make_channel(enabled=False, disabled_message="Closed"),
-            participant_identifier=None,
-        )
+    def _core_stage_types(self):
+        pipeline = ChannelBase._build_pipeline(MagicMock(attachment_hydration_stage_class=MagicMock))
+        return [type(stage) for stage in pipeline.core_stages]
 
-        with pytest.raises(EarlyExitResponse):
-            self.stage(ctx)
+    def test_runs_after_participant_resolution_and_consent(self):
+        types = self._core_stage_types()
+        disabled_at = types.index(ChannelDisabledStage)
 
-        assert ctx.participant_identifier == "+27820001111"
+        assert types.index(ParticipantResolverStage) < disabled_at
+        assert types.index(ConsentCheckStage) < disabled_at
+
+    def test_runs_before_session_resolution(self):
+        types = self._core_stage_types()
+
+        assert types.index(ChannelDisabledStage) < types.index(SessionResolutionStage)

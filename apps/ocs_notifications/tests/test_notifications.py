@@ -243,6 +243,20 @@ class TestMessageDeliveryFailureNotification:
             links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
         )
 
+    @pytest.mark.django_db()
+    @patch("apps.ocs_notifications.notifications.create_notification")
+    def test_creates_notification_without_a_session(self, mock_create_notification):
+        """Sends from an early exit (e.g. a disabled channel) have no session. The team still
+        has to hear about the failure -- @silence_exceptions would otherwise swallow it whole."""
+        experiment = ExperimentFactory.create()
+
+        message_delivery_failure_notification(experiment, None, "WhatsApp", "text message", recipient="+27820001111")
+
+        mock_create_notification.assert_called_once()
+        kwargs = mock_create_notification.call_args.kwargs
+        assert "+27820001111" in kwargs["message"]
+        assert kwargs["links"] == {"View Bot": experiment.get_absolute_url()}
+
 
 class TestToolErrorNotification:
     @pytest.mark.django_db()

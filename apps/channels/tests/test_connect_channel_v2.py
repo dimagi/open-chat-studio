@@ -182,3 +182,51 @@ class TestCommCareConnectChannelIntegration:
 
         mock_bot.assert_not_called()
         ClientMock.return_value.send_message_to_user.assert_not_called()
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="test-secret", COMMCARE_CONNECT_SERVER_ID="test-id")
+    def test_disabled_channel_delivers_its_static_message(self, experiment):
+        """The sender encrypts against ParticipantData, so the disabled check has to run
+        after the participant stages -- otherwise the message can never be delivered."""
+        participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=True)
+        ExperimentChannelFactory.create(
+            team=experiment.team,
+            experiment=experiment,
+            platform=ChannelPlatform.COMMCARE_CONNECT,
+            enabled=False,
+            disabled_message="This bot is paused",
+        )
+        payload = _encrypt_user_message(encryption_key, channel_id)
+        experiment.create_new_version(make_default=True)
+
+        with (
+            patch("apps.chat.bots.PipelineBot.process_input") as mock_bot,
+            patch("apps.channels.connect_channel.CommCareConnectClient") as ClientMock,
+        ):
+            handle_commcare_connect_message(experiment.id, participant_data.id, payload["messages"])
+
+        mock_bot.assert_not_called()
+        call_kwargs = ClientMock.return_value.send_message_to_user.call_args[1]
+        assert call_kwargs["channel_id"] == channel_id
+        assert call_kwargs["message"] == "This bot is paused"
+
+    @override_settings(COMMCARE_CONNECT_SERVER_SECRET="test-secret", COMMCARE_CONNECT_SERVER_ID="test-id")
+    def test_disabled_channel_still_honours_revoked_consent(self, experiment):
+        """Being disabled is not licence to message someone who has withdrawn consent."""
+        participant, participant_data, channel_id, encryption_key = _make_participant_data(experiment, consent=False)
+        ExperimentChannelFactory.create(
+            team=experiment.team,
+            experiment=experiment,
+            platform=ChannelPlatform.COMMCARE_CONNECT,
+            enabled=False,
+            disabled_message="This bot is paused",
+        )
+        payload = _encrypt_user_message(encryption_key, channel_id)
+        experiment.create_new_version(make_default=True)
+
+        with (
+            patch("apps.chat.bots.PipelineBot.process_input"),
+            patch("apps.channels.connect_channel.CommCareConnectClient") as ClientMock,
+        ):
+            handle_commcare_connect_message(experiment.id, participant_data.id, payload["messages"])
+
+        ClientMock.return_value.send_message_to_user.assert_not_called()

@@ -107,45 +107,6 @@ def get_or_create_participant(
 
 
 # ---------------------------------------------------------------------------
-# ChannelDisabledStage
-# ---------------------------------------------------------------------------
-
-
-class ChannelDisabledStage(ProcessingStage):
-    """Blocks inbound messages on a channel an admin has switched off.
-
-    Runs first so a disabled channel does no work at all: no participant record,
-    no session, no bot invocation. When a static ``disabled_message`` is configured
-    it is returned to the user via the terminal stages; otherwise the pipeline halts
-    silently and the user gets no reply.
-
-    Nothing is persisted either way -- neither the inbound message nor the static
-    reply -- because the stages that create them never run.
-    """
-
-    span_input_fields = ("experiment_channel.enabled",)
-
-    def should_run(self, ctx: MessageProcessingContext) -> bool:
-        return not ctx.experiment_channel.enabled
-
-    def process(self, ctx: MessageProcessingContext) -> None:
-        channel = ctx.experiment_channel
-        logger.info("Ignoring message for disabled channel %s (%s)", channel.id, channel.platform)
-
-        # ParticipantValidationStage never runs, so set the recipient the terminal
-        # sending stage needs to deliver the static reply. Prefer remote_id: the
-        # participant_id may be a BSUID that WhatsApp won't accept as an outbound
-        # recipient, and ParticipantResolverStage hasn't run to supply the phone
-        # number the senders normally fall back to.
-        if ctx.message is not None:
-            ctx.participant_identifier = ctx.message.remote_id or ctx.message.participant_id
-
-        if channel.disabled_message:
-            raise EarlyExitResponse(channel.disabled_message)
-        raise EarlyAbort()
-
-
-# ---------------------------------------------------------------------------
 # ParticipantValidationStage
 # ---------------------------------------------------------------------------
 
@@ -398,6 +359,48 @@ class ConsentCheckStage(ProcessingStage):
 
         if not participant_data.system_metadata.get("consent", config.default_consent):
             raise EarlyAbort()
+
+
+# ---------------------------------------------------------------------------
+# ChannelDisabledStage
+# ---------------------------------------------------------------------------
+
+
+class ChannelDisabledStage(ProcessingStage):
+    """Blocks inbound messages on a channel an admin has switched off.
+
+    Runs as late as it can while still preventing every effect that matters: no session
+    is created, no bot is invoked, and the inbound message is never recorded. When a
+    static ``disabled_message`` is configured it goes back to the user through the
+    terminal stages; otherwise the pipeline halts silently.
+
+    It deliberately does *not* run first. Delivering the static message needs the same
+    groundwork any other reply needs, so it sits behind the participant stages:
+
+    * ``ParticipantResolverStage`` supplies ``ctx.participant`` (WhatsApp addresses the
+      reply to the stored phone number, since the identifier may be a non-sendable BSUID)
+      and ``ctx.participant_data`` (CommCare Connect cannot send without it).
+    * ``ConsentCheckStage`` still gets to abort first, so we never push a message at a
+      participant who has withdrawn consent or blocked the bot.
+
+    The cost is that a first-time sender to a disabled channel gets a ``Participant``
+    record. Channels that carry a pre-set session (Web, Slack) also persist the static
+    reply to chat history and bump ``last_activity_at``, exactly as any other early exit
+    on those channels does.
+    """
+
+    span_input_fields = ("experiment_channel.enabled",)
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.experiment_channel.is_disabled
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        channel = ctx.experiment_channel
+        logger.info("Ignoring message for disabled channel %s (%s)", channel.id, channel.platform)
+
+        if channel.disabled_message:
+            raise EarlyExitResponse(channel.disabled_message)
+        raise EarlyAbort()
 
 
 # ---------------------------------------------------------------------------

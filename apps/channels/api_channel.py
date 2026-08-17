@@ -91,11 +91,10 @@ class ApiChannel(ChannelBase):
     def _build_pipeline(self) -> MessageProcessingPipeline:
         return MessageProcessingPipeline(
             core_stages=[
-                # ApiChannel also backs the embedded widget, which admins can disable
-                ChannelDisabledStage(),
                 ParticipantValidationStage(),
                 ParticipantResolverStage(),
                 ConsentCheckStage(),
+                ChannelDisabledStage(),
                 SessionResolutionStage(),
                 SessionActivationStage(),
                 MessageTypeValidationStage(),

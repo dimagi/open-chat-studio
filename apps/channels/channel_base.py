@@ -126,10 +126,12 @@ class ChannelBase(ABC):
         """
         return MessageProcessingPipeline(
             core_stages=[
-                ChannelDisabledStage(),
                 ParticipantValidationStage(),
                 ParticipantResolverStage(),
                 ConsentCheckStage(),
+                # After the participant stages so the static reply is addressable and
+                # consent-gated; before session/bot work so a disabled channel does none.
+                ChannelDisabledStage(),
                 SessionResolutionStage(),
                 SessionActivationStage(),
                 self.attachment_hydration_stage_class(),
