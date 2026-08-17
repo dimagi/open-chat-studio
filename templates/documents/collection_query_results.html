@@ -14,7 +14,11 @@
 {% for chunk in chunks %}
     <div class="flex justify-between items-start mb-1">
         <p class="text-sm text-base-content/70">Source: {{ chunk.file.name }}</p>
-        {% if chunk.fused_score %}
+        {# Keyed off the context flag, not the score: a fused score of 0 is legitimate (it happens
+           when the dense weight is 0 and a chunk was found by dense search alone), so testing the
+           value for truthiness would send those rows down the distance branch, which has no
+           distance to show. #}
+        {% if hybrid_search %}
             <div class="badge badge-outline badge-sm badge-info">
                 Score: {{ chunk.fused_score|floatformat:4 }}
             </div>

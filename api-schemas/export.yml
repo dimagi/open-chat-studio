@@ -2502,7 +2502,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/SearchLanguageEnum'
           description: |-
-            Postgres text search configuration used for keyword search over this collection's documents. Picking the language of the documents enables stemming and stopword removal, which multi-word questions need. 'Simple' does neither and matches exact tokens only, so it suits mixed-language or unknown-language collections. Changing this requires rebuilding the collection's search vectors.
+            Postgres text search configuration used for keyword search over this collection's documents. Picking the language of the documents enables stemming and stopword removal, which multi-word questions need. 'Simple' does neither and matches exact tokens only, so it suits mixed-language or unknown-language collections. Existing documents keep the language they were indexed with, so re-index the collection after changing this or keyword search will not find them.
 
             * `simple` - Simple (no stemming, exact tokens)
             * `arabic` - Arabic

@@ -375,12 +375,12 @@ class TestLexicalSearchLanguage:
 
         assert _lexical_candidate_ids(collection, question, 10) == [chunk.id]
 
-    def test_language_change_without_a_rebuild_finds_nothing_until_rebuilt(self):
+    def test_changing_the_language_after_indexing_finds_nothing(self):
         """The drift trap: chunks keep the configuration they were indexed with.
 
         A collection indexed as Spanish but queried as English returns no lexical hits, which is
-        indistinguishable from a query that simply has none. `rebuild_search_vectors` is the
-        supported way back.
+        indistinguishable from a query that simply has none. Re-indexing rebuilds the vectors with
+        the current language; nothing else does, which is why the field's help text says so.
         """
         collection, file = _make_indexed_collection(search_language=SearchLanguage.SPANISH)
         chunk = _add_chunk(collection, file, "Paris es la capital de Francia.", _unit_vector(0))
@@ -389,7 +389,8 @@ class TestLexicalSearchLanguage:
         collection.save()
         assert _lexical_candidate_ids(collection, "capital of Francia", 10) == []
 
-        assert collection.rebuild_search_vectors() == 1
+        # Re-indexing the chunk under the new language brings it back.
+        LocalIndexManager._build_search_vectors([chunk], collection)
         assert _lexical_candidate_ids(collection, "capital of Francia", 10) == [chunk.id]
 
     def test_stopword_only_query_falls_back_to_dense(self):
@@ -419,7 +420,6 @@ class TestQueryPreviewScore:
             with override_flag(HYBRID_FLAG, active=True):
                 results = search_collection(collection, "capital of France", top_k=5)
 
-        assert [result.fused_score for result in results] == [pytest.approx(result.fused_score) for result in results]
         assert all(result.fused_score is not None and result.fused_score > 0 for result in results)
 
     def test_dense_only_results_keep_their_distance(self):
@@ -449,6 +449,20 @@ class TestQueryPreviewScore:
 
         assert expected in html
         assert absent not in html
+
+    def test_a_zero_fused_score_still_renders_as_a_score(self):
+        """A fused score of 0 is legitimate: it happens when the dense weight is 0 and a chunk was
+        found by dense search alone. Testing the value for truthiness would send it down the
+        distance branch, which has no distance to render.
+        """
+        collection, file = _make_indexed_collection()
+        chunk = _add_chunk(collection, file, "some prose", _unit_vector(0))
+        chunk.fused_score = 0.0
+
+        html = render_to_string("documents/collection_query_results.html", {"chunks": [chunk], "hybrid_search": True})
+
+        assert "Score:" in html
+        assert "Distance:" not in html
 
 
 @pytest.mark.django_db()

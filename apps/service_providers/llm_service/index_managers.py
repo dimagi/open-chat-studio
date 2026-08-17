@@ -7,7 +7,7 @@ from typing import Literal
 import openai
 from django.conf import settings
 from django.contrib.postgres.search import SearchVector
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from apps.assistants.utils import chunk_list
@@ -343,6 +343,28 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
+    @classmethod
+    def _try_build_search_vectors(cls, embeddings: list[FileChunkEmbedding], collection: Collection):
+        """Build the lexical vectors, treating a failure here as non-fatal for the file.
+
+        The embeddings are already written and each one cost a provider call. Losing the lexical
+        index is a degradation -- dense retrieval still works, and hybrid search falls back to it --
+        whereas letting this propagate would hit the caller's cleanup and delete the whole file's
+        embeddings over a secondary index.
+
+        The write is wrapped in a nested atomic() so a database error rolls back to a savepoint and
+        leaves the surrounding transaction usable, per the project's transaction rules.
+        """
+        try:
+            with transaction.atomic():
+                cls._build_search_vectors(embeddings, collection)
+        except Exception:
+            logger.exception(
+                "Failed to build lexical search vectors; the file is indexed but will not be "
+                "found by keyword search until it is re-indexed",
+                extra={"collection_id": collection.id, "chunk_count": len(embeddings)},
+            )
+
     @staticmethod
     def _build_search_vectors(embeddings: list[FileChunkEmbedding], collection: Collection):
         """Populate the lexical `search_vector` for chunks just written.
@@ -414,7 +436,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 # Content that is entirely NUL bytes clears the check above but sanitizes away
                 # chunk by chunk. Nothing was indexed, so this is a failure by the same reasoning.
                 raise FileReadException(NO_EXTRACTABLE_TEXT)
-            self._build_search_vectors(embeddings, collection_file.collection)
+            self._try_build_search_vectors(embeddings, collection_file.collection)
             return embeddings
         except Exception:
             FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()

@@ -116,12 +116,16 @@ def _rank_by_score(scores: dict[int, float]) -> list[int]:
 
 
 def _dense_queryset(collection: Collection, query_vector: list[float], limit: int):
-    """Chunks ranked by cosine distance between their embedding and the query embedding."""
+    """Chunks ranked by cosine distance between their embedding and the query embedding.
+
+    Ties break on id, as the lexical side does, so equally distant chunks come back in the same
+    order every time rather than in whatever order Postgres happens to produce.
+    """
     return (
         FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", query_vector))
         .filter(collection_id=collection.id)
         .filter(chunk_from_indexed_file())
-        .order_by("distance")
+        .order_by("distance", "id")
         .select_related("file")
         .only(*_RESULT_ONLY_FIELDS)[:limit]
     )

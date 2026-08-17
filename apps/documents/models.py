@@ -2,7 +2,6 @@ import logging
 from collections.abc import Iterator
 from datetime import timedelta
 
-from django.contrib.postgres.search import SearchVector
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models.expressions import Combinable
@@ -17,7 +16,6 @@ from field_audit.models import AuditingManager
 from apps.documents.datamodels import ChunkingStrategy, CollectionFileMetadata, DocumentSourceConfig
 from apps.documents.exceptions import IndexConfigurationException
 from apps.experiments.versioning import VersionDetails, VersionField, VersionsMixin, VersionsObjectManagerMixin
-from apps.files.models import FileChunkEmbedding
 from apps.service_providers.exceptions import ServiceProviderConfigError
 from apps.service_providers.models import EmbeddingProviderModel
 from apps.teams.flags import Flags
@@ -247,8 +245,9 @@ class Collection(BaseTeamModel, VersionsMixin):
             "Postgres text search configuration used for keyword search over this collection's "
             "documents. Picking the language of the documents enables stemming and stopword "
             "removal, which multi-word questions need. 'Simple' does neither and matches exact "
-            "tokens only, so it suits mixed-language or unknown-language collections. Changing "
-            "this requires rebuilding the collection's search vectors."
+            "tokens only, so it suits mixed-language or unknown-language collections. Existing "
+            "documents keep the language they were indexed with, so re-index the collection after "
+            "changing this or keyword search will not find them."
         ),
     )
     # Hybrid search tuning. The defaults are literals rather than settings: a field default is
@@ -557,21 +556,6 @@ class Collection(BaseTeamModel, VersionsMixin):
         if self.is_remote_index:
             return False
         return self._flag_active_for_team(Flags.HYBRID_SEARCH)
-
-    def rebuild_search_vectors(self) -> int:
-        """Recompute every chunk's `search_vector` using this collection's search language.
-
-        Chunks store their lexical vector built with the language that was set when they were
-        indexed. Changing `search_language` afterwards leaves them built with the old
-        configuration, and a query parsed with the new one then matches nothing, which looks
-        exactly like "no lexical results" rather than like a misconfiguration. Call this after
-        changing the language to bring the stored vectors back in step.
-
-        Returns the number of chunks updated.
-        """
-        return FileChunkEmbedding.objects.filter(collection_id=self.id).update(
-            search_vector=SearchVector("context", "text", config=self.search_language)
-        )
 
     def get_query_vector(self, query: str) -> list[float]:
         """Get the embedding vector for a query using the embedding provider model"""
