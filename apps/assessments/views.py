@@ -48,7 +48,7 @@ def _candidate_categorical_fields(eval_config: EvaluationConfig, queue: Annotati
     for name in sorted(shared):
         eval_type = eval_fields[name].get("type")
         queue_type = queue_fields[name].get("type")
-        if eval_type == "choice" and queue_type == "choice":
+        if eval_type == queue_type and eval_type in ("choice", "binary"):
             candidates.append(name)
     return candidates
 
@@ -66,7 +66,17 @@ def _latest_score_per_target(scores) -> dict[int, Score]:
 
 
 def _score_value(score: Score) -> Any:
-    """Render the comparable value out of a Score."""
+    """Render the display value out of a Score."""
+    if score.data_type == Score.DataType.CATEGORICAL:
+        return score.value_string
+    if score.data_type == Score.DataType.BOOLEAN:
+        return score.value_string if score.value_string else bool(score.value_numeric)
+    return score.value_numeric
+
+
+def _score_compare_value(score: Score) -> Any:
+    """Value used for agreement comparison. BOOLEAN compares as a boolean so two
+    sides with different display labels still agree on the underlying value."""
     if score.data_type == Score.DataType.CATEGORICAL:
         return score.value_string
     if score.data_type == Score.DataType.BOOLEAN:
@@ -148,6 +158,8 @@ def _make_row(
     ext_id, exp_id = _session_fields(sessions_by_id.get(target_id))
     j_val = _score_value(judge_score) if judge_score is not None else None
     h_val = _score_value(human_score) if human_score is not None else None
+    j_cmp = _score_compare_value(judge_score) if judge_score is not None else None
+    h_cmp = _score_compare_value(human_score) if human_score is not None else None
     # NOTE: the eval results page's `?result_id=` is actually an EvaluationMessage.id
     # (its table rows are keyed by message — multiple evaluator results for the same
     # message merge into one row). Pass the message id, not the EvaluationResult.id,
@@ -160,7 +172,7 @@ def _make_row(
         experiment_public_id=exp_id,
         judge_value=j_val,
         human_value=h_val,
-        agree=(j_val == h_val) if kind == "matched" else None,
+        agree=(j_cmp == h_cmp) if kind == "matched" else None,
         eval_run_id=automated.run_id if automated else None,
         eval_result_id=automated.message_id if automated else None,
         annotation_item_id=item.id if item else None,
