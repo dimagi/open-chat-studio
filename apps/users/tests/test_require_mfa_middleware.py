@@ -10,6 +10,7 @@ import pytest
 from allauth.account.models import EmailAddress
 from allauth.mfa.totp.internal import auth as totp_auth
 from allauth.socialaccount.models import SocialApp
+from django.conf import settings
 from django.contrib.sites.models import Site
 from django.urls import reverse
 
@@ -144,7 +145,8 @@ def test_requirement_can_be_switched_off(client, user, gated_page, settings):
 def test_anonymous_users_are_not_gated(client, gated_page):
     response = client.get(gated_page)
 
-    assert reverse("mfa_activate_totp") not in response["Location"]
+    assert response.status_code == 302
+    assert response["Location"].startswith(reverse(settings.LOGIN_URL))
 
 
 @pytest.mark.parametrize(
