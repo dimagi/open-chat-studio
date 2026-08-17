@@ -159,6 +159,7 @@ MIDDLEWARE = list(
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
+            "apps.users.middleware.RequireMfaForStaffMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -291,6 +292,11 @@ MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
 MFA_RECOVERY_CODE_COUNT = 10
 MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "Open Chat Studio"
+# Staff and superusers are confined to the MFA setup flow until they enrol
+# (apps.users.middleware.RequireMfaForStaffMiddleware). Off by default in development and under
+# test: local superusers shouldn't have to enrol, and the existing staff-view tests would each need
+# to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
+REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
