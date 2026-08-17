@@ -1,12 +1,13 @@
 import csv
-import gc
 import io
 import json
+import weakref
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments import export as export_mod
 from apps.experiments.export import (
     SESSION_CACHE_MAX_ENTRIES,
     UTF8_BOM,
@@ -484,15 +485,37 @@ def test_export_rows_correct_when_sessions_exceed_cache_ceiling():
 
 
 @pytest.mark.django_db()
-def test_generate_export_rows_holds_only_one_chunk_of_messages():
-    """Spent chunks must not accumulate: ORM reference cycles need an explicit collection."""
+def test_generate_export_rows_releases_spent_chunks():
+    """A written-out chunk must be released, not left for some later generational pass.
+
+    Django model instances sit in reference cycles, so dropping the last strong reference
+    is not enough on its own. Weakrefs to the first chunk's messages assert release
+    directly; counting live ChatMessage instances process-wide would instead depend on
+    whatever other tests happen to be holding, which is not this code's business.
+    """
+    chunk_size = 5
     session = _make_session_with_messages(25)
-    live_counts = []
+    refs = []
+    real_yield = export_mod._yield_row_for_message
 
-    with patch("apps.experiments.export.EXPORT_CHUNK_SIZE", 5):
+    def recording_yield(message, *args):
+        refs.append(weakref.ref(message))
+        return real_yield(message, *args)
+
+    first_chunk_alive_later = None
+    with (
+        patch("apps.experiments.export.EXPORT_CHUNK_SIZE", chunk_size),
+        patch("apps.experiments.export._yield_row_for_message", recording_yield),
+    ):
         for _ in generate_export_rows(session.experiment, session.experiment.sessions.all()):
-            live_counts.append(sum(1 for o in gc.get_objects() if type(o) is ChatMessage))
+            # One message into the third chunk, both earlier chunks have been collected.
+            # (Chunk N's last message stays reachable via the loop variable until the
+            # following chunk rebinds it, so it is chunk N+1's collect that frees it --
+            # hence checking two chunks out rather than one.)
+            if len(refs) == chunk_size * 2 + 1 and first_chunk_alive_later is None:
+                first_chunk_alive_later = sum(1 for ref in refs[:chunk_size] if ref() is not None)
 
-    # Without the per-chunk collect this climbs toward the full 25; bounded, it stays
-    # within a chunk (plus the row currently being yielded).
-    assert max(live_counts) <= 10, f"spent chunks are accumulating: peak live={max(live_counts)}"
+    assert first_chunk_alive_later == 0, (
+        f"{first_chunk_alive_later}/{chunk_size} messages from the first chunk were still alive "
+        "two chunks later -- spent chunks are not being released"
+    )
