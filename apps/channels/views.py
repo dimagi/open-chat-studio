@@ -34,6 +34,7 @@ from apps.channels.datamodels import TwilioMessage, is_non_conversational_whatsa
 from apps.channels.exceptions import ExperimentChannelException
 from apps.channels.forms import ChannelFormWrapper
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.rate_limiting import count_channel_delivery
 from apps.channels.serializers import (
     ApiMessageSerializer,
     ApiResponseMessageSerializer,
@@ -58,6 +59,7 @@ log = logging.getLogger("ocs.channels")
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
 @csrf_exempt
+@require_POST
 def new_telegram_message(request, channel_external_id: uuid):
     token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     if token != settings.TELEGRAM_SECRET_TOKEN:
@@ -69,6 +71,7 @@ def new_telegram_message(request, channel_external_id: uuid):
 
     set_current_team(channel.team)
     request.experiment = channel.experiment  # used by RequestLoggingMiddleware
+    count_channel_delivery(request, channel)
     data = json.loads(request.body)
     tasks.handle_telegram_message.delay(message_data=data, channel_external_id=channel_external_id)
     return HttpResponse()
@@ -105,6 +108,7 @@ def new_twilio_message(request):
     ):
         return HttpResponseBadRequest("Invalid signature.")
 
+    count_channel_delivery(request, experiment_channel)
     tasks.handle_twilio_message.delay(message_data=message_data)
     return HttpResponse()
 
@@ -122,6 +126,7 @@ def new_sureadhere_message(request, sureadhere_tenant_id: int):
 
     set_current_team(channel.team)
     request.experiment = channel.experiment  # used by RequestLoggingMiddleware
+    count_channel_delivery(request, channel)
     message_data = json.loads(request.body)
     tasks.handle_sureadhere_message.delay(sureadhere_tenant_id=sureadhere_tenant_id, message_data=message_data)
     return HttpResponse()
@@ -166,6 +171,7 @@ def new_turn_message(request, experiment_id: uuid):
     if not _turn_request_is_authorised(request, channel):
         return HttpResponse("Invalid signature.", status=401)
 
+    count_channel_delivery(request, channel)
     tasks.handle_turn_message.delay(experiment_id=experiment_id, message_data=message_data)
     return HttpResponse()
 
@@ -345,6 +351,7 @@ def new_connect_message(request: HttpRequest):
     if not participant_data.has_consented():
         return JsonResponse({"detail": "User has not given consent"}, status=status.HTTP_400_BAD_REQUEST)
 
+    count_channel_delivery(request, channel)
     tasks.handle_commcare_connect_message.delay(
         experiment_id=participant_data.experiment_id,
         participant_data_id=participant_data.id,
@@ -561,10 +568,10 @@ class MetaCloudAPIWebhookView(View):
             log.warning("Meta Cloud API webhook signature verification failed for channel")
             return HttpResponse()
 
-        self._dispatch_message_values(message_values, channel_map)
+        self._dispatch_message_values(request, message_values, channel_map)
         return HttpResponse()
 
-    def _dispatch_message_values(self, message_values: list[dict], channel_map: dict) -> None:
+    def _dispatch_message_values(self, request, message_values: list[dict], channel_map: dict) -> None:
         """Queue a task for each conversational message value, routing it to its channel."""
         for value in message_values:
             phone_number_id = value["metadata"]["phone_number_id"]
@@ -576,6 +583,9 @@ class MetaCloudAPIWebhookView(View):
                 log.info("Ignoring non-conversational Meta Cloud API webhook value")
                 continue
 
+            # One payload may carry values for several phone numbers, each belonging to
+            # a different team, so each value is billed to the channel it routes to.
+            count_channel_delivery(request, ch)
             tasks.handle_meta_cloud_api_message.delay(
                 channel_id=ch.id,
                 team_slug=ch.team.slug,

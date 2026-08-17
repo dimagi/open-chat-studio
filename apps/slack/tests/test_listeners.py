@@ -1,6 +1,9 @@
 from unittest.mock import MagicMock, Mock
 
 import pytest
+from django.conf import settings
+from django.core.cache import caches
+from django.test import override_settings
 from django.utils import timezone
 from slack_bolt import BoltContext
 
@@ -281,3 +284,57 @@ def test_channel_routing_priority(experiment_channel, keyword_channel, default_c
     new_message(default_event, bolt_context)
 
     assert ExperimentSession.objects.filter(experiment_channel=default_channel).exists()
+
+
+# Rate limiting: Slack resolves its channel inside the Bolt listener rather than in the
+# view, so the delivery is counted here. Only messages the bot answers reach that point.
+SLACK_TINY_LIMITS = settings.RATE_LIMITS | {"channels": {"rate": "2/5m", "fail_open": True, "refuse": False}}
+
+
+@pytest.fixture()
+def _empty_rate_limit_window():
+    caches[settings.RATE_LIMIT_CACHE_ALIAS].clear()
+    yield
+    caches[settings.RATE_LIMIT_CACHE_ALIAS].clear()
+
+
+@pytest.fixture()
+def rate_limit_logs(caplog):
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        yield caplog
+
+
+def _would_block_records(logs):
+    return [record for record in logs.records if record.message == "rate_limit.would_block"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.usefixtures("_empty_rate_limit_window")
+@override_settings(RATE_LIMITS=SLACK_TINY_LIMITS)
+def test_answered_messages_are_counted_against_their_channel(bolt_context, rate_limit_logs, experiment_channel):
+    """Slack traffic draws down the channels scope like every other platform, and the
+    over-limit signal names the team that crossed.
+    """
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    for _ in range(3):
+        new_message(BOT_MENTION_EVENT, bolt_context)
+
+    (record,) = _would_block_records(rate_limit_logs)
+    assert record.team_id == experiment_channel.team_id
+    assert record.scope == "channels"
+
+
+@pytest.mark.django_db()
+@pytest.mark.usefixtures("_empty_rate_limit_window", "experiment_channel")
+@override_settings(RATE_LIMITS=SLACK_TINY_LIMITS)
+def test_messages_the_bot_does_not_answer_are_not_counted(bolt_context, rate_limit_logs):
+    """A message in an assigned channel that neither mentions the bot nor continues a
+    session resolves no channel and creates no work, so it spends no allowance.
+    """
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    for _ in range(5):
+        new_message(CHANNEL_MESSAGE_EVENT, bolt_context)
+
+    assert _would_block_records(rate_limit_logs) == []

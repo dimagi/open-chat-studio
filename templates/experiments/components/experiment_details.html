@@ -1,4 +1,4 @@
-{% load i18n waffle_tags %}
+{% load humanize i18n waffle_tags %}
 
 <div>
   <div class="pl-4">
@@ -27,6 +27,20 @@
           {% endif %}
         </dd>
       </div>
+      {% if cost_tracking_enabled %}
+        <div class="py-3 grid grid-cols-3 sm:gap-4">
+          <dt class="text-sm font-medium leading-6">{% translate "Usage" %}</dt>
+          <dd class="text-sm col-span-2 flex items-center gap-2 flex-wrap" data-testid="session-usage-summary">
+            {% if usage_summary.by_model %}
+              <span>{{ usage_summary.total_tokens|intcomma }} {% translate "tokens" %}</span>
+              <span class="text-base-content/40">·</span>
+              {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.total_cost unpriced=usage_summary.has_unpriced estimated=usage_summary.has_estimated unknown=usage_summary.has_unknown testid_prefix="session-usage" %}
+            {% else %}
+              <span class="text-base-content/40">{% translate "No usage recorded" %}</span>
+            {% endif %}
+          </dd>
+        </div>
+      {% endif %}
       {% if experiment_session.chat.metadata.openai_thread_id %}
         <div class="py-3 grid grid-cols-3 sm:gap-4">
           <dt class="text-sm font-medium leading-6">OpenAI Thread</dt>

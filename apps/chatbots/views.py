@@ -1,5 +1,6 @@
 import unicodedata
 import uuid
+from datetime import timedelta
 from functools import cached_property
 
 from django.contrib import messages
@@ -13,6 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, FormView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
@@ -28,6 +30,7 @@ from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotFor
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
+from apps.cost_tracking.services.reporting import chatbot_usage_summary
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -66,6 +69,9 @@ from apps.trace.models import Trace
 from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
+USAGE_WIDGET_WINDOW_DAYS = 30
 
 
 def _get_alpine_context(request, experiment=None):
@@ -314,6 +320,13 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     published = resolve_published_or_working(experiment)
     deployed_version = published.version_number if experiment != published else None
 
+    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
+    usage_summary = None
+    if cost_tracking_enabled:
+        end = timezone.now()
+        start = end - timedelta(days=USAGE_WIDGET_WINDOW_DAYS)
+        usage_summary = chatbot_usage_summary(experiment, start=start, end=end)
+
     context = {
         "active_tab": "chatbots",
         "page_title": f"{experiment.name} Details",
@@ -325,6 +338,8 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         # the "chat to the published version" launcher must read them off this, not `experiment`.
         "published_version": published,
         "highlight_version_id": request.GET.get("version_id"),
+        "cost_tracking_enabled": cost_tracking_enabled,
+        "usage_summary": usage_summary,
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
