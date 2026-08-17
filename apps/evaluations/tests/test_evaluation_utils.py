@@ -2,7 +2,7 @@ import pytest
 
 from apps.chat.models import ChatMessageType
 from apps.evaluations.exceptions import HistoryParseException
-from apps.evaluations.utils import make_evaluation_messages_from_sessions, parse_history_text
+from apps.evaluations.utils import make_evaluation_messages_from_sessions, merge_binary_labels, parse_history_text
 from apps.utils.factories.experiment import ChatMessageFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
@@ -215,3 +215,23 @@ def test_make_evaluation_messages_from_sessions():
     assert eval_msg_4.metadata["session_id"] == session.external_id
     # History should include all previous messages
     assert len(eval_msg_4.history) == 5  # human1, ai1, human2, human3, ai3
+
+
+class TestMergeBinaryLabels:
+    def test_binary_stats_gain_labels_from_schema(self):
+        stats = {"type": "binary", "count": 3, "mean": 0.6667, "true_count": 2}
+        field_def = {"type": "binary", "true_label": "Correct", "false_label": "Incorrect"}
+        assert merge_binary_labels(stats, field_def) == {
+            **stats,
+            "true_label": "Correct",
+            "false_label": "Incorrect",
+        }
+
+    def test_labels_default_when_schema_omits_them(self):
+        merged = merge_binary_labels({"type": "binary", "count": 1}, {"type": "binary"})
+        assert merged["true_label"] == "True"
+        assert merged["false_label"] == "False"
+
+    def test_non_binary_stats_unchanged(self):
+        stats = {"type": "numeric", "count": 3, "mean": 2.0}
+        assert merge_binary_labels(stats, {"type": "int"}) is stats

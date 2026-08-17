@@ -538,6 +538,21 @@ def get_use_in_aggregations(field_def: dict) -> bool:
     return field_def.get("type") != "string"
 
 
+def merge_binary_labels(stats: dict, field_def: dict) -> dict:
+    """Copy binary display labels from a field definition into an aggregate blob.
+
+    Labels live only in the schema; the stored blob carries integers. Non-binary
+    blobs pass through unchanged.
+    """
+    if not isinstance(stats, dict) or stats.get("type") != "binary":
+        return stats
+    return {
+        **stats,
+        "true_label": field_def.get("true_label", "True"),
+        "false_label": field_def.get("false_label", "False"),
+    }
+
+
 def filter_aggregates_for_display(aggregates) -> list[dict]:
     """Filter aggregate fields based on use_in_aggregations setting.
 
@@ -547,7 +562,7 @@ def filter_aggregates_for_display(aggregates) -> list[dict]:
     for agg in aggregates:
         output_schema = agg.evaluator.params.get("output_schema", {})
         filtered = {
-            field_name: stats
+            field_name: merge_binary_labels(stats, output_schema.get(field_name) or {})
             for field_name, stats in agg.aggregates.items()
             if get_use_in_aggregations(output_schema.get(field_name, {}))
         }

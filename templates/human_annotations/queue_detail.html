@@ -96,6 +96,18 @@
                   <span class="badge badge-sm badge-outline">{{ value }}: {{ pct }}%</span>
                 {% endfor %}
               </div>
+            {% elif stats.type == "binary" %}
+              <div class="grid grid-cols-2 gap-1 text-sm">
+                {% if stats.mean is not None %}
+                  <div>mean: <span class="font-mono">{{ stats.mean }}</span></div>
+                {% endif %}
+                {% if stats.true_count is not None %}
+                  <div>{{ stats.true_label }}: <span class="font-mono">{{ stats.true_count }}/{{ stats.count }}</span></div>
+                {% endif %}
+                {% if stats.excluded_count %}
+                  <div class="col-span-2 text-base-content/60">excluded: <span class="font-mono">{{ stats.excluded_count }}</span></div>
+                {% endif %}
+              </div>
             {% endif %}
           </div>
         {% endfor %}
