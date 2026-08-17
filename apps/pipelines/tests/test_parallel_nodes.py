@@ -209,13 +209,15 @@ def main(input, **kwargs):
     output_state = PipelineState(output)
     assert PipelineAccessor(output_state).get_node_output("end") == "B: A: Hi,C: Hi"
     assert isinstance(output_state["outputs"]["Code"], dict)
+    # The code node's source is B: of the two branches feeding it, B is the one that delivered last
+    # and so unblocked the merge.
     assert output_state.get_execution_flow() in [
         [
             (None, "start", ["A", "C"]),
             ("start", "C", ["Code"]),
             ("start", "A", ["B"]),
             ("A", "B", ["Code"]),
-            ("C", "Code", ["end"]),
+            ("B", "Code", ["end"]),
             ("Code", "end", []),
         ],
         [
@@ -223,7 +225,7 @@ def main(input, **kwargs):
             ("start", "A", ["B"]),
             ("start", "C", ["Code"]),
             ("A", "B", ["Code"]),
-            ("C", "Code", ["end"]),
+            ("B", "Code", ["end"]),
             ("Code", "end", []),
         ],
     ]
@@ -337,6 +339,176 @@ def test_dangling_node_abort_after(pipeline, experiment_session):
     assert "B" in output_state["outputs"]
     assert "C" in output_state["outputs"]
     assert "Code Abort" not in output_state["outputs"]
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "merge_edges",
+    [
+        pytest.param(["C - D", "B - D"], id="long-branch-edge-first"),
+        pytest.param(["B - D", "C - D"], id="short-branch-edge-first"),
+    ],
+)
+def test_merge_node_inputs_arrive_in_execution_order(pipeline, experiment_session, merge_edges):
+    """A node on an uneven merge runs once per branch that reaches it. Each run's input is the one
+    that arrived most recently, and every input that has arrived is available as `node_inputs` --
+    neither of which may depend on the order the merge edges were drawn.
+
+    start -> A -> C -> D -> end
+          -> B ------^
+    """
+    start = start_node()
+    node_a = render_template_node("A: {{ input }}", "A")
+    node_b = render_template_node("B: {{ input }}", "B")
+    node_c = render_template_node("C: {{ input }}", "C")
+    node_d = code_node(
+        code="""
+def main(input, **kwargs):
+    return f"{input} <- {kwargs['node_inputs']}"
+    """,
+        name="D",
+    )
+    end = end_node()
+    nodes = [start, node_a, node_b, node_c, node_d, end]
+    edges = ["start - A", "start - B", "A - C", *merge_edges, "D - end"]
+    output = create_runnable(pipeline, nodes, edges).invoke(
+        PipelineState(messages=["Hi"], experiment_session=experiment_session),
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
+    )
+    runs = [run["message"] for run in PipelineState(output)["outputs"]["D"]]
+    assert runs == [
+        "B: Hi <- ['B: Hi']",
+        "C: A: Hi <- ['B: Hi', 'C: A: Hi']",
+    ]
+
+
+@pytest.mark.django_db()
+def test_merge_node_waits_for_optional_branch(pipeline, experiment_session):
+    """Only one of the router's branches runs, so the merge node counts its inputs instead of naming
+    the nodes it is waiting for.
+
+    start -> Router -(b)-> B -> Merge -> end
+          -> A ----------------^
+             Router -(c)-> C ---^
+    """
+    start = start_node()
+    router = state_key_router_node(route_key="route", keywords=["b", "c"], name="Router")
+    node_a = render_template_node("A: {{ input }}", "A")
+    node_b = render_template_node("B: {{ input }}", "B")
+    node_c = render_template_node("C: {{ input }}", "C")
+    merge = code_node(
+        code="""
+def main(input, **kwargs):
+    all_inputs = kwargs["node_inputs"]
+    if len(all_inputs) < 2:
+        wait_for_next_input()
+    return ",".join(all_inputs)
+    """,
+        name="Merge",
+    )
+    end = end_node()
+    nodes = [start, router, node_a, node_b, node_c, merge, end]
+    edges = [
+        "start - Router",
+        "start - A",
+        "Router:0 - B",
+        "Router:1 - C",
+        "A - Merge",
+        "B - Merge",
+        "C - Merge",
+        "Merge - end",
+    ]
+    output = create_runnable(pipeline, nodes, edges).invoke(
+        PipelineState(messages=["Hi"], experiment_session=experiment_session, temp_state={"route": "b"}),
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
+    )
+    output_state = PipelineState(output)
+    assert PipelineAccessor(output_state).get_node_output("end") == "A: Hi,B: Hi"
+
+
+@pytest.mark.django_db()
+def test_node_downstream_of_merge_gets_merged_output(pipeline, experiment_session):
+    """A node placed after a merge node receives the merged output.
+
+    start -> A -> B -> Code -> D -> end
+          -> C --------^
+    """
+    start = start_node()
+    node_a = render_template_node("A: {{ input }}", "A")
+    node_b = render_template_node("B: {{ input }}", "B")
+    node_c = render_template_node("C: {{ input }}", "C")
+    code = code_node(
+        code="""
+def main(input, **kwargs):
+    require_node_outputs("B", "C")
+    return f"{get_node_output('B')},{get_node_output('C')}"
+    """,
+        name="Code",
+    )
+    node_d = render_template_node("D: {{ input }}", "D")
+    end = end_node()
+    nodes = [start, node_a, node_b, node_c, code, node_d, end]
+    edges = ["start - A", "start - C", "A - B", "B - Code", "C - Code", "Code - D", "D - end"]
+    output = create_runnable(pipeline, nodes, edges).invoke(
+        PipelineState(messages=["Hi"], experiment_session=experiment_session),
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
+    )
+    output_state = PipelineState(output)
+    assert PipelineAccessor(output_state).get_node_output("D") == "D: B: A: Hi,C: Hi"
+
+
+@pytest.mark.django_db()
+def test_merge_output_not_lost_when_a_branch_arrives_with_it(pipeline, experiment_session):
+    """The merge node and a third branch both reach D in the same step, so D runs once with both
+    inputs. Whichever one becomes `input`, neither may be dropped.
+
+    start -> P -----------> Code -> D -> end
+          -> Q1 -> Q2 -------^      ^
+          -> R1 -> R2 -> R3 --------/
+    """
+    start = start_node()
+    node_p = render_template_node("P: {{ input }}", "P")
+    q1 = render_template_node("Q1: {{ input }}", "Q1")
+    q2 = render_template_node("Q2: {{ input }}", "Q2")
+    r1 = render_template_node("R1: {{ input }}", "R1")
+    r2 = render_template_node("R2: {{ input }}", "R2")
+    r3 = render_template_node("R3: {{ input }}", "R3")
+    code = code_node(
+        code="""
+def main(input, **kwargs):
+    require_node_outputs("P", "Q2")
+    return f"merged:{get_node_output('P')}+{get_node_output('Q2')}"
+    """,
+        name="Code",
+    )
+    node_d = code_node(
+        code="""
+def main(input, **kwargs):
+    return ",".join(sorted(kwargs["node_inputs"]))
+    """,
+        name="D",
+    )
+    end = end_node()
+    nodes = [start, node_p, q1, q2, r1, r2, r3, code, node_d, end]
+    edges = [
+        "start - P",
+        "start - Q1",
+        "start - R1",
+        "P - Code",
+        "Q1 - Q2",
+        "Q2 - Code",
+        "R1 - R2",
+        "R2 - R3",
+        "Code - D",
+        "R3 - D",
+        "D - end",
+    ]
+    output = create_runnable(pipeline, nodes, edges).invoke(
+        PipelineState(messages=["Hi"], experiment_session=experiment_session),
+        config={"configurable": {"repo": ORMRepository(session=experiment_session)}},
+    )
+    output_state = PipelineState(output)
+    assert PipelineAccessor(output_state).get_node_output("D") == "R3: R2: R1: Hi,merged:P: Hi+Q2: Q1: Hi"
 
 
 def static_output(output: str, name: str):
