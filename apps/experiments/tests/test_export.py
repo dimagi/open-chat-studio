@@ -10,13 +10,18 @@ from apps.experiments.export import (
     UTF8_BOM,
     count_export_messages,
     export_rows_to_csv_stream,
-    filtered_export_to_csv,
     generate_export_rows,
 )
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.traces import TraceFactory
+
+
+def _export_csv_text(experiment, sessions_queryset, translation_language=None) -> str:
+    """Render an export to CSV text, minus the Excel BOM, for content assertions."""
+    rows = generate_export_rows(experiment, sessions_queryset, translation_language)
+    return "".join(export_rows_to_csv_stream(rows)).removeprefix(UTF8_BOM)
 
 
 @pytest.mark.django_db()
@@ -88,8 +93,7 @@ def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_
     else:
         filtered_queryset = experiment.sessions.none()
 
-    csv_in_memory = filtered_export_to_csv(experiment, filtered_queryset)
-    csv_content = csv_in_memory.getvalue()
+    csv_content = _export_csv_text(experiment, filtered_queryset)
     csv_lines = csv_content.strip().split("\n") if csv_content.strip() else []
     # Each session produces 2 rows (human + AI message), plus 1 header
     expected_rows = len(filtered_indices) * 2 + 1
@@ -135,8 +139,7 @@ def test_participant_data_export():
         participant_data_diff=[["change", "age", [25, 26]]],
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]
@@ -181,8 +184,7 @@ def test_participant_data_export_empty_diff():
         participant_data_diff=[],
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]
@@ -223,8 +225,7 @@ def test_participant_data_export_empty_data():
         participant_data_diff=[],
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]
@@ -298,8 +299,8 @@ def test_trace_id_resolved_per_message_trace_info():
     mock_messages_qs.filter.return_value.__getitem__ = Mock(return_value=messages)
 
     with patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs):
-        csv_in_memory = filtered_export_to_csv(experiment, Mock())
-        rows = list(csv.reader(io.StringIO(csv_in_memory.getvalue()), delimiter=","))
+        csv_text = _export_csv_text(experiment, Mock())
+        rows = list(csv.reader(io.StringIO(csv_text), delimiter=","))
 
     header = rows[0]
     trace_id_index = header.index("Trace ID")
@@ -341,8 +342,7 @@ def test_session_state_export():
         output_message=ai_msg,
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]

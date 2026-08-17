@@ -292,20 +292,6 @@ def export_to_tempfile(
     return tmp
 
 
-def filtered_export_to_csv(experiment, sessions_queryset, translation_language=None):
-    """Build a complete CSV in a StringIO buffer and return it.
-
-    For large datasets prefer generate_export_rows() + export_rows_to_csv_stream()
-    to avoid buffering the entire export in memory.  This function is retained for
-    backward compatibility with callers that expect a StringIO return value.
-    """
-    csv_in_memory = io.StringIO()
-    writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    for row in generate_export_rows(experiment, sessions_queryset, translation_language):
-        writer.writerow(row)
-    return csv_in_memory
-
-
 def _get_trace_id_for_export(message):
     """Returns the trace info from the message.
     This will return the first non-OCS trace info if it exists.
