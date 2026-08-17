@@ -309,6 +309,56 @@ class TestChatbotUsageSummary:
         assert usage.sessions_count == 1
         assert usage.messages_count == 1
 
+    def test_caches_result_for_short_ttl(self):
+        """A second call for the same (team, experiment) within the TTL returns the cached
+        snapshot rather than re-querying - even though new usage was written in between.
+        `end` is padded into the future so the second record would be in-window if this were
+        a fresh read - otherwise "still 1.00" could just mean the window excluded it."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.00"))
+        start = timezone.now() - timedelta(days=30)
+        end = timezone.now() + timedelta(minutes=1)
+
+        first = chatbot_usage_summary(experiment, start=start, end=end)
+        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("9.00"))
+        second = chatbot_usage_summary(experiment, start=start, end=end)
+
+        assert first.cost.total_cost == Decimal("1.00000000")
+        assert second.cost.total_cost == Decimal("1.00000000")
+
+    def test_use_cache_false_bypasses_cache(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.00"))
+        start = timezone.now() - timedelta(days=30)
+        end = timezone.now() + timedelta(minutes=1)
+
+        chatbot_usage_summary(experiment, start=start, end=end)  # populate the cache
+        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("9.00"))
+        fresh = chatbot_usage_summary(experiment, start=start, end=end, use_cache=False)
+
+        assert fresh.cost.total_cost == Decimal("10.00000000")
+
+    def test_cache_keyed_per_experiment(self):
+        """Two experiments in the same team don't share a cache entry."""
+        team = TeamFactory.create()
+        exp_a = ExperimentFactory.create(team=team)
+        exp_b = ExperimentFactory.create(team=team)
+        session_a = ExperimentSessionFactory.create(experiment=exp_a, team=team)
+        session_b = ExperimentSessionFactory.create(experiment=exp_b, team=team)
+        UsageRecordFactory.create(team=team, experiment=exp_a, session=session_a, cost=Decimal("1.00"))
+        UsageRecordFactory.create(team=team, experiment=exp_b, session=session_b, cost=Decimal("2.00"))
+        start, end = self._window()
+
+        usage_a = chatbot_usage_summary(exp_a, start=start, end=end)
+        usage_b = chatbot_usage_summary(exp_b, start=start, end=end)
+
+        assert usage_a.cost.total_cost == Decimal("1.00000000")
+        assert usage_b.cost.total_cost == Decimal("2.00000000")
+
 
 @pytest.mark.django_db()
 class TestSessionUsage:

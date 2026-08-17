@@ -9,6 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from django.core.cache import cache
 from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
 
@@ -34,6 +35,12 @@ _GRANULARITY_TRUNC = {
 # Token split for the usage API: `prompt` covers fresh + cached input, `completion` is output, and
 # `total` is every LLM kind (so cache-write tokens land in the total but neither sub-count).
 _PROMPT_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_CACHED_INPUT)
+
+# Short: this bounds staleness, not correctness (like PricingResolver's cache, but with no
+# signal-based invalidation - UsageRecord rows are written continuously, so invalidating on
+# write would defeat the cache). The chatbot home page is the only caller today; a team member
+# watching it during an active conversation will see the number settle within this window.
+_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS = 5 * 60
 
 
 @dataclass(frozen=True)
@@ -391,17 +398,41 @@ class ChatbotUsageSummary:
     messages_count: int
 
 
-def chatbot_usage_summary(experiment: Experiment, *, start: datetime, end: datetime) -> ChatbotUsageSummary:
+def _chatbot_usage_summary_cache_key(experiment: Experiment) -> str:
+    """Keyed on (team, experiment) only, not the resolved window - the chatbot home page always
+    asks for "the last 30 days as of now", so the window changes every request and could never
+    hit a key that included it. The cached value goes stale by at most the TTL instead (same
+    approach as the dashboard's own cost cache: see `apps/dashboard/views.py::_cost_cache_key`).
+    """
+    return f"cost:chatbot_usage_summary:{experiment.team_id}:{experiment.id}"
+
+
+def chatbot_usage_summary(
+    experiment: Experiment, *, start: datetime, end: datetime, use_cache: bool = True
+) -> ChatbotUsageSummary:
     """Cost, session count and message count for one chatbot in [start, end), for the chatbot home
     page's usage widget. Session/message counts come from `filtered_querysets` - the same canonical,
     ADR-0051 activity definitions the dashboard's Bot Performance table uses - narrowed to this
     experiment, rather than re-deriving the session base here.
+
+    Cached in Redis for `_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS` (see that constant's docstring).
+    Pass `use_cache=False` for a guaranteed-fresh read (e.g. in tests asserting on just-written data).
     """
+    cache_key = _chatbot_usage_summary_cache_key(experiment) if use_cache else None
+    if cache_key:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     cost = cost_summary(experiment.team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment.id]))
     querysets = filtered_querysets(experiment.team, start_date=start, end_date=end, experiment_ids=[experiment.id])
     sessions_count = querysets["sessions"].count()
     messages_count = conversation_messages(querysets["messages"]).count()
-    return ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
+    usage = ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
+
+    if cache_key:
+        cache.set(cache_key, usage, _CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS)
+    return usage
 
 
 def session_usage(session: ExperimentSession) -> SessionUsage:
