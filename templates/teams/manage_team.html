@@ -48,7 +48,7 @@
       {% has_perm "custom_actions" "add_customaction" as allow_new_action %}
       {% url "custom_actions:table" request.team.slug as actions_table_url %}
       {% url "custom_actions:new" request.team.slug as actions_new_url %}
-      {% translate "Allow Experiments to call external services" as actions_subtitle %}
+      {% translate "Allow Chatbots to call external services" as actions_subtitle %}
       {% include "generic/object_home_content.html" with new_object_url=actions_new_url title="Custom Actions" table_url=actions_table_url allow_new=allow_new_action subtitle=actions_subtitle data_cy_title="title-actions" %}
     {% endwith %}
     {% flag "flag_mcp" %}
