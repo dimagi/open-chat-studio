@@ -13,6 +13,7 @@ from django_tables2 import RequestConfig, SingleTableView
 
 from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
+from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
 from apps.channels.models import ChannelPlatform
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
@@ -347,25 +348,32 @@ def trigger_bot(request, team_slug: str, participant_id: int):
 
     if not form.is_valid():
         messages.error(request, "Please check the form for errors")
-        context = single_participant_home_context(request, {}, participant_id=participant_id)
-        context["trigger_bot_form"] = form
-        return render(request, "participants/single_participant_home.html", context=context)
+        return _render_trigger_bot_form(request, participant_id, form)
 
-    experiment = form.cleaned_data["experiment"]
-    prompt_text = form.cleaned_data["prompt_text"]
-    start_new_session = form.cleaned_data["start_new_session"]
-    session_data = form.cleaned_data.get("session_data", {})
+    try:
+        # Shared with the API's trigger-bot endpoint: the session has to exist before the task runs,
+        # and both callers must agree on the task's arguments (#4221).
+        session, _ = prepare_trigger_bot_message(
+            request.team,
+            form.cleaned_data["experiment"],
+            participant.identifier,
+            participant.platform,
+            start_new_session=form.cleaned_data["start_new_session"],
+            session_data=form.cleaned_data.get("session_data"),
+        )
+    except TriggerBotMessageError as error:
+        form.add_error(None, error.detail)
+        return _render_trigger_bot_form(request, participant_id, form)
 
-    data = {
-        "identifier": participant.identifier,
-        "platform": participant.platform,
-        "experiment": str(experiment.public_id),
-        "prompt_text": prompt_text,
-        "start_new_session": start_new_session,
-        "session_data": session_data,
-    }
-
-    trigger_bot_message_task.delay(data)
+    # No message_text: this form only sends prompts through the bot, never verbatim messages.
+    trigger_bot_message_task.delay_on_commit(str(session.external_id), form.cleaned_data["prompt_text"], None)
 
     messages.success(request, f"Bot message triggered for {participant}")
     return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+
+
+def _render_trigger_bot_form(request, participant_id: int, form: TriggerBotForm):
+    """Re-render the participant page with the errored form (the template reopens the dialog)."""
+    context = single_participant_home_context(request, {}, participant_id=participant_id)
+    context["trigger_bot_form"] = form
+    return render(request, "participants/single_participant_home.html", context=context)
