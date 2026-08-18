@@ -395,8 +395,8 @@ function dashboard() {
             try {
                 const data = await this.apiRequest('api/cost-breakdown/');
                 this.costBreakdown = data;
-                window.chartManager.renderCostProviderChart(data.by_model || []);
-                window.chartManager.renderCostModelChart(data.by_model || []);
+                window.chartManager.renderCostProviderChart(data.by_model);
+                window.chartManager.renderCostModelChart(data.by_model);
                 this.renderServiceKindChart();
             } catch (error) {
                 console.error("Failed to load cost breakdown charts:", error);
