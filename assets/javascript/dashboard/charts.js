@@ -433,14 +433,6 @@ class ChartManager {
             }))
         };
 
-        // Mirror main.js's formatCurrency: 4 decimals below $0.01 so sub-cent
-        // daily spend doesn't flatten to $0.00 on the axis/tooltip.
-        const formatCost = (value) => {
-            const num = value || 0;
-            const decimals = num !== 0 && num < 0.01 ? 4 : 2;
-            return `$${num.toFixed(decimals)}`;
-        };
-
         const tooltipCallbacks = {
             label: (context) => `${context.dataset.label}: ${formatCost(context.parsed.y)}`
         };
