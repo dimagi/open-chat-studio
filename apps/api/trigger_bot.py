@@ -37,7 +37,6 @@ class TriggerBotMessageError(Exception):
 
 
 def prepare_trigger_bot_message(
-    team: Team,
     experiment: Experiment,
     identifier: str,
     platform: str,
@@ -48,6 +47,9 @@ def prepare_trigger_bot_message(
 ) -> tuple[ExperimentSession, ParticipantData]:
     """Resolve everything ``trigger_bot_message_task`` needs and return the session to send in.
 
+    The participant is created on ``experiment.team``; callers resolve the experiment through the
+    requesting team, so there is no second team to pass in.
+
     The session is created synchronously (rather than in the task) so that callers can report it
     back to the user before the task runs. Raises :class:`TriggerBotMessageError` when the message
     cannot be triggered at all: no channel for the platform, a channel an admin has switched off,
@@ -55,7 +57,9 @@ def prepare_trigger_bot_message(
     """
     identifier = ChannelPlatform(platform).normalize_identifier(identifier)
     channel = get_trigger_bot_channel(experiment, platform)
-    participant_data = get_or_create_participant_data(team, identifier, platform, experiment, incoming_participant_data)
+    participant_data = get_or_create_participant_data(
+        experiment.team, identifier, platform, experiment, incoming_participant_data
+    )
 
     if platform == ChannelPlatform.COMMCARE_CONNECT:
         ensure_commcare_connect_ready(channel, identifier, participant_data)

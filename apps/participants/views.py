@@ -354,7 +354,6 @@ def trigger_bot(request, team_slug: str, participant_id: int):
         # Shared with the API's trigger-bot endpoint: the session has to exist before the task runs,
         # and both callers must agree on the task's arguments (#4221).
         session, _ = prepare_trigger_bot_message(
-            request.team,
             form.cleaned_data["experiment"],
             participant.identifier,
             participant.platform,

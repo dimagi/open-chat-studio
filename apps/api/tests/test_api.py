@@ -1092,7 +1092,7 @@ def test_trigger_bot_on_disabled_channel(trigger_bot_message_task, experiment):
     response = client.post(reverse("api:trigger_bot"), json.dumps(data), content_type="application/json")
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "The email channel for this experiment is disabled."
+    assert response.json()["detail"] == "The email channel for this chatbot is disabled."
     trigger_bot_message_task.delay_on_commit.assert_not_called()
     assert not ExperimentSession.objects.filter(experiment=experiment).exists()
 

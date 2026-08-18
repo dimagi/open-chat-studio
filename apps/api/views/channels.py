@@ -117,7 +117,6 @@ def handle_trigger_bot_message(request, response_serializer_class):
     # created -- the Connect auto-consent flow relies on the participant data surviving the error.
     try:
         session, participant_data = prepare_trigger_bot_message(
-            request.team,
             experiment,
             data["identifier"],
             data["platform"],
