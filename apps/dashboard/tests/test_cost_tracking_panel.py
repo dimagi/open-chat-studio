@@ -15,6 +15,7 @@ from apps.teams.models import Flag
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.traces import TraceFactory
 
 _NOW = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 
@@ -409,6 +410,70 @@ class TestCostPanelCaching:
         assert bogus.json() == daily.json()
         keys = set(DashboardCache.objects.values_list("cache_key", flat=True))
         assert not any("bogus" in key for key in keys)
+
+
+@pytest.mark.django_db()
+class TestCostP95Endpoint:
+    """`api/cost-p95/` serves the per-chatbot p95 cost-per-trace series."""
+
+    def _url(self, team):
+        return reverse("dashboard:api_cost_p95", kwargs={"team_slug": team.slug})
+
+    def test_empty_when_flag_off(self, authenticated_client, team, experiment):
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            experiment=experiment,
+            trace=TraceFactory.create(team=team),
+        )
+
+        response = authenticated_client.get(self._url(team))
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_returns_series_when_flag_on(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            experiment=experiment,
+            trace=TraceFactory.create(team=team),
+        )
+
+        data = authenticated_client.get(self._url(team)).json()
+
+        assert data == [
+            {
+                "experiment_id": experiment.id,
+                "experiment_name": experiment.name,
+                "points": [{"date": (_NOW - timedelta(days=1)).date().isoformat(), "p95": 1.0}],
+            }
+        ]
+
+    def test_respects_experiment_filter(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        other = ExperimentFactory.create(team=team)
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            experiment=experiment,
+            trace=TraceFactory.create(team=team),
+        )
+        _usage(
+            team,
+            cost="2.00",
+            when=_NOW - timedelta(days=1),
+            experiment=other,
+            trace=TraceFactory.create(team=team),
+        )
+
+        data = authenticated_client.get(self._url(team), {"experiments": experiment.id}).json()
+
+        assert [line["experiment_id"] for line in data] == [experiment.id]
 
 
 @pytest.mark.django_db()

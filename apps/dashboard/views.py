@@ -21,6 +21,7 @@ from apps.cost_tracking.services.reporting import (
     costs_by_model,
     costs_by_service_kind,
     coverage_gaps,
+    p95_cost_per_trace,
 )
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
@@ -327,6 +328,33 @@ class CostBreakdownApiView(DashboardApiView):
                 "by_model": costs_by_model(request.team, start=start, end=end, filters=filters),
                 "by_service_kind": costs_by_service_kind(request.team, start=start, end=end, filters=filters),
             },
+            decode=_identity,
+            encode=_identity,
+        )
+        return self.json_response(data)
+
+
+class CostP95ApiView(DashboardApiView):
+    """p95 cost-per-trace series for the cost panel's line chart, gated on the
+    team's cost-monitoring flag. Empty payload when the flag is off so the
+    frontend can no-op.
+    """
+
+    def get(self, request, *args, **kwargs):
+        if not flag_is_active(request, COST_TRACKING_FLAG):
+            return self.json_response([])
+        filter_form = DashboardFilterForm(data=request.GET, team=request.team)
+        start, end, filters = _cost_panel_scope(filter_form)
+        granularity = request.GET.get("granularity", "daily")
+        if granularity not in ("daily", "weekly", "monthly"):
+            # Same normalisation as the timeseries endpoint: reporting falls
+            # back to daily anyway, so don't mint a cache row per raw string.
+            granularity = "daily"
+        cache_key = f"{_cost_cache_key('cost_p95', filter_form)}_{granularity}"
+        data = _cached(
+            request.team,
+            cache_key,
+            lambda: p95_cost_per_trace(request.team, start=start, end=end, granularity=granularity, filters=filters),
             decode=_identity,
             encode=_identity,
         )
