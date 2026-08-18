@@ -17,6 +17,49 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+_ScoreValueParts = tuple["Score.DataType", Decimal | None, str | None]
+
+
+def _binary_parts(name: str, raw_value: Any, schema_field: dict | None) -> _ScoreValueParts | None:
+    if raw_value not in (0, 1):
+        logger.warning("Score field %s: binary value %r is not 0 or 1; skipping", name, raw_value)
+        return None
+    is_true = int(raw_value) == 1
+    label = (schema_field or {}).get("true_label" if is_true else "false_label", str(is_true))
+    return Score.DataType.BOOLEAN, Decimal(int(raw_value)), sanitize_control_chars(str(label))
+
+
+def _numeric_parts(name: str, raw_value: Any) -> _ScoreValueParts | None:
+    try:
+        return Score.DataType.NUMERIC, Decimal(str(raw_value)), None
+    except InvalidOperation:
+        logger.warning("Score field %s: cannot convert %r to Decimal; skipping", name, raw_value)
+        return None
+
+
+def _score_value_parts(name: str, raw_value: Any, schema_field: dict | None) -> _ScoreValueParts | None:
+    """Resolve (data_type, value_numeric, value_string) for a field value, or None if unsupported."""
+    schema_type = (schema_field or {}).get("type")
+    # Force categorical when the schema declares a choice — handles numeric-looking
+    # choice values like "0" / "1" without misclassifying them as numeric.
+    if schema_type == "choice":
+        return Score.DataType.CATEGORICAL, None, sanitize_control_chars(str(raw_value))
+    if schema_type == "binary":
+        return _binary_parts(name, raw_value, schema_field)
+    if isinstance(raw_value, bool):
+        return Score.DataType.BOOLEAN, Decimal(1) if raw_value else Decimal(0), None
+    if isinstance(raw_value, int | float | Decimal):
+        return _numeric_parts(name, raw_value)
+    if isinstance(raw_value, str):
+        return Score.DataType.CATEGORICAL, None, sanitize_control_chars(raw_value)
+    logger.warning(
+        "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
+        name,
+        type(raw_value).__name__,
+    )
+    return None
+
+
 def _score_from_field(
     *,
     team,
@@ -33,44 +76,10 @@ def _score_from_field(
     if raw_value is None:
         return None
 
-    schema_type = (schema_field or {}).get("type")
-    value_numeric: Decimal | None = None
-    value_string: str | None = None
-
-    # Force categorical when the schema declares a choice — handles numeric-looking
-    # choice values like "0" / "1" without misclassifying them as numeric.
-    if schema_type == "choice":
-        data_type = Score.DataType.CATEGORICAL
-        value_string = sanitize_control_chars(str(raw_value))
-    elif schema_type == "binary":
-        if raw_value not in (0, 1):
-            logger.warning("Score field %s: binary value %r is not 0 or 1; skipping", name, raw_value)
-            return None
-        data_type = Score.DataType.BOOLEAN
-        value_numeric = Decimal(int(raw_value))
-        label_key = "true_label" if int(raw_value) == 1 else "false_label"
-        default = "True" if int(raw_value) == 1 else "False"
-        value_string = sanitize_control_chars(str((schema_field or {}).get(label_key, default)))
-    elif isinstance(raw_value, bool):
-        data_type = Score.DataType.BOOLEAN
-        value_numeric = Decimal(1) if raw_value else Decimal(0)
-    elif isinstance(raw_value, int | float | Decimal):
-        try:
-            value_numeric = Decimal(str(raw_value))
-        except InvalidOperation:
-            logger.warning("Score field %s: cannot convert %r to Decimal; skipping", name, raw_value)
-            return None
-        data_type = Score.DataType.NUMERIC
-    elif isinstance(raw_value, str):
-        data_type = Score.DataType.CATEGORICAL
-        value_string = sanitize_control_chars(raw_value)
-    else:
-        logger.warning(
-            "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
-            name,
-            type(raw_value).__name__,
-        )
+    parts = _score_value_parts(name, raw_value, schema_field)
+    if parts is None:
         return None
+    data_type, value_numeric, value_string = parts
 
     return Score(
         team=team,
