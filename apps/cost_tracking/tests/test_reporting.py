@@ -20,6 +20,7 @@ from apps.cost_tracking.services.reporting import (
     cost_total,
     costs_by_experiment,
     costs_by_model,
+    costs_by_participant,
     costs_by_service_kind,
     coverage_gaps,
     get_latest_chatbot_usage_summary,
@@ -30,7 +31,7 @@ from apps.cost_tracking.services.reporting import (
 )
 from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
 
@@ -212,6 +213,89 @@ class TestCostsByExperiment:
         _usage(other, cost="999.00", when=_NOW - timedelta(days=1), experiment=exp_other)
 
         assert costs_by_experiment(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
+
+
+@pytest.mark.django_db()
+class TestCostsByParticipant:
+    """Per-participant cost map feeding the dashboard's Most Active Participants
+    table and the participants page cost column."""
+
+    def test_single_query(self):
+        team = TeamFactory.create()
+        first = ParticipantFactory.create(team=team)
+        second = ParticipantFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=first)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), participant=second)
+
+        with CaptureQueriesContext(connection) as ctx:
+            costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        # Single GROUP BY query - no N+1 per participant.
+        assert len(ctx.captured_queries) == 1
+
+    def test_aggregates_per_participant(self):
+        team = TeamFactory.create()
+        participant = ParticipantFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=participant)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=2), participant=participant)
+
+        costs = costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert costs == {participant.id: Decimal("3.00000000")}
+
+    def test_excludes_records_with_null_participant(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=None)
+
+        assert costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
+
+    def test_excludes_evaluation_spend(self):
+        team = TeamFactory.create()
+        participant = ParticipantFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=participant)
+        _usage(
+            team,
+            cost="9.00",
+            when=_NOW - timedelta(days=1),
+            participant=participant,
+            source=UsageSource.EVALUATION,
+        )
+
+        costs = costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW)
+
+        assert costs == {participant.id: Decimal("1.00000000")}
+
+    def test_excludes_records_outside_window(self):
+        team = TeamFactory.create()
+        participant = ParticipantFactory.create(team=team)
+        _usage(team, cost="9.99", when=_NOW - timedelta(days=40), participant=participant)
+
+        assert costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
+
+    def test_team_scoped(self):
+        team = TeamFactory.create()
+        other = TeamFactory.create()
+        participant_other = ParticipantFactory.create(team=other)
+        _usage(other, cost="999.00", when=_NOW - timedelta(days=1), participant=participant_other)
+
+        assert costs_by_participant(team, start=_NOW - timedelta(days=30), end=_NOW) == {}
+
+    def test_bounded_by_participant_filter(self):
+        """Callers bound the read to a page / top-N of participants via CostFilters."""
+        team = TeamFactory.create()
+        wanted = ParticipantFactory.create(team=team)
+        unwanted = ParticipantFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=wanted)
+        _usage(team, cost="2.00", when=_NOW - timedelta(days=1), participant=unwanted)
+
+        costs = costs_by_participant(
+            team,
+            start=_NOW - timedelta(days=30),
+            end=_NOW,
+            filters=CostFilters(participant_ids=[wanted.id]),
+        )
+
+        assert costs == {wanted.id: Decimal("1.00000000")}
 
 
 @pytest.mark.django_db()

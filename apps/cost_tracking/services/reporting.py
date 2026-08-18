@@ -369,6 +369,20 @@ def cost_total(team: Team, *, start: datetime, end: datetime, filters: CostFilte
     return CostTotal(total=total, currency=currency)
 
 
+def _entity_cost_map(
+    team: Team, field: str, *, start: datetime, end: datetime, filters: CostFilters | None
+) -> dict[int, Decimal]:
+    """Chat-only cost grouped by an entity FK (`experiment` / `participant`),
+    keyed by the FK id, rows with a null FK excluded."""
+    rows = (
+        _attributable_records(team, filters)
+        .filter(timestamp__gte=start, timestamp__lt=end, **{f"{field}__isnull": False})
+        .values(f"{field}_id")
+        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+    )
+    return {row[f"{field}_id"]: row["cost"] for row in rows}
+
+
 def costs_by_experiment(
     team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None
 ) -> dict[int, Decimal]:
@@ -378,13 +392,20 @@ def costs_by_experiment(
     as is evaluation spend — neither judging a chatbot nor exercising it from an
     eval run is the chatbot's cost.
     """
-    rows = (
-        _attributable_records(team, filters)
-        .filter(timestamp__gte=start, timestamp__lt=end, experiment__isnull=False)
-        .values("experiment_id")
-        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
-    )
-    return {row["experiment_id"]: row["cost"] for row in rows}
+    return _entity_cost_map(team, "experiment", start=start, end=end, filters=filters)
+
+
+def costs_by_participant(
+    team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None
+) -> dict[int, Decimal]:
+    """Total cost per participant in the period, keyed by `participant_id`.
+    Feeds the dashboard's Most Active Participants table and the participants
+    page cost column; both bound the read to a handful of participants via
+    `CostFilters.participant_ids` since `UsageRecord` has no `(team, participant)`
+    index. Records with a null participant are excluded, as is evaluation spend -
+    per-entity attribution is chat-only (ADR-0048).
+    """
+    return _entity_cost_map(team, "participant", start=start, end=end, filters=filters)
 
 
 def costs_by_model(team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None) -> list[dict]:
