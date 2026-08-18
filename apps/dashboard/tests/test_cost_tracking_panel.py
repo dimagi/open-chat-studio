@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from time_machine import travel
 
-from apps.cost_tracking.models import Confidence, UsageSource
+from apps.cost_tracking.models import Confidence, ServiceKind, UsageSource
 from apps.dashboard.models import DashboardCache
 from apps.teams.models import Flag
 from apps.utils.factories.annotations import CustomTaggedItemFactory, TagFactory
@@ -392,3 +392,71 @@ class TestCostPanelCaching:
         assert bogus.json() == daily.json()
         keys = set(DashboardCache.objects.values_list("cache_key", flat=True))
         assert not any("bogus" in key for key in keys)
+
+
+@pytest.mark.django_db()
+class TestCostBreakdownEndpoint:
+    """`api/cost-breakdown/` serves the provider/model and service-kind chart data."""
+
+    def _url(self, team):
+        return reverse("dashboard:api_cost_breakdown", kwargs={"team_slug": team.slug})
+
+    def test_empty_when_flag_off(self, authenticated_client, team):
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+
+        response = authenticated_client.get(self._url(team))
+
+        assert response.status_code == 200
+        assert response.json() == {}
+
+    def test_returns_model_and_service_kind_groups(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            provider_type="openai",
+            model_name="gpt-4o-mini",
+            service_kind=ServiceKind.LLM_INPUT,
+            quantity=1000,
+        )
+        _usage(
+            team,
+            cost="2.00",
+            when=_NOW - timedelta(days=2),
+            provider_type="anthropic",
+            model_name="claude-sonnet-5",
+            service_kind=ServiceKind.LLM_OUTPUT,
+            quantity=500,
+        )
+
+        data = authenticated_client.get(self._url(team)).json()
+
+        assert data["by_model"] == [
+            {"provider_type": "anthropic", "model_name": "claude-sonnet-5", "cost": 2.00},
+            {"provider_type": "openai", "model_name": "gpt-4o-mini", "cost": 1.00},
+        ]
+        by_kind = {row["service_kind"]: row for row in data["by_service_kind"]}
+        assert by_kind["llm_input"] == {"service_kind": "llm_input", "cost": 1.00, "tokens": 1000}
+        assert by_kind["llm_output"] == {"service_kind": "llm_output", "cost": 2.00, "tokens": 500}
+
+    def test_experiment_filter_narrows_to_chat_spend(self, authenticated_client, team):
+        """A filtered read is per-entity attribution, chat only (ADR-0048)."""
+        _enable_flag_for(team)
+        experiment = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment, source=UsageSource.CHAT)
+        _usage(team, cost="0.25", when=_NOW - timedelta(days=2), experiment=experiment, source=UsageSource.EVALUATION)
+
+        data = authenticated_client.get(self._url(team), {"experiments": experiment.id}).json()
+
+        assert [row["cost"] for row in data["by_model"]] == [1.00]
+
+    def test_second_read_is_served_from_cache(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+
+        first = authenticated_client.get(self._url(team)).json()
+        _usage(team, cost="5.00", when=_NOW - timedelta(days=1))
+        second = authenticated_client.get(self._url(team)).json()
+
+        assert second == first

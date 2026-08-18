@@ -17,6 +17,7 @@ urlpatterns = [
     path("api/average-response-time/", views.AverageResponseTimeApiView.as_view(), name="api_average_response_time"),
     path("api/cost-tracking-panel/", views.CostTrackingPanelView.as_view(), name="api_cost_tracking_panel"),
     path("api/cost-timeseries/", views.CostTrackingApiView.as_view(), name="api_cost_timeseries"),
+    path("api/cost-breakdown/", views.CostBreakdownApiView.as_view(), name="api_cost_breakdown"),
     # Filter management
     path("filters/save/", views.SaveFilterView.as_view(), name="save_filter"),
     path("filters/load/<int:filter_id>/", views.LoadFilterView.as_view(), name="load_filter"),

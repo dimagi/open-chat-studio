@@ -18,6 +18,8 @@ from apps.cost_tracking.services.reporting import (
     ModelCoverageGap,
     cost_summary,
     cost_timeseries,
+    costs_by_model,
+    costs_by_service_kind,
     coverage_gaps,
 )
 from apps.teams.decorators import login_and_team_required
@@ -296,6 +298,33 @@ class CostTrackingApiView(DashboardApiView):
             request.team,
             cache_key,
             lambda: cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters),
+            decode=lambda payload: payload,
+            encode=lambda value: value,
+        )
+        return self.json_response(data)
+
+
+class CostBreakdownApiView(DashboardApiView):
+    """Provider/model and service-kind cost breakdowns for the cost panel's
+    charts, gated on the team's cost-monitoring flag. Returns an empty payload
+    when the flag is off so the frontend can no-op. Both groupings share one
+    cache entry - the frontend always consumes them together.
+    """
+
+    def get(self, request, *args, **kwargs):
+        if not flag_is_active(request, COST_TRACKING_FLAG):
+            return self.json_response({})
+        filter_form = DashboardFilterForm(data=request.GET, team=request.team)
+        start, end, filters = _cost_panel_scope(filter_form)
+        # The payload is already JSON-shaped, so both cache directions are
+        # identity, the same as the timeseries endpoint.
+        data = _cached(
+            request.team,
+            _cost_cache_key("cost_breakdown", filter_form),
+            lambda: {
+                "by_model": costs_by_model(request.team, start=start, end=end, filters=filters),
+                "by_service_kind": costs_by_service_kind(request.team, start=start, end=end, filters=filters),
+            },
             decode=lambda payload: payload,
             encode=lambda value: value,
         )
