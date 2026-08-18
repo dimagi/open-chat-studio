@@ -1069,8 +1069,37 @@ def test_generate_bot_message_for_email_channel(experiment, django_capture_on_co
 
 
 @pytest.mark.django_db()
+@patch("apps.api.views.channels.trigger_bot_message_task")
+def test_trigger_bot_on_disabled_channel(trigger_bot_message_task, experiment):
+    """The channel kill-switch blocks outbound triggers too: no session is opened, nothing is sent."""
+    ExperimentChannelFactory.create(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.EMAIL,
+        extra_data={"email_address": "bot@chat.openchatstudio.com"},
+        enabled=False,
+    )
+
+    api_user = experiment.team.members.first()
+    client = ApiTestClient(api_user, experiment.team)
+
+    data = {
+        "identifier": "user@example.com",
+        "platform": ChannelPlatform.EMAIL,
+        "experiment": str(experiment.public_id),
+        "prompt_text": "Say hello",
+    }
+    response = client.post(reverse("api:trigger_bot"), json.dumps(data), content_type="application/json")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "The email channel for this chatbot is disabled."
+    trigger_bot_message_task.delay_on_commit.assert_not_called()
+    assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+
+
+@pytest.mark.django_db()
 @override_settings(COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123")
-@patch("apps.api.views.channels.CommCareConnectClient")
+@patch("apps.api.trigger_bot.CommCareConnectClient")
 def test_trigger_bot_duplicate_channel_id_conflict(ConnectClientView, experiment):
     """A duplicate channel_id during enrollment surfaces as a 409, not a misleading consent error."""
     duplicate_channel_id = uuid.uuid4().hex
@@ -1120,7 +1149,7 @@ def test_trigger_bot_duplicate_channel_id_conflict(ConnectClientView, experiment
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
-@patch("apps.api.views.channels.CommCareConnectClient")
+@patch("apps.api.trigger_bot.CommCareConnectClient")
 @patch("apps.channels.connect_channel.CommCareConnectClient")
 @pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
 def test_trigger_bot_direct_message(
@@ -1217,7 +1246,7 @@ def test_trigger_bot_direct_message_for_email_channel(experiment, django_capture
 @override_settings(
     CELERY_TASK_ALWAYS_EAGER=True, COMMCARE_CONNECT_SERVER_SECRET="123", COMMCARE_CONNECT_SERVER_ID="123"
 )
-@patch("apps.api.views.channels.CommCareConnectClient")
+@patch("apps.api.trigger_bot.CommCareConnectClient")
 @patch("apps.channels.connect_channel.CommCareConnectClient")
 def test_trigger_bot_direct_message_consent_required(ConnectClientChat, ConnectClientView, experiment, httpx_mock):
     """
