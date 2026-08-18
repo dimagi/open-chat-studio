@@ -178,7 +178,7 @@ caller must present. No new platform.
 # apps/channels/models.py
 class ChannelPlatform(models.TextChoices):
     ...
-    EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"   # label change only
+    EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"  # label change only
 
 
 class CredentialMode(models.TextChoices):
@@ -328,7 +328,7 @@ def _check_start_session_access(request, experiment, embed_key_channel, oauth_ch
         return Response({"error": "Version number requires authentication"}, status=403)
     if embed_key_channel is not None or oauth_channel is not None:
         return None
-    return None   # keyless: unchanged here; keyless-chat-start-sunset.md replaces this line
+    return None  # keyless: unchanged here; keyless-chat-start-sunset.md replaces this line
 ```
 
 The mode's requirement is then checked against the channel that was resolved: `oauth` mode demands a
@@ -342,7 +342,7 @@ only.**
 
 ```python
 # apps/api/views/chat.py
-AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]            # unchanged
+AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]  # unchanged
 START_AUTH_CLASSES = [ChatOAuthAuthentication, *AUTH_CLASSES]
 ```
 
