@@ -225,7 +225,6 @@ class TestGroqIntegration:
             team_with_users=team_with_users,
             provider_type=LlmProviderTypes.groq,
             provider_config=groq_credentials,
-            model_name="llama-3.1-8b-instant",  # The current default model has been removed
         )
 
 
