@@ -19,6 +19,7 @@ from apps.cost_tracking.services.reporting import (
     cost_timeseries,
     cost_total,
     costs_by_experiment,
+    costs_by_model,
     coverage_gaps,
     session_usage,
     token_counts,
@@ -904,3 +905,89 @@ class TestCostTotal:
             _usage(team, cost="0.10", when=_NOW - timedelta(days=1), currency=currency)
 
         assert cost_total(team, start=_NOW - timedelta(days=30), end=_NOW).currency == expected
+
+
+@pytest.mark.django_db()
+class TestCostsByModel:
+    """Per-(provider, model) cost rows feeding the dashboard's provider and model charts."""
+
+    def test_groups_by_provider_and_model_ordered_by_cost_desc(self):
+        team = TeamFactory.create()
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            provider_type="openai",
+            model_name="gpt-4o-mini",
+        )
+        _usage(
+            team,
+            cost="0.50",
+            when=_NOW - timedelta(days=2),
+            provider_type="openai",
+            model_name="gpt-4o-mini",
+        )
+        _usage(
+            team,
+            cost="4.00",
+            when=_NOW - timedelta(days=3),
+            provider_type="anthropic",
+            model_name="claude-sonnet-5",
+        )
+
+        rows = costs_by_model(team, start=_START, end=_NOW)
+
+        assert rows == [
+            {"provider_type": "anthropic", "model_name": "claude-sonnet-5", "cost": 4.00},
+            {"provider_type": "openai", "model_name": "gpt-4o-mini", "cost": 1.50},
+        ]
+
+    def test_excludes_records_outside_window(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        _usage(team, cost="9.99", when=_NOW - timedelta(days=40))
+
+        rows = costs_by_model(team, start=_START, end=_NOW)
+
+        assert [row["cost"] for row in rows] == [1.00]
+
+    def test_team_scoped(self):
+        team = TeamFactory.create()
+        other = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+        _usage(other, cost="999.00", when=_NOW - timedelta(days=1))
+
+        rows = costs_by_model(team, start=_START, end=_NOW)
+
+        assert [row["cost"] for row in rows] == [1.00]
+
+    def test_unfiltered_read_counts_evaluation_spend(self):
+        """A team total counts every source (ADR-0048)."""
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), source=UsageSource.CHAT)
+        _usage(team, cost="0.25", when=_NOW - timedelta(days=2), source=UsageSource.EVALUATION)
+
+        rows = costs_by_model(team, start=_START, end=_NOW)
+
+        assert [row["cost"] for row in rows] == [1.25]
+
+    def test_filtered_read_counts_chat_only(self):
+        """Narrowing to a chatbot is per-entity attribution, so eval spend
+        drops out even though the eval row carries the experiment id (ADR-0048)."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), experiment=experiment, source=UsageSource.CHAT)
+        _usage(team, cost="0.25", when=_NOW - timedelta(days=2), experiment=experiment, source=UsageSource.EVALUATION)
+
+        rows = costs_by_model(team, start=_START, end=_NOW, filters=CostFilters(experiment_ids=[experiment.id]))
+
+        assert [row["cost"] for row in rows] == [1.00]
+
+    def test_single_query(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+
+        with CaptureQueriesContext(connection) as ctx:
+            costs_by_model(team, start=_START, end=_NOW)
+
+        assert len(ctx.captured_queries) == 1

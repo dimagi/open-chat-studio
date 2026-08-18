@@ -380,6 +380,27 @@ def costs_by_experiment(
     return {row["experiment_id"]: row["cost"] for row in rows}
 
 
+def costs_by_model(team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None) -> list[dict]:
+    """Cost per (provider_type, model_name) in [start, end), ordered by descending
+    cost, as floats for direct JSON/Chart.js consumption. One grouped query over
+    the `(team, model_name, timestamp)` index; it feeds both of the dashboard's
+    provider and model charts - the provider chart sums these rows per provider
+    client-side. An unfiltered read is a team total and counts every source; a
+    filtered read is narrowed to chat by `_scoped_records` (ADR-0048).
+    """
+    rows = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=start, timestamp__lt=end)
+        .values("provider_type", "model_name")
+        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .order_by("-cost")
+    )
+    return [
+        {"provider_type": row["provider_type"], "model_name": row["model_name"], "cost": float(row["cost"])}
+        for row in rows
+    ]
+
+
 @dataclass(frozen=True)
 class ChatbotUsageSummary:
     """The chatbot home page's usage widget: a window's cost plus session/message counts for one
