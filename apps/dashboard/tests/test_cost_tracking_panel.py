@@ -9,6 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from time_machine import travel
 
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageSource
 from apps.dashboard.models import DashboardCache
 from apps.teams.models import Flag
@@ -314,6 +315,85 @@ class TestBotPerformanceCostColumns:
         response = authenticated_client.get(self._url(team) + self._RANGE + f"&tags={tag.id}")
 
         row = next(r for r in response.json()["results"] if r["experiment_id"] == experiment.id)
+        assert row["cost"] == 1.0
+
+
+@pytest.mark.django_db()
+class TestMostActiveParticipantsCost:
+    """The user-engagement API surfaces per-participant cost only when the team
+    has the flag; cost is chat-only and honours the dashboard filters."""
+
+    _RANGE = "?date_range=custom&start_date=2026-06-01&end_date=2026-06-20"
+
+    def _url(self, team):
+        return reverse("dashboard:api_user_engagement", kwargs={"team_slug": team.slug})
+
+    def _active_session(self, team, experiment):
+        """A session whose participant has a human message in the window (so they
+        rank in Most Active Participants). Returns the session."""
+        session = ExperimentSessionFactory.create(team=team, experiment=experiment)
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+        return session
+
+    def test_no_cost_field_when_flag_off(self, authenticated_client, team, experiment):
+        session = self._active_session(team, experiment)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=session.participant)
+
+        response = authenticated_client.get(self._url(team) + self._RANGE)
+
+        rows = response.json()["most_active_participants"]
+        assert rows
+        assert "cost" not in rows[0]
+
+    def test_cost_present_when_flag_on(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        session = self._active_session(team, experiment)
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), participant=session.participant)
+
+        response = authenticated_client.get(self._url(team) + self._RANGE)
+
+        row = next(
+            r for r in response.json()["most_active_participants"] if r["participant_id"] == session.participant_id
+        )
+        assert row["cost"] == 1.0
+
+    def test_active_participant_without_usage_costs_zero(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        session = self._active_session(team, experiment)
+
+        response = authenticated_client.get(self._url(team) + self._RANGE)
+
+        row = next(
+            r for r in response.json()["most_active_participants"] if r["participant_id"] == session.participant_id
+        )
+        assert row["cost"] == 0.0
+
+    def test_cost_respects_tag_filter(self, authenticated_client, team, experiment):
+        _enable_flag_for(team)
+        tagged = self._active_session(team, experiment)
+        tag = TagFactory.create(team=team)
+        CustomTaggedItemFactory.create(team=team, tag=tag, target=tagged.chat)
+        untagged = ExperimentSessionFactory.create(team=team, experiment=experiment, participant=tagged.participant)
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            participant=tagged.participant,
+            session=tagged,
+        )
+        _usage(
+            team,
+            cost="9.00",
+            when=_NOW - timedelta(days=1),
+            participant=tagged.participant,
+            session=untagged,
+        )
+
+        response = authenticated_client.get(self._url(team) + self._RANGE + f"&tags={tag.id}")
+
+        row = next(
+            r for r in response.json()["most_active_participants"] if r["participant_id"] == tagged.participant_id
+        )
         assert row["cost"] == 1.0
 
 
