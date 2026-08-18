@@ -37,7 +37,9 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
     COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
     EVALUATIONS = "evaluations", "Evaluations"
-    EMBEDDED_WIDGET = "embedded_widget", "Embedded Widget"
+    # Label only — the stored value stays `embedded_widget` because it is also a
+    # Participant.platform value, and renaming it would fork every existing participant.
+    EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"
     EMAIL = "email", "Email"
 
     @classmethod
