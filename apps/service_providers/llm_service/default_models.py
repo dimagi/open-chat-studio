@@ -107,11 +107,11 @@ DEFAULT_LLM_PROVIDER_MODELS = {
     ],
     "groq": [
         Model("whisper-large-v3-turbo", k(8)),
-        Model("gemma2-9b-it", k(8)),
+        Model("gemma2-9b-it", k(8), deprecated=True, replacement="openai/gpt-oss-20b"),
         Model("gemma-7b-it", k(8), deprecated=True),
-        Model("llama-3.3-70b-versatile", k(128), is_default=True, is_translation_default=True),
-        Model("llama-3.1-8b-instant", k(128)),
-        Model("openai/gpt-oss-120b", 131072),
+        Model("llama-3.3-70b-versatile", k(128), deprecated=True, replacement="openai/gpt-oss-120b"),
+        Model("llama-3.1-8b-instant", k(128), deprecated=True, replacement="openai/gpt-oss-20b"),
+        Model("openai/gpt-oss-120b", 131072, is_default=True, is_translation_default=True),
         Model("openai/gpt-oss-20b", 131072),
     ],
     "perplexity": [
