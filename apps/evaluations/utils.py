@@ -541,16 +541,20 @@ def get_use_in_aggregations(field_def: dict) -> bool:
 def merge_binary_labels(stats: dict, field_def: dict) -> dict:
     """Copy binary display labels from a field definition into an aggregate blob.
 
-    Labels live only in the schema; the stored blob carries integers. Non-binary
-    blobs pass through unchanged.
+    Labels live only in the schema; the stored blob carries integers. `false_count`
+    is derived here rather than stored so blobs aggregated before it existed still
+    render both counts. Non-binary blobs pass through unchanged.
     """
     if not isinstance(stats, dict) or stats.get("type") != "binary":
         return stats
-    return {
+    merged = {
         **stats,
         "true_label": field_def.get("true_label", "True"),
         "false_label": field_def.get("false_label", "False"),
     }
+    if stats.get("true_count") is not None:
+        merged["false_count"] = stats["count"] - stats["true_count"]
+    return merged
 
 
 def filter_aggregates_for_display(aggregates) -> list[dict]:

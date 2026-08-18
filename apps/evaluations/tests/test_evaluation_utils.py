@@ -218,19 +218,24 @@ def test_make_evaluation_messages_from_sessions():
 
 
 class TestMergeBinaryLabels:
-    def test_binary_stats_gain_labels_from_schema(self):
+    def test_binary_stats_gain_labels_and_false_count_from_schema(self):
         stats = {"type": "binary", "count": 3, "mean": 0.6667, "true_count": 2}
         field_def = {"type": "binary", "true_label": "Correct", "false_label": "Incorrect"}
         assert merge_binary_labels(stats, field_def) == {
             **stats,
             "true_label": "Correct",
             "false_label": "Incorrect",
+            "false_count": 1,
         }
 
     def test_labels_default_when_schema_omits_them(self):
         merged = merge_binary_labels({"type": "binary", "count": 1}, {"type": "binary"})
         assert merged["true_label"] == "True"
         assert merged["false_label"] == "False"
+
+    def test_no_false_count_without_true_count(self):
+        merged = merge_binary_labels({"type": "binary", "count": 0}, {"type": "binary"})
+        assert "false_count" not in merged
 
     def test_non_binary_stats_unchanged(self):
         stats = {"type": "numeric", "count": 3, "mean": 2.0}
