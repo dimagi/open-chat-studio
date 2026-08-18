@@ -3,6 +3,7 @@
  * Handles Chart.js chart creation and management
  */
 import Chart from "chart.js/auto";
+import {formatCost, providerTotals, serviceKindSeries} from "./costBreakdown.js";
 
 class ChartManager {
     constructor() {
@@ -481,6 +482,127 @@ class ChartManager {
             type: 'bar',
             data: chartData,
             options: options
+        });
+    }
+
+    costBarOptions() {
+        // Shared shape for the provider/model cost bars: no legend (single
+        // series), currency ticks and tooltips.
+        return {
+            ...this.defaultOptions,
+            plugins: {
+                ...this.defaultOptions.plugins,
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    ...this.defaultOptions.plugins.tooltip,
+                    callbacks: {
+                        label: (context) => formatCost(context.parsed.y)
+                    }
+                }
+            },
+            scales: {
+                ...this.defaultOptions.scales,
+                y: {
+                    ...this.defaultOptions.scales.y,
+                    ticks: {
+                        callback: (value) => formatCost(value)
+                    }
+                }
+            }
+        };
+    }
+
+    renderCostProviderChart(byModel) {
+        const ctx = document.getElementById('costProviderChart');
+        if (!ctx) return;
+
+        this.destroyChart('costProvider');
+
+        const rows = providerTotals(byModel);
+        this.charts.costProvider = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: rows.map(row => row.provider),
+                datasets: [{
+                    data: rows.map(row => row.cost),
+                    backgroundColor: this.colorPalette.primary + '80',
+                    borderColor: this.colorPalette.primary,
+                    borderWidth: 1
+                }]
+            },
+            options: this.costBarOptions()
+        });
+    }
+
+    renderCostModelChart(byModel) {
+        const ctx = document.getElementById('costModelChart');
+        if (!ctx) return;
+
+        this.destroyChart('costModel');
+
+        const rows = byModel || [];
+        const options = this.costBarOptions();
+        // Model names can repeat across providers, so disambiguate in the tooltip title.
+        options.plugins.tooltip.callbacks.title = (items) =>
+            items.length ? `${rows[items[0].dataIndex].provider_type} / ${rows[items[0].dataIndex].model_name}` : '';
+        this.charts.costModel = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: rows.map(row => row.model_name),
+                datasets: [{
+                    data: rows.map(row => row.cost),
+                    backgroundColor: this.colorPalette.secondary + '80',
+                    borderColor: this.colorPalette.secondary,
+                    borderWidth: 1
+                }]
+            },
+            options: options
+        });
+    }
+
+    renderCostServiceKindChart(byServiceKind, mode) {
+        const ctx = document.getElementById('costServiceKindChart');
+        if (!ctx) return;
+
+        this.destroyChart('costServiceKind');
+
+        const series = serviceKindSeries(byServiceKind, mode);
+        const formatValue = mode === 'tokens'
+            ? (value) => `${(value || 0).toLocaleString()} tokens`
+            : (value) => formatCost(value);
+        const colors = [
+            this.colorPalette.primary,
+            this.colorPalette.success,
+            this.colorPalette.warning,
+            this.colorPalette.secondary
+        ];
+
+        this.charts.costServiceKind = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: series.labels,
+                datasets: [{
+                    data: series.values,
+                    backgroundColor: colors.map(color => color + '80'),
+                    borderColor: colors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: this.defaultOptions.plugins.legend,
+                    tooltip: {
+                        ...this.defaultOptions.plugins.tooltip,
+                        callbacks: {
+                            label: (context) => `${context.label}: ${formatValue(context.parsed)}`
+                        }
+                    }
+                }
+            }
         });
     }
 
