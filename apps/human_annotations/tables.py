@@ -23,7 +23,8 @@ class AnnotationQueueTable(tables.Table):
         actions=[
             chip_action(
                 label_factory=lambda record, _: record.name,
-                button_style="btn-soft btn-primary",
+                button_style=actions.CHIP_BUTTON_STYLE,
+                truncate=True,
             ),
         ],
         align="left",
@@ -72,7 +73,7 @@ class AnnotationItemTable(tables.Table):
             chip_action(
                 label="Annotate",
                 url_factory=_item_chip_url,
-                button_style="btn-soft btn-primary",
+                button_style=actions.CHIP_BUTTON_STYLE,
             ),
         ],
         align="left",

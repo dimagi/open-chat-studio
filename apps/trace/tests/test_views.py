@@ -7,6 +7,7 @@ import pytest
 from django.urls import reverse
 
 from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind
+from apps.generics.actions import CHIP_BUTTON_STYLE
 from apps.teams.models import Flag
 from apps.trace.models import TraceStatus
 from apps.utils.factories.cost_tracking import UsageRecordFactory
@@ -261,3 +262,22 @@ def test_trace_table_view_filters_by_team(client, team_with_users):
     visible_ids = {row.record.id for row in response.context_data["table"].rows}
     assert own_trace.id in visible_ids
     assert foreign_trace.id not in visible_ids
+
+
+@pytest.mark.django_db()
+def test_trace_table_renders_chips_like_other_tables(client, team_with_users):
+    """The bot and session columns stand in for the record, so they carry the shared chip styling
+    and the same one-line truncation as the participant chips in the session tables."""
+    team = team_with_users
+    user = team.members.first()
+    _make_trace(team)
+
+    client.force_login(user)
+    response = client.get(reverse("trace:table", args=[team.slug]))
+
+    chips = re.findall(r'<a [^>]*class="([^"]*)"', response.content.decode())
+    assert chips
+    for classes in chips:
+        assert CHIP_BUTTON_STYLE in classes
+        assert "max-w-xs" in classes
+    assert response.content.decode().count("min-w-0 truncate") == 2

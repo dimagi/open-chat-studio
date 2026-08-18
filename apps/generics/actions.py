@@ -9,6 +9,10 @@ from django.template.loader import get_template
 from django.urls import reverse
 from django_tables2 import TemplateColumn
 
+CHIP_BUTTON_STYLE = "btn-soft btn-primary"
+"""Styling for chips that stand in for the record itself (a name, a participant). Mirrored by
+`generic/chip_button.html`, which renders the same chips outside of an action column."""
+
 
 @dataclasses.dataclass
 class Action:
@@ -68,6 +72,8 @@ class Action:
             "title": self.title or "",
             "disabled": not self.is_enabled(request, record),
             "open_url_in_new_tab": self.open_url_in_new_tab,
+            # set explicitly so an outer context can't turn truncation on for an action
+            "truncate": False,
         }
         if self.button_style:
             ctxt["button_style"] = self.button_style
@@ -180,12 +186,17 @@ def chip_action(
     title: str | None = None,
     button_style: str = "",
     open_url_in_new_tab: bool = False,
+    truncate: bool = False,
 ):
     """Action to display a chip-style link that links to another page.
 
     This must be used with objects that implement the `get_absolute_url` method.
 
-    Note: Keep the styling consistent with `generic/chip_button.html`"""
+    Pass `button_style=CHIP_BUTTON_STYLE` for chips that stand in for the record itself; the
+    default styling suits chips that read as buttons ("Refresh", "View Session").
+
+    Set `truncate` for chips in a table cell, where a wrapped label stretches the chip to the
+    full cell width."""
     if not label and not label_factory:
 
         def label_factory(record, value):
@@ -210,6 +221,7 @@ def chip_action(
         display_condition=display_condition,
         enabled_condition=enabled_condition,
         open_url_in_new_tab=open_url_in_new_tab,
+        extra_context={"truncate": truncate},
     )
 
 
