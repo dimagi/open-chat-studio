@@ -1224,3 +1224,22 @@ class TestP95CostPerTrace:
             p95_cost_per_trace(team, start=_START, end=_NOW)
 
         assert len(ctx.captured_queries) == 2
+
+    def test_resolves_name_for_archived_chatbot(self):
+        """The name lookup must not go through the plain (filtered) manager - a chatbot
+        archived after spending in the window would otherwise resolve to no name at all,
+        leaving its line in the chart with a blank legend entry."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team, name="Archived Bot")
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            experiment=experiment,
+            trace=TraceFactory.create(team=team),
+        )
+        experiment.archive()
+
+        series = p95_cost_per_trace(team, start=_START, end=_NOW)
+
+        assert series[0]["experiment_name"] == "Archived Bot"

@@ -1,6 +1,7 @@
 """Read path for cost tracking. The dashboard, REST endpoints, and weekly
-digest all consume this. Aggregations are single-query, team-scoped, and
-hit the `(team, timestamp)` / `(team, experiment, timestamp)` indexes.
+digest all consume this. Aggregations are single-query where possible,
+team-scoped, and hit the `(team, timestamp)` / `(team, experiment, timestamp)`
+indexes.
 """
 
 import logging
@@ -457,6 +458,9 @@ def p95_cost_per_trace(
     to `top_n`. Chat-only: the read attributes cost to chatbots, so it goes
     through `_attributable_records` (ADR-0048) - and traces only carry chat
     spend anyway (ADR-0050). Costs are floats for direct JSON/Chart.js use.
+
+    The percentile is computed here in Python rather than in SQL; if that becomes a
+    bottleneck at scale, Postgres's `percentile_cont` is the escape hatch.
     """
     trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
     rows = (
@@ -473,7 +477,10 @@ def p95_cost_per_trace(
         per_bucket[(row["experiment_id"], row["bucket"])].append(float(row["cost"]))
         spend[row["experiment_id"]] += row["cost"]
     top = sorted(spend, key=lambda experiment_id: (-spend[experiment_id], experiment_id))[:top_n]
-    names = dict(Experiment.objects.filter(team=team, id__in=top).values_list("id", "name")) if top else {}
+    # get_all() bypasses the versioning manager's default is_archived=False filter - a chatbot
+    # archived after spending in the window must still resolve to its real name rather than a
+    # blank legend entry, since the spend already happened and is charted regardless.
+    names = dict(Experiment.objects.get_all().filter(team=team, id__in=top).values_list("id", "name")) if top else {}
     return [
         {
             "experiment_id": experiment_id,
