@@ -37,4 +37,5 @@ urlpatterns = [
     # Cross-team LLM usage / provider-key reporting (consumed by external scripts)
     path("api/provider-usage/", views.provider_usage_api, name="provider_usage_api"),
     path("api/provider-keys/", views.provider_keys_api, name="provider_keys_api"),
+    path("api/tracing-usage/", views.tracing_usage_api, name="tracing_usage_api"),
 ]

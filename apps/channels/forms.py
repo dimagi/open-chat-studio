@@ -97,8 +97,18 @@ class ChannelForm(forms.ModelForm):
 
     class Meta:
         model = ExperimentChannel
-        fields = ["name", "platform", "messaging_provider"]
-        widgets = {"platform": forms.HiddenInput()}
+        fields = ["name", "platform", "messaging_provider", "enabled", "disabled_message"]
+        widgets = {
+            "platform": forms.HiddenInput(),
+            "disabled_message": forms.Textarea(
+                attrs={
+                    "rows": 3,
+                    "placeholder": "e.g. This bot is temporarily unavailable. Please try again later.",
+                    # Only relevant while the channel is off
+                    "control_attrs": {"x-show": "!channelEnabled"},
+                }
+            ),
+        }
 
     def __init__(self, experiment, *args, **kwargs):
         initial: dict = kwargs.get("initial", {})
@@ -106,6 +116,17 @@ class ChannelForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         platform = self.initial["platform"]
         self._populate_available_message_providers(experiment.team, platform)
+        self.fields["enabled"].widget.attrs["x-model.boolean"] = "channelEnabled"
+        self.form_attrs = {"x-data": json.dumps({"channelEnabled": self._enabled_initial()})}
+
+    def _enabled_initial(self) -> bool:
+        """The value the Alpine toggle starts on: the bound value if the form was submitted,
+        otherwise the instance's (new channels default to enabled)."""
+        if self.is_bound:
+            return bool(self.data.get(self.add_prefix("enabled")))
+        if self.instance.pk:
+            return bool(self.instance.enabled)
+        return True
 
     def _populate_available_message_providers(self, team: Team, platform: ChannelPlatform):
         provider_types = MessagingProviderType.platform_supported_provider_types(platform)

@@ -433,3 +433,36 @@ class TestMetaCloudApi:
             from_="12345",
             message_id="wamid.abc123",
         )
+
+    @pytest.mark.django_db()
+    @patch("apps.service_providers.messaging_service.MetaCloudAPIService.send_template_message")
+    @patch("apps.service_providers.messaging_service.httpx.post")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_disabled_channel_message_is_not_billed_as_a_template(
+        self,
+        bot_process_input,
+        httpx_post,
+        send_template_message,
+        meta_cloud_api_whatsapp_channel,
+    ):
+        """A disabled channel replies before a session exists, so there is no stored
+        ``last_activity_at`` to prove the 24-hour service window is open. The inbound message
+        itself is that proof -- without it the reply goes out as a paid template, or not at
+        all when the team has no template configured."""
+        channel = meta_cloud_api_whatsapp_channel
+        channel.enabled = False
+        channel.disabled_message = "We are offline"
+        channel.save()
+
+        handle_meta_cloud_api_message(
+            channel_id=channel.id,
+            team_slug=channel.team.slug,
+            message_data=meta_cloud_api_messages.text_message_value(),
+        )
+
+        bot_process_input.assert_not_called()
+        send_template_message.assert_not_called()
+        sent = [call.kwargs["json"] for call in httpx_post.call_args_list]
+        assert [(payload["type"], payload["text"]["body"]) for payload in sent] == [("text", "We are offline")]
+        # Addressed to the phone number, not the BSUID the message is keyed by.
+        assert sent[0]["to"] == "27456897512"

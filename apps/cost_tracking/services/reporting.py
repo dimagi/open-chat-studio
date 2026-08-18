@@ -9,13 +9,14 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from django.core.cache import cache
 from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
 from django.utils import timezone
 
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.evaluations.models import EvaluationConfig, EvaluationRun, Evaluator
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
@@ -36,6 +37,11 @@ _GRANULARITY_TRUNC = {
 # Token split for the usage API: `prompt` covers fresh + cached input, `completion` is output, and
 # `total` is every LLM kind (so cache-write tokens land in the total but neither sub-count).
 _PROMPT_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_CACHED_INPUT)
+
+# The chatbot home usage widget's rolling window and how long its cached snapshot is trusted for -
+# see `get_latest_chatbot_usage_summary`.
+_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS = 30
+_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS = 5 * 60
 
 
 @dataclass(frozen=True)
@@ -393,17 +399,51 @@ class ChatbotUsageSummary:
     messages_count: int
 
 
-def chatbot_usage_summary(experiment: Experiment, *, start: datetime, end: datetime) -> ChatbotUsageSummary:
+def chatbot_usage_summary(team: Team, experiment_id: int, *, start: datetime, end: datetime) -> ChatbotUsageSummary:
     """Cost, session count and message count for one chatbot in [start, end), for the chatbot home
     page's usage widget. Session/message counts come from `filtered_querysets` - the same canonical,
     ADR-0051 activity definitions the dashboard's Bot Performance table uses - narrowed to this
     experiment, rather than re-deriving the session base here.
+
+    Takes `team` and `experiment_id` rather than an `Experiment` object - the query below only ever
+    needs those two, and requiring the row would force `get_latest_chatbot_usage_summary` to fetch it
+    even on a cache hit, defeating a chunk of the point of caching this at all.
     """
-    cost = cost_summary(experiment.team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment.id]))
-    querysets = filtered_querysets(experiment.team, start_date=start, end_date=end, experiment_ids=[experiment.id])
+    cost = cost_summary(team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment_id]))
+    querysets = filtered_querysets(team, start_date=start, end_date=end, experiment_ids=[experiment_id])
     sessions_count = querysets["sessions"].count()
     messages_count = conversation_messages(querysets["messages"]).count()
     return ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
+
+
+def _chatbot_usage_summary_cache_key(team_id: int, experiment_id: int) -> str:
+    return f"cost:chatbot_usage_summary:{team_id}:{experiment_id}"
+
+
+def get_latest_chatbot_usage_summary(team: Team, experiment_id: int) -> ChatbotUsageSummary:
+    """Cost, session count and message count for one chatbot over the last
+    `_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS` days, for the chatbot home page's usage widget.
+
+    This owns both the "latest N days" window and the caching, rather than leaving either to the
+    view: the two are coupled (see `chatbot_usage_summary`'s docstring for why a `start`/`end`-taking
+    function can't safely own this cache), and a cache hit here needs no query at all, since
+    `chatbot_usage_summary` needs nothing but the `team`/`experiment_id` this function already has.
+    Cached in Redis for `_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS`: short enough that nobody
+    watching the page during an active conversation would call the number stale, with no
+    signal-based invalidation - `UsageRecord` rows are written continuously, so invalidating on
+    write would defeat the cache (the same tradeoff `PricingResolver`'s cache makes).
+    """
+    cache_key = _chatbot_usage_summary_cache_key(team.id, experiment_id)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    end = timezone.now()
+    start = end - timedelta(days=_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS)
+    usage = chatbot_usage_summary(team, experiment_id, start=start, end=end)
+
+    cache.set(cache_key, usage, _CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS)
+    return usage
 
 
 def session_usage(session: ExperimentSession) -> SessionUsage:
