@@ -94,7 +94,7 @@ session-token rollout. ADR-0034 is the repo's deprecation process, and it applie
 
 So enforcement requires two things, in this order:
 
-1. **The date has passed** — `KEYLESS_CHAT_START_SUNSET_AT` beside the existing `EMBED_FLOW_SUNSET_AT`
+1. **The date has passed** — `KEYLESS_CHAT_START_SUNSET_AT` alongside the existing `EMBED_FLOW_REMOVED_ON` (a plain `date`, where this one is tz-aware)
    in `apps/experiments/const.py`, testable with `time_machine.travel`, which the suite already uses.
 2. **A deliberate switch-on**, after the owner has triaged the teams still producing `KEYLESS_START`
    markers ([D2](#d2-make-the-population-queryable)). Flipping it back is the kill switch.
