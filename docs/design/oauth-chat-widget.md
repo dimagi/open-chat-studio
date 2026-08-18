@@ -41,7 +41,7 @@ in the table below rather than quietly assumed away.
 | Credential on `chat/start/` | What must be enabled | Session's channel | Status |
 |---|---|---|---|
 | `X-Embed-Key` | a Chat API Channel in `embed_key` mode (the key *is* that channel) | that channel | shipped |
-| Django session **+ team membership** | nothing — in-app surfaces | team API channel | shipped (ADR-0053) |
+| Django session **+ team membership** | nothing — in-app surfaces | the team's API entry point (the `API` pseudo-platform row, *not* a Chat API Channel) | shipped (ADR-0053) |
 | Django session **+ embed key** | a Chat API Channel | that channel | shipped (ADR-0053) |
 | `Authorization: Bearer` (any `X-Embed-Key` ignored) | a Chat API Channel in `oauth` mode **and** the chatbot listed on the token's OAuth application | that channel | **this work** |
 | *(none)* | — | — | still admitted — closed by [keyless-chat-start-sunset.md](keyless-chat-start-sunset.md) |
@@ -400,20 +400,35 @@ ADR-0053's principle: the channel that owns the session is the one whose credent
 
 ```python
 # apps/oauth/permissions.py — sibling to is_client_credentials_request()
-def validated_machine_token(request, experiment) -> OAuth2AccessToken | None:
-    """The request's client-credentials token if valid for `experiment`, else None."""
-    result = OAuth2Authentication().authenticate(request)  # None when absent or invalid
+def validated_machine_token(request, experiment) -> OAuth2AccessToken:
+    """The request's client-credentials token, or raise if it is not valid for `experiment`.
+
+    The caller must already have established that an `Authorization` header is present:
+    every path out of here is either a token or a refusal, never a silent None.
+    """
+    result = OAuth2Authentication().authenticate(request)
     if result is None:
-        return None
+        raise ChatApiAccessDenied()   # signature, expiry or revocation — never "no token"
     _user, token = result
     if not is_client_credentials_token(token) or token.team_id != experiment.team_id:
-        return None
+        raise ChatApiAccessDenied()
     if not token.is_valid([CHAT_API_SCOPE]):
-        return None
+        raise ChatApiAccessDenied()
     if not token_allows_chatbot(token, experiment):
-        return None
+        raise ChatApiAccessDenied()
     return token
 ```
+
+**Absence is decided by the header, not by the authenticator's return value.**
+`OAuth2Authentication.authenticate()` returns `None` for an *invalid or expired* token exactly as it
+does for no token at all — the two differ only in that the first also sets `request.oauth2_error`.
+Treating that `None` as "no credential was offered" would let an expired token fall through to
+`EmbeddedWidgetAuthentication`, and from there to the still-open keyless path: a caller whose token
+OCS had just revoked would be admitted anyway. So `ChatOAuthAuthentication` decides the question
+before calling in — no `Authorization` header means return `None` and let the next authenticator run;
+a header that is present and does not check out raises, whatever the reason. This is what makes
+[D3](#d3-extend-the-existing-authorization-site)'s "a presented-but-invalid token is never ignored"
+true in code rather than only in prose.
 
 **Two small refactors, both the same shape.** `is_client_credentials_request(request)` becomes a
 wrapper over a new `is_client_credentials_token(token)`, and PR #4198's
@@ -591,7 +606,7 @@ admission happens once per session. Short OAuth token lifetimes therefore bound 
 `last_activity_at`, so a caller who kept chatting kept its session alive forever. The abuse budget of
 one minted token is
 
-```
+```text
 rate limit (ADR-0052, per-session bucket)  ×  session lifetime
 ```
 
@@ -705,7 +720,7 @@ instead of handing one over and forgetting it, and re-opens the `_has_legacy_acc
 
 ## Browser embeds and the token
 
-#3893's ask is `oauth` mode on a browser embed: the same snippet, now requiring a valid
+Issue #3893's ask is `oauth` mode on a browser embed: the same snippet, now requiring a valid
 client-credentials token ([D4](#d4-what-makes-a-token-acceptable)), checked at `start/` like every
 other admission decision. Any `X-Embed-Key` the existing snippet still sends is ignored.
 
@@ -716,7 +731,7 @@ switching a channel to `oauth` would lock team members out of their own in-app e
 Client credentials means a client secret, which must never reach page source. The supported shape is:
 the host app's backend mints a short-lived token and hands it to the page.
 
-```
+```text
 host backend ──POST /o/token/ (client_credentials)──► OCS
       │  short-lived access token
       ▼
