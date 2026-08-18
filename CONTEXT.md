@@ -42,18 +42,21 @@ _Note_: most Channels are messaging platforms, but the Chat API Channel is not �
 _Avoid_: "ExperimentChannel" outside of code.
 
 **Chat API Channel**:
-The Channel that exposes a Chatbot over the chat API (`/api/chat/`), created from the Channels tab and shown as **Chat Widget & API**. Its main client is the embedded chat widget, but not its only one. Until a Chatbot has one, it is unreachable over the chat API — exposure is a deliberate admin act, not a default.
+The Channel that exposes a Chatbot over the chat API (`/api/chat/`), created from the Channels tab. Its main client is the embedded chat widget, but not its only one. Presenting a credential — the **Embed Key**, or a Django session plus team membership — reaches a Chatbot only through this Channel: exposure is a deliberate admin act, not a default.
 
-A Chat API Channel carries two independent settings that are easy to confuse:
+**It is not yet the *only* way in.** A caller presenting *no* credential at all is still admitted and is given the team's API entry point rather than any Chat API Channel, so "no Chat API Channel" does not yet mean "unreachable". Deny-by-default is the destination, and closing that path is scheduled in [keyless-chat-start-sunset.md](docs/design/keyless-chat-start-sunset.md) (ADR-0053 deferred it to the 2026-10-01 sunset).
 
-- **Credential Mode** — the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
+A Chat API Channel carries two settings that are easy to confuse, deliberately kept apart:
+
+- **Credential Mode** — *planned, not shipped* ([oauth-chat-widget.md](docs/design/oauth-chat-widget.md) D1): the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
 - **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin wants required.
 
-An admin's policy must never be switched on by a widget upgrade, which is why these are two fields and not rungs of one ladder.
+An admin's policy must never be switched on by a widget upgrade, which is why these are two separate settings and not rungs of one ladder.
 
-Under the OAuth mode, exposure takes **two** admin acts that must agree: the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
-_Backed by_: `ChannelPlatform.EMBEDDED_WIDGET` — the stored value stays `embedded_widget` because it is also a `Participant.platform` value.
-_Avoid_: "the Embedded Widget channel" when the channel is serving a server integration; "the widget channel" is fine when a widget really is the client.
+Once the OAuth mode exists, exposure will take **two** admin acts that must agree: the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
+_Backed by_: `ChannelPlatform.EMBEDDED_WIDGET`, labelled *Embedded Widget* — the stored value stays `embedded_widget` because it is also a `Participant.platform` value. `Widget Auth Level` is `ExperimentChannel.required_auth_level`.
+_Planned_: the label becomes **Chat Widget & API** and `credential_mode` is added, per `oauth-chat-widget.md` D1. Neither has shipped; the label change is what makes "Chat Widget & API" the name to use in the UI.
+_Avoid_: leaning on the current *Embedded Widget* label when the channel is serving a server integration — say "Chat API Channel". "The widget channel" is fine when a widget really is the client.
 
 **Embed Key**:
 The per-Channel secret an embedded widget presents (`X-Embed-Key`) to prove it may talk to a Chatbot. Validated together with the request's origin against the Channel's allowed domains — the key alone is not enough. Rotatable, and revoked when the Channel is deleted. Not a secret from the *page* (it ships in the embed snippet); it is a secret from everyone who was not given the snippet.
