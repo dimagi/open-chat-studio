@@ -1,9 +1,17 @@
-{% with classes="btn btn-sm btn-soft btn-primary" %}
+{% comment %}
+Chip-styled link, or a static badge when `url` is empty.
+
+Params:
+  url, label
+  truncate: keep the chip on one line, ellipsizing overflow with the full label in the tooltip.
+    Use in table cells, where a wrapped label stretches the chip to the full cell width.
+{% endcomment %}
+{% with classes="btn btn-sm btn-soft btn-primary" truncate_classes=truncate|yesno:"max-w-xs," %}
 {% if url %}
-  <a href="{{ url }}" class="{{ classes }}">
-    {{ label }}
+  <a href="{{ url }}" class="{{ classes }} {{ truncate_classes }}">
+    {% include "generic/chip_label.html" %}
   </a>
 {% elif label %}
-  <div class="{{ classes }} no-animation">{{ label }}</div>
+  <div class="{{ classes }} no-animation {{ truncate_classes }}">{% include "generic/chip_label.html" %}</div>
 {% endif %}
 {% endwith %}

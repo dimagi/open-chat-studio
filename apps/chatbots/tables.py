@@ -216,14 +216,14 @@ class ChatbotSessionsTable(tables.Table):
     def render_participant(self, record):
         template = get_template("generic/chip.html")
         chip = record.get_participant_chip(include_link=self._user_has_perm("experiments.view_participant"))
-        return template.render({"chip": chip})
+        return template.render({"chip": chip, "truncate": True})
 
     def render_chatbot(self, record):
         template = get_template("generic/chip.html")
         chatbot = record.experiment
         url = chatbot.get_absolute_url() if self._user_has_perm("experiments.view_experiment") else ""
         chip = chips.Chip(label=str(chatbot), url=url)
-        return template.render({"chip": chip})
+        return template.render({"chip": chip, "truncate": True})
 
     def _user_has_perm(self, perm: str) -> bool:
         # `request` is only set when the table is built via RequestConfig/SingleTableView; guard
