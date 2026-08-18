@@ -382,6 +382,9 @@
                   <th>{% translate "Participant" %}</th>
                   <th>{% translate "Messages" %}</th>
                   <th>{% translate "Sessions" %}</th>
+                  {% if cost_tracking_enabled %}
+                    <th class="text-right" data-testid="most-active-cost-header">{% translate "Cost" %}</th>
+                  {% endif %}
                   <th>{% translate "Last Activity" %}</th>
                 </tr>
               </thead>
@@ -396,6 +399,9 @@
                     </td>
                     <td x-text="formatNumber(participant.total_messages)"></td>
                     <td x-text="formatNumber(participant.total_sessions)"></td>
+                    {% if cost_tracking_enabled %}
+                      <td class="text-right" x-text="formatCurrency(participant.cost)"></td>
+                    {% endif %}
                     <td x-text="`${formatDate(participant.last_activity)} ago`"></td>
                   </tr>
                 </template>

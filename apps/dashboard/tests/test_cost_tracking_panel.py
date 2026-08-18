@@ -396,6 +396,18 @@ class TestMostActiveParticipantsCost:
         )
         assert row["cost"] == 1.0
 
+    def test_dashboard_hides_cost_header_when_flag_off(self, authenticated_client, team):
+        response = authenticated_client.get(reverse("dashboard:index", kwargs={"team_slug": team.slug}))
+
+        assert b'data-testid="most-active-cost-header"' not in response.content
+
+    def test_dashboard_shows_cost_header_when_flag_on(self, authenticated_client, team):
+        _enable_flag_for(team)
+
+        response = authenticated_client.get(reverse("dashboard:index", kwargs={"team_slug": team.slug}))
+
+        assert b'data-testid="most-active-cost-header"' in response.content
+
 
 @pytest.mark.django_db()
 class TestCostPanelCaching:
