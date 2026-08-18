@@ -29,6 +29,9 @@ logger = logging.getLogger("ocs.admin")
 
 _LAST = 4
 
+# Tracing-provider metadata a spend report joins on, copied through verbatim.
+_TRACE_METADATA_KEYS = ("project_id", "project_name", "organization_id", "organization_name")
+
 
 @dataclass(frozen=True)
 class _MaskRule:
@@ -115,7 +118,6 @@ def get_trace_provider_records(metadata_fields: list[dict] | None = None) -> Ite
         metadata_fields = get_team_metadata_fields()
     providers = TraceProvider.objects.select_related("team").order_by("team__name", "type", "name")
     for provider in providers.iterator():
-        provider_metadata = provider.metadata or {}
         yield {
             "team_id": provider.team_id,
             "team_name": provider.team.name,
@@ -125,16 +127,24 @@ def get_trace_provider_records(metadata_fields: list[dict] | None = None) -> Ite
             "provider_type": provider.type,
             "name": provider.name,
             "host": provider.config.get("host") or "",
-            "project_id": provider_metadata.get("project_id") or "",
-            "project_name": provider_metadata.get("project_name") or "",
-            "organization_id": provider_metadata.get("organization_id") or "",
-            "organization_name": provider_metadata.get("organization_name") or "",
+            **_trace_metadata(provider),
         }
 
 
 def _team_metadata(team, metadata_fields) -> dict:
     metadata = team.metadata or {}
     return {field["key"]: metadata.get(field["key"], "") for field in metadata_fields}
+
+
+def _trace_metadata(provider) -> dict:
+    """The provider-side project/organization ids, blank where not yet recorded.
+
+    Metadata is best-effort at save time — a tracing-service outage leaves it empty —
+    so every key is always present and a missing one reads as "nothing to join on"
+    rather than being absent from the record.
+    """
+    metadata = provider.metadata or {}
+    return {key: metadata.get(key) or "" for key in _TRACE_METADATA_KEYS}
 
 
 def _cloud_project(provider) -> str | None:

@@ -1,6 +1,7 @@
 import functools
 import hmac
 import logging
+from collections.abc import Callable
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
@@ -568,6 +569,19 @@ def users_api(request):
     return JsonResponse(data, safe=False)
 
 
+def _range_report(request, build: Callable[[datetime, datetime], dict]) -> JsonResponse:
+    """Run a reporting query over the requested date range, or 400 if it isn't valid.
+
+    Shared by the cross-team reporting APIs: they differ only in which report they
+    build, and the range is the whole of their request contract.
+    """
+    result = _validated_range(request)
+    if result is None:
+        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
+    _, _, start_timestamp, end_timestamp = result
+    return JsonResponse(build(start_timestamp, end_timestamp))
+
+
 @rate_limited("admin_api", key_fn=admin_api_key)
 @superuser_or_reporting_token
 def provider_usage_api(request):
@@ -575,11 +589,7 @@ def provider_usage_api(request):
     per-model detail, all read from recorded UsageRecords. Requires `range_type`,
     `start`, and `end` query params (as the dashboard date-range form).
     """
-    result = _validated_range(request)
-    if result is None:
-        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
-    _, _, start_timestamp, end_timestamp = result
-    return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
+    return _range_report(request, build_usage_report)
 
 
 @rate_limited("admin_api", key_fn=admin_api_key)
@@ -609,11 +619,7 @@ def tracing_usage_api(request):
     that arrives with no per-team breakdown. Requires `range_type`, `start`, and `end`
     query params (as the dashboard date-range form).
     """
-    result = _validated_range(request)
-    if result is None:
-        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
-    _, _, start_timestamp, end_timestamp = result
-    return JsonResponse(build_tracing_volume_report(start_timestamp, end_timestamp))
+    return _range_report(request, build_tracing_volume_report)
 
 
 @is_superuser
