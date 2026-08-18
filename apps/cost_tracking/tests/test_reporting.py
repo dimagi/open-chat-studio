@@ -20,6 +20,7 @@ from apps.cost_tracking.services.reporting import (
     cost_total,
     costs_by_experiment,
     costs_by_model,
+    costs_by_service_kind,
     coverage_gaps,
     session_usage,
     token_counts,
@@ -989,5 +990,72 @@ class TestCostsByModel:
 
         with CaptureQueriesContext(connection) as ctx:
             costs_by_model(team, start=_START, end=_NOW)
+
+        assert len(ctx.captured_queries) == 1
+
+
+@pytest.mark.django_db()
+class TestCostsByServiceKind:
+    """Per-ServiceKind cost + token rows feeding the dashboard's service-kind donut."""
+
+    def test_groups_cost_and_tokens_per_kind(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=1000)
+        _usage(team, cost="0.10", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT, quantity=200)
+        _usage(team, cost="0.40", when=_NOW - timedelta(days=2), service_kind=ServiceKind.LLM_OUTPUT, quantity=300)
+
+        rows = costs_by_service_kind(team, start=_START, end=_NOW)
+
+        by_kind = {row["service_kind"]: row for row in rows}
+        assert by_kind[ServiceKind.LLM_INPUT] == {
+            "service_kind": ServiceKind.LLM_INPUT,
+            "cost": 1.10,
+            "tokens": 1200,
+        }
+        assert by_kind[ServiceKind.LLM_OUTPUT] == {
+            "service_kind": ServiceKind.LLM_OUTPUT,
+            "cost": 0.40,
+            "tokens": 300,
+        }
+
+    def test_kinds_with_no_rows_are_absent(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1), service_kind=ServiceKind.LLM_INPUT)
+
+        rows = costs_by_service_kind(team, start=_START, end=_NOW)
+
+        assert [row["service_kind"] for row in rows] == [ServiceKind.LLM_INPUT]
+
+    def test_filtered_read_counts_chat_only(self):
+        """ADR-0048: a filtered read is per-entity attribution, chat only."""
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        _usage(
+            team,
+            cost="1.00",
+            when=_NOW - timedelta(days=1),
+            experiment=experiment,
+            source=UsageSource.CHAT,
+            quantity=100,
+        )
+        _usage(
+            team,
+            cost="0.25",
+            when=_NOW - timedelta(days=2),
+            experiment=experiment,
+            source=UsageSource.EVALUATION,
+            quantity=50,
+        )
+
+        rows = costs_by_service_kind(team, start=_START, end=_NOW, filters=CostFilters(experiment_ids=[experiment.id]))
+
+        assert rows == [{"service_kind": ServiceKind.LLM_INPUT, "cost": 1.00, "tokens": 100}]
+
+    def test_single_query(self):
+        team = TeamFactory.create()
+        _usage(team, cost="1.00", when=_NOW - timedelta(days=1))
+
+        with CaptureQueriesContext(connection) as ctx:
+            costs_by_service_kind(team, start=_START, end=_NOW)
 
         assert len(ctx.captured_queries) == 1
