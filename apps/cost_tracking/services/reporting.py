@@ -4,6 +4,8 @@ hit the `(team, timestamp)` / `(team, experiment, timestamp)` indexes.
 """
 
 import logging
+import math
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -15,7 +17,7 @@ from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWee
 from django.utils import timezone
 
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
@@ -431,6 +433,64 @@ def costs_by_service_kind(
     return [
         {"service_kind": row["service_kind"], "cost": float(row["cost"]), "tokens": int(row["tokens"])} for row in rows
     ]
+
+
+# Series cap for the p95 chart. The chatbot filter still narrows the read to
+# any specific bot regardless of the cap, so nothing is unreachable; tune the
+# value against the rendered chart with real data.
+P95_TOP_CHATBOTS = 5
+
+
+def p95_cost_per_trace(
+    team: Team,
+    *,
+    start: datetime,
+    end: datetime,
+    granularity: str = "daily",
+    filters: CostFilters | None = None,
+    top_n: int = P95_TOP_CHATBOTS,
+) -> list[dict]:
+    """p95 of per-trace cost, per chatbot per time bucket, for the dashboard's
+    cost-per-trace chart. Per-trace cost is `Sum(cost)` grouped by
+    (trace, experiment, bucket); the p95 is nearest-rank over those totals in
+    Python. One series per chatbot, ordered by descending window spend, capped
+    to `top_n`. Chat-only: the read attributes cost to chatbots, so it goes
+    through `_attributable_records` (ADR-0048) - and traces only carry chat
+    spend anyway (ADR-0050). Costs are floats for direct JSON/Chart.js use.
+    """
+    trunc = _GRANULARITY_TRUNC.get(granularity, TruncDate)
+    rows = (
+        _attributable_records(team, filters)
+        .filter(timestamp__gte=start, timestamp__lt=end, trace__isnull=False, experiment__isnull=False)
+        .annotate(bucket=trunc("timestamp"))
+        .values("trace_id", "experiment_id", "bucket")
+        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .order_by()
+    )
+    per_bucket: dict[tuple, list[float]] = defaultdict(list)
+    spend: dict[int, Decimal] = defaultdict(Decimal)
+    for row in rows:
+        per_bucket[(row["experiment_id"], row["bucket"])].append(float(row["cost"]))
+        spend[row["experiment_id"]] += row["cost"]
+    top = sorted(spend, key=lambda experiment_id: (-spend[experiment_id], experiment_id))[:top_n]
+    names = dict(Experiment.objects.filter(team=team, id__in=top).values_list("id", "name")) if top else {}
+    return [
+        {
+            "experiment_id": experiment_id,
+            "experiment_name": names.get(experiment_id, ""),
+            "points": [
+                {"date": bucket, "p95": _nearest_rank_p95(per_bucket[(experiment_id, bucket)])}
+                for bucket in sorted(bucket for key_id, bucket in per_bucket if key_id == experiment_id)
+            ],
+        }
+        for experiment_id in top
+    ]
+
+
+def _nearest_rank_p95(values: list[float]) -> float:
+    """Nearest-rank 95th percentile of a non-empty list."""
+    ordered = sorted(values)
+    return ordered[max(math.ceil(0.95 * len(ordered)) - 1, 0)]
 
 
 @dataclass(frozen=True)
