@@ -7,7 +7,7 @@ CLAUDE.md
 
 # Workflow templates
 .github/templates/
-.github/
+/.github/
 
 # Superpower designs and ADRs
 docs/superpowers
@@ -15,8 +15,8 @@ docs/design
 docs/adr
 
 # Any markdown in the apps or components directory
-apps/
-components/
+/apps/
+/components/
 
 # Build output and virtualenv
 site/
