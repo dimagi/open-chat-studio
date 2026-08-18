@@ -131,6 +131,23 @@ class TestCostTrackingPanel:
 
         assert response.context["cost_summary"].total_cost == Decimal(0)
 
+    def test_breakdown_canvases_render_with_spend(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="2.50", when=_NOW - timedelta(days=1))
+
+        response = self._get_dashboard(authenticated_client, team)
+
+        assert b'id="costProviderChart"' in response.content
+        assert b'id="costModelChart"' in response.content
+        assert b'id="costServiceKindChart"' in response.content
+
+    def test_breakdown_canvases_absent_without_spend(self, authenticated_client, team):
+        _enable_flag_for(team)
+
+        response = self._get_dashboard(authenticated_client, team)
+
+        assert b'id="costProviderChart"' not in response.content
+
 
 @pytest.mark.django_db()
 class TestCostTrackingPanelEndpoint:

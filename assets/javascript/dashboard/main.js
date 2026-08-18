@@ -54,6 +54,8 @@ function dashboard() {
         },
         userEngagementData: [],
         tagAnalyticsData: {},
+        costBreakdown: null,
+        serviceKindMode: 'cost',
 
         loadingStates: {
             overview: false,
@@ -367,9 +369,9 @@ function dashboard() {
                 const response = await fetch(`api/cost-tracking-panel/?${urlParams}`);
                 if (response.ok) {
                     container.innerHTML = await response.text();
-                    // The panel HTML (and its chart canvas) is replaced on each
-                    // refresh, so render the chart after the swap.
-                    await this.loadCostTimeseriesChart();
+                    // The panel HTML (and its chart canvases) is replaced on each
+                    // refresh, so render the charts after the swap.
+                    await Promise.all([this.loadCostTimeseriesChart(), this.loadCostBreakdownCharts()]);
                 }
             } catch (error) {
                 console.error("Failed to refresh cost tracking panel:", error);
@@ -385,6 +387,30 @@ function dashboard() {
             } catch (error) {
                 console.error("Failed to load cost timeseries chart:", error);
             }
+        },
+
+        async loadCostBreakdownCharts() {
+            if (!document.getElementById("costProviderChart")) return;
+
+            try {
+                const data = await this.apiRequest('api/cost-breakdown/');
+                this.costBreakdown = data;
+                window.chartManager.renderCostProviderChart(data.by_model || []);
+                window.chartManager.renderCostModelChart(data.by_model || []);
+                this.renderServiceKindChart();
+            } catch (error) {
+                console.error("Failed to load cost breakdown charts:", error);
+            }
+        },
+
+        renderServiceKindChart() {
+            const rows = (this.costBreakdown && this.costBreakdown.by_service_kind) || [];
+            window.chartManager.renderCostServiceKindChart(rows, this.serviceKindMode);
+        },
+
+        setServiceKindMode(mode) {
+            this.serviceKindMode = mode;
+            this.renderServiceKindChart();
         },
 
         async loadOverviewStats() {
