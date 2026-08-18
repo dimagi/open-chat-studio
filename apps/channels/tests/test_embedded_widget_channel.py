@@ -66,6 +66,11 @@ class TestEmbeddedWidgetChannelForm:
         assert form.is_valid()
         assert form.cleaned_data["allowed_domains"] == expected_domains
 
+    def test_credential_mode_is_not_user_editable_yet(self):
+        """Nothing resolves an OAuth token, so selecting that mode would strand the channel."""
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
+        assert "credential_mode" not in form.fields
+
     def test_required_auth_level_is_not_user_editable(self):
         """required_auth_level is a system-managed policy; it must not be exposed on the form."""
         form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())

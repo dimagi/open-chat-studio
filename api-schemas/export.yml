@@ -2696,6 +2696,14 @@ components:
       - cursor
       - has_more
       - results
+    CredentialModeEnum:
+      enum:
+      - embed_key
+      - oauth
+      type: string
+      description: |-
+        * `embed_key` - Embed key (public widget)
+        * `oauth` - OAuth token
     CustomActionDetail:
       type: object
       properties:
@@ -3870,6 +3878,22 @@ components:
           type: string
           format: date-time
           nullable: true
+        credential_mode:
+          allOf:
+          - $ref: '#/components/schemas/CredentialModeEnum'
+          description: |-
+            What a caller must present to start a chat session on this channel.
+
+            * `embed_key` - Embed key (public widget)
+            * `oauth` - OAuth token
+        session_token_lifetime:
+          type: string
+          nullable: true
+          title: Session lifetime
+          description: 'How long a chat session stays usable after it is created.
+            Leave blank to use the system default. Format: <code>HH:MM:SS</code>,
+            or <code>D HH:MM:SS</code> for days (e.g. <code>12:00:00</code> for 12
+            hours, <code>2 00:00:00</code> for 2 days).'
         experiment:
           type: integer
           nullable: true
