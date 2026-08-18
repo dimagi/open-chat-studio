@@ -1612,6 +1612,19 @@ class ExperimentSession(BaseTeamModel):
         if (instruction_prompt is None) == (message_text is None):
             raise ValueError("Exactly one of instruction_prompt or message_text must be provided")
 
+        if self.experiment_channel and self.experiment_channel.is_disabled:
+            # A disabled channel blocks bot-initiated traffic too -- scheduled messages, event
+            # actions, API triggers. Checked here rather than at the send, so a disabled channel
+            # costs no LLM call and leaves no undelivered AI message in the chat history.
+            # Deliberately not an error: the admin asked for this, so retrying it or logging a
+            # failed attempt against the schedule would both be wrong.
+            log.info(
+                "Not sending bot message to session %s: channel %s is disabled",
+                self.id,
+                self.experiment_channel_id,
+            )
+            return {}
+
         trace_service = None
         try:
             with transaction.atomic(), current_team(self.team):

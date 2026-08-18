@@ -20,6 +20,7 @@ from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession, Participant
 from apps.experiments.services import start_experiment_session
 from apps.experiments.tasks import get_response_for_webchat_task
+from apps.service_providers.tracing import TraceInfo
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -240,6 +241,60 @@ class TestDisabledChannelBlocksNewSessions:
         )
 
         assert session.experiment_channel == channel
+
+
+@pytest.mark.django_db()
+class TestDisabledChannelBlocksOutboundMessages:
+    """Bot-initiated sends -- scheduled messages, event actions, API triggers -- never touch a
+    pipeline, so the toggle has to be enforced on the outbound path separately."""
+
+    def test_ad_hoc_bot_message_is_a_no_op(self):
+        """Checked before the LLM runs, so a disabled channel costs nothing and leaves no
+        undelivered AI message behind."""
+        session = ExperimentSessionFactory.create()
+        _disable(session, "We are closed")
+
+        with (
+            patch("apps.chat.bots.EventBot.get_user_message") as get_user_message,
+            patch("apps.experiments.models.ExperimentSession.try_send_message") as try_send_message,
+        ):
+            result = session.ad_hoc_bot_message("check in with the user", TraceInfo(name="test"))
+
+        assert result == {}
+        get_user_message.assert_not_called()
+        try_send_message.assert_not_called()
+        assert not ChatMessage.objects.filter(chat=session.chat).exists()
+
+    def test_direct_message_is_a_no_op(self):
+        session = ExperimentSessionFactory.create()
+        _disable(session)
+
+        with patch("apps.experiments.models.ExperimentSession.try_send_message") as try_send_message:
+            result = session.ad_hoc_bot_message(None, TraceInfo(name="test"), message_text="see you tomorrow")
+
+        assert result == {}
+        try_send_message.assert_not_called()
+        assert not ChatMessage.objects.filter(chat=session.chat).exists()
+
+    def test_send_message_to_user_delivers_nothing(self):
+        """And the static disabled_message is not substituted in: nobody asked us anything, so
+        pushing "we are offline" at them would be worse than staying quiet."""
+        session = ExperimentSessionFactory.create()
+        _disable(session, "We are closed")
+        channel = _make_channel(session)
+
+        channel.send_message_to_user("your appointment is tomorrow")
+
+        assert channel.text_sent == []
+        assert not ChatMessage.objects.filter(chat=session.chat).exists()
+
+    def test_an_enabled_channel_still_sends(self):
+        session = ExperimentSessionFactory.create()
+        channel = _make_channel(session)
+
+        channel.send_message_to_user("your appointment is tomorrow")
+
+        assert channel.text_sent == ["your appointment is tomorrow"]
 
 
 @pytest.mark.django_db()
