@@ -127,6 +127,21 @@ def test_vertex_exposes_gcp_project(superuser_client, credentials, expected):
 
 
 @pytest.mark.django_db()
+def test_non_vertex_provider_never_reports_a_cloud_project(superuser_client):
+    """`config` is a free-form JSON blob, so any provider could carry a
+    `credentials_json`. Only Vertex bills by project, and handing a spend report a
+    project id for anything else would attribute that cost to the wrong team."""
+    LlmProviderFactory(
+        type=str(LlmProviderTypes.openai),
+        config={"openai_api_key": OPENAI_KEY, "credentials_json": {"project_id": "not-vertex"}},
+    )
+    response = superuser_client.get(reverse("ocs_admin:provider_keys_api"))
+
+    openai = {p["provider_type"]: p for p in response.json()["providers"]}["openai"]
+    assert openai["cloud_project"] is None
+
+
+@pytest.mark.django_db()
 def test_lists_trace_providers_with_project_mapping(superuser_client):
     team = TeamFactory(name="Alpha")
     TraceProviderFactory(

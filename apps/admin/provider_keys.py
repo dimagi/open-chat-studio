@@ -22,7 +22,7 @@ import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from apps.service_providers.models import LlmProvider, TraceProvider
+from apps.service_providers.models import LlmProvider, LlmProviderTypes, TraceProvider
 from apps.teams.metadata import get_team_metadata_fields
 
 logger = logging.getLogger("ocs.admin")
@@ -144,17 +144,32 @@ def _cloud_project(provider) -> str | None:
     ``mask_secret`` has nothing to fingerprint and the key→team join can never fire for
     it. Its GCP project id is the join instead — that is what the Cloud Billing export
     keys cost by — and it is an identifier, not a credential.
+
+    Gated on the provider type rather than on the presence of ``credentials_json``:
+    ``config`` is a free-form JSON blob, so any provider could carry that key, and a
+    stray one would hand a spend report a project id to attribute cost by — quietly
+    billing the wrong team.
     """
-    credentials = provider.config.get("credentials_json")
-    if isinstance(credentials, str):
-        try:
-            credentials = json.loads(credentials)
-        except ValueError:
-            logger.warning("Provider id=%s has unparseable credentials_json", provider.pk)
-            return None
-    if not isinstance(credentials, dict):
+    if provider.type != str(LlmProviderTypes.google_vertex_ai):
         return None
-    return credentials.get("project_id") or None
+    credentials = provider.config.get("credentials_json")
+    project = _as_dict(credentials).get("project_id") or None
+    if credentials and not project:
+        # Configured but unusable -- malformed JSON, or a document with no project_id.
+        # Either way this team's Vertex spend cannot be joined, so say so rather than
+        # letting it silently fall through to the pro-rata bucket.
+        logger.warning("Vertex provider id=%s has no usable project_id in credentials_json", provider.pk)
+    return project
+
+
+def _as_dict(value) -> dict:
+    """``value`` as a dict, whether it is stored as one or as a JSON string."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _secret_field_for(provider) -> str | None:
