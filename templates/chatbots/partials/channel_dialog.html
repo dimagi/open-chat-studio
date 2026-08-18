@@ -22,9 +22,20 @@
       hx-swap="innerHTML"
     >
       {% csrf_token %}
+      {% if channel.is_disabled %}
+        <div role="alert" class="alert alert-warning">
+          <i class="fa-solid fa-ban"></i>
+          <span>
+            This channel is disabled. Incoming messages are not processed
+            {% if channel.disabled_message %}and users receive the message below{% else %}and users receive no reply{% endif %}.
+          </span>
+        </div>
+      {% endif %}
       {{ form.non_field_errors }}
       {% if extra_form %}{{ extra_form.non_field_errors }}{% endif %}
-      {% render_form_fields form %}
+      <div {% include "generic/attrs.html" with attrs=form.form_attrs %}>
+        {% render_form_fields form %}
+      </div>
       {% if extra_form %}
         <div {% include "generic/attrs.html" with attrs=extra_form.form_attrs %}>
           {% render_form_fields extra_form %}

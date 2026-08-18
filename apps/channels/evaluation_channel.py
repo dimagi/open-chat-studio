@@ -70,6 +70,10 @@ class EvaluationChannel(ChannelBase):
         return ctx
 
     def _build_pipeline(self) -> MessageProcessingPipeline:
+        # ChannelDisabledStage omitted: the evaluations channel is team-global and has no
+        # admin toggle, and an eval run is not participant access to the bot. Honouring a
+        # disabled flag here would silently substitute the static message for the bot's
+        # output and corrupt the run's results.
         # ParticipantValidationStage omitted: the "evaluations" participant is internal,
         # validating against participant_allowlist is meaningless (and would block private
         # experiments). Nothing downstream in this pipeline reads ctx.participant_identifier.
