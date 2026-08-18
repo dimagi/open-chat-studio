@@ -90,8 +90,8 @@
             <div class="flex items-center justify-between mb-2">
               <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Spend by token type" %}</div>
               <div class="join" data-testid="service-kind-toggle">
-                <button type="button" class="join-item btn btn-xs" :class="serviceKindMode === 'cost' && 'btn-active'" @click="setServiceKindMode('cost')">{% translate "Cost" %}</button>
-                <button type="button" class="join-item btn btn-xs" :class="serviceKindMode === 'tokens' && 'btn-active'" @click="setServiceKindMode('tokens')">{% translate "Tokens" %}</button>
+                <button type="button" class="join-item btn btn-xs" :class="serviceKindMode === 'cost' && 'btn-active'" :aria-pressed="serviceKindMode === 'cost'" @click="setServiceKindMode('cost')">{% translate "Cost" %}</button>
+                <button type="button" class="join-item btn btn-xs" :class="serviceKindMode === 'tokens' && 'btn-active'" :aria-pressed="serviceKindMode === 'tokens'" @click="setServiceKindMode('tokens')">{% translate "Tokens" %}</button>
               </div>
             </div>
             <div class="h-64"><canvas id="costServiceKindChart"></canvas></div>

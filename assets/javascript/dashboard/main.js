@@ -392,6 +392,9 @@ function dashboard() {
 
         async loadCostBreakdownCharts() {
             if (!document.getElementById("costProviderChart")) return;
+            // Drop the previous filter scope's data so a mode toggle during the
+            // fetch (or after a failed one) doesn't render stale numbers.
+            this.costBreakdown = null;
 
             try {
                 const data = await this.apiRequest('api/cost-breakdown/');
