@@ -145,7 +145,7 @@ def test_trigger_bot_on_disabled_channel(mock_task, client, team_with_users):
     )
 
     assert response.status_code == 200
-    assert "channel for this experiment is disabled" in response.content.decode()
+    assert "channel for this chatbot is disabled" in response.content.decode()
     mock_task.delay_on_commit.assert_not_called()
     assert not ExperimentSession.objects.filter(experiment=experiment).exists()
 

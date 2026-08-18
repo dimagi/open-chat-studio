@@ -83,10 +83,10 @@ def get_trigger_bot_channel(experiment: Experiment, platform: str) -> Experiment
     channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
     if not channel:
         raise TriggerBotMessageError(
-            f"Experiment cannot send messages on the {platform} channel. Create the channel first."
+            f"Chatbot cannot send messages on the {platform} channel. Create the channel first."
         )
     if channel.is_disabled:
-        raise TriggerBotMessageError(f"The {platform} channel for this experiment is disabled.")
+        raise TriggerBotMessageError(f"The {platform} channel for this chatbot is disabled.")
     return channel
 
 
