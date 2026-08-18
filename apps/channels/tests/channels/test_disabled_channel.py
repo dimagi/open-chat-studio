@@ -24,7 +24,6 @@ from apps.service_providers.tracing import TraceInfo
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.tests.clients import ApiTestClient
 
 from .conftest import StubChannel, make_trace_service
 
@@ -299,7 +298,12 @@ class TestDisabledChannelBlocksOutboundMessages:
 
 @pytest.mark.django_db()
 class TestDisabledChannelRefusesSessionStarts:
-    """The HTTP surfaces that open a session, each turning the refusal into its own idiom."""
+    """The HTTP surfaces that open a session, each turning the refusal into its own idiom.
+
+    The trigger-bot endpoint belongs to this set too, but its refusal now comes from
+    ``get_trigger_bot_channel``, so it is covered by ``test_trigger_bot_on_disabled_channel``
+    in ``apps/api/tests/test_api.py`` alongside the rest of that endpoint's behaviour.
+    """
 
     def test_widget_session_start_is_refused(self):
         """The widget calls this before it can send anything, so letting it through would hand
@@ -336,29 +340,6 @@ class TestDisabledChannelRefusesSessionStarts:
 
         assert response.status_code == 403
         assert response.json() == {"error": "This chatbot is currently unavailable."}
-
-    def test_trigger_bot_message_is_refused(self):
-        """This endpoint opens a session *and* pushes a message, so both have to be refused."""
-        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
-        ExperimentChannelFactory.create(
-            team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM, enabled=False
-        )
-        client = ApiTestClient(experiment.team.members.first(), experiment.team)
-
-        response = client.post(
-            reverse("api:trigger_bot"),
-            data={
-                "identifier": "123",
-                "platform": ChannelPlatform.TELEGRAM,
-                "experiment": str(experiment.public_id),
-                "prompt_text": "check in with the user",
-            },
-            format="json",
-        )
-
-        assert response.status_code == 400
-        assert "disabled" in response.json()["detail"]
-        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
 
     def test_public_web_chat_shows_the_static_message(self, client):
         experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())

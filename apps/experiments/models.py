@@ -1156,10 +1156,9 @@ class Participant(BaseTeamModel):
         if self.is_anonymous:
             suffix = str(self.public_id)[:6]
             return f"Anonymous [{suffix}]"
-        if self.name:
-            return f"{self.name} ({self.identifier})"
-        if self.user and self.user.get_full_name():
-            return f"{self.user.get_full_name()} ({self.identifier})"
+        name = self.name or (self.user.get_full_name() if self.user else "")
+        if name and name != self.identifier:
+            return f"{name} ({self.identifier})"
         return self.identifier
 
     def get_platform_display(self):

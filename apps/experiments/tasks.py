@@ -5,7 +5,7 @@ from uuid import uuid4
 from celery.app import shared_task
 from celery.utils.log import get_task_logger
 from celery_progress.backend import ProgressRecorder
-from django.core.files.base import ContentFile
+from django.core.files.base import File as DjangoFile
 from django.http import QueryDict
 from django.utils import timezone
 from langchain_core.messages import AIMessage, HumanMessage
@@ -50,11 +50,15 @@ def async_export_chat(self, experiment_id: int, query_params: str, time_zone) ->
     # compress=True writes a gzip stream, reducing file size by ~80–90% for typical
     # chat exports and dramatically cutting S3 storage and download time.
     with export_to_tempfile(experiment, filtered_sessions, compress=True, progress_callback=report_progress) as tmp:
+        # Hand the temp file to storage directly rather than via ContentFile(tmp.read()):
+        # the storage backend streams it in chunks, so peak memory stays flat instead of
+        # scaling with export size. Reading it in one go negates the spooling above and
+        # has OOM'd the worker on large exports.
         file_obj = File.objects.create(
             name=filename,
             team=experiment.team,
             content_type="application/gzip",
-            file=ContentFile(tmp.read(), name=filename),
+            file=DjangoFile(tmp, name=filename),
             purpose=FilePurpose.DATA_EXPORT,
             expiry_date=timezone.now() + timedelta(days=7),
         )

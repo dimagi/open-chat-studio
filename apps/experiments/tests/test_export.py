@@ -1,22 +1,31 @@
 import csv
 import io
 import json
+import weakref
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments import export as export_mod
 from apps.experiments.export import (
+    SESSION_CACHE_MAX_ENTRIES,
     UTF8_BOM,
+    _SessionCache,
     count_export_messages,
     export_rows_to_csv_stream,
-    filtered_export_to_csv,
     generate_export_rows,
 )
 from apps.service_providers.tracing import OCS_TRACE_PROVIDER
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.traces import TraceFactory
+
+
+def _export_csv_text(experiment, sessions_queryset, translation_language=None) -> str:
+    """Render an export to CSV text, minus the Excel BOM, for content assertions."""
+    rows = generate_export_rows(experiment, sessions_queryset, translation_language)
+    return "".join(export_rows_to_csv_stream(rows)).removeprefix(UTF8_BOM)
 
 
 @pytest.mark.django_db()
@@ -88,8 +97,7 @@ def test_filtered_export_with_mocked_filter(mock_get_filtered_sessions, session_
     else:
         filtered_queryset = experiment.sessions.none()
 
-    csv_in_memory = filtered_export_to_csv(experiment, filtered_queryset)
-    csv_content = csv_in_memory.getvalue()
+    csv_content = _export_csv_text(experiment, filtered_queryset)
     csv_lines = csv_content.strip().split("\n") if csv_content.strip() else []
     # Each session produces 2 rows (human + AI message), plus 1 header
     expected_rows = len(filtered_indices) * 2 + 1
@@ -135,8 +143,7 @@ def test_participant_data_export():
         participant_data_diff=[["change", "age", [25, 26]]],
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]
@@ -181,8 +188,7 @@ def test_participant_data_export_empty_diff():
         participant_data_diff=[],
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]
@@ -223,8 +229,7 @@ def test_participant_data_export_empty_data():
         participant_data_diff=[],
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]
@@ -298,8 +303,8 @@ def test_trace_id_resolved_per_message_trace_info():
     mock_messages_qs.filter.return_value.__getitem__ = Mock(return_value=messages)
 
     with patch("apps.experiments.export.ChatMessage.objects.filter", return_value=mock_messages_qs):
-        csv_in_memory = filtered_export_to_csv(experiment, Mock())
-        rows = list(csv.reader(io.StringIO(csv_in_memory.getvalue()), delimiter=","))
+        csv_text = _export_csv_text(experiment, Mock())
+        rows = list(csv.reader(io.StringIO(csv_text), delimiter=","))
 
     header = rows[0]
     trace_id_index = header.index("Trace ID")
@@ -341,8 +346,7 @@ def test_session_state_export():
         output_message=ai_msg,
     )
 
-    csv_in_memory = filtered_export_to_csv(experiment, experiment.sessions.all())
-    csv_reader = csv.reader(io.StringIO(csv_in_memory.getvalue()))
+    csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
     rows = list(csv_reader)
 
     header = rows[0]
@@ -415,3 +419,103 @@ def test_generate_export_rows_progress_interval_independent_of_chunk_size():
         )
 
     assert calls == [5]
+
+
+def test_session_cache_evicts_oldest_beyond_max_entries():
+    """The cache is an LRU with a hard ceiling, so it can't grow with the session count."""
+    cache = _SessionCache(max_entries=2)
+    sessions = [Mock(id=i, external_id=f"s{i}", state={}, get_platform_name=Mock(return_value="Web")) for i in range(3)]
+    for session in sessions:
+        session.participant = Mock(name=f"p{session.id}", identifier=f"p{session.id}", public_id=f"pub{session.id}")
+        session.chat = Mock(tags=Mock(all=Mock(return_value=[])), comments=Mock(all=Mock(return_value=[])))
+
+    first = cache.get(sessions[0])
+    cache.get(sessions[1])
+    assert cache.get(sessions[0]) is first, "a cache hit must reuse the existing entry"
+
+    # session 0 was just used, so session 1 is the least-recently-used and gets evicted.
+    cache.get(sessions[2])
+    assert len(cache) == 2
+    assert cache.get(sessions[0]) is first
+    assert cache.get(sessions[1]) is not None, "an evicted session is simply recomputed"
+    assert len(cache) == 2
+
+
+def test_session_cache_default_ceiling_comes_from_module_constant():
+    assert _SessionCache()._max_entries == SESSION_CACHE_MAX_ENTRIES
+
+
+@pytest.mark.django_db()
+def test_export_rows_correct_when_sessions_exceed_cache_ceiling():
+    """Rows stay correct for sessions evicted from the cache and re-encountered later.
+
+    Messages are ordered by global message pk, so sessions interleave: with a ceiling
+    below the session count, entries get evicted and rebuilt mid-export. Each row must
+    still carry its own session's values, not a neighbour's.
+    """
+    experiment = ExperimentFactory.create()
+    sessions = [
+        ExperimentSessionFactory.create(
+            experiment=experiment, team=experiment.team, participant__identifier=f"user{i}", state={"idx": i}
+        )
+        for i in range(4)
+    ]
+    # Interleave: one message per session per round, so pk order cycles through sessions.
+    for round_no in range(3):
+        for i, session in enumerate(sessions):
+            ChatMessage.objects.create(
+                chat=session.chat, content=f"s{i}-r{round_no}", message_type=ChatMessageType.HUMAN
+            )
+
+    with patch("apps.experiments.export.SESSION_CACHE_MAX_ENTRIES", 2):
+        csv_reader = csv.reader(io.StringIO(_export_csv_text(experiment, experiment.sessions.all())))
+        rows = list(csv_reader)
+
+    header = rows[0]
+    state_index = header.index("Session State")
+    identifier_index = header.index("Participant Identifier")
+    content_index = header.index("Message Content")
+
+    assert len(rows) == 1 + 4 * 3
+    for row in rows[1:]:
+        # "s<i>-r<n>" encodes the owning session, so each row's own values must match it.
+        expected_idx = int(row[content_index].split("-")[0].removeprefix("s"))
+        assert json.loads(row[state_index]) == {"idx": expected_idx}
+        assert row[identifier_index] == f"user{expected_idx}"
+
+
+@pytest.mark.django_db()
+def test_generate_export_rows_releases_spent_chunks():
+    """A written-out chunk must be released, not left for some later generational pass.
+
+    Django model instances sit in reference cycles, so dropping the last strong reference
+    is not enough on its own. Weakrefs to the first chunk's messages assert release
+    directly; counting live ChatMessage instances process-wide would instead depend on
+    whatever other tests happen to be holding, which is not this code's business.
+    """
+    chunk_size = 5
+    session = _make_session_with_messages(25)
+    refs = []
+    real_yield = export_mod._yield_row_for_message
+
+    def recording_yield(message, *args):
+        refs.append(weakref.ref(message))
+        return real_yield(message, *args)
+
+    first_chunk_alive_later = None
+    with (
+        patch("apps.experiments.export.EXPORT_CHUNK_SIZE", chunk_size),
+        patch("apps.experiments.export._yield_row_for_message", recording_yield),
+    ):
+        for _ in generate_export_rows(session.experiment, session.experiment.sessions.all()):
+            # One message into the third chunk, both earlier chunks have been collected.
+            # (Chunk N's last message stays reachable via the loop variable until the
+            # following chunk rebinds it, so it is chunk N+1's collect that frees it --
+            # hence checking two chunks out rather than one.)
+            if len(refs) == chunk_size * 2 + 1 and first_chunk_alive_later is None:
+                first_chunk_alive_later = sum(1 for ref in refs[:chunk_size] if ref() is not None)
+
+    assert first_chunk_alive_later == 0, (
+        f"{first_chunk_alive_later}/{chunk_size} messages from the first chunk were still alive "
+        "two chunks later -- spent chunks are not being released"
+    )

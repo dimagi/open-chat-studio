@@ -1,5 +1,5 @@
 {% if chip.url or chip.label %}
-  {% include "generic/chip_button.html" with url=chip.url label=chip.label %}
+  {% include "generic/chip_button.html" with url=chip.url label=chip.label truncate=truncate %}
 {% else %}
   {{ chip }}
 {% endif %}

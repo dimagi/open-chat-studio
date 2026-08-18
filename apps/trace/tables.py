@@ -37,6 +37,8 @@ class TraceTable(tables.Table):
             chip_action(
                 label_factory=lambda record, _: _get_chatbot_name(record),
                 url_factory=_chip_chatbot_url_factory,
+                button_style=actions.CHIP_BUTTON_STYLE,
+                truncate=True,
             ),
         ],
         align="left",
@@ -49,6 +51,8 @@ class TraceTable(tables.Table):
                 label_factory=lambda record, _: record.participant.identifier,
                 url_factory=_chip_session_url_factory,
                 display_condition=lambda request, record: record.session is not None,
+                button_style=actions.CHIP_BUTTON_STYLE,
+                truncate=True,
             ),
         ],
         align="left",
