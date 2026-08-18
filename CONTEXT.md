@@ -46,7 +46,7 @@ The Channel that exposes a Chatbot over the chat API (`/api/chat/`), created fro
 
 A Chat API Channel carries two independent settings that are easy to confuse:
 
-- **Credential Mode** — the *admin's* choice of what a caller must present: the **Embed Key**, or an OAuth token. Under the OAuth mode an Embed Key is simply ignored, so an existing embed snippet keeps working unchanged. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
+- **Credential Mode** — the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
 - **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin wants required.
 
 An admin's policy must never be switched on by a widget upgrade, which is why these are two fields and not rungs of one ladder.
@@ -101,7 +101,7 @@ A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. P
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
 
 **OAuth Application**:
-A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents). A machine application also names the Chatbots it may start chat sessions with; naming none means it may start none.
+A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents). A machine application also names the Chatbots it may **reach**; naming none means it may reach none. The allowlist gates every door the machine scope opens — chat completions, message ingress and outbound bot messages (ADR-0055) — with chat-session admission as one more consumer.
 _Avoid_: "API key" (a separate, user-scoped credential), and "the OAuth app's user" for a machine application — it has none.
 
 **Custom Action**:
