@@ -707,16 +707,24 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
 
+    @staticmethod
+    def _pop_session_token_lifetime(cleaned_data):
+        """Take the lifetime out of `cleaned_data`, which becomes the channel's extra_data.
+
+        It has a column of its own, so it must not also land in the JSON blob — the same
+        reason `allow_all_domains` is popped.
+        """
+        lifetime = cleaned_data.pop("session_token_lifetime", None)
+        if lifetime is not None and lifetime < MIN_SESSION_TOKEN_LIFETIME:
+            # A lifetime this short makes every session on the channel dead on arrival.
+            raise ValidationError({"session_token_lifetime": "The session lifetime must be at least 5 minutes."})
+        return lifetime
+
     def clean(self):
         """Generate or preserve the widget token"""
         cleaned_data = super().clean()
 
-        # Popped for the same reason as allow_all_domains: whatever is left in cleaned_data
-        # becomes the channel's extra_data, and this one has a column of its own.
-        self._session_token_lifetime = cleaned_data.pop("session_token_lifetime", None)
-        if self._session_token_lifetime is not None and self._session_token_lifetime < MIN_SESSION_TOKEN_LIFETIME:
-            # A lifetime this short makes every session dead on arrival.
-            raise ValidationError({"session_token_lifetime": "The session lifetime must be at least 5 minutes."})
+        self._session_token_lifetime = self._pop_session_token_lifetime(cleaned_data)
 
         allow_all_domains = cleaned_data.pop("allow_all_domains", False)
         if not allow_all_domains and not cleaned_data.get("allowed_domains"):
