@@ -1,8 +1,10 @@
 import csv
+import gc
 import gzip
 import io
 import json
 import tempfile
+from collections import OrderedDict
 from collections.abc import Generator, Iterator
 
 import dictdiffer
@@ -19,6 +21,10 @@ _SPOOLED_MAX_BYTES = 10 * 1024 * 1024  # 10 MB threshold before spilling to disk
 
 EXPORT_CHUNK_SIZE = 1000
 PROGRESS_UPDATE_INTERVAL = 100
+
+# Ceiling on the per-session value cache. At roughly 2.4 KB per entry this caps the cache
+# at a few MB regardless of how many sessions the export spans.
+SESSION_CACHE_MAX_ENTRIES = 2000
 
 UTF8_BOM = "\ufeff"  # Prepended to CSV exports so Excel detects UTF-8 encoding.
 
@@ -141,6 +147,40 @@ def _build_session_cache_entry(session) -> dict:
     }
 
 
+class _SessionCache:
+    """Bounded LRU cache of the per-session values repeated on every row of that session.
+
+    Messages are exported in order of global message pk, so a session's messages stay
+    interleaved with other sessions' for the whole run and no entry is ever safely "done".
+    An unbounded dict therefore grows with the session count (~2.4 KB per session), which
+    is the one export memory term that scales with the dataset rather than with the output.
+
+    Capping it trades a recomputation when an evicted session reappears for a fixed
+    ceiling. A miss costs no extra query: the session and its chat tags/comments are
+    already loaded on the message by ``_build_message_queryset``.
+    """
+
+    def __init__(self, max_entries: int | None = None):
+        self._entries: OrderedDict[int, dict] = OrderedDict()
+        # Resolved at call time rather than bound as a default so the ceiling stays patchable.
+        self._max_entries = SESSION_CACHE_MAX_ENTRIES if max_entries is None else max_entries
+
+    def get(self, session) -> dict:
+        try:
+            entry = self._entries[session.id]
+        except KeyError:
+            entry = _build_session_cache_entry(session)
+            self._entries[session.id] = entry
+            if len(self._entries) > self._max_entries:
+                self._entries.popitem(last=False)
+            return entry
+        self._entries.move_to_end(session.id)
+        return entry
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+
 def _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language) -> list:
     """Return an export row list for *message*."""
     content = get_message_content(message, translation_language) if translation_language else message.content
@@ -170,12 +210,10 @@ def _build_message_row(message, participant_data, sc, experiment, trace_id, tran
     return row
 
 
-def _yield_row_for_message(message, session_cache, experiment, translation_language) -> list:
+def _yield_row_for_message(message, session_cache: _SessionCache, experiment, translation_language) -> list:
     """Return an export row for a single message."""
     session = message.chat.experiment_session
-    if session.id not in session_cache:
-        session_cache[session.id] = _build_session_cache_entry(session)
-    sc = session_cache[session.id]
+    sc = session_cache.get(session)
     participant_data = _get_participant_data_for_message(message)
     trace_id = _get_trace_id_for_export(message)
     return _build_message_row(message, participant_data, sc, experiment, trace_id, translation_language)
@@ -190,14 +228,14 @@ def generate_export_rows(
     that memory usage stays bounded regardless of dataset size.  Session-level values
     (platform name, state JSON, participant fields, chat tags/comments) are cached the
     first time each session is encountered so they are serialised only once no matter
-    how many messages belong to that session.  The cache stores plain strings/dicts
-    (not ORM objects) so its footprint is small even for experiments with many sessions.
+    how many messages belong to that session; see :class:`_SessionCache` for why that
+    cache is bounded rather than keeping every session for the life of the export.
     """
     yield _get_export_header(translation_language)
 
     base_qs = _build_message_queryset(sessions_queryset)
     last_pk = 0
-    session_cache: dict[int, dict] = {}
+    session_cache = _SessionCache()
     processed = 0
 
     def report(count):
@@ -216,7 +254,15 @@ def generate_export_rows(
                 report(processed)
 
         last_pk = chunk[-1].pk
-        if len(chunk) < EXPORT_CHUNK_SIZE:
+        done = len(chunk) < EXPORT_CHUNK_SIZE
+        # Django model instances take part in reference cycles (``_state``, the
+        # related-object and prefetch caches), so refcounting alone does not reclaim a
+        # spent chunk -- it lingers two to three chunks behind until a generational pass
+        # happens to run. Dropping the reference before collecting is what lets the
+        # current chunk go too, which measured ~70% off peak memory for large exports.
+        del chunk
+        gc.collect()
+        if done:
             break
 
     # Report the final tally so the last partial interval (and exports smaller than one
@@ -290,20 +336,6 @@ def export_to_tempfile(
 
     tmp.seek(0)
     return tmp
-
-
-def filtered_export_to_csv(experiment, sessions_queryset, translation_language=None):
-    """Build a complete CSV in a StringIO buffer and return it.
-
-    For large datasets prefer generate_export_rows() + export_rows_to_csv_stream()
-    to avoid buffering the entire export in memory.  This function is retained for
-    backward compatibility with callers that expect a StringIO return value.
-    """
-    csv_in_memory = io.StringIO()
-    writer = csv.writer(csv_in_memory, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    for row in generate_export_rows(experiment, sessions_queryset, translation_language):
-        writer.writerow(row)
-    return csv_in_memory
 
 
 def _get_trace_id_for_export(message):

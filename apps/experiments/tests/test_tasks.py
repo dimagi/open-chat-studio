@@ -6,6 +6,7 @@ import pytest
 from django.test import override_settings
 
 from apps.chat.models import ChatMessage, ChatMessageType
+from apps.experiments import tasks
 from apps.experiments.tasks import async_create_experiment_version, async_export_chat, get_response_for_webchat_task
 from apps.files.models import File, FilePurpose
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
@@ -46,6 +47,59 @@ def test_async_export_chat_applies_query_string_filters(mock_recorder_cls):
     csv_content = gzip.decompress(File.objects.get(id=result["file_id"]).file.read()).decode()
     assert "message from alice" in csv_content
     assert "message from bob" not in csv_content
+
+
+class _ReadTracker:
+    """Wraps the export temp file and records the size argument of every ``read()`` call."""
+
+    def __init__(self, wrapped, reads):
+        self._wrapped = wrapped
+        self._reads = reads
+
+    def read(self, size=-1):
+        self._reads.append(size)
+        return self._wrapped.read(size)
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+    def __enter__(self):
+        self._wrapped.__enter__()
+        return self
+
+    def __exit__(self, *exc_info):
+        return self._wrapped.__exit__(*exc_info)
+
+
+@pytest.mark.django_db()
+@patch("apps.experiments.tasks.ProgressRecorder")
+def test_async_export_chat_streams_temp_file_to_storage(mock_recorder_cls):
+    """The export must reach storage in bounded chunks, never as one big ``read()``.
+
+    ``ContentFile(tmp.read(), ...)`` materialised the entire compressed export as a single
+    bytes object, so peak worker memory scaled with export size and large exports OOM'd the
+    worker — defeating the point of spooling to a temp file in the first place.
+    """
+    session = ExperimentSessionFactory.create()
+    for i in range(50):
+        ChatMessage.objects.create(chat=session.chat, content=f"m{i}", message_type=ChatMessageType.HUMAN)
+
+    reads = []
+    real_export_to_tempfile = tasks.export_to_tempfile
+
+    def tracked_export_to_tempfile(*args, **kwargs):
+        return _ReadTracker(real_export_to_tempfile(*args, **kwargs), reads)
+
+    with patch.object(tasks, "export_to_tempfile", tracked_export_to_tempfile):
+        result = async_export_chat.run(session.experiment_id, "", "UTC")
+
+    assert reads, "the temp file was never read"
+    assert all(size > 0 for size in reads), f"export was read unbounded into memory: read sizes {reads}"
+
+    file = File.objects.get(id=result["file_id"])
+    csv_content = gzip.decompress(file.file.read()).decode()
+    assert "m49" in csv_content
+    assert file.content_size == file.file.size
 
 
 @pytest.mark.django_db()
