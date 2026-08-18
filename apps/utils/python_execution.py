@@ -140,6 +140,7 @@ class RestrictedPythonExecutionMixin(BaseModel):
                 "datetime": datetime,
                 "dict": dict,
                 "range": limited_range,
+                "enumerate": enumerate,
             }
         )
 
