@@ -96,6 +96,20 @@ def _score_from_field(
     )
 
 
+def _build_scores(payload: dict, schema: dict, **score_kwargs) -> list[Score]:
+    candidates = (
+        _score_from_field(name=name, raw_value=raw_value, schema_field=schema.get(name), **score_kwargs)
+        for name, raw_value in payload.items()
+    )
+    return [score for score in candidates if score is not None]
+
+
+def _replace_scores(existing_filter: dict, scores: list[Score]) -> None:
+    with transaction.atomic():
+        Score.objects.filter(**existing_filter).delete()
+        Score.objects.bulk_create(scores)
+
+
 def _source_for_evaluator(evaluator) -> str:
     """Map an Evaluator.type to a Score.Source. Defaults to LLM_JUDGE."""
     if evaluator.type == "PythonEvaluator":
@@ -121,26 +135,16 @@ def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
     if not isinstance(result_payload, dict):
         return
 
-    source = _source_for_evaluator(result.evaluator)
     schema = (result.evaluator.params or {}).get("output_schema", {}) or {}
-
-    scores = []
-    for name, raw_value in result_payload.items():
-        score = _score_from_field(
-            team=result.team,
-            target=session,
-            name=name,
-            raw_value=raw_value,
-            source=source,
-            automated_result=result,
-            schema_field=schema.get(name),
-        )
-        if score is not None:
-            scores.append(score)
-
-    with transaction.atomic():
-        Score.objects.filter(automated_result=result).delete()
-        Score.objects.bulk_create(scores)
+    scores = _build_scores(
+        result_payload,
+        schema,
+        team=result.team,
+        target=session,
+        source=_source_for_evaluator(result.evaluator),
+        automated_result=result,
+    )
+    _replace_scores({"automated_result": result}, scores)
 
 
 def write_scores_from_annotation(annotation: Annotation) -> None:
@@ -157,24 +161,13 @@ def write_scores_from_annotation(annotation: Annotation) -> None:
     if target is None:
         return
 
-    schema = item.queue.schema or {}
-    data = annotation.data or {}
-
-    scores = []
-    for name, raw_value in data.items():
-        score = _score_from_field(
-            team=annotation.team,
-            target=target,
-            name=name,
-            raw_value=raw_value,
-            source=Score.Source.HUMAN_REVIEW,
-            review=annotation,
-            author=annotation.reviewer,
-            schema_field=schema.get(name),
-        )
-        if score is not None:
-            scores.append(score)
-
-    with transaction.atomic():
-        Score.objects.filter(review=annotation).delete()
-        Score.objects.bulk_create(scores)
+    scores = _build_scores(
+        annotation.data or {},
+        item.queue.schema or {},
+        team=annotation.team,
+        target=target,
+        source=Score.Source.HUMAN_REVIEW,
+        review=annotation,
+        author=annotation.reviewer,
+    )
+    _replace_scores({"review": annotation}, scores)

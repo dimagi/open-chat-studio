@@ -133,6 +133,15 @@ class ImportFromDatasetForm(forms.Form):
         ).order_by("name")
 
 
+def _bounded_number_field(name, defn, field_cls):
+    kwargs = {"label": name, "help_text": defn.description, "required": defn.required}
+    if defn.ge is not None:
+        kwargs["min_value"] = defn.ge
+    if defn.le is not None:
+        kwargs["max_value"] = defn.le
+    return field_cls(**kwargs)
+
+
 def build_annotation_form(queue):
     """Dynamically build a Django form from an AnnotationQueue's field definitions."""
     field_defs = queue.get_field_definitions()
@@ -140,20 +149,10 @@ def build_annotation_form(queue):
 
     for name, defn in field_defs.items():
         if isinstance(defn, IntFieldDefinition):
-            kwargs = {"label": name, "help_text": defn.description, "required": defn.required}
-            if defn.ge is not None:
-                kwargs["min_value"] = defn.ge
-            if defn.le is not None:
-                kwargs["max_value"] = defn.le
-            form_fields[name] = forms.IntegerField(**kwargs)
+            form_fields[name] = _bounded_number_field(name, defn, forms.IntegerField)
 
         elif isinstance(defn, FloatFieldDefinition):
-            kwargs = {"label": name, "help_text": defn.description, "required": defn.required}
-            if defn.ge is not None:
-                kwargs["min_value"] = defn.ge
-            if defn.le is not None:
-                kwargs["max_value"] = defn.le
-            form_fields[name] = forms.FloatField(**kwargs)
+            form_fields[name] = _bounded_number_field(name, defn, forms.FloatField)
 
         elif isinstance(defn, BinaryFieldDefinition):
             choices = [("", "---"), ("1", defn.true_label), ("0", defn.false_label)]
