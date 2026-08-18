@@ -266,7 +266,7 @@ untouched. Version *recording* stays gated on `is_widget_request`, so a server c
 is not tagged with a placeholder version.
 
 `MIN_OAUTH_WIDGET_VERSION` still earns its place in `apps/channels/widget_versions.py`: a browser
-widget in either OAuth mode needs the release that ships the `auth-token` prop, and the channel dialog
+widget in `oauth` mode needs the release that ships the `auth-token` prop, and the channel dialog
 should state it. It stays **advisory** — an older widget simply cannot send a token and fails
 admission — so no new version-based rejection is introduced.
 
@@ -320,7 +320,7 @@ def _check_start_session_access(request, experiment, embed_key_channel, oauth_ch
 
     ADR-0053 established the rule for cookie-bearing callers: team membership or the chatbot's
     embed key. This adds the third credential — a client-credentials token, admitted only when
-    the chatbot's Chat API Channel is in an OAuth mode.
+    the chatbot's Chat API Channel is in `oauth` mode.
     """
     if request.user.is_authenticated:
         ...  # unchanged ADR-0053 logic: membership, else embed key, else 403
@@ -348,7 +348,7 @@ START_AUTH_CLASSES = [ChatOAuthAuthentication, *AUTH_CLASSES]
 
 `ChatOAuthAuthentication` resolves the chatbot the way `EmbeddedWidgetAuthentication._get_experiment_id`
 already does (`chatbot_id` from the body, through `get_working_version_id()` so channel lookups land on
-the working version), finds its Chat API Channel if the mode is an OAuth one, validates the token
+the working version), finds its Chat API Channel if the mode is `oauth`, validates the token
 ([D4](#d4-what-makes-a-token-acceptable)) and the origin ([D2](#d2-the-origin-rule-follows-the-credential)),
 and returns `(AnonymousUser(), channel)` — the same shape `EmbeddedWidgetAuthentication` returns.
 
@@ -754,16 +754,16 @@ PR #4198 delivered the per-application allowlist, so none of those appear here a
 
 | # | File | Change |
 |---|---|---|
-| 1 | `apps/channels/models.py` | `CredentialMode` choices; `credential_mode` column defaulting to `EMBED_KEY`; nullable `session_token_lifetime` (D7; null = use the global); `EMBEDDED_WIDGET` label → "Chat Widget & API"; `clean()`/`save()` + `CheckConstraint` pinning `SESSION_TOKEN` for the OAuth modes; add both columns to `EXPERIMENT_CHANNEL_FIELDS`. **Migration.** |
+| 1 | `apps/channels/models.py` | ~~`CredentialMode` choices; `credential_mode` column defaulting to `EMBED_KEY`; nullable `session_token_lifetime` (D7; null = use the global); `EMBEDDED_WIDGET` label → "Chat Widget & API"; `clean()`/`save()` + `CheckConstraint` pinning `SESSION_TOKEN` for `oauth` mode; add both columns to `EXPERIMENT_CHANNEL_FIELDS`~~ — **shipped** as `bot_channels.0033`. |
 | 2 | `apps/channels/widget_versions.py` | `MIN_OAUTH_WIDGET_VERSION` (advisory). |
-| 3 | `apps/channels/forms.py` | `credential_mode` on `EmbeddedWidgetChannelForm`; `allowed_domains` required for `embed_key`, optional for `oauth`; `session_token_lifetime` as an optional override with the mode's suggested value in help text; instructions + link to the team's OAuth applications. |
-| 4 | `apps/channels/tasks.py` | Ratchet task skips channels already pinned to `SESSION_TOKEN` by their mode. |
+| 3 | `apps/channels/forms.py` | `credential_mode` on `EmbeddedWidgetChannelForm`; `allowed_domains` required for `embed_key`, optional for `oauth`; instructions + link to the team's OAuth applications. `session_token_lifetime` as an optional override is **shipped**; `credential_mode` is deliberately *not* on the form until the OAuth path exists, since selecting `oauth` today would make the channel unreachable. |
+| 4 | `apps/channels/tasks.py` | ~~Ratchet task skips channels already pinned to `SESSION_TOKEN` by their mode~~ — **shipped** (the queryset filters on `credential_mode`). |
 | 5 | `apps/oauth/models.py`, `forms.py`, `views.py` | ~~`allowed_chatbots` M2M + team-filtered picker~~ — **shipped in PR #4198**. No change. |
 | 6 | `apps/oauth/permissions.py` | `is_client_credentials_token()` and `token_allows_chatbot()` extracted from their request-shaped wrappers (D4 — the wrappers read `request.auth`, which does not exist inside an authenticator); `validated_machine_token()` composing them. |
 | 7 | `apps/api/exceptions.py` | `ChatApiAccessDenied(NotAuthenticated)` — body and `code` only; the `401` comes from the authenticator (D6). |
-| 8 | `apps/api/authentication.py` | `ChatOAuthAuthentication`: resolve chatbot → Chat API Channel in an OAuth mode, validate token + origin, return `(AnonymousUser(), channel)`; `authenticate_header` → `Bearer realm="api"` (D3). |
+| 8 | `apps/api/authentication.py` | `ChatOAuthAuthentication`: resolve chatbot → Chat API Channel in `oauth` mode, validate token + origin, return `(AnonymousUser(), channel)`; `authenticate_header` → `Bearer realm="api"` (D3). |
 | 9 | `apps/api/throttling.py` | **No change** — the existing `ExperimentChannel` branch buckets OAuth callers per channel. |
-| 10 | `apps/api/session_tokens.py` | ~~age check against `created_at`; `last_activity_at` branch deleted~~ — **shipped in PR #4204** (ADR-0054). Reading the per-channel override is what remains. |
+| 10 | `apps/api/session_tokens.py` | ~~age check against `created_at`; `last_activity_at` branch deleted~~ — **shipped in PR #4204** (ADR-0054). ~~Reading the per-channel override~~ — **shipped**. Note the lifetime is read off `get_experiment_session_cached`'s cached session, so a change to a channel's value takes up to `WIDGET_SESSION_CACHE_TTL` (5 min) to take effect. |
 | 11 | `apps/api/permissions.py` | **No change** — one call site, already raising `session_expired`. |
 | 12 | `apps/api/views/chat.py` | `START_AUTH_CLASSES` on `chat_start_session` only; mode checks in `_check_start_session_access`; OAuth channel as an attribution source in `_resolve_experiment_channel`. |
 | 13 | `apps/api/v2/inspect/serializers.py` | **No change** — one platform, so the existing `EMBEDDED_WIDGET` guards stay correct. Expose `credential_mode` if the inspect API should report it. |
@@ -772,7 +772,8 @@ PR #4198 delivered the per-application allowlist, so none of those appear here a
 
 This work carries **one migration** (`credential_mode` + `session_token_lifetime` on the same
 `channels` migration; the platform change is a label only, and `allowed_chatbots` already shipped as
-`oauth.0004`), and lands as a single phase. No
+`oauth.0004`) — **shipped as `bot_channels.0033`**, ahead of the rest, since the columns are inert
+until something can select the mode. What is left lands as a single phase. No
 change to `required_auth_level` semantics for existing channels — they all migrate to `EMBED_KEY` mode,
 which is exactly today's behaviour. One status code changes on an already-rejected path
 (`test_start_session_with_invalid_embed_key`, `403` → `401`, [D6](#d6-getting-a-401-out-of-drf)).
