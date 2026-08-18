@@ -403,13 +403,6 @@ def chatbot_usage_summary(experiment: Experiment, *, start: datetime, end: datet
     page's usage widget. Session/message counts come from `filtered_querysets` - the same canonical,
     ADR-0051 activity definitions the dashboard's Bot Performance table uses - narrowed to this
     experiment, rather than re-deriving the session base here.
-
-    Uncached and takes an arbitrary window - for a caller that wants a fixed date range. The chatbot
-    home page instead wants "the last 30 days as of now" specifically, cached for a few minutes to
-    cut its query load: see `get_latest_chatbot_usage_summary`, which owns both of those and calls
-    this function on a cache miss. Caching *this* function directly would be wrong - a cache key
-    that doesn't include `start`/`end` would silently serve one caller's window to another's, and a
-    key that does would never hit here since "now"-relative bounds differ on every call.
     """
     cost = cost_summary(experiment.team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment.id]))
     querysets = filtered_querysets(experiment.team, start_date=start, end_date=end, experiment_ids=[experiment.id])
