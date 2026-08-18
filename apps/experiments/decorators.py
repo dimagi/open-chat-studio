@@ -6,7 +6,6 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 
 from apps.experiments.models import Experiment, ExperimentSession
-from apps.teams.decorators import ENFORCES_TEAM_AUTH_ATTR
 
 
 def experiment_session_view(view_func):
@@ -34,9 +33,9 @@ def experiment_session_view(view_func):
 
         return view_func(request, team_slug, experiment_id, session_id, **kwargs)
 
-    # These views are team-scoped: they require request.team and scope the experiment/session
-    # lookups to it. Mark them so the team-auth guard recognises it.
-    setattr(decorated_view, ENFORCES_TEAM_AUTH_ATTR, True)
+    # Deliberately *not* stamped with ENFORCES_TEAM_AUTH_ATTR: resolving team-scoped objects
+    # is not authorisation. Stamping it would make apps/teams/tests/test_view_auth_guard.py
+    # accept a view that only resolves the session, hiding a missing `login_and_team_required`.
     return decorated_view
 
 
@@ -55,7 +54,12 @@ def require_transcript_access(view):
 
     @wraps(view)
     def _inner(request, *args, **kwargs):
-        is_own_session = request.experiment_session.participant.user_id == request.user.id
+        if not request.user.is_authenticated:
+            raise PermissionDenied
+        # `user_id` is None for anonymous participants, and `AnonymousUser.id` is None too,
+        # so the ownership branch must never compare two Nones.
+        participant_user_id = request.experiment_session.participant.user_id
+        is_own_session = participant_user_id is not None and participant_user_id == request.user.id
         if is_own_session or request.user.has_perm("chat.view_chat"):
             return view(request, *args, **kwargs)
         raise PermissionDenied

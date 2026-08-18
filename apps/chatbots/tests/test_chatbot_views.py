@@ -1242,6 +1242,37 @@ def test_session_pagination_requires_chat_view_chat(client, groups, expected_sta
 
 
 @pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("groups", "shows_pagination"),
+    [
+        pytest.param([CHAT_VIEWER_GROUP], True, id="chat-viewer-sees-pagination"),
+        pytest.param([CHATBOT_ADMIN_GROUP], False, id="session-owner-without-chat-view-chat-does-not"),
+    ],
+)
+def test_session_view_only_offers_pagination_to_chat_viewers(client, groups, shows_pagination):
+    """Don't render controls the pagination view will refuse (it needs chat.view_chat)."""
+    create_default_groups()
+    team = TeamFactory.create()
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    user = UserFactory.create()
+    add_user_to_team(team, user, groups=groups)
+    session.participant.user = user
+    session.participant.save()
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    content = client.get(url).content.decode()
+    paginate_url = reverse(
+        "chatbots:chatbot_session_pagination_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    assert (paginate_url in content) is shows_pagination
+
+
+@pytest.mark.django_db()
 def test_session_view_hides_usage_summary_when_flag_off(client, team_with_users):
     """The usage summary row is gated by flag_ai_cost_monitoring."""
     team = team_with_users

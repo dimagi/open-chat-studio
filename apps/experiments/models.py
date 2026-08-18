@@ -1487,15 +1487,6 @@ class ExperimentSession(BaseTeamModel):
 
         super().save(*args, **kwargs)
 
-    def has_display_messages(self) -> bool:
-        return bool(self.get_messages_for_display())
-
-    def get_messages_for_display(self):
-        if self.seed_task_id:
-            return self.chat.messages.all()[1:]
-        else:
-            return self.chat.messages.all()
-
     def get_participant_chip(self, include_link: bool = True) -> Chip:
         if self.participant:
             url = ""

@@ -20,18 +20,21 @@
         <h1 class="pg-title">Chatbot Review</h1>
       </div>
       {% if request.user.is_authenticated %}
-        {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
         <div class="flex flex-wrap items-center justify-end gap-2">
-          <div class="join">
-            <a class="btn btn-sm join-item"
-               href="{{ paginate_url }}?dir=prev">
-              <i class="fa-solid fa-backward-step"></i> Older
-            </a>
-            <a class="btn btn-sm join-item"
-               href="{{ paginate_url }}?dir=next">
-              Newer <i class="fa-solid fa-forward-step"></i>
-            </a>
-          </div>
+          {# Pagination navigates to another session, so the view requires chat.view_chat. #}
+          {% if perms.chat.view_chat %}
+            {% url 'chatbots:chatbot_session_pagination_view' team.slug experiment.public_id experiment_session.external_id as paginate_url %}
+            <div class="join">
+              <a class="btn btn-sm join-item"
+                 href="{{ paginate_url }}?dir=prev">
+                <i class="fa-solid fa-backward-step"></i> Older
+              </a>
+              <a class="btn btn-sm join-item"
+                 href="{{ paginate_url }}?dir=next">
+                Newer <i class="fa-solid fa-forward-step"></i>
+              </a>
+            </div>
+          {% endif %}
           {% if perms.trace.view_trace %}
             <a class="btn btn-sm"
                href="{% url 'trace:home' team.slug %}{% querystring f_session_id=experiment_session.external_id op_session_id='equals' %}">
