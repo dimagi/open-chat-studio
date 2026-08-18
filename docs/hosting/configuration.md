@@ -75,7 +75,7 @@ One of the following email backends must be configured. Set `DJANGO_EMAIL_BACKEN
 
 ### Mailgun (default)
 
-```
+```env
 DJANGO_EMAIL_BACKEND=anymail.backends.mailgun.EmailBackend
 MAILGUN_API_KEY=your-mailgun-api-key
 MAILGUN_SENDER_DOMAIN=mail.yourdomain.com
@@ -83,7 +83,7 @@ MAILGUN_SENDER_DOMAIN=mail.yourdomain.com
 
 ### Amazon SES
 
-```
+```env
 DJANGO_EMAIL_BACKEND=anymail.backends.amazon_ses.EmailBackend
 # Omit these if using IAM roles:
 AWS_SES_ACCESS_KEY=
@@ -122,7 +122,7 @@ The settings above also work with any S3-compatible service (MinIO, Cloudflare R
 
 MinIO (path-style addressing — note the bucket is included in `AWS_S3_CUSTOM_DOMAIN`):
 
-```
+```env
 USE_S3_STORAGE=True
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
@@ -136,7 +136,7 @@ WHATSAPP_S3_AUDIO_BUCKET=whatsapp-audio
 
 Cloudflare R2 (virtual-host addressing):
 
-```
+```env
 USE_S3_STORAGE=True
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
