@@ -37,3 +37,18 @@ export function formatCost(value) {
     const decimals = num !== 0 && num < 0.01 ? 4 : 2;
     return `$${num.toFixed(decimals)}`;
 }
+
+export function p95ChartSeries(series) {
+    const lines = series || [];
+    const labels = [...new Set(lines.flatMap(line => line.points.map(point => point.date)))].sort();
+    return {
+        labels,
+        datasets: lines.map(line => {
+            const byDate = new Map(line.points.map(point => [point.date, point.p95]));
+            return {
+                label: line.experiment_name,
+                data: labels.map(date => (byDate.has(date) ? byDate.get(date) : null)),
+            };
+        }),
+    };
+}

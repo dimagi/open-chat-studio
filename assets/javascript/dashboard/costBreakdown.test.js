@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 
-import {SERVICE_KINDS, formatCost, providerTotals, serviceKindSeries} from "./costBreakdown.js";
+import {SERVICE_KINDS, formatCost, providerTotals, serviceKindSeries, p95ChartSeries} from "./costBreakdown.js";
 
 describe("providerTotals", () => {
     it("sums model rows per provider, sorted by descending cost", () => {
@@ -66,5 +66,37 @@ describe("SERVICE_KINDS", () => {
             "llm_cache_write",
             "llm_output",
         ]);
+    });
+});
+
+describe("p95ChartSeries", () => {
+    it("aligns every series to the union of dates, null-filling gaps", () => {
+        const series = [
+            {
+                experiment_id: 1,
+                experiment_name: "Support Bot",
+                points: [
+                    {date: "2026-06-13", p95: 1.0},
+                    {date: "2026-06-14", p95: 2.0},
+                ],
+            },
+            {
+                experiment_id: 2,
+                experiment_name: "Sales Bot",
+                points: [{date: "2026-06-14", p95: 3.0}],
+            },
+        ];
+
+        expect(p95ChartSeries(series)).toEqual({
+            labels: ["2026-06-13", "2026-06-14"],
+            datasets: [
+                {label: "Support Bot", data: [1.0, 2.0]},
+                {label: "Sales Bot", data: [null, 3.0]},
+            ],
+        });
+    });
+
+    it("handles missing input", () => {
+        expect(p95ChartSeries(undefined)).toEqual({labels: [], datasets: []});
     });
 });
