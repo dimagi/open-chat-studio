@@ -159,6 +159,7 @@ MIDDLEWARE = list(
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
+            "apps.users.middleware.RequireMfaForStaffMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -291,6 +292,11 @@ MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
 MFA_RECOVERY_CODE_COUNT = 10
 MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "Open Chat Studio"
+# Staff and superusers are confined to the MFA setup flow until they enrol
+# (apps.users.middleware.RequireMfaForStaffMiddleware). Off by default in development and under
+# test: local superusers shouldn't have to enrol, and the existing staff-view tests would each need
+# to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
+REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
@@ -631,8 +637,15 @@ RATE_LIMIT_TRUSTED_PROXY_COUNT = env.int("RATE_LIMIT_TRUSTED_PROXY_COUNT", defau
 RATE_LIMIT_CACHE_ALIAS = "rate_limit"
 RATE_LIMITS = {
     "api": {"rate": env("RATE_LIMIT_API", default="2000/5m"), "fail_open": True},
+    # Counts and reports, never refuses. Counting happens after the view has answered
+    # the provider, so refusing means dropping the dispatch on a delivery the provider
+    # considers made: the participant's message is lost rather than delayed.
+    "channels": {"rate": env("RATE_LIMIT_CHANNELS", default="3000/5m"), "fail_open": True, "refuse": False},
     "admin_api": {"rate": env("RATE_LIMIT_ADMIN_API", default="100/5m"), "fail_open": True},
     "chat_api": {"rate": env("RATE_LIMIT_CHAT_API", default="300/5m"), "fail_open": True},
+    # Fail-closed: a counter the limiter cannot read must not become a way to
+    # brute force credentials unobserved.
+    "credentials": {"rate": env("RATE_LIMIT_CREDENTIALS", default="100/5m"), "fail_open": False},
 }
 CACHES["rate_limit"] = {
     "BACKEND": "django_redis.cache.RedisCache",
@@ -965,8 +978,9 @@ MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
 
-# How long after the last message a chat session token remains usable.
-CHAT_SESSION_TOKEN_INACTIVITY_WINDOW = timedelta(days=7)
+# How long after a chat session was created its token remains usable. Absolute:
+# activity does not extend it.
+CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
 SUPPORTED_FILE_TYPES = {
     "file_search": (

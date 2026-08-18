@@ -72,6 +72,33 @@ def is_client_credentials_request(request) -> bool:
     return token.application.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS
 
 
+def application_allows_chatbot(request, experiment) -> bool:
+    """True when the request may start a chat with `experiment`.
+
+    Only client-credentials (machine) applications are pinned to a set of chatbots: their token is
+    handed to a machine (and, for the chat widget, to a browser) with no user behind it, so the team
+    boundary is too coarse to be the last line. Every other caller -- API key, Django session,
+    authorization-code token -- keeps team-membership semantics untouched.
+
+    The allowlist holds working versions, but a caller may address a version directly: `public_id` is
+    unique per row and `create_new_version` assigns a fresh one. Normalise to the family head so a
+    legitimate versioned call is not denied.
+    """
+    if not is_client_credentials_request(request):
+        return True
+    return request.auth.application.allowed_chatbots.filter(pk=experiment.get_working_version_id()).exists()
+
+
+def enforce_application_chatbot_access(request, experiment) -> None:
+    """Raise `PermissionDenied` unless the request may start a chat with `experiment`.
+
+    403 rather than 401: the caller authenticated fine, it just isn't authorised for this chatbot.
+    Call this before anything with a side effect -- a session, a participant -- is created.
+    """
+    if not application_allows_chatbot(request, experiment):
+        raise exceptions.PermissionDenied("This application is not authorized to interact with this chatbot.")
+
+
 class TokenHasOAuthScope(TokenHasScope):
     """
     OAuth scope checking should only be done for OAuth2 tokens. This class overrides the

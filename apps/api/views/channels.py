@@ -31,16 +31,25 @@ from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.registry import get_channel_class_for_platform
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment, Participant, ParticipantData
-from apps.oauth.permissions import TokenHasOAuthScope
+from apps.oauth.permissions import TokenHasOAuthScope, enforce_application_chatbot_access
 from apps.teams.utils import current_team
+from apps.utils.rate_limit import rate_limited
 
 connect_logger = logging.getLogger("api.connect_channel")
 
 
 @csrf_exempt
 @require_POST
+@rate_limited("credentials")
 def generate_key(request: Request):
-    """Generates a key for a specific channel to use for secure communication"""
+    """Generates a key for a specific channel to use for secure communication.
+
+    Counted at the door by client IP, ahead of the outbound call below. The view
+    accepts any non-empty Authorization header and lets CommCare Connect decide
+    whether it was valid, so an unauthenticated caller can make us issue that request.
+    `channel_id` arrives before the call but the caller supplies it, so keying on it
+    would let someone drain a known channel's budget or evade the counter by varying it.
+    """
     token = request.META.get("HTTP_AUTHORIZATION")
     if not (token and "channel_id" in request.POST):
         return HttpResponse("Missing token or data", status=400)
@@ -167,6 +176,8 @@ def handle_trigger_bot_message(request, response_serializer_class):
     data = dict(data)
     data["identifier"] = identifier
     experiment = get_object_or_404(Experiment, public_id=data["experiment"], team=request.team)
+    # Before _get_or_create_participant_data below, which creates participant data as a side effect.
+    enforce_application_chatbot_access(request, experiment)
 
     channel = ExperimentChannel.objects.filter(platform=platform, experiment=experiment).first()
     if not channel:
@@ -224,6 +235,7 @@ class TriggerBotMessageView(APIView):
         responses={
             200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
+            403: {"description": "The OAuth application is not authorized for this chatbot"},
             404: {"description": "Not Found"},
         },
         examples=[

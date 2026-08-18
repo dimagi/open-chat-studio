@@ -1,10 +1,12 @@
 # ADR-0040: Stateless signed session tokens with server-side inactivity expiry
 
-<span class="adr-status adr-status-accepted">ACCEPTED</span>
+<span class="adr-status adr-status-superseded">SUPERSEDED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-06-09</p>
 
 <p class="adr-meta">Extends: <a href="0039-require-proof-of-possession-for-chat-session-access.md">ADR-0039</a></p>
+
+<p class="adr-meta">Superseded by: <a href="0054-chat-session-tokens-expire-on-absolute-age.md">ADR-0054</a> — the inactivity window is replaced by an absolute lifetime; the stateless signed token below still stands.</p>
 
 ## Context
 

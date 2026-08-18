@@ -63,10 +63,16 @@ def _parse_rate_cached(rate: str) -> tuple[int, int]:
     return parse_rate(rate)
 
 
-def _scope_config(scope: str) -> tuple[int, int, bool]:
+def _scope_config(scope: str) -> tuple[int, int, bool, bool]:
+    """Returns the scope's limit, window, backend-failure policy and over-limit policy.
+
+    `fail_open` covers a limiter that cannot answer; `refuse` covers one that answers
+    "over limit". A scope that sets `refuse: False` counts and reports but never turns
+    a caller away, for traffic where dropping the request costs more than serving it.
+    """
     config = settings.RATE_LIMITS[scope]
     limit, window_seconds = _parse_rate_cached(config["rate"])
-    return limit, window_seconds, config.get("fail_open", True)
+    return limit, window_seconds, config.get("fail_open", True), config.get("refuse", True)
 
 
 def _count(cache, key: str, timeout: int) -> int:
@@ -79,11 +85,32 @@ def _count(cache, key: str, timeout: int) -> int:
         return cache.incr(key)
 
 
+def _degraded_result(limit: int | None, window_seconds: int | None, fail_open: bool, refuses: bool) -> RateLimitResult:
+    """Answers for a request the limiter could not count.
+
+    `limit` is None when the configured rate itself would not parse, so there is no
+    limit to enforce and the request is allowed whatever the scope's fail_open says.
+    Otherwise a fail-closed scope refuses, unless it is one that never refuses.
+    """
+    if limit is None:
+        return RateLimitResult(allowed=True, limit=0, remaining=0, reset_seconds=0, degraded=True)
+    blocked = not fail_open and refuses and settings.RATE_LIMIT_ENFORCE
+    return RateLimitResult(
+        allowed=not blocked,
+        limit=limit,
+        remaining=0 if blocked else limit,
+        reset_seconds=window_seconds,
+        retry_after=window_seconds if blocked else None,
+        degraded=True,
+    )
+
+
 def check(scope: str, identity_type: str, identity: str, team_id: int | None = None) -> RateLimitResult:
     now = _now()
     limit = window_seconds = fail_open = None
+    refuses = True
     try:
-        limit, window_seconds, fail_open = _scope_config(scope)
+        limit, window_seconds, fail_open, refuses = _scope_config(scope)
         window_start = now - (now % window_seconds)
         reset_seconds = window_start + window_seconds - now
         key = f"rl:{scope}:{window_start}:{identity_type}:{identity}"
@@ -95,25 +122,15 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
             "rate_limit.backend_error",
             extra={"scope": scope, "identity_type": identity_type},
         )
-        if limit is None:
-            # The configured rate itself could not be parsed, so there is no limit to
-            # enforce; allow the request regardless of the scope's fail_open setting.
-            return RateLimitResult(allowed=True, limit=0, remaining=0, reset_seconds=0, degraded=True)
-        blocked = not fail_open and settings.RATE_LIMIT_ENFORCE
-        return RateLimitResult(
-            allowed=not blocked,
-            limit=limit,
-            remaining=0 if blocked else limit,
-            reset_seconds=window_seconds,
-            retry_after=window_seconds if blocked else None,
-            degraded=True,
-        )
-    remaining = max(0, limit - count)
+        return _degraded_result(limit, window_seconds, fail_open, refuses)
     if count > limit:
-        if settings.RATE_LIMIT_ENFORCE:
+        if settings.RATE_LIMIT_ENFORCE and refuses:
             return RateLimitResult(
                 allowed=False, limit=limit, remaining=0, reset_seconds=reset_seconds, retry_after=reset_seconds
             )
+        # Reached either before the enforcement flip or, for a scope that never refuses,
+        # for good. That scope produces no 429s, so this line is its only signal that an
+        # identity crossed its limit and has to keep running after the flip.
         if count == limit + 1 or count % WOULD_BLOCK_LOG_INTERVAL == 0:
             logger.info(
                 "rate_limit.would_block",
@@ -127,7 +144,7 @@ def check(scope: str, identity_type: str, identity: str, team_id: int | None = N
                 },
             )
         return RateLimitResult(allowed=True, limit=limit, remaining=0, reset_seconds=reset_seconds)
-    return RateLimitResult(allowed=True, limit=limit, remaining=remaining, reset_seconds=reset_seconds)
+    return RateLimitResult(allowed=True, limit=limit, remaining=limit - count, reset_seconds=reset_seconds)
 
 
 def client_ip(request) -> str:
@@ -152,7 +169,17 @@ def _bucket_ip(ip: str) -> str:
 
 
 def is_exempt(request) -> bool:
-    return bool(flag_is_active(request, RATE_LIMIT_EXEMPT_FLAG))
+    """Whether this request bypasses rate limiting entirely.
+
+    Resolving the flag reads a cache the limiter does not own and cannot bound.
+    A failure here answers "not exempt", which leaves each scope to its own
+    configured failure mode rather than raising past it.
+    """
+    try:
+        return bool(flag_is_active(request, RATE_LIMIT_EXEMPT_FLAG))
+    except Exception:
+        logger.exception("rate_limit.exemption_check_error")
+        return False
 
 
 def json_limited_response(request, result: RateLimitResult):
@@ -178,6 +205,47 @@ def rate_limited(scope: str, key_fn=None, response_fn=None):
         return wrapper
 
     return decorator
+
+
+def count_request(
+    request, scope: str, identity_type: str, identity: str, team_id: int | None = None
+) -> RateLimitResult:
+    """Counts one request against `scope` for an identity the view has already resolved.
+
+    `rate_limited` keys off what the request carries, so the identity is whatever the
+    caller supplied. A view that resolves its channel before counting calls this
+    instead: the identity is then a local primary key nobody can forge, the team is in
+    hand for `would_block` attribution and the per-team exemption, and the count can sit
+    after a signature check rather than in front of it.
+
+    This reports rather than refuses, so the caller owns what happens when `allowed` is
+    False. A view that ignores the return value stays unenforced once
+    RATE_LIMIT_ENFORCE is switched on.
+
+    The result is recorded on the request so `RateLimitHeadersMiddleware` emits the same
+    headers here as on the decorator and DRF paths. One response cannot describe more
+    than one bucket, so a view counting several identities reports the most recent
+    count, except that a refusal is never overwritten by a later allowance, which would
+    strip Retry-After off a 429. On a scope that never refuses every count is an
+    allowance, so its headers describe the identity counted last rather than the one
+    closest to its limit.
+
+    An exempt request is not counted and records nothing, so it reports no headers. Its
+    result carries the allow decision and no counter data. `team_id` reaches the
+    would_block log line for attribution; the exemption flag still resolves through
+    `request.team`, which is unset on the routes this serves, so only the global kill
+    switch reaches them.
+    """
+    if is_exempt(request):
+        return RateLimitResult(allowed=True, limit=0, remaining=0, reset_seconds=0)
+    result = check(scope, identity_type, str(identity), team_id=team_id)
+    # Auth attributes live on the DRF Request; the headers middleware reads the
+    # underlying HttpRequest, so the result is attached there, as in APIRateThrottle.
+    target = getattr(request, "_request", request)
+    recorded = getattr(target, "rate_limit_result", None)
+    if recorded is None or recorded.allowed:
+        target.rate_limit_result = result
+    return result
 
 
 def _ip_key(request, *args, **kwargs) -> tuple[str, str]:

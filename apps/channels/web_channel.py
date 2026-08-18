@@ -11,6 +11,7 @@ from apps.channels.models import ExperimentChannel
 from apps.channels.pipeline import MessageProcessingPipeline
 from apps.channels.stages.core import (
     BotInteractionStage,
+    ChannelDisabledStage,
     ChatMessageCreationStage,
     MessageTypeValidationStage,
     ParticipantValidationStage,
@@ -65,10 +66,13 @@ class WebChannel(ChannelBase):
         return MessageProcessingPipeline(
             core_stages=[
                 ParticipantValidationStage(),
+                # Embedded-widget sessions are served here, not by ApiChannel, so the
+                # admin's channel toggle has to be enforced on this pipeline too.
+                ChannelDisabledStage(),
                 # No SessionResolutionStage — session always pre-set
                 SessionActivationStage(),
                 MessageTypeValidationStage(),
-                # No ConsentFlowStage — web uses UI-based consent
+                # No ConsentFlowStage — the consent form UI that collected it was removed
                 QueryExtractionStage(),
                 ChatMessageCreationStage(),
                 BotInteractionStage(),

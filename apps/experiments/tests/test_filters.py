@@ -584,6 +584,77 @@ class TestExperimentSessionFilters:
         assert target not in filtered
 
 
+@pytest.mark.django_db()
+class TestLastActivityFilter:
+    """The Last Activity filter mirrors the sessions table's "Last activity" column: it falls back
+    to ``created_at`` for sessions whose participant never sent a message.
+    """
+
+    @pytest.fixture()
+    def sessions(self):
+        """Two sessions created in January; only ``messaged`` has participant activity, in March."""
+        with travel("2025-01-10 10:00:00", tick=False):
+            never_messaged = ExperimentSessionFactory.create()
+            messaged = ExperimentSessionFactory.create(experiment=never_messaged.experiment)
+        messaged.last_activity_at = timezone.datetime.fromisoformat("2025-03-10T10:00:00+00:00")
+        messaged.save()
+        return never_messaged, messaged
+
+    def _filter(self, sessions, operator, value):
+        never_messaged, _ = sessions
+        params = {"f_last_activity": value, "op_last_activity": operator}
+        return ExperimentSessionFilter().apply(
+            never_messaged.experiment.sessions.all(), FilterParams(_get_querydict(params))
+        )
+
+    @pytest.mark.parametrize(
+        ("operator", "value", "expected"),
+        [
+            pytest.param(Operators.ON, "2025-01-10", ["never_messaged"], id="on-creation-date"),
+            pytest.param(Operators.ON, "2025-03-10", ["messaged"], id="on-last-message-date"),
+            pytest.param(Operators.BEFORE, "2025-02-01", ["never_messaged"], id="before"),
+            pytest.param(Operators.AFTER, "2025-02-01", ["messaged"], id="after"),
+            pytest.param(Operators.AFTER, "2025-01-01", ["never_messaged", "messaged"], id="after-matches-both"),
+            pytest.param(Operators.BEFORE, "2025-01-01", [], id="before-matches-neither"),
+        ],
+    )
+    def test_operators(self, sessions, operator, value, expected):
+        by_name = dict(zip(("never_messaged", "messaged"), sessions, strict=True))
+        filtered = self._filter(sessions, operator, value)
+        assert set(filtered) == {by_name[name] for name in expected}
+
+    def test_no_duplicate_rows(self, sessions):
+        """The filter ORs two conditions on the same table, so it must not multiply rows."""
+        filtered = self._filter(sessions, Operators.AFTER, "2025-01-01")
+        assert filtered.count() == 2
+        assert len(list(filtered)) == 2
+
+    @travel("2025-03-11 10:00:00", tick=False)
+    def test_range_operator_uses_created_at_fallback(self, sessions):
+        """A session created inside the range but never messaged is still recent activity."""
+        never_messaged, messaged = sessions
+        filtered = self._filter(sessions, Operators.RANGE, "7d")
+        assert set(filtered) == {messaged}
+
+        never_messaged.created_at = timezone.datetime.fromisoformat("2025-03-09T10:00:00+00:00")
+        never_messaged.save()
+        assert set(self._filter(sessions, Operators.RANGE, "7d")) == {never_messaged, messaged}
+
+    def test_date_range_pair_on_the_same_column(self, sessions):
+        """The UI expresses a range as ``after X`` + ``before Y`` on one column; both must apply."""
+        never_messaged, _ = sessions
+        params = _get_querydict_from_pairs(
+            [
+                ("f_last_activity", "2025-01-01"),
+                ("op_last_activity", Operators.AFTER),
+                ("f_last_activity", "2025-02-01"),
+                ("op_last_activity", Operators.BEFORE),
+            ]
+        )
+        filtered = ExperimentSessionFilter().apply(never_messaged.experiment.sessions.all(), FilterParams(params))
+        assert list(filtered) == [never_messaged]
+
+
 @pytest.fixture(scope="class")
 def participant_session(django_db_setup, django_db_blocker):
     """Create a base experiment session with participant"""

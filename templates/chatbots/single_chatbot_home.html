@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 form_tags static team_tags waffle_tags %}
+{% load django_tables2 form_tags humanize static team_tags waffle_tags %}
 
 {% block page_head %}
   {{ block.super }}
@@ -115,6 +115,22 @@
     {% if experiment.is_editable %}
       {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
       <div id="channel_create_edit_modal_placeholder"></div>
+    {% endif %}
+    {% if cost_tracking_enabled %}
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm" data-testid="chatbot-usage-widget">
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (30d)</span>
+          {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_call_count unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" %}
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Sessions (30d)</span>
+          <span class="font-semibold">{{ usage_summary.sessions_count|intcomma }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Messages (30d)</span>
+          <span class="font-semibold">{{ usage_summary.messages_count|intcomma }}</span>
+        </div>
+      </div>
     {% endif %}
   </div>
   <div class="tabs-container">

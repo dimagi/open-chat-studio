@@ -1,7 +1,9 @@
 from django import forms
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from oauth2_provider.forms import AllowForm
 
+from apps.experiments.models import Experiment
 from apps.oauth.models import OAuth2Application
 
 
@@ -62,7 +64,7 @@ class RegisterApplicationForm(forms.ModelForm):
         help_text="Algorithm for signing JWT tokens.",
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, team=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["algorithm"].disabled = True
         # redirect_uris is only required for the authorization-code grant; enforced in clean().
@@ -74,11 +76,36 @@ class RegisterApplicationForm(forms.ModelForm):
             # the application exists.
             self.fields["authorization_grant_type"].disabled = True
 
+        if "allowed_chatbots" in self.fields:
+            self._init_allowed_chatbots(team)
+
+    def _init_allowed_chatbots(self, team):
+        """Offer the team's chatbots, plus whatever this application already points at.
+
+        A ModelMultipleChoiceField silently drops selected values that fall outside its queryset, so
+        filtering archived chatbots out on its own would quietly revoke an archived one on the next
+        unrelated save. The current selections are unioned back in -- and set as the initial value,
+        since the related manager the ModelForm reads them through excludes archived rows too.
+        """
+        selected_ids = list(
+            Experiment.objects.get_all().filter(oauth_applications=self.instance).values_list("pk", flat=True)
+            if self.instance.pk
+            else []
+        )
+        offered = Q(team=team, working_version__isnull=True, is_archived=False) if team else Q(pk__in=[])
+        field = self.fields["allowed_chatbots"]
+        field.queryset = Experiment.objects.get_all().filter(offered | Q(pk__in=selected_ids)).order_by("name")
+        self.initial["allowed_chatbots"] = selected_ids
+
     def clean(self):
         cleaned_data = super().clean()
         grant_type = cleaned_data.get("authorization_grant_type")
         if grant_type == OAuth2Application.GRANT_AUTHORIZATION_CODE and not cleaned_data.get("redirect_uris"):
             self.add_error("redirect_uris", "Redirect URIs are required for authorization-code applications.")
+        if grant_type != OAuth2Application.GRANT_CLIENT_CREDENTIALS and "allowed_chatbots" in cleaned_data:
+            # Only client-credentials applications are pinned to chatbots; an authorization-code token
+            # carries a user, so it keeps team-membership semantics and a stored list would mislead.
+            cleaned_data["allowed_chatbots"] = Experiment.objects.none()
         return cleaned_data
 
     def save(self, commit=True):
@@ -90,6 +117,9 @@ class RegisterApplicationForm(forms.ModelForm):
         instance.skip_authorization = False
         if commit:
             instance.save()
+            # `super().save(commit=False)` defers the m2m write to here; without this
+            # `allowed_chatbots` would never persist.
+            self.save_m2m()
         return instance
 
     class Meta:
@@ -103,12 +133,20 @@ class RegisterApplicationForm(forms.ModelForm):
             "post_logout_redirect_uris",
             "allowed_origins",
             "algorithm",
+            "allowed_chatbots",
         ]
+        widgets = {
+            "allowed_chatbots": forms.CheckboxSelectMultiple,
+        }
         help_texts = {
             "redirect_uris": "Enter one URI per line. These are the allowed redirect URIs after authorization.",
             "post_logout_redirect_uris": "Enter one URI per line. Optional URIs for post-logout redirects.",
             "allowed_origins": "Enter one origin per line. Optional CORS allowed origins.",
             "algorithm": "Algorithm for signing tokens.",
+            "allowed_chatbots": (
+                "Chatbots this application may start chat sessions with. Empty means none. Applies to "
+                "client-credentials applications only."
+            ),
         }
 
 
@@ -124,6 +162,11 @@ class RegisterGlobalApplicationForm(RegisterApplicationForm):
         label="Grant type",
         help_text="Global applications support the authorization-code grant only.",
     )
+
+    class Meta(RegisterApplicationForm.Meta):
+        # No allowed_chatbots: the field only means anything for client-credentials applications, and
+        # a global application has no team whose chatbots could be offered.
+        fields = [field for field in RegisterApplicationForm.Meta.fields if field != "allowed_chatbots"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

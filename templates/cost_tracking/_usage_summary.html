@@ -1,0 +1,43 @@
+{% load cost_tracking %}
+{% comment %}
+  Cost figure + confidence badge, shared by the trace detail, session detail, and chatbot
+  home usage widgets so the "no pricing data" / confidence-badge behaviour reads identically
+  everywhere. Caller must gate this include behind `cost_tracking_enabled` itself.
+
+  Required context:
+    total_cost - Decimal, the priced spend for the window/trace/session.
+    testid_prefix - str, unique per call site (e.g. "trace", "session-usage", "chatbot-usage").
+  Optional context:
+    unpriced/estimated/unknown - a bool or a truthy count; either renders the same way.
+      unpriced: some usage has no matching PricingRule ("No pricing data" / "(partial pricing)").
+      estimated: some usage is Confidence.ESTIMATED, not provider-reported.
+      unknown: some usage is Confidence.UNKNOWN (no usage data recorded at all).
+{% endcomment %}
+{% with cost_tip="Estimated from recorded token usage multiplied by the configured price for each model. Treat as a guide to relative spend, not an exact bill." %}
+  <div class="flex items-center gap-2 flex-wrap">
+    {% if total_cost %}
+      <span class="font-semibold tooltip" data-tip="{{ cost_tip }}" data-testid="{{ testid_prefix }}-cost">${{ total_cost|cost_display }}</span>
+      {% if unpriced %}
+        <span class="text-xs text-base-content/40 tooltip"
+              data-tip="Some of this usage has no matching price configured, so this total is incomplete.">(partial pricing)</span>
+      {% endif %}
+    {% elif unpriced %}
+      <span class="text-base-content/40 tooltip"
+            data-tip="None of this usage has a matching price configured yet."
+            data-testid="{{ testid_prefix }}-cost">No pricing data</span>
+    {% else %}
+      <span class="font-semibold tooltip" data-tip="{{ cost_tip }}" data-testid="{{ testid_prefix }}-cost">$0.00</span>
+    {% endif %}
+    {% if estimated or unknown %}
+      <span class="badge badge-warning badge-xs tooltip"
+            data-testid="{{ testid_prefix }}-confidence-badge"
+            {% if unknown %}
+              data-tip="Some LLM calls have no recorded usage data"
+            {% else %}
+              data-tip="Some token counts are estimated, not provider-reported"
+            {% endif %}>
+        {% if unknown %}Unknown{% else %}Estimated{% endif %}
+      </span>
+    {% endif %}
+  </div>
+{% endwith %}

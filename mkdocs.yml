@@ -129,6 +129,7 @@ nav:
       - 0051 One set of activity-metric definitions across usage surfaces: adr/0051-usage-activity-metric-definitions.md
       - 0052 App-layer rate limiting: adr/0052-app-layer-rate-limiting-mechanism.md
       - 0053 Starting a chat session requires team membership or the embed key: adr/0053-chat-session-start-requires-membership-or-embed-key.md
+      - 0054 Chat session tokens expire on absolute age, not inactivity: adr/0054-chat-session-tokens-expire-on-absolute-age.md
   - Developer Guides:
     - Processes:
       - Claude GitHub Automation: developer_guides/claude_github_automation.md
@@ -161,6 +162,7 @@ nav:
   - Self-Hosting:
     - Overview: hosting/index.md
     - Configuration: hosting/configuration.md
+    - Rate Limiting: hosting/rate_limiting.md
     - Docker Compose: hosting/docker.md
     - Heroku: hosting/heroku.md
     - AWS Fargate: hosting/aws.md

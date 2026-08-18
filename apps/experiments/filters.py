@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import ClassVar
 
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.models import ChannelPlatform
@@ -23,6 +23,34 @@ from apps.web.dynamic_filters.column_filters import (
     SessionStatusFilter,
     TimestampFilter,
 )
+
+
+class LastActivityFilter(TimestampFilter):
+    """Timestamp filter over the session's last activity, matching the sessions table column.
+
+    ``last_activity_at`` is only written when the participant sends a message, so it is null for
+    sessions that never received one (bot-initiated sessions, rows predating the field). Those
+    sessions fall back to ``created_at`` here, exactly as
+    :attr:`~apps.experiments.models.ExperimentSession.last_activity` does when rendering.
+    """
+
+    query_param: str = "last_activity"
+    label: str = "Last Activity"
+    description: str = (
+        "Filter by last activity time: the participant's most recent message, "
+        "or the session's creation time if they never sent one"
+    )
+
+    def _filter_by_lookup(self, queryset, lookup_suffix: str, value):
+        # Two branches rather than a ``Coalesce`` annotation: each side can use the existing
+        # column indexes, and the same column can carry two filters (the UI expresses a date
+        # range as ``after X`` + ``before Y``) without colliding on an annotation alias.
+        # A null ``last_activity_at`` can never satisfy the first branch, so the branches are
+        # mutually exclusive — and both target this table, so no row multiplication either.
+        return queryset.filter(
+            Q(**{f"last_activity_at__{lookup_suffix}": value})
+            | Q(last_activity_at__isnull=True, **{f"created_at__{lookup_suffix}": value})
+        )
 
 
 class MessageTimestampFilter(TimestampFilter):
@@ -230,20 +258,23 @@ class ExperimentSessionFilter(MultiColumnFilter):
     """Filter for experiment sessions using the new ColumnFilter pattern."""
 
     slug: ClassVar[str] = "session"
-    date_range_column: ClassVar[str] = "last_message"
+    # The quick date-range dropdown targets last activity rather than the participant's last
+    # message, so "Last 7 Days" keeps sessions the participant never replied to.
+    date_range_column: ClassVar[str] = "last_activity"
     filters: ClassVar[Sequence[ColumnFilter]] = [
         ParticipantFilter(),
+        LastActivityFilter(),
         TimestampFilter(
-            label="Last Message",
+            label="Last Participant Message",
             column="last_activity_at",
             query_param="last_message",
-            description="Filter by last message time",
+            description="Filter by the time of the participant's most recent message",
         ),
         TimestampFilter(
-            label="First Message",
+            label="First Participant Message",
             column="first_activity_at",
             query_param="first_message",
-            description="Filter by first message time",
+            description="Filter by the time of the participant's first message",
         ),
         MessageTimestampFilter(
             label="Message Date",

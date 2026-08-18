@@ -1,6 +1,7 @@
 import functools
 import hmac
 import logging
+from collections.abc import Callable
 from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
@@ -28,8 +29,9 @@ from apps.admin.forms import (
 )
 from apps.admin.imports import import_team_metadata_from_csv
 from apps.admin.models import OcsConfiguration
-from apps.admin.provider_keys import get_provider_key_fingerprints
+from apps.admin.provider_keys import get_provider_key_fingerprints, get_trace_provider_records
 from apps.admin.queries import (
+    build_tracing_volume_report,
     build_usage_report,
     get_message_stats,
     get_participant_stats,
@@ -567,6 +569,19 @@ def users_api(request):
     return JsonResponse(data, safe=False)
 
 
+def _range_report(request, build: Callable[[datetime, datetime], dict]) -> JsonResponse:
+    """Run a reporting query over the requested date range, or 400 if it isn't valid.
+
+    Shared by the cross-team reporting APIs: they differ only in which report they
+    build, and the range is the whole of their request contract.
+    """
+    result = _validated_range(request)
+    if result is None:
+        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
+    _, _, start_timestamp, end_timestamp = result
+    return JsonResponse(build(start_timestamp, end_timestamp))
+
+
 @rate_limited("admin_api", key_fn=admin_api_key)
 @superuser_or_reporting_token
 def provider_usage_api(request):
@@ -574,11 +589,7 @@ def provider_usage_api(request):
     per-model detail, all read from recorded UsageRecords. Requires `range_type`,
     `start`, and `end` query params (as the dashboard date-range form).
     """
-    result = _validated_range(request)
-    if result is None:
-        return JsonResponse({"error": "Invalid or missing date range (range_type, start, end)"}, status=400)
-    _, _, start_timestamp, end_timestamp = result
-    return JsonResponse(build_usage_report(start_timestamp, end_timestamp))
+    return _range_report(request, build_usage_report)
 
 
 @rate_limited("admin_api", key_fn=admin_api_key)
@@ -587,10 +598,28 @@ def provider_keys_api(request):
     """Masked API-key fingerprint → team mapping across all LLM providers, so a
     report can attribute provider-side cost (keyed by the provider's redacted
     key) back to the owning team. Never returns the raw secret.
+
+    `trace_providers` is the same mapping for tracing, which bills by project inside
+    an organization rather than by key, so it joins on `project_id` instead.
     """
+    metadata_fields = get_team_metadata_fields()
     return JsonResponse(
-        {"providers": list(get_provider_key_fingerprints()), "metadata_fields": get_team_metadata_fields()}
+        {
+            "providers": list(get_provider_key_fingerprints(metadata_fields)),
+            "trace_providers": list(get_trace_provider_records(metadata_fields)),
+            "metadata_fields": metadata_fields,
+        }
     )
+
+
+@rate_limited("admin_api", key_fn=admin_api_key)
+@superuser_or_reporting_token
+def tracing_usage_api(request):
+    """Cross-team tracing volume over a date range, for apportioning a tracing bill
+    that arrives with no per-team breakdown. Requires `range_type`, `start`, and `end`
+    query params (as the dashboard date-range form).
+    """
+    return _range_report(request, build_tracing_volume_report)
 
 
 @is_superuser

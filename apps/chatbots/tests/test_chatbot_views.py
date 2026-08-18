@@ -1,5 +1,6 @@
 import re
 from datetime import UTC, datetime
+from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import pytest
@@ -12,10 +13,11 @@ from django.test import Client, RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.html import escape
+from time_machine import travel
 
 from apps.annotations.models import Tag
 from apps.api.session_tokens import validate_session_token
-from apps.chat.models import Chat
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 from apps.chatbots.tables import ChatbotSessionsTable
 from apps.chatbots.views import (
     ChatbotExperimentTableView,
@@ -25,15 +27,24 @@ from apps.chatbots.views import (
     chatbot_session_pagination_view,
     home,
 )
+from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.events.models import StaticTriggerType
 from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
 from apps.pipelines.models import Pipeline
 from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.teams.helpers import get_team_membership_for_request
+from apps.teams.models import Flag
 from apps.teams.utils import set_current_team
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory, TeamFactory
 from apps.utils.factories.user import UserFactory
+
+
+def _enable_cost_tracking_flag_for(team):
+    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
+    flag.teams.add(team)
+    flag.flush()
 
 
 @pytest.mark.django_db()
@@ -157,6 +168,136 @@ def test_single_chatbot_home_version_snapshot_redirects_to_working_version(clien
     expected_url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
     assert response.status_code == 302
     assert response["Location"] == f"{expected_url}?version_id={snapshot.version_number}#versions"
+
+
+def _create_chatbot(team, user):
+    pipeline = Pipeline.objects.create(team=team, name="Test Pipeline", data={"nodes": [], "edges": []})
+    return Experiment.objects.create(
+        name="Test Experiment", description="Test Description", owner=user, team=team, pipeline=pipeline
+    )
+
+
+@pytest.mark.django_db()
+def test_chatbot_home_hides_usage_widget_when_flag_off(client, team_with_users):
+    """The usage widget is gated by flag_ai_cost_monitoring."""
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+    client.force_login(user)
+    experiment = _create_chatbot(team, user)
+    session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+    UsageRecordFactory.create(
+        team=team,
+        experiment=experiment,
+        session=session,
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        cost=Decimal("1.00"),
+    )
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context_data["cost_tracking_enabled"] is False
+    assert response.context_data["usage_summary"] is None
+    assert b'data-testid="chatbot-usage-widget"' not in response.content
+
+
+@pytest.mark.django_db()
+def test_chatbot_home_shows_usage_widget_when_flag_on(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+    _enable_cost_tracking_flag_for(team)
+    client.force_login(user)
+    experiment = _create_chatbot(team, user)
+    session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+    UsageRecordFactory.create(
+        team=team,
+        experiment=experiment,
+        session=session,
+        model_name="gpt-4o",
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=1000,
+        cost=Decimal("1.50"),
+    )
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+    ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.AI, content="hello")
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context_data["cost_tracking_enabled"] is True
+    usage = response.context_data["usage_summary"]
+    assert usage.cost.total_cost == Decimal("1.50000000")
+    assert usage.sessions_count == 1
+    assert usage.messages_count == 2
+    content = response.content.decode()
+    assert b'data-testid="chatbot-usage-widget"' in response.content
+    assert "1.50" in content
+
+
+@pytest.mark.django_db()
+def test_chatbot_home_shows_no_pricing_data_when_unpriced(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+    _enable_cost_tracking_flag_for(team)
+    client.force_login(user)
+    experiment = _create_chatbot(team, user)
+    session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+    UsageRecordFactory.create(
+        team=team,
+        experiment=experiment,
+        session=session,
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        cost=Decimal("0"),
+    )
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert "No pricing data" in response.content.decode()
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "cost",
+    [
+        pytest.param(Decimal("0.10"), id="nonzero-cost"),
+        pytest.param(Decimal("0"), id="zero-cost-decimal-is-falsy"),
+    ],
+)
+def test_chatbot_home_shows_confidence_badge_for_estimated_rows(client, team_with_users, cost):
+    """The badge condition can't be derived from `estimated_cost` alone - a $0 estimated row
+    (e.g. a zero-priced model) is a Decimal 0, which is falsy, but must still show the badge."""
+    team = team_with_users
+    user = team.members.first()
+    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
+    _enable_cost_tracking_flag_for(team)
+    client.force_login(user)
+    experiment = _create_chatbot(team, user)
+    session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+    UsageRecordFactory.create(
+        team=team,
+        experiment=experiment,
+        session=session,
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        cost=cost,
+        confidence=Confidence.ESTIMATED,
+    )
+
+    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert b'data-testid="chatbot-usage-confidence-badge"' in response.content
+    assert "Estimated" in response.content.decode()
 
 
 @pytest.mark.django_db()
@@ -419,6 +560,29 @@ def test_chatbot_sessions_table_view_applies_both_filters_on_one_column(client, 
     assert response.status_code == 200
     assert list(response.context_data["table"].data.data) == [in_range]
     assert str(out_of_range.external_id) not in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_chatbot_sessions_table_view_last_activity_filter(client, team_with_users):
+    """The Last Activity filter matches a never-messaged session on its creation time, and the
+    rendered row shows that time rather than an empty cell."""
+    team = team_with_users
+    user = team.members.first()
+    client.force_login(user)
+    experiment = ExperimentFactory.create(team=team)
+    with travel("2026-05-15 10:00:00", tick=False):
+        never_messaged = ExperimentSessionFactory.create(team=team, experiment=experiment, participant__team=team)
+    with travel("2026-01-15 10:00:00", tick=False):
+        older = ExperimentSessionFactory.create(team=team, experiment=experiment, participant__team=team)
+
+    url = reverse("chatbots:sessions-list", kwargs={"team_slug": team.slug, "experiment_id": experiment.id})
+    response = client.get(url, {"f_last_activity": "2026-04-30", "op_last_activity": "after"})
+
+    assert response.status_code == 200
+    assert list(response.context_data["table"].data.data) == [never_messaged]
+    content = response.content.decode()
+    assert never_messaged.created_at.isoformat() in content
+    assert str(older.external_id) not in content
 
 
 @pytest.mark.django_db()
@@ -1075,3 +1239,114 @@ def test_session_pagination_requires_chat_view_chat(client, groups, expected_sta
         args=[team.slug, session.experiment.public_id, session.external_id],
     )
     assert client.get(url).status_code == expected_status
+
+
+@pytest.mark.django_db()
+def test_session_view_hides_usage_summary_when_flag_off(client, team_with_users):
+    """The usage summary row is gated by flag_ai_cost_monitoring."""
+    team = team_with_users
+    user = team.members.first()
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    UsageRecordFactory.create(
+        team=team, session=session, service_kind=ServiceKind.LLM_INPUT, quantity=100, cost=Decimal("1.00")
+    )
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context_data["cost_tracking_enabled"] is False
+    assert response.context_data["usage_summary"] is None
+    assert b'data-testid="session-usage-summary"' not in response.content
+
+
+@pytest.mark.django_db()
+def test_session_view_shows_usage_summary_when_flag_on(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    UsageRecordFactory.create(
+        team=team,
+        session=session,
+        model_name="gpt-4o",
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=1000,
+        cost=Decimal("1.50"),
+    )
+    UsageRecordFactory.create(
+        team=team,
+        session=session,
+        model_name="gpt-4o",
+        service_kind=ServiceKind.LLM_OUTPUT,
+        quantity=200,
+        cost=Decimal("0.30"),
+    )
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context_data["cost_tracking_enabled"] is True
+    usage = response.context_data["usage_summary"]
+    assert usage.total_cost == Decimal("1.80000000")
+    assert usage.total_tokens == 1200
+    content = response.content.decode()
+    assert b'data-testid="session-usage-summary"' in response.content
+    assert "1,200" in content
+    assert "1.80" in content
+
+
+@pytest.mark.django_db()
+def test_session_view_shows_no_pricing_data_when_unpriced(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    UsageRecordFactory.create(
+        team=team, session=session, service_kind=ServiceKind.LLM_INPUT, quantity=100, cost=Decimal("0")
+    )
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert "No pricing data" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_session_view_shows_confidence_badge_for_estimated_rows(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    session = ExperimentSessionFactory.create(experiment__team=team)
+    UsageRecordFactory.create(
+        team=team,
+        session=session,
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        confidence=Confidence.ESTIMATED,
+    )
+    client.force_login(user)
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert b'data-testid="session-usage-confidence-badge"' in response.content
+    assert "Estimated" in response.content.decode()

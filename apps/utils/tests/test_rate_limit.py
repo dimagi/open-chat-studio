@@ -11,6 +11,7 @@ from django.core.cache import caches
 from django.http import HttpResponse
 from django.http import JsonResponse as DjangoJsonResponse
 from django.test import RequestFactory, override_settings
+from rest_framework.request import Request as DRFRequest
 from waffle import get_waffle_flag_model
 
 from apps.teams.flags import Flags
@@ -22,6 +23,7 @@ from apps.utils.rate_limit import (
     _scope_config,
     check,
     client_ip,
+    count_request,
     is_exempt,
     parse_rate,
     rate_limited,
@@ -395,11 +397,12 @@ def test_admin_api_scope_is_configured():
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("admin_api")
+    limit, window_seconds, fail_open, refuses = _scope_config("admin_api")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is True
+    assert refuses is True
 
 
 def test_chat_api_scope_is_configured():
@@ -408,11 +411,45 @@ def test_chat_api_scope_is_configured():
     The configured rate is env-overridable, so this asserts the properties that
     hold for any deployment rather than one deployment's numbers.
     """
-    limit, window_seconds, fail_open = _scope_config("chat_api")
+    limit, window_seconds, fail_open, refuses = _scope_config("chat_api")
 
     assert limit > 0
     assert window_seconds > 0
     assert fail_open is True
+    assert refuses is True
+
+
+def test_channels_scope_is_configured():
+    """The channels scope is registered, parses, fails open, and never refuses.
+
+    The configured rate is env-overridable, so this asserts the properties that
+    hold for any deployment rather than one deployment's numbers.
+
+    Refusing an inbound channel delivery discards a participant's message: the
+    provider has already been answered, and there is nobody to retry. Counting is
+    what this scope is for, and the would_block line is what carries an over-limit
+    identity to monitoring.
+    """
+    limit, window_seconds, fail_open, refuses = _scope_config("channels")
+
+    assert limit > 0
+    assert window_seconds > 0
+    assert fail_open is True
+    assert refuses is False
+
+
+def test_credentials_scope_is_configured_fail_closed():
+    """The credentials scope is registered, parses, and is the one fail-closed scope.
+
+    The configured rate is env-overridable, so this asserts the properties that
+    hold for any deployment rather than one deployment's numbers.
+    """
+    limit, window_seconds, fail_open, refuses = _scope_config("credentials")
+
+    assert limit > 0
+    assert window_seconds > 0
+    assert fail_open is False
+    assert refuses is True
 
 
 def test_middleware_skips_degraded_results(db):
@@ -441,3 +478,219 @@ def test_middleware_gives_degraded_blocks_a_retry_after(db):
     response = RateLimitHeadersMiddleware(view)(_request())
     assert response.headers["Retry-After"] == "300"
     assert "X-RateLimit-Limit" not in response.headers
+
+
+def test_exemption_check_treats_a_broken_flag_backend_as_not_exempt(rf, monkeypatch):
+    """The exemption lookup runs before the limiter's own failure handling, so it
+    must not turn a backend outage into a 500 on a scope that promises to refuse.
+    """
+
+    def _explode(*args, **kwargs):
+        raise ConnectionError("flag backend unreachable")
+
+    monkeypatch.setattr("apps.utils.rate_limit.flag_is_active", _explode)
+
+    assert is_exempt(rf.get("/")) is False
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_counts_the_identity_it_is_given(db):
+    """The caller supplies a resolved identity, so nothing is read off the request."""
+    request = _request()
+
+    first = count_request(request, "api", "channel", "17")
+    second = count_request(request, "api", "channel", "17")
+
+    assert (first.limit, first.remaining) == (3, 2)
+    assert second.remaining == 1
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_keeps_identities_in_separate_buckets(db):
+    """Two channels counted in the same request do not spend each other's allowance."""
+    request = _request()
+
+    count_request(request, "api", "channel", "17")
+    other = count_request(request, "api", "channel", "18")
+
+    assert other.remaining == 2
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_records_the_result_for_the_headers_middleware(db):
+    """Counting in a view still emits X-RateLimit-*, as the decorator path does."""
+
+    def view(request):
+        count_request(request, "api", "channel", "17")
+        return DjangoJsonResponse({"ok": True})
+
+    response = RateLimitHeadersMiddleware(view)(_request())
+
+    assert response.headers["X-RateLimit-Limit"] == "3"
+    assert response.headers["X-RateLimit-Remaining"] == "2"
+    assert int(response.headers["X-RateLimit-Reset"]) > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_records_the_latest_identity_while_all_are_allowed(db):
+    """One response cannot describe several buckets, so the newest allowed count wins."""
+    request = _request()
+
+    count_request(request, "api", "channel", "17")
+    count_request(request, "api", "channel", "18")
+
+    assert request.rate_limit_result.remaining == 2
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_keeps_a_refusal_when_a_later_identity_is_allowed(db):
+    """A 429 needs its Retry-After, so a later allowance does not displace the refusal
+    that the response is being built from.
+    """
+    request = _request()
+    for _ in range(4):
+        count_request(request, "api", "channel", "17")
+
+    count_request(request, "api", "channel", "18")
+
+    assert request.rate_limit_result.allowed is False
+    assert request.rate_limit_result.retry_after > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_reports_over_the_limit_without_refusing(db):
+    """The helper answers the question and leaves the response to the caller."""
+    request = _request()
+    for _ in range(3):
+        count_request(request, "api", "channel", "17")
+
+    result = count_request(request, "api", "channel", "17")
+
+    assert result.allowed is False
+    assert result.retry_after == result.reset_seconds > 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_count_request_records_on_the_underlying_request_for_drf_views(db):
+    """A DRF Request proxies reads but not writes, so the middleware would never see a
+    result attached to the wrapper.
+    """
+    underlying = _request()
+
+    count_request(DRFRequest(underlying), "api", "channel", "17")
+
+    assert underlying.rate_limit_result.remaining == 2
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_count_request_accepts_a_non_string_identity(db):
+    """Callers pass a resolved primary key. The crossing request hashes the identity, so
+    an int would only fail once a bucket went over, in the shipped log-only default.
+    """
+    request = _request()
+
+    for _ in range(5):
+        result = count_request(request, "api", "channel", 17)
+
+    assert result.allowed is True
+    assert result.remaining == 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+def test_count_request_allows_over_the_limit_in_log_only_mode(db):
+    """The shipped default counts without ever refusing."""
+    request = _request()
+
+    for _ in range(5):
+        result = count_request(request, "api", "channel", "17")
+
+    assert result.allowed is True
+    assert result.remaining == 0
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=True)
+@pytest.mark.django_db()
+def test_count_request_skips_exempt_requests():
+    """An exempt request is neither counted nor refused, and reports no headers."""
+    get_waffle_flag_model().objects.update_or_create(name=RATE_LIMIT_EXEMPT_FLAG, defaults={"everyone": True})
+    request = _request()
+
+    for _ in range(5):
+        result = count_request(request, "api", "channel", "17")
+
+    assert result.allowed is True
+    assert not hasattr(request, "rate_limit_result")
+
+
+@override_settings(RATE_LIMITS=TINY_LIMITS, RATE_LIMIT_ENFORCE=False)
+@pytest.mark.django_db()
+def test_count_request_attributes_would_block_to_the_resolved_team(caplog):
+    """The team the view resolved reaches the log line, which the decorator path cannot
+    do on these routes because request.team is None there.
+    """
+    team = TeamFactory()
+    request = _request()
+    for _ in range(3):
+        count_request(request, "api", "channel", "17", team_id=team.pk)
+
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        count_request(request, "api", "channel", "17", team_id=team.pk)
+
+    would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
+    assert [r.team_id for r in would_block] == [team.pk]
+
+
+NEVER_REFUSING_LIMITS = {"api": {"rate": "3/5m", "fail_open": True, "refuse": False}}
+
+
+def test_scopes_refuse_by_default():
+    """Omitting the key leaves a scope refusing, so the landed scopes are untouched."""
+    _, _, _, refuses = _scope_config("api")
+
+    assert refuses is True
+
+
+@override_settings(RATE_LIMITS=NEVER_REFUSING_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_a_never_refusing_scope_serves_over_limit_requests_under_enforcement():
+    """Some traffic costs more to drop than to serve. Refusing a provider delivery
+    discards a participant's message, so this scope counts and lets it through even
+    once the global enforcement switch is on.
+    """
+    for _ in range(3):
+        check("api", "channel", "17")
+
+    result = check("api", "channel", "17")
+
+    assert result.allowed is True
+    assert result.remaining == 0
+    assert result.retry_after is None
+
+
+@override_settings(RATE_LIMITS=NEVER_REFUSING_LIMITS, RATE_LIMIT_ENFORCE=True)
+def test_a_never_refusing_scope_still_reports_crossings_under_enforcement(caplog):
+    """The log line is the only signal this scope ever produces, so it has to survive
+    the enforcement flip that silences it everywhere else.
+    """
+    for _ in range(3):
+        check("api", "channel", "17")
+
+    with caplog.at_level("INFO", logger="ocs.rate_limit"):
+        check("api", "channel", "17", team_id=7)
+
+    would_block = [r for r in caplog.records if r.message == "rate_limit.would_block"]
+    assert [r.team_id for r in would_block] == [7]
+
+
+@override_settings(
+    RATE_LIMITS={"api": {"rate": "3/5m", "fail_open": False, "refuse": False}},
+    RATE_LIMIT_ENFORCE=True,
+)
+def test_a_never_refusing_scope_serves_requests_when_the_backend_fails():
+    """A fail-closed setting cannot smuggle a refusal into a scope that promises never
+    to refuse, so the two settings cannot combine into a dropped message.
+    """
+    with mock.patch("apps.utils.rate_limit._count", side_effect=ConnectionError("redis down")):
+        result = check("api", "channel", "17")
+
+    assert result.allowed is True
+    assert result.degraded is True

@@ -1,11 +1,31 @@
 import hashlib
 
 import pytest
+from django.conf import settings
+from django.core.cache import cache as default_cache
+from django.core.cache import caches
 
 from apps.channels.models import ChannelPlatform
 from apps.service_providers.models import MessagingProviderType
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.service_provider_factories import MessagingProviderFactory
+
+
+def _clear_rate_limit_counters():
+    caches[settings.RATE_LIMIT_CACHE_ALIAS].clear()
+    default_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_rate_limit_counters():
+    """Gives every test in this package an empty rate limit window.
+
+    Webhook counters live in a process-global local-memory cache under test, which
+    outlives an individual test, so counts are cleared on both sides.
+    """
+    _clear_rate_limit_counters()
+    yield
+    _clear_rate_limit_counters()
 
 
 @pytest.fixture()

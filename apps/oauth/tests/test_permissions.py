@@ -7,8 +7,13 @@ from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
-from apps.oauth.permissions import OAuth2AccessTokenAuthentication, is_client_credentials_request
+from apps.oauth.permissions import (
+    OAuth2AccessTokenAuthentication,
+    application_allows_chatbot,
+    is_client_credentials_request,
+)
 from apps.teams.helpers import SyntheticTeamMembership
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -82,3 +87,37 @@ def test_authenticate_authorization_code_still_requires_membership(rf, team):
 
     with pytest.raises(AuthenticationFailed):
         OAuth2AccessTokenAuthentication().authenticate(request)
+
+
+@pytest.mark.django_db()
+def test_application_allows_chatbot_only_when_listed(client_credentials_token, team):
+    request = SimpleNamespace(auth=client_credentials_token)
+    listed = ExperimentFactory.create(team=team)
+    unlisted = ExperimentFactory.create(team=team)
+
+    assert application_allows_chatbot(request, listed) is False
+
+    client_credentials_token.application.allowed_chatbots.add(listed)
+
+    assert application_allows_chatbot(request, listed) is True
+    assert application_allows_chatbot(request, unlisted) is False
+
+
+@pytest.mark.django_db()
+def test_application_allows_chatbot_normalises_versions(client_credentials_token, team):
+    """The allowlist holds family heads, but a caller can address a version by its own public_id."""
+    request = SimpleNamespace(auth=client_credentials_token)
+    chatbot = ExperimentFactory.create(team=team)
+    version = chatbot.create_new_version()
+    client_credentials_token.application.allowed_chatbots.add(chatbot)
+
+    assert application_allows_chatbot(request, version) is True
+
+
+@pytest.mark.django_db()
+def test_application_allows_chatbot_ignores_non_machine_callers(team):
+    """Only client-credentials applications are pinned; every other caller keeps team semantics."""
+    chatbot = ExperimentFactory.create(team=team)
+
+    assert application_allows_chatbot(SimpleNamespace(auth=None), chatbot) is True
+    assert application_allows_chatbot(SimpleNamespace(auth=object()), chatbot) is True
