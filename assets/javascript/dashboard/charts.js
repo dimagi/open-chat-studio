@@ -3,7 +3,7 @@
  * Handles Chart.js chart creation and management
  */
 import Chart from "chart.js/auto";
-import {formatCost, providerTotals, serviceKindSeries} from "./costBreakdown.js";
+import {formatCost, p95ChartSeries, providerTotals, serviceKindSeries} from "./costBreakdown.js";
 
 class ChartManager {
     constructor() {
@@ -592,6 +592,58 @@ class ChartManager {
                         ...this.defaultOptions.plugins.tooltip,
                         callbacks: {
                             label: (context) => `${context.label}: ${formatValue(context.parsed)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    renderCostP95Chart(series) {
+        const ctx = document.getElementById('costP95Chart');
+        if (!ctx) return;
+
+        this.destroyChart('costP95');
+
+        const {labels, datasets} = p95ChartSeries(series);
+        const colors = [
+            this.colorPalette.primary,
+            this.colorPalette.secondary,
+            this.colorPalette.success,
+            this.colorPalette.warning,
+            this.colorPalette.danger,
+            this.colorPalette.info
+        ];
+
+        this.charts.costP95 = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels.map(date => this.formatDateLabel(date)),
+                datasets: datasets.map((dataset, index) => ({
+                    ...dataset,
+                    borderColor: colors[index % colors.length],
+                    backgroundColor: colors[index % colors.length] + '33',
+                    spanGaps: true,
+                    tension: 0.3
+                }))
+            },
+            options: {
+                ...this.defaultOptions,
+                plugins: {
+                    ...this.defaultOptions.plugins,
+                    tooltip: {
+                        ...this.defaultOptions.plugins.tooltip,
+                        callbacks: {
+                            label: (context) => `${context.dataset.label}: ${formatCost(context.parsed.y)}`
+                        }
+                    }
+                },
+                scales: {
+                    ...this.defaultOptions.scales,
+                    y: {
+                        ...this.defaultOptions.scales.y,
+                        ticks: {
+                            callback: (value) => formatCost(value)
                         }
                     }
                 }

@@ -149,6 +149,14 @@ class TestCostTrackingPanel:
 
         assert b'id="costProviderChart"' not in response.content
 
+    def test_p95_canvas_renders_with_spend(self, authenticated_client, team):
+        _enable_flag_for(team)
+        _usage(team, cost="2.50", when=_NOW - timedelta(days=1))
+
+        response = self._get_dashboard(authenticated_client, team)
+
+        assert b'id="costP95Chart"' in response.content
+
 
 @pytest.mark.django_db()
 class TestCostTrackingPanelEndpoint:
