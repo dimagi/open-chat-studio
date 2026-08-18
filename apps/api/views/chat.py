@@ -269,6 +269,20 @@ def _check_start_session_access(request, experiment, embed_key_channel, version_
     return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
 
 
+def _channel_disabled_response(experiment_channel) -> Response | None:
+    """A 403 when an admin has switched this channel off, else None.
+
+    Refused here rather than left to the pipeline: the session start is what the widget calls
+    first, and letting it succeed hands back a session and a token on a channel that will not
+    talk. Relays the admin's own static message when they configured one; a silent disable still
+    owes the caller an HTTP body, so it falls back to a generic line.
+    """
+    if not experiment_channel.is_disabled:
+        return None
+    detail = experiment_channel.disabled_message or "This chatbot is currently unavailable."
+    return Response({"error": detail}, status=status.HTTP_403_FORBIDDEN)
+
+
 def _get_requested_version(experiment, version_number):
     """The explicitly requested version, or None to use the working version."""
     if version_number is None or version_number == Experiment.DEFAULT_VERSION_NUMBER:
@@ -400,6 +414,10 @@ def chat_start_session(request):
     team = experiment.team
 
     experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel)
+
+    # Before the participant work below, which creates records as a side effect.
+    if disabled := _channel_disabled_response(experiment_channel):
+        return disabled
 
     if request.user.is_authenticated:
         user = request.user

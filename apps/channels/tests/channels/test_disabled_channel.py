@@ -3,19 +3,27 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.contrib.auth.models import Permission
+from django.urls import reverse
+from rest_framework.test import APIClient
 
 from apps.channels.api_channel import ApiChannel
 from apps.channels.channel_base import ChannelBase
 from apps.channels.evaluation_channel import EvaluationChannel
-from apps.channels.models import ChannelPlatform
+from apps.channels.exceptions import ChannelDisabledException
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.registry import PLATFORM_CHANNEL_CLASSES
 from apps.channels.stages.core import AttachmentHydrationStage, ChannelDisabledStage
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
-from apps.chat.models import ChatMessage, ChatMessageType
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
+from apps.experiments.models import ExperimentSession, Participant
+from apps.experiments.services import start_experiment_session
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.utils.factories.channels import ExperimentChannelFactory
-from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.team import TeamWithUsersFactory
+from apps.utils.tests.clients import ApiTestClient
 
 from .conftest import StubChannel, make_trace_service
 
@@ -179,3 +187,181 @@ class TestDisabledStageIsWired:
         stages = self._core_stages(EvaluationChannel)
 
         assert not any(isinstance(stage, ChannelDisabledStage) for stage in stages)
+
+
+@pytest.mark.django_db()
+class TestDisabledChannelBlocksNewSessions:
+    """The toggle has to mean "no new conversations", not only "no bot replies".
+
+    ChannelDisabledStage can only speak for traffic that reaches a pipeline. Every route that
+    opens a session -- widget and API session starts, the public web chat, the Slack listener,
+    admin "new session" actions -- creates it *before* any pipeline runs, so the guarantee lives
+    in start_experiment_session instead.
+    """
+
+    def _disabled_channel(self, disabled_message=""):
+        return ExperimentChannelFactory.create(enabled=False, disabled_message=disabled_message)
+
+    def test_start_experiment_session_refuses(self):
+        channel = self._disabled_channel("We are closed")
+
+        with pytest.raises(ChannelDisabledException) as exc_info:
+            start_experiment_session(
+                working_experiment=channel.experiment,
+                experiment_channel=channel,
+                participant=Participant(identifier="brand-new"),
+            )
+
+        assert exc_info.value.channel == channel
+        assert exc_info.value.disabled_message == "We are closed"
+
+    def test_refusing_writes_nothing(self):
+        """The refusal precedes every write, so a disabled channel leaves no trace of the attempt."""
+        channel = self._disabled_channel()
+
+        with pytest.raises(ChannelDisabledException):
+            start_experiment_session(
+                working_experiment=channel.experiment,
+                experiment_channel=channel,
+                participant=Participant(identifier="brand-new"),
+            )
+
+        assert not ExperimentSession.objects.filter(experiment_channel=channel).exists()
+        assert not Participant.objects.filter(identifier="brand-new").exists()
+        assert not Chat.objects.exists()
+
+    def test_an_enabled_channel_is_unaffected(self):
+        channel = ExperimentChannelFactory.create()
+
+        session = start_experiment_session(
+            working_experiment=channel.experiment,
+            experiment_channel=channel,
+            participant=Participant(identifier="brand-new"),
+        )
+
+        assert session.experiment_channel == channel
+
+
+@pytest.mark.django_db()
+class TestDisabledChannelRefusesSessionStarts:
+    """The HTTP surfaces that open a session, each turning the refusal into its own idiom."""
+
+    def test_widget_session_start_is_refused(self):
+        """The widget calls this before it can send anything, so letting it through would hand
+        back a session and a token on a channel that will not talk."""
+        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+        channel = ExperimentChannel.objects.get_team_api_channel(experiment.team)
+        channel.enabled = False
+        channel.disabled_message = "The bot is offline for maintenance"
+        channel.save()
+
+        response = APIClient().post(
+            reverse("api:chat:start-session"),
+            data={"chatbot_id": str(experiment.public_id), "session_data": {}},
+            format="json",
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {"error": "The bot is offline for maintenance"}
+        assert not ExperimentSession.objects.filter(experiment_channel=channel).exists()
+        assert not Participant.objects.filter(team=experiment.team).exists()
+
+    def test_widget_session_start_refusal_has_a_body_when_silent(self):
+        """A silent disable still owes an HTTP caller something to show."""
+        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+        channel = ExperimentChannel.objects.get_team_api_channel(experiment.team)
+        channel.enabled = False
+        channel.save()
+
+        response = APIClient().post(
+            reverse("api:chat:start-session"),
+            data={"chatbot_id": str(experiment.public_id), "session_data": {}},
+            format="json",
+        )
+
+        assert response.status_code == 403
+        assert response.json() == {"error": "This chatbot is currently unavailable."}
+
+    def test_trigger_bot_message_is_refused(self):
+        """This endpoint opens a session *and* pushes a message, so both have to be refused."""
+        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+        ExperimentChannelFactory.create(
+            team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM, enabled=False
+        )
+        client = ApiTestClient(experiment.team.members.first(), experiment.team)
+
+        response = client.post(
+            reverse("api:trigger_bot"),
+            data={
+                "identifier": "123",
+                "platform": ChannelPlatform.TELEGRAM,
+                "experiment": str(experiment.public_id),
+                "prompt_text": "check in with the user",
+            },
+            format="json",
+        )
+
+        assert response.status_code == 400
+        assert "disabled" in response.json()["detail"]
+        assert not ExperimentSession.objects.filter(experiment=experiment).exists()
+
+    def test_public_web_chat_shows_the_static_message(self, client):
+        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+        channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        channel.enabled = False
+        channel.disabled_message = "Back on Monday"
+        channel.save()
+
+        response = client.get(
+            reverse(
+                "experiments:start_session_public",
+                kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+            )
+        )
+
+        assert response.status_code == 503
+        assert "Back on Monday" in response.content.decode()
+        assert not ExperimentSession.objects.filter(experiment_channel=channel).exists()
+
+    def _console_user(self, experiment, *codenames):
+        user = experiment.team.members.first()
+        for codename in codenames:
+            user.user_permissions.add(Permission.objects.get(codename=codename))
+        return user
+
+    def test_authed_web_session_start_is_refused(self, client):
+        """The console's own "chat to this bot" button goes through the same web channel."""
+        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+        channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        channel.enabled = False
+        channel.save()
+        client.force_login(self._console_user(experiment))
+
+        response = client.post(
+            reverse(
+                "chatbots:start_authed_web_session",
+                args=[experiment.team.slug, experiment.id, experiment.version_number],
+            )
+        )
+
+        assert response.status_code == 302
+        assert response.url == reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id])
+        assert not ExperimentSession.objects.exists()
+
+    def test_invitation_is_refused(self, client):
+        """An invitation to a channel that will not talk is worse than no invitation."""
+        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+        channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        channel.enabled = False
+        channel.save()
+        client.force_login(self._console_user(experiment, "invite_participants", "view_experiment"))
+
+        with patch("apps.chatbots.views.send_experiment_invitation") as send_invitation:
+            response = client.post(
+                reverse("chatbots:chatbots_invitations", args=[experiment.team.slug, experiment.id]),
+                data={"experiment_id": experiment.id, "email": "someone@example.com", "invite_now": "on"},
+            )
+
+        assert response.status_code == 200
+        send_invitation.assert_not_called()
+        assert not ExperimentSession.objects.exists()

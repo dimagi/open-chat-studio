@@ -43,7 +43,7 @@ from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.datamodels import Attachment
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
@@ -261,6 +261,21 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     experiment_version = resolve_published_or_working(experiment)
     if not experiment_version.is_public:
         raise Http404
+
+    # Checked once up front rather than around each start_new_session below, so a participant
+    # never fills in the consent form only to be refused on submit. Looked up rather than
+    # created (``get_team_web_channel`` is a get_or_create): this runs on every GET of the
+    # consent page, and a channel that does not exist yet cannot be disabled.
+    web_channel = ExperimentChannel.objects.filter(
+        team=request.team, platform=ChannelPlatform.WEB, deleted=False
+    ).first()
+    if web_channel and web_channel.is_disabled:
+        return TemplateResponse(
+            request,
+            "experiments/channel_disabled.html",
+            {"disabled_message": web_channel.disabled_message},
+            status=503,
+        )
 
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)

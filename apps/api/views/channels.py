@@ -186,6 +186,14 @@ def handle_trigger_bot_message(request, response_serializer_class):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Also before _get_or_create_participant_data: this endpoint both opens a session and pushes a
+    # bot message, so a disabled channel has to refuse before either happens.
+    if channel.is_disabled:
+        return JsonResponse(
+            {"detail": f"The {platform} channel is disabled for this experiment."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     participant_data = _get_or_create_participant_data(
         request, identifier, platform, experiment, data.get("participant_data")
     )

@@ -75,6 +75,13 @@ def _respond_to_message(event, channel_id, thread_ts, experiment_channel, experi
     slack_user = event.get("user")
 
     if not session:
+        if experiment_channel.is_disabled:
+            # A new thread has no session, so the pipeline -- and its ChannelDisabledStage --
+            # never runs. Mirror what that stage would have done: the admin's static message,
+            # or silence.
+            if experiment_channel.disabled_message:
+                context.say(experiment_channel.disabled_message, thread_ts=thread_ts)
+            return
         external_id = make_session_external_id(channel_id, thread_ts)
         session = SlackChannel.start_new_session(
             working_experiment=experiment,
