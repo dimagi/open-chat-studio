@@ -70,7 +70,7 @@ The OCS [development workflow](dev-workflow.md) follows a design-before-code pro
 each phase — exploring the problem, planning the implementation, executing it, and reviewing the
 result. Install it from the same marketplace:
 
-```
+```text
 /plugins
 ```
 
@@ -81,7 +81,7 @@ Then pick `superpowers`. `/plugins` is also how you'd browse the rest of the mar
 Use Claude Code's **built-in `/code-review`** command. It needs no plugin and takes the working
 diff, a PR number, a branch or a path:
 
-```
+```text
 /code-review          # report findings
 /code-review --fix    # report findings and apply them
 ```

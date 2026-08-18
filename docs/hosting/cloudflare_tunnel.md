@@ -155,7 +155,7 @@ networks:
 ### How private hostname resolution works
 Private hostnames like `ocs.your-org` don't exist in public DNS. Here's the full resolution chain:
 
-```
+```text
 1. User types `ocs.your-org` in browser
 2. WARP intercepts the DNS query
 3. WARP checks Local Domain Fallback → matches `ocs.your-org`
