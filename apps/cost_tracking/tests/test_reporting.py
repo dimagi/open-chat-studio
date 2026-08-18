@@ -231,7 +231,7 @@ class TestChatbotUsageSummary:
         experiment = ExperimentFactory.create(team=team)
         start, end = self._window()
 
-        usage = chatbot_usage_summary(experiment, start=start, end=end)
+        usage = chatbot_usage_summary(team, experiment.id, start=start, end=end)
 
         assert usage.cost.total_cost == Decimal(0)
         assert usage.sessions_count == 0
@@ -247,7 +247,7 @@ class TestChatbotUsageSummary:
         ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.SYSTEM, content="sys")
         start, end = self._window()
 
-        usage = chatbot_usage_summary(experiment, start=start, end=end)
+        usage = chatbot_usage_summary(team, experiment.id, start=start, end=end)
 
         assert usage.cost.total_cost == Decimal("1.50000000")
         assert usage.sessions_count == 1
@@ -265,7 +265,7 @@ class TestChatbotUsageSummary:
         UsageRecordFactory.create(team=team, experiment=other_experiment, session=other_session, cost=Decimal("9.00"))
         start, end = self._window()
 
-        usage = chatbot_usage_summary(experiment, start=start, end=end)
+        usage = chatbot_usage_summary(team, experiment.id, start=start, end=end)
 
         assert usage.cost.total_cost == Decimal("1.00000000")
         assert usage.sessions_count == 1
@@ -286,7 +286,7 @@ class TestChatbotUsageSummary:
         ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
         start, end = self._window()
 
-        usage = chatbot_usage_summary(experiment, start=start, end=end)
+        usage = chatbot_usage_summary(team, experiment.id, start=start, end=end)
 
         assert usage.sessions_count == 0
 
@@ -305,7 +305,7 @@ class TestChatbotUsageSummary:
             chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi", created_at=end - timedelta(days=1)
         )
 
-        usage = chatbot_usage_summary(experiment, start=start, end=end)
+        usage = chatbot_usage_summary(team, experiment.id, start=start, end=end)
 
         assert usage.sessions_count == 1
         assert usage.messages_count == 1

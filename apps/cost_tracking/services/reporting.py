@@ -15,7 +15,7 @@ from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWee
 from django.utils import timezone
 
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
@@ -398,14 +398,18 @@ class ChatbotUsageSummary:
     messages_count: int
 
 
-def chatbot_usage_summary(experiment: Experiment, *, start: datetime, end: datetime) -> ChatbotUsageSummary:
+def chatbot_usage_summary(team: Team, experiment_id: int, *, start: datetime, end: datetime) -> ChatbotUsageSummary:
     """Cost, session count and message count for one chatbot in [start, end), for the chatbot home
     page's usage widget. Session/message counts come from `filtered_querysets` - the same canonical,
     ADR-0051 activity definitions the dashboard's Bot Performance table uses - narrowed to this
     experiment, rather than re-deriving the session base here.
+
+    Takes `team` and `experiment_id` rather than an `Experiment` object - the query below only ever
+    needs those two, and requiring the row would force `get_latest_chatbot_usage_summary` to fetch it
+    even on a cache hit, defeating a chunk of the point of caching this at all.
     """
-    cost = cost_summary(experiment.team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment.id]))
-    querysets = filtered_querysets(experiment.team, start_date=start, end_date=end, experiment_ids=[experiment.id])
+    cost = cost_summary(team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment_id]))
+    querysets = filtered_querysets(team, start_date=start, end_date=end, experiment_ids=[experiment_id])
     sessions_count = querysets["sessions"].count()
     messages_count = conversation_messages(querysets["messages"]).count()
     return ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
@@ -421,8 +425,8 @@ def get_latest_chatbot_usage_summary(team: Team, experiment_id: int) -> ChatbotU
 
     This owns both the "latest N days" window and the caching, rather than leaving either to the
     view: the two are coupled (see `chatbot_usage_summary`'s docstring for why a `start`/`end`-taking
-    function can't safely own this cache), and a cache hit here needs no query at all - not even to
-    load the `Experiment` row, since the caller already has `team` and only needs to pass the id.
+    function can't safely own this cache), and a cache hit here needs no query at all, since
+    `chatbot_usage_summary` needs nothing but the `team`/`experiment_id` this function already has.
     Cached in Redis for `_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS`: short enough that nobody
     watching the page during an active conversation would call the number stale, with no
     signal-based invalidation - `UsageRecord` rows are written continuously, so invalidating on
@@ -435,8 +439,7 @@ def get_latest_chatbot_usage_summary(team: Team, experiment_id: int) -> ChatbotU
 
     end = timezone.now()
     start = end - timedelta(days=_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS)
-    experiment = Experiment.objects.get(id=experiment_id, team=team)
-    usage = chatbot_usage_summary(experiment, start=start, end=end)
+    usage = chatbot_usage_summary(team, experiment_id, start=start, end=end)
 
     cache.set(cache_key, usage, _CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS)
     return usage
