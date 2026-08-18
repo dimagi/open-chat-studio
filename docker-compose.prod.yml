@@ -8,10 +8,16 @@
 # simpler single-server setups.
 
 x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
   image: open-chat-studio:latest
   restart: unless-stopped
   env_file:
-    - .env.prod
+    - path: .env.prod
+      required: false
+    - path: .env
+      required: false
   depends_on:
     db:
       condition: service_healthy
