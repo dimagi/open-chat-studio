@@ -189,9 +189,11 @@ class TriggerBotMessageView(APIView):
             ),
             OpenApiExample(
                 name="ExperimentChannelNotFound",
-                summary="Experiment cannot send messages on the specified channel",
-                value={"detail": "Experiment cannot send messages on the connect_messaging channel"},
-                status_codes=[404],
+                summary="Chatbot cannot send messages on the specified channel",
+                value={
+                    "detail": "Chatbot cannot send messages on the connect_messaging channel. Create the channel first."
+                },
+                status_codes=[400],
             ),
             OpenApiExample(
                 name="ConsentNotGiven",
