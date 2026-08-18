@@ -94,7 +94,7 @@ session-token rollout. ADR-0034 is the repo's deprecation process, and it applie
 
 So enforcement requires two things, in this order:
 
-1. **The date has passed** — `KEYLESS_CHAT_START_SUNSET_AT` beside the existing `EMBED_FLOW_SUNSET_AT`
+1. **The date has passed** — `KEYLESS_CHAT_START_SUNSET_AT` alongside the existing `EMBED_FLOW_REMOVED_ON` (a plain `date`, where this one is tz-aware)
    in `apps/experiments/const.py`, testable with `time_machine.travel`, which the suite already uses.
 2. **A deliberate switch-on**, after the owner has triaged the teams still producing `KEYLESS_START`
    markers ([D2](#d2-make-the-population-queryable)). Flipping it back is the kill switch.
@@ -143,6 +143,14 @@ Each milestone carries its own `event_data={"milestone": "T-30"}` so it opens a 
 thread rather than being deduplicated against the last one — the same trick `min_version` plays for the
 ratchet notification.
 
+**Milestones already past when the task first runs are not emitted.** Phase 1 ships after T-90
+(2026-07-03) and T-60 (2026-08-02) have gone by, and a team that has never been told anything is not
+helped by three notices in one day. The first-detection notice carries the sunset date itself, so it
+already says everything the missed milestones would have; the task then resumes at the next *future*
+milestone. This has to be stated rather than left to the implementation, because the obvious loop —
+"emit every milestone whose date has passed and that has no thread yet" — produces exactly the burst
+this avoids. Worth a test that rolls out after a milestone and asserts a single notice.
+
 **Admins, not every member.** The framework targets by permission
 (`get_users_to_be_notified(team, permissions)`), so the audience is
 `["bot_channels.add_experimentchannel"]` — the Chatbot Admin and Super Admin groups, the people who can
@@ -154,15 +162,25 @@ involves an OAuth application (registered by a Team Admin, who holds `oauth.*` b
 ### D4: Satisfying the ratchet precondition first
 
 ADR-0053's second precondition is that the ADR-0045 ratchet has moved live channels off
-`WidgetAuthLevel.NONE`. A data migration raises any survivors to `EMBED_KEY`, and the pre-cutover
-notification reports channels still sitting at `NONE`.
+`WidgetAuthLevel.NONE`. Two things serve it, in this order: the pre-cutover notification reports the
+channels still sitting at `NONE` so they can be triaged, and a data migration then raises whatever
+survives that triage to `EMBED_KEY`.
 
-**This ships in the same phase as the instrumentation, not with the removal.** An earlier draft had it
-in the final phase, after the date — which, combined with a clock-driven flip that waits for no deploy,
-would have enforced the precondition *after* the thing it gates had already fired. Even with the gate
-of [D1](#d1-the-date-is-a-checkpoint-not-the-trigger) making that sequencing survivable, the migration
-belongs before the gate can be opened, so that "is the precondition met?" is answerable when the triage
-decision is taken.
+**It ships in Phase 2, before the gate opens — not with the Phase 1 instrumentation.** Two things rule
+Phase 1 out, and they are the same thing seen from either end. A channel sits at `NONE` precisely
+because the widget it last saw was below 0.5.1 (`level_for_version`: unparseable or `< 0.5.1` → `NONE`),
+so it is the one population that *cannot* satisfy `EMBED_KEY` — raising it is not a formality, it is the
+breakage this document exists to schedule, arriving early and without notice. And Phase 1 asks the
+notification to report "channels still at `NONE`", which a migration in the same phase empties: the
+report and the migration cannot both be Phase 1 or the report has nothing to describe.
+
+So Phase 1 only *observes* the `NONE` population and names it in the notice, and the migration runs in
+Phase 2 as the last act before the gate opens — after triage has decided what to do about each survivor.
+That still satisfies the ordering an earlier draft got wrong: the precondition is enforced before the
+thing it gates, rather than after the date has already fired. What it gives up is being able to answer
+"is the precondition met?" with a migration that has already run; instead triage answers it by looking at
+the reported population, which is the more honest reading of ADR-0053's precondition anyway — it asks
+that live channels have *moved off* `NONE`, not that a migration has overwritten the column.
 
 ## Implementation outline
 
@@ -174,17 +192,18 @@ decision is taken.
 | 2 | `apps/api/views/chat.py` | RFC 8594 headers on keyless responses (D3). |
 | 3 | `apps/experiments/const.py` | `KEYLESS_CHAT_START_SUNSET_AT = datetime(2026, 10, 1, tzinfo=UTC)`; the triage gate, defaulting to off (D1). |
 | 4 | `apps/channels/tasks.py` | Escalating notification to affected teams, reporting channels still at `NONE` (D3). |
-| 5 | `apps/channels/migrations/` | Data migration: `WidgetAuthLevel.NONE` channels → `EMBED_KEY` (D4). |
 
 **Phase 2 — after the date, and after triage**
 
 | # | Change |
 |---|---|
-| 6 | Triage the teams still producing `KEYLESS_START` markers (ADR-0034: contacted, migrated, or breakage accepted by the owner), then open the gate. |
-| 7 | Delete the keyless branch in `_check_start_session_access`, the `NONE` handling, and the `is_public` fallback in `_has_legacy_access`; drop the date check and the gate. |
+| 5 | Triage the teams still producing `KEYLESS_START` markers, and the channels still at `NONE` (ADR-0034: contacted, migrated, or breakage accepted by the owner). |
+| 6 | `apps/channels/migrations/`: data migration `WidgetAuthLevel.NONE` → `EMBED_KEY` (D4) — after triage, before the gate opens. |
+| 7 | Open the gate. |
+| 8 | Delete the keyless branch in `_check_start_session_access`, the `NONE` handling, and the `is_public` fallback in `_has_legacy_access`; drop the date check and the gate. |
 
-No database migration in Phase 1 beyond the data migration in item 5 — the marker lives in existing
-session metadata and the gate is a settings value.
+No database migration in Phase 1 at all — the marker lives in existing session metadata and the gate is
+a settings value.
 
 **ADRs to extract** when this flips to `stable`: the cutover and its gate, which supersedes the
 "deferred, not rejected" clause of ADR-0053 and should cite ADR-0034 for the gate's shape.
@@ -198,7 +217,9 @@ session metadata and the gate is a settings value.
 | No credential, date passed **and** gate open (`time_machine`) | `401` |
 | No credential, gate open but date **not** passed | `201` — both conditions required, in order |
 | Credentialed request, gate closed | no `KEYLESS_START` marker, no sunset headers |
-| Channel at `NONE` after the Phase 1 data migration | raised to `EMBED_KEY` |
+| Channel at `NONE` after the Phase 2 data migration | raised to `EMBED_KEY` |
+| Channel at `NONE` during Phase 1 | left at `NONE`, and named in the notification |
+| Notification task first run after a milestone has passed | one notice, not one per missed milestone (D3) |
 | Notification task | one thread per milestone (not deduplicated); audience is `bot_channels.add_experimentchannel` holders only |
 
 Regression guards: `test_chat_api_anon.py` (updated for the marker and headers),
