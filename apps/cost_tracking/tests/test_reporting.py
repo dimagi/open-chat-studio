@@ -20,6 +20,7 @@ from apps.cost_tracking.services.reporting import (
     cost_total,
     costs_by_experiment,
     coverage_gaps,
+    get_latest_chatbot_usage_summary,
     session_usage,
     token_counts,
     trace_token_usage,
@@ -309,38 +310,56 @@ class TestChatbotUsageSummary:
         assert usage.sessions_count == 1
         assert usage.messages_count == 1
 
+
+@pytest.mark.django_db()
+class TestGetLatestChatbotUsageSummary:
+    """The chatbot home page's cached "last 30 days" read. Caching and window resolution live
+    here rather than on `chatbot_usage_summary` itself - see that function's docstring for why
+    a `start`/`end`-taking function can't safely own this cache. Correctness of the underlying
+    aggregation (scoping, exclusions, the session-window fix) is `TestChatbotUsageSummary`'s job;
+    these tests only cover what this wrapper adds: the window and the cache."""
+
+    def test_computes_last_30_days(self):
+        team = TeamFactory.create()
+        experiment = ExperimentFactory.create(team=team)
+        session = ExperimentSessionFactory.create(experiment=experiment, team=team)
+        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.50"))
+        ChatMessage.objects.create(chat=session.chat, message_type=ChatMessageType.HUMAN, content="hi")
+
+        usage = get_latest_chatbot_usage_summary(team, experiment.id)
+
+        assert usage.cost.total_cost == Decimal("1.50000000")
+        assert usage.sessions_count == 1
+        assert usage.messages_count == 1
+
     def test_caches_result_for_short_ttl(self):
         """A second call for the same (team, experiment) within the TTL returns the cached
-        snapshot rather than re-querying - even though new usage was written in between.
-        `end` is padded into the future so the second record would be in-window if this were
-        a fresh read - otherwise "still 1.00" could just mean the window excluded it."""
+        snapshot rather than re-querying - even though new usage was written in between."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
         session = ExperimentSessionFactory.create(experiment=experiment, team=team)
         UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.00"))
-        start = timezone.now() - timedelta(days=30)
-        end = timezone.now() + timedelta(minutes=1)
 
-        first = chatbot_usage_summary(experiment, start=start, end=end)
+        first = get_latest_chatbot_usage_summary(team, experiment.id)
         UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("9.00"))
-        second = chatbot_usage_summary(experiment, start=start, end=end)
+        second = get_latest_chatbot_usage_summary(team, experiment.id)
 
         assert first.cost.total_cost == Decimal("1.00000000")
         assert second.cost.total_cost == Decimal("1.00000000")
 
-    def test_use_cache_false_bypasses_cache(self):
+    def test_cache_hit_needs_no_queries(self):
+        """The whole point of keying on (team, experiment_id) rather than requiring an
+        `Experiment` object: a cache hit doesn't even load the Experiment row."""
         team = TeamFactory.create()
         experiment = ExperimentFactory.create(team=team)
         session = ExperimentSessionFactory.create(experiment=experiment, team=team)
         UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("1.00"))
-        start = timezone.now() - timedelta(days=30)
-        end = timezone.now() + timedelta(minutes=1)
+        get_latest_chatbot_usage_summary(team, experiment.id)  # populate the cache
 
-        chatbot_usage_summary(experiment, start=start, end=end)  # populate the cache
-        UsageRecordFactory.create(team=team, experiment=experiment, session=session, cost=Decimal("9.00"))
-        fresh = chatbot_usage_summary(experiment, start=start, end=end, use_cache=False)
+        with CaptureQueriesContext(connection) as ctx:
+            get_latest_chatbot_usage_summary(team, experiment.id)
 
-        assert fresh.cost.total_cost == Decimal("10.00000000")
+        assert len(ctx.captured_queries) == 0
 
     def test_cache_keyed_per_experiment(self):
         """Two experiments in the same team don't share a cache entry."""
@@ -351,10 +370,9 @@ class TestChatbotUsageSummary:
         session_b = ExperimentSessionFactory.create(experiment=exp_b, team=team)
         UsageRecordFactory.create(team=team, experiment=exp_a, session=session_a, cost=Decimal("1.00"))
         UsageRecordFactory.create(team=team, experiment=exp_b, session=session_b, cost=Decimal("2.00"))
-        start, end = self._window()
 
-        usage_a = chatbot_usage_summary(exp_a, start=start, end=end)
-        usage_b = chatbot_usage_summary(exp_b, start=start, end=end)
+        usage_a = get_latest_chatbot_usage_summary(team, exp_a.id)
+        usage_b = get_latest_chatbot_usage_summary(team, exp_b.id)
 
         assert usage_a.cost.total_cost == Decimal("1.00000000")
         assert usage_b.cost.total_cost == Decimal("2.00000000")

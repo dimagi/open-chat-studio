@@ -5,13 +5,14 @@ hit the `(team, timestamp)` / `(team, experiment, timestamp)` indexes.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
 from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
+from django.utils import timezone
 
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.experiments.models import Experiment, ExperimentSession
@@ -36,10 +37,9 @@ _GRANULARITY_TRUNC = {
 # `total` is every LLM kind (so cache-write tokens land in the total but neither sub-count).
 _PROMPT_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_CACHED_INPUT)
 
-# Short: this bounds staleness, not correctness (like PricingResolver's cache, but with no
-# signal-based invalidation - UsageRecord rows are written continuously, so invalidating on
-# write would defeat the cache). The chatbot home page is the only caller today; a team member
-# watching it during an active conversation will see the number settle within this window.
+# The chatbot home usage widget's rolling window and how long its cached snapshot is trusted for -
+# see `get_latest_chatbot_usage_summary`.
+_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS = 30
 _CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS = 5 * 60
 
 
@@ -398,40 +398,54 @@ class ChatbotUsageSummary:
     messages_count: int
 
 
-def _chatbot_usage_summary_cache_key(experiment: Experiment) -> str:
-    """Keyed on (team, experiment) only, not the resolved window - the chatbot home page always
-    asks for "the last 30 days as of now", so the window changes every request and could never
-    hit a key that included it. The cached value goes stale by at most the TTL instead (same
-    approach as the dashboard's own cost cache: see `apps/dashboard/views.py::_cost_cache_key`).
-    """
-    return f"cost:chatbot_usage_summary:{experiment.team_id}:{experiment.id}"
-
-
-def chatbot_usage_summary(
-    experiment: Experiment, *, start: datetime, end: datetime, use_cache: bool = True
-) -> ChatbotUsageSummary:
+def chatbot_usage_summary(experiment: Experiment, *, start: datetime, end: datetime) -> ChatbotUsageSummary:
     """Cost, session count and message count for one chatbot in [start, end), for the chatbot home
     page's usage widget. Session/message counts come from `filtered_querysets` - the same canonical,
     ADR-0051 activity definitions the dashboard's Bot Performance table uses - narrowed to this
     experiment, rather than re-deriving the session base here.
 
-    Cached in Redis for `_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS` (see that constant's docstring).
-    Pass `use_cache=False` for a guaranteed-fresh read (e.g. in tests asserting on just-written data).
+    Uncached and takes an arbitrary window - for a caller that wants a fixed date range. The chatbot
+    home page instead wants "the last 30 days as of now" specifically, cached for a few minutes to
+    cut its query load: see `get_latest_chatbot_usage_summary`, which owns both of those and calls
+    this function on a cache miss. Caching *this* function directly would be wrong - a cache key
+    that doesn't include `start`/`end` would silently serve one caller's window to another's, and a
+    key that does would never hit here since "now"-relative bounds differ on every call.
     """
-    cache_key = _chatbot_usage_summary_cache_key(experiment) if use_cache else None
-    if cache_key:
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return cached
-
     cost = cost_summary(experiment.team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment.id]))
     querysets = filtered_querysets(experiment.team, start_date=start, end_date=end, experiment_ids=[experiment.id])
     sessions_count = querysets["sessions"].count()
     messages_count = conversation_messages(querysets["messages"]).count()
-    usage = ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
+    return ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
 
-    if cache_key:
-        cache.set(cache_key, usage, _CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS)
+
+def _chatbot_usage_summary_cache_key(team_id: int, experiment_id: int) -> str:
+    return f"cost:chatbot_usage_summary:{team_id}:{experiment_id}"
+
+
+def get_latest_chatbot_usage_summary(team: Team, experiment_id: int) -> ChatbotUsageSummary:
+    """Cost, session count and message count for one chatbot over the last
+    `_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS` days, for the chatbot home page's usage widget.
+
+    This owns both the "latest N days" window and the caching, rather than leaving either to the
+    view: the two are coupled (see `chatbot_usage_summary`'s docstring for why a `start`/`end`-taking
+    function can't safely own this cache), and a cache hit here needs no query at all - not even to
+    load the `Experiment` row, since the caller already has `team` and only needs to pass the id.
+    Cached in Redis for `_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS`: short enough that nobody
+    watching the page during an active conversation would call the number stale, with no
+    signal-based invalidation - `UsageRecord` rows are written continuously, so invalidating on
+    write would defeat the cache (the same tradeoff `PricingResolver`'s cache makes).
+    """
+    cache_key = _chatbot_usage_summary_cache_key(team.id, experiment_id)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    end = timezone.now()
+    start = end - timedelta(days=_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS)
+    experiment = Experiment.objects.get(id=experiment_id, team=team)
+    usage = chatbot_usage_summary(experiment, start=start, end=end)
+
+    cache.set(cache_key, usage, _CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS)
     return usage
 
 
