@@ -506,51 +506,52 @@ class ChartManager {
         };
     }
 
-    renderCostProviderChart(byModel) {
-        const ctx = document.getElementById('costProviderChart');
+    renderCostBarChart({chartKey, canvasId, rows, getLabel, color, tooltipTitle}) {
+        const ctx = document.getElementById(canvasId);
         if (!ctx) return;
 
-        this.destroyChart('costProvider');
+        this.destroyChart(chartKey);
 
-        const rows = providerTotals(byModel);
-        this.charts.costProvider = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: rows.map(row => row.provider),
-                datasets: [{
-                    data: rows.map(row => row.cost),
-                    backgroundColor: this.colorPalette.primary + '80',
-                    borderColor: this.colorPalette.primary,
-                    borderWidth: 1
-                }]
-            },
-            options: this.costBarOptions()
-        });
-    }
-
-    renderCostModelChart(byModel) {
-        const ctx = document.getElementById('costModelChart');
-        if (!ctx) return;
-
-        this.destroyChart('costModel');
-
-        const rows = byModel || [];
         const options = this.costBarOptions();
-        // Model names can repeat across providers, so disambiguate in the tooltip title.
-        options.plugins.tooltip.callbacks.title = (items) =>
-            items.length ? `${rows[items[0].dataIndex].provider_type} / ${rows[items[0].dataIndex].model_name}` : '';
-        this.charts.costModel = new Chart(ctx, {
+        if (tooltipTitle) {
+            options.plugins.tooltip.callbacks.title = tooltipTitle;
+        }
+        this.charts[chartKey] = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: rows.map(row => row.model_name),
+                labels: rows.map(getLabel),
                 datasets: [{
                     data: rows.map(row => row.cost),
-                    backgroundColor: this.colorPalette.secondary + '80',
-                    borderColor: this.colorPalette.secondary,
+                    backgroundColor: color + '80',
+                    borderColor: color,
                     borderWidth: 1
                 }]
             },
             options: options
+        });
+    }
+
+    renderCostProviderChart(byModel) {
+        this.renderCostBarChart({
+            chartKey: 'costProvider',
+            canvasId: 'costProviderChart',
+            rows: providerTotals(byModel),
+            getLabel: row => row.provider,
+            color: this.colorPalette.primary
+        });
+    }
+
+    renderCostModelChart(byModel) {
+        const rows = byModel || [];
+        this.renderCostBarChart({
+            chartKey: 'costModel',
+            canvasId: 'costModelChart',
+            rows: rows,
+            getLabel: row => row.model_name,
+            color: this.colorPalette.secondary,
+            // Model names can repeat across providers, so disambiguate in the tooltip title.
+            tooltipTitle: (items) =>
+                items.length ? `${rows[items[0].dataIndex].provider_type} / ${rows[items[0].dataIndex].model_name}` : ''
         });
     }
 

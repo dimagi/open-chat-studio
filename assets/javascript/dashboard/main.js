@@ -7,6 +7,7 @@ import TomSelect from "tom-select";
 import {formatDistanceToNow} from "date-fns";
 
 import {serializeCSVTildeValues} from "../filters/csvTilde.js";
+import {formatCost} from "./costBreakdown.js";
 
 // Constants
 const DEFAULTS = {
@@ -404,7 +405,7 @@ function dashboard() {
         },
 
         renderServiceKindChart() {
-            const rows = (this.costBreakdown && this.costBreakdown.by_service_kind) || [];
+            const rows = this.costBreakdown?.by_service_kind || [];
             window.chartManager.renderCostServiceKindChart(rows, this.serviceKindMode);
         },
 
@@ -771,12 +772,8 @@ function dashboard() {
             return num.toString();
         },
 
-        // Mirrors the server-side `cost_display` filter: 2 decimals for $0.01+,
-        // 4 for sub-cent so small early-usage spend doesn't flatten to $0.00.
         formatCurrency(value) {
-            const num = value || 0;
-            const decimals = num !== 0 && num < 0.01 ? 4 : 2;
-            return `$${num.toFixed(decimals)}`;
+            return formatCost(value);
         },
 
         formatDuration(minutes) {

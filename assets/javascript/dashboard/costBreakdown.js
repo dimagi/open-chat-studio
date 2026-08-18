@@ -30,8 +30,8 @@ export function serviceKindSeries(byServiceKind, mode) {
     };
 }
 
-// Mirrors main.js's formatCurrency: 4 decimals below $0.01 so sub-cent
-// spend doesn't flatten to $0.00 on an axis or tooltip.
+// Mirrors the server-side `cost_display` filter (apps/cost_tracking/templatetags):
+// 4 decimals below $0.01 so sub-cent spend doesn't flatten to $0.00.
 export function formatCost(value) {
     const num = value || 0;
     const decimals = num !== 0 && num < 0.01 ? 4 : 2;
