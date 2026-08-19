@@ -11,16 +11,13 @@
 # Superpower designs and ADRs (for now)
 docs/superpowers
 docs/design
-docs/adr
 
-# Ignore Claude Code agent definitions as it refers to AGENTS.md
+# Ignore Claude Code agent definitions as it just refers to AGENTS.md
 CLAUDE.md
 
 # Ignore skills files (for now)
 .claude/skills/
 .claude/skills/extract-adrs/templates
-# Ignore slash commands (prompt bodies)
-
 
 # Any markdown in the apps or components directory
 /apps/

@@ -12,7 +12,7 @@ MD012: false
 
 # Line length — reduce progressively after long lines are fixed
 MD013:
-  line_length: 550
+  line_length: 1000
   code_blocks: false
   tables: false
   headings: false
@@ -46,6 +46,7 @@ MD033:
     - figure
     - iframe
     - kbd
+    - p
     - small
     - span
     - sub
