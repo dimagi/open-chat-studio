@@ -704,7 +704,7 @@ a soft prerequisite for this document's own goal, not merely a nice-to-have.
 **The global default is 7 days — deliberately today's number.** Reusing `W` makes the change a
 *uniform tightening*: since the old rule expired a session at `last_activity + 7d` and
 `last_activity >= created_at`, the new rule at `created_at + 7d` fires no later, ever. **No session's
-life is extended and none dies before it would have under a dormancy rule.** The only sessions affected
+life is extended; the only change is that some now die sooner.** The only sessions affected
 are those currently kept alive past a week *by activity* — which is exactly the abuse shape, plus a
 thin tail of genuine long-running conversations.
 
