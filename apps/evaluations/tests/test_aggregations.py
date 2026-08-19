@@ -1,10 +1,15 @@
 import pytest
 
 from apps.evaluations.aggregation import compute_aggregates_for_run
-from apps.evaluations.aggregators import aggregate_field, get_aggregators_for_value
+from apps.evaluations.aggregators import aggregate_binary_field, aggregate_field, get_aggregators_for_value
 from apps.evaluations.models import EvaluationRunStatus
 from apps.evaluations.utils import build_trend_data
-from apps.utils.factories.evaluations import EvaluationResultFactory, EvaluationRunFactory, EvaluatorFactory
+from apps.utils.factories.evaluations import (
+    EvaluationResultFactory,
+    EvaluationRunAggregateFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
 
 
 class TestAggregators:
@@ -242,3 +247,112 @@ class TestBuildTrendData:
         assert categorical_data["type"] == "categorical"
         assert len(categorical_data["points"]) == 1
         assert categorical_data["points"][0]["value"] == "good"
+
+    def test_binary_field_uses_mean_points(self):
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        runs = []
+        for mean, true_count, count in [(1.0, 2, 2), (0.5, 1, 2)]:
+            run = EvaluationRunFactory.create(team=evaluator.team)
+            EvaluationRunAggregateFactory.create(
+                run=run,
+                evaluator=evaluator,
+                aggregates={"correct": {"type": "binary", "count": count, "mean": mean, "true_count": true_count}},
+            )
+            runs.append(run)
+
+        trend_data = build_trend_data(runs)
+
+        field = trend_data[evaluator.name]["correct (binary)"]
+        assert field["type"] == "binary"
+        assert [p["value"] for p in field["points"]] == [1.0, 0.5]
+        assert field["mean"] == 0.75
+        assert "categories" not in field
+
+
+@pytest.mark.django_db()
+class TestBinaryAggregationDispatch:
+    def _make_run_with_results(self, evaluator, outputs):
+        run = EvaluationRunFactory.create(team=evaluator.team)
+        for output in outputs:
+            EvaluationResultFactory.create(
+                team=evaluator.team,
+                run=run,
+                evaluator=evaluator,
+                output={"result": output},
+            )
+        return run
+
+    def test_binary_field_routes_to_binary_aggregator(self):
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        run = self._make_run_with_results(evaluator, [{"correct": 1}, {"correct": 0}, {"correct": 1}])
+        (aggregate,) = compute_aggregates_for_run(run)
+        assert aggregate.aggregates["correct"] == {
+            "type": "binary",
+            "count": 3,
+            "mean": 0.6667,
+            "true_count": 2,
+        }
+
+    def test_field_absent_from_schema_falls_back_to_value_dispatch(self):
+        # A renamed or removed field aggregates as it does today (numeric for ints).
+        evaluator = EvaluatorFactory.create(binary_schema=True)
+        run = self._make_run_with_results(evaluator, [{"old_name": 1}, {"old_name": 0}])
+        (aggregate,) = compute_aggregates_for_run(run)
+        assert aggregate.aggregates["old_name"]["type"] == "numeric"
+
+    def test_python_evaluator_without_output_schema_unchanged(self):
+        evaluator = EvaluatorFactory.create(
+            type="PythonEvaluator",
+            llm_provider=None,
+            llm_provider_model=None,
+            params={"code": "pass"},
+        )
+        run = self._make_run_with_results(evaluator, [{"score": 1}, {"score": 0}])
+        (aggregate,) = compute_aggregates_for_run(run)
+        assert aggregate.aggregates["score"]["type"] == "numeric"
+
+
+class TestAggregateBinaryField:
+    @pytest.mark.parametrize(
+        ("values", "expected"),
+        [
+            pytest.param(
+                [1, 1, 1],
+                {"type": "binary", "count": 3, "mean": 1.0, "true_count": 3},
+                id="all-true",
+            ),
+            pytest.param(
+                [0, 0],
+                {"type": "binary", "count": 2, "mean": 0.0, "true_count": 0},
+                id="all-false-keeps-zero-stats",
+            ),
+            pytest.param(
+                [1, 0, 1, 0],
+                {"type": "binary", "count": 4, "mean": 0.5, "true_count": 2},
+                id="mixed",
+            ),
+            pytest.param(
+                [True, False, 1],
+                {"type": "binary", "count": 3, "mean": 0.6667, "true_count": 2},
+                id="bools-count-as-their-integer-values",
+            ),
+            pytest.param(
+                [1, 2, "yes", 0],
+                {"type": "binary", "count": 2, "mean": 0.5, "true_count": 1, "excluded_count": 2},
+                id="non-binary-values-excluded-and-reported",
+            ),
+            pytest.param(
+                [2, "maybe"],
+                {"type": "binary", "count": 0, "excluded_count": 2},
+                id="all-excluded-returns-count-0-without-mean",
+            ),
+            pytest.param([], {"type": "binary", "count": 0}, id="empty-input"),
+            pytest.param(
+                [None, 1, 0],
+                {"type": "binary", "count": 2, "mean": 0.5, "true_count": 1},
+                id="none-filtered-silently-like-aggregate-field",
+            ),
+        ],
+    )
+    def test_aggregate_binary_field(self, values, expected):
+        assert aggregate_binary_field(values) == expected

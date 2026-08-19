@@ -375,6 +375,29 @@ def test_queue_detail_shows_aggregates(client, team_with_users, queue, user):
 
 
 @pytest.mark.django_db()
+def test_queue_detail_shows_a_count_for_each_binary_label(client, team_with_users, user):
+    binary_queue = AnnotationQueueFactory.create(team=team_with_users, created_by=user, binary_schema=True)
+    for value in (1, 1, 1, 0):
+        item = AnnotationItemFactory.create(queue=binary_queue, team=team_with_users)
+        Annotation.objects.create(
+            item=item,
+            team=team_with_users,
+            reviewer=user,
+            data={"correct": value},
+            status=AnnotationStatus.SUBMITTED,
+        )
+    compute_aggregates_for_queue(binary_queue)
+
+    url = reverse("human_annotations:queue_detail", args=[team_with_users.slug, binary_queue.pk])
+    response = client.get(url)
+
+    content = response.content.decode()
+    assert "3/4" in content
+    assert "Incorrect:" in content
+    assert "1/4" in content
+
+
+@pytest.mark.django_db()
 def test_queue_items_table(client, team_with_users, queue):
     AnnotationItemFactory.create(queue=queue, team=team_with_users)
     url = reverse("human_annotations:queue_items_table", args=[team_with_users.slug, queue.pk])

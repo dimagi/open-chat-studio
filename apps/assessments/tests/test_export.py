@@ -87,6 +87,64 @@ def test_export_concordance_csv(client, concordance_flags):
 
 
 @pytest.mark.django_db()
+def test_export_concordance_csv_neutralizes_formula_label_values(client, concordance_flags):
+    # Binary labels are user-controlled and land in the CSV via Score.value_string;
+    # a label starting with = would execute as a formula when opened in Excel/Sheets.
+    team = TeamWithUsersFactory.create()
+    user = team.members.first()
+    client.force_login(user)
+
+    formula_label = '=HYPERLINK("http://evil.example","open")'
+    schema = {
+        "verdict": {
+            "type": "binary",
+            "description": "x",
+            "true_label": formula_label,
+            "false_label": "No",
+        }
+    }
+    session = ExperimentSessionFactory.create(team=team, experiment__team=team)
+    evaluator = EvaluatorFactory.create(team=team, params={"llm_prompt": "x", "output_schema": schema})
+    eval_config = EvaluationConfigFactory.create(team=team)
+    eval_config.evaluators.add(evaluator)
+    run = EvaluationRunFactory.create(team=team, config=eval_config)
+    message = EvaluationMessageFactory.create(session=session)
+    result = EvaluationResult.objects.create(
+        team=team,
+        evaluator=evaluator,
+        message=message,
+        run=run,
+        output={"result": {"verdict": 1}},
+    )
+    write_scores_from_evaluation_result(result)
+
+    queue = AnnotationQueueFactory.create(team=team, schema=schema)
+    item = AnnotationItemFactory.create(queue=queue, session=session, team=team)
+    Annotation.objects.create(
+        team=team,
+        item=item,
+        reviewer=user,
+        data={"verdict": 1},
+        status=AnnotationStatus.SUBMITTED,
+    )
+
+    url = reverse("assessments:concordance_export", args=[team.slug])
+    response = client.get(url, {"eval": eval_config.id, "queue": queue.id, "field": "verdict", "show": "all"})
+
+    assert response.status_code == 200
+    reader = csv.DictReader(io.StringIO(response.content.decode()))
+    rows = list(reader)
+    assert len(rows) >= 1
+    for row in rows:
+        for value in (row["judge_verdict"], row["human_verdict"]):
+            if value:
+                assert not value.startswith("="), f"unneutralized formula value in CSV: {value!r}"
+    matched = [row for row in rows if row["kind"] == "matched"]
+    assert matched[0]["judge_verdict"] == f"'{formula_label}"
+    assert matched[0]["human_verdict"] == f"'{formula_label}"
+
+
+@pytest.mark.django_db()
 def test_export_concordance_csv_missing_params(client, concordance_flags):
     team = TeamWithUsersFactory.create()
     user = team.members.first()
