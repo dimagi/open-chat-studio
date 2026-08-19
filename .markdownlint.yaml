@@ -1,6 +1,6 @@
 default: true
 
-# Disable rules that are NOT important for AI agent parsing - structural integrity and link/reference correctness
+# Enable rules that are important for AI agent parsing, structural integrity and link/reference correctness
 
 # List markers must be *
 MD004: true
@@ -71,5 +71,9 @@ MD051: true
 MD053: false
 MD054: false
 MD058: false
-MD059: false
+
+# Require descriptive link text (no "click here") — agents extracting a link
+# out of context need the anchor text itself to say what it points to.
+MD059: true
+
 MD060: false
