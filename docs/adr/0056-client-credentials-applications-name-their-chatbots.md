@@ -16,7 +16,7 @@ We will scope a client-credentials application to an explicit set of chatbots.
 
 - `OAuth2Application.allowed_chatbots`, a many-to-many to `Experiment`, names the chatbots the application may reach. It is audited, so changes to an application's reach are recorded.
 - **Empty means none, not all.** An application authorises nothing until someone says so.
-- It is consulted for **client-credentials callers only**. API-key, Django-session and authorization-code callers keep team-membership semantics untouched, so the field neither appears on nor constrains a user-facing application.
+- It is consulted for **client-credentials callers only**. API-key, Django-session and authorization-code callers keep team-membership semantics untouched, so the field does not constrain a user-facing application — the picker is still rendered on every team application form, but `clean()` blanks it for non-client-credentials grants.
 - It gates every door `chatbots:interact` opens, not one of them: chat completions, message ingress, and outbound bot messages.
 - Denial is a `403` — the caller authenticated, it simply is not authorised for this chatbot — raised before anything with a side effect exists, so a denied call leaves no session and no participant data behind.
 - The allowlist holds **working versions**. A caller may legitimately address a chatbot version by its own `public_id`, so the check normalises to the version family head; listing a chatbot therefore authorises all of its versions.
