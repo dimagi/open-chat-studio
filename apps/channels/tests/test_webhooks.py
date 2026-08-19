@@ -104,4 +104,3 @@ def test_telegram_message_rejected_when_secret_missing_but_required(client, tele
         )
     assert response.status_code == 400
     assert response.content == b"Invalid request."
-

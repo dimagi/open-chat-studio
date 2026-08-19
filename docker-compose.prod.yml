@@ -14,9 +14,10 @@ x-app: &app
   image: open-chat-studio:latest
   restart: unless-stopped
   env_file:
-    - path: .env.prod
-      required: false
+    # .env is read first so .env.prod values (if present) win on conflicts.
     - path: .env
+      required: false
+    - path: .env.prod
       required: false
   depends_on:
     db:
