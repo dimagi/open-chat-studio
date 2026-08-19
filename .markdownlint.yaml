@@ -12,7 +12,7 @@ MD012: false
 
 # Line length — reduce progressively after long lines are fixed
 MD013:
-  line_length: 2000
+  line_length: 550
   code_blocks: false
   tables: false
   headings: false
