@@ -495,6 +495,9 @@ class EvaluationModelSpend:
     model_name: str
     cost: Decimal
     tokens: int
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
 
 
 @dataclass(frozen=True)
@@ -506,6 +509,9 @@ class EvaluatorSpend:
     evaluator_name: str
     cost: Decimal
     tokens: int
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
 
 
 @dataclass(frozen=True)
@@ -516,24 +522,40 @@ class EvaluationRunCost:
     total_cost: Decimal
     total_tokens: int
     currency: str
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
     by_evaluator: list[EvaluatorSpend] = field(default_factory=list)
     by_model: list[EvaluationModelSpend] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
-class EvaluationConfigCostSummary:
-    """Aggregate spend across every run of one evaluation config, for the config page."""
+class EvaluationPeriodCost:
+    """One window's worth of `EvaluationConfigCostSummary` — cost plus the same
+    confidence flags as `EvaluationRunCost`, scoped to that window rather than a run."""
 
-    last_30_days: Decimal
-    all_time: Decimal
+    total_cost: Decimal
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
+
+
+@dataclass(frozen=True)
+class EvaluationConfigCostSummary:
+    """Aggregate spend across every run of one evaluation config, for the config page:
+    last 30 days and all time, each with its own confidence flags since a model priced
+    today may have been unpriced (or estimated) 45 days ago."""
+
+    last_30_days: EvaluationPeriodCost
+    all_time: EvaluationPeriodCost
     currency: str
 
 
 def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
     """Total cost for one evaluation run, broken down by (provider, model) and by
     evaluator. Both breakdowns and the currency are grouped/aggregated in the DB;
-    only the totals — a sum over a handful of already-aggregated model rows — happen
-    in Python.
+    only the totals — a sum/any() over a handful of already-aggregated model rows —
+    happen in Python.
 
     Scoped by the indexed `evaluation_config` FK first; `extra.evaluation_run_id` (a
     JSON key, not a FK, since runs get pruned) narrows to the run within that. Every row
@@ -550,6 +572,9 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
         .annotate(
             cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
             tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
+            estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+            unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
         )
         .order_by("-cost")
     )
@@ -559,6 +584,9 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
             model_name=row["model_name"],
             cost=row["cost"],
             tokens=int(row["tokens"]),
+            has_unpriced=bool(row["unpriced_count"]),
+            has_estimated=bool(row["estimated_count"]),
+            has_unknown=bool(row["unknown_count"]),
         )
         for row in model_rows
     ]
@@ -568,6 +596,9 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
         .annotate(
             cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
             tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
+            estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+            unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
         )
         .order_by("-cost")
     )
@@ -583,6 +614,9 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
             ),
             cost=row["cost"],
             tokens=int(row["tokens"]),
+            has_unpriced=bool(row["unpriced_count"]),
+            has_estimated=bool(row["estimated_count"]),
+            has_unknown=bool(row["unknown_count"]),
         )
         for row in evaluator_rows
     ]
@@ -591,6 +625,9 @@ def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
         total_cost=sum((row.cost for row in by_model), _ZERO),
         total_tokens=sum(row.tokens for row in by_model),
         currency=currency,
+        has_unpriced=any(row.has_unpriced for row in by_model),
+        has_estimated=any(row.has_estimated for row in by_model),
+        has_unknown=any(row.has_unknown for row in by_model),
         by_evaluator=by_evaluator,
         by_model=by_model,
     )
@@ -616,18 +653,39 @@ def evaluation_run_costs(config_id: int, run_ids: list[int]) -> dict[int, Decima
 
 
 def evaluation_config_cost_summary(config: EvaluationConfig) -> EvaluationConfigCostSummary:
-    """Aggregate spend across every run of one config: last 30 days and all time.
+    """Aggregate spend across every run of one config: last 30 days and all time, each
+    with its own confidence flags (mirrors `cost_summary`'s per-period counters).
 
-    Single aggregate query (two conditional sums) over the indexed `evaluation_config` FK.
+    Single aggregate query — a cost sum plus three confidence counts per period — over
+    the indexed `evaluation_config` FK.
     """
     qs = UsageRecord.objects.filter(evaluation_config_id=config.id)
-    cutoff = timezone.now() - timedelta(days=30)
+    recent_q = Q(timestamp__gte=timezone.now() - timedelta(days=30))
     agg = qs.aggregate(
-        all_time=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
-        last_30_days=Coalesce(Sum("cost", filter=Q(timestamp__gte=cutoff)), _ZERO, output_field=_COST_FIELD),
+        all_time_cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+        all_time_unpriced=Count("id", filter=Q(pricing_rule__isnull=True)),
+        all_time_estimated=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+        all_time_unknown=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
+        last_30_days_cost=Coalesce(Sum("cost", filter=recent_q), _ZERO, output_field=_COST_FIELD),
+        last_30_days_unpriced=Count("id", filter=recent_q & Q(pricing_rule__isnull=True)),
+        last_30_days_estimated=Count("id", filter=recent_q & Q(confidence=Confidence.ESTIMATED)),
+        last_30_days_unknown=Count("id", filter=recent_q & Q(confidence=Confidence.UNKNOWN)),
     )
+    currency = _single_currency(qs)
     return EvaluationConfigCostSummary(
-        last_30_days=agg["last_30_days"], all_time=agg["all_time"], currency=_single_currency(qs)
+        last_30_days=EvaluationPeriodCost(
+            total_cost=agg["last_30_days_cost"],
+            has_unpriced=bool(agg["last_30_days_unpriced"]),
+            has_estimated=bool(agg["last_30_days_estimated"]),
+            has_unknown=bool(agg["last_30_days_unknown"]),
+        ),
+        all_time=EvaluationPeriodCost(
+            total_cost=agg["all_time_cost"],
+            has_unpriced=bool(agg["all_time_unpriced"]),
+            has_estimated=bool(agg["all_time_estimated"]),
+            has_unknown=bool(agg["all_time_unknown"]),
+        ),
+        currency=currency,
     )
 
 

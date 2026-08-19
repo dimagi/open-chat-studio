@@ -150,5 +150,5 @@ class TestConfigAggregateCost:
         response = client.get(url)
 
         assert response.context["cost_tracking_enabled"] is True
-        assert response.context["cost_summary"].all_time == Decimal("4.20")
-        assert response.context["cost_summary"].last_30_days == Decimal("4.20")
+        assert response.context["cost_summary"].all_time.total_cost == Decimal("4.20")
+        assert response.context["cost_summary"].last_30_days.total_cost == Decimal("4.20")

@@ -8,12 +8,13 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
+from apps.cost_tracking.models import Confidence
 from apps.cost_tracking.services.reporting import (
     evaluation_config_cost_summary,
     evaluation_run_cost,
     evaluation_run_costs,
 )
-from apps.utils.factories.cost_tracking import UsageRecordFactory
+from apps.utils.factories.cost_tracking import PricingRuleFactory, UsageRecordFactory
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationRunFactory, EvaluatorFactory
 
 
@@ -83,8 +84,71 @@ def test_evaluation_run_cost_with_no_usage_returns_zero():
 
     assert result.total_cost == Decimal(0)
     assert result.total_tokens == 0
+    assert result.has_unpriced is False
+    assert result.has_estimated is False
+    assert result.has_unknown is False
     assert result.by_evaluator == []
     assert result.by_model == []
+
+
+@pytest.mark.django_db()
+def test_evaluation_run_cost_confidence_flags_roll_up_from_rows():
+    config = EvaluationConfigFactory.create()
+    run = EvaluationRunFactory.create(team=config.team, config=config)
+    evaluator = EvaluatorFactory.create(team=config.team)
+    priced_rule = PricingRuleFactory.create(provider_type="openai", model_name="gpt-4o-mini")
+
+    # Priced, exact — the "clean" row, judged by `evaluator`.
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        provider_type="openai",
+        model_name="gpt-4o-mini",
+        cost=Decimal("0.10"),
+        pricing_rule=priced_rule,
+        extra={"evaluation_run_id": run.id, "evaluator_id": evaluator.id},
+    )
+    # Estimated confidence, same model/evaluator.
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        provider_type="openai",
+        model_name="gpt-4o-mini",
+        cost=Decimal("0.05"),
+        pricing_rule=priced_rule,
+        confidence=Confidence.ESTIMATED,
+        extra={"evaluation_run_id": run.id, "evaluator_id": evaluator.id},
+    )
+    # Unpriced + unknown, from bot generation (no evaluator_id).
+    UsageRecordFactory.create(
+        team=config.team,
+        evaluation_config=config,
+        provider_type="anthropic",
+        model_name="claude-3",
+        cost=Decimal("0"),
+        pricing_rule=None,
+        confidence=Confidence.UNKNOWN,
+        extra={"evaluation_run_id": run.id},
+    )
+
+    result = evaluation_run_cost(run)
+
+    assert result.has_unpriced is True
+    assert result.has_estimated is True
+    assert result.has_unknown is True
+
+    by_model = {row.model_name: row for row in result.by_model}
+    assert by_model["gpt-4o-mini"].has_unpriced is False
+    assert by_model["gpt-4o-mini"].has_estimated is True
+    assert by_model["gpt-4o-mini"].has_unknown is False
+    assert by_model["claude-3"].has_unpriced is True
+    assert by_model["claude-3"].has_unknown is True
+
+    by_evaluator = {row.evaluator_name: row for row in result.by_evaluator}
+    assert by_evaluator[evaluator.name].has_unpriced is False
+    assert by_evaluator[evaluator.name].has_estimated is True
+    assert by_evaluator["Bot generation"].has_unpriced is True
+    assert by_evaluator["Bot generation"].has_unknown is True
 
 
 @pytest.mark.django_db()
@@ -134,8 +198,28 @@ def test_evaluation_config_cost_summary_splits_last_30_days_from_all_time():
 
     summary = evaluation_config_cost_summary(config)
 
-    assert summary.last_30_days == Decimal("1")
-    assert summary.all_time == Decimal("6")
+    assert summary.last_30_days.total_cost == Decimal("1")
+    assert summary.all_time.total_cost == Decimal("6")
+
+
+@pytest.mark.django_db()
+def test_evaluation_config_cost_summary_confidence_flags_are_scoped_per_period():
+    """A row unpriced 45 days ago must not mark the 30-day window unpriced — each
+    period's flags come from its own conditional count, not the config's whole history."""
+    config = EvaluationConfigFactory.create()
+    now = timezone.now()
+    UsageRecordFactory.create(
+        team=config.team, evaluation_config=config, cost=Decimal("0"), pricing_rule=None, at=now - timedelta(days=45)
+    )
+    rule = PricingRuleFactory.create()
+    UsageRecordFactory.create(
+        team=config.team, evaluation_config=config, cost=Decimal("1"), pricing_rule=rule, at=now - timedelta(days=1)
+    )
+
+    summary = evaluation_config_cost_summary(config)
+
+    assert summary.last_30_days.has_unpriced is False
+    assert summary.all_time.has_unpriced is True
 
 
 @pytest.mark.django_db()
@@ -144,5 +228,7 @@ def test_evaluation_config_cost_summary_with_no_usage_is_zero():
 
     summary = evaluation_config_cost_summary(config)
 
-    assert summary.last_30_days == Decimal(0)
-    assert summary.all_time == Decimal(0)
+    assert summary.last_30_days.total_cost == Decimal(0)
+    assert summary.all_time.total_cost == Decimal(0)
+    assert summary.last_30_days.has_unpriced is False
+    assert summary.all_time.has_unpriced is False
