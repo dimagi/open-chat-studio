@@ -54,7 +54,7 @@ So "this Chatbot has no Chat API Channel" means "no outside embedder can reach i
 A Chat API Channel carries two settings that are easy to confuse, deliberately kept apart:
 
 - **Credential Mode** — the column exists (`ExperimentChannel.credential_mode`) but nothing reads it yet, so it is not admin-selectable and every Channel sits at `embed_key`. Once the OAuth path lands ([oauth-chat-widget.md](docs/design/oauth-chat-widget.md) D1) it is the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
-- **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin wants required.
+- **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin requires.
 
 An admin's policy must never be switched on by a widget upgrade, which is why these are two separate settings and not rungs of one ladder.
 
