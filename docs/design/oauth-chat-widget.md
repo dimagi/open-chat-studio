@@ -178,7 +178,7 @@ caller must present. No new platform.
 # apps/channels/models.py
 class ChannelPlatform(models.TextChoices):
     ...
-    EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"   # label change only
+    EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"  # label change only
 
 
 class CredentialMode(models.TextChoices):
@@ -327,14 +327,14 @@ def _check_start_session_access(request, experiment, embed_key_channel, oauth_ch
     if version_number is not None:
         return Response({"error": "Version number requires authentication"}, status=403)
     if oauth_channel is not None:
-        return None                 # the token was validated by the authenticator
+        return None  # the token was validated by the authenticator
     if embed_key_channel is not None:
         # The key resolved a channel, but the channel may not accept keys. Anonymous +
         # `oauth` mode is the leaked-embed-key case the mode exists to stop.
         if embed_key_channel.credential_mode != CredentialMode.EMBED_KEY:
             raise ChatApiAccessDenied()
         return None
-    return None   # keyless: unchanged here; keyless-chat-start-sunset.md replaces this line
+    return None  # keyless: unchanged here; keyless-chat-start-sunset.md replaces this line
 ```
 
 **The mode is checked against the channel the *embed key* resolved, and the check is a rejection
@@ -360,7 +360,7 @@ only.**
 
 ```python
 # apps/api/views/chat.py
-AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]            # unchanged
+AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]  # unchanged
 START_AUTH_CLASSES = [ChatOAuthAuthentication, *AUTH_CLASSES]
 ```
 
@@ -426,7 +426,7 @@ def validated_machine_token(request, experiment) -> OAuth2AccessToken:
     """
     result = OAuth2Authentication().authenticate(request)
     if result is None:
-        raise ChatApiAccessDenied()   # signature, expiry or revocation — never "no token"
+        raise ChatApiAccessDenied()  # signature, expiry or revocation — never "no token"
     _user, token = result
     if not is_client_credentials_token(token) or token.team_id != experiment.team_id:
         raise ChatApiAccessDenied()
