@@ -165,7 +165,7 @@ a machine token may be granted, enforced at issuance by `APIScopedValidator.vali
 | Django session | membership **or** embed key (ADR-0053) |
 | Session token on an existing session | ADR-0039 proof of possession |
 | **Nothing at all** | **nothing** — `chat_start_session`'s only permission class is `WidgetDomainPermission`, which returns `True` when `request.auth` is not a channel |
-| **A machine caller** | **no way in at all** — OAuth is not in the chat endpoints' `AUTH_CLASSES`. True of `/api/chat/*` only: a `chatbots:interact` token converses via `/api/openai/…/chat/completions` and `/channels/api/<experiment_id>/incoming_message` with **the chatbots its application lists** (PR #4198) — still with no *channel* enabling anything, which is the gap [D1](#d1-the-chat-api-channel-and-its-credential-mode) closes for this door |
+| **A machine caller** | **no way in at all** — OAuth is not in the chat endpoints' `AUTH_CLASSES`. True of `/api/chat/*` only: a `chatbots:interact` token converses via `/api/openai/…/chat/completions` with **the chatbots its application lists** (PR #4198) — still with no *channel* enabling anything, which is the gap [D1](#d1-the-chat-api-channel-and-its-credential-mode) closes for this door |
 
 ## Decisions
 
@@ -514,7 +514,7 @@ in the team and with no channel enabling anything:
 | Endpoint | Capability |
 |---|---|
 | `apps/api/openai.py` (`ChatCompletions*View`) | converse with any chatbot |
-| `apps/channels/views.py` (`NewApiMessage*View`) | converse with any chatbot |
+| `apps/channels/views.py` (`NewApiMessage*View`) | *authorised, but no success path* — the endpoint derives its participant from `request.user.email`, and a client-credentials caller is an `AnonymousUser`. Widening it is [#4197](https://github.com/dimagi/open-chat-studio/issues/4197)'s call, not this document's. |
 | `apps/api/views/channels.py`, `apps/api/v2/channels.py` (`TriggerBotMessageView`) | **send outbound WhatsApp / Telegram / Connect messages to arbitrary participants** |
 
 That is the wrong credential to hand a browser. The supported shape for a browser embed puts a bearer
