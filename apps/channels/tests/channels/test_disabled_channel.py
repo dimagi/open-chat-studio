@@ -365,6 +365,58 @@ class TestDisabledChannelRefusesSessionStarts:
             user.user_permissions.add(Permission.objects.get(codename=codename))
         return user
 
+    def test_public_web_chat_survives_the_channel_going_down_mid_request(self, client):
+        """The check runs before the consent form renders, but an admin can switch the channel off
+        between that check and the session start. A public URL must not 500 for that."""
+        experiment = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+        channel = ExperimentChannel.objects.get_team_web_channel(experiment.team)
+        channel.disabled_message = "Back on Monday"
+        channel.save()  # left enabled, so the up-front check passes
+
+        with patch(
+            "apps.experiments.views.experiment.WebChannel.start_new_session",
+            side_effect=ChannelDisabledException(channel),
+        ):
+            response = client.post(
+                reverse(
+                    "experiments:start_session_public",
+                    kwargs={"team_slug": experiment.team.slug, "experiment_id": experiment.public_id},
+                ),
+                data={
+                    "identifier": "someone@example.com",
+                    "consent_agreement": True,
+                    "experiment_id": str(experiment.id),
+                    "participant_id": "",
+                },
+            )
+
+        assert response.status_code == 503
+        assert "Back on Monday" in response.content.decode()
+
+    def test_console_new_session_survives_the_channel_going_down_mid_request(self, client):
+        """Worse here than on the public page: the old session is already ended by this point, so
+        a 500 would leave the participant with no session at all."""
+        session = ExperimentSessionFactory.create(
+            experiment__team=TeamWithUsersFactory.create(),
+            experiment_channel__platform=ChannelPlatform.TELEGRAM,
+        )
+        experiment = session.experiment
+        client.force_login(self._console_user(experiment, "change_experimentsession"))
+
+        with patch("apps.chatbots.views.get_channel_class_for_platform") as get_channel_class:
+            get_channel_class.return_value.start_new_session.side_effect = ChannelDisabledException(
+                session.experiment_channel
+            )
+            response = client.post(
+                reverse(
+                    "chatbots:chatbot_new_session",
+                    args=[experiment.team.slug, experiment.public_id, session.external_id],
+                )
+            )
+
+        assert response.status_code == 302
+        assert experiment.sessions.count() == 1
+
     def test_new_session_from_the_console_is_refused(self, client):
         """The admin "new session" action reuses the old session's channel, so a disabled one has
         to refuse -- and refuse before ending the session the participant is already in."""

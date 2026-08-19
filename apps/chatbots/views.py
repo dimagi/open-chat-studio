@@ -671,13 +671,19 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
 
     # Create new session using the same channel as the old session
     channel_cls = get_channel_class_for_platform(experiment_channel.platform)
-    new_session = channel_cls.start_new_session(
-        working_experiment=experiment,
-        participant_identifier=participant.identifier,
-        participant_user=participant.user,
-        session_status=SessionStatus.ACTIVE,
-        experiment_channel=experiment_channel,
-    )
+    try:
+        new_session = channel_cls.start_new_session(
+            working_experiment=experiment,
+            participant_identifier=participant.identifier,
+            participant_user=participant.user,
+            session_status=SessionStatus.ACTIVE,
+            experiment_channel=experiment_channel,
+        )
+    except ChannelDisabledException:
+        # Switched off between the check above and here. The old session is already ended, so
+        # say so plainly rather than 500 after a destructive step.
+        messages.error(request, "The channel was disabled while creating the new session.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
     send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
 

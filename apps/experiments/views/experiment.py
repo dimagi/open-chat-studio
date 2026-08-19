@@ -43,6 +43,7 @@ from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.datamodels import Attachment
+from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
@@ -249,6 +250,16 @@ def _poll_messages(request):
     return HttpResponse()
 
 
+def _channel_disabled_page(request, disabled_message: str) -> TemplateResponse:
+    """The maintenance page shown when the channel a participant is trying to reach is off."""
+    return TemplateResponse(
+        request,
+        "experiments/channel_disabled.html",
+        {"disabled_message": disabled_message},
+        status=503,
+    )
+
+
 def _disabled_web_channel_response(request) -> TemplateResponse | None:
     """The maintenance page when an admin has switched off the team's web channel, else None.
 
@@ -260,12 +271,7 @@ def _disabled_web_channel_response(request) -> TemplateResponse | None:
     web_channel = ExperimentChannel.objects.filter(team=request.team, platform=ChannelPlatform.WEB).first()
     if not (web_channel and web_channel.is_disabled):
         return None
-    return TemplateResponse(
-        request,
-        "experiments/channel_disabled.html",
-        {"disabled_message": web_channel.disabled_message},
-        status=503,
-    )
+    return _channel_disabled_page(request, web_channel.disabled_message)
 
 
 def _resolve_consent_identifier(consent, form, user, team) -> tuple[str, bool]:
@@ -295,11 +301,20 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     if not experiment_version.is_public:
         raise Http404
 
-    # Checked once up front rather than around each start_new_session below, so a participant
-    # never fills in the consent form only to be refused on submit.
+    # Checked before the consent form is rendered, so a participant never fills it in only to be
+    # refused on submit. The channel is checked again inside start_experiment_session, which is
+    # what the except below catches: an admin switching the channel off mid-request should get
+    # the same maintenance page, not a 500 on a public URL.
     if disabled_response := _disabled_web_channel_response(request):
         return disabled_response
+    try:
+        return _run_public_consent_flow(request, team_slug, experiment, experiment_version)
+    except ChannelDisabledException as e:
+        return _channel_disabled_page(request, e.disabled_message)
 
+
+def _run_public_consent_flow(request, team_slug: str, experiment, experiment_version):
+    """Collect consent if the chatbot asks for it, then start the participant's session."""
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
     if not consent:
