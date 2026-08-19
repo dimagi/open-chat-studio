@@ -106,7 +106,13 @@ def test_openrouter_minimal_config(clean_env):
     clean_env.setenv("OPENROUTER_API_KEY", "or-test")
     creds = get_provider_credentials_for_type(LlmProviderTypes.openrouter)
     assert creds is not None
-    assert creds.config == {"openai_api_key": "or-test"}
+    assert creds.config == {
+        "openai_api_key": "or-test",
+        "default_headers": {
+            "HTTP-Referer": "https://github.com/dimagi/open-chat-studio",
+            "X-Title": "Open Chat Studio",
+        },
+    }
 
 
 def test_returns_one_entry_per_configured_provider(clean_env):
