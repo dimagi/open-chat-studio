@@ -109,14 +109,23 @@ class PipelineNodesView(DiscoveryView):
         ],
     )
     def get(self, request):
-        node_types = get_node_types()
-        requested_type = request.query_params.get("type")
-        if requested_type:
-            node_types = [node for node in node_types if node["type"] == requested_type]
-            if not node_types:
-                raise unknown_node_type(requested_type)
+        node_types = self._requested_node_types(request.query_params.get("type"))
+        return self._etagged(request, self.get_serializer(node_types, many=True).data)
 
-        payload = self.get_serializer(node_types, many=True).data
+    @staticmethod
+    def _requested_node_types(requested_type: str | None) -> list[dict]:
+        """Every listed node type, or just the one `?type=` named."""
+        node_types = get_node_types()
+        if not requested_type:
+            return node_types
+        matching = [node for node in node_types if node["type"] == requested_type]
+        if not matching:
+            raise unknown_node_type(requested_type)
+        return matching
+
+    @staticmethod
+    def _etagged(request, payload) -> Response | HttpResponseNotModified:
+        """`payload` under its `ETag`, or a bare 304 for a client whose cached copy still matches."""
         payload_etag = etag(payload)
         if request.headers.get("If-None-Match") == payload_etag:
             return HttpResponseNotModified()
@@ -269,18 +278,25 @@ class PipelineOptionsView(DiscoveryView):
 
     @classmethod
     def _clean_options(cls, value):
-        """Strip builder-only affordances: placeholder entries with an empty ``value`` and
-        ``edit_url`` links into the Django UI. Recurses -- ``built_in_tools`` and ``tool_config`` nest
-        their lists inside dicts keyed by provider type."""
+        """Strip the builder-only affordances off every option list. Recurses -- ``built_in_tools``
+        and ``tool_config`` nest their lists inside dicts keyed by provider type."""
         if isinstance(value, dict):
             return {key: cls._clean_options(item) for key, item in value.items()}
         if isinstance(value, list):
-            return [
-                {key: item for key, item in option.items() if key != "edit_url"} if isinstance(option, dict) else option
-                for option in value
-                if not (isinstance(option, dict) and option.get("value") == "")
-            ]
+            return [cls._clean_option(option) for option in value if not cls._is_placeholder(option)]
         return value
+
+    @staticmethod
+    def _is_placeholder(option) -> bool:
+        """A builder entry standing in for "nothing chosen". It names no resource to reference."""
+        return isinstance(option, dict) and option.get("value") == ""
+
+    @staticmethod
+    def _clean_option(option):
+        """One option entry, with its ``edit_url`` link into the Django UI dropped."""
+        if not isinstance(option, dict):
+            return option
+        return {key: item for key, item in option.items() if key != "edit_url"}
 
     @staticmethod
     def _describe_prompt_vars(options: dict) -> dict:
