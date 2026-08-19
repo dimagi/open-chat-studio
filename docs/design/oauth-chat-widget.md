@@ -426,7 +426,7 @@ def validated_machine_token(request, experiment) -> OAuth2AccessToken:
     """
     result = OAuth2Authentication().authenticate(request)
     if result is None:
-        raise ChatApiAccessDenied()   # signature, expiry or revocation — never "no token"
+        raise ChatApiAccessDenied()  # signature, expiry or revocation — never "no token"
     _user, token = result
     if not is_client_credentials_token(token) or token.team_id != experiment.team_id:
         raise ChatApiAccessDenied()
