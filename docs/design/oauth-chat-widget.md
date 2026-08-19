@@ -630,10 +630,10 @@ probing for which one it is.
 
 ### D7: Admission is bounded in time
 
-> **Largely shipped.** The global lifetime landed in PR #4204 and is recorded as **ADR-0054**
+> **Shipped.** The global lifetime landed in PR #4204 and is recorded as **ADR-0054**
 > (*Chat session tokens expire on absolute age, not inactivity*), superseding ADR-0040's expiry rule.
-> [#4199](https://github.com/dimagi/open-chat-studio/issues/4199) stays open for the per-channel
-> `session_token_lifetime` override, which ADR-0054 records as deferred. The argument below is kept
+> The per-channel `session_token_lifetime` override, which ADR-0054 recorded as deferred, followed
+> under [#4199](https://github.com/dimagi/open-chat-studio/issues/4199). The argument below is kept
 > because it is what makes the rest of this document's admission control worth anything; read it as
 > settled, not proposed.
 
@@ -708,17 +708,17 @@ If the page's token has expired, that is a `401` and the host must push a fresh 
 puts in front of its own token-minting endpoint runs again at the cadence of the lifetime. That is the
 mechanism by which a short OAuth TTL finally does the work it looks like it is doing.
 
-**Configuration: a mandatory global (shipped), with a per-channel override (outstanding).**
+**Configuration: a mandatory global and a per-channel override — both shipped.**
 `CHAT_SESSION_TOKEN_LIFETIME` always has a value and is live. `ExperimentChannel.session_token_lifetime`
-(nullable — null means "use the global") is **the piece #4199 still tracks**, and it rides D1's
+(nullable — null means "use the global") landed under #4199, riding D1's
 migration rather than carrying one of its own. `get_experiment_session_cached` already
 `select_related`s `experiment_channel` and caches the session, so the override costs no query.
 
 Per-channel matters because the modes want different values: on a public `embed_key` widget a
 mid-conversation restart is pure UX cost with no security gain, while an `oauth` channel wants it
-tight. **Until the override lands, an `oauth` channel cannot tighten below the global at all** — so a
-chatbot exposed for abuse-resistance still grants a week per admitted caller. That makes the override
-a soft prerequisite for this document's own goal, not merely a nice-to-have.
+tight. **Without the override an `oauth` channel could not tighten below the global at all** — a
+chatbot exposed for abuse-resistance would still grant a week per admitted caller. That made the
+override a soft prerequisite for this document's own goal, not merely a nice-to-have.
 
 **The global default is 7 days — deliberately today's number.** Reusing `W` makes the change a
 *uniform tightening*: since the old rule expired a session at `last_activity + 7d` and
@@ -832,10 +832,9 @@ which is exactly today's behaviour. One status code changes on an already-reject
 
 **[D7](#d7-admission-is-bounded-in-time) was the one behaviour change on an already-admitted path**,
 and it has already shipped separately (PR #4204, ADR-0054), so **this document is now backwards
-compatible end to end**. What remains of D7 here is the per-channel `session_token_lifetime` override
-(rows 1 and 3), still tracked by [#4199](https://github.com/dimagi/open-chat-studio/issues/4199). It
-rides D1's migration; if it lands first it carries its own and D1's shrinks back to `credential_mode`
-alone.
+compatible end to end**. Nothing of D7 is outstanding here: the per-channel `session_token_lifetime`
+override (rows 1 and 3) shipped alongside `credential_mode` in `bot_channels.0033`, which is what
+[#4199](https://github.com/dimagi/open-chat-studio/issues/4199) tracked.
 
 **ADRs to extract** when this flips to `stable` (next free number is 0057): the admission model, with
 the Chat API Channel and its credential mode as the enablement rule, and the OAuth credential's
