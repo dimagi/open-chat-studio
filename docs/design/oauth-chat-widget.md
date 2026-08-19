@@ -165,7 +165,7 @@ a machine token may be granted, enforced at issuance by `APIScopedValidator.vali
 | Django session | membership **or** embed key (ADR-0053) |
 | Session token on an existing session | ADR-0039 proof of possession |
 | **Nothing at all** | **nothing** — `chat_start_session`'s only permission class is `WidgetDomainPermission`, which returns `True` when `request.auth` is not a channel |
-| **A machine caller** | **no way in at all** — OAuth is not in the chat endpoints' `AUTH_CLASSES`. True of `/api/chat/*` only: a `chatbots:interact` token converses via `/api/openai/` and `/api/messages/` with **the chatbots its application lists** (PR #4198) — still with no *channel* enabling anything, which is the gap [D1](#d1-the-chat-api-channel-and-its-credential-mode) closes for this door |
+| **A machine caller** | **no way in at all** — OAuth is not in the chat endpoints' `AUTH_CLASSES`. True of `/api/chat/*` only: a `chatbots:interact` token converses via `/api/openai/…/chat/completions` and `/channels/api/<experiment_id>/incoming_message` with **the chatbots its application lists** (PR #4198) — still with no *channel* enabling anything, which is the gap [D1](#d1-the-chat-api-channel-and-its-credential-mode) closes for this door |
 
 ## Decisions
 
@@ -326,13 +326,31 @@ def _check_start_session_access(request, experiment, embed_key_channel, oauth_ch
         ...  # unchanged ADR-0053 logic: membership, else embed key, else 403
     if version_number is not None:
         return Response({"error": "Version number requires authentication"}, status=403)
-    if embed_key_channel is not None or oauth_channel is not None:
+    if oauth_channel is not None:
+        return None                 # the token was validated by the authenticator
+    if embed_key_channel is not None:
+        # The key resolved a channel, but the channel may not accept keys. Anonymous +
+        # `oauth` mode is the leaked-embed-key case the mode exists to stop.
+        if embed_key_channel.credential_mode != CredentialMode.EMBED_KEY:
+            raise ChatApiAccessDenied()
         return None
     return None   # keyless: unchanged here; keyless-chat-start-sunset.md replaces this line
 ```
 
-The mode's requirement is then checked against the channel that was resolved: `oauth` mode demands a
-valid token and ignores any embed key that rode along.
+**The mode is checked against the channel the *embed key* resolved, and the check is a rejection
+rather than a fallthrough.** An `oauth`-mode channel reached with a key and no token has to fail here
+or nowhere: `embed_key_authorizes_channel` and `WidgetDomainPermission` are unchanged and know nothing
+about the mode, and `ChatOAuthAuthentication` returns `None` when there is no `Authorization` header,
+so it never runs on a key-only request. Leaving the branches to converge on `return None` — as an
+earlier draft of this sketch did — would admit exactly the caller the test plan requires be refused
+(*"Embed key alone, `oauth` mode → 401"*), which is to say it would ship a mode that silently does not
+gate. The refusal is `ChatApiAccessDenied` (a `401`, per [D6](#d6-getting-a-401-out-of-drf)) rather
+than a returned `403`, so it is indistinguishable from every other admission failure at this door.
+
+Note that `oauth` mode ignores an embed key that rides along *with a valid token* — that is the
+existing-snippet case from [D1](#d1-the-chat-api-channel-and-its-credential-mode). Ignored means "not
+required and not rejected", not "sufficient".
+
 The OAuth requirement is evaluated on the **embed-key branch only**, never on the membership branch —
 ADR-0053 admits a cookie-bearing team member without a key, and switching a channel to `oauth` mode
 must not lock team members out of their own in-app embeds.
@@ -476,7 +494,7 @@ every non-client-credentials caller, so the field neither appears on nor constra
 application.
 
 **It already gates the existing `chatbots:interact` endpoints**, not just this one: `/api/openai/`,
-`/api/messages/` and `TriggerBotMessage`, six views in all. Leaving those on plain team scope would
+the `channels/api/…/incoming_message` ingress views and `TriggerBotMessage`, six views in all. Leaving those on plain team scope would
 have kept the inconsistency this field exists to remove — the same scope meaning different things at
 different doors. Empty means none there too, with no backfill: client credentials shipped 2026-07-24,
 so the population of live machine applications was small enough to migrate by announcement. That work
