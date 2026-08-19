@@ -372,7 +372,11 @@ function dashboard() {
                     container.innerHTML = await response.text();
                     // The panel HTML (and its chart canvases) is replaced on each
                     // refresh, so render the charts after the swap.
-                    await Promise.all([this.loadCostTimeseriesChart(), this.loadCostBreakdownCharts()]);
+                    await Promise.all([
+                        this.loadCostTimeseriesChart(),
+                        this.loadCostBreakdownCharts(),
+                        this.loadCostP95Chart()
+                    ]);
                 }
             } catch (error) {
                 console.error("Failed to refresh cost tracking panel:", error);
@@ -404,6 +408,17 @@ function dashboard() {
                 this.renderServiceKindChart();
             } catch (error) {
                 console.error("Failed to load cost breakdown charts:", error);
+            }
+        },
+
+        async loadCostP95Chart() {
+            if (!document.getElementById("costP95Chart")) return;
+
+            try {
+                const data = await this.apiRequest('api/cost-p95/');
+                window.chartManager.renderCostP95Chart(data || []);
+            } catch (error) {
+                console.error("Failed to load cost p95 chart:", error);
             }
         },
 
