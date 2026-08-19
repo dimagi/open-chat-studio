@@ -124,6 +124,14 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         Model("llama-3.1-8b-instruct", 131072),
         Model("llama-3.1-70b-instruct", 131072),
     ],
+    "openrouter": [
+        Model("openai/gpt-4.1-mini", 1000000, is_default=True),
+        Model("openai/gpt-4.1", 1000000),
+        Model("anthropic/claude-sonnet-4-6", 1000000, is_translation_default=True),
+        Model("meta-llama/llama-3.3-70b-instruct", 128000),
+        Model("google/gemini-2.5-flash", 1048576),
+        Model("deepseek/deepseek-v4-flash", 1000000),
+    ],
     "deepseek": [
         # llm-stats lists this model under its open-weights name (deepseek-v4-flash-0731), but
         # api.deepseek.com only serves the undated alias, which is what we have to send.
