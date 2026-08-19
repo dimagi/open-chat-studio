@@ -45,7 +45,7 @@ This guide helps you set up Slack integration with your development environment 
    invoke runserver --public
    ```
 3. This will expose your local server and generate a public HTTPS URL like:
-   ```
+   ```text
    https://abc123.ngrok.io
    ```
 
@@ -54,7 +54,7 @@ This guide helps you set up Slack integration with your development environment 
 1. In your Slack app, go to **OAuth & Permissions**.
 2. Under **Redirect URLs**, add:
 
-   ```
+   ```text
    https://<your-ngrok-subdomain>.ngrok.io/slack/oauth_redirect
    ```
 3. Click **Save URLs**.
@@ -65,7 +65,7 @@ This guide helps you set up Slack integration with your development environment 
 2. Toggle **Enable Events**.
 3. Set the **Request URL** to:
 
-   ```
+   ```text
    https://<your-ngrok-subdomain>.ngrok.io/slack/events
    ```
 4. Under **Subscribe to Bot Events**, add:
