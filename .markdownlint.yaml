@@ -2,8 +2,8 @@ default: true
 
 # Enable rules that are important for AI agent parsing, structural integrity and link/reference correctness
 
-# List markers must be *
-MD004: true
+# List markers can be either - or *
+MD004: false
 
 # Ignore unordered list indentation check
 MD007: false
