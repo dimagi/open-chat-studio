@@ -42,9 +42,14 @@ _Note_: most Channels are messaging platforms, but the Chat API Channel is not �
 _Avoid_: "ExperimentChannel" outside of code.
 
 **Chat API Channel**:
-The Channel that exposes a Chatbot over the chat API (`/api/chat/`), created from the Channels tab. Its main client is the embedded chat widget, but not its only one. Presenting a credential — the **Embed Key**, or a Django session plus team membership — reaches a Chatbot only through this Channel: exposure is a deliberate admin act, not a default.
+The Channel that exposes a Chatbot over the chat API (`/api/chat/`), created from the Channels tab. Its main client is the embedded chat widget, but not its only one. It is what an **Embed Key** admits a caller through — an outside embedder reaches a Chatbot only by way of a Chat API Channel, so exposure to that audience is a deliberate admin act, not a default.
 
-**It is not yet the *only* way in.** A caller presenting *no* credential at all is still admitted and is given the team's API entry point rather than any Chat API Channel, so "no Chat API Channel" does not yet mean "unreachable". Deny-by-default is the destination, and closing that path is scheduled in [keyless-chat-start-sunset.md](docs/design/keyless-chat-start-sunset.md) (ADR-0053 deferred it to the 2026-10-01 sunset).
+**Two other callers reach `/api/chat/` without one**, and neither is attributed to a Chat API Channel — both land on the team's **API entry point** instead, so a Chat API Channel's settings (the ADR-0045 auth-level ratchet, the ADR-0052 per-channel throttle bucket) do not apply to them:
+
+- a **team member** with a Django session, admitted on membership alone (ADR-0053);
+- a caller with **no credential at all** — still admitted today, and scheduled for removal in [keyless-chat-start-sunset.md](docs/design/keyless-chat-start-sunset.md) (ADR-0053 deferred it to the 2026-10-01 sunset).
+
+So "this Chatbot has no Chat API Channel" means "no outside embedder can reach it", not "unreachable".
 
 A Chat API Channel carries two settings that are easy to confuse, deliberately kept apart:
 
