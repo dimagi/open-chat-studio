@@ -366,6 +366,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: No chatbot with the given ID exists in the team
+          description: ''
   /api/openai/{experiment_id}/v{version}/chat/completions:
     post:
       operationId: openai_chat_completions_versioned
@@ -434,6 +446,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateChatCompletionResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: No chatbot with the given ID exists in the team
           description: ''
   /api/participants:
     get:
@@ -840,9 +864,9 @@ paths:
                   the bot/LLM.
               ExperimentChannelNotFound:
                 value:
-                  detail: Experiment cannot send messages on the connect_messaging
-                    channel
-                summary: Experiment cannot send messages on the specified channel
+                  detail: Chatbot cannot send messages on the connect_messaging channel.
+                    Create the channel first.
+                summary: Chatbot cannot send messages on the specified channel
               ConsentNotGiven:
                 value:
                   detail: User has not given consent
@@ -891,22 +915,27 @@ paths:
               schema:
                 description: Bad Request
               examples:
+                ExperimentChannelNotFound:
+                  value:
+                    detail: Chatbot cannot send messages on the connect_messaging
+                      channel. Create the channel first.
+                  summary: Chatbot cannot send messages on the specified channel
                 ConsentNotGiven:
                   value:
                     detail: User has not given consent
                   summary: User has not given consent
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
           description: ''
         '404':
           content:
             application/json:
               schema:
                 description: Not Found
-              examples:
-                ExperimentChannelNotFound:
-                  value:
-                    detail: Experiment cannot send messages on the connect_messaging
-                      channel
-                  summary: Experiment cannot send messages on the specified channel
           description: ''
   /channels/api/{experiment_id}/incoming_message:
     post:
@@ -938,6 +967,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
           description: ''
   /channels/api/{experiment_id}/v{version}/incoming_message:
     post:
@@ -979,6 +1014,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseMessage'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
           description: ''
 components:
   schemas:

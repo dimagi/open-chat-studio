@@ -11,7 +11,7 @@ This guide covers the configuration parameters for a Turn.io messaging provider 
 
 Both are stored as encrypted fields and obfuscated in the UI.
 
-## `hmac_secret` - Webhook Signature Verification
+## `hmac_secret` — Webhook Signature Verification
 
 Turn signs every webhook delivery with an HMAC-SHA256 of the raw request body, keyed on the
 secret configured for that webhook in your Turn account, and sends the base64-encoded digest

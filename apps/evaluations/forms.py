@@ -476,7 +476,7 @@ class EvaluatorTagRuleForm(forms.ModelForm):
         try:
             coerced = ConditionType.coerce_value(value, field_type)
         except (TypeError, ValueError):
-            msg = "Value must be an integer." if field_type == "int" else "Value must be numeric."
+            msg = "Value must be an integer." if field_type in ("int", "binary") else "Value must be numeric."
             self.add_error("condition_value_single", msg)
             return
         if not self.errors:

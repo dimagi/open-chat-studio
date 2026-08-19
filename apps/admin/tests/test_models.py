@@ -9,6 +9,10 @@ from apps.admin.models import (
     clear_site_config_cache,
     get_site_config,
 )
+from apps.channels.models import ChannelPlatform
+from apps.channels.utils import clear_widget_embed_key_cache
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ExperimentFactory
 
 
 class TestChatWidgetConfig:
@@ -28,6 +32,34 @@ class TestChatWidgetConfig:
         attrs = config.get_widget_attributes()
         assert attrs["welcome-messages"] == '["Message with \\"quotes\\" and \\\\backslashes"]'
         assert attrs["starter-questions"] == "[\"Question with 'quotes'\"]"
+
+    def test_get_widget_attributes_without_a_chatbot_has_no_embed_key(self):
+        assert "embed-key" not in ChatWidgetConfig().get_widget_attributes()
+
+    @pytest.mark.django_db()
+    def test_get_widget_attributes_includes_the_chatbots_embed_key(self):
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            extra_data={"widget_token": "site-widget-token", "allowed_domains": ["example.com"]},
+        )
+        chatbot_id = str(channel.experiment.public_id)
+        clear_widget_embed_key_cache(chatbot_id)
+        try:
+            attrs = ChatWidgetConfig(chatbot_id=chatbot_id).get_widget_attributes()
+        finally:
+            clear_widget_embed_key_cache(chatbot_id)
+        assert attrs["embed-key"] == "site-widget-token"
+
+    @pytest.mark.django_db()
+    def test_get_widget_attributes_omits_embed_key_when_the_chatbot_has_no_widget_channel(self):
+        experiment = ExperimentFactory.create()
+        chatbot_id = str(experiment.public_id)
+        clear_widget_embed_key_cache(chatbot_id)
+        try:
+            attrs = ChatWidgetConfig(chatbot_id=chatbot_id).get_widget_attributes()
+        finally:
+            clear_widget_embed_key_cache(chatbot_id)
+        assert "embed-key" not in attrs
 
 
 class TestSiteConfig:

@@ -9,9 +9,9 @@ Banners are temporary notifications that can be displayed to users on specific p
 ## Features
 
 - **Multiple Banner Types**: Information, warning, error, and success banners
-- **Location Targeting**: Display banners on specific pages or globally as well as on specific sites (domains) or all sites
+- **Location Targeting**: Display banners on specific pages or globally, as well as on specific sites (domains) or all sites
 - **Scheduling**: Set start and end dates for automatic banner display
-- **Feature Flag Integration**: Show banners only to teams with specific feature flags
+- **Feature Flag Integration**: Show banners only to teams with a specific feature flag enabled
 - **User Dismissal**: Users can dismiss banners with optional re-appearance timeout
 - **Markdown Support**: Banner messages support markdown formatting
 - **Template Variables**: Dynamic content using Django template syntax
@@ -32,21 +32,21 @@ Banners are temporary notifications that can be displayed to users on specific p
 - **Title** (optional): A brief title for the banner
 - **Message**: The main content displayed to users (supports markdown)
 - **Banner Type**: Choose the visual style:
-  - `info` - Blue information banner
-  - `warning` - Yellow warning banner
-  - `error` - Red error banner
-  - `success` - Green success banner
+    - `info` - Blue information banner
+    - `warning` - Yellow warning banner
+    - `error` - Red error banner
+    - `success` - Green success banner
 
 #### Location settings
 
 - **Location**: Where the banner should appear:
-  - `global` - All pages (default)
-  - `pipelines` - Pipelines home page
-  - `pipelines_new` - New pipeline creation page
-  - `chatbots_home` - Chatbots listing page
-  - `chatbots_new` - New chatbot creation page
-  - `assistants_home` - Assistants listing page
-  - `team_settings` - Team settings page
+    - `global` - All pages (default)
+    - `pipelines` - Pipelines home page
+    - `pipelines_new` - New pipeline creation page
+    - `chatbots_home` - Chatbots listing page
+    - `chatbots_new` - New chatbot creation page
+    - `assistants_home` - Assistants listing page
+    - `team_settings` - Team settings page
 
 #### Scheduling
 
@@ -65,11 +65,11 @@ Banners are temporary notifications that can be displayed to users on specific p
 
 A banner is visible when ALL of the following conditions are met:
 
-1. The banner is marked as active (`is_active = True`)
-2. The current time is between the start and end dates
-3. The user hasn't dismissed the banner (or the dismiss timeout has expired)
-4. The banner location matches the current page (or is set to "global")
-5. If a feature flag is set, the user's team must have that flag enabled
+- The banner is marked as active (`is_active = True`)
+- The current time is between the start and end dates
+- The user hasn't dismissed the banner (or the dismiss timeout has expired)
+- The banner location matches the current page (or is set to "global")
+- If a feature flag is set, the user's team must have that flag enabled
 
 ### Display Locations
 

@@ -9,6 +9,7 @@ from apps.human_annotations.models import (
     AnnotationStatus,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
+from apps.utils.factories.human_annotations import AnnotationQueueFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
 
@@ -202,3 +203,20 @@ def test_aggregation_falls_back_to_all_when_no_authoritative(team, queue_with_in
     # Both values should contribute when no authoritative pick.
     assert agg.aggregates["score"]["count"] == 2
     assert agg.aggregates["score"]["mean"] == 3.0
+
+
+@pytest.mark.django_db()
+def test_binary_field_aggregates_as_rate(team):
+    queue = AnnotationQueueFactory(binary_schema=True, team=team)
+    reviewer = team.members.first()
+    for value in (1, 0, 1):
+        _make_item_and_annotate(queue, team, reviewer, {"correct": value})
+
+    aggregate = compute_aggregates_for_queue(queue)
+
+    assert aggregate.aggregates["correct"] == {
+        "type": "binary",
+        "count": 3,
+        "mean": 0.6667,
+        "true_count": 2,
+    }

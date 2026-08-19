@@ -1,5 +1,5 @@
 {% extends "web/app/app_base.html" %}
-{% load django_tables2 form_tags static team_tags waffle_tags %}
+{% load django_tables2 form_tags humanize static team_tags waffle_tags %}
 
 {% block page_head %}
   {{ block.super }}
@@ -59,28 +59,16 @@
                 </div>
                 <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
                   <li>
-                    {% flag "flag_chat_widget" %}
-                      <button type="button" onclick="openChatWidget({{ experiment.version_number }})">Unreleased version</button>
-                    {% else %}
-                      <form method="post"
-                            action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id experiment.version_number %}"
-                            class="inline">
-                        {% csrf_token %}
-                        <button type="submit">Unreleased version</button>
-                      </form>
-                    {% endflag %}
+                    <button type="button"
+                            onclick="openChatWidget({{ experiment.version_number }}, {allowAttachments: {{ experiment.file_uploads_enabled|yesno:'true,false' }} })">
+                      Unreleased version
+                    </button>
                   </li>
                   <li>
-                    {% flag "flag_chat_widget" %}
-                      <button type="button" onclick="openChatWidget(0)">Published version</button>
-                    {% else %}
-                      <form method="post"
-                            action="{% url 'chatbots:start_authed_web_session' team.slug experiment.id 0 %}"
-                            class="inline">
-                        {% csrf_token %}
-                        <button type="submit">Published version</button>
-                      </form>
-                    {% endflag %}
+                    <button type="button"
+                            onclick="openChatWidget(0, {allowAttachments: {{ published_version.file_uploads_enabled|yesno:'true,false' }} })">
+                      Published version
+                    </button>
                   </li>
                 </ul>
               </div>
@@ -149,6 +137,22 @@
         {% include "experiments/share/dialog.html" %}
       {% endif %}
       <div id="channel_create_edit_modal_placeholder"></div>
+    {% endif %}
+    {% if cost_tracking_enabled %}
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm" data-testid="chatbot-usage-widget">
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (30d)</span>
+          {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_call_count unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" %}
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Sessions (30d)</span>
+          <span class="font-semibold">{{ usage_summary.sessions_count|intcomma }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Messages (30d)</span>
+          <span class="font-semibold">{{ usage_summary.messages_count|intcomma }}</span>
+        </div>
+      </div>
     {% endif %}
   </div>
   <div class="tabs-container">
@@ -259,27 +263,28 @@
       });
       window.addEventListener('hashchange', selectTabFromHash);
     </script>
-    {% flag "flag_chat_widget" %}
-      <open-chat-studio-widget
-        id="chatbot-widget"
-        show-button="false"
-        visible="false"
-        chatbot-id="{{ experiment.public_id }}"
-        api-base-url="{{ request.scheme }}://{{ request.get_host }}"
-        user-id="{{ request.user.email }}"
-        user-name="{{ request.user.get_full_name }}"
-        position="right"
-        persistent-session="false"
-      ></open-chat-studio-widget>
-      <script>
-        // ocsApplyWidgetVersionTheme is defined in the shared launcher partial included below.
-        function openChatWidget(versionNumber) {
-          const widget = document.getElementById('chatbot-widget');
-          widget.versionNumber = versionNumber;
-          widget.visible = true;
-          ocsApplyWidgetVersionTheme(widget, versionNumber);
-        }
-      </script>
-    {% endflag %}
+    <open-chat-studio-widget
+      id="chatbot-widget"
+      show-button="false"
+      visible="false"
+      chatbot-id="{{ experiment.public_id }}"
+      api-base-url="{{ request.scheme }}://{{ request.get_host }}"
+      user-id="{{ request.user.email }}"
+      user-name="{{ request.user.get_full_name }}"
+      position="right"
+      persistent-session="false"
+    ></open-chat-studio-widget>
+    <script>
+      // Start a new chat against `versionNumber` (0 = published version). Options: `headerText` to
+      // override the version badge, `allowAttachments` to enable file uploads for that version.
+      // ocsApplyWidgetVersionTheme is defined in the shared launcher partial included below.
+      function openChatWidget(versionNumber, options = {}) {
+        const widget = document.getElementById('chatbot-widget');
+        widget.versionNumber = versionNumber;
+        widget.visible = true;
+        widget.allowAttachments = !!options.allowAttachments;
+        ocsApplyWidgetVersionTheme(widget, versionNumber, options.headerText);
+      }
+    </script>
     {% include "chatbots/components/session_chat_widget_launcher.html" %}
 {% endblock app %}

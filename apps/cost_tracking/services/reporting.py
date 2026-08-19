@@ -5,20 +5,21 @@ hit the `(team, timestamp)` / `(team, experiment, timestamp)` indexes.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from django.contrib.contenttypes.models import ContentType
-from django.db.models import Count, DecimalField, Exists, F, OuterRef, Q, Subquery, Sum
+from django.core.cache import cache
+from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWeek
+from django.utils import timezone
 
-from apps.annotations.models import CustomTaggedItem
-from apps.chat.models import Chat, ChatMessage
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
 from apps.experiments.models import ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
+from apps.usage_metrics.dashboard_querysets import filtered_querysets
+from apps.usage_metrics.filters import chat_tag_exists_pair, conversation_messages
 
 logger = logging.getLogger("ocs.cost_tracking")
 
@@ -36,6 +37,11 @@ _GRANULARITY_TRUNC = {
 # `total` is every LLM kind (so cache-write tokens land in the total but neither sub-count).
 _PROMPT_KINDS = (ServiceKind.LLM_INPUT, ServiceKind.LLM_CACHED_INPUT)
 
+# The chatbot home usage widget's rolling window and how long its cached snapshot is trusted for -
+# see `get_latest_chatbot_usage_summary`.
+_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS = 30
+_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS = 5 * 60
+
 
 @dataclass(frozen=True)
 class CostSummary:
@@ -43,6 +49,11 @@ class CostSummary:
 
     `total_cost` is every source — it's what the team actually spent, evaluations
     included, with no per-source split (ADR-0048).
+
+    `estimated_call_count` is a row count, not derived from `estimated_cost` - a $0 estimated
+    row (e.g. a zero-priced model) must still register as "estimated" for a confidence badge,
+    and a Decimal `0` is falsy so `estimated_cost` alone can't tell "no estimated usage" apart
+    from "estimated usage that happens to cost nothing".
     """
 
     period_start: datetime
@@ -52,6 +63,7 @@ class CostSummary:
     delta_pct: float | None
     exact_cost: Decimal
     estimated_cost: Decimal
+    estimated_call_count: int
     unknown_call_count: int
     unpriced_call_count: int
 
@@ -77,26 +89,43 @@ class CostTotal:
 
 @dataclass(frozen=True)
 class ModelSpend:
-    """Per-model spend row for a single session's usage breakdown."""
+    """Per-model spend row for a single session's usage breakdown. `has_unpriced`/`has_estimated`/
+    `has_unknown` mirror the trace detail page's per-model flags (`ModelTokens`) but scoped to this
+    model's rows within the session."""
 
     model_name: str
     cost: Decimal
     tokens: int
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
 
 
 @dataclass(frozen=True)
 class SessionUsage:
-    """Whole-session usage: total cost plus a per-model breakdown."""
+    """Whole-session usage: total cost plus a per-model breakdown, aggregated across every trace
+    in the session. `has_unpriced` is what tells the session page whether `total_cost` is complete
+    or partial - and, when the session has usage but `total_cost` is still zero, whether to render
+    "no pricing data" rather than "$0.00". `has_estimated`/`has_unknown` drive the confidence badge,
+    the same as the trace detail page's `TraceTokenUsage`."""
 
     total_cost: Decimal
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
     by_model: list[ModelSpend]
+
+    @property
+    def total_tokens(self) -> int:
+        return sum(row.tokens for row in self.by_model)
 
 
 @dataclass(frozen=True)
 class ModelTokens:
     """One (provider, model) row of a trace's token breakdown. `input_tokens` is fresh input only —
     `cached_input_tokens` and `cache_write_tokens` are the sub-buckets the recorder peels off it, so
-    the row's input side is the sum of all three."""
+    the row's input side is the sum of all three. `cost`/`has_unpriced`/`has_estimated`/`has_unknown`
+    mirror the trace-level fields on `TraceTokenUsage` but scoped to this model's rows."""
 
     provider_type: str
     model_name: str
@@ -104,6 +133,10 @@ class ModelTokens:
     cached_input_tokens: int
     cache_write_tokens: int
     output_tokens: int
+    cost: Decimal
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
 
     @property
     def total_input_tokens(self) -> int:
@@ -118,11 +151,22 @@ class TraceTokenUsage:
 
     The headline is a two-way split, so unlike the usage API's `TokenCounts` it folds cache-write
     into `input_tokens`: every kind lands on one side or the other, which keeps
-    `input_tokens + output_tokens == total` and reproduces the provider's headline input count."""
+    `input_tokens + output_tokens == total` and reproduces the provider's headline input count.
+
+    `total_cost` sums only priced rows (an unpriced row's `cost` defaults to 0), so `has_unpriced`
+    is what tells the trace detail page whether that total is complete or partial - and, when the
+    trace has usage but `total_cost` is still zero, whether to render "no pricing data" rather than
+    "$0.00". `has_estimated`/`has_unknown` say whether any row's token count is a
+    `Confidence.ESTIMATED` or `Confidence.UNKNOWN` guess rather than an exact provider-reported
+    count, for the confidence badge."""
 
     input_tokens: int
     output_tokens: int
     total: int
+    total_cost: Decimal
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
     by_model: list[ModelTokens]
 
 
@@ -206,29 +250,9 @@ def _scoped_records(team: Team, filters: CostFilters | None = None):
     if filters.platform_names:
         qs = qs.filter(session__platform__in=filters.platform_names)
     if filters.tag_ids:
-        # Exists() rather than join+distinct, matching the dashboard's tag filter.
-        chat_content_type = ContentType.objects.get_for_model(Chat)
-        message_content_type = ContentType.objects.get_for_model(ChatMessage)
-        tag_on_chat = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=chat_content_type,
-                object_id=OuterRef("session__chat_id"),
-                tag_id__in=filters.tag_ids,
-            )
-        )
-        tag_on_msg = Exists(
-            CustomTaggedItem.objects.filter(
-                team_id=team.id,
-                tag__team_id=team.id,
-                content_type=message_content_type,
-                object_id__in=Subquery(
-                    ChatMessage.objects.filter(chat=OuterRef(OuterRef("session__chat_id"))).values("id")
-                ),
-                tag_id__in=filters.tag_ids,
-            )
-        )
+        # The same chat-or-message match as the dashboard's tag filter, from
+        # its single definition in apps.usage_metrics.
+        tag_on_chat, tag_on_msg = chat_tag_exists_pair(team, filters.tag_ids, "session__chat_id")
         qs = qs.annotate(_tag_on_chat=tag_on_chat, _tag_on_msg=tag_on_msg).filter(
             Q(_tag_on_chat=True) | Q(_tag_on_msg=True)
         )
@@ -259,25 +283,34 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
     period_q = Q(timestamp__gte=start, timestamp__lt=end)
     previous_q = Q(timestamp__gte=previous_start, timestamp__lt=start)
 
-    agg = _scoped_records(team, filters).aggregate(
-        total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
-        previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
-        exact=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        estimated=Coalesce(
-            Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
-            _ZERO,
-            output_field=_COST_FIELD,
-        ),
-        unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
-        # Rows that got recorded but the resolver couldn't price (no matching
-        # PricingRule). Excludes UNKNOWN-confidence rows because those have
-        # their own counter. Distinct row counter, not a sum - these rows
-        # contribute $0 to total_cost.
-        unpriced_rows=Count("id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)),
+    # Bound the scan to the two periods the aggregates below actually read.
+    # Without it this scans the team's whole UsageRecord history on every load.
+    agg = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=previous_start, timestamp__lt=end)
+        .aggregate(
+            total=Coalesce(Sum("cost", filter=period_q), _ZERO, output_field=_COST_FIELD),
+            previous=Coalesce(Sum("cost", filter=previous_q), _ZERO, output_field=_COST_FIELD),
+            exact=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.EXACT)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            estimated=Coalesce(
+                Sum("cost", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
+                _ZERO,
+                output_field=_COST_FIELD,
+            ),
+            estimated_rows=Count("id", filter=period_q & Q(confidence=Confidence.ESTIMATED)),
+            unknown_rows=Count("id", filter=period_q & Q(confidence=Confidence.UNKNOWN)),
+            # Rows that got recorded but the resolver couldn't price (no matching
+            # PricingRule). Excludes UNKNOWN-confidence rows because those have
+            # their own counter. Distinct row counter, not a sum - these rows
+            # contribute $0 to total_cost.
+            unpriced_rows=Count(
+                "id", filter=period_q & Q(pricing_rule__isnull=True) & ~Q(confidence=Confidence.UNKNOWN)
+            ),
+        )
     )
 
     return CostSummary(
@@ -288,6 +321,7 @@ def cost_summary(team: Team, *, start: datetime, end: datetime, filters: CostFil
         delta_pct=_safe_pct(agg["total"] - agg["previous"], agg["previous"]),
         exact_cost=agg["exact"],
         estimated_cost=agg["estimated"],
+        estimated_call_count=agg["estimated_rows"],
         unknown_call_count=agg["unknown_rows"],
         unpriced_call_count=agg["unpriced_rows"],
     )
@@ -353,6 +387,64 @@ def costs_by_experiment(
     return {row["experiment_id"]: row["cost"] for row in rows}
 
 
+@dataclass(frozen=True)
+class ChatbotUsageSummary:
+    """The chatbot home page's usage widget: a window's cost plus session/message counts for one
+    chatbot. `cost` is `cost_summary` narrowed to this one experiment via `CostFilters`, so it
+    carries the same exact/estimated split and coverage counts the dashboard panel shows."""
+
+    cost: CostSummary
+    sessions_count: int
+    messages_count: int
+
+
+def chatbot_usage_summary(team: Team, experiment_id: int, *, start: datetime, end: datetime) -> ChatbotUsageSummary:
+    """Cost, session count and message count for one chatbot in [start, end), for the chatbot home
+    page's usage widget. Session/message counts come from `filtered_querysets` - the same canonical,
+    ADR-0051 activity definitions the dashboard's Bot Performance table uses - narrowed to this
+    experiment, rather than re-deriving the session base here.
+
+    Takes `team` and `experiment_id` rather than an `Experiment` object - the query below only ever
+    needs those two, and requiring the row would force `get_latest_chatbot_usage_summary` to fetch it
+    even on a cache hit, defeating a chunk of the point of caching this at all.
+    """
+    cost = cost_summary(team, start=start, end=end, filters=CostFilters(experiment_ids=[experiment_id]))
+    querysets = filtered_querysets(team, start_date=start, end_date=end, experiment_ids=[experiment_id])
+    sessions_count = querysets["sessions"].count()
+    messages_count = conversation_messages(querysets["messages"]).count()
+    return ChatbotUsageSummary(cost=cost, sessions_count=sessions_count, messages_count=messages_count)
+
+
+def _chatbot_usage_summary_cache_key(team_id: int, experiment_id: int) -> str:
+    return f"cost:chatbot_usage_summary:{team_id}:{experiment_id}"
+
+
+def get_latest_chatbot_usage_summary(team: Team, experiment_id: int) -> ChatbotUsageSummary:
+    """Cost, session count and message count for one chatbot over the last
+    `_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS` days, for the chatbot home page's usage widget.
+
+    This owns both the "latest N days" window and the caching, rather than leaving either to the
+    view: the two are coupled (see `chatbot_usage_summary`'s docstring for why a `start`/`end`-taking
+    function can't safely own this cache), and a cache hit here needs no query at all, since
+    `chatbot_usage_summary` needs nothing but the `team`/`experiment_id` this function already has.
+    Cached in Redis for `_CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS`: short enough that nobody
+    watching the page during an active conversation would call the number stale, with no
+    signal-based invalidation - `UsageRecord` rows are written continuously, so invalidating on
+    write would defeat the cache (the same tradeoff `PricingResolver`'s cache makes).
+    """
+    cache_key = _chatbot_usage_summary_cache_key(team.id, experiment_id)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    end = timezone.now()
+    start = end - timedelta(days=_CHATBOT_USAGE_SUMMARY_WINDOW_DAYS)
+    usage = chatbot_usage_summary(team, experiment_id, start=start, end=end)
+
+    cache.set(cache_key, usage, _CHATBOT_USAGE_SUMMARY_CACHE_TTL_SECONDS)
+    return usage
+
+
 def session_usage(session: ExperimentSession) -> SessionUsage:
     """Cost/token breakdown by model for a single session, plus the overall
     total. Rows are ordered by descending cost. Uses the
@@ -367,14 +459,31 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
         .annotate(
             cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
             tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
+            estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+            unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
         )
         .order_by("-cost")
     )
     by_model = [
-        ModelSpend(model_name=row["model_name"], cost=row["cost"], tokens=int(row["tokens"] or 0)) for row in rows
+        ModelSpend(
+            model_name=row["model_name"],
+            cost=row["cost"],
+            tokens=int(row["tokens"] or 0),
+            has_unpriced=bool(row["unpriced_count"]),
+            has_estimated=bool(row["estimated_count"]),
+            has_unknown=bool(row["unknown_count"]),
+        )
+        for row in rows
     ]
     total_cost = sum((row.cost for row in by_model), _ZERO)
-    return SessionUsage(total_cost=total_cost, by_model=by_model)
+    return SessionUsage(
+        total_cost=total_cost,
+        has_unpriced=any(row.has_unpriced for row in by_model),
+        has_estimated=any(row.has_estimated for row in by_model),
+        has_unknown=any(row.has_unknown for row in by_model),
+        by_model=by_model,
+    )
 
 
 def trace_token_usage(trace: Trace) -> TraceTokenUsage:
@@ -396,6 +505,10 @@ def trace_token_usage(trace: Trace) -> TraceTokenUsage:
             cached_input_tokens=_kind_quantity(ServiceKind.LLM_CACHED_INPUT),
             cache_write_tokens=_kind_quantity(ServiceKind.LLM_CACHE_WRITE),
             output_tokens=_kind_quantity(ServiceKind.LLM_OUTPUT),
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
+            estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+            unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
         )
         .order_by("provider_type", "model_name")
     )
@@ -407,6 +520,10 @@ def trace_token_usage(trace: Trace) -> TraceTokenUsage:
             cached_input_tokens=int(row["cached_input_tokens"]),
             cache_write_tokens=int(row["cache_write_tokens"]),
             output_tokens=int(row["output_tokens"]),
+            cost=row["cost"],
+            has_unpriced=bool(row["unpriced_count"]),
+            has_estimated=bool(row["estimated_count"]),
+            has_unknown=bool(row["unknown_count"]),
         )
         for row in rows
     ]
@@ -416,6 +533,10 @@ def trace_token_usage(trace: Trace) -> TraceTokenUsage:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total=input_tokens + output_tokens,
+        total_cost=sum((row.cost for row in by_model), _ZERO),
+        has_unpriced=any(row.has_unpriced for row in by_model),
+        has_estimated=any(row.has_estimated for row in by_model),
+        has_unknown=any(row.has_unknown for row in by_model),
         by_model=by_model,
     )
 

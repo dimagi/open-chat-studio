@@ -1,6 +1,6 @@
 # ADR-0027: Secrets exclusion via per-resource allowlist serializers
 
-<span class="adr-status adr-status-proposed">PROPOSED</span>
+<span class="adr-status adr-status-accepted">ACCEPTED</span>
 
 <p class="adr-meta">Author: Simon Kelly · Created: 2026-05-29</p>
 

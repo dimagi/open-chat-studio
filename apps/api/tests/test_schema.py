@@ -6,6 +6,7 @@ from django.test import Client
 from apps.api.schema import _swap_host
 
 
+@pytest.mark.django_db()
 def test_schema_filters():
     c = Client()
     response = c.get("/api/schema/")
@@ -35,6 +36,7 @@ def test_swap_host(value, expected):
     assert _swap_host(value, "https://ocs.example") == expected
 
 
+@pytest.mark.django_db()
 def test_served_schema_uses_request_host():
     """The live-served schema points example URLs at the requesting deployment's host, not the
     ``example.com``/``example.org`` placeholders baked into the committed schema files."""

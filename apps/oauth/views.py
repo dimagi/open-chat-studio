@@ -173,6 +173,11 @@ class CreateApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Crea
             "algorithm": OAuth2Application.RS256_ALGORITHM,
         }
 
+    def get_form_kwargs(self):
+        # The chatbots on offer are the team's, and `form_valid` sets the team too late to filter a
+        # queryset with.
+        return super().get_form_kwargs() | {"team": self.request.team}
+
     def get_success_url(self):
         return _manage_team_url(self.request.team.slug)
 
@@ -199,6 +204,9 @@ class EditApplication(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Update
 
     def get_queryset(self):
         return OAuth2Application.objects.filter(team=self.request.team)
+
+    def get_form_kwargs(self):
+        return super().get_form_kwargs() | {"team": self.request.team}
 
     def get_success_url(self):
         return _manage_team_url(self.request.team.slug)

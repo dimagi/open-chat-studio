@@ -6,6 +6,7 @@ from django.db.models import Prefetch
 from django.urls import reverse
 from django.views.generic import DetailView, TemplateView
 from django_tables2 import SingleTableView
+from waffle import flag_is_active
 
 from apps.annotations.models import CustomTaggedItem
 from apps.cost_tracking.services.reporting import trace_token_usage
@@ -17,6 +18,8 @@ from apps.trace.tables import TraceTable
 from apps.web.dynamic_filters.datastructures import FilterParams
 
 logger = logging.getLogger(__name__)
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
 class TracesHome(LoginAndTeamRequiredMixin, TemplateView):
@@ -77,6 +80,7 @@ class TraceDetailView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Detail
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["token_usage"] = trace_token_usage(self.object)
+        context["cost_tracking_enabled"] = flag_is_active(self.request, COST_TRACKING_FLAG)
         return context
 
 

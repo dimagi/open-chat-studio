@@ -5,7 +5,7 @@ from functools import cached_property
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, When
 from django.http import Http404, HttpResponse, HttpResponseRedirect
@@ -13,7 +13,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, FormView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
@@ -25,15 +24,13 @@ from apps.api.session_tokens import issue_session_token
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
-from apps.chat.models import Chat
-from apps.chat.utils import safe_link_url
 from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
+from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
-from apps.experiments.const import EMBED_FLOW_SUCCESSOR_URL, EMBED_FLOW_SUNSET_AT
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
 from apps.experiments.email import send_experiment_invitation
 from apps.experiments.filters import (
@@ -41,7 +38,8 @@ from apps.experiments.filters import (
     get_filter_context_data,
 )
 from apps.experiments.forms import ExperimentInvitationForm, ExperimentVersionForm
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, SyntheticVoice
+from apps.experiments.models import Experiment, ExperimentSession, SessionStatus, SyntheticVoice
+from apps.experiments.rate_limit_keys import public_chat_rate_limited
 from apps.experiments.tables import ExperimentVersionsTable
 from apps.experiments.tasks import start_version_creation
 from apps.experiments.views import ExperimentVersionsTableView
@@ -65,10 +63,11 @@ from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
 from apps.trace.models import Trace
-from apps.utils.decorators import sunset
 from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
 def _get_alpine_context(request, experiment=None):
@@ -317,6 +316,11 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     published = resolve_published_or_working(experiment)
     deployed_version = published.version_number if experiment != published else None
 
+    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
+    usage_summary = None
+    if cost_tracking_enabled:
+        usage_summary = get_latest_chatbot_usage_summary(request.team, experiment.id)
+
     context = {
         "active_tab": "chatbots",
         "page_title": f"{experiment.name} Details",
@@ -324,7 +328,12 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "platforms": available_platforms,
         "channels": channels,
         "deployed_version": deployed_version,
+        # Settings differ between the working and published rows (both are in VERSIONED_FIELDS), so
+        # the "chat to the published version" launcher must read them off this, not `experiment`.
+        "published_version": published,
         "highlight_version_id": request.GET.get("version_id"),
+        "cost_tracking_enabled": cost_tracking_enabled,
+        "usage_summary": usage_summary,
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
@@ -785,55 +794,14 @@ def start_chatbot_session_public(request, team_slug: str, experiment_id: uuid.UU
 
 
 @waf_allow(WafRule.NoUserAgent_HEADER)
+@public_chat_rate_limited
 @experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
 @verify_session_access_cookie
 def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
     return _chatbot_chat_ui(request)
 
 
-@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
-@xframe_options_exempt
-@team_required
-def start_chatbot_session_public_embed(request, team_slug: str, experiment_id: uuid.UUID):
-    """Special view for starting chatbot sessions from embedded widgets. This will ignore consent and
-    will ALWAYS create anonymous participants.
-
-    Deprecated: legacy embed flow, sunset 2026-08-03 — use the chat widget (`/api/chat/*`).
-    See https://github.com/dimagi/open-chat-studio/issues/3540
-    """
-    try:
-        chatbot = get_object_or_404(Experiment, public_id=experiment_id, team=request.team)
-    except ValidationError:
-        # old links dont have uuids
-        raise Http404() from None
-
-    chatbot_version = resolve_published_or_working(chatbot)
-    if not chatbot_version.is_public:
-        raise Http404
-
-    participant = Participant.create_anonymous(request.team, ChannelPlatform.WEB)
-    session = WebChannel.start_new_session(
-        working_experiment=chatbot,
-        participant_identifier=participant.identifier,
-        timezone=request.session.get("detected_tz", None),
-        metadata={Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))},
-    )
-    return redirect("chatbots:chatbot_chat_embed", team_slug, chatbot.public_id, session.external_id)
-
-
-@sunset(EMBED_FLOW_SUNSET_AT, successor_url=EMBED_FLOW_SUCCESSOR_URL)
-@experiment_session_view(allowed_states=[SessionStatus.ACTIVE, SessionStatus.SETUP])
-@xframe_options_exempt
-def chatbot_chat_embed(request, team_slug: str, experiment_id: uuid.UUID, session_id: str):
-    """Special view for embedding that doesn't have the cookie security. This is OK because of the additional
-    checks to ensure the participant is 'anonymous'."""
-    session = request.experiment_session
-    if not session.participant.is_anonymous:
-        raise Http404
-    return _chatbot_chat_ui(request, embedded=True)
-
-
-def _chatbot_chat_ui(request, embedded=False):
+def _chatbot_chat_ui(request):
     chatbot_version = resolve_published_or_working(request.experiment)
     version_specific_vars = {
         "assistant": chatbot_version.get_assistant(),
@@ -849,7 +817,6 @@ def _chatbot_chat_ui(request, embedded=False):
             "session": request.experiment_session,
             "session_token": issue_session_token(request.experiment_session),
             "active_tab": "chatbots",
-            "embedded": embedded,
             **version_specific_vars,
         },
     )

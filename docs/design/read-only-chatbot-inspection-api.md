@@ -430,7 +430,7 @@ index — rejected with [D6](#d6-inline-nested-resource-tree-denormalized).
 
 ## Endpoint shape
 
-```
+```http
 GET /api/v2/chatbots/{public_id}/inspect/
 GET /api/v2/chatbots/{public_id}/inspect/?version=<n>        # specific published version
 GET /api/v2/chatbots/{public_id}/inspect/?version=default    # the default published version

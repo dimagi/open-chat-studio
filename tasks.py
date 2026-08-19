@@ -38,12 +38,13 @@ def down(c: Context):
 
 
 @task(
+    aliases=["requirements"],
     help={
         "upgrade_all": "Upgrade all packages to latest versions",
         "upgrade_package": "Upgrade specific package (e.g. --upgrade-package django)",
-    }
+    },
 )
-def requirements(c: Context, upgrade_all=False, upgrade_package=None):
+def uv(c: Context, upgrade_all=False, upgrade_package=None):
     """Update Python dependencies using uv lock and optionally sync environment."""
     if upgrade_all and upgrade_package:
         raise Exit("Cannot specify both upgrade and upgrade-package", -1)
@@ -298,6 +299,39 @@ def pnpm(c: Context, watch=False, install=False):
         c.run("pnpm install", echo=True)
     cmd = "dev-watch" if watch else "dev"
     c.run(f"pnpm run {cmd}", echo=True, pty=True)
+
+
+@task(
+    aliases=["types"],
+    help={
+        "paths": "Python files or directories to check (space-separated). Defaults to apps/.",
+        "python": "Only run the Python type checker",
+        "js": "Only run the TypeScript type checker",
+    },
+)
+def typecheck(c: Context, paths="", python=False, js=False):
+    """Run the Python (ty) and TypeScript (tsc) type checkers.
+
+    Both run even if the first one fails, so a single invocation reports every type error rather
+    than making you fix Python before you see the TypeScript ones.
+    """
+    run_python = python or not js
+    run_js = js or not python
+    pty = sys.stdout.isatty()
+    failures = []
+
+    if run_python:
+        if not c.run(f"ty check {paths or 'apps/'}", echo=True, pty=pty, warn=True).ok:
+            failures.append("Python (ty)")
+
+    if run_js:
+        _ensure_pnpm(c)
+        if not c.run("pnpm run type-check", echo=True, pty=pty, warn=True).ok:
+            failures.append("TypeScript (tsc)")
+
+    if failures:
+        raise Exit(f"Type checks failed: {', '.join(failures)}", -1)
+    cprint("Type checks passed.", "green")
 
 
 @task(help={"port": "Port to serve docs on (default: 8001)"})

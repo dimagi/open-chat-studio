@@ -7,10 +7,9 @@ from django.db.models import F
 from django.template.loader import get_template
 from django.urls import reverse
 from django_tables2 import columns
-from waffle import flag_is_active
 
 from apps.api.session_tokens import issue_session_token
-from apps.experiments.models import Experiment, ExperimentSession
+from apps.experiments.models import Experiment, ExperimentSession, last_activity_expression
 from apps.generics import actions, chips
 from apps.generics.actions import chip_action
 from apps.generics.tables import ArrayColumn, ColumnWithHelp, TimeAgoColumn
@@ -27,26 +26,59 @@ def _show_chat_button(request, record):
     return record.participant.user == request.user and not record.is_complete and record.experiment.is_editable
 
 
+def _version_label(session: ExperimentSession, version_number: int) -> str:
+    """Label for the version badge on a session's chat widget.
+
+    Version 0 is the "published version" alias rather than a real version number. Sessions are
+    always attached to the working version (``start_experiment_session`` rejects anything else),
+    so ``session.experiment.version_number`` is the working version's number and needs no query.
+    """
+    if version_number == Experiment.DEFAULT_VERSION_NUMBER:
+        return "Published Version"
+    if version_number == session.experiment.version_number:
+        return f"Working Version (v{version_number})"
+    return f"Version {version_number}"
+
+
+def _chat_version(session: ExperimentSession, version_number: int) -> Experiment:
+    """The experiment row whose settings the session's chat runs with.
+
+    ``file_uploads_enabled`` is versioned, so the working row's value can disagree with the snapshot
+    the session actually targets (same reason ``single_chatbot_home`` passes ``published_version``
+    to its launcher). Archived versions are excluded from the default manager, so an old session
+    pointing at one can't be resolved — fall back to the working row rather than dropping the button.
+    """
+    try:
+        return session.experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        return session.experiment
+
+
 @dataclasses.dataclass
 class ContinueChatAction(actions.Action):
-    """Continue Chat action. When the chat widget flag is active it opens the session in the embedded
-    widget (a floating popup) instead of linking to the full-page chat UI."""
+    """Continue Chat action. Opens the session in the embedded widget (a floating popup).
+
+    This action does not navigate, so the ``url_name``/``url_factory`` it is constructed with are
+    vestigial: ``Action.get_context`` always builds ``action_url``, but the template above renders a
+    widget launcher instead of a link. They stay because ``url_name`` is a required field on the base
+    class — don't read them as evidence that the full-page chat route is still reachable from here.
+    """
 
     template: str = "chatbots/components/continue_chat_action.html"
 
     def get_context(self, request, record, value):
         ctxt = super().get_context(request, record, value)
-        if flag_is_active(request, "flag_chat_widget"):
-            ctxt.update(
-                {
-                    "use_widget": True,
-                    "chatbot_id": record.experiment.public_id,
-                    "session_external_id": record.external_id,
-                    "session_token": issue_session_token(record),
-                    "version_number": record.get_experiment_version_number(),
-                    "allow_attachments": record.experiment.file_uploads_enabled,
-                }
-            )
+        version_number = record.get_experiment_version_number()
+        ctxt.update(
+            {
+                "chatbot_id": record.experiment.public_id,
+                "session_external_id": record.external_id,
+                "session_token": issue_session_token(record),
+                "version_number": version_number,
+                "version_label": _version_label(record, version_number),
+                "allow_attachments": _chat_version(record, version_number).file_uploads_enabled,
+            }
+        )
         return ctxt
 
 
@@ -70,8 +102,8 @@ class ChatbotTable(tables.Table):
             chip_action(
                 label_factory=_name_label_factory,
                 url_factory=_chip_chatbot_url_factory,
-                # Note: Keep the styling consistent with `generic/chip_button.html`
-                button_style="btn-soft btn-primary",
+                button_style=actions.CHIP_BUTTON_STYLE,
+                truncate=True,
             ),
         ],
         align="left",
@@ -87,7 +119,6 @@ class ChatbotTable(tables.Table):
     )
     actions = columns.TemplateColumn(
         template_name="experiments/components/experiment_actions_column.html",
-        extra_context={"type": "chatbots"},
     )
 
     class Meta:
@@ -146,7 +177,7 @@ class ChatbotSessionsTable(tables.Table):
         accessor="message_count",
         orderable=True,
     )
-    last_message = TimeAgoColumn(accessor="last_activity_at", verbose_name="Last activity", orderable=True)
+    last_activity = TimeAgoColumn(accessor="last_activity", verbose_name="Last activity", orderable=True)
     tags = columns.TemplateColumn(verbose_name="Tags", template_name="annotations/tag_ui.html")
     versions = ArrayColumn(verbose_name="Versions", accessor="experiment_versions")
     state = columns.Column(verbose_name="State", accessor="status", orderable=True)
@@ -169,6 +200,15 @@ class ChatbotSessionsTable(tables.Table):
         align="right",
     )
 
+    def order_last_activity(self, queryset, is_descending):
+        """Sort by the same coalesced expression the column renders.
+
+        Without this, django-tables2 would order by the `last_activity` accessor, which is a
+        model property and not a database field.
+        """
+        order = last_activity_expression()
+        return queryset.order_by(order.desc() if is_descending else order.asc()), True
+
     def render_tags(self, record, bound_column):
         template = get_template(bound_column.column.template_name)
         return template.render({"object": record.chat})
@@ -176,14 +216,14 @@ class ChatbotSessionsTable(tables.Table):
     def render_participant(self, record):
         template = get_template("generic/chip.html")
         chip = record.get_participant_chip(include_link=self._user_has_perm("experiments.view_participant"))
-        return template.render({"chip": chip})
+        return template.render({"chip": chip, "truncate": True})
 
     def render_chatbot(self, record):
         template = get_template("generic/chip.html")
         chatbot = record.experiment
         url = chatbot.get_absolute_url() if self._user_has_perm("experiments.view_experiment") else ""
         chip = chips.Chip(label=str(chatbot), url=url)
-        return template.render({"chip": chip})
+        return template.render({"chip": chip, "truncate": True})
 
     def _user_has_perm(self, perm: str) -> bool:
         # `request` is only set when the table is built via RequestConfig/SingleTableView; guard
@@ -194,7 +234,7 @@ class ChatbotSessionsTable(tables.Table):
     class Meta:
         model = ExperimentSession
         # Ensure that chatbot is shown first
-        fields = ["chatbot", "participant", "message_count", "last_message"]
+        fields = ["chatbot", "participant", "message_count", "last_activity"]
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No sessions yet!"

@@ -1156,10 +1156,9 @@ class Participant(BaseTeamModel):
         if self.is_anonymous:
             suffix = str(self.public_id)[:6]
             return f"Anonymous [{suffix}]"
-        if self.name:
-            return f"{self.name} ({self.identifier})"
-        if self.user and self.user.get_full_name():
-            return f"{self.user.get_full_name()} ({self.identifier})"
+        name = self.name or (self.user.get_full_name() if self.user else "")
+        if name and name != self.identifier:
+            return f"{name} ({self.identifier})"
         return self.identifier
 
     def get_platform_display(self):
@@ -1371,6 +1370,15 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
+def last_activity_expression():
+    """Order-by expression matching :attr:`ExperimentSession.last_activity`.
+
+    Returned fresh on each call rather than shared as a module constant so callers can
+    safely attach their own ``.desc()``/``.asc()`` wrappers.
+    """
+    return functions.Coalesce("last_activity_at", "created_at")
+
+
 class ExperimentSessionQuerySet(models.QuerySet):
     def annotate_with_message_count(self):
         message_count_subquery = Subquery(
@@ -1392,7 +1400,10 @@ class ExperimentSessionObjectManager(models.Manager):
             queryset = queryset.filter(experiment__id=experiment_id)
 
         queryset = queryset.select_related("experiment", "participant__user", "chat")
-        return queryset.annotate_with_message_count().order_by(F("last_activity_at").desc(nulls_last=True))
+        # Order by the same expression the "Last activity" column renders, so a session whose
+        # `last_activity_at` is null doesn't sort to the bottom while displaying a recent
+        # `created_at`. Backed by `expsession_team_lastact_c_idx`.
+        return queryset.annotate_with_message_count().order_by(last_activity_expression().desc())
 
 
 class ExperimentSession(BaseTeamModel):
@@ -1442,10 +1453,30 @@ class ExperimentSession(BaseTeamModel):
             models.Index(fields=["team", "first_activity_at"], name="expsession_team_firstact_idx"),
             # Supports the global (cross-team) date-range scans in the admin dashboard.
             models.Index(fields=["created_at"], name="expsession_created_at_idx"),
+            # Supports the sessions-table default ordering, which sorts by `last_activity`
+            # (coalesced) rather than the raw column — the index above can't serve that.
+            models.Index(
+                "team",
+                functions.Coalesce("last_activity_at", "created_at").desc(),
+                name="expsession_team_lastact_c_idx",
+            ),
         ]
 
     def __str__(self):
         return f"ExperimentSession(id={self.external_id})"
+
+    @property
+    def last_activity(self) -> datetime:
+        """The timestamp shown as the session's "last activity".
+
+        `last_activity_at` is only written when the participant sends a message, so sessions
+        created without one — bot-initiated sessions via `trigger_bot_api`, or rows predating
+        the field — have it null. Creating a session is itself activity, so fall back to
+        `created_at` rather than rendering an empty cell. `last_activity_expression()` is the
+        DB-side equivalent used for ordering, and `LastActivityFilter` filters on the same
+        fallback; keep all three in sync.
+        """
+        return self.last_activity_at or self.created_at
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):

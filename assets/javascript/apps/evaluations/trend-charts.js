@@ -69,7 +69,7 @@ export function renderTrendCharts(trendData, baseUrl) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) continue;
 
-            if (fieldData.type === 'numeric') {
+            if (fieldData.type === 'numeric' || fieldData.type === 'binary') {
                 renderSparkline(canvas, fieldData, fieldName, buildUrl);
             } else if (fieldData.type === 'categorical') {
                 renderStackedBar(canvas, fieldData, fieldName, buildUrl);

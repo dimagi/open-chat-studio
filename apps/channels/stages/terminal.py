@@ -219,6 +219,7 @@ class SendingErrorHandlerStage(ProcessingStage):
                 session=ctx.experiment_session,
                 platform_title=ctx.experiment_channel.platform_enum.title(),
                 context=exc.context,
+                recipient=ctx.participant_identifier,
             )
             return
 

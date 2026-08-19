@@ -23,6 +23,7 @@ from kombu import Queue
 from pythonjsonlogger.json import JsonFormatter
 
 from apps.utils.celery import Queues
+from config.db import get_database_config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -158,6 +159,7 @@ MIDDLEWARE = list(
             "django.middleware.csrf.CsrfViewMiddleware",
             "django.contrib.auth.middleware.AuthenticationMiddleware",
             "django_htmx.middleware.HtmxMiddleware",
+            "apps.users.middleware.RequireMfaForStaffMiddleware",
             "apps.teams.middleware.TeamsMiddleware",
             "apps.web.scope_middleware.RequestContextMiddleware",
             "apps.web.locale_middleware.UserLocaleMiddleware",
@@ -170,6 +172,7 @@ MIDDLEWARE = list(
             "apps.web.htmx_middleware.HtmxMessageMiddleware",
             "tz_detect.middleware.TimezoneMiddleware",
             "apps.web.request_logging_middleware.RequestLoggingMiddleware",
+            "apps.utils.rate_limit.RateLimitHeadersMiddleware",
             "django_browser_reload.middleware.BrowserReloadMiddleware",
         ],
     )
@@ -228,39 +231,7 @@ FORMS_URLFIELD_ASSUME_HTTPS = True
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-if "DATABASE_URL" in env:
-    DATABASES = {"default": env.db()}
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql_psycopg2",
-            "NAME": env("DJANGO_DATABASE_NAME", default="open_chat_studio"),
-            "USER": env("DJANGO_DATABASE_USER", default="postgres"),
-            "PASSWORD": env("DJANGO_DATABASE_PASSWORD", default="***"),
-            "HOST": env("DJANGO_DATABASE_HOST", default="localhost"),
-            "PORT": env("DJANGO_DATABASE_PORT", default="5432"),
-            "CONN_HEALTH_CHECKS": True,
-            "DISABLE_SERVER_SIDE_CURSORS": env.bool("DJANGO_DISABLE_SERVER_SIDE_CURSORS", default=False),
-        }
-    }
-
-db_options: dict = DATABASES["default"].setdefault("OPTIONS", {})  # ty: ignore[invalid-assignment]
-if env.bool("DJANGO_DATABASE_USE_POOL", True):
-    DATABASES["default"].pop("CONN_MAX_AGE", None)
-    # See https://www.psycopg.org/psycopg3/docs/api/pool.html#psycopg_pool.ConnectionPool
-    db_options["pool"] = {
-        "min_size": env.int("DJANGO_DATABASE_POOL_MIN_SIZE", default=2),
-        "max_size": env.int("DJANGO_DATABASE_POOL_MAX_SIZE", default=35),
-        "timeout": env.int("DJANGO_DATABASE_POOL_TIMEOUT", default=10),
-    }
-else:
-    DATABASES["default"]["CONN_MAX_AGE"] = env.int("DJANGO_DATABASE_CONN_MAX_AGE", 0)
-
-# RDS Proxy requires TLS. psycopg3 defaults to sslmode=prefer which falls back to
-# non-SSL on handshake failure, which the proxy rejects. sslmode=require forces SSL
-# without the non-SSL fallback. Override with DJANGO_DATABASE_SSLMODE if needed
-# (e.g. set to "prefer" for local dev without TLS).
-db_options["sslmode"] = env("DJANGO_DATABASE_SSLMODE", default="prefer" if DEBUG else "require")
+DATABASES = get_database_config(env, debug=DEBUG)
 
 # Auth / login stuff
 
@@ -321,6 +292,11 @@ MFA_ADAPTER = "apps.users.adapter.MfaAdapter"
 MFA_RECOVERY_CODE_COUNT = 10
 MFA_RECOVERY_CODES_SHOW_ONCE = True
 MFA_TOTP_ISSUER = "Open Chat Studio"
+# Staff and superusers are confined to the MFA setup flow until they enrol
+# (apps.users.middleware.RequireMfaForStaffMiddleware). Off by default in development and under
+# test: local superusers shouldn't have to enrol, and the existing staff-view tests would each need
+# to. Set REQUIRE_MFA_FOR_STAFF=True to exercise it locally; the middleware's own tests switch it on.
+REQUIRE_MFA_FOR_STAFF = env.bool("REQUIRE_MFA_FOR_STAFF", default=not (DEBUG or IS_TESTING))
 
 # User signup configuration: change to "mandatory" to require users to confirm email before signing in.
 # or "optional" to send confirmation emails but not require them
@@ -479,6 +455,8 @@ REST_FRAMEWORK = {
     "DEFAULT_VERSIONING_CLASS": "apps.api.versioning.URLPathVersioning",
     "DEFAULT_VERSION": "v1",
     "ALLOWED_VERSIONS": ["v1", "v2"],
+    "DEFAULT_THROTTLE_CLASSES": ["apps.api.throttling.APIRateThrottle"],
+    "EXCEPTION_HANDLER": "apps.api.exception_handlers.api_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
@@ -655,10 +633,43 @@ CACHES = {
     },
 }
 
+# Rate limiting (#2140 / #2349). Counters live in a dedicated cache alias with short
+# socket timeouts so a hung Redis cannot stall request handling. Log-only until
+# RATE_LIMIT_ENFORCE is switched on.
+RATE_LIMIT_ENFORCE = env.bool("RATE_LIMIT_ENFORCE", default=False)
+RATE_LIMIT_TRUSTED_PROXY_COUNT = env.int("RATE_LIMIT_TRUSTED_PROXY_COUNT", default=0)
+RATE_LIMIT_CACHE_ALIAS = "rate_limit"
+RATE_LIMITS = {
+    "api": {"rate": env("RATE_LIMIT_API", default="2000/5m"), "fail_open": True},
+    # Counts and reports, never refuses. Counting happens after the view has answered
+    # the provider, so refusing means dropping the dispatch on a delivery the provider
+    # considers made: the participant's message is lost rather than delayed.
+    "channels": {"rate": env("RATE_LIMIT_CHANNELS", default="3000/5m"), "fail_open": True, "refuse": False},
+    "admin_api": {"rate": env("RATE_LIMIT_ADMIN_API", default="100/5m"), "fail_open": True},
+    "chat_api": {"rate": env("RATE_LIMIT_CHAT_API", default="300/5m"), "fail_open": True},
+    "public_chat": {"rate": env("RATE_LIMIT_PUBLIC_CHAT", default="100/5m"), "fail_open": True},
+    # Fail-closed: a counter the limiter cannot read must not become a way to
+    # brute force credentials unobserved.
+    "credentials": {"rate": env("RATE_LIMIT_CREDENTIALS", default="100/5m"), "fail_open": False},
+}
+CACHES["rate_limit"] = {
+    "BACKEND": "django_redis.cache.RedisCache",
+    "LOCATION": REDIS_URL,
+    "OPTIONS": {
+        "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        "SOCKET_TIMEOUT": 0.5,
+        "SOCKET_CONNECT_TIMEOUT": 0.5,
+    },
+}
+
 if IS_TESTING:
     # Use an in-process cache for tests: faster than Redis (no network round-trips) and
     # naturally isolated per pytest-xdist worker, since each worker is a separate process.
     CACHES["default"] = {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
+    CACHES["rate_limit"] = {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "rate-limit",
+    }
 
 # Waffle config
 WAFFLE_FLAG_MODEL = "teams.Flag"
@@ -974,9 +985,19 @@ MAX_SUMMARY_LENGTH = 1024
 MAX_FILES_PER_COLLECTION = 1000
 MAX_FILE_SIZE_MB = 50
 
-# How long after the last message a chat session token remains usable.
-CHAT_SESSION_TOKEN_INACTIVITY_WINDOW = timedelta(days=7)
+# How long after a chat session was created its token remains usable. Absolute:
+# activity does not extend it.
+CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
+
+# Hybrid search: lexical retrieval fused with dense retrieval by Reciprocal Rank Fusion.
+# Gated per-team by the `flag_hybrid_search` waffle flag; when inactive, retrieval stays dense-only.
+# The per-collection knobs (search language, dense weight, candidate pool) live on Collection
+# rather than here: a setting used as a field default is copied into each row at creation, so
+# changing it would need a migration to take effect and would not be a setting in any useful sense.
+# This one is read on every call, so it is a genuine runtime knob.
+# RRF smoothing constant. 60 is the value from the original RRF paper and the common default.
+DOCUMENT_SEARCH_RRF_K = 60
 SUPPORTED_FILE_TYPES = {
     "file_search": (
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"
@@ -1025,6 +1046,14 @@ CORS_ALLOW_METHODS = [
     "PATCH",
     "POST",
     "PUT",
+]
+
+# Expose rate limit headers so cross-origin chat widget clients can read them
+CORS_EXPOSE_HEADERS = [
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+    "Retry-After",
 ]
 
 # Additional CORS settings for security

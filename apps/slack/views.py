@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from slack_bolt.adapter.django.handler import to_bolt_request, to_django_response
 
 from apps.slack.models import SlackOAuthState
@@ -40,8 +41,10 @@ def slack_oauth_redirect(request):
 
 @waf_allow(WafRule.SizeRestrictions_BODY)
 @csrf_exempt
+@require_POST
 def slack_events_handler(request):
-    # see `slack_listeners.py`
+    # see `slack_listeners.py`, which counts a message against its channel once Bolt
+    # has verified the request and resolved one
     return handler.handle(request)
 
 

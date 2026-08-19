@@ -16,6 +16,7 @@ from apps.evaluations.models import EvaluationConfig, EvaluationDataset, Evaluat
 from apps.experiments.models import Experiment, ExperimentSession, Participant
 from apps.teams.metadata import get_team_metadata_fields
 from apps.teams.models import Team
+from apps.trace.models import Trace
 
 _ZERO = Decimal(0)
 _COST_FIELD = DecimalField(max_digits=14, decimal_places=8)
@@ -162,6 +163,57 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
         "metadata_fields": metadata_fields,
         "teams": result,
     }
+
+
+def build_tracing_volume_report(start: datetime, end: datetime) -> dict:
+    """Per-team tracing volume: how many traces each team recorded, and how many LLM
+    turns and tool calls happened inside them.
+
+    Reports the three counts separately and combines none of them. A consumer
+    apportioning a tracing bill needs a single weight, but what that weight should be is
+    a question about how the tracing service prices ingestion, not about OCS — so it
+    belongs to whoever is reading the invoice.
+
+    What the counts do and don't cover is an OCS fact, and worth knowing before
+    weighting them: a trace records its LLM turns and tool calls, but not its pipeline
+    node steps. A tracing service that bills per observation is therefore billing for
+    spans no column here counts, and a team running wide pipelines will look cheaper
+    than it is.
+
+    Counts every team's traces, including teams tracing to their own account rather
+    than ours. Which teams belong on our invoice is a question about *providers*, and
+    the caller answers it from the tracing-provider records in the provider-keys API.
+    """
+    rows = (
+        Trace.objects.filter(timestamp__gte=start, timestamp__lt=end, team_id__isnull=False)
+        .values("team_id")
+        .annotate(
+            traces=Count("id"),
+            turns=Coalesce(Sum("n_turns"), 0),
+            toolcalls=Coalesce(Sum("n_toolcalls"), 0),
+        )
+    )
+    by_team = {row["team_id"]: row for row in rows}
+    # Name and slug fetched by PK rather than grouped on, as in `get_usage_data`: both
+    # are per-team so neither affects the grouping, and it keeps the team join off the
+    # high-volume Trace scan.
+    teams = Team.objects.filter(id__in=list(by_team)).values_list("id", "name", "slug")
+
+    result = [
+        {
+            "team_id": team_id,
+            "team_name": name,
+            "team_slug": slug,
+            "traces": by_team[team_id]["traces"],
+            "turns": by_team[team_id]["turns"],
+            "toolcalls": by_team[team_id]["toolcalls"],
+        }
+        for team_id, name, slug in teams
+    ]
+    # Busiest first on the primary count, so the raw JSON reads sensibly. Ordering on a
+    # sum of the three would be the same editorial choice this report declines to make.
+    result.sort(key=lambda team: (-team["traces"], team["team_name"] or ""))
+    return {"start": start.isoformat(), "end": end.isoformat(), "teams": result}
 
 
 def get_whatsapp_numbers():

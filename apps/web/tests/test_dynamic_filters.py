@@ -52,6 +52,7 @@ class TestExperimentSessionFilterSchema:
         schema = get_filter_schema(ExperimentSessionFilter)
         expected_keys = {
             "participant",
+            "last_activity",
             "last_message",
             "first_message",
             "message_date",
@@ -70,6 +71,14 @@ class TestExperimentSessionFilterSchema:
         schema = get_filter_schema(ExperimentSessionFilter)
         for key, col in schema.items():
             assert col["description"], f"Column {key!r} has no description"
+
+    def test_timestamp_labels_distinguish_activity_from_participant_messages(self):
+        """``last_activity`` covers sessions with no participant message at all, so the
+        message-based filters must not be labelled as if they were the general case."""
+        schema = get_filter_schema(ExperimentSessionFilter)
+        assert schema["last_activity"]["label"] == "Last Activity"
+        assert schema["last_message"]["label"] == "Last Participant Message"
+        assert schema["first_message"]["label"] == "First Participant Message"
 
 
 class TestChatMessageFilterSchema:

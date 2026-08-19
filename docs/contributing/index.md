@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to Open Chat Studio! This guide will help you understand the contribution process and coding conventions.
+Thank you for your interest in contributing to Open Chat Studio (OCS)! This guide will help you understand the contribution process and coding conventions.
 
 ## Forms of Contribution
 
@@ -24,11 +24,11 @@ Thank you for your interest in contributing to Open Chat Studio! This guide will
     For non-trivial or complex changes, please discuss your design plan before writing code. The GitHub issue is the best place to start — add a comment outlining your approach and get feedback from maintainers. For broader ideas without a dedicated issue, open a [GitHub Discussion](https://github.com/dimagi/open-chat-studio/discussions). Aligning on design early avoids wasted effort and makes reviews much smoother.
 
 !!! info "Agentic development workflow"
-    We recommend using an agentic coding tool like Claude Code for development on this project. Our workflow follows a **design-first approach**: produce a design, post it to the GitHub issue for core team review, then implement once approved. See the [AI-Assisted Development](../developer_guides/ai_development.md) guide for the full workflow and setup instructions.
+    We recommend using an agentic coding tool like Claude Code for development on this project. Our workflow follows a **design-first approach**: produce a design, post it to the GitHub issue for core team review, then implement once approved. See the [Development Workflow](../getting-started/dev-workflow.md) guide for the full loop, and [AI Tool Setup](../getting-started/ai-setup.md) for setup instructions.
 
 ### Improve Documentation
 
-- **Developer Documentation** needs improvement, and we welcome contributions.
+- **Developer Documentation** welcomes contributions and improvements.
 - **User Documentation** welcomes feedback and corrections. See [how to contribute](./user_docs.md).
 
 ## Technical Guide
@@ -56,4 +56,4 @@ If you have any questions or need assistance:
 
 ## License
 
-By contributing to Open Chat Studio, you agree that your contributions will be licensed under the terms stated in the [LICENSE](https://github.com/dimagi/open-chat-studio/blob/master/LICENSE) file.
+By contributing to Open Chat Studio, you agree that your contributions will be licensed under the terms stated in the [LICENSE](https://github.com/dimagi/open-chat-studio/blob/main/LICENSE) file.
