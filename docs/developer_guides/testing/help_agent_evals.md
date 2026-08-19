@@ -6,7 +6,7 @@ The `apps/help/evals/` directory contains evaluation tests for the AI agents in 
 
 Eval tests are regular pytest tests marked with `@pytest.mark.eval`. They are automatically skipped if the required API keys are not configured, so they do not break CI for contributors without LLM access.
 
-```
+```text
 apps/help/evals/
 ├── conftest.py              # Shared fixtures, check dispatch, LLM judge
 ├── checks.py                # Deterministic check functions
