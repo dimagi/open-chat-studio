@@ -327,7 +327,7 @@ def _check_start_session_access(request, experiment, embed_key_channel, oauth_ch
     if version_number is not None:
         return Response({"error": "Version number requires authentication"}, status=403)
     if oauth_channel is not None:
-        return None                 # the token was validated by the authenticator
+        return None  # the token was validated by the authenticator
     if embed_key_channel is not None:
         # The key resolved a channel, but the channel may not accept keys. Anonymous +
         # `oauth` mode is the leaked-embed-key case the mode exists to stop.
