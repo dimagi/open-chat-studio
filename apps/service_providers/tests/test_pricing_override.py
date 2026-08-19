@@ -11,14 +11,7 @@ from django.urls import reverse
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.service_providers.models import LlmProviderModel
 from apps.service_providers.views import _get_models_by_type
-from apps.teams.models import Flag
 from apps.utils.factories.team import TeamWithUsersFactory
-
-
-def _enable_flag_for(team):
-    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
-    flag.teams.add(team)
-    flag.flush()
 
 
 def _global_rule(provider, name, kind, price):
@@ -49,18 +42,8 @@ def _client_for(team):
 class TestPricingOverride:
     """POST /pricing/override/submit/ inserts a team-scoped rule per non-empty field."""
 
-    def test_flag_off_returns_404(self):
-        team = TeamWithUsersFactory.create()
-        model = _custom_model(team)
-        url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
-
-        response = _client_for(team).post(url, {"input_price_per_million_tokens": "5.0"})
-
-        assert response.status_code == 404
-
     def test_creates_team_scoped_rules_per_field(self):
         team = TeamWithUsersFactory.create()
-        _enable_flag_for(team)
         model = _custom_model(team, name="test-pa")
         url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
 
@@ -81,7 +64,6 @@ class TestPricingOverride:
 
     def test_supersedes_existing_team_rule(self):
         team = TeamWithUsersFactory.create()
-        _enable_flag_for(team)
         model = _custom_model(team, name="test-pb")
         existing = PricingRule.objects.create(
             team=team,
@@ -102,7 +84,6 @@ class TestPricingOverride:
 
     def test_empty_form_rejected(self):
         team = TeamWithUsersFactory.create()
-        _enable_flag_for(team)
         model = _custom_model(team, name="test-pc")
         url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
 
@@ -122,7 +103,6 @@ class TestPricingRevert:
 
     def test_closes_team_overrides_only(self):
         team = TeamWithUsersFactory.create()
-        _enable_flag_for(team)
         model = _custom_model(team, name="test-pd")
         _global_rule("openai", "test-pd", ServiceKind.LLM_INPUT, "0.00250")
         team_rule = PricingRule.objects.create(
@@ -149,9 +129,8 @@ class TestPricingRevert:
 class TestCreateModelWithPricing:
     """Custom-model creation with optional pricing fields."""
 
-    def test_creates_model_and_rules_when_flag_on(self):
+    def test_creates_model_and_rules(self):
         team = TeamWithUsersFactory.create()
-        _enable_flag_for(team)
         url = reverse("service_providers:llm_provider_model_new", kwargs={"team_slug": team.slug})
 
         response = _client_for(team).post(
@@ -171,24 +150,6 @@ class TestCreateModelWithPricing:
         kinds = {r.service_kind: r.unit_price for r in rules}
         assert kinds[ServiceKind.LLM_INPUT] == Decimal("0.00250000")
         assert kinds[ServiceKind.LLM_OUTPUT] == Decimal("0.01000000")
-
-    def test_pricing_fields_ignored_when_flag_off(self):
-        team = TeamWithUsersFactory.create()
-        url = reverse("service_providers:llm_provider_model_new", kwargs={"team_slug": team.slug})
-
-        response = _client_for(team).post(
-            url,
-            {
-                "type": "openai",
-                "name": "test-create-no-flag",
-                "max_token_limit": "128000",
-                "input_price_per_million_tokens": "2.5",
-            },
-        )
-
-        assert response.status_code == 200
-        assert LlmProviderModel.objects.filter(team=team, name="test-create-no-flag").exists()
-        assert not PricingRule.objects.filter(team=team, model_name="test-create-no-flag").exists()
 
 
 @pytest.mark.django_db()

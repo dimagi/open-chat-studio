@@ -264,6 +264,7 @@ class TestDashboardService:
                 "total_messages": 3,
                 "total_sessions": 1,
                 "last_activity": ANY,
+                "cost": 0.0,
             }
         ]
 

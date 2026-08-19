@@ -471,9 +471,8 @@ def _price_per_million_field(label):
 
 
 class LlmProviderModelForm(forms.ModelForm):
-    """Custom-model creation form. Optional pricing fields are shown only
-    when `flag_ai_cost_monitoring` is on for the team; the view converts
-    per-million to per-1K tokens before persisting `PricingRule` rows."""
+    """Custom-model creation form. The view converts the optional per-million
+    pricing fields to per-1K tokens before persisting `PricingRule` rows."""
 
     input_price_per_million_tokens = _price_per_million_field(_("Input price ($ / 1M tokens)"))
     output_price_per_million_tokens = _price_per_million_field(_("Output price ($ / 1M tokens)"))

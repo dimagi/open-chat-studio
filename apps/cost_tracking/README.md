@@ -1,6 +1,6 @@
 # Cost Tracking App
 
-This app records the cost of every LLM call OCS makes and surfaces it to the team that owns the chat. The whole feature is gated by the `flag_ai_cost_monitoring` team-scoped Waffle flag, so teams opt in.
+This app records the cost of every LLM call OCS makes and surfaces it to the team that owns the chat.
 
 There are two halves: the capture path (record what happened) and the resolution path (price what was recorded). A small operational layer (seed loader, auto-update workflow) keeps pricing data fresh.
 
@@ -46,7 +46,7 @@ The canonical pricing seed lives in `seed_data/llm_pricing.json` (per-1K-tokens,
 
 ## Surface
 
-Two places consume the data, both gated by `flag_ai_cost_monitoring`:
+Two places consume the data:
 
 - **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`.
 - **LLM Provider page** shows each model's current per-1K rate inline. Admins can override at team scope via an HTMX modal (`pricing_override` view) or revert to global. The custom-model creation dialog accepts optional input/output rates that persist as team-scoped `PricingRule` rows in the same transaction as the model save.

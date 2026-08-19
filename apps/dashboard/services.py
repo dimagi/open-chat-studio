@@ -178,30 +178,24 @@ class DashboardService:
         page_size: int = 10,
         order_by: str = "messages",
         order_dir: str = "desc",
-        include_cost: bool = False,
         **filters,
     ) -> dict[str, Any]:
         """Get bot performance summary with rankings, pagination, and ordering.
 
-        When `include_cost` is set (team has the cost-monitoring flag), each row
-        gains `cost` and `cost_per_session` sourced from UsageRecord.
+        Each row carries `cost` and `cost_per_session` sourced from UsageRecord.
         """
 
         # Extract pagination/ordering from filters for cache key
         cache_filters = {k: v for k, v in filters.items() if k not in ["page", "page_size", "order_by", "order_dir"]}
-        cache_key = f"bot_performance_{'cost_' if include_cost else ''}{self._cache_key(cache_filters)}"
+        cache_key = f"bot_performance_cost_{self._cache_key(cache_filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
 
         if not cached_data:
-            cached_data = self._compute_bot_performance(cache_filters, include_cost)
+            cached_data = self._compute_bot_performance(cache_filters)
             DashboardCache.set_cached_data(self.team, cache_key, cached_data)
 
-        # Apply ordering. Cost fields are only sortable when they're present.
         reverse_order = order_dir.lower() == "desc"
-        valid_order_fields = self.VALID_ORDER_FIELDS
-        if not include_cost:
-            valid_order_fields = [f for f in valid_order_fields if f not in ("cost", "cost_per_session")]
-        sort_field = order_by if order_by in valid_order_fields else "messages"
+        sort_field = order_by if order_by in self.VALID_ORDER_FIELDS else "messages"
         # sorted() (not list.sort()) so we never mutate the cached list in place.
         cached_data = sorted(cached_data, key=lambda x: x.get(sort_field) or 0, reverse=reverse_order)
 
@@ -223,7 +217,7 @@ class DashboardService:
             "order_dir": order_dir,
         }
 
-    def _compute_bot_performance(self, cache_filters: dict, include_cost: bool) -> list[dict[str, Any]]:
+    def _compute_bot_performance(self, cache_filters: dict) -> list[dict[str, Any]]:
         """Build the (uncached, unordered) per-experiment performance rows."""
         querysets = self.get_filtered_queryset_base(**cache_filters)
         # Conversation turns inside the window, so this column agrees with the
@@ -262,28 +256,24 @@ class DashboardService:
         )
         dur_map = {s["experiment_id"]: s for s in session_durations}
 
-        cost_map = (
-            costs_by_experiment(
-                self.team,
-                start=querysets["start_date"],
-                end=querysets["end_date"],
-                filters=CostFilters(
-                    experiment_ids=cache_filters.get("experiment_ids"),
-                    platform_names=cache_filters.get("platform_names"),
-                    participant_ids=cache_filters.get("participant_ids"),
-                    tag_ids=cache_filters.get("tag_ids"),
-                ),
-            )
-            if include_cost
-            else {}
+        cost_map = costs_by_experiment(
+            self.team,
+            start=querysets["start_date"],
+            end=querysets["end_date"],
+            filters=CostFilters(
+                experiment_ids=cache_filters.get("experiment_ids"),
+                platform_names=cache_filters.get("platform_names"),
+                participant_ids=cache_filters.get("participant_ids"),
+                tag_ids=cache_filters.get("tag_ids"),
+            ),
         )
 
         return [
-            self._bot_performance_row(experiment, stats_dict, dur_map, cost_map, include_cost)
+            self._bot_performance_row(experiment, stats_dict, dur_map, cost_map)
             for experiment in querysets["experiments"]
         ]
 
-    def _bot_performance_row(self, experiment, stats_dict, dur_map, cost_map, include_cost: bool) -> dict[str, Any]:
+    def _bot_performance_row(self, experiment, stats_dict, dur_map, cost_map) -> dict[str, Any]:
         stats = stats_dict.get(experiment.id, {"participants_count": 0, "sessions_count": 0, "messages_count": 0})
         sessions_count = stats["sessions_count"]
         messages_count = stats["messages_count"]
@@ -292,7 +282,8 @@ class DashboardService:
             dur_map.get(experiment.id, {}).get("average_session_duration") or timedelta()
         ).total_seconds() / 60
 
-        row = {
+        cost = float(cost_map.get(experiment.id, 0))
+        return {
             "experiment_id": experiment.id,
             "experiment_name": experiment.name,
             "experiment_url": reverse(
@@ -305,21 +296,17 @@ class DashboardService:
             "avg_session_duration": avg_duration,
             "completion_rate": (completed_sessions / sessions_count) if sessions_count else 0,
             "avg_messages_per_session": messages_count / sessions_count if sessions_count > 0 else 0,
+            "cost": cost,
+            "cost_per_session": (cost / sessions_count) if sessions_count else None,
         }
-        if include_cost:
-            cost = float(cost_map.get(experiment.id, 0))
-            row["cost"] = cost
-            row["cost_per_session"] = (cost / sessions_count) if sessions_count else None
-        return row
 
-    def get_user_engagement_data(self, limit: int = 10, include_cost: bool = False, **filters) -> dict[str, Any]:
+    def get_user_engagement_data(self, limit: int = 10, **filters) -> dict[str, Any]:
         """Get user engagement analysis data.
 
-        When `include_cost` is set (team has the cost-monitoring flag), each
-        most-active row gains `cost` sourced from UsageRecord, bounded to the
-        top `limit` participants (UsageRecord has no `(team, participant)` index).
+        Each most-active row carries `cost` sourced from UsageRecord, bounded to
+        the top `limit` participants (UsageRecord has no `(team, participant)` index).
         """
-        cache_key = f"user_engagement_{'cost_' if include_cost else ''}{limit}_{self._cache_key(filters)}"
+        cache_key = f"user_engagement_cost_{limit}_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -361,11 +348,11 @@ class DashboardService:
                     tag_ids=filters.get("tag_ids"),
                 ),
             )
-            if include_cost and top_ids
+            if top_ids
             else {}
         )
         most_active = [
-            self._format_participant_data(participants[stats[participant_field]], stats, cost_map, include_cost)
+            self._format_participant_data(participants[stats[participant_field]], stats, cost_map)
             for stats in participant_stats
             if stats[participant_field] in participants
         ]
@@ -553,9 +540,7 @@ class DashboardService:
         """Format a period object to ISO string"""
         return period.isoformat() if hasattr(period, "isoformat") else str(period)
 
-    def _format_participant_data(
-        self, participant, stats: dict, cost_map: dict | None = None, include_cost: bool = False
-    ) -> dict[str, Any]:
+    def _format_participant_data(self, participant, stats: dict, cost_map: dict | None = None) -> dict[str, Any]:
         """Format participant data for engagement analysis. `stats` is one
         aggregate row keyed on the participant, not annotations on the
         participant itself."""
@@ -563,17 +548,15 @@ class DashboardService:
             "participants:single-participant-home",
             kwargs={"team_slug": self.team.slug, "participant_id": participant.id},
         )
-        data = {
+        return {
             "participant_id": participant.id,
             "participant_name": participant.name or participant.identifier,
             "participant_url": participant_url,
             "total_messages": stats["total_messages"],
             "total_sessions": stats["total_sessions"],
             "last_activity": stats["last_activity"].isoformat() if stats["last_activity"] else None,
+            "cost": float((cost_map or {}).get(participant.id, 0)),
         }
-        if include_cost:
-            data["cost"] = float((cost_map or {}).get(participant.id, 0))
-        return data
 
     @staticmethod
     def _cache_key(filters: dict) -> str:
