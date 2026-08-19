@@ -18,6 +18,8 @@ from apps.cost_tracking.services.reporting import (
     ModelCoverageGap,
     cost_summary,
     cost_timeseries,
+    costs_by_model,
+    costs_by_service_kind,
     coverage_gaps,
 )
 from apps.teams.decorators import login_and_team_required
@@ -41,6 +43,10 @@ def _cost_cache_key(prefix: str, filter_form: DashboardFilterForm) -> str:
     return f"{prefix}_{DashboardService._cache_key(params)}"
 
 
+def _identity(value):
+    return value
+
+
 def _cached(team, cache_key: str, compute, decode, encode=asdict):
     """Serve `compute()` through DashboardCache, encoding via the JSON encoder
     the cache field expects and rebuilding the dataclass on the way out. A
@@ -48,7 +54,7 @@ def _cached(team, cache_key: str, compute, decode, encode=asdict):
     still inside its TTL after a deploy - falls through to a recompute that
     overwrites it, rather than surfacing the decode error on every load.
     `encode` defaults to dataclass encoding; a payload that is already
-    JSON-shaped passes identity functions for both directions."""
+    JSON-shaped passes `_identity` for both directions."""
     cached_data = DashboardCache.get_cached_data(team, cache_key)
     if cached_data is not None:
         try:
@@ -296,8 +302,33 @@ class CostTrackingApiView(DashboardApiView):
             request.team,
             cache_key,
             lambda: cost_timeseries(request.team, start=start, end=end, granularity=granularity, filters=filters),
-            decode=lambda payload: payload,
-            encode=lambda value: value,
+            decode=_identity,
+            encode=_identity,
+        )
+        return self.json_response(data)
+
+
+class CostBreakdownApiView(DashboardApiView):
+    """Provider/model and service-kind cost breakdowns for the cost panel's
+    charts, gated on the team's cost-monitoring flag. Returns an empty payload
+    when the flag is off so the frontend can no-op. Both groupings share one
+    cache entry - the frontend always consumes them together.
+    """
+
+    def get(self, request, *args, **kwargs):
+        if not flag_is_active(request, COST_TRACKING_FLAG):
+            return self.json_response({})
+        filter_form = DashboardFilterForm(data=request.GET, team=request.team)
+        start, end, filters = _cost_panel_scope(filter_form)
+        data = _cached(
+            request.team,
+            _cost_cache_key("cost_breakdown", filter_form),
+            lambda: {
+                "by_model": costs_by_model(request.team, start=start, end=end, filters=filters),
+                "by_service_kind": costs_by_service_kind(request.team, start=start, end=end, filters=filters),
+            },
+            decode=_identity,
+            encode=_identity,
         )
         return self.json_response(data)
 

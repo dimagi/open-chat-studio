@@ -387,6 +387,52 @@ def costs_by_experiment(
     return {row["experiment_id"]: row["cost"] for row in rows}
 
 
+def costs_by_model(team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None) -> list[dict]:
+    """Cost per (provider_type, model_name) in [start, end), ordered by descending
+    cost, as floats for direct JSON/Chart.js consumption. One grouped query over
+    the `(team, timestamp)` index; it feeds both of the dashboard's
+    provider and model charts - the provider chart sums these rows per provider
+    client-side. An unfiltered read is a team total and counts every source; a
+    filtered read is narrowed to chat by `_scoped_records` (ADR-0048).
+    """
+    rows = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=start, timestamp__lt=end)
+        .values("provider_type", "model_name")
+        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .order_by("-cost", "provider_type", "model_name")
+    )
+    return [
+        {"provider_type": row["provider_type"], "model_name": row["model_name"], "cost": float(row["cost"])}
+        for row in rows
+    ]
+
+
+def costs_by_service_kind(
+    team: Team, *, start: datetime, end: datetime, filters: CostFilters | None = None
+) -> list[dict]:
+    """Cost and token quantity per ServiceKind in [start, end), one grouped query,
+    JSON-shaped (float cost, integer tokens). Feeds the dashboard's service-kind
+    donut, which toggles between the two measures; the cached-input slice is the
+    "are we benefiting from caching" answer. Kinds with no rows are absent - the
+    frontend zero-fills over the fixed four-kind order. Same ADR-0048 source
+    semantics as `costs_by_model`.
+    """
+    rows = (
+        _scoped_records(team, filters)
+        .filter(timestamp__gte=start, timestamp__lt=end)
+        .values("service_kind")
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+        )
+        .order_by()
+    )
+    return [
+        {"service_kind": row["service_kind"], "cost": float(row["cost"]), "tokens": int(row["tokens"])} for row in rows
+    ]
+
+
 @dataclass(frozen=True)
 class ChatbotUsageSummary:
     """The chatbot home page's usage widget: a window's cost plus session/message counts for one
