@@ -114,10 +114,26 @@ def _perplexity() -> ProviderCredentials | None:
 
 
 def _openrouter() -> ProviderCredentials | None:
+    """Load OpenRouter credentials from environment variables.
+
+    The ``HTTP-Referer`` and ``X-Title`` headers are recommended by OpenRouter
+    so that requests are attributed to this application in the OpenRouter
+    dashboard and rate-limit tiers. Without them requests appear anonymous.
+    """
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         return None
-    return ProviderCredentials(LlmProviderTypes.openrouter, "OpenRouter", {"openai_api_key": api_key})
+    return ProviderCredentials(
+        LlmProviderTypes.openrouter,
+        "OpenRouter",
+        {
+            "openai_api_key": api_key,
+            "default_headers": {
+                "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://github.com/dimagi/open-chat-studio"),
+                "X-Title": os.environ.get("OPENROUTER_TITLE", "Open Chat Studio"),
+            },
+        },
+    )
 
 
 def _minimax() -> ProviderCredentials | None:

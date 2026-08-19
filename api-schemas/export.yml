@@ -3168,7 +3168,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB19Enum'
+          $ref: '#/components/schemas/Type4a4Enum'
         name:
           type: string
           description: The name of the model. e.g. 'text-embedding-3-small'
@@ -4373,7 +4373,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB19Enum'
+          $ref: '#/components/schemas/Type4a4Enum'
         name:
           type: string
           maxLength: 255
@@ -4420,7 +4420,7 @@ components:
           format: date-time
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeB19Enum'
+          $ref: '#/components/schemas/Type4a4Enum'
         name:
           type: string
           description: The name of the model. e.g. 'gpt-4o-mini' or 'claude-3-5-sonnet-20240620'
@@ -6049,13 +6049,14 @@ components:
       - cursor
       - has_more
       - results
-    TypeB19Enum:
+    Type4a4Enum:
       enum:
       - openai
       - azure
       - anthropic
       - groq
       - perplexity
+      - openrouter
       - deepseek
       - minimax
       - google
@@ -6068,6 +6069,7 @@ components:
         * `anthropic` - Anthropic
         * `groq` - Groq
         * `perplexity` - Perplexity
+        * `openrouter` - OpenRouter
         * `deepseek` - DeepSeek
         * `minimax` - MiniMax
         * `google` - Google Gemini

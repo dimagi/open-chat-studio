@@ -55,7 +55,7 @@ def test_openai_service_uses_responses_api():
     [
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
-        (LlmProviderTypes.openrouter, {"openai_api_key": "test"}),
+        pytest.param(LlmProviderTypes.openrouter, {"openai_api_key": "test"}, id="openrouter"),
         (LlmProviderTypes.minimax, {"openai_api_key": "test"}),
     ],
 )
@@ -159,3 +159,17 @@ def test_anthropic_service_returns_prompt_caching_middleware():
 )
 def test_non_anthropic_services_have_no_prompt_caching_middleware(service):
     assert service.get_prompt_caching_middleware() is None
+
+
+def test_openrouter_attribution_headers_forwarded_to_chat_model():
+    """OpenRouter requires HTTP-Referer and X-Title headers for attribution.
+
+    Verify that headers stored in ``default_headers`` on the service are
+    forwarded verbatim to the constructed ``ChatOpenAI`` client so they
+    appear on every outgoing request.
+    """
+    headers = {"HTTP-Referer": "https://example.com", "X-Title": "Test App"}
+    service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test", "default_headers": headers})
+    assert service.default_headers == headers
+    chat_model = service.get_chat_model("openai/gpt-4.1-mini")
+    assert chat_model.default_headers == headers
