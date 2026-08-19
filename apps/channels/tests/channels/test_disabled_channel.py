@@ -17,7 +17,7 @@ from apps.channels.stages.core import AttachmentHydrationStage, ChannelDisabledS
 from apps.channels.tests.message_examples import base_messages
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import Chat, ChatMessage, ChatMessageType
-from apps.experiments.models import ExperimentSession, Participant
+from apps.experiments.models import ExperimentSession, Participant, SessionStatus
 from apps.experiments.services import start_experiment_session
 from apps.experiments.tasks import get_response_for_webchat_task
 from apps.service_providers.tracing import TraceInfo
@@ -364,6 +364,32 @@ class TestDisabledChannelRefusesSessionStarts:
         for codename in codenames:
             user.user_permissions.add(Permission.objects.get(codename=codename))
         return user
+
+    def test_new_session_from_the_console_is_refused(self, client):
+        """The admin "new session" action reuses the old session's channel, so a disabled one has
+        to refuse -- and refuse before ending the session the participant is already in."""
+        session = ExperimentSessionFactory.create(
+            experiment__team=TeamWithUsersFactory.create(),
+            experiment_channel__platform=ChannelPlatform.TELEGRAM,
+        )
+        experiment = session.experiment
+        session.experiment_channel.enabled = False
+        session.experiment_channel.save()
+        client.force_login(self._console_user(experiment, "change_experimentsession"))
+
+        with patch("apps.chatbots.views.send_bot_message") as send_bot_message:
+            response = client.post(
+                reverse(
+                    "chatbots:chatbot_new_session",
+                    args=[experiment.team.slug, experiment.public_id, session.external_id],
+                )
+            )
+
+        assert response.status_code == 302
+        send_bot_message.delay.assert_not_called()
+        session.refresh_from_db()
+        assert session.status != SessionStatus.COMPLETE
+        assert experiment.sessions.count() == 1
 
     def test_authed_web_session_start_is_refused(self, client):
         """The console's own "chat to this bot" button goes through the same web channel."""
