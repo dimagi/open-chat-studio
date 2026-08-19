@@ -1,4 +1,4 @@
-# Chat widget versioning & deprecation
+# Chat Widget Versioning & Deprecation
 
 The chat widget (`open-chat-studio-widget` on npm, source in `components/chat_widget`)
 is embedded on customer sites with a version-pinned script tag. The Django app's

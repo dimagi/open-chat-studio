@@ -10,7 +10,7 @@ from time_machine import travel
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.generics.actions import Action, chip_action
-from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
+from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 
 
 @pytest.mark.django_db()
@@ -117,3 +117,22 @@ def test_chatbot_chip_action():
         args=[team.slug, experiment.public_id, session.external_id],
     )
     assert url == expected_url
+
+
+@pytest.mark.django_db()
+class TestSessionsTableParticipantColumn:
+    """Long participant labels used to wrap, stretching the chip to fill the cell and giving the
+    column ragged row heights."""
+
+    def _cell(self, session):
+        table = ChatbotSessionsTable(ExperimentSession.objects.filter(id=session.id))
+        return str(list(table.rows)[0].get_cell("participant"))
+
+    def test_chip_stays_on_one_line(self, team_with_users):
+        participant = ParticipantFactory.create(
+            team=team_with_users, name="", identifier="a-very-long-participant@dimagi-associate.com"
+        )
+        session = ExperimentSessionFactory.create(team=team_with_users, participant=participant)
+        cell = self._cell(session)
+        assert "truncate" in cell
+        assert f'title="{participant.identifier}"' in cell

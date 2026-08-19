@@ -94,7 +94,7 @@ The `ColumnFilter.apply()` method:
 
 ### Available Filter Types
 
-The dynamic filter system provides several filter types that implements common filtering patterns:
+The dynamic filter system provides several filter types that implement common filtering patterns:
 
 #### StringColumnFilter
 Provides methods for string-based filtering operations:
@@ -162,7 +162,7 @@ class ProductCategoryFilter(ChoiceColumnFilter):
 
 p_filter = ProductCategoryFilter()
 
-# Alternately, you can construct it directly using kwargs:
+# Alternatively, you can construct it directly using kwargs:
 
 p_filter = ChoiceColumnFilter(label="Category", query_param="category", column="category__name", options=[...])
 ```

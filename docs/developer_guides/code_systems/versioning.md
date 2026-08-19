@@ -16,7 +16,7 @@ Versioned objects include Experiment, Pipeline, Node, Collection and more. To co
 |-------------------|-------------------------|-----------------------------------------------------------------------------|
 | **Working version** | *Unreleased version*     | The editable version of an object.                                 |
 | **Default version** | *Published version*      | The version currently live and user-facing.                         |
-| **Version family**  | —                       | A group of instances that are versions of the same working instance. This includes the working version itself |
+| **Version family**  | —                       | A group of instances that are versions of the same working instance. This includes the working version itself. |
 
 ---
 

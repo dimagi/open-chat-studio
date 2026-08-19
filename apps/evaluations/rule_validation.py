@@ -16,6 +16,7 @@ from pydantic import TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
 from apps.evaluations.field_definitions import (
+    BinaryFieldDefinition,
     ChoiceFieldDefinition,
     FieldDefinition,
     FloatFieldDefinition,
@@ -41,14 +42,16 @@ class ConditionType(models.TextChoices):
     def coerce_value(raw, field_type: str | None):
         """Coerce a raw equals-value input to the target field's python type.
 
-        Returns the input unchanged when `field_type` isn't numeric; raises
-        (TypeError, ValueError) on failed int/float conversion so the form can
-        surface a user-facing error.
+        Returns the input unchanged when `field_type` isn't numeric or binary;
+        raises (TypeError, ValueError) on failed int/float conversion so the form
+        can surface a user-facing error.
         """
         if field_type == "int":
             return int(raw)
         if field_type == "float":
             return float(raw)
+        if field_type == "binary":
+            return int(raw)
         return raw
 
     def matches(self, condition_value: dict, field_value) -> bool:
@@ -68,7 +71,7 @@ class ConditionType(models.TextChoices):
 
 def parse_field_definition(field_def: dict | FieldDefinition) -> FieldDefinition:
     """Parse a raw dict into a typed FieldDefinition, or return as-is if already one."""
-    if isinstance(field_def, (IntFieldDefinition, FloatFieldDefinition, ChoiceFieldDefinition)):
+    if isinstance(field_def, (IntFieldDefinition, FloatFieldDefinition, ChoiceFieldDefinition, BinaryFieldDefinition)):
         return field_def
     return _FIELD_DEFINITION_ADAPTER.validate_python(field_def)
 
@@ -125,6 +128,26 @@ def _coerce_numeric(raw: Any, py_type: type) -> int | float:
         raise ValidationError({"condition_value": f"Value must be coercible to {py_type.__name__}."}) from err
 
 
+def _validate_choice_equals(condition_value: dict, field_definition: ChoiceFieldDefinition) -> None:
+    if not field_definition.choices:
+        raise ValidationError({"condition_value": "Choice field has no 'choices' configured."})
+    if condition_value["value"] not in field_definition.choices:
+        raise ValidationError(
+            {
+                "condition_value": (
+                    f"Value '{condition_value['value']}' is not in the field's choices: {field_definition.choices}"
+                )
+            }
+        )
+
+
+def _validate_binary_equals(condition_value: dict) -> None:
+    coerced = _coerce_numeric(condition_value["value"], int)
+    if coerced not in (0, 1):
+        raise ValidationError({"condition_value": "Value must be 0 or 1 for a binary field."})
+    condition_value["value"] = coerced
+
+
 def _validate_equals_condition(condition_value: dict, field_definition: FieldDefinition) -> None:
     extra = set(condition_value.keys()) - {"value"}
     if extra:
@@ -132,25 +155,16 @@ def _validate_equals_condition(condition_value: dict, field_definition: FieldDef
     if "value" not in condition_value:
         raise ValidationError({"condition_value": "'equals' condition requires a 'value' key."})
     if isinstance(field_definition, ChoiceFieldDefinition):
-        if not field_definition.choices:
-            raise ValidationError({"condition_value": "Choice field has no 'choices' configured."})
-        if condition_value["value"] not in field_definition.choices:
-            raise ValidationError(
-                {
-                    "condition_value": (
-                        f"Value '{condition_value['value']}' is not in the field's choices: {field_definition.choices}"
-                    )
-                }
-            )
-        return
-    if isinstance(field_definition, _NUMERIC_FIELD_TYPES):
+        _validate_choice_equals(condition_value, field_definition)
+    elif isinstance(field_definition, BinaryFieldDefinition):
+        _validate_binary_equals(condition_value)
+    elif isinstance(field_definition, _NUMERIC_FIELD_TYPES):
         condition_value["value"] = _coerce_numeric(condition_value["value"], field_definition.python_type)
-        return
-    if isinstance(field_definition, StringFieldDefinition):
+    elif isinstance(field_definition, StringFieldDefinition):
         if not isinstance(condition_value["value"], str):
             raise ValidationError({"condition_value": "Value must be a string."})
-        return
-    raise ValidationError({"condition_type": "'equals' condition is not supported for this field type."})
+    else:
+        raise ValidationError({"condition_type": "'equals' condition is not supported for this field type."})
 
 
 def _validate_range_condition(condition_value: dict, field_definition: FieldDefinition) -> None:

@@ -1,6 +1,5 @@
 import unicodedata
 import uuid
-from datetime import timedelta
 from functools import cached_property
 
 from django.contrib import messages
@@ -14,7 +13,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, FormView, TemplateView
 from django_htmx.http import HttpResponseClientRedirect
@@ -30,7 +28,7 @@ from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotFor
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message
 from apps.chatbots.version_resolver import resolve_published_or_working
-from apps.cost_tracking.services.reporting import chatbot_usage_summary
+from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
 from apps.events.tables import EventsTable
 from apps.experiments.decorators import experiment_session_view, verify_session_access_cookie
@@ -71,7 +69,6 @@ from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
 COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
-USAGE_WIDGET_WINDOW_DAYS = 30
 
 
 def _get_alpine_context(request, experiment=None):
@@ -323,9 +320,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
     usage_summary = None
     if cost_tracking_enabled:
-        end = timezone.now()
-        start = end - timedelta(days=USAGE_WIDGET_WINDOW_DAYS)
-        usage_summary = chatbot_usage_summary(experiment, start=start, end=end)
+        usage_summary = get_latest_chatbot_usage_summary(request.team, experiment.id)
 
     context = {
         "active_tab": "chatbots",

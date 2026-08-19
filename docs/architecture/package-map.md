@@ -3,7 +3,7 @@ hide:
   - navigation
 ---
 
-# Package map
+# Package Map
 
 A navigation map of the Django apps in `apps/` — what each is for, and which way
 dependencies flow. Use it to find where a concern lives and to gauge the blast radius

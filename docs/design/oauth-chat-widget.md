@@ -114,10 +114,10 @@ egress IP would share an allowance — and share it with unrelated anonymous tra
 the credential in an authentication class puts the channel in `request.auth`, which the existing
 `ExperimentChannel` branch already buckets on.
 
-### The per-application chatbot allowlist (ADR-0055, PR #4198, merged 2026-08-14)
+### The per-application chatbot allowlist (ADR-0056, PR #4198, merged 2026-08-14)
 
 What [D4](#d4-what-makes-a-token-acceptable) called a prerequisite has shipped, closing #4197 and
-recorded as **ADR-0055** (*Client-credentials applications name the chatbots they may reach*):
+recorded as **ADR-0056** (*Client-credentials applications name the chatbots they may reach*):
 
 - **`OAuth2Application.allowed_chatbots`** — M2M to `Experiment`, `related_name="oauth_applications"`,
   audited via `@audit_fields`, migration `oauth.0004`. **Empty means none.**
@@ -414,7 +414,7 @@ ADR-0053's principle: the channel that owns the session is the one whose credent
 | `token.team_id == experiment.team_id` | A token pinned to team A must not reach team B's chatbot. |
 | `token.is_valid([CHAT_API_SCOPE])` | `chat:start` — a new scope, narrower than `chatbots:interact`. See below. |
 | The chatbot's Chat API Channel is in `oauth` mode | An admin must have exposed *this* chatbot. |
-| The token's application lists this chatbot | An admin must have authorised *this* application for it. **Shipped** — ADR-0055. |
+| The token's application lists this chatbot | An admin must have authorised *this* application for it. **Shipped** — ADR-0056. |
 
 ```python
 # apps/oauth/permissions.py — sibling to is_client_credentials_request()
@@ -457,8 +457,8 @@ before `request.auth` exists — so the request-shaped helper cannot be called f
 token-shaped core keeps the version normalisation (`get_working_version_id()`) in one place rather than
 reimplementing it at the chat door, which is exactly the bug the shipped helper documents.
 
-**Reuse, not re-decision.** The allowlist itself is settled, merged and recorded in **ADR-0055**
-([above](#the-per-application-chatbot-allowlist-adr-0055-pr-4198-merged-2026-08-14)); what follows is why
+**Reuse, not re-decision.** The allowlist itself is settled, merged and recorded in **ADR-0056**
+([above](#the-per-application-chatbot-allowlist-adr-0056-pr-4198-merged-2026-08-14)); what follows is why
 `chat:start` needs it too rather than why it exists. Without it `chat:start` is *team*-scoped: one
 token opens sessions on every `oauth`-mode chatbot in the team. That was tolerable while a middle mode
 required the channel-scoped embed key alongside the token, because the key pinned the chatbot. Dropping
@@ -817,9 +817,9 @@ compatible end to end**. What remains of D7 here is the per-channel `session_tok
 rides D1's migration; if it lands first it carries its own and D1's shrinks back to `credential_mode`
 alone.
 
-**ADRs to extract** when this flips to `stable` (next free number is 0056): the admission model, with
+**ADRs to extract** when this flips to `stable` (next free number is 0057): the admission model, with
 the Chat API Channel and its credential mode as the enablement rule, and the OAuth credential's
-acceptance conditions (D1–D4). The allowlist half of D4 is **already recorded as ADR-0055** and should
+acceptance conditions (D1–D4). The allowlist half of D4 is **already recorded as ADR-0056** and should
 be cited rather than re-extracted; what remains for D4 is the `chat:start` scope and the conditions
 specific to the chat door. D7 needs no extraction — it is **ADR-0054**, already written, superseding
 ADR-0040's expiry rule. The keyless cutover has its own document and its own ADR.

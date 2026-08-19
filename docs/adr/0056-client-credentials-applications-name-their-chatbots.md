@@ -1,4 +1,4 @@
-# ADR-0055: Client-credentials applications name the chatbots they may reach
+# ADR-0056: Client-credentials applications name the chatbots they may reach
 
 <span class="adr-status adr-status-accepted">ACCEPTED</span>
 

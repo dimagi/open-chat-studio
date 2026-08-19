@@ -109,7 +109,7 @@ A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. P
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
 
 **OAuth Application**:
-A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents). A machine application also names the Chatbots it may **reach**; naming none means it may reach none. The allowlist gates every door the machine scope opens — chat completions, message ingress and outbound bot messages (ADR-0055) — with chat-session admission as one more consumer.
+A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents). A machine application also names the Chatbots it may **reach**; naming none means it may reach none. The allowlist gates every door the machine scope opens — chat completions, message ingress and outbound bot messages (ADR-0056) — with chat-session admission as one more consumer.
 _Avoid_: "API key" (a separate, user-scoped credential), and "the OAuth app's user" for a machine application — it has none.
 
 **Custom Action**:
