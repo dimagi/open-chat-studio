@@ -6,7 +6,7 @@
 
 ## Context
 
-Client-credentials OAuth applications are pinned to a team at registration, and every token they issue is scoped to that team. Until now the team was the *only* boundary: a machine token bearing `chatbots:interact` could converse with every chatbot in its team, through chat completions and the message-ingress endpoint, with nothing per-chatbot enabling it. The same scope also authorises outbound messages to arbitrary participants on WhatsApp, Telegram and Connect.
+Client-credentials OAuth applications are pinned to a team at registration, and every token they issue is scoped to that team. Until now the team was the *only* boundary: a machine token bearing `chatbots:interact` was authorised to reach every chatbot in its team, through chat completions and the message-ingress endpoint, with nothing per-chatbot enabling it. The same scope also authorises outbound messages to arbitrary participants on WhatsApp, Telegram and Connect.
 
 A team is the wrong granularity for a credential with no user behind it: teams hold unrelated chatbots, and an application is typically registered for one integration. The gap widens with the chat widget, where the supported shape places a bearer token in page JavaScript by design, putting a team-wide grant one page-source leak away.
 
