@@ -341,7 +341,11 @@ class UserEngagementApiView(DashboardApiView):
         filter_params = self.get_filter_params()
         limit = int(request.GET.get("limit", 10))
 
-        data = service.get_user_engagement_data(limit=limit, **filter_params)
+        data = service.get_user_engagement_data(
+            limit=limit,
+            include_cost=flag_is_active(request, COST_TRACKING_FLAG),
+            **filter_params,
+        )
         return self.json_response(data)
 
 
