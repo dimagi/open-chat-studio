@@ -6,9 +6,9 @@
 .github/pull_request_template.md
 
 # Markdown that is consumed by AI-Agents does need to follow standards
-# Temporary folders disabled as rollout fixes
+# Some folders are set to be ignored as we rollout fixes
 
-# Superpower designs and ADRs (for now)
+# Superpowers & designs (for now)
 docs/superpowers
 docs/design
 
@@ -19,7 +19,7 @@ CLAUDE.md
 .claude/skills/
 .claude/skills/extract-adrs/templates
 
-# Any markdown in the apps or components directory
+# Any markdown in the apps or components directory  (for now)
 /apps/
 /components/
 
