@@ -40,7 +40,7 @@ from apps.service_providers.llm_service.credentials import (
 from apps.service_providers.models import LlmProvider, LlmProviderTypes
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
-from apps.teams.models import Flag, Membership, Team
+from apps.teams.models import Membership, Team
 from apps.trace.models import Trace, TraceStatus
 
 _PIPELINE_NAMES = [
@@ -74,7 +74,6 @@ _EVALUATION_DATASET_MESSAGES = [
     ("Thanks for the fast shipping!", "Glad to hear it — enjoy!"),
     ("This product doesn't match the description.", "I understand, let me help you with a return."),
 ]
-_COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 # Fake model names for the unpriced / no-usage rows so the panel's coverage-gap
 # warnings have something to list.
 _UNPRICED_MODEL = "experimental-model-x"
@@ -386,7 +385,7 @@ class Command(BaseCommand):
         the trace detail page's token card reads.
         """
         # Rerun-safe: an already-seeded team yields no new sessions upstream, so
-        # rehydrate from the DB rather than skipping usage seeding and the flag.
+        # rehydrate from the DB rather than skipping usage seeding.
         if not sessions:
             sessions = list(
                 ExperimentSession.objects.filter(team=team).select_related("experiment", "participant").order_by("id")
@@ -452,7 +451,6 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS(f"  Created {created} usage record(s)"))
-        self._enable_cost_tracking_flag(team)
 
     def _seed_daily_priced_usage(
         self,
@@ -542,14 +540,6 @@ class Command(BaseCommand):
                 unit_price=Decimal("0.00015"),
             )
         return rule
-
-    def _enable_cost_tracking_flag(self, team) -> None:
-        """The Cost Tracking panel is gated on this team-scoped flag, so enable
-        it here to make the seeded records visible on the dashboard."""
-        flag, _ = Flag.objects.get_or_create(name=_COST_TRACKING_FLAG)
-        flag.teams.add(team)
-        flag.flush()
-        self.stdout.write(self.style.SUCCESS(f"  Enabled '{_COST_TRACKING_FLAG}' flag for team"))
 
     def _seed_files(self, team) -> list[File]:
         self.stdout.write("")
