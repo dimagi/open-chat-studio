@@ -27,6 +27,24 @@ class EvaluatorFactory(DjangoModelFactory):
     class Meta:
         model = Evaluator
 
+    class Params:
+        binary_schema = factory.Trait(
+            params=factory.LazyFunction(
+                lambda: {
+                    "llm_prompt": "was the answer correct",
+                    "output_schema": {
+                        "correct": {
+                            "type": "binary",
+                            "description": "was the answer correct",
+                            "true_label": "Correct",
+                            "false_label": "Incorrect",
+                            "use_in_aggregations": True,
+                        },
+                    },
+                }
+            )
+        )
+
     team = factory.SubFactory(TeamFactory)
     type = "LlmEvaluator"
     name = factory.Sequence(lambda n: f"Test Evaluator {n}")

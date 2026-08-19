@@ -89,7 +89,7 @@ A schema defines the structured fields that scorers (automated or human) produce
 | ID | Requirement | Priority |
 |----|------------|----------|
 | FR-1.1 | Define schemas as named, reusable objects owned by a team | Must |
-| FR-1.2 | Support field types: string, int, float, choice | Must |
+| FR-1.2 | Support field types: string, int, float, choice, binary | Must |
 | FR-1.3 | Support validation constraints per field type (min/max, pattern, choices) | Must |
 | FR-1.4 | Support `required` and `use_in_aggregations` flags per field | Must |
 | FR-1.5 | A schema is reusable across multiple Assessments and is shared by all scorers within an Assessment (both automated and human, with each scorer addressing a subset via `output_fields` — see D-10) | Must |
@@ -333,7 +333,7 @@ Where each 2026 backlog item lands, and what state it's in today. "Done" items w
 
 The conceptual model:
 
-```
+```text
                     AssessmentSchema
                         │ (FK, shared catalogue)
                         ▼
@@ -390,7 +390,7 @@ A reusable, named schema that all scorers in one or more Assessments share. Lift
 |---|---|
 | `team` | `BaseTeamModel` |
 | `name`, `description` | |
-| `fields` | JSON: `dict[name, FieldDefinition]`. Reuses existing types: `String`, `Int`, `Float`, `Choice`. |
+| `fields` | JSON: `dict[name, FieldDefinition]`. Reuses existing types: `String`, `Int`, `Float`, `Choice`, `Binary`. |
 | `created_at` | Indexed; lets the per-Assessment schema-history chain be queried in order. |
 
 **New table.** Existing inline schemas are migrated lazily — the first time a Score is written referencing an inline schema, an `AssessmentSchema` row is materialised and FK'd.

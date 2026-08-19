@@ -34,9 +34,9 @@ recorded on the tracking issue.
 
 **In-app features** — write a throwaway Django shell script measuring, per team:
 
-1. **Configured**: teams/objects that have the feature set up.
-2. **Active**: usage events within the window (sessions, messages, task runs —
-   whatever "the feature did something" means for this feature).
+- **Configured**: teams/objects that have the feature set up.
+- **Active**: usage events within the window (sessions, messages, task runs —
+  whatever "the feature did something" means for this feature).
 
 Attach the script and its output to the tracking issue (paste or gist) — do
 not commit it to the repo.

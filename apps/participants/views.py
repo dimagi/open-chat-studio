@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
@@ -6,15 +7,19 @@ from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import RequestConfig, SingleTableView
+from waffle import flag_is_active
 
 from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
+from apps.api.trigger_bot import TriggerBotMessageError, prepare_trigger_bot_message
 from apps.channels.models import ChannelPlatform
 from apps.chatbots.tables import ChatbotSessionsTable
+from apps.cost_tracking.services.reporting import CostFilters, costs_by_participant
 from apps.experiments.models import Experiment, ExperimentSession, Participant, ParticipantData
 from apps.filters.models import FilterSet
 from apps.participants.forms import ParticipantExportForm, ParticipantForm, ParticipantImportForm, TriggerBotForm
@@ -35,6 +40,10 @@ IMPORT_PERMISSIONS = [
     "experiments.add_participantdata",
     "experiments.change_participantdata",
 ]
+
+COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
+# Same window as the dashboard's default date range (apps/dashboard/forms.py).
+PARTICIPANT_COST_WINDOW_DAYS = 30
 
 
 def single_participant_home_context(
@@ -162,6 +171,37 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, S
         filter_set = ParticipantFilter()
         query = filter_set.apply(query, filter_params=FilterParams.from_request(self.request), timezone=timezone)
         return query
+
+    def get_table(self, **kwargs):
+        """Attach per-page cost when the team has the cost-monitoring flag.
+
+        Hooking after `RequestConfig.configure` means the queryset is already
+        paginated, so the cost read is bounded to one page of participants -
+        `UsageRecord` has no `(team, participant)` index, which is also why the
+        column is not sortable.
+        """
+        table = super().get_table(**kwargs)
+        if not flag_is_active(self.request, COST_TRACKING_FLAG):
+            table.exclude = ("cost",)
+            return table
+        page = getattr(table, "page", None)
+        # `page.object_list` holds django-tables2 `BoundRow` wrappers, not the underlying
+        # `Participant` instances - unwrap via `.record`, the same pattern
+        # `attach_chat_tagged_items` uses for the same paginator shape.
+        page_ids = [getattr(row, "record", row).id for row in page.object_list] if page is not None else []
+        end = timezone.now()
+        start = end - timedelta(days=PARTICIPANT_COST_WINDOW_DAYS)
+        table.cost_map = (
+            costs_by_participant(
+                self.request.team,
+                start=start,
+                end=end,
+                filters=CostFilters(participant_ids=page_ids),
+            )
+            if page_ids
+            else {}
+        )
+        return table
 
 
 class SingleParticipantHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -347,25 +387,31 @@ def trigger_bot(request, team_slug: str, participant_id: int):
 
     if not form.is_valid():
         messages.error(request, "Please check the form for errors")
-        context = single_participant_home_context(request, {}, participant_id=participant_id)
-        context["trigger_bot_form"] = form
-        return render(request, "participants/single_participant_home.html", context=context)
+        return _render_trigger_bot_form(request, participant_id, form)
 
-    experiment = form.cleaned_data["experiment"]
-    prompt_text = form.cleaned_data["prompt_text"]
-    start_new_session = form.cleaned_data["start_new_session"]
-    session_data = form.cleaned_data.get("session_data", {})
+    try:
+        # Shared with the API's trigger-bot endpoint: the session has to exist before the task runs,
+        # and both callers must agree on the task's arguments (#4221).
+        session, _ = prepare_trigger_bot_message(
+            form.cleaned_data["experiment"],
+            participant.identifier,
+            participant.platform,
+            start_new_session=form.cleaned_data["start_new_session"],
+            session_data=form.cleaned_data.get("session_data"),
+        )
+    except TriggerBotMessageError as error:
+        form.add_error(None, error.detail)
+        return _render_trigger_bot_form(request, participant_id, form)
 
-    data = {
-        "identifier": participant.identifier,
-        "platform": participant.platform,
-        "experiment": str(experiment.public_id),
-        "prompt_text": prompt_text,
-        "start_new_session": start_new_session,
-        "session_data": session_data,
-    }
-
-    trigger_bot_message_task.delay(data)
+    # No message_text: this form only sends prompts through the bot, never verbatim messages.
+    trigger_bot_message_task.delay_on_commit(str(session.external_id), form.cleaned_data["prompt_text"], None)
 
     messages.success(request, f"Bot message triggered for {participant}")
     return redirect("participants:single-participant-home", team_slug=team_slug, participant_id=participant_id)
+
+
+def _render_trigger_bot_form(request, participant_id: int, form: TriggerBotForm):
+    """Re-render the participant page with the errored form (the template reopens the dialog)."""
+    context = single_participant_home_context(request, {}, participant_id=participant_id)
+    context["trigger_bot_form"] = form
+    return render(request, "participants/single_participant_home.html", context=context)

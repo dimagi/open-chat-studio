@@ -6,14 +6,15 @@ from typing import Literal
 
 import openai
 from django.conf import settings
-from django.db import DatabaseError
+from django.contrib.postgres.search import SearchVector
+from django.db import DatabaseError, transaction
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pgvector.django import CosineDistance
 
 from apps.assistants.utils import chunk_list
 from apps.documents.exceptions import FileUploadError
-from apps.documents.models import CollectionFile, FileStatus, chunk_from_indexed_file, format_failure_reason
+from apps.documents.models import Collection, CollectionFile, FileStatus, format_failure_reason
 from apps.documents.readers import FileReadException
+from apps.documents.retrieval import search_collection
 from apps.files.models import File, FileChunkEmbedding
 from apps.service_providers.exceptions import UnableToLinkFileException
 
@@ -342,6 +343,42 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                         "Failed to update collection file status", extra={"collection_file_id": collection_file_id}
                     )
 
+    @classmethod
+    def _try_build_search_vectors(cls, embeddings: list[FileChunkEmbedding], collection: Collection):
+        """Build the lexical vectors, treating a failure here as non-fatal for the file.
+
+        The embeddings are already written and each one cost a provider call. Losing the lexical
+        index is a degradation -- dense retrieval still works, and hybrid search falls back to it --
+        whereas letting this propagate would hit the caller's cleanup and delete the whole file's
+        embeddings over a secondary index.
+
+        The write is wrapped in a nested atomic() so a database error rolls back to a savepoint and
+        leaves the surrounding transaction usable, per the project's transaction rules.
+        """
+        try:
+            with transaction.atomic():
+                cls._build_search_vectors(embeddings, collection)
+        except Exception:
+            logger.exception(
+                "Failed to build lexical search vectors; the file is indexed but will not be "
+                "found by keyword search until it is re-indexed",
+                extra={"collection_id": collection.id, "chunk_count": len(embeddings)},
+            )
+
+    @staticmethod
+    def _build_search_vectors(embeddings: list[FileChunkEmbedding], collection: Collection):
+        """Populate the lexical `search_vector` for chunks just written.
+
+        Done in one statement so Postgres builds the tsvectors itself rather than round-tripping
+        the text through Python. The configuration comes from the collection, and
+        `apps.documents.retrieval` parses queries with the same one: a chunk indexed as `spanish`
+        and queried as `english` matches nothing, which is indistinguishable from having no
+        lexical hits at all.
+        """
+        FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).update(
+            search_vector=SearchVector("context", "text", config=collection.search_language)
+        )
+
     def _embed_file(
         self,
         collection_file: CollectionFile,
@@ -399,6 +436,7 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
                 # Content that is entirely NUL bytes clears the check above but sanitizes away
                 # chunk by chunk. Nothing was indexed, so this is a failure by the same reasoning.
                 raise FileReadException(NO_EXTRACTABLE_TEXT)
+            self._try_build_search_vectors(embeddings, collection_file.collection)
             return embeddings
         except Exception:
             FileChunkEmbedding.objects.filter(id__in=[embedding.id for embedding in embeddings]).delete()
@@ -438,7 +476,11 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
         """
         Query the local index for the most relevant file chunks based on the query string.
 
+        Delegates to `search_collection` so this shares one definition of retrieval with the
+        chat search tools, including hybrid search where the flag is active.
+
         Args:
+            index_id: The id of the collection to search.
             query: The query string to search for.
             top_k: The number of top results to return.
 
@@ -446,15 +488,14 @@ class LocalIndexManager(IndexManager, metaclass=ABCMeta):
             list[FileChunkEmbedding]: List of FileChunkEmbedding instances matching the query.
         """
 
+        # `get_all()` bypasses the default manager's is_archived filter. Retrieval used to select
+        # chunks by collection id alone, so an archived collection still returned its chunks;
+        # going through the default manager would turn that into Collection.DoesNotExist.
+        collection = Collection.objects.get_all().get(id=index_id)
+        # This manager can already embed the query; passing the vector avoids `search_collection`
+        # building a second index manager (and its contextualizer) just to do the same work.
         embedding_vector = self.get_embedding_vector(query, input_type="query")
-        return (
-            FileChunkEmbedding.objects.annotate(distance=CosineDistance("embedding", embedding_vector))
-            .filter(collection_id=index_id)
-            .filter(chunk_from_indexed_file())
-            .order_by("distance")
-            .select_related("file")
-            .only("text", "file__name")[:top_k]
-        )
+        return search_collection(collection, query, top_k=top_k, query_vector=embedding_vector)
 
 
 class OpenAILocalIndexManager(LocalIndexManager):

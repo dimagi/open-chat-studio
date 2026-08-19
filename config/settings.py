@@ -985,6 +985,15 @@ MAX_FILE_SIZE_MB = 50
 # activity does not extend it.
 CHAT_SESSION_TOKEN_LIFETIME = timedelta(days=7)
 EMBEDDING_VECTOR_SIZE = 1024
+
+# Hybrid search: lexical retrieval fused with dense retrieval by Reciprocal Rank Fusion.
+# Gated per-team by the `flag_hybrid_search` waffle flag; when inactive, retrieval stays dense-only.
+# The per-collection knobs (search language, dense weight, candidate pool) live on Collection
+# rather than here: a setting used as a field default is copied into each row at creation, so
+# changing it would need a migration to take effect and would not be a setting in any useful sense.
+# This one is read on every call, so it is a genuine runtime knob.
+# RRF smoothing constant. 60 is the value from the original RRF paper and the common default.
+DOCUMENT_SEARCH_RRF_K = 60
 SUPPORTED_FILE_TYPES = {
     "file_search": (
         ".c,.cs,.cpp,.doc,.docx,.html,.java,.json,.md,.pdf,.php,.pptx,.py,.py,.rb,.tex,.txt,.css,.js,.sh,.ts"

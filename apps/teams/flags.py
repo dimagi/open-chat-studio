@@ -90,6 +90,14 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
+    HYBRID_SEARCH = (
+        "flag_hybrid_search",
+        "Hybrid search - fuse dense and lexical collection retrieval with RRF (issue #2681)",
+        "",
+        [],
+        True,
+    )
+
     IGNORE_RATE_LIMITING = (
         "flag_ignore_rate_limiting",
         "Exempts a team from rate limiting; enabling for everyone disables rate limiting globally",

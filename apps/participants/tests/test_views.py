@@ -1,14 +1,20 @@
 import json
+from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
 from django.http import QueryDict
+from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.channels.models import ChannelPlatform
-from apps.experiments.models import Participant, ParticipantData
+from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.participants.forms import TriggerBotForm
+from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 
 
@@ -68,9 +74,14 @@ def test_single_participant_home_with_experiment_renders_session_table(client, t
 
 
 @pytest.mark.django_db()
-@patch("apps.participants.views.trigger_bot_message_task")
-def test_trigger_bot(mock_task, client, team_with_users):
-    """Test that a bot can be triggered for a participant"""
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+@patch.object(ExperimentSession, "ad_hoc_bot_message", autospec=True)
+def test_trigger_bot(mock_ad_hoc_bot_message, client, team_with_users, django_capture_on_commit_callbacks):
+    """Test that a bot can be triggered for a participant.
+
+    The task runs for real (eagerly) rather than being mocked: mocking it let this view keep calling
+    the task with its old dict argument long after the signature changed (#4221).
+    """
     participant = ParticipantFactory.create(team=team_with_users, platform=ChannelPlatform.WHATSAPP)
     experiment = ExperimentFactory.create(team=team_with_users, working_version=None)
     ExperimentChannelFactory.create(team=team_with_users, experiment=experiment, platform=ChannelPlatform.WHATSAPP)
@@ -92,18 +103,56 @@ def test_trigger_bot(mock_task, client, team_with_users):
         "session_data": '{"key": "value"}',
     }
 
-    response = client.post(url, data)
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(url, data)
     assert response.status_code == 302
 
-    # Verify the task was called with correct data
-    mock_task.delay.assert_called_once()
-    call_args = mock_task.delay.call_args[0][0]
-    assert call_args["identifier"] == participant.identifier
-    assert call_args["platform"] == participant.platform
-    assert call_args["experiment"] == str(experiment.public_id)
-    assert call_args["prompt_text"] == "Hello, this is a test message"
-    assert call_args["start_new_session"] is True
-    assert call_args["session_data"] == {"key": "value"}
+    # The view creates the session up front so the task can look it up by external ID
+    session = ExperimentSession.objects.get(participant__identifier=participant.identifier, experiment=experiment)
+    assert session.experiment_channel.platform == ChannelPlatform.WHATSAPP
+    assert session.state == {"key": "value"}
+
+    mock_ad_hoc_bot_message.assert_called_once()
+    called_session, prompt_text = mock_ad_hoc_bot_message.call_args.args[:2]
+    assert called_session == session
+    assert prompt_text == "Hello, this is a test message"
+    assert mock_ad_hoc_bot_message.call_args.kwargs["message_text"] is None
+
+
+@pytest.mark.django_db()
+@patch("apps.participants.views.trigger_bot_message_task")
+def test_trigger_bot_on_disabled_channel(mock_task, client, team_with_users):
+    """The channel kill-switch blocks outbound triggers too: no session is opened, nothing is sent."""
+    participant = ParticipantFactory.create(team=team_with_users, platform=ChannelPlatform.WHATSAPP)
+    experiment = ExperimentFactory.create(team=team_with_users, working_version=None)
+    ExperimentChannelFactory.create(
+        team=team_with_users, experiment=experiment, platform=ChannelPlatform.WHATSAPP, enabled=False
+    )
+    user = team_with_users.members.first()
+    client.login(username=user.username, password="password")
+
+    url = reverse(
+        "participants:trigger_bot",
+        kwargs={
+            "team_slug": team_with_users.slug,
+            "participant_id": participant.id,
+        },
+    )
+
+    response = client.post(
+        url,
+        {
+            "prompt_text": "Hello, this is a test message",
+            "experiment": experiment.id,
+            "start_new_session": True,
+            "session_data": "{}",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "channel for this chatbot is disabled" in response.content.decode()
+    mock_task.delay_on_commit.assert_not_called()
+    assert not ExperimentSession.objects.filter(experiment=experiment).exists()
 
 
 @pytest.mark.django_db()
@@ -133,7 +182,7 @@ def test_trigger_bot_with_invalid_json(mock_task, client, team_with_users):
 
     response = client.post(url, data)
     assert response.status_code == 200
-    mock_task.delay.assert_not_called()
+    mock_task.delay_on_commit.assert_not_called()
 
 
 @pytest.mark.django_db()
@@ -231,3 +280,60 @@ def test_participant_home_shows_create_action(client, team_with_users):
     assert response.status_code == 200
     create_url = reverse("participants:participant_new", kwargs={"team_slug": team_with_users.slug})
     assert create_url.encode() in response.content
+
+
+def _enable_cost_flag(team):
+    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
+    flag.teams.add(team)
+    flag.flush()
+
+
+@pytest.mark.django_db()
+class TestParticipantTableCostColumn:
+    """The participants table shows a 30-day cost column only when the team has
+    `flag_ai_cost_monitoring`."""
+
+    def _get_table(self, client, team):
+        user = team.members.first()
+        client.login(username=user.username, password="password")
+        url = reverse("participants:participant_table", kwargs={"team_slug": team.slug})
+        return client.get(url)
+
+    def test_column_absent_when_flag_off(self, client, team_with_users):
+        ParticipantFactory.create(team=team_with_users)
+
+        response = self._get_table(client, team_with_users)
+
+        assert response.status_code == 200
+        assert "Cost (30d)" not in response.content.decode()
+
+    def test_column_shows_last_30_day_cost(self, client, team_with_users):
+        _enable_cost_flag(team_with_users)
+        participant = ParticipantFactory.create(team=team_with_users)
+        UsageRecordFactory.create(
+            team=team_with_users,
+            participant=participant,
+            cost=Decimal("1.23"),
+            at=timezone.now() - timedelta(days=1),
+        )
+        UsageRecordFactory.create(
+            team=team_with_users,
+            participant=participant,
+            cost=Decimal("9.99"),
+            at=timezone.now() - timedelta(days=40),
+        )
+
+        response = self._get_table(client, team_with_users)
+
+        content = response.content.decode()
+        assert "Cost (30d)" in content
+        assert "$1.23" in content
+        assert "$11.22" not in content
+
+    def test_participant_without_usage_shows_zero(self, client, team_with_users):
+        _enable_cost_flag(team_with_users)
+        ParticipantFactory.create(team=team_with_users)
+
+        response = self._get_table(client, team_with_users)
+
+        assert "$0.00" in response.content.decode()

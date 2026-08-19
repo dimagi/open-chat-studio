@@ -73,6 +73,7 @@
                 <option value="int">{% translate "Integer" %}</option>
                 <option value="float">{% translate "Float" %}</option>
                 <option value="choice">{% translate "Choice" %}</option>
+                <option value="binary">{% translate "Binary" %}</option>
               </select>
             </div>
 
@@ -164,6 +165,32 @@
               </div>
             </template>
 
+            <!-- Binary Labels -->
+            <template x-if="field.type === 'binary'">
+              <div class="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label class="label py-0">
+                    <span class="label-text text-xs">{% translate "True label" %}</span>
+                  </label>
+                  <input type="text"
+                         x-model="field.true_label"
+                         placeholder="{% translate "True" %}"
+                         :disabled="locked"
+                         class="input input-bordered w-full input-sm">
+                </div>
+                <div>
+                  <label class="label py-0">
+                    <span class="label-text text-xs">{% translate "False label" %}</span>
+                  </label>
+                  <input type="text"
+                         x-model="field.false_label"
+                         placeholder="{% translate "False" %}"
+                         :disabled="locked"
+                         class="input input-bordered w-full input-sm">
+                </div>
+              </div>
+            </template>
+
             <div class="form-control mt-2" :class="locked && 'bg-base-100 rounded-lg p-2 border border-primary/30'">
               <label class="label cursor-pointer justify-start gap-2">
                 <input type="checkbox"
@@ -247,6 +274,8 @@
               le: def.le !== undefined ? def.le : null,
               max_length: def.max_length !== undefined ? def.max_length : null,
               choices: def.choices || [],
+              true_label: def.true_label !== undefined ? def.true_label : null,
+              false_label: def.false_label !== undefined ? def.false_label : null,
               required: def.required !== undefined ? def.required : true,
             }));
           }
@@ -265,6 +294,8 @@
             le: null,
             max_length: null,
             choices: [],
+            true_label: null,
+            false_label: null,
             required: true,
           });
         },
@@ -279,6 +310,8 @@
           field.le = null;
           field.max_length = null;
           field.choices = [];
+          field.true_label = null;
+          field.false_label = null;
           if (field.type === 'choice') {
             field.choices = [''];
           }
@@ -311,6 +344,9 @@
                 if (validChoices.length > 0) {
                   def.choices = validChoices;
                 }
+              } else if (field.type === 'binary') {
+                def.true_label = field.true_label && field.true_label.trim() ? field.true_label.trim() : 'True';
+                def.false_label = field.false_label && field.false_label.trim() ? field.false_label.trim() : 'False';
               }
               obj[field.name.trim()] = def;
             }
