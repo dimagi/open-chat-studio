@@ -538,6 +538,25 @@ def get_use_in_aggregations(field_def: dict) -> bool:
     return field_def.get("type") != "string"
 
 
+def merge_binary_labels(stats: dict, field_def: dict) -> dict:
+    """Copy binary display labels from a field definition into an aggregate blob.
+
+    Labels live only in the schema; the stored blob carries integers. `false_count`
+    is derived here rather than stored so blobs aggregated before it existed still
+    render both counts. Non-binary blobs pass through unchanged.
+    """
+    if not isinstance(stats, dict) or stats.get("type") != "binary":
+        return stats
+    merged = {
+        **stats,
+        "true_label": field_def.get("true_label", "True"),
+        "false_label": field_def.get("false_label", "False"),
+    }
+    if stats.get("true_count") is not None:
+        merged["false_count"] = stats["count"] - stats["true_count"]
+    return merged
+
+
 def filter_aggregates_for_display(aggregates) -> list[dict]:
     """Filter aggregate fields based on use_in_aggregations setting.
 
@@ -547,7 +566,7 @@ def filter_aggregates_for_display(aggregates) -> list[dict]:
     for agg in aggregates:
         output_schema = agg.evaluator.params.get("output_schema", {})
         filtered = {
-            field_name: stats
+            field_name: merge_binary_labels(stats, output_schema.get(field_name) or {})
             for field_name, stats in agg.aggregates.items()
             if get_use_in_aggregations(output_schema.get(field_name, {}))
         }
@@ -570,10 +589,10 @@ def build_trend_data(runs: list) -> dict:
         {
             "evaluator_name": {
                 "field_name (type)": {
-                    "type": "numeric" | "categorical",
+                    "type": "numeric" | "categorical" | "binary",
                     "points": [{"run_id": int, "date": str, "value": any, ...}],
                     "categories": ["cat1", "cat2"],  # for categorical only
-                    "mean": float,  # for numeric only
+                    "mean": float,  # for numeric and binary only
                 }
             }
         }
@@ -619,7 +638,7 @@ def build_trend_data(runs: list) -> dict:
                     "date": run.created_at.strftime("%b %d"),
                 }
 
-                if field_type == "numeric":
+                if field_type in ("numeric", "binary"):
                     point["value"] = stats.get("mean")
                 else:
                     point["value"] = stats.get("mode")

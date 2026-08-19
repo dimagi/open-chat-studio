@@ -2498,6 +2498,54 @@ components:
           nullable: true
           description: If enabled, a short context header is generated for each chunk
             and stored for retrieval.
+        search_language:
+          allOf:
+          - $ref: '#/components/schemas/SearchLanguageEnum'
+          description: |-
+            Postgres text search configuration used for keyword search over this collection's documents. Picking the language of the documents enables stemming and stopword removal, which multi-word questions need. 'Simple' does neither and matches exact tokens only, so it suits mixed-language or unknown-language collections. Existing documents keep the language they were indexed with, so re-index the collection after changing this or keyword search will not find them.
+
+            * `simple` - Simple (no stemming, exact tokens)
+            * `arabic` - Arabic
+            * `armenian` - Armenian
+            * `basque` - Basque
+            * `catalan` - Catalan
+            * `danish` - Danish
+            * `dutch` - Dutch
+            * `english` - English
+            * `finnish` - Finnish
+            * `french` - French
+            * `german` - German
+            * `greek` - Greek
+            * `hindi` - Hindi
+            * `hungarian` - Hungarian
+            * `indonesian` - Indonesian
+            * `irish` - Irish
+            * `italian` - Italian
+            * `lithuanian` - Lithuanian
+            * `nepali` - Nepali
+            * `norwegian` - Norwegian
+            * `portuguese` - Portuguese
+            * `romanian` - Romanian
+            * `russian` - Russian
+            * `serbian` - Serbian
+            * `spanish` - Spanish
+            * `swedish` - Swedish
+            * `tamil` - Tamil
+            * `turkish` - Turkish
+            * `yiddish` - Yiddish
+        search_dense_weight:
+          type: number
+          format: double
+          maximum: 1.0
+          minimum: 0.0
+          description: Weight of dense (semantic) results when fusing with lexical
+            results, between 0 and 1. The lexical ranking receives the remaining weight.
+        search_fetch_k:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: How many candidates to retrieve from each of the dense and
+            lexical searches before fusing them.
         create_version_task_id:
           type: string
           maxLength: 128
@@ -5254,6 +5302,68 @@ components:
       - cursor
       - has_more
       - results
+    SearchLanguageEnum:
+      enum:
+      - simple
+      - arabic
+      - armenian
+      - basque
+      - catalan
+      - danish
+      - dutch
+      - english
+      - finnish
+      - french
+      - german
+      - greek
+      - hindi
+      - hungarian
+      - indonesian
+      - irish
+      - italian
+      - lithuanian
+      - nepali
+      - norwegian
+      - portuguese
+      - romanian
+      - russian
+      - serbian
+      - spanish
+      - swedish
+      - tamil
+      - turkish
+      - yiddish
+      type: string
+      description: |-
+        * `simple` - Simple (no stemming, exact tokens)
+        * `arabic` - Arabic
+        * `armenian` - Armenian
+        * `basque` - Basque
+        * `catalan` - Catalan
+        * `danish` - Danish
+        * `dutch` - Dutch
+        * `english` - English
+        * `finnish` - Finnish
+        * `french` - French
+        * `german` - German
+        * `greek` - Greek
+        * `hindi` - Hindi
+        * `hungarian` - Hungarian
+        * `indonesian` - Indonesian
+        * `irish` - Irish
+        * `italian` - Italian
+        * `lithuanian` - Lithuanian
+        * `nepali` - Nepali
+        * `norwegian` - Norwegian
+        * `portuguese` - Portuguese
+        * `romanian` - Romanian
+        * `russian` - Russian
+        * `serbian` - Serbian
+        * `spanish` - Spanish
+        * `swedish` - Swedish
+        * `tamil` - Tamil
+        * `turkish` - Turkish
+        * `yiddish` - Yiddish
     ServiceEnum:
       enum:
       - AWS

@@ -76,7 +76,7 @@ Optional background info Claude should know about.
 - [ ] Task 1
 
 Detailed context for this task. Include relevant file paths, expected
-behavior, edge cases, or links to related code.
+behaviour, edge cases, or links to related code.
 
 ### Task 2: Short description
 - [ ] Task 2

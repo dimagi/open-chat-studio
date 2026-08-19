@@ -132,6 +132,12 @@ EXCLUDE_REGISTRY: dict[str, list[str]] = {
     # slug may already be taken by another team on the target. TagBase.save() regenerates a
     # collision-free slug when it's absent.
     "annotations.tag": ["slug"],
+    # search_vector is a tsvector derived from context + text, both of which are exported. Shipping
+    # it would bloat every chunk in the payload to carry data the target can rebuild from what it
+    # already has, with no provider call (unlike `embedding`). It does have to be rebuilt though:
+    # re-indexing the collection on the target repopulates it, and until that happens imported
+    # chunks are invisible to keyword search while dense retrieval works normally.
+    "files.filechunkembedding": ["search_vector"],
 }
 
 # ORM lookup path from a model to its owning team, applied as Model.objects.filter(<path>=team).

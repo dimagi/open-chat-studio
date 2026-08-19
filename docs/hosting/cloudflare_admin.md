@@ -1,4 +1,4 @@
-# Cloudflare Zero Trust - Administration
+# Cloudflare Zero Trust — Administration
 
 This guide covers ongoing administration of a self-hosted Open Chat Studio instance that uses Cloudflare Zero Trust for access control: managing users, devices, sessions, and audit logs.
 
@@ -42,7 +42,7 @@ Ask the team member to install the [Cloudflare WARP client](https://developers.c
 1. Open WARP → **Preferences → Account → Login with Cloudflare Zero Trust**
 2. Enter the organisation team name (available under **Zero Trust → Settings → Custom Pages**)
 3. Enter the **OTP code** sent to their work **email**
-4. Turn **WARP ON** - the icon should show **Connected**
+4. Turn **WARP ON** — the icon should show **Connected**
 5. Open a browser and navigate to the app **hostname** (e.g. `https://ocs.your-org`)
 
 ---
@@ -114,7 +114,7 @@ Go to **Settings → WARP Client → Global settings → Session duration**.
 
 Cloudflare maintains two separate logs.
 
-### Access logs - who connected and whether they were allowed
+### Access logs — who connected and whether they were allowed
 
 **Location:** Zero Trust → Logs → Access
 
@@ -124,7 +124,7 @@ Each entry shows the user email, device serial, source IP, country, allow/deny d
 - Investigate a failed access attempt
 - Check whether a removed user attempted access after revocation
 
-### Gateway logs - network activity
+### Gateway logs — network activity
 
 **Location:** Zero Trust → Logs → Gateway
 
@@ -156,7 +156,7 @@ Work through this checklist:
 4. Is their email address in the Access policy?
 5. Is the tunnel healthy? Go to **Networks → Tunnels**; status should show **Healthy**.
 6. Can they reach the app by **CIDR IP**? Try `http://172.18.0.7:8000`. If this works but the hostname doesn't, the issue is **DNS**, not access.
-7. Is Local Domain Fallback configured? Go to **Self Host → Team & Resources → Devices → Default profiles → Default Profile Configure → Local Domain Fallback**; the hostname must be listed with the host IP e.g `ocs.your-org  - 172.18.0.100` .
+7. Is Local Domain Fallback configured? Go to **Self Host → Team & Resources → Devices → Default profiles → Default Profile Configure → Local Domain Fallback**; the hostname must be listed with the host IP e.g `ocs.your-org - 172.18.0.100`.
 8. Is Gateway Proxy enabled with **UDP**? Go to **Traffic policies → Traffic settings → Proxy and inspection**. UDP must be on for DNS resolution to private IPs.
 
 If all of the above are correct, check the Access logs. The deny reason will identify exactly which check is failing.
@@ -167,7 +167,7 @@ The private hostname cannot be resolved. This is a DNS issue, not an access issu
 
 1. Is **WARP connected**? Private hostnames only resolve through WARP.
 2. Has the user toggled **WARP OFF** and on since the last profile change? Profile updates require a reconnect.
-3. Is Local Domain Fallback configured? Go to **Self Host → Team & Resources → Devices → Default profiles → Default Profile Configure → Local Domain Fallback**; the hostname must be listed with the host IP e.g `ocs.your-org  - 172.18.0.100` .
+3. Is Local Domain Fallback configured? Go to **Self Host → Team & Resources → Devices → Default profiles → Default Profile Configure → Local Domain Fallback**; the hostname must be listed with the host IP e.g `ocs.your-org - 172.18.0.100`.
 4. Is Gateway Proxy enabled with UDP? Go to **Traffic policies → Traffic settings**; UDP must be on.
 5. Is the `\etc\hosts` inside the server have been set using  `sudo sed -i 's/172.18.0.7 openchatstudio.semabu/172.18.0.6 openchatstudio.semabu/' /etc/hosts`
 6. Is the hostname using `.local`? The `.local` TLD is reserved for mDNS and will not resolve through WARP. Use a different name.
@@ -184,7 +184,7 @@ Access is revoked as soon as the serial number is removed.
 
 ### The tunnel is down and all users cannot connect
 
-The tunnel runs with `restart: unless-stopped` - most crashes recover within seconds. If it has been unavailable for more than a minute:
+The tunnel runs with `restart: unless-stopped` — most crashes recover within seconds. If it has been unavailable for more than a minute:
 
 1. Check the tunnel status at **Networks → Tunnels**.
 2. If the status shows **Unhealthy** or **Inactive**, restart the `cloudflared` container:
@@ -224,5 +224,5 @@ docker compose -f docker-compose.prod.yml -f docker-compose.cloudflare.yml resta
 
 ## Related
 
-- [Cloudflare Tunnel setup guide](./cloudflare_tunnel.md) - initial setup, Docker compose, tunnel ingress, Access policies
-- [Zero Trust Access overview](./zero_trust_access.md) - tool comparison and webhook path requirements
+- [Cloudflare Tunnel setup guide](./cloudflare_tunnel.md) — initial setup, Docker compose, tunnel ingress, Access policies
+- [Zero Trust Access overview](./zero_trust_access.md) — tool comparison and webhook path requirements

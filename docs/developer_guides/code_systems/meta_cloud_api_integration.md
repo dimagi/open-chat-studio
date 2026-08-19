@@ -36,7 +36,7 @@ Every incoming POST webhook from Meta includes an `X-Hub-Signature-256` header c
 
 The `business_id` is your WhatsApp Business Account ID. During channel creation, when a user enters a phone number, we call the Meta Graph API's Phone Number Management endpoint to list all phone numbers registered under this business account:
 
-```
+```http
 GET https://graph.facebook.com/v25.0/{business_id}/phone_numbers
 ```
 
@@ -68,7 +68,7 @@ This differs from other WhatsApp providers (Twilio, Turn.io) which use the phone
 
 Unlike Turn.io (which uses per-experiment webhook URLs), the Meta Cloud API uses a **single global webhook endpoint**:
 
-```
+```text
 /channels/whatsapp/meta/incoming_message
 ```
 

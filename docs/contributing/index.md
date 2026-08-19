@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to Open Chat Studio! This guide will help you understand the contribution process and coding conventions.
+Thank you for your interest in contributing to Open Chat Studio (OCS)! This guide will help you understand the contribution process and coding conventions.
 
 ## Forms of Contribution
 
@@ -28,7 +28,7 @@ Thank you for your interest in contributing to Open Chat Studio! This guide will
 
 ### Improve Documentation
 
-- **Developer Documentation** needs improvement, and we welcome contributions.
+- **Developer Documentation** welcomes contributions and improvements.
 - **User Documentation** welcomes feedback and corrections. See [how to contribute](./user_docs.md).
 
 ## Technical Guide
@@ -56,4 +56,4 @@ If you have any questions or need assistance:
 
 ## License
 
-By contributing to Open Chat Studio, you agree that your contributions will be licensed under the terms stated in the [LICENSE](https://github.com/dimagi/open-chat-studio/blob/master/LICENSE) file.
+By contributing to Open Chat Studio, you agree that your contributions will be licensed under the terms stated in the [LICENSE](https://github.com/dimagi/open-chat-studio/blob/main/LICENSE) file.

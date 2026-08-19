@@ -114,10 +114,10 @@ egress IP would share an allowance — and share it with unrelated anonymous tra
 the credential in an authentication class puts the channel in `request.auth`, which the existing
 `ExperimentChannel` branch already buckets on.
 
-### The per-application chatbot allowlist (ADR-0055, PR #4198, merged 2026-08-14)
+### The per-application chatbot allowlist (ADR-0056, PR #4198, merged 2026-08-14)
 
 What [D4](#d4-what-makes-a-token-acceptable) called a prerequisite has shipped, closing #4197 and
-recorded as **ADR-0055** (*Client-credentials applications name the chatbots they may reach*):
+recorded as **ADR-0056** (*Client-credentials applications name the chatbots they may reach*):
 
 - **`OAuth2Application.allowed_chatbots`** — M2M to `Experiment`, `related_name="oauth_applications"`,
   audited via `@audit_fields`, migration `oauth.0004`. **Empty means none.**
@@ -165,7 +165,7 @@ a machine token may be granted, enforced at issuance by `APIScopedValidator.vali
 | Django session | membership **or** embed key (ADR-0053) |
 | Session token on an existing session | ADR-0039 proof of possession |
 | **Nothing at all** | **nothing** — `chat_start_session`'s only permission class is `WidgetDomainPermission`, which returns `True` when `request.auth` is not a channel |
-| **A machine caller** | **no way in at all** — OAuth is not in the chat endpoints' `AUTH_CLASSES`. True of `/api/chat/*` only: a `chatbots:interact` token converses via `/api/openai/` and `/api/messages/` with **the chatbots its application lists** (PR #4198) — still with no *channel* enabling anything, which is the gap [D1](#d1-the-chat-api-channel-and-its-credential-mode) closes for this door |
+| **A machine caller** | **no way in at all** — OAuth is not in the chat endpoints' `AUTH_CLASSES`. True of `/api/chat/*` only: a `chatbots:interact` token converses via `/api/openai/…/chat/completions` with **the chatbots its application lists** (PR #4198) — still with no *channel* enabling anything, which is the gap [D1](#d1-the-chat-api-channel-and-its-credential-mode) closes for this door |
 
 ## Decisions
 
@@ -326,13 +326,31 @@ def _check_start_session_access(request, experiment, embed_key_channel, oauth_ch
         ...  # unchanged ADR-0053 logic: membership, else embed key, else 403
     if version_number is not None:
         return Response({"error": "Version number requires authentication"}, status=403)
-    if embed_key_channel is not None or oauth_channel is not None:
+    if oauth_channel is not None:
+        return None                 # the token was validated by the authenticator
+    if embed_key_channel is not None:
+        # The key resolved a channel, but the channel may not accept keys. Anonymous +
+        # `oauth` mode is the leaked-embed-key case the mode exists to stop.
+        if embed_key_channel.credential_mode != CredentialMode.EMBED_KEY:
+            raise ChatApiAccessDenied()
         return None
     return None  # keyless: unchanged here; keyless-chat-start-sunset.md replaces this line
 ```
 
-The mode's requirement is then checked against the channel that was resolved: `oauth` mode demands a
-valid token and ignores any embed key that rode along.
+**The mode is checked against the channel the *embed key* resolved, and the check is a rejection
+rather than a fallthrough.** An `oauth`-mode channel reached with a key and no token has to fail here
+or nowhere: `embed_key_authorizes_channel` and `WidgetDomainPermission` are unchanged and know nothing
+about the mode, and `ChatOAuthAuthentication` returns `None` when there is no `Authorization` header,
+so it never runs on a key-only request. Leaving the branches to converge on `return None` — as an
+earlier draft of this sketch did — would admit exactly the caller the test plan requires be refused
+(*"Embed key alone, `oauth` mode → 401"*), which is to say it would ship a mode that silently does not
+gate. The refusal is `ChatApiAccessDenied` (a `401`, per [D6](#d6-getting-a-401-out-of-drf)) rather
+than a returned `403`, so it is indistinguishable from every other admission failure at this door.
+
+Note that `oauth` mode ignores an embed key that rides along *with a valid token* — that is the
+existing-snippet case from [D1](#d1-the-chat-api-channel-and-its-credential-mode). Ignored means "not
+required and not rejected", not "sufficient".
+
 The OAuth requirement is evaluated on the **embed-key branch only**, never on the membership branch —
 ADR-0053 admits a cookie-bearing team member without a key, and switching a channel to `oauth` mode
 must not lock team members out of their own in-app embeds.
@@ -396,7 +414,7 @@ ADR-0053's principle: the channel that owns the session is the one whose credent
 | `token.team_id == experiment.team_id` | A token pinned to team A must not reach team B's chatbot. |
 | `token.is_valid([CHAT_API_SCOPE])` | `chat:start` — a new scope, narrower than `chatbots:interact`. See below. |
 | The chatbot's Chat API Channel is in `oauth` mode | An admin must have exposed *this* chatbot. |
-| The token's application lists this chatbot | An admin must have authorised *this* application for it. **Shipped** — ADR-0055. |
+| The token's application lists this chatbot | An admin must have authorised *this* application for it. **Shipped** — ADR-0056. |
 
 ```python
 # apps/oauth/permissions.py — sibling to is_client_credentials_request()
@@ -439,8 +457,8 @@ before `request.auth` exists — so the request-shaped helper cannot be called f
 token-shaped core keeps the version normalisation (`get_working_version_id()`) in one place rather than
 reimplementing it at the chat door, which is exactly the bug the shipped helper documents.
 
-**Reuse, not re-decision.** The allowlist itself is settled, merged and recorded in **ADR-0055**
-([above](#the-per-application-chatbot-allowlist-adr-0055-pr-4198-merged-2026-08-14)); what follows is why
+**Reuse, not re-decision.** The allowlist itself is settled, merged and recorded in **ADR-0056**
+([above](#the-per-application-chatbot-allowlist-adr-0056-pr-4198-merged-2026-08-14)); what follows is why
 `chat:start` needs it too rather than why it exists. Without it `chat:start` is *team*-scoped: one
 token opens sessions on every `oauth`-mode chatbot in the team. That was tolerable while a middle mode
 required the channel-scoped embed key alongside the token, because the key pinned the chatbot. Dropping
@@ -476,7 +494,7 @@ every non-client-credentials caller, so the field neither appears on nor constra
 application.
 
 **It already gates the existing `chatbots:interact` endpoints**, not just this one: `/api/openai/`,
-`/api/messages/` and `TriggerBotMessage`, six views in all. Leaving those on plain team scope would
+the `channels/api/…/incoming_message` ingress views and `TriggerBotMessage`, six views in all. Leaving those on plain team scope would
 have kept the inconsistency this field exists to remove — the same scope meaning different things at
 different doors. Empty means none there too, with no backfill: client credentials shipped 2026-07-24,
 so the population of live machine applications was small enough to migrate by announcement. That work
@@ -496,7 +514,7 @@ in the team and with no channel enabling anything:
 | Endpoint | Capability |
 |---|---|
 | `apps/api/openai.py` (`ChatCompletions*View`) | converse with any chatbot |
-| `apps/channels/views.py` (`NewApiMessage*View`) | converse with any chatbot |
+| `apps/channels/views.py` (`NewApiMessage*View`) | *authorised, but no success path* — the endpoint derives its participant from `request.user.email`, and a client-credentials caller is an `AnonymousUser`. Widening it is [#4197](https://github.com/dimagi/open-chat-studio/issues/4197)'s call, not this document's. |
 | `apps/api/views/channels.py`, `apps/api/v2/channels.py` (`TriggerBotMessageView`) | **send outbound WhatsApp / Telegram / Connect messages to arbitrary participants** |
 
 That is the wrong credential to hand a browser. The supported shape for a browser embed puts a bearer
@@ -686,7 +704,7 @@ a soft prerequisite for this document's own goal, not merely a nice-to-have.
 **The global default is 7 days — deliberately today's number.** Reusing `W` makes the change a
 *uniform tightening*: since the old rule expired a session at `last_activity + 7d` and
 `last_activity >= created_at`, the new rule at `created_at + 7d` fires no later, ever. **No session's
-life is extended and none dies before it would have under a dormancy rule.** The only sessions affected
+life is extended; the only change is that some now die sooner.** The only sessions affected
 are those currently kept alive past a week *by activity* — which is exactly the abuse shape, plus a
 thin tail of genuine long-running conversations.
 
@@ -800,9 +818,9 @@ compatible end to end**. What remains of D7 here is the per-channel `session_tok
 rides D1's migration; if it lands first it carries its own and D1's shrinks back to `credential_mode`
 alone.
 
-**ADRs to extract** when this flips to `stable` (next free number is 0056): the admission model, with
+**ADRs to extract** when this flips to `stable` (next free number is 0057): the admission model, with
 the Chat API Channel and its credential mode as the enablement rule, and the OAuth credential's
-acceptance conditions (D1–D4). The allowlist half of D4 is **already recorded as ADR-0055** and should
+acceptance conditions (D1–D4). The allowlist half of D4 is **already recorded as ADR-0056** and should
 be cited rather than re-extracted; what remains for D4 is the `chat:start` scope and the conditions
 specific to the chat door. D7 needs no extraction — it is **ADR-0054**, already written, superseding
 ADR-0040's expiry rule. The keyless cutover has its own document and its own ADR.

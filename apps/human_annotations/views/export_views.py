@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.views import View
 
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.csv_export import neutralize_csv_formula
 
 from ..models import Annotation, AnnotationItem, AnnotationItemStatus, AnnotationQueue, AnnotationStatus
 
@@ -15,21 +16,6 @@ from ..models import Annotation, AnnotationItem, AnnotationItemStatus, Annotatio
 def _safe_filename(name: str) -> str:
     """Sanitize a string for use in Content-Disposition filename."""
     return re.sub(r"[^\w\s\-.]", "_", name).strip()
-
-
-_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _neutralize_csv_formula(value):
-    """Prefix annotator-controlled values that could execute as a spreadsheet formula.
-
-    csv.DictWriter's quoting protects against delimiter injection but not formula
-    injection: a value starting with =, +, -, or @ runs as a formula when the export
-    is opened in Excel/Sheets. Prepending an apostrophe forces it to be read as text.
-    """
-    if isinstance(value, str) and value.startswith(_CSV_FORMULA_PREFIXES):
-        return f"'{value}"
-    return value
 
 
 class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
@@ -132,7 +118,7 @@ class ExportAnnotations(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View
         for field in schema_fields:
             row = dict(base, field=field)
             for email in annotator_emails:
-                row[email] = _neutralize_csv_formula(data_by_email.get(email, {}).get(field, ""))
+                row[email] = neutralize_csv_formula(data_by_email.get(email, {}).get(field, ""))
             rows.append(row)
         return rows
 

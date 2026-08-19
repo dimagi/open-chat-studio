@@ -22,6 +22,7 @@ from waffle import flag_is_active
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.channels.models import ChannelPlatform
 from apps.chat.models import ChatMessage
+from apps.evaluations.utils import merge_binary_labels
 from apps.experiments.filters import get_filter_context_data
 from apps.experiments.models import ExperimentSession
 from apps.filters.models import FilterSet
@@ -164,7 +165,11 @@ class AnnotationQueueDetail(LoginAndTeamRequiredMixin, PermissionRequiredMixin, 
         context["items_table_url"] = items_table_url
 
         aggregate = getattr(queue, "aggregate", None)
-        context["aggregates"] = aggregate.aggregates if aggregate else {}
+        schema = queue.schema or {}
+        context["aggregates"] = {
+            name: merge_binary_labels(stats, schema.get(name) or {})
+            for name, stats in (aggregate.aggregates if aggregate else {}).items()
+        }
 
         filter_context = get_filter_context_data(
             self.request.team,

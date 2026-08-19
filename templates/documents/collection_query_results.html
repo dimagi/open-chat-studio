@@ -2,7 +2,11 @@
     <div class="alert alert-info mb-4">
         <i class="fas fa-info-circle"></i>
         <div class="text-sm">
-            <p>Results are ranked by semantic similarity. <strong>0</strong> = perfect match, <strong>1</strong> = totally unrelated.</p>
+            {% if hybrid_search %}
+                <p>Results are ranked by a combination of semantic and keyword search. A <strong>higher</strong> score is a better match.</p>
+            {% else %}
+                <p>Results are ranked by semantic similarity. <strong>0</strong> = perfect match, <strong>1</strong> = totally unrelated.</p>
+            {% endif %}
         </div>
     </div>
 {% endif %}
@@ -10,9 +14,16 @@
 {% for chunk in chunks %}
     <div class="flex justify-between items-start mb-1">
         <p class="text-sm text-base-content/70">Source: {{ chunk.file.name }}</p>
-        <div class="badge badge-outline badge-sm {% if chunk.distance <= 0.3 %}badge-success{% elif chunk.distance <= 0.7 %}badge-warning{% else %}badge-error{% endif %}">
-            Distance: {{ chunk.distance|floatformat:3 }}
-        </div>
+        {# Keyed off the flag, not the score: a fused score of 0 is legitimate. #}
+        {% if hybrid_search %}
+            <div class="badge badge-outline badge-sm badge-info">
+                Score: {{ chunk.fused_score|floatformat:4 }}
+            </div>
+        {% else %}
+            <div class="badge badge-outline badge-sm {% if chunk.distance <= 0.3 %}badge-success{% elif chunk.distance <= 0.7 %}badge-warning{% else %}badge-error{% endif %}">
+                Distance: {{ chunk.distance|floatformat:3 }}
+            </div>
+        {% endif %}
     </div>
     <div class="p-3 bg-base-200 rounded-lg">
         <p class="text-sm text-base-content/70">{{ chunk.text }}</p>

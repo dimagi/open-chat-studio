@@ -131,6 +131,23 @@ def test_run_with_aggregates_renders_them_and_stops_polling(client_with_user, me
 
 
 @pytest.mark.django_db()
+def test_binary_aggregate_renders_a_count_for_each_label(client_with_user, membership):
+    run = _completed_run(membership.team, finalized=True)
+    EvaluationRunAggregateFactory.create(
+        run=run,
+        evaluator=EvaluatorFactory.create(team=membership.team, binary_schema=True),
+        aggregates={"correct": {"type": "binary", "count": 4, "mean": 0.75, "true_count": 3}},
+    )
+
+    response = client_with_user.get(_aggregates_url(run))
+
+    content = response.content.decode()
+    assert "3/4" in content
+    assert "Incorrect:" in content
+    assert "1/4" in content
+
+
+@pytest.mark.django_db()
 def test_finalized_run_with_no_aggregates_renders_nothing(client_with_user, membership):
     """A run whose results were all errors legitimately has none — and must not poll for them."""
     run = _completed_run(membership.team, finalized=True)

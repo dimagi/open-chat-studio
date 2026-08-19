@@ -214,7 +214,7 @@ def test_non_machine_callers_are_unaffected(handle_api_message, _trigger_task, p
 @pytest.mark.django_db()
 @patch("apps.api.views.channels.trigger_bot_message_task")
 def test_denied_trigger_bot_creates_no_participant_data(trigger_bot_message_task, experiment):
-    """The check runs before `_get_or_create_participant_data`, which creates data as a side effect."""
+    """The check runs before `prepare_trigger_bot_message`, which creates data as a side effect."""
     response = _post_trigger_bot(_machine_client(experiment.team), experiment)
 
     assert response.status_code == 403, response.content

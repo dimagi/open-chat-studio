@@ -3,6 +3,7 @@ from unittest import mock
 import openai
 import pytest
 from django.conf import settings
+from django.db import DatabaseError
 
 from apps.documents.exceptions import FileUploadError
 from apps.documents.models import CollectionFile, FileStatus
@@ -87,6 +88,24 @@ class TestLocalIndexManager:
         assert embeddings.count() == 2
         assert embeddings.first().text == "test"
         assert embeddings.last().text == "content"
+
+    def test_search_vector_failure_keeps_the_embeddings(self, local_index_instance, index_manager):
+        """Building the lexical vectors is the last step and each embedding above it cost a provider
+        call, so a failure there must not take the file's embeddings down with it. Keyword search
+        loses the file until it is re-indexed; dense retrieval is unaffected.
+        """
+        file = FileFactory.create(file__data=b"test content")
+        local_index_instance.files.add(file)
+        collection_file = CollectionFile.objects.get(collection=local_index_instance, file=file)
+
+        with mock.patch.object(LocalIndexManager, "_build_search_vectors", side_effect=DatabaseError("boom")):
+            index_manager.add_files(CollectionFile.objects.filter(id=collection_file.id).iterator(1))
+
+        collection_file.refresh_from_db()
+        assert collection_file.status == FileStatus.COMPLETED
+        embeddings = FileChunkEmbedding.objects.filter(file=file, collection=local_index_instance)
+        assert embeddings.count() == 2
+        assert all(embedding.search_vector is None for embedding in embeddings)
 
     def test_add_files_fails(self, local_index_instance, index_manager):
         """If anything goes wrong during local indexing, the file should be marked as failed"""

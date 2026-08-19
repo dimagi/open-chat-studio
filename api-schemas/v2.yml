@@ -199,9 +199,9 @@ paths:
               examples:
                 ChannelNotConfigured:
                   value:
-                    detail: Experiment cannot send messages on the whatsapp channel.
+                    detail: Chatbot cannot send messages on the whatsapp channel.
                       Create the channel first.
-                  summary: Experiment cannot send messages on the specified channel
+                  summary: Chatbot cannot send messages on the specified channel
                 ConsentNotGiven:
                   value:
                     detail: User has not given consent

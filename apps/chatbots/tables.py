@@ -102,8 +102,8 @@ class ChatbotTable(tables.Table):
             chip_action(
                 label_factory=_name_label_factory,
                 url_factory=_chip_chatbot_url_factory,
-                # Note: Keep the styling consistent with `generic/chip_button.html`
-                button_style="btn-soft btn-primary",
+                button_style=actions.CHIP_BUTTON_STYLE,
+                truncate=True,
             ),
         ],
         align="left",
@@ -216,14 +216,14 @@ class ChatbotSessionsTable(tables.Table):
     def render_participant(self, record):
         template = get_template("generic/chip.html")
         chip = record.get_participant_chip(include_link=self._user_has_perm("experiments.view_participant"))
-        return template.render({"chip": chip})
+        return template.render({"chip": chip, "truncate": True})
 
     def render_chatbot(self, record):
         template = get_template("generic/chip.html")
         chatbot = record.experiment
         url = chatbot.get_absolute_url() if self._user_has_perm("experiments.view_experiment") else ""
         chip = chips.Chip(label=str(chatbot), url=url)
-        return template.render({"chip": chip})
+        return template.render({"chip": chip, "truncate": True})
 
     def _user_has_perm(self, perm: str) -> bool:
         # `request` is only set when the table is built via RequestConfig/SingleTableView; guard

@@ -6,12 +6,13 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from apps.evaluations.field_definitions import (
+    BinaryFieldDefinition,
     ChoiceFieldDefinition,
     FloatFieldDefinition,
     IntFieldDefinition,
     StringFieldDefinition,
 )
-from apps.evaluations.rule_validation import validate_condition, validate_field_in_schema
+from apps.evaluations.rule_validation import ConditionType, validate_condition, validate_field_in_schema
 from apps.evaluations.tagging import evaluate_rules, matches, resolve_target
 
 
@@ -113,6 +114,54 @@ class TestValidateFieldInSchema:
     def test_empty_field_name(self):
         with pytest.raises(ValidationError):
             validate_field_in_schema("", {"x": {"type": "int", "description": "d"}})
+
+
+# ---- binary field tag rule conditions --------------------------------------
+
+
+BINARY_FIELD = BinaryFieldDefinition(
+    type="binary", description="was it correct", true_label="Correct", false_label="Incorrect"
+)
+
+
+class TestBinaryTagRuleConditions:
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            pytest.param(1, 1, id="int-one"),
+            pytest.param(0, 0, id="int-zero"),
+            pytest.param("1", 1, id="string-one-coerced"),
+            pytest.param("0", 0, id="string-zero-coerced"),
+        ],
+    )
+    def test_equals_accepts_0_and_1(self, raw, expected):
+        condition_value = {"value": raw}
+        validate_condition(ConditionType.EQUALS, condition_value, BINARY_FIELD)
+        assert condition_value["value"] == expected
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            pytest.param(2, id="out-of-range-int"),
+            pytest.param(-1, id="negative"),
+            pytest.param("maybe", id="non-numeric-string"),
+            pytest.param(0.5, id="non-integral-float"),
+        ],
+    )
+    def test_equals_rejects_non_binary_values(self, raw):
+        with pytest.raises(ValidationError):
+            validate_condition(ConditionType.EQUALS, {"value": raw}, BINARY_FIELD)
+
+    def test_range_rejected_for_binary(self):
+        with pytest.raises(ValidationError):
+            validate_condition(ConditionType.RANGE, {"min": 0, "max": 1}, BINARY_FIELD)
+
+    def test_coerce_value_converts_binary_to_int(self):
+        assert ConditionType.coerce_value("1", "binary") == 1
+
+    def test_equals_match_compares_stored_integers(self):
+        assert ConditionType.EQUALS.matches({"value": 1}, 1) is True
+        assert ConditionType.EQUALS.matches({"value": 1}, 0) is False
 
 
 # ---- evaluate_rules --------------------------------------------------------
