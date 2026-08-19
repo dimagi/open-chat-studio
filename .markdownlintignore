@@ -1,18 +1,26 @@
 # Markdown that is consumed by tooling rather than published to the docs site.
 # A top-level heading would change their meaning, so MD041 must not apply to them.
 
-# Claude Code agent definitions and slash commands (prompt bodies)
-CLAUDE.md
-.claude/skills
-
 # Workflow templates
-.github/templates/
-/.github/
+.github/ISSUE_TEMPLATE/
+.github/pull_request_template.md
 
-# Superpower designs and ADRs
+# Markdown that is consumed by AI-Agents does need to follow standards
+# Temporary folders disabled as rollout fixes
+
+# Superpower designs and ADRs (for now)
 docs/superpowers
 docs/design
 docs/adr
+
+# Ignore Claude Code agent definitions as it refers to AGENTS.md
+CLAUDE.md
+
+# Ignore skills files (for now)
+.claude/skills/
+.claude/skills/extract-adrs/templates
+# Ignore slash commands (prompt bodies)
+
 
 # Any markdown in the apps or components directory
 /apps/
