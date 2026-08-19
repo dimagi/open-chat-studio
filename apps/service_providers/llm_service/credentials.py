@@ -114,6 +114,13 @@ def _perplexity() -> ProviderCredentials | None:
     return ProviderCredentials(LlmProviderTypes.perplexity, "Perplexity", {"openai_api_key": api_key})
 
 
+def _openrouter() -> ProviderCredentials | None:
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return None
+    return ProviderCredentials(LlmProviderTypes.openrouter, "OpenRouter", {"openai_api_key": api_key})
+
+
 def _minimax() -> ProviderCredentials | None:
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
@@ -142,6 +149,7 @@ _LOADERS: list[Callable[[], ProviderCredentials | None]] = [
     _azure,
     _groq,
     _perplexity,
+    _openrouter,
     _minimax,
     _litellm,
 ]

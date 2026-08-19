@@ -53,6 +53,7 @@ def test_openai_service_uses_responses_api():
     [
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
+        (LlmProviderTypes.openrouter, {"openai_api_key": "test"}),
         (LlmProviderTypes.minimax, {"openai_api_key": "test"}),
         (LlmProviderTypes.litellm, {"openai_api_key": "test", "openai_api_base": "https://proxy.example.com/v1"}),
     ],
@@ -93,6 +94,18 @@ def test_litellm_is_openai_compatible_chat_provider():
     assert service.openai_api_base == "https://proxy.example.com/v1"
 
 
+def test_openrouter_is_openai_compatible_chat_provider():
+    """OpenRouter exposes an OpenAI-compatible chat endpoint, so it is routed through
+    OpenAIGenericService (like Groq/Perplexity) with the OpenRouter base URL and must
+    not use the OpenAI-specific Responses API."""
+    assert LlmProviderTypes.openrouter.additional_config["openai_api_base"] == "https://openrouter.ai/api/v1"
+    service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test"})
+    assert isinstance(service, OpenAIGenericService)
+    assert service._type == "openrouter"
+    assert service._use_responses_api is False
+
+
+
 def test_voyage_ai_service():
     service = LlmProviderTypes.voyage.get_llm_service({"voyage_api_key": "test"})
     assert isinstance(service, VoyageAILlmService)
@@ -117,6 +130,7 @@ def test_voyage_ai_service_returns_local_index_manager():
         ),
         pytest.param(LlmProviderTypes.groq, {"openai_api_key": "test"}, "groq", id="groq"),
         pytest.param(LlmProviderTypes.perplexity, {"openai_api_key": "test"}, "perplexity", id="perplexity"),
+        pytest.param(LlmProviderTypes.openrouter, {"openai_api_key": "test"}, "openrouter", id="openrouter"),
         pytest.param(LlmProviderTypes.minimax, {"openai_api_key": "test"}, "minimax", id="minimax"),
         pytest.param(
             LlmProviderTypes.litellm,
