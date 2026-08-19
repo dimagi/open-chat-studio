@@ -333,7 +333,7 @@ Where each 2026 backlog item lands, and what state it's in today. "Done" items w
 
 The conceptual model:
 
-```
+```text
                     AssessmentSchema
                         │ (FK, shared catalogue)
                         ▼

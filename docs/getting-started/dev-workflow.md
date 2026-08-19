@@ -148,7 +148,7 @@ readable.
 
 Run Claude Code's built-in `/code-review` command over the working tree — no plugin needed:
 
-```
+```text
 /code-review          # report findings
 /code-review --fix    # report findings and apply them
 ```
@@ -159,7 +159,7 @@ what you touched (see [Everyday commands](#everyday-commands)).
 
 ## 5. Open the PR
 
-```
+```text
 /create-pr
 ```
 
@@ -184,7 +184,7 @@ Open it as a **draft**.
 
 ## 6. Iterate until it's clean
 
-```
+```text
 /iterate-pr
 ```
 
