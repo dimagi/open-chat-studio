@@ -811,24 +811,31 @@ PR #4198 delivered the per-application allowlist, so none of those appear here a
 | 3 | `apps/channels/forms.py` | `credential_mode` on `EmbeddedWidgetChannelForm`; `allowed_domains` required for `embed_key`, optional for `oauth`; instructions + link to the team's OAuth applications. `session_token_lifetime` as an optional override is **shipped**; `credential_mode` is deliberately *not* on the form until the OAuth path exists, since selecting `oauth` today would make the channel unreachable. |
 | 4 | `apps/channels/tasks.py` | ~~Ratchet task skips channels already pinned to `SESSION_TOKEN` by their mode~~ — **shipped** (the queryset filters on `credential_mode`). |
 | 5 | `apps/oauth/models.py`, `forms.py`, `views.py` | ~~`allowed_chatbots` M2M + team-filtered picker~~ — **shipped in PR #4198**. No change. |
-| 6 | `apps/oauth/permissions.py` | `is_client_credentials_token()` and `token_allows_chatbot()` extracted from their request-shaped wrappers (D4 — the wrappers read `request.auth`, which does not exist inside an authenticator); `validated_machine_token()` composing them. |
-| 7 | `apps/api/exceptions.py` | `ChatApiAccessDenied(NotAuthenticated)` — body and `code` only; the `401` comes from the authenticator (D6). |
-| 8 | `apps/api/authentication.py` | `ChatOAuthAuthentication`: resolve chatbot → Chat API Channel in `oauth` mode, validate token + origin, return `(AnonymousUser(), channel)`; `authenticate_header` → `Bearer realm="api"` (D3). |
+| 6 | `apps/oauth/permissions.py` | ~~`is_client_credentials_token()` and `token_allows_chatbot()` extracted from their request-shaped wrappers (D4 — the wrappers read `request.auth`, which does not exist inside an authenticator); `validated_machine_token()` composing them~~ — **shipped**. |
+| 7 | `apps/api/exceptions.py` | ~~`ChatApiAccessDenied(NotAuthenticated)` — body and `code` only; the `401` comes from the authenticator (D6)~~ — **shipped**. |
+| 8 | `apps/api/authentication.py` | ~~`ChatOAuthAuthentication`: resolve chatbot → Chat API Channel in `oauth` mode, validate token + origin, return `(AnonymousUser(), channel)`; `authenticate_header` → `Bearer realm="api"` (D3)~~ — **shipped**, alongside `oauth_resolved_channel()`, which tells an OAuth-resolved channel in `request.auth` from an embed-key-resolved one (rows 11 and 12 both need the distinction). An unknown `chatbot_id` — a version's own `public_id` included — makes the authenticator return `None` so the view's `404` still answers. |
 | 9 | `apps/api/throttling.py` | **No change** — the existing `ExperimentChannel` branch buckets OAuth callers per channel. |
 | 10 | `apps/api/session_tokens.py` | ~~age check against `created_at`; `last_activity_at` branch deleted~~ — **shipped in PR #4204** (ADR-0054). ~~Reading the per-channel override~~ — **shipped**. Note the lifetime is read off `get_experiment_session_cached`'s cached session, so a change to a channel's value takes up to `WIDGET_SESSION_CACHE_TTL` (5 min) to take effect. |
-| 11 | `apps/api/permissions.py` | `WidgetDomainPermission` skips its origin check for an OAuth-resolved channel, which `ChatOAuthAuthentication` has already validated (D2) — without this the blank-list server-integration path is rejected before the view runs. `SessionAccessPermission` is untouched: one call site, already raising `session_expired`. |
-| 12 | `apps/api/views/chat.py` | `START_AUTH_CLASSES` on `chat_start_session` only; mode checks in `_check_start_session_access`; OAuth channel as an attribution source in `_resolve_experiment_channel`. |
+| 11 | `apps/api/permissions.py` | ~~`WidgetDomainPermission` skips its origin check for an OAuth-resolved channel, which `ChatOAuthAuthentication` has already validated (D2) — without this the blank-list server-integration path is rejected before the view runs~~ — **shipped**. `SessionAccessPermission` is untouched: one call site, already raising `session_expired`. |
+| 12 | `apps/api/views/chat.py` | ~~`START_AUTH_CLASSES` on `chat_start_session` only; mode checks in `_check_start_session_access`; OAuth channel as an attribution source in `_resolve_experiment_channel`~~ — **shipped**. Implementing it settled one thing the sketch in [D3](#d3-extend-the-existing-authorization-site) left open: the mode is checked wherever the *embed key* is the proof, which includes ADR-0053's cookie-bearing **non-member** with a key, not only the anonymous caller. That branch keeps its `403` (D6: a `401` at an authenticated caller reads as a broken session), so only the anonymous refusal is one of the door's uniform `401`s. |
 | 13 | `apps/api/v2/inspect/serializers.py` | **No change** — one platform, so the existing `EMBEDDED_WIDGET` guards stay correct. Expose `credential_mode` if the inspect API should report it. |
-| 14 | `config/settings.py` | `CORS_ALLOW_HEADERS += ["authorization"]`; `chat:start` in `OAUTH2_PROVIDER["SCOPES"]` and `OAUTH_CLIENT_CREDENTIALS_SCOPES`; `CHAT_API_SCOPE`. `CHAT_SESSION_TOKEN_LIFETIME` already **shipped in PR #4204**. |
+| 14 | `config/settings.py` | ~~`CORS_ALLOW_HEADERS += ["authorization"]`; `chat:start` in `OAUTH2_PROVIDER["SCOPES"]` and `OAUTH_CLIENT_CREDENTIALS_SCOPES`; `CHAT_API_SCOPE`~~ — **shipped** (the new scope also lands in the generated `api-schemas/*.yml` security definitions). `CHAT_SESSION_TOKEN_LIFETIME` already **shipped in PR #4204**. |
 | 15 | `components/chat_widget` | `auth-token` prop, header, `@Watch`, `401` surface; release + `LATEST_VERSION` bump. Nothing for D7 in an *unbound* widget; the bound-widget dead-end (D7) is ADR-0054's own follow-up, not this document's. |
 
 This work carries **one migration** (`credential_mode` + `session_token_lifetime` on the same
 `channels` migration; the platform change is a label only, and `allowed_chatbots` already shipped as
 `oauth.0004`) — **shipped as `bot_channels.0033`**, ahead of the rest, since the columns are inert
-until something can select the mode. What is left lands as a single phase. No
+until something can select the mode. The server admission path (rows 6–8, 11, 12, 14) followed as a
+second phase; what is left is the admin-facing half — `credential_mode` on the channel form and
+`MIN_OAUTH_WIDGET_VERSION` (rows 2 and 3) — plus the widget (row 15). Until the form lands the mode
+is not admin-selectable, so `oauth` mode is reachable in tests and the shell only. No
 change to `required_auth_level` semantics for existing channels — they all migrate to `EMBED_KEY` mode,
-which is exactly today's behaviour. One status code changes on an already-rejected path
-(`test_start_session_with_invalid_embed_key`, `403` → `401`, [D6](#d6-getting-a-401-out-of-drf)).
+which is exactly today's behaviour. One status code changed on an already-rejected path
+(`test_start_session_with_invalid_embed_key`, `403` → `401`, [D6](#d6-getting-a-401-out-of-drf)), and
+one more path moved that earlier drafts did not name: an `Authorization: Bearer` header on
+`chat/start/` was previously ignored outright, and is now a `401` if it is not a valid `chat:start`
+token — which is the point of "a presented-but-invalid token is never ignored", but it is worth
+stating as a change rather than leaving it implied.
 
 **[D7](#d7-admission-is-bounded-in-time) was the one behaviour change on an already-admitted path**,
 and it has already shipped separately (PR #4204, ADR-0054), so **this document is now backwards
@@ -845,7 +852,10 @@ ADR-0040's expiry rule. The keyless cutover has its own document and its own ADR
 
 ## Test plan
 
-New `apps/api/tests/test_chat_api_admission.py`, parametrised over the credential paths. The
+New `apps/api/tests/test_chat_api_admission.py` (the credential paths) and
+`apps/api/tests/test_chat_api_domains.py` (the origin matrix) — both **shipped with the server
+path**, together with `validated_machine_token` unit tests in `apps/oauth/tests/test_permissions.py`
+and the throttle-bucket case in `apps/api/tests/test_throttling.py`. The
 membership and embed-key rows are ADR-0053's and already covered in `test_chat_api_authed.py`; the
 allowlist's own semantics are PR #4198's and covered in `test_application_chatbot_allowlist.py`, so
 what follows tests the *chat door*, not the allowlist:
@@ -864,6 +874,7 @@ what follows tests the *chat door*, not the allowlist:
 | Authorization-code token | `401` |
 | Valid token + a stale/invalid `X-Embed-Key`, `oauth` mode | `201` — the key is ignored, not rejected |
 | Embed key alone, `oauth` mode | `401` — the key does not admit |
+| `oauth` mode, cookie-bearing **non-member** with a valid embed key | `403` — ADR-0053 lets a key stand in for membership; the mode withdraws that, so a leaked key plus any OCS login is not a way in. `403` rather than `401` because the caller is authenticated (D6) |
 | `oauth` mode, cookie-bearing **team member**, no key or token | `201` — ADR-0053 path unaffected |
 | Machine token + `version_number` | `403` — version selection stays member-only |
 | Invalid token offered on an `embed_key`-mode chatbot | `401` — never silently falls through to the keyless path |
@@ -927,6 +938,16 @@ is untouched by this work. Widget: header sent/omitted/rotated, never persisted.
   [D4](#d4-what-makes-a-token-acceptable). Needs a model field, form work and a migration.
 - **Per-application rate *limits*.** D3 fixes how OAuth traffic is *bucketed*; choosing different
   allowances per application is ADR-0052's territory, not this document's.
+- **Counting a rejected token against the `credentials` rate limit.** DRF resolves authentication
+  before `check_throttles`, so every `401` out of `ChatOAuthAuthentication` escapes the throttle
+  entirely — an unauthenticated caller can drive unlimited rejections, each costing an `Experiment`,
+  an `ExperimentChannel` and a token lookup. `BaseKeyAuthentication` already solves this for API keys
+  via `_count_failed_credential_attempt`, and this path deliberately does not reuse it, for the same
+  reason `EmbeddedWidgetAuthentication` does not: the `credentials` bucket is per-IP and
+  **fail-closed**, and in `oauth` mode an expired page token producing a `401` is the *normal*
+  [D7](#d7-admission-is-bounded-in-time) re-admission path — so browsers sharing one egress IP could
+  exhaust it on a legitimate flow. Reaching for it would also mean moving the helper out of
+  `apps/api/permissions.py`, which imports the authentication module. ADR-0052's territory.
 - **Per-session message budget.** A hard ceiling on messages per session, rather than
   [D7](#d7-admission-is-bounded-in-time)'s ceiling on *time*. Redundant once the lifetime exists —
   rate limit × bounded lifetime is already finite — and it needs a counter where the lifetime needs
