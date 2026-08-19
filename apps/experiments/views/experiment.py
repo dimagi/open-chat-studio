@@ -249,6 +249,39 @@ def _poll_messages(request):
     return HttpResponse()
 
 
+def _disabled_web_channel_response(request) -> TemplateResponse | None:
+    """The maintenance page when an admin has switched off the team's web channel, else None.
+
+    Looked up rather than fetched via ``get_team_web_channel``, which is a ``get_or_create``:
+    this runs on every anonymous GET of the consent page, so creating here would both write on
+    a read and race two first-time loads against ``unique_global_channel_per_team``. A channel
+    that does not exist yet cannot be disabled, so its absence is not a refusal.
+    """
+    web_channel = ExperimentChannel.objects.filter(team=request.team, platform=ChannelPlatform.WEB).first()
+    if not (web_channel and web_channel.is_disabled):
+        return None
+    return TemplateResponse(
+        request,
+        "experiments/channel_disabled.html",
+        {"disabled_message": web_channel.disabled_message},
+        status=503,
+    )
+
+
+def _resolve_consent_identifier(consent, form, user, team) -> tuple[str, bool]:
+    """The participant identifier from a submitted consent form, and whether to verify it.
+
+    When the form captures an identifier we take theirs and verify it. When it does not, the
+    field was disabled, so we supply one -- the signed-in user's email, or a fresh anonymous
+    identifier -- and there is nothing to verify.
+    """
+    if consent.capture_identifier:
+        return form.cleaned_data.get("identifier", None), True
+    if user:
+        return user.email, False
+    return Participant.create_anonymous(team, ChannelPlatform.WEB).identifier, False
+
+
 @public_chat_rate_limited
 @team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
@@ -263,19 +296,9 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
         raise Http404
 
     # Checked once up front rather than around each start_new_session below, so a participant
-    # never fills in the consent form only to be refused on submit. Looked up rather than
-    # created (``get_team_web_channel`` is a get_or_create): this runs on every GET of the
-    # consent page, and a channel that does not exist yet cannot be disabled.
-    web_channel = ExperimentChannel.objects.filter(
-        team=request.team, platform=ChannelPlatform.WEB, deleted=False
-    ).first()
-    if web_channel and web_channel.is_disabled:
-        return TemplateResponse(
-            request,
-            "experiments/channel_disabled.html",
-            {"disabled_message": web_channel.disabled_message},
-            status=503,
-        )
+    # never fills in the consent form only to be refused on submit.
+    if disabled_response := _disabled_web_channel_response(request):
+        return disabled_response
 
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
@@ -292,16 +315,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
-            verify_user = True
-            if consent.capture_identifier:
-                identifier = form.cleaned_data.get("identifier", None)
-            else:
-                # The identifier field will be disabled, so we must generate one
-                verify_user = False
-                if user:
-                    identifier = user.email
-                else:
-                    identifier = Participant.create_anonymous(request.team, ChannelPlatform.WEB).identifier
+            identifier, verify_user = _resolve_consent_identifier(consent, form, user, request.team)
 
             session = WebChannel.start_new_session(
                 working_experiment=experiment,
