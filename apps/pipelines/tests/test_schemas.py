@@ -40,14 +40,19 @@ def test_no_param_points_at_a_definition_that_was_dropped(schema):
 
 def _reference_paths(node, path=""):
     """Every `$ref` left in `node`, by the path it sits at."""
+    if isinstance(node, dict) and "$ref" in node:
+        yield f"{path} -> {node['$ref']}"
+    for child_path, child in _nested_values(node, path):
+        yield from _reference_paths(child, child_path)
+
+
+def _nested_values(node, path):
+    """Each value held inside `node`, paired with the path it sits at. A leaf holds nothing."""
     if isinstance(node, dict):
-        if "$ref" in node:
-            yield f"{path} -> {node['$ref']}"
-        for key, value in node.items():
-            yield from _reference_paths(value, f"{path}.{key}")
-    elif isinstance(node, list):
-        for index, value in enumerate(node):
-            yield from _reference_paths(value, f"{path}[{index}]")
+        return [(f"{path}.{key}", value) for key, value in node.items()]
+    if isinstance(node, list):
+        return [(f"{path}[{index}]", value) for index, value in enumerate(node)]
+    return []
 
 
 def test_schemas():
