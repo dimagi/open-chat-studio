@@ -50,7 +50,7 @@ This is a generic pattern supported by several tools. Choose the one that fits y
 | **ngrok** | HTTP/TCP | ngrok dashboard | Not documented |
 | **frp** | TCP/HTTP | Self-hosted relay | Not documented |
 
-Only Cloudflare Tunnel has a bundled compose file and guide. The other tools work with the same application, Open Chat Studio has no dependency on the tunnel technology, but you would need to configure them yourself.
+Only Cloudflare Tunnel has a bundled compose file and guide. The other tools work with the same application — Open Chat Studio has no dependency on the tunnel technology — but you would need to configure them yourself.
 
 ## Webhook path requirements
 
@@ -71,7 +71,7 @@ Regardless of which tool you use, the following paths **must** be publicly acces
 Paths not in this list (the admin panel, experiment UI, API endpoints) can be protected by your access policy.
 
 !!! warning "Keep this list up to date"
-    If you add a new messaging channel or webhook endpoint to the codebase, update this table and the corresponding Bypass policy table in [Cloudflare Tunnel - Part B](./cloudflare_tunnel.md#part-b-add-bypass-policies-for-webhooks). A missing entry here will cause webhook delivery to fail silently for anyone running Zero Trust access.
+    If you add a new messaging channel or webhook endpoint to the codebase, update this table and the corresponding Bypass policy table in [Cloudflare Tunnel — Part B](./cloudflare_tunnel.md#part-b-add-bypass-policies-for-webhooks). A missing entry here will cause webhook delivery to fail silently for anyone running Zero Trust access.
 
     To check for recently added webhook routes, search the codebase:
     ```bash

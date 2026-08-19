@@ -1,5 +1,7 @@
 # Deployment Process
 
+This describes how changes are deployed to Dimagi's own openchatstudio.com. If you're deploying a self-hosted instance elsewhere, see [Self-Hosting Open Chat Studio](../hosting/index.md) instead.
+
 ## Continuous Deployment
 
 - All changes merged to the `main` branch trigger an automated deployment.
@@ -8,7 +10,7 @@
 
 ## Monitoring Deployments
 
-- Deploy notifications are automatically sent to #open-chat-studio-dev Slack channel.
+- Deploy notifications are automatically sent to the #open-chat-studio-dev Slack channel.
 - Each notification includes:
     - Build status
     - Changes included in the deployment
@@ -22,5 +24,5 @@
 ## Rollback Process
 - Although rollback is possible, we would prefer to roll forward by deploying a fix to the issue.
 - If issues are detected, notify the team in #open-chat-studio-dev.
-- Monitor \#ocs-ops for any related errors.
+- Monitor #ocs-ops for any related errors.
 - Work with the team to determine the best course of action.

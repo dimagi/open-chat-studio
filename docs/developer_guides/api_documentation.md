@@ -4,8 +4,8 @@ The OCS REST API is primarily documented via its OpenAPI schema. The schema is c
 
 The current production schema is available at https://www.openchatstudio.com/api/schema/. It is also kept in the code repository in the `api-schemas/v1.yml` file. This file serves two purposes:
 
-1. Provide an easy way to visually inspect changes to the schema.
-2. Provide a reference for generating API documentation in the docs repo (see below).
+- Provide an easy way to visually inspect changes to the schema.
+- Provide a reference for generating API documentation in the docs repo (see below).
 
 The schema can be generated locally by running:
 
@@ -22,3 +22,5 @@ Whenever changes are made that impact the API schema, the `api-schemas/v1.yml` f
 1. `api-schemas/v1.yml` file changes in the `main` branch.
 2. `api-schema-dispatch.yml` GitHub action runs which sends a dispatch event to the OCS docs repo.
 3. A GitHub action in the OCS docs repo runs and creates a PR with any updated API docs.
+
+This is one of two ways docs/changelog updates get triggered from a merged PR — see [User Documentation and Changelog Process](user_docs.md) for the other (manual PR-description-driven) path and how the two relate.
