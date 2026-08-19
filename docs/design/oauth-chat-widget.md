@@ -300,9 +300,22 @@ The form makes `allowed_domains` required for `embed_key` and optional for `oaut
 > that means rejection. Worth a line in the docs; not worth special-casing.
 
 `embed_key_authorizes_channel` is unchanged: it already validates key and origin together and rejects
-any platform that is not `EMBEDDED_WIDGET`, which stays correct. The OAuth rule lives with the OAuth
-resolution ([D3](#d3-extend-the-existing-authorization-site)), so `WidgetDomainPermission` needs no
-change at all.
+any platform that is not `EMBEDDED_WIDGET`, which stays correct.
+
+**`WidgetDomainPermission` does need one change, and the blank-list row is why.** The permission
+short-circuits to `True` whenever `request.auth` is not an `ExperimentChannel`, which is the only
+reason an originless call gets through today. [D3](#d3-extend-the-existing-authorization-site) puts an
+`ExperimentChannel` in `request.auth` on purpose — that is what fixes the ADR-0052 throttle bucket — so
+the short-circuit stops firing for OAuth callers, and the next line (`if not origin_domain: return
+False`) rejects the server integration *before* the domain list is ever consulted. The blank-list
+"admit" row would be unreachable.
+
+So the permission has to tell an OAuth-resolved channel from an embed-key-resolved one and skip its
+own check for the former, because `ChatOAuthAuthentication` has already applied the rule in this
+section's table — this is *each credential validates its own origin* holding at the permission layer
+too, not an exemption from it. The other two `oauth` rows need nothing: non-blank + Origin present is
+`validate_domain`'s ordinary path, and blank + Origin present rejects on its own since `any([])` is
+`False`.
 
 > Earlier drafts also proposed enforcing the channel's domain list on *session-bound* requests. That
 > is dropped: ADR-0039 makes the session token the credential for those endpoints, and a session token
@@ -339,8 +352,9 @@ def _check_start_session_access(request, experiment, embed_key_channel, oauth_ch
 
 **The mode is checked against the channel the *embed key* resolved, and the check is a rejection
 rather than a fallthrough.** An `oauth`-mode channel reached with a key and no token has to fail here
-or nowhere: `embed_key_authorizes_channel` and `WidgetDomainPermission` are unchanged and know nothing
-about the mode, and `ChatOAuthAuthentication` returns `None` when there is no `Authorization` header,
+or nowhere: `embed_key_authorizes_channel` is unchanged and `WidgetDomainPermission` knows nothing
+about the credential *mode* (its one change, in [D2](#d2-the-origin-rule-follows-the-credential), is
+about which credential resolved the channel, not which mode the channel is in), and `ChatOAuthAuthentication` returns `None` when there is no `Authorization` header,
 so it never runs on a key-only request. Leaving the branches to converge on `return None` — as an
 earlier draft of this sketch did — would admit exactly the caller the test plan requires be refused
 (*"Embed key alone, `oauth` mode → 401"*), which is to say it would ship a mode that silently does not
@@ -365,8 +379,12 @@ START_AUTH_CLASSES = [ChatOAuthAuthentication, *AUTH_CLASSES]
 ```
 
 `ChatOAuthAuthentication` resolves the chatbot the way `EmbeddedWidgetAuthentication._get_experiment_id`
-already does (`chatbot_id` from the body, through `get_working_version_id()` so channel lookups land on
-the working version), finds its Chat API Channel if the mode is `oauth`, validates the token
+already does — `chatbot_id` from the body, validated as a UUID and used as-is. There is no version
+normalisation at this step and none is added: `chat_start_session` looks the chatbot up with
+`working_version_id__isnull=True`, so a version's own `public_id` never reaches here. (The
+`get_working_version_id()` normalisation is real but lives one layer in, inside `token_allows_chatbot`,
+where it decides whether the *allowlist* matches.) It then finds the Chat API Channel if the mode is
+`oauth`, validates the token
 ([D4](#d4-what-makes-a-token-acceptable)) and the origin ([D2](#d2-the-origin-rule-follows-the-credential)),
 and returns `(AnonymousUser(), channel)` — the same shape `EmbeddedWidgetAuthentication` returns.
 
@@ -489,9 +507,10 @@ the same permission split the notification work in
 The team-filtered picker shipped with the field; `OAuth2Application.as_chip()` and the
 `oauth_applications` reverse accessor cover rendering the reverse view on a chatbot.
 
-**Authorization-code applications are unaffected** — `application_allows_chatbot` returns `True` for
-every non-client-credentials caller, so the field neither appears on nor constrains a user-facing
-application.
+**Authorization-code applications are unaffected in behaviour** — `application_allows_chatbot` returns
+`True` for every non-client-credentials caller, so the field does not constrain a user-facing
+application. It is still *rendered* on every team application form, whatever the grant type; `clean()`
+blanks it for non-client-credentials grants, which is what the field's own help text warns about.
 
 **It already gates the existing `chatbots:interact` endpoints**, not just this one: `/api/openai/`,
 the `channels/api/…/incoming_message` ingress views and `TriggerBotMessage`, six views in all. Leaving those on plain team scope would
@@ -797,7 +816,7 @@ PR #4198 delivered the per-application allowlist, so none of those appear here a
 | 8 | `apps/api/authentication.py` | `ChatOAuthAuthentication`: resolve chatbot → Chat API Channel in `oauth` mode, validate token + origin, return `(AnonymousUser(), channel)`; `authenticate_header` → `Bearer realm="api"` (D3). |
 | 9 | `apps/api/throttling.py` | **No change** — the existing `ExperimentChannel` branch buckets OAuth callers per channel. |
 | 10 | `apps/api/session_tokens.py` | ~~age check against `created_at`; `last_activity_at` branch deleted~~ — **shipped in PR #4204** (ADR-0054). ~~Reading the per-channel override~~ — **shipped**. Note the lifetime is read off `get_experiment_session_cached`'s cached session, so a change to a channel's value takes up to `WIDGET_SESSION_CACHE_TTL` (5 min) to take effect. |
-| 11 | `apps/api/permissions.py` | **No change** — one call site, already raising `session_expired`. |
+| 11 | `apps/api/permissions.py` | `WidgetDomainPermission` skips its origin check for an OAuth-resolved channel, which `ChatOAuthAuthentication` has already validated (D2) — without this the blank-list server-integration path is rejected before the view runs. `SessionAccessPermission` is untouched: one call site, already raising `session_expired`. |
 | 12 | `apps/api/views/chat.py` | `START_AUTH_CLASSES` on `chat_start_session` only; mode checks in `_check_start_session_access`; OAuth channel as an attribution source in `_resolve_experiment_channel`. |
 | 13 | `apps/api/v2/inspect/serializers.py` | **No change** — one platform, so the existing `EMBEDDED_WIDGET` guards stay correct. Expose `credential_mode` if the inspect API should report it. |
 | 14 | `config/settings.py` | `CORS_ALLOW_HEADERS += ["authorization"]`; `chat:start` in `OAUTH2_PROVIDER["SCOPES"]` and `OAUTH_CLIENT_CREDENTIALS_SCOPES`; `CHAT_API_SCOPE`. `CHAT_SESSION_TOKEN_LIFETIME` already **shipped in PR #4204**. |
@@ -838,7 +857,7 @@ what follows tests the *chat door*, not the allowlist:
 | Machine token, channel in `embed_key` mode | `401` — the mode is the enablement |
 | Machine token for a different team | `401` |
 | Machine token whose application does **not** list this chatbot | `401` — the allowlist is the per-chatbot pin, and a `401` here rather than PR #4198's `403` (D4) |
-| Machine token addressing a **version** of a listed chatbot by its own `public_id` | `201` — `token_allows_chatbot` keeps PR #4198's `get_working_version_id()` normalisation |
+| Machine token addressing a **version** of a listed chatbot by its own `public_id` | `404` — the chat door resolves working versions only (`working_version_id__isnull=True`), so this fails before any credential is examined. Version addressing is available on the `chatbots:interact` surfaces, not this one |
 | Machine token valid for chatbot A, replayed against chatbot B in the same team | `401` — the leak-a-page-token case |
 | Application with an empty `allowed_chatbots` | `401` — empty means none, not all |
 | Machine token carrying `chatbots:interact` but not `chat:start` | `401` — the narrow scope is mandatory (D4) |
