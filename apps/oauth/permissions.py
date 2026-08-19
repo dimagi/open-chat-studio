@@ -8,10 +8,12 @@ Framework's OAuth2 functionality with team-aware scoping. It ensures that:
 - Fine-grained permission control via required scopes
 """
 
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication, TokenHasResourceScope, TokenHasScope
 from rest_framework import exceptions
 
+from apps.api.exceptions import ChatApiAccessDenied
 from apps.oauth.models import OAuth2Application
 from apps.teams.helpers import SyntheticTeamMembership, get_team_membership_for_request
 from apps.teams.utils import set_current_team
@@ -107,9 +109,44 @@ def enforce_application_chatbot_access(request, experiment) -> None:
 
     403 rather than 401: the caller authenticated fine, it just isn't authorised for this chatbot.
     Call this before anything with a side effect -- a session, a participant -- is created.
+
+    Not for `chat/start/`, where the allowlist is one of several admission checks that collapse
+    into a single uniform 401: call `token_allows_chatbot` there and let the authenticator raise,
+    so the response does not leak which check failed.
     """
     if not application_allows_chatbot(request, experiment):
         raise exceptions.PermissionDenied("This application is not authorized to interact with this chatbot.")
+
+
+def validated_machine_token(request, experiment) -> OAuth2AccessToken:
+    """The request's client-credentials token, or raise `ChatApiAccessDenied` if it is not valid
+    for starting a chat session with `experiment`.
+
+    The caller must already have established that an `Authorization` header is present: every path
+    out of here is either a token or a refusal, never a silent None. `OAuth2Authentication` returns
+    None for an *invalid or expired* token exactly as it does for no token at all, so treating that
+    None as "no credential was offered" would let a revoked token fall through to the embed-key
+    authenticator and from there to the still-open keyless path.
+    """
+    result = OAuth2Authentication().authenticate(request)
+    if result is None:
+        # Signature, expiry or revocation -- never "no token", which the caller ruled out.
+        raise ChatApiAccessDenied()
+    _user, token = result
+    if not is_client_credentials_token(token):
+        # Authorization-code tokens take their team from a Grant plus a live membership check, and
+        # admitting them raises a question this door does not need to answer (may a signed-in
+        # user's token chat as an anonymous participant?).
+        raise ChatApiAccessDenied()
+    if token.team_id != experiment.team_id:
+        raise ChatApiAccessDenied()
+    if not token.is_valid([settings.CHAT_API_SCOPE]):
+        # `chat:start` only: a chatbots:interact token also sends outbound WhatsApp/Telegram
+        # messages to arbitrary participants, which is the wrong credential to hand a browser.
+        raise ChatApiAccessDenied()
+    if not token_allows_chatbot(token, experiment):
+        raise ChatApiAccessDenied()
+    return token
 
 
 class TokenHasOAuthScope(TokenHasScope):

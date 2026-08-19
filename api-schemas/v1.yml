@@ -190,6 +190,8 @@ paths:
                 summary: Start session with specific version (requires auth)
         required: true
       security:
+      - chatOAuth2:
+        - chat:start
       - cookieAuth: []
       - embedKeyAuth: []
       responses:
@@ -1972,6 +1974,7 @@ components:
           scopes:
             chatbots:read: List and Retrieve Chatbot Data
             chatbots:interact: Converse with a Chatbot and trigger bot messages
+            chat:start: Start a chat session
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions
             files:read: Download file content
@@ -1982,6 +1985,13 @@ components:
       type: apiKey
       in: header
       name: X-api-key
+    chatOAuth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /o/token/
+          scopes:
+            chat:start: Start a chat session
     cookieAuth:
       type: apiKey
       in: cookie

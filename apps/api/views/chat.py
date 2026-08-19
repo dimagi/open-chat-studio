@@ -20,7 +20,13 @@ from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from apps.api.authentication import EmbeddedWidgetAuthentication, get_embed_key_channel
+from apps.api.authentication import (
+    ChatOAuthAuthentication,
+    EmbeddedWidgetAuthentication,
+    get_embed_key_channel,
+    oauth_resolved_channel,
+)
+from apps.api.exceptions import ChatApiAccessDenied
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
@@ -34,7 +40,7 @@ from apps.api.session_tokens import issue_session_token
 from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
-from apps.channels.models import ExperimentChannel, WidgetAuthLevel
+from apps.channels.models import CredentialMode, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
 from apps.channels.widget_versions import (
     WIDGET_VERSION_HEADER,
@@ -58,6 +64,10 @@ from apps.service_providers.llm_service.image_types import (
 from apps.web.waf import WafRule, waf_allow
 
 AUTH_CLASSES = [SessionAuthentication, EmbeddedWidgetAuthentication]
+# `chat_start_session` only. Scoping the OAuth credential to the one endpoint that makes an
+# admission decision is what keeps the session-bound endpoints on ADR-0039's session token, and
+# position 0 is required rather than stylistic — see ChatOAuthAuthentication.
+START_AUTH_CLASSES = [ChatOAuthAuthentication, *AUTH_CLASSES]
 SESSION_PERMISSION_CLASSES = [WidgetDomainPermission, SessionAccessPermission]
 
 MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
@@ -239,13 +249,30 @@ def _resolve_embed_key_channel(request, experiment) -> ExperimentChannel | None:
     Resolved once: it both authorizes the caller and owns the session. `request.auth` already
     holds it when the key did the authenticating, so this only queries for keys that rode along
     with another authenticator.
+
+    A bearer token also puts a channel in `request.auth`, and that one is not an embed-key
+    resolution: in `oauth` mode the key is ignored, so none is looked up either.
     """
+    if oauth_resolved_channel(request) is not None:
+        return None
     if isinstance(request.auth, ExperimentChannel):
         return request.auth
     return get_embed_key_channel(request, experiment)
 
 
-def _check_start_session_access(request, experiment, embed_key_channel, version_number) -> Response | None:
+def _embed_key_admits(embed_key_channel: ExperimentChannel | None) -> bool:
+    """Whether this request's embed key is proof of access to the channel it resolved.
+
+    The key resolved a channel, but the channel may not accept keys: a channel in `oauth` mode
+    demands a token, and an anonymous caller presenting only a key there is the leaked-embed-key
+    case the mode exists to stop.
+    """
+    return embed_key_channel is not None and embed_key_channel.credential_mode == CredentialMode.EMBED_KEY
+
+
+def _check_start_session_access(
+    request, experiment, embed_key_channel, oauth_channel, version_number
+) -> Response | None:
     """A 403 response if this caller may not start the session they asked for, else None.
 
     ADR-0053: being logged in to OCS is not, on its own, access to every chatbot. A
@@ -253,18 +280,34 @@ def _check_start_session_access(request, experiment, embed_key_channel, version_
     same proof an anonymous embedder must present. The key path is what keeps the site help
     widget working, since its users are logged in but are not members of the support bot's team.
 
+    A client-credentials token is the third credential, admitted only when the chatbot's Chat API
+    Channel is in `oauth` mode — which `ChatOAuthAuthentication` has already established, along
+    with the token itself, by the time `oauth_channel` is non-None here.
+
+    The credential mode is evaluated on the embed-key branch only, never on the membership branch:
+    ADR-0053 admits a cookie-bearing team member without a key, and switching a channel to `oauth`
+    must not lock team members out of their own in-app embeds.
+
     Selecting a version is narrower still: only a team member may do it, so `version_number` must
     be None on every other route through here. `chat_send_message` gates it the same way.
     """
     if not request.user.is_authenticated:
-        # Otherwise unaffected: the permission classes are the only gate on the anonymous path.
-        if version_number is None:
+        if version_number is not None:
+            return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
+        if oauth_channel is not None:
             return None
-        return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
+        if embed_key_channel is not None and not _embed_key_admits(embed_key_channel):
+            # A rejection, not a fallthrough: this is the only place an `oauth`-mode channel
+            # reached with a key and no token can fail, and letting the branches converge on
+            # `return None` would ship a mode that silently does not gate. `401`, so it is
+            # indistinguishable from every other admission failure at this door.
+            raise ChatApiAccessDenied()
+        # Keyless: unchanged here — closing it is keyless-chat-start-sunset.md's work.
+        return None
     if experiment.team.members.filter(id=request.user.id).exists():
         return None
     # Not a member: the embed key is the only other proof, and it does not grant version selection.
-    if embed_key_channel is not None and version_number is None:
+    if _embed_key_admits(embed_key_channel) and version_number is None:
         return None
     return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -279,25 +322,29 @@ def _get_requested_version(experiment, version_number):
         raise NotFound(f"Experiment with version {version_number} not found") from None
 
 
-def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
+def _resolve_experiment_channel(request, team, session_data, embed_key_channel, oauth_channel):
     """Return the ExperimentChannel that owns this session.
 
-    ADR-0053: a widget's own channel owns the session whenever the request carries that widget's
-    embed key, whether the key authenticated the request (an anonymous embed) or merely
-    accompanied it (the site help widget, where a Django session cookie authenticates first).
-    Attribution therefore tracks the widget, not the authenticator, so one widget cannot produce
-    two channels — and two participants — depending on who is looking at the page.
+    ADR-0053: the channel that owns the session is the one whose credential got the caller in. A
+    widget's own channel owns the session whenever the request carries that widget's embed key,
+    whether the key authenticated the request (an anonymous embed) or merely accompanied it (the
+    site help widget, where a Django session cookie authenticates first). Attribution therefore
+    tracks the credential, not the authenticator, so one widget cannot produce two channels — and
+    two participants — depending on who is looking at the page. A bearer token is the same story:
+    the Chat API Channel it resolved owns the session.
 
     For widget traffic we also record the reported version (or a placeholder for pre-0.5.1
     widgets that send no header). Recording is gated on `is_widget_request` so a non-widget
-    caller using an embed key isn't tagged with a placeholder version. Everything else
-    (authenticated users with no key) falls back to the team API channel.
+    caller — a server integration in `oauth` mode, or an embed key used from a script — isn't
+    tagged with a placeholder version. Everything else (authenticated users with no key) falls
+    back to the team API channel.
     """
-    if embed_key_channel is None:
+    channel = embed_key_channel or oauth_channel
+    if channel is None:
         return ExperimentChannel.objects.get_team_api_channel(team)
     if is_widget_request(request, session_data):
-        embed_key_channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
-    return embed_key_channel
+        channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
+    return channel
 
 
 @extend_schema(
@@ -367,7 +414,7 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
 @widget_sunset_headers
 @api_view(["POST"])
 @throttle_classes([ChatAPIRateThrottle])
-@authentication_classes(AUTH_CLASSES)
+@authentication_classes(START_AUTH_CLASSES)
 @permission_classes([WidgetDomainPermission])
 def chat_start_session(request):
     """Start a new chat session - supports both authenticated users and embedded widgets"""
@@ -389,9 +436,10 @@ def chat_start_session(request):
     # Always look up the working version by public_id
     experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
 
+    oauth_channel = oauth_resolved_channel(request)
     embed_key_channel = _resolve_embed_key_channel(request, experiment)
 
-    denied = _check_start_session_access(request, experiment, embed_key_channel, version_number)
+    denied = _check_start_session_access(request, experiment, embed_key_channel, oauth_channel, version_number)
     if denied:
         return denied
 
@@ -399,7 +447,7 @@ def chat_start_session(request):
 
     team = experiment.team
 
-    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel)
+    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel, oauth_channel)
 
     if request.user.is_authenticated:
         user = request.user

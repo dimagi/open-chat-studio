@@ -2102,6 +2102,7 @@ components:
           scopes:
             chatbots:read: List and Retrieve Chatbot Data
             chatbots:interact: Converse with a Chatbot and trigger bot messages
+            chat:start: Start a chat session
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions
             files:read: Download file content
