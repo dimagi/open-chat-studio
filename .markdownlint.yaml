@@ -2,8 +2,8 @@ default: true
 
 # Disable rules that are NOT important for AI agent parsing - structural integrity and link/reference correctness
 
-# List markers can be either - or *
-MD004: false
+# List markers must be *
+MD004: true
 
 # Ignore unordered list indentation check
 MD007: false
@@ -65,8 +65,8 @@ MD046: false
 MD049: false
 MD050: false
 
-# TO DO- enable as need link-fragment validation, there can be broken in-document links after heading changes
-MD051: false
+# Link-fragment validation to catch broken in-document links after heading changes
+MD051: true
 
 MD053: false
 MD054: false
