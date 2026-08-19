@@ -58,6 +58,17 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
         return user, access_token
 
 
+def is_client_credentials_token(token) -> bool:
+    """True when `token` is a client-credentials (machine) OAuth token.
+
+    Takes the token rather than the request because an authentication class resolves the token
+    *inside* `authenticate()`, before `request.auth` exists.
+    """
+    if not isinstance(token, OAuth2AccessToken) or token.application_id is None:
+        return False
+    return token.application.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS
+
+
 def is_client_credentials_request(request) -> bool:
     """True when the request is authenticated by a client-credentials (machine) OAuth token.
 
@@ -66,14 +77,11 @@ def is_client_credentials_request(request) -> bool:
     OAuth scope (enforced by TokenHasOAuthScope / TokenHasOAuthResourceScope) and the team pinned on
     the token.
     """
-    token = getattr(request, "auth", None)
-    if not isinstance(token, OAuth2AccessToken) or token.application_id is None:
-        return False
-    return token.application.authorization_grant_type == OAuth2Application.GRANT_CLIENT_CREDENTIALS
+    return is_client_credentials_token(getattr(request, "auth", None))
 
 
-def application_allows_chatbot(request, experiment) -> bool:
-    """True when the request may start a chat with `experiment`.
+def token_allows_chatbot(token, experiment) -> bool:
+    """True when `token` may start a chat with `experiment`.
 
     Only client-credentials (machine) applications are pinned to a set of chatbots: their token is
     handed to a machine (and, for the chat widget, to a browser) with no user behind it, so the team
@@ -84,9 +92,14 @@ def application_allows_chatbot(request, experiment) -> bool:
     unique per row and `create_new_version` assigns a fresh one. Normalise to the family head so a
     legitimate versioned call is not denied.
     """
-    if not is_client_credentials_request(request):
+    if not is_client_credentials_token(token):
         return True
-    return request.auth.application.allowed_chatbots.filter(pk=experiment.get_working_version_id()).exists()
+    return token.application.allowed_chatbots.filter(pk=experiment.get_working_version_id()).exists()
+
+
+def application_allows_chatbot(request, experiment) -> bool:
+    """True when the request may start a chat with `experiment`."""
+    return token_allows_chatbot(getattr(request, "auth", None), experiment)
 
 
 def enforce_application_chatbot_access(request, experiment) -> None:
