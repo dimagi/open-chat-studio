@@ -269,6 +269,25 @@ def _check_start_session_access(request, experiment, embed_key_channel, version_
     return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
 
 
+def _record_participant_name(participant, experiment, team, name: str) -> None:
+    """Store the caller-supplied display name on the participant and their experiment data.
+
+    Written in both places because they are read in different contexts: the participant record
+    labels them across the team, while the ParticipantData copy is what a pipeline sees as
+    ``{participant_data.name}``. Both writes are conditional so a repeat session start with an
+    unchanged name is a no-op rather than a pair of UPDATEs.
+    """
+    if participant.name != name:
+        participant.name = name
+        participant.save(update_fields=["name"])
+    participant_data, _ = ParticipantData.objects.get_or_create(
+        participant=participant, experiment=experiment, team=team, defaults={"data": {}}
+    )
+    if participant_data.data.get("name") != name:
+        participant_data.data["name"] = name
+        participant_data.save(update_fields=["data"])
+
+
 def _channel_disabled_response(experiment_channel) -> Response | None:
     """A 403 when an admin has switched this channel off, else None.
 
@@ -443,15 +462,7 @@ def chat_start_session(request):
         participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id)
 
     if name:
-        if participant.name != name:
-            participant.name = name
-            participant.save(update_fields=["name"])
-        participant_data, _ = ParticipantData.objects.get_or_create(
-            participant=participant, experiment=experiment, team=team, defaults={"data": {}}
-        )
-        if participant_data.data.get("name") != name:
-            participant_data.data["name"] = name
-            participant_data.save(update_fields=["data"])
+        _record_participant_name(participant, experiment, team, name)
 
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
 
