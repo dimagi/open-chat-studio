@@ -2,8 +2,8 @@ import importlib
 from datetime import timedelta
 
 import pytest
-from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
+from django.apps import apps as django_apps
+from django.db.migrations.state import ProjectState
 from django.utils import timezone
 from field_audit.models import AuditAction
 
@@ -28,7 +28,7 @@ def test_backfill_uses_earliest_membership_and_leaves_teams_without_members_null
         created_at=now - timedelta(days=1), audit_action=AuditAction.IGNORE
     )
 
-    historical_apps = MigrationExecutor(connection).loader.project_state().apps
+    historical_apps = ProjectState.from_apps(django_apps).apps
     migration.backfill_team_created_by(historical_apps, None)
 
     team.refresh_from_db()
