@@ -645,7 +645,7 @@ def main(input, **kwargs):
     return json.dumps({"safe": 1})
 """
         output = _run_sandbox(use_json)
-        assert output.update["messages"][-1] == '{"safe": 1}'  # ty: ignore[not-subscriptable]
+        assert output.update["messages"][-1] == '{"safe": 1}'
 
     @pytest.mark.parametrize(
         ("code", "expected"),
@@ -663,7 +663,7 @@ def main(input, **kwargs):
     def test_augmented_assignment_supported(self, code, expected):
         """``_inplacevar_`` must make augmented assignment on names work again."""
         output = _run_sandbox(code)
-        assert output.update["messages"][-1] == expected  # ty: ignore[not-subscriptable]
+        assert output.update["messages"][-1] == expected
 
     @pytest.mark.parametrize(
         "body",
