@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('experiments', '0148_alter_syntheticvoice_service'),
+        ('experiments', '0149_expsession_team_lastact_c_idx'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
