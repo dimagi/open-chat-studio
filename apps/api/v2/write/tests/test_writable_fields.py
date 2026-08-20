@@ -11,6 +11,7 @@ which is where the API's `<resource>_id` names map back to the FK they write.
 
 from rest_framework import serializers
 
+from apps.api.v2.write.fields import TeamScopedRelatedField
 from apps.api.v2.write.serializers import ChatbotWriteSerializer
 from apps.chatbots.forms import ChatbotSettingsForm
 from apps.experiments.models import Experiment
@@ -41,3 +42,21 @@ def test_patch_writes_exactly_what_the_settings_form_edits():
     editing are different jobs, and inspect returns plenty that is not writable. A field added to
     the settings page therefore has to be added here too."""
     assert _writable_model_fields(ChatbotWriteSerializer()) == set(ChatbotSettingsForm.Meta.fields)
+
+
+def _related_fields(serializer):
+    """Every relational field on the serializer, following nesting."""
+    for name, field in serializer.fields.items():
+        if isinstance(field, serializers.BaseSerializer):
+            yield from _related_fields(field)
+        elif isinstance(field, serializers.RelatedField):
+            yield name, field
+
+
+def test_every_reference_on_the_patch_body_is_team_scoped():
+    """The two tests above compare field *names*, so a relation declared as a plain
+    `PrimaryKeyRelatedField(queryset=Model.objects.all())` satisfies both while accepting another
+    team's id. Team scoping is the security boundary here, so it is asserted structurally rather
+    than left to whoever adds the next FK."""
+    for name, field in _related_fields(ChatbotWriteSerializer()):
+        assert isinstance(field, TeamScopedRelatedField), f"{name} is a relation but is not team-scoped"
