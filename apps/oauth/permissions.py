@@ -118,6 +118,32 @@ def enforce_application_chatbot_access(request, experiment) -> None:
         raise exceptions.PermissionDenied("This application is not authorized to interact with this chatbot.")
 
 
+def token_admits_chatbot(token, experiment) -> bool:
+    """Whether `token` meets every condition the chat door asks of a machine credential.
+
+    Four conditions, and the reason each is here rather than left to the generic OAuth gates:
+
+    - **Client credentials.** An authorization-code token takes its team from a `Grant` plus a live
+      membership check, and admitting one raises a question this door does not need to answer (may a
+      signed-in user's token chat as an anonymous participant?).
+    - **Team.** A token pinned to team A must not reach team B's chatbot.
+    - **`chat:start` and nothing broader.** A `chatbots:interact` token also converses with every
+      chatbot in the team and sends outbound WhatsApp/Telegram messages to arbitrary participants,
+      which is the wrong credential to put in page JavaScript.
+    - **The application's allowlist.** `chat:start` is *team*-scoped, and the token is placed in a
+      browser by design, so the team boundary is too coarse to be the last line.
+
+    One predicate rather than four guard clauses because the caller collapses them into a single
+    uniform refusal anyway: which condition failed goes to the logs, never to the response.
+    """
+    return (
+        is_client_credentials_token(token)
+        and token.team_id == experiment.team_id
+        and token.is_valid([settings.CHAT_API_SCOPE])
+        and token_allows_chatbot(token, experiment)
+    )
+
+
 def validated_machine_token(request, experiment) -> OAuth2AccessToken:
     """The request's client-credentials token, or raise `ChatApiAccessDenied` if it is not valid
     for starting a chat session with `experiment`.
@@ -133,18 +159,7 @@ def validated_machine_token(request, experiment) -> OAuth2AccessToken:
         # Signature, expiry or revocation -- never "no token", which the caller ruled out.
         raise ChatApiAccessDenied()
     _user, token = result
-    if not is_client_credentials_token(token):
-        # Authorization-code tokens take their team from a Grant plus a live membership check, and
-        # admitting them raises a question this door does not need to answer (may a signed-in
-        # user's token chat as an anonymous participant?).
-        raise ChatApiAccessDenied()
-    if token.team_id != experiment.team_id:
-        raise ChatApiAccessDenied()
-    if not token.is_valid([settings.CHAT_API_SCOPE]):
-        # `chat:start` only: a chatbots:interact token also sends outbound WhatsApp/Telegram
-        # messages to arbitrary participants, which is the wrong credential to hand a browser.
-        raise ChatApiAccessDenied()
-    if not token_allows_chatbot(token, experiment):
+    if not token_admits_chatbot(token, experiment):
         raise ChatApiAccessDenied()
     return token
 
