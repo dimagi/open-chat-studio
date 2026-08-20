@@ -17,6 +17,11 @@ from apps.cost_tracking.services.reporting import (
 from apps.utils.factories.cost_tracking import PricingRuleFactory, UsageRecordFactory
 from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationRunFactory, EvaluatorFactory
 
+# A model name absent from the seed JSON, so a global PricingRule for it can't
+# collide with the rows migration 0062_load_ai_pricing inserts. Tests run with
+# --no-migrations locally and on PRs, so a seeded name only breaks on main.
+_PRICED_MODEL = "test-priced-model"
+
 
 @pytest.mark.django_db()
 def test_evaluation_run_cost_breaks_down_by_evaluator_and_model():
@@ -96,14 +101,14 @@ def test_evaluation_run_cost_confidence_flags_roll_up_from_rows():
     config = EvaluationConfigFactory.create()
     run = EvaluationRunFactory.create(team=config.team, config=config)
     evaluator = EvaluatorFactory.create(team=config.team)
-    priced_rule = PricingRuleFactory.create(provider_type="openai", model_name="gpt-4o-mini")
+    priced_rule = PricingRuleFactory.create(provider_type="openai", model_name=_PRICED_MODEL)
 
     # Priced, exact — the "clean" row, judged by `evaluator`.
     UsageRecordFactory.create(
         team=config.team,
         evaluation_config=config,
         provider_type="openai",
-        model_name="gpt-4o-mini",
+        model_name=_PRICED_MODEL,
         cost=Decimal("0.10"),
         pricing_rule=priced_rule,
         extra={"evaluation_run_id": run.id, "evaluator_id": evaluator.id},
@@ -113,7 +118,7 @@ def test_evaluation_run_cost_confidence_flags_roll_up_from_rows():
         team=config.team,
         evaluation_config=config,
         provider_type="openai",
-        model_name="gpt-4o-mini",
+        model_name=_PRICED_MODEL,
         cost=Decimal("0.05"),
         pricing_rule=priced_rule,
         confidence=Confidence.ESTIMATED,
@@ -138,9 +143,9 @@ def test_evaluation_run_cost_confidence_flags_roll_up_from_rows():
     assert result.has_unknown is True
 
     by_model = {row.model_name: row for row in result.by_model}
-    assert by_model["gpt-4o-mini"].has_unpriced is False
-    assert by_model["gpt-4o-mini"].has_estimated is True
-    assert by_model["gpt-4o-mini"].has_unknown is False
+    assert by_model[_PRICED_MODEL].has_unpriced is False
+    assert by_model[_PRICED_MODEL].has_estimated is True
+    assert by_model[_PRICED_MODEL].has_unknown is False
     assert by_model["claude-3"].has_unpriced is True
     assert by_model["claude-3"].has_unknown is True
 
