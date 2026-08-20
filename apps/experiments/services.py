@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.db.models import Q
 
+from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.exceptions import VersionedExperimentSessionsNotAllowedException
 from apps.chat.models import Chat
@@ -25,11 +26,25 @@ def start_experiment_session(
     wrapper (``Participant(identifier=...)`` or ``Participant(identifier=..., user=...)``) and it
     is looked up or created here. A stored participant (e.g. one the v2 pipeline already resolved)
     is used as-is.
+
+    Raises ``ChannelDisabledException`` when the channel is switched off. Every participant-facing
+    route that opens a session funnels through here -- widget and API session starts, the public
+    web chat, the Slack listener, admin "new session" actions -- so guarding it here is what makes
+    the admin toggle mean "no new conversations" rather than only "no bot replies". Callers decide
+    how to report the refusal, and several check ``is_disabled`` themselves first so they can
+    refuse before creating participant records.
+
+    Internal routes that build a session row directly (``ExperimentSessionCreateSerializer`` for
+    ``POST /api/sessions/``, eval runs, pipeline test runs) bypass this guard; their traffic is
+    still stopped at the pipeline by ``ChannelDisabledStage``.
     """
     if working_experiment.is_a_version:
         raise VersionedExperimentSessionsNotAllowedException(
             message="A session cannot be linked to an experiment version. "
         )
+
+    if experiment_channel.is_disabled:
+        raise ChannelDisabledException(experiment_channel)
 
     team = working_experiment.team
     participant_identifier = participant.identifier

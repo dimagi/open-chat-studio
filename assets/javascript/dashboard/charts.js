@@ -3,6 +3,7 @@
  * Handles Chart.js chart creation and management
  */
 import Chart from "chart.js/auto";
+import {formatCost, p95ChartSeries, providerTotals, serviceKindSeries} from "./costBreakdown.js";
 
 class ChartManager {
     constructor() {
@@ -432,14 +433,6 @@ class ChartManager {
             }))
         };
 
-        // Mirror main.js's formatCurrency: 4 decimals below $0.01 so sub-cent
-        // daily spend doesn't flatten to $0.00 on the axis/tooltip.
-        const formatCost = (value) => {
-            const num = value || 0;
-            const decimals = num !== 0 && num < 0.01 ? 4 : 2;
-            return `$${num.toFixed(decimals)}`;
-        };
-
         const tooltipCallbacks = {
             label: (context) => `${context.dataset.label}: ${formatCost(context.parsed.y)}`
         };
@@ -481,6 +474,180 @@ class ChartManager {
             type: 'bar',
             data: chartData,
             options: options
+        });
+    }
+
+    costBarOptions() {
+        // Shared shape for the provider/model cost bars: no legend (single
+        // series), currency ticks and tooltips.
+        return {
+            ...this.defaultOptions,
+            plugins: {
+                ...this.defaultOptions.plugins,
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    ...this.defaultOptions.plugins.tooltip,
+                    callbacks: {
+                        label: (context) => formatCost(context.parsed.y)
+                    }
+                }
+            },
+            scales: {
+                ...this.defaultOptions.scales,
+                y: {
+                    ...this.defaultOptions.scales.y,
+                    ticks: {
+                        callback: (value) => formatCost(value)
+                    }
+                }
+            }
+        };
+    }
+
+    renderCostBarChart({chartKey, canvasId, rows, getLabel, color, tooltipTitle}) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+
+        this.destroyChart(chartKey);
+
+        const options = this.costBarOptions();
+        if (tooltipTitle) {
+            options.plugins.tooltip.callbacks.title = tooltipTitle;
+        }
+        this.charts[chartKey] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: rows.map(getLabel),
+                datasets: [{
+                    data: rows.map(row => row.cost),
+                    backgroundColor: color + '80',
+                    borderColor: color,
+                    borderWidth: 1
+                }]
+            },
+            options: options
+        });
+    }
+
+    renderCostProviderChart(byModel) {
+        this.renderCostBarChart({
+            chartKey: 'costProvider',
+            canvasId: 'costProviderChart',
+            rows: providerTotals(byModel),
+            getLabel: row => row.provider,
+            color: this.colorPalette.primary
+        });
+    }
+
+    renderCostModelChart(byModel) {
+        const rows = byModel || [];
+        this.renderCostBarChart({
+            chartKey: 'costModel',
+            canvasId: 'costModelChart',
+            rows: rows,
+            getLabel: row => row.model_name,
+            color: this.colorPalette.secondary,
+            // Model names can repeat across providers, so disambiguate in the tooltip title.
+            tooltipTitle: (items) =>
+                items.length ? `${rows[items[0].dataIndex].provider_type} / ${rows[items[0].dataIndex].model_name}` : ''
+        });
+    }
+
+    renderCostServiceKindChart(byServiceKind, mode) {
+        const ctx = document.getElementById('costServiceKindChart');
+        if (!ctx) return;
+
+        this.destroyChart('costServiceKind');
+
+        const series = serviceKindSeries(byServiceKind, mode);
+        const formatValue = mode === 'tokens'
+            ? (value) => `${(value || 0).toLocaleString()} tokens`
+            : (value) => formatCost(value);
+        const colors = [
+            this.colorPalette.primary,
+            this.colorPalette.success,
+            this.colorPalette.warning,
+            this.colorPalette.secondary
+        ];
+
+        this.charts.costServiceKind = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: series.labels,
+                datasets: [{
+                    data: series.values,
+                    backgroundColor: colors.map(color => color + '80'),
+                    borderColor: colors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: this.defaultOptions.plugins.legend,
+                    tooltip: {
+                        ...this.defaultOptions.plugins.tooltip,
+                        callbacks: {
+                            label: (context) => `${context.label}: ${formatValue(context.parsed)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    renderCostP95Chart(series) {
+        const ctx = document.getElementById('costP95Chart');
+        if (!ctx) return;
+
+        this.destroyChart('costP95');
+
+        const {labels, datasets} = p95ChartSeries(series);
+        const colors = [
+            this.colorPalette.primary,
+            this.colorPalette.secondary,
+            this.colorPalette.success,
+            this.colorPalette.warning,
+            this.colorPalette.danger,
+            this.colorPalette.info
+        ];
+
+        this.charts.costP95 = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels.map(date => this.formatDateLabel(date)),
+                datasets: datasets.map((dataset, index) => ({
+                    ...dataset,
+                    borderColor: colors[index % colors.length],
+                    backgroundColor: colors[index % colors.length] + '33',
+                    spanGaps: true,
+                    tension: 0.3
+                }))
+            },
+            options: {
+                ...this.defaultOptions,
+                plugins: {
+                    ...this.defaultOptions.plugins,
+                    tooltip: {
+                        ...this.defaultOptions.plugins.tooltip,
+                        callbacks: {
+                            label: (context) => `${context.dataset.label}: ${formatCost(context.parsed.y)}`
+                        }
+                    }
+                },
+                scales: {
+                    ...this.defaultOptions.scales,
+                    y: {
+                        ...this.defaultOptions.scales.y,
+                        ticks: {
+                            callback: (value) => formatCost(value)
+                        }
+                    }
+                }
+            }
         });
     }
 

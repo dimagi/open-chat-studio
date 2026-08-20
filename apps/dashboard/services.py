@@ -12,7 +12,7 @@ from django.urls import reverse
 from apps.annotations.models import CustomTaggedItem, TagCategories
 from apps.channels.models import ExperimentChannel
 from apps.chat.models import ChatMessage, ChatMessageType
-from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment
+from apps.cost_tracking.services.reporting import CostFilters, costs_by_experiment, costs_by_participant
 from apps.experiments.models import Participant
 from apps.usage_metrics.dashboard_querysets import filtered_querysets
 from apps.usage_metrics.filters import HUMAN_AUTHORED
@@ -312,9 +312,14 @@ class DashboardService:
             row["cost_per_session"] = (cost / sessions_count) if sessions_count else None
         return row
 
-    def get_user_engagement_data(self, limit: int = 10, **filters) -> dict[str, Any]:
-        """Get user engagement analysis data"""
-        cache_key = f"user_engagement_{limit}_{self._cache_key(filters)}"
+    def get_user_engagement_data(self, limit: int = 10, include_cost: bool = False, **filters) -> dict[str, Any]:
+        """Get user engagement analysis data.
+
+        When `include_cost` is set (team has the cost-monitoring flag), each
+        most-active row gains `cost` sourced from UsageRecord, bounded to the
+        top `limit` participants (UsageRecord has no `(team, participant)` index).
+        """
+        cache_key = f"user_engagement_{'cost_' if include_cost else ''}{limit}_{self._cache_key(filters)}"
         cached_data = DashboardCache.get_cached_data(self.team, cache_key)
         if cached_data:
             return cached_data
@@ -340,12 +345,27 @@ class DashboardService:
             .order_by("-total_messages")[:limit]
         )
 
+        top_ids = [stats[participant_field] for stats in participant_stats]
+
         # Most active participants
-        participants = Participant.objects.filter(team=self.team).in_bulk(
-            [stats[participant_field] for stats in participant_stats]
+        participants = Participant.objects.filter(team=self.team).in_bulk(top_ids)
+        cost_map = (
+            costs_by_participant(
+                self.team,
+                start=querysets["start_date"],
+                end=querysets["end_date"],
+                filters=CostFilters(
+                    experiment_ids=filters.get("experiment_ids"),
+                    platform_names=filters.get("platform_names"),
+                    participant_ids=top_ids,
+                    tag_ids=filters.get("tag_ids"),
+                ),
+            )
+            if include_cost and top_ids
+            else {}
         )
         most_active = [
-            self._format_participant_data(participants[stats[participant_field]], stats)
+            self._format_participant_data(participants[stats[participant_field]], stats, cost_map, include_cost)
             for stats in participant_stats
             if stats[participant_field] in participants
         ]
@@ -533,7 +553,9 @@ class DashboardService:
         """Format a period object to ISO string"""
         return period.isoformat() if hasattr(period, "isoformat") else str(period)
 
-    def _format_participant_data(self, participant, stats: dict) -> dict[str, Any]:
+    def _format_participant_data(
+        self, participant, stats: dict, cost_map: dict | None = None, include_cost: bool = False
+    ) -> dict[str, Any]:
         """Format participant data for engagement analysis. `stats` is one
         aggregate row keyed on the participant, not annotations on the
         participant itself."""
@@ -541,7 +563,7 @@ class DashboardService:
             "participants:single-participant-home",
             kwargs={"team_slug": self.team.slug, "participant_id": participant.id},
         )
-        return {
+        data = {
             "participant_id": participant.id,
             "participant_name": participant.name or participant.identifier,
             "participant_url": participant_url,
@@ -549,6 +571,9 @@ class DashboardService:
             "total_sessions": stats["total_sessions"],
             "last_activity": stats["last_activity"].isoformat() if stats["last_activity"] else None,
         }
+        if include_cost:
+            data["cost"] = float((cost_map or {}).get(participant.id, 0))
+        return data
 
     @staticmethod
     def _cache_key(filters: dict) -> str:

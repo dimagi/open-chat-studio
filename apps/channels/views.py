@@ -61,9 +61,10 @@ log = logging.getLogger("ocs.channels")
 @csrf_exempt
 @require_POST
 def new_telegram_message(request, channel_external_id: uuid):
-    token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
-    if token != settings.TELEGRAM_SECRET_TOKEN:
-        return HttpResponseBadRequest("Invalid request.")
+    if settings.TELEGRAM_SECRET_TOKEN:
+        token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if token != settings.TELEGRAM_SECRET_TOKEN:
+            return HttpResponseBadRequest("Invalid request.")
 
     channel = tasks.get_experiment_channel(ChannelPlatform.TELEGRAM, external_id=channel_external_id)
     if not channel:

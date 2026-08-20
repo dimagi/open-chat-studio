@@ -2194,7 +2194,7 @@ components:
         * `slack` - Slack
         * `commcare_connect` - CommCare Connect
         * `evaluations` - Evaluations
-        * `embedded_widget` - Embedded Widget
+        * `embedded_widget` - Chat Widget & API
         * `email` - Email
     PromptVariable:
       type: object
