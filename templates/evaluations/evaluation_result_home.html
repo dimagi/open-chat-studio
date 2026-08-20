@@ -130,44 +130,41 @@
     </div>
 
     {# Details #}
+    {% url 'evaluations:edit' request.team.slug evaluation_run.config.id as config_url %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 text-sm mb-8">
-      <div class="flex justify-between py-2 border-b border-base-200">
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
         <span class="text-base-content/60">Created</span>
         <span>{{ evaluation_run.created_at|date:"Y-m-d H:i:s" }}</span>
       </div>
-      <div class="flex justify-between py-2 border-b border-base-200">
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
         <span class="text-base-content/60">Configuration</span>
-        <a href="{% url 'evaluations:edit' request.team.slug evaluation_run.config.id %}" class="link">
-          {{ evaluation_run.config.name }}
-        </a>
+        {% include "generic/chip_button.html" with url=config_url label=evaluation_run.config.name %}
       </div>
-      <div class="flex justify-between py-2 border-b border-base-200">
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
         <span class="text-base-content/60">Finished</span>
         <span>{{ evaluation_run.finished_at|date:"Y-m-d H:i:s"|default:"—" }}</span>
       </div>
-      <div class="flex justify-between py-2 border-b border-base-200">
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
         <span class="text-base-content/60">Dataset</span>
-        <a href="{% url 'evaluations:dataset_edit' request.team.slug evaluation_run.config.dataset.id %}" class="link">
-          {{ evaluation_run.config.dataset.name }}
-        </a>
+        {% include "generic/chip_button.html" with url=evaluation_run.config.dataset.get_absolute_url label=evaluation_run.config.dataset.name %}
       </div>
-      <div class="flex justify-between py-2 border-b border-base-200">
+      <div class="flex justify-between items-start py-2 border-b border-base-200">
         <span class="text-base-content/60">Evaluators</span>
-        <span>
+        <div class="flex flex-wrap gap-1 justify-end">
           {% for evaluator in evaluation_run.config.evaluators.all %}
-            <a href="{% url 'evaluations:evaluator_edit' request.team.slug evaluator.id %}" class="link">
-              {{ evaluator.name }}
-            </a>{% if not forloop.last %}, {% endif %}
+            {% include "generic/chip_button.html" with url=evaluator.get_absolute_url label=evaluator.name %}
           {% endfor %}
-        </span>
+        </div>
       </div>
-      <div class="flex justify-between py-2 border-b border-base-200">
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
         <span class="text-base-content/60">Generation chatbot</span>
         {% if evaluation_run.generation_experiment %}
-          <a href="{% url 'chatbots:single_chatbot_home' request.team.slug evaluation_run.generation_experiment.id %}" class="link">
-            {{ evaluation_run.generation_experiment.name }}
-            {% if evaluation_run.generation_experiment.version_display %}({{ evaluation_run.generation_experiment.version_display }}){% endif %}
-          </a>
+          <span class="flex items-center gap-1">
+            {% include "generic/chip.html" with chip=evaluation_run.generation_experiment.as_chatbot_chip %}
+            {% if evaluation_run.generation_experiment.version_display %}
+              <span class="text-xs text-base-content/60">{{ evaluation_run.generation_experiment.version_display }}</span>
+            {% endif %}
+          </span>
         {% else %}
           <span class="text-base-content/40">None configured</span>
         {% endif %}
