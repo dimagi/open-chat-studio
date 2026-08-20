@@ -38,8 +38,6 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
     COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
     EVALUATIONS = "evaluations", "Evaluations"
-    # Label only — the stored value stays `embedded_widget` because it is also a
-    # Participant.platform value, and renaming it would fork every existing participant.
     EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"
     EMAIL = "email", "Email"
 
@@ -267,9 +265,6 @@ class ExperimentChannel(BaseTeamModel):
     # ratchet_widget_auth_levels; not audited (the audited change is required_auth_level itself).
     pending_auth_level = models.PositiveSmallIntegerField(choices=WidgetAuthLevel.choices, null=True, blank=True)
     auth_level_notified_at = models.DateTimeField(null=True, blank=True)
-    # Which credential admits a caller to `chat/start/` on this channel; enforced by
-    # `ChatOAuthAuthentication` and `_check_start_session_access`. Not on the channel form yet, so
-    # every row sits at EMBED_KEY — today's behaviour exactly — until an admin can select the mode.
     credential_mode = models.CharField(
         max_length=32,
         choices=CredentialMode.choices,
