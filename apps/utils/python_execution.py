@@ -8,6 +8,7 @@ import re
 import sys
 import time
 import traceback
+import types
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -51,6 +52,23 @@ def restricted_inplacevar(op: str, x: Any, y: Any) -> Any:
     except KeyError:
         raise SyntaxError(f"Augmented assignment operator {op!r} is not supported") from None
     return func(x, y)
+
+
+def restricted_write(obj: Any) -> Any:
+    """Write guard applied by RestrictedPython before attribute/item assignment.
+
+    RestrictedPython compiles ``obj.attr = x`` to ``_write_(obj).attr = x``. We block
+    writes to objects that are *shared across executions* or process-global — module
+    singletons (``json``, ``re``, ``datetime``, ...) and classes/types — because mutating
+    those (e.g. ``json.dumps = evil``) would persist and poison other pipeline executions
+    on the same worker process. Per-execution data objects (``dict``, ``list``, pydantic
+    models such as ``Attachment``, etc.) remain writable so legitimate node code keeps
+    working. Underscore-prefixed attribute names are already rejected at compile time.
+    """
+    if isinstance(obj, (types.ModuleType, type)):
+        # full_write_guard wraps the object so any attribute/item write raises.
+        return full_write_guard(obj)
+    return obj
 
 
 class RestrictedPythonExecutionMixin(BaseModel):
@@ -148,12 +166,11 @@ class RestrictedPythonExecutionMixin(BaseModel):
             "_getiter_": default_guarded_getiter,
             "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
             "_unpack_sequence_": guarded_unpack_sequence,
-            # full_write_guard lets item assignment through on plain dict/list but wraps
-            # every other object so attribute/item writes raise. This prevents sandbox
-            # code from mutating shared objects such as the module singletons injected
-            # below (e.g. ``json.dumps = evil``), which would otherwise persist across
-            # executions on the same worker process.
-            "_write_": full_write_guard,
+            # restricted_write blocks writes to shared/process-global objects (module
+            # singletons injected below, and classes/types) so sandbox code cannot do
+            # e.g. ``json.dumps = evil`` and poison other executions on the same worker,
+            # while still allowing writes to per-execution data (dict, list, Attachment).
+            "_write_": restricted_write,
             "_inplacevar_": restricted_inplacevar,
         }
         return custom_globals

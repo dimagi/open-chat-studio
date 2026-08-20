@@ -629,6 +629,41 @@ def main(input, **kwargs):
         with pytest.raises(CodeNodeRunError):
             _run_sandbox(code)
 
+    def test_can_write_attributes_on_per_execution_objects(self):
+        """Writing an attribute on a per-execution object (e.g. an Attachment) must work.
+
+        The write guard only blocks shared/process-global objects (modules, types); it
+        must not block mutation of ordinary data objects handed to node code.
+        """
+        attachment = Attachment(
+            file_id=1, type="code_interpreter", name="a.txt", size=1, content_type="text/plain", download_link=""
+        )
+        code = """
+def main(input, **kwargs):
+    for att in get_temp_state_key("attachments"):
+        att.send_to_llm = False
+    return str([att.send_to_llm for att in get_temp_state_key("attachments")])
+"""
+        state = PipelineState(
+            outputs={},
+            experiment_session=ExperimentSessionFactory.build(),
+            last_node_input="hi",
+            node_inputs=["hi"],
+            temp_state={"attachments": [attachment]},
+        )
+        output = _run_sandbox(code, state=state)
+        assert output.update["messages"][-1] == "[False]"
+
+    def test_cannot_write_attributes_on_shared_types(self):
+        """Writing an attribute on a class/type (shared, process-global) must be blocked."""
+        code = """
+def main(input, **kwargs):
+    dict.injected = 1
+    return "patched"
+"""
+        with pytest.raises(CodeNodeRunError):
+            _run_sandbox(code)
+
     def test_shared_module_not_poisoned_across_executions(self):
         """A poisoning attempt in one execution must not affect a later execution."""
         poison = """

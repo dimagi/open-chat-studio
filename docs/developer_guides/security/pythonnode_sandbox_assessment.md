@@ -62,7 +62,7 @@ All of the following were **blocked** (compile-time `SyntaxError` unless noted):
 - `f(*args)` / `f(**kwargs)` call unpacking → `NameError: _apply_ is not defined` (RestrictedPython rewrites these to `_apply_(...)`, which the sandbox does not provide). This is why the `*args`/`**kwargs` spellings in Finding 4 fail at runtime even though they slip past the source regex.
 - `class Foo: ...` → fails with `NameError: __metaclass__`. Note this is **missing sandbox setup, not an intentional policy**: RestrictedPython 8.1 rewrites class bodies to reference `__metaclass__` and expects `__name__` in the execution globals, neither of which is provided. It happens to block class-based escape attempts, but should be made an explicit, clearly-messaged policy (see #6 / issue #4243).
 - Attribute reads are additionally guarded at **runtime** by `safer_getattr` (present as `_getattr_` inside the builtins), so dunder access is blocked even when it slips past the compiler.
-- `setattr`/`delattr` are the guarded RestrictedPython variants (`guarded_setattr`/`guarded_delattr`). These do **not** perform an independent underscore-name check — they route the target through `full_write_guard`, which wraps any non-`dict`/`list` object so the write raises. Underscore-prefixed *names* are instead rejected earlier, at compile time. (Before this PR `_write_` was a no-op, so `full_write_guard` was not actually in effect — see Finding 5.)
+- `setattr`/`delattr` are the guarded RestrictedPython variants (`guarded_setattr`/`guarded_delattr`). These do **not** perform an independent underscore-name check — they route the target through `full_write_guard`, which wraps any non-`dict`/`list` object so the write raises. Underscore-prefixed *names* are instead rejected earlier, at compile time. (Direct attribute assignment — `obj.attr = x` — goes through our own `_write_`/`restricted_write` guard instead, which is scoped to block only modules/types; see Findings 1 and 5.)
 
 The exposed attack surface is a small, curated builtin set (99 names, mostly exception
 types and safe scalars/containers), plus five stdlib modules and the injected helper
@@ -123,18 +123,27 @@ This is not a RestrictedPython bug — it is a wiring choice in our harness (sha
 singletons + a disabled write guard).
 
 ### Remediation
-- **✅ Done in this PR.** `_write_` is now `full_write_guard` (from `RestrictedPython.Guards`).
-  It passes plain `dict`/`list` through unchanged — so legitimate item assignment in node
-  code (`d["k"] = v`, `xs[0] = v`) keeps working — but wraps every other object (including
-  the injected module singletons) so `json.dumps = evil` raises `TypeError`. Verified: a
-  poisoning attempt in one execution no longer affects a later execution
-  (`TestSandboxHardening::test_shared_module_not_poisoned_across_executions`).
+- **✅ Done in this PR.** `_write_` is now a small `restricted_write` guard. It blocks
+  attribute/item writes on objects that are *shared across executions or process-global* —
+  module singletons and classes/`type`s (routed through `full_write_guard` so the write
+  raises) — so `json.dumps = evil` or `dict.injected = 1` now raise. Everything else,
+  including per-execution data objects (`dict`, `list`, and pydantic models such as
+  `Attachment`), stays writable, so legitimate node code keeps working
+  (`d["k"] = v`, `att.send_to_llm = False`, etc.).
+  - *Why not plain `full_write_guard`?* It wraps every non-`dict`/`list` object, which
+    also blocks mutating per-execution objects the node is meant to change — e.g.
+    `att.send_to_llm = False` on an `Attachment` from temp state. Scoping the block to
+    modules/types keeps the security property while preserving that behaviour.
+  - Verified: a poisoning attempt in one execution no longer affects a later execution
+    (`TestSandboxHardening::test_shared_module_not_poisoned_across_executions`), type writes
+    are blocked (`::test_cannot_write_attributes_on_shared_types`), and object attribute
+    writes still work (`::test_can_write_attributes_on_per_execution_objects`).
 - **Follow-up ([#4239](https://github.com/dimagi/open-chat-studio/issues/4239)):** as
   defense in depth, stop handing live module singletons to sandboxed code — expose curated
   read-only façades of just the functions needed rather than the module object, and give
   each execution its own `random.Random()` so `random.seed()` can't leak RNG state across
-  runs. (`full_write_guard` already blocks attribute writes, but shared *mutable* state
-  reachable through method calls, like the module-global RNG, is a residual concern.)
+  runs. (`restricted_write` blocks attribute writes, but shared *mutable* state reachable
+  through method calls, like the module-global RNG, is a residual concern.)
 
 ---
 
@@ -258,9 +267,9 @@ observed (before this PR):
 - `obj.public = 777` on any exposed object succeeded (underscore attrs still compile-block).
 - Enabled the shared-module poisoning in Finding 1.
 
-**✅ Done in this PR** — `_write_` is now `full_write_guard` (see Finding 1 remediation).
-Called out separately because it is the underlying mechanism and a one-line change closes
-the highest-impact vector.
+**✅ Done in this PR** — `_write_` is now the `restricted_write` guard (see Finding 1
+remediation). Called out separately because it is the underlying mechanism and closes the
+highest-impact vector.
 
 ---
 
