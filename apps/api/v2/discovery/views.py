@@ -203,6 +203,8 @@ class TeamOptionsView(DiscoveryView):
     """Shared payload for the two option endpoints. Both build every option list the team can draw
     on and differ only in which keys they keep."""
 
+    serializer_class = PipelineOptionsSerializer
+
     @classmethod
     def _options_for_team(cls, team: Team) -> dict:
         """Every option list the team can draw on, with the builder-only affordances stripped.
@@ -282,7 +284,8 @@ class PipelineOptionsView(TeamOptionsView):
     def get(self, request):
         served = served_option_keys()
         options = self._options_for_team(request.team)
-        return Response({key: value for key, value in options.items() if key in served})
+        filtered = {key: value for key, value in options.items() if key in served}
+        return Response(self.get_serializer(filtered).data)
 
 
 class PipelineNodeOptionsView(TeamOptionsView):
@@ -317,4 +320,5 @@ class PipelineNodeOptionsView(TeamOptionsView):
         if wanted is None:
             raise unknown_node_type(node_type)
         options = self._options_for_team(request.team)
-        return Response({key: value for key, value in options.items() if key in wanted})
+        filtered = {key: value for key, value in options.items() if key in wanted}
+        return Response(self.get_serializer(filtered).data)

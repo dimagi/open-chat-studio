@@ -1,7 +1,8 @@
-"""Serializers describing the discovery endpoint responses for the OpenAPI schema.
+"""Serializers describing the discovery endpoint responses, for the OpenAPI schema and to shape the
+responses themselves.
 
-Documentation only -- the views build plain dicts and hand them back. Each field's ``help_text`` is
-what a client reads about that field.
+The views build a plain dict and hand it to the matching serializer, which decides what actually
+reaches the client. Each field's ``help_text`` is what a client reads about that field.
 """
 
 from rest_framework import serializers
