@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,96 @@ TEARDOWN_SCRIPT = REPOSITORY_ROOT / "scripts" / "teardown-worktree.sh"
 ENSURE_SETUP_SCRIPT = REPOSITORY_ROOT / "scripts" / "ensure-worktree-setup.sh"
 WORKTREE_ENVIRONMENT_SCRIPT = REPOSITORY_ROOT / "scripts" / "worktree-environment.sh"
 CODEX_HOOKS_FILE = REPOSITORY_ROOT / ".codex" / "hooks.json"
+
+FAKE_BOOTSTRAP_SCRIPT = r"""#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$PWD/.venv" "$PWD/node_modules"
+printf "bootstrap:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
+"""
+
+FAKE_PSQL_SCRIPT = r"""#!/usr/bin/env bash
+set -euo pipefail
+printf "psql:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
+if [[ "${OCS_TEST_FAIL_PSQL:-false}" == "true" ]]; then exit 1; fi
+if [[ "$*" == *"SELECT 1 FROM pg_database"* ]]; then exit 0; fi
+"""
+
+FAKE_UV_SCRIPT = r"""#!/usr/bin/env bash
+set -euo pipefail
+printf "uv:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
+"""
+
+FAKE_REDIS_CLI_SCRIPT = r"""#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${*: -1}" == "FLUSHDB" ]]; then
+    printf "redis-cli:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
+    [[ "${OCS_TEST_FAIL_REDIS_FLUSH:-false}" != "true" ]]
+    exit 0
+fi
+
+operation=
+resource_name=
+database=
+for argument in "$@"; do
+    if [[ "$argument" =~ ^(allocate|lookup|release)$ ]]; then
+        operation=$argument
+        continue
+    fi
+    if [[ -n "$operation" && -z "$resource_name" ]]; then
+        resource_name=$argument
+    elif [[ "$operation" == "release" && -n "$resource_name" ]]; then
+        database=$argument
+    fi
+done
+
+printf "redis-registry:%s:%s:%s\n" "$operation" "$resource_name" "$database" \
+    >> "$OCS_TEST_COMMAND_LOG"
+touch "$OCS_TEST_REDIS_REGISTRY"
+existing=$(awk -v resource="$resource_name" '$1 == resource { print $2 }' \
+    "$OCS_TEST_REDIS_REGISTRY")
+
+if [[ "$operation" == "lookup" ]]; then
+    [[ -n "$existing" ]] || exit 1
+    printf "%s\n" "$existing"
+    exit 0
+fi
+
+if [[ "$operation" == "allocate" ]]; then
+    if [[ -n "$existing" ]]; then printf "%s\n" "$existing"; exit 0; fi
+    for candidate in $(seq 1 14); do
+        if ! awk -v database="$candidate" \
+            '$2 == database { found = 1 } END { exit !found }' \
+            "$OCS_TEST_REDIS_REGISTRY"; then
+            printf "%s %s\n" "$resource_name" "$candidate" >> "$OCS_TEST_REDIS_REGISTRY"
+            printf "%s\n" "$candidate"
+            exit 0
+        fi
+    done
+    echo "Redis database registry exhausted" >&2
+    exit 1
+fi
+
+if [[ "$operation" == "release" ]]; then
+    [[ "$existing" == "$database" ]] || exit 1
+    awk -v resource="$resource_name" '$1 != resource' "$OCS_TEST_REDIS_REGISTRY" \
+        > "$OCS_TEST_REDIS_REGISTRY.tmp"
+    mv "$OCS_TEST_REDIS_REGISTRY.tmp" "$OCS_TEST_REDIS_REGISTRY"
+    echo 1
+    exit 0
+fi
+
+exit 1
+"""
+
+
+@dataclass(frozen=True)
+class SessionGuardScenario:
+    database_name: str
+    thread_id: str
+    setup_script: str
+    expected_log: str | None
+    redis_url: str | None = None
+    python_version: str | None = None
 
 
 def _run(
@@ -80,31 +171,27 @@ def _allocate_redis_database(worktree: Path, env: dict[str, str], resource_name:
 def _prepare_session_guard(
     worktree: Path,
     env: dict[str, str],
-    command_log: Path,
-    *,
-    database_name: str,
-    thread_id: str,
-    setup_script: str,
-    redis_url: str | None = None,
+    scenario: SessionGuardScenario,
 ) -> Path:
     redis_database = _allocate_redis_database(worktree, env, "codex_a1b2")
-    expected_redis_url = redis_url or f"redis://localhost:6379/{redis_database}"
+    expected_redis_url = scenario.redis_url or f"redis://localhost:6379/{redis_database}"
     (worktree / ".env").write_text(
         "SECRET_KEY=test-only\n"
-        f"DATABASE_URL=postgres://postgres:postgres@localhost:5432/{database_name}\n"
+        f"DATABASE_URL=postgres://postgres:postgres@localhost:5432/{scenario.database_name}\n"
         f"REDIS_URL={expected_redis_url}\n"
     )
     (worktree / ".venv").mkdir()
     (worktree / "node_modules").mkdir()
     _record_dependency_fingerprint(worktree)
-    _write_executable(worktree / "scripts" / "setup-worktree.sh", setup_script)
+    _write_executable(worktree / "scripts" / "setup-worktree.sh", scenario.setup_script)
+    command_log = Path(env["OCS_TEST_COMMAND_LOG"])
     env.update(
         {
-            "CODEX_THREAD_ID": thread_id,
+            "CODEX_THREAD_ID": scenario.thread_id,
             "TMPDIR": str(command_log.parent),
         }
     )
-    return command_log.parent / f"ocs-worktree-setup-{thread_id}.log"
+    return command_log.parent / f"ocs-worktree-setup-{scenario.thread_id}.log"
 
 
 @pytest.fixture()
@@ -119,13 +206,7 @@ def worktree_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
     _run("git", "config", "user.email", "tests@example.com", cwd=root)
     _run("git", "config", "user.name", "Test User", cwd=root)
 
-    _write_executable(
-        root / "scripts" / "bootstrap.sh",
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        'mkdir -p "$PWD/.venv" "$PWD/node_modules"\n'
-        'printf "bootstrap:%s\\n" "$*" >> "$OCS_TEST_COMMAND_LOG"\n',
-    )
+    _write_executable(root / "scripts" / "bootstrap.sh", FAKE_BOOTSTRAP_SCRIPT)
     (root / "scripts" / "worktree-environment.sh").write_text(WORKTREE_ENVIRONMENT_SCRIPT.read_text())
     (root / ".python-version").write_text("3.13\n")
     (root / "manage.py").write_text("# test fixture\n")
@@ -149,74 +230,9 @@ def worktree_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
     worktree.parent.mkdir(parents=True)
     _run("git", "worktree", "add", "--detach", worktree, "HEAD", cwd=root)
 
-    _write_executable(
-        fake_bin / "psql",
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        'printf "psql:%s\\n" "$*" >> "$OCS_TEST_COMMAND_LOG"\n'
-        'if [[ "${OCS_TEST_FAIL_PSQL:-false}" == "true" ]]; then exit 1; fi\n'
-        'if [[ "$*" == *"SELECT 1 FROM pg_database"* ]]; then exit 0; fi\n',
-    )
-    _write_executable(
-        fake_bin / "uv",
-        '#!/usr/bin/env bash\nset -euo pipefail\nprintf "uv:%s\\n" "$*" >> "$OCS_TEST_COMMAND_LOG"\n',
-    )
-    _write_executable(
-        fake_bin / "redis-cli",
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        'if [[ "${*: -1}" == "FLUSHDB" ]]; then\n'
-        '    printf "redis-cli:%s\\n" "$*" >> "$OCS_TEST_COMMAND_LOG"\n'
-        '    [[ "${OCS_TEST_FAIL_REDIS_FLUSH:-false}" != "true" ]]\n'
-        "    exit 0\n"
-        "fi\n"
-        "operation=\n"
-        "resource_name=\n"
-        "database=\n"
-        'for argument in "$@"; do\n'
-        '    if [[ "$argument" =~ ^(allocate|lookup|release)$ ]]; then\n'
-        "        operation=$argument\n"
-        "        continue\n"
-        "    fi\n"
-        '    if [[ -n "$operation" && -z "$resource_name" ]]; then\n'
-        "        resource_name=$argument\n"
-        '    elif [[ "$operation" == "release" && -n "$resource_name" ]]; then\n'
-        "        database=$argument\n"
-        "    fi\n"
-        "done\n"
-        'printf "redis-registry:%s:%s:%s\\n" "$operation" "$resource_name" "$database" '
-        '>> "$OCS_TEST_COMMAND_LOG"\n'
-        'touch "$OCS_TEST_REDIS_REGISTRY"\n'
-        "existing=$(awk -v resource=\"$resource_name\" '$1 == resource { print $2 }' "
-        '"$OCS_TEST_REDIS_REGISTRY")\n'
-        'if [[ "$operation" == "lookup" ]]; then\n'
-        '    [[ -n "$existing" ]] || exit 1\n'
-        '    printf "%s\\n" "$existing"\n'
-        "    exit 0\n"
-        "fi\n"
-        'if [[ "$operation" == "allocate" ]]; then\n'
-        '    if [[ -n "$existing" ]]; then printf "%s\\n" "$existing"; exit 0; fi\n'
-        "    for candidate in $(seq 1 14); do\n"
-        "        if ! awk -v database=\"$candidate\" '$2 == database { found = 1 } END { exit !found }' "
-        '"$OCS_TEST_REDIS_REGISTRY"; then\n'
-        '            printf "%s %s\\n" "$resource_name" "$candidate" >> "$OCS_TEST_REDIS_REGISTRY"\n'
-        '            printf "%s\\n" "$candidate"\n'
-        "            exit 0\n"
-        "        fi\n"
-        "    done\n"
-        '    echo "Redis database registry exhausted" >&2\n'
-        "    exit 1\n"
-        "fi\n"
-        'if [[ "$operation" == "release" ]]; then\n'
-        '    [[ "$existing" == "$database" ]] || exit 1\n'
-        '    awk -v resource="$resource_name" \'$1 != resource\' "$OCS_TEST_REDIS_REGISTRY" '
-        '> "$OCS_TEST_REDIS_REGISTRY.tmp"\n'
-        '    mv "$OCS_TEST_REDIS_REGISTRY.tmp" "$OCS_TEST_REDIS_REGISTRY"\n'
-        "    echo 1\n"
-        "    exit 0\n"
-        "fi\n"
-        "exit 1\n",
-    )
+    _write_executable(fake_bin / "psql", FAKE_PSQL_SCRIPT)
+    _write_executable(fake_bin / "uv", FAKE_UV_SCRIPT)
+    _write_executable(fake_bin / "redis-cli", FAKE_REDIS_CLI_SCRIPT)
 
     env = {
         "OCS_TEST_COMMAND_LOG": str(command_log),
@@ -509,78 +525,64 @@ def test_codex_session_setup_keeps_bootstrap_output_out_of_context(
     assert (command_log.parent / "ocs-worktree-setup-test-thread.log").read_text() == "verbose setup output\n"
 
 
-def test_codex_session_setup_skips_an_initialized_checkout(
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        pytest.param(
+            SessionGuardScenario(
+                database_name="codex_a1b2",
+                thread_id="initialized-thread",
+                setup_script="#!/usr/bin/env bash\nexit 99\n",
+                expected_log=None,
+            ),
+            id="initialized-checkout",
+        ),
+        pytest.param(
+            SessionGuardScenario(
+                database_name="codex_a1b2",
+                thread_id="stale-dependencies-thread",
+                setup_script="#!/usr/bin/env bash\necho 'refreshed dependencies'\n",
+                expected_log="refreshed dependencies\n",
+                python_version="3.14",
+            ),
+            id="stale-dependencies",
+        ),
+        pytest.param(
+            SessionGuardScenario(
+                database_name="root_database",
+                thread_id="shared-database-thread",
+                setup_script="#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
+                expected_log="reconfigured worktree\n",
+            ),
+            id="shared-database",
+        ),
+        pytest.param(
+            SessionGuardScenario(
+                database_name="codex_a1b2",
+                thread_id="shared-redis-thread",
+                setup_script="#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
+                expected_log="reconfigured worktree\n",
+                redis_url="redis://localhost:6379/0",
+            ),
+            id="shared-redis",
+        ),
+    ],
+)
+def test_codex_session_setup_guard(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    scenario: SessionGuardScenario,
 ) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    log_file = _prepare_session_guard(
-        worktree,
-        env,
-        command_log,
-        database_name="codex_a1b2",
-        thread_id="initialized-thread",
-        setup_script="#!/usr/bin/env bash\nexit 99\n",
-    )
+    _, worktree, env, _ = worktree_fixture
+    log_file = _prepare_session_guard(worktree, env, scenario)
+    if scenario.python_version:
+        (worktree / ".python-version").write_text(f"{scenario.python_version}\n")
 
     _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
 
-    assert not log_file.exists()
-
-
-def test_codex_session_setup_refreshes_stale_dependencies(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    log_file = _prepare_session_guard(
-        worktree,
-        env,
-        command_log,
-        database_name="codex_a1b2",
-        thread_id="stale-dependencies-thread",
-        setup_script="#!/usr/bin/env bash\necho 'refreshed dependencies'\n",
-    )
-    (worktree / ".python-version").write_text("3.14\n")
-
-    _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
-
-    assert log_file.read_text() == "refreshed dependencies\n"
-
-
-def test_codex_session_setup_repairs_a_shared_database_configuration(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    log_file = _prepare_session_guard(
-        worktree,
-        env,
-        command_log,
-        database_name="root_database",
-        thread_id="shared-database-thread",
-        setup_script="#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
-    )
-
-    _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
-
-    assert log_file.read_text() == "reconfigured worktree\n"
-
-
-def test_codex_session_setup_repairs_a_shared_redis_configuration(
-    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
-) -> None:
-    _, worktree, env, command_log = worktree_fixture
-    log_file = _prepare_session_guard(
-        worktree,
-        env,
-        command_log,
-        database_name="codex_a1b2",
-        thread_id="shared-redis-thread",
-        setup_script="#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
-        redis_url="redis://localhost:6379/0",
-    )
-
-    _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
-
-    assert log_file.read_text() == "reconfigured worktree\n"
+    if scenario.expected_log is None:
+        assert not log_file.exists()
+    else:
+        assert log_file.read_text() == scenario.expected_log
 
 
 def test_codex_hook_runs_when_a_session_resumes() -> None:
