@@ -9,9 +9,9 @@ import pytest
 from django.urls import reverse
 
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
-from apps.service_providers.models import LlmProviderModel
+from apps.service_providers.models import LlmProviderModel, VoiceProviderType
 from apps.utils.factories.documents import CollectionFactory
-from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
+from apps.utils.factories.experiment import ExperimentFactory, SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import PipelineFactory
 from apps.utils.factories.service_provider_factories import (
     LlmProviderFactory,
@@ -118,6 +118,24 @@ def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
 
 
 @pytest.mark.django_db()
+def test_the_builder_keeps_the_models_a_node_may_already_point_at(team):
+    """The builder offers every model the team can see so a node pointing at a deprecated one, or at
+    one whose provider has since been removed, still renders its selection. `usable_models_only`
+    narrows the list to the models the team can actually call."""
+    LlmProviderFactory.create(team=team, type="openai")
+    deprecated = LlmProviderModelFactory.create(team=team, type="openai", deprecated=True)
+    no_provider = LlmProviderModelFactory.create(team=team, type="anthropic")
+
+    offered = {option["value"] for option in get_node_parameter_values(team)["llm_provider_model_id"]}
+    usable = {
+        option["value"] for option in get_node_parameter_values(team, usable_models_only=True)["llm_provider_model_id"]
+    }
+
+    assert {deprecated.id, no_provider.id} <= offered
+    assert not {deprecated.id, no_provider.id} & usable
+
+
+@pytest.mark.django_db()
 def test_pipeline_builder_context_still_populated(client):
     """The builder view still gets its three context keys from the extracted helpers."""
     team = TeamWithUsersFactory.create()
@@ -132,6 +150,25 @@ def test_pipeline_builder_context_still_populated(client):
     assert response.context["node_schemas"]
     assert response.context["parameter_values"]["llm_provider_id"]
     assert "llm_provider_id" in response.context["default_values"]
+
+
+@pytest.mark.django_db()
+def test_chatbot_builder_offers_only_the_experiments_own_voices(client, team):
+    """The chatbot builder narrows the voice list to the experiment's own provider: a voice only some
+    other provider can speak is not a selection the chatbot could honour."""
+    aws = VoiceProviderFactory.create(team=team, type=VoiceProviderType.aws)
+    azure = VoiceProviderFactory.create(team=team, type=VoiceProviderType.azure)
+    speakable = SyntheticVoiceFactory.create(name="Nicole", service="AWS", voice_provider=aws)
+    unspeakable = SyntheticVoiceFactory.create(name="Elan", service="Azure", voice_provider=azure)
+    experiment = ExperimentFactory.create(team=team, voice_provider=aws)
+    client.force_login(team.members.first())
+
+    response = client.get(reverse("chatbots:edit", kwargs={"team_slug": team.slug, "pk": experiment.id}))
+
+    assert response.status_code == 200
+    voices = {option["value"] for option in response.context["parameter_values"]["synthetic_voice_id"]}
+    assert speakable.id in voices
+    assert unspeakable.id not in voices
 
 
 @pytest.mark.django_db()
