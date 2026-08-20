@@ -9,7 +9,7 @@ import pytest
 from django.urls import reverse
 
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values, get_node_schemas
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.service_providers.models import LlmProviderModel
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
 from apps.utils.factories.pipelines import PipelineFactory
@@ -43,19 +43,14 @@ def team_with_resources(db):
 
 @pytest.mark.django_db()
 def test_get_node_parameter_values_is_team_scoped():
-    """The provider list is passed in, but the resource lists are queried here, so the team argument
-    is what keeps another team's rows out."""
+    """Every list is queried here off the team argument, so that argument is what keeps another team's
+    rows out."""
     team = TeamWithUsersFactory.create()
     other_team = TeamWithUsersFactory.create()
     mine = LlmProviderFactory.create(team=team)
     theirs = LlmProviderFactory.create(team=other_team)
 
-    values = get_node_parameter_values(
-        team=team,
-        llm_providers=list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
-        llm_provider_models=LlmProviderModel.objects.for_team(team),
-        synthetic_voices=[],
-    )
+    values = get_node_parameter_values(team=team, synthetic_voices=[])
 
     provider_ids = {option["value"] for option in values["llm_provider_id"]}
     assert mine.id in provider_ids
@@ -67,12 +62,7 @@ def test_every_option_key_is_snake_case():
     """The builder and the v2 discovery API both read this payload verbatim."""
     team = TeamWithUsersFactory.create()
 
-    values = get_node_parameter_values(
-        team=team,
-        llm_providers=list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
-        llm_provider_models=LlmProviderModel.objects.for_team(team),
-        synthetic_voices=[],
-    )
+    values = get_node_parameter_values(team=team, synthetic_voices=[])
 
     assert [key for key in values if key != key.lower()] == []
 
@@ -86,12 +76,7 @@ def test_every_declared_options_source_has_a_list_to_draw_on():
     error."""
     team = TeamWithUsersFactory.create()
 
-    values = get_node_parameter_values(
-        team=team,
-        llm_providers=list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
-        llm_provider_models=LlmProviderModel.objects.for_team(team),
-        synthetic_voices=[],
-    )
+    values = get_node_parameter_values(team=team, synthetic_voices=[])
     declared = {
         prop["ui:optionsSource"]
         for schema in get_node_schemas()
@@ -108,16 +93,12 @@ def test_a_zero_max_token_limit_is_served_rather_than_dropped(team):
     """0 is a real limit -- it turns history compression off -- so a caller reading the option list
     has to be able to tell it apart from a model with no limit recorded."""
     LlmProviderFactory.create(team=team, type="openai")
-    LlmProviderModelFactory.create(team=team, type="openai", max_token_limit=0)
+    model = LlmProviderModelFactory.create(team=team, type="openai", max_token_limit=0)
 
-    values = get_node_parameter_values(
-        team=team,
-        llm_providers=list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
-        llm_provider_models=LlmProviderModel.objects.filter(team=team),
-        synthetic_voices=[],
-    )
+    values = get_node_parameter_values(team=team, synthetic_voices=[])
 
-    assert [option["max_token_limit"] for option in values["llm_provider_model_id"]] == [0]
+    options = {option["value"]: option for option in values["llm_provider_model_id"]}
+    assert options[model.id]["max_token_limit"] == 0
 
 
 @pytest.mark.django_db()
@@ -126,16 +107,14 @@ def test_get_node_default_values_pairs_a_provider_with_a_type_matching_model():
     search walks the providers until one has a model of its own type."""
     team = TeamWithUsersFactory.create()
     provider = LlmProviderFactory.create(team=team, type="openai")
-    # Own the model row: a `django_db(transaction=True)` test elsewhere flushes the global seed rows.
-    model = LlmProviderModelFactory.create(team=team, type="openai")
+    # Own a model row: a `django_db(transaction=True)` test elsewhere flushes the global seed rows.
+    LlmProviderModelFactory.create(team=team, type="openai")
 
-    defaults = get_node_default_values(
-        list(LlmProvider.objects.filter(team=team).values("id", "name", "type")),
-        LlmProviderModel.objects.filter(team=team),
-    )
+    defaults = get_node_default_values(team)
 
     assert defaults["llm_provider_id"] == provider.id
-    assert defaults["llm_provider_model_id"] == model.id
+    # Which openai row is picked is up to the queryset; that it is an openai row is the contract.
+    assert LlmProviderModel.objects.get(id=defaults["llm_provider_model_id"]).type == "openai"
 
 
 @pytest.mark.django_db()

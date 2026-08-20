@@ -5,8 +5,6 @@ Both reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which
 raw. The reshaping rules live in ``contract.py`` and ``node_types.py``.
 """
 
-from django.db.models import QuerySet
-from django.db.models.functions import Lower
 from django.http import HttpResponseNotModified
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
@@ -14,12 +12,11 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
-from apps.experiments.models import SyntheticVoice
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values
-from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
+from apps.teams.models import Team
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
 from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
@@ -205,48 +202,16 @@ class TeamOptionsView(DiscoveryView):
     on and differ only in which keys they keep."""
 
     @classmethod
-    def _options_for_team(cls, team) -> dict:
+    def _options_for_team(cls, team: Team) -> dict:
         """Every option list the team can draw on, with the builder-only affordances stripped.
-        Scoping to a node type happens after this."""
-        llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
-        llm_provider_types = {provider["type"] for provider in llm_providers}
-        voice_providers = list(VoiceProvider.objects.filter(team=team))
+        Scoping to a node type happens after this.
 
-        # A model the team holds no provider for cannot be called, so it is not an option. Models with
-        # no team are shared with every team, which makes this the only filter that scopes them.
-        # Deprecated models are absent rather than flagged, the same as a deprecated node type.
-        llm_provider_models = LlmProviderModel.objects.for_team(team).filter(
-            type__in=llm_provider_types, deprecated=False
-        )
-
-        options = cls._clean_options(
-            get_node_parameter_values(
-                team=team,
-                llm_providers=llm_providers,
-                llm_provider_models=llm_provider_models,
-                synthetic_voices=cls._speakable_voices(team, voice_providers),
-            )
-        )
-        options[OptionsSource.tool_config] = {
-            provider_type: config
-            for provider_type, config in options[OptionsSource.tool_config].items()
-            if provider_type in llm_provider_types
-        }
-        options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)
+        Unlike the builders, this serves only what a client may write, so the models the team cannot
+        call are left out.
+        """
+        options = cls._clean_options(get_node_parameter_values(team=team, usable_models_only=True))
+        options["default_llm_provider"] = get_node_default_values(team, usable_models_only=True)
         return cls._describe_prompt_vars(options)
-
-    @staticmethod
-    def _speakable_voices(team, voice_providers: list) -> QuerySet:
-        """The voices the team has a provider to speak. `SyntheticVoice.service` ("AWS") and the
-        provider type ("aws") differ in case, so the match is made on a lowered annotation."""
-        reachable_services = {provider.type.lower() for provider in voice_providers}
-        if not reachable_services:
-            return SyntheticVoice.objects.none()
-        return (
-            SyntheticVoice.get_for_team(team, [])
-            .annotate(service_lower=Lower("service"))
-            .filter(service_lower__in=reachable_services)
-        )
 
     @classmethod
     def _clean_options(cls, value):

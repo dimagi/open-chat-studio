@@ -33,7 +33,6 @@ from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import LLM_MODEL_PARAMETER_SCHEMAS
-from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
@@ -164,8 +163,6 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
         return {
             **data,
@@ -174,12 +171,11 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
             "node_schemas": get_node_schemas(),
             "parameter_values": get_node_parameter_values(
                 team=self.request.team,
-                llm_providers=llm_providers,
-                llm_provider_models=llm_provider_models,
+                # A pipeline is edited outside any one chatbot, so there is no voice provider to offer.
                 synthetic_voices=[],
                 include_versions=pipeline.is_a_version,
             ),
-            "default_values": get_node_default_values(llm_providers, llm_provider_models),
+            "default_values": get_node_default_values(self.request.team),
             "allow_edit_name": True,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
