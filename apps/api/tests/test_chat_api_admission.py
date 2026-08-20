@@ -11,6 +11,7 @@ follows tests the *chat door*: which credentials it admits, and that every refus
 
 import uuid
 from datetime import timedelta
+from unittest import mock
 
 import pytest
 import time_machine
@@ -24,6 +25,7 @@ from apps.channels.models import ChannelPlatform, CredentialMode, WidgetAuthLeve
 from apps.experiments.models import ExperimentSession
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
 from apps.teams.backends import add_user_to_team
+from apps.teams.utils import get_current_team
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamFactory
@@ -442,3 +444,28 @@ def test_the_cross_origin_preflight_allows_the_authorization_header():
     )
 
     assert "authorization" in response["access-control-allow-headers"]
+
+
+@pytest.mark.django_db()
+def test_the_token_team_becomes_the_request_team(chatbot):
+    """What `OAuth2AccessTokenAuthentication` does for every other OAuth endpoint. Nothing on this
+    path writes an audited row today, so this is attribution rather than a fix: it keeps a later
+    audited write from landing with no team, and gives Sentry the team tag on a chat error.
+    """
+    _channel(chatbot)
+    client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])
+    seen = {}
+
+    original = ChatOAuthAuthentication.authenticate
+
+    def capture(self, request):
+        result = original(self, request)
+        seen["request_team"] = getattr(request, "team", None)
+        seen["current_team"] = get_current_team()
+        return result
+
+    with mock.patch.object(ChatOAuthAuthentication, "authenticate", capture):
+        assert _start(client, chatbot.public_id).status_code == 201
+
+    assert seen["request_team"] == chatbot.team
+    assert seen["current_team"] == chatbot.team

@@ -9,6 +9,7 @@ from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChan
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.experiments.models import Experiment
 from apps.oauth.permissions import validated_machine_token
+from apps.teams.utils import set_current_team
 
 
 def chatbot_id_from_body(request) -> str | None:
@@ -195,8 +196,16 @@ class ChatOAuthAuthentication(authentication.BaseAuthentication):
             # exposed this chatbot in `oauth` mode.
             raise ChatApiAccessDenied()
 
-        validated_machine_token(request, experiment)
+        token = validated_machine_token(request, experiment)
         self._check_origin(request, channel)
+        # What OAuth2AccessTokenAuthentication does for every other OAuth endpoint. Nothing on
+        # this path writes an audited row today -- `record_widget_version` deliberately bypasses
+        # auditing, and neither Participant nor ExperimentSession is audited -- so this is for
+        # consistency and attribution (the Sentry team tag, the rate limiter's team scope) rather
+        # than to fix a live gap. It is also what keeps a later audited write here from silently
+        # landing without a team. Unset by the request_finished signal.
+        request.team = token.team
+        set_current_team(token.team)
         return (AnonymousUser(), channel)
 
     @staticmethod
