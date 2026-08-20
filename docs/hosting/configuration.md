@@ -165,6 +165,12 @@ Required only if you want users to connect Slack channels to their chatbots.
 | `SLACK_SIGNING_SECRET` | Slack app signing secret |
 | `SLACK_BOT_NAME` | Display name for the Slack bot |
 
+### Telegram
+
+| Variable | Description |
+|----------|-------------|
+| `TELEGRAM_SECRET_TOKEN` | Optional. Secret token for verifying inbound webhook authenticity via the `X-Telegram-Bot-Api-Secret-Token` header. When configured, OCS registers it with Telegram's `setWebhook` API and rejects requests without matching tokens. |
+
 ## Observability
 
 | Variable | Description |
