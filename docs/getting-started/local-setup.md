@@ -23,7 +23,7 @@ Open Chat Studio uses [UV](https://docs.astral.sh/uv/getting-started/installatio
     ```bash
     uv venv --python 3.13
     source .venv/bin/activate
-    uv sync
+    uv sync --locked
     ```
 
 3. **Run the automated setup**
