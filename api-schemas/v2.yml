@@ -115,6 +115,252 @@ paths:
               schema:
                 $ref: '#/components/schemas/Me'
           description: ''
+  /api/v2/pipeline/nodes/:
+    get:
+      operationId: pipeline_node_list
+      description: |-
+        The node types a pipeline can contain, with the JSON Schema of each one's `params` and the outputs its edges leave by. Deprecated types are omitted.
+
+        Static per deploy: revalidate a cached copy with `If-None-Match` against the `ETag`.
+      summary: List Pipeline Node Types
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeType'
+              examples:
+                NodeTypes:
+                  value:
+                  - type: RouterNode
+                    description: Routes the input to one of the linked nodes using
+                      an LLM
+                    documentation_url: https://docs.openchatstudio.com/how-to/pipelines/nodes/
+                    outputs:
+                      kind: per_keyword
+                      handles: null
+                      handle_pattern: output_{index}
+                      description: One output per entry in `keywords`.
+                    schema:
+                      title: RouterNode
+                      type: object
+                      required:
+                      - llm_provider_id
+                      - llm_provider_model_id
+                      - name
+                      properties:
+                        llm_provider_id:
+                          type: integer
+                          title: LLM Model
+                          description: The configured LLM service provider this node
+                            calls.
+                        llm_provider_model_id:
+                          type: integer
+                          must_match:
+                            field: llm_provider_id
+                            'on': type
+                  summary: A router, showing the per-keyword outputs and a param-pairing
+                    rule.
+          description: ''
+  /api/v2/pipeline/nodes/{node_type}/:
+    get:
+      operationId: pipeline_node_retrieve
+      description: |-
+        One node type, as `/pipeline/nodes/` serves it. A deprecated type is not retrievable either -- it is not something a client may build.
+
+        Static per deploy: revalidate a cached copy with `If-None-Match` against the `ETag`.
+      summary: Retrieve a Pipeline Node Type
+      parameters:
+      - in: path
+        name: node_type
+        schema:
+          type: string
+        description: The type's name, as carried in the `type` field of a `/pipeline/nodes/`
+          entry.
+        required: true
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeType'
+              examples:
+                NodeType:
+                  value:
+                    type: RouterNode
+                    description: Routes the input to one of the linked nodes using
+                      an LLM
+                    documentation_url: https://docs.openchatstudio.com/how-to/pipelines/nodes/
+                    outputs:
+                      kind: per_keyword
+                      handles: null
+                      handle_pattern: output_{index}
+                      description: One output per entry in `keywords`.
+                    schema:
+                      title: RouterNode
+                      type: object
+                      required:
+                      - llm_provider_id
+                      - llm_provider_model_id
+                      - name
+                      properties:
+                        llm_provider_id:
+                          type: integer
+                          title: LLM Model
+                          description: The configured LLM service provider this node
+                            calls.
+                        llm_provider_model_id:
+                          type: integer
+                          must_match:
+                            field: llm_provider_id
+                            'on': type
+                  summary: A router, showing the per-keyword outputs and a param-pairing
+                    rule.
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeTypeNotFound'
+          description: No such node type, or the type is deprecated and therefore
+            not listed.
+  /api/v2/pipeline/options/:
+    get:
+      operationId: pipeline_options
+      description: |-
+        The values each node param accepts, scoped to the API key's team.
+
+        A key holds the values for the node param of the same name: write one of `source_material`'s entries into a node's `source_material_id`, one of `collection_index`'s into `collection_index_ids`.
+
+        The variable lists are the exception, because no param is named for the list it draws on and two different params are both named `prompt`. Jinja params -- `template_string` and `SendEmail`'s fields -- draw from `template_variables` and are written double-braced (`{{input}}`); an LLM node's `prompt` draws from `llm_prompt_variables` and a router's from `router_prompt_variables`, both written single-braced (`{source_material}`). Fetch `/pipeline/options/{node_type}/` to receive only the list that applies -- the sets are not interchangeable.
+      summary: List Pipeline Node Options
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineOptions'
+              examples:
+                PipelineOptions:
+                  value:
+                    llm_provider_id:
+                    - value: 1
+                      label: Prod OpenAI
+                      type: openai
+                    llm_provider_model_id:
+                    - value: 5
+                      label: gpt-4o
+                      type: openai
+                      max_token_limit: 128000
+                    synthetic_voice_id:
+                    - value: 11
+                      label: Joanna (English)
+                      type: aws
+                      provider_id: 2
+                    source_material:
+                    - value: 3
+                      label: Returns policy
+                    collection:
+                    - value: 7
+                      label: Policy docs
+                    collection_index:
+                    - value: 9
+                      label: Support KB (Remote)
+                    tools:
+                    - value: one-off-reminder
+                      label: One-off Reminder
+                    custom_actions:
+                    - value: 4:getOrderStatus
+                      label: 'Orders API: Look up an order'
+                    built_in_tools:
+                      openai:
+                      - value: web-search
+                        label: Web Search
+                    tool_config:
+                      anthropic:
+                        web-search:
+                        - name: allowed_domains
+                          type: expandable_text
+                          label: Allowed Domains
+                          helpText: Only search these domains. Separate entries with
+                            newlines.
+                    template_variables:
+                    - label: input
+                      description: The text passed into this node from the preceding
+                        one.
+                    llm_prompt_variables:
+                    - label: source_material
+                      description: The full text of the source material chosen in
+                        `source_material_id`.
+                    router_prompt_variables:
+                    - label: session_state
+                      description: State that survives for the whole session.
+                    default_llm_provider:
+                      llm_provider_id: 1
+                      llm_provider_model_id: 5
+                  summary: Every key the endpoint serves, for a team that has one
+                    of each resource.
+          description: ''
+  /api/v2/pipeline/options/{node_type}/:
+    get:
+      operationId: pipeline_node_options
+      description: 'The keys this node type''s params can reference, plus its `default_llm_provider`
+        where it has one -- `/pipeline/options/` cut down to what building this one
+        node needs. Which of the three variable lists applies is settled here rather
+        than left to the client: the sets are not interchangeable.'
+      summary: List One Node Type's Options
+      parameters:
+      - in: path
+        name: node_type
+        schema:
+          type: string
+        description: The type's name, as carried in the `type` field of a `/pipeline/nodes/`
+          entry.
+        required: true
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineOptions'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeTypeNotFound'
+          description: No such node type, or the type is deprecated and therefore
+            not listed.
   /api/v2/trigger_bot/:
     post:
       operationId: trigger_bot_message
@@ -866,6 +1112,18 @@ components:
       - id
       - name
       - server_url
+    DefaultLlmProvider:
+      type: object
+      properties:
+        llm_provider_id:
+          type: integer
+          nullable: true
+        llm_provider_model_id:
+          type: integer
+          nullable: true
+      required:
+      - llm_provider_id
+      - llm_provider_model_id
     ExtractParticipantDataParams:
       type: object
       properties:
@@ -1498,6 +1756,16 @@ components:
         * `send_message_to_bot` - Prompt the bot to message the user
         * `schedule_trigger` - Trigger a schedule
         * `pipeline_start` - Start a pipeline
+    KindEnum:
+      enum:
+      - single
+      - per_keyword
+      - none
+      type: string
+      description: |-
+        * `single` - single
+        * `per_keyword` - per_keyword
+        * `none` - none
     LLMResponseParams:
       type: object
       description: An LLM call with no prompt/history configuration of its own.
@@ -1580,6 +1848,28 @@ components:
             type: string
           nullable: true
           description: MCP server tools enabled for the node.
+    LlmProviderModelOption:
+      type: object
+      description: A model the team can call, given the providers it holds.
+      properties:
+        value:
+          type: integer
+          description: The model's id. Write this into the node param.
+        label:
+          type: string
+        type:
+          type: string
+          description: The provider type that serves the model. Must equal the `type`
+            of the chosen `llm_provider_id`.
+        max_token_limit:
+          type: integer
+          description: The token count beyond which a session's message history is
+            compressed. `0` means compression is off for this model. Absent where
+            no limit is recorded.
+      required:
+      - label
+      - type
+      - value
     Me:
       type: object
       properties:
@@ -1650,6 +1940,80 @@ components:
       - ai
       - human
       - total
+    NodeOutputs:
+      type: object
+      properties:
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/KindEnum'
+          description: |-
+            `single` for one fixed output, `per_keyword` for one per `keywords` entry, `none` for a terminus.
+
+            * `single` - single
+            * `per_keyword` - per_keyword
+            * `none` - none
+        handles:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: The `source_handle` values an edge may use, or null when they
+            depend on the node's params.
+        handle_pattern:
+          type: string
+          description: How to build a handle name when `handles` is null.
+        description:
+          type: string
+      required:
+      - description
+      - handles
+      - kind
+    NodeType:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Write this to a node's `type` field.
+        description:
+          type: string
+        documentation_url:
+          type: string
+          format: uri
+          description: Human documentation for this node type, where it exists.
+        outputs:
+          allOf:
+          - $ref: '#/components/schemas/NodeOutputs'
+          description: How many outputs the node has and how edges address them.
+        schema:
+          type: object
+          additionalProperties: {}
+          description: 'JSON Schema for the node''s `params`. A param drawing from
+            a fixed set of values takes them from the `/pipeline/options/` key of
+            the same name. Properties carry these keys beyond standard JSON Schema,
+            where they apply: `must_match` (this value must agree with another param''s
+            chosen option on the named attribute), `options_keyed_by` (the option
+            list is a dict, and another param''s chosen option selects the sub-list),
+            `applies_when` (the param is ignored unless the condition holds) and `requires_feature_flag`.'
+      required:
+      - description
+      - outputs
+      - schema
+      - type
+    NodeTypeNotFound:
+      type: object
+      description: The body DRF renders for the `NotFound` raised on a node type name
+        nothing answers to.
+      properties:
+        detail:
+          type: string
+        valid_types:
+          type: array
+          items:
+            type: string
+          description: Every type this endpoint serves, so a failed call can be corrected.
+      required:
+      - detail
+      - valid_types
     PaginatedChatbotList:
       type: object
       required:
@@ -1721,6 +2085,91 @@ components:
       - edge
       - node
       - pipeline
+    PipelineOptions:
+      type: object
+      description: |-
+        The documented keys. Each holds the values for the node param of the same name. A response
+        from `/pipeline/options/{node_type}/` carries a subset, and any response may carry keys not
+        listed here as new node params are added.
+      properties:
+        llm_provider_id:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderOption'
+        llm_provider_model_id:
+          type: array
+          items:
+            $ref: '#/components/schemas/LlmProviderModelOption'
+        synthetic_voice_id:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyntheticVoiceOption'
+        source_material:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceOption'
+        collection:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceOption'
+          description: Media collections -- files a node can talk about.
+        collection_index:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceOption'
+          description: Searchable indexes a node can retrieve from.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolOption'
+          description: The bot tools a node's `tools` param may enable. Distinct from
+            `custom_actions` and `built_in_tools`, which are separate params drawing
+            on their own lists.
+        custom_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolOption'
+        built_in_tools:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/ToolOption'
+          description: Keyed by LLM provider type.
+        tool_config:
+          type: object
+          additionalProperties: {}
+          description: Per-provider, per-tool config field descriptors. Keyed by LLM
+            provider type.
+        template_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVariable'
+          description: 'The variables a Jinja param may reference, written double-braced
+            -- `{{input}}`. Covers `RenderTemplate`''s `template_string` and `SendEmail`''s
+            `recipient_list`, `subject` and `body`. Distinct from the two prompt lists
+            in both content and syntax: those are single-braced. Fetch `/pipeline/options/{node_type}/`
+            to get the list that applies.'
+        llm_prompt_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVariable'
+          description: 'The variables an LLM node''s `prompt` may reference, written
+            single-braced -- `{source_material}`. A superset of `router_prompt_variables`:
+            it adds the ones backed by a param on the same node, such as `source_material`
+            and `media`.'
+        router_prompt_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptVariable'
+          description: The variables a router node's `prompt` may reference, written
+            single-braced. Narrower than `llm_prompt_variables` -- a router has no
+            source material or media to interpolate.
+        default_llm_provider:
+          allOf:
+          - $ref: '#/components/schemas/DefaultLlmProvider'
+          description: A provider/model pair that already satisfies the `must_match`
+            rule.
     PlatformEnum:
       enum:
       - telegram
@@ -1747,6 +2196,20 @@ components:
         * `evaluations` - Evaluations
         * `embedded_widget` - Chat Widget & API
         * `email` - Email
+    PromptVariable:
+      type: object
+      description: A template variable rather than a resource id -- there is no `value`
+        to write.
+      properties:
+        label:
+          type: string
+          description: Write this into the prompt or template, in braces.
+        description:
+          type: string
+          description: What the variable holds and when to use it.
+      required:
+      - description
+      - label
     Provider:
       type: object
       description: |-
@@ -1766,6 +2229,24 @@ components:
       - id
       - name
       - type
+    ProviderOption:
+      type: object
+      description: One of the team's configured service providers.
+      properties:
+        value:
+          type: integer
+          description: The provider's id. Write this into the node param.
+        label:
+          type: string
+          description: The name the team gave the provider.
+        type:
+          type: string
+          description: What the provider talks to -- `openai`, `anthropic`, `aws`.
+            The join key for `must_match`.
+      required:
+      - label
+      - type
+      - value
     RenderTemplateParams:
       type: object
       properties:
@@ -1775,6 +2256,21 @@ components:
         template_string:
           type: string
           description: Jinja2 template rendered against the node input.
+    ResourceOption:
+      type: object
+      description: |-
+        One of the team's stored resources. Write `value` into the param; `label` is for humans
+        reading a diff.
+      properties:
+        value:
+          type: integer
+          description: The resource's id. Write this into the node param.
+        label:
+          type: string
+          description: What the resource is called.
+      required:
+      - label
+      - value
     RouterNodeParams:
       type: object
       properties:
@@ -1882,6 +2378,29 @@ components:
           type: string
           nullable: true
           description: Key within the data source whose value selects the route.
+    SyntheticVoiceOption:
+      type: object
+      description: A voice, and the voice provider that speaks it.
+      properties:
+        value:
+          type: integer
+          description: The voice's id. Write this into the node param.
+        label:
+          type: string
+        type:
+          type: string
+          description: The service the voice comes from -- `aws`, `azure`, `openai`.
+        provider_id:
+          type: integer
+          nullable: true
+          description: The voice provider that owns this voice, or null for a shared
+            voice any provider of the same `type` can speak. The chatbot's own provider
+            is its `voice.provider_id` -- see the chatbot detail endpoint.
+      required:
+      - label
+      - provider_id
+      - type
+      - value
     Team:
       type: object
       properties:
@@ -1911,6 +2430,21 @@ components:
       - completion
       - prompt
       - total
+    ToolOption:
+      type: object
+      description: One selectable tool. Write `value` into the param; `label` is for
+        humans reading a diff.
+      properties:
+        value:
+          type: string
+          description: Write this into the node param. Opaque -- copy it verbatim
+            and never construct one. `custom_actions` values in particular are composite
+            identifiers rather than names.
+        label:
+          type: string
+      required:
+      - label
+      - value
     TriggerBotChannel:
       type: object
       description: |-
@@ -2123,6 +2657,9 @@ tags:
 - name: Me
   description: Information about the authenticated user and the team the token is
     scoped to.
+- name: Pipelines
+  description: Discover the pipeline node types an agent may build and the resource
+    ids it may reference.
 - name: Usage
   description: Inspect team usage and activity data (message counts, and more).
 externalDocs:

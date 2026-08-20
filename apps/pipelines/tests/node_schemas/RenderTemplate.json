@@ -8,6 +8,7 @@
       "type": "string"
     },
     "name": {
+      "description": "Identifies the node within its pipeline. Another node reaches this one's result through `temp_state.outputs.<name>`, so renaming it breaks any template that does.",
       "title": "Node Name",
       "type": "string",
       "ui:widget": "node_name"
@@ -16,7 +17,7 @@
       "description": "Use {{your_variable_name}} to refer to designate input",
       "title": "Template String",
       "type": "string",
-      "ui:optionsSource": "jinja_node",
+      "ui:optionsSource": "template_variables",
       "ui:widget": "jinja_template"
     }
   },

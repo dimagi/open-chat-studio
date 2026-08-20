@@ -53,14 +53,13 @@ from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.exceptions import has_errors
-from apps.pipelines.views import (
-    _pipeline_node_default_values,
-    _pipeline_node_parameter_values,
-    _pipeline_node_schemas,
-    get_widget_page_context,
-    llm_model_parameter_context,
+from apps.pipelines.nodes.node_metadata import (
+    get_node_default_values,
+    get_node_parameter_values,
+    get_node_schemas,
+    get_speakable_voices,
 )
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.pipelines.views import get_widget_page_context, llm_model_parameter_context
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
@@ -360,8 +359,6 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         experiment = get_object_or_404(
             Experiment.objects.get_all().select_related("voice_provider", "pipeline"),
             id=kwargs["pk"],
@@ -372,22 +369,19 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
             if flag_is_active(self.request, "flag_open_ai_voice_engine"):
                 exclude_services = []
-            synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
-            synthetic_voices = synthetic_voices.filter(service__iexact=experiment.voice_provider.type)
+            # Only the experiment's own provider can speak, so the other providers' voices are not offered.
+            synthetic_voices = get_speakable_voices(
+                self.request.team, [experiment.voice_provider], exclude_services=exclude_services
+            )
 
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
-            "node_schemas": _pipeline_node_schemas(),
+            "node_schemas": get_node_schemas(),
             "experiment": experiment,
             "page_title": f"Edit {experiment.name}",
-            "parameter_values": _pipeline_node_parameter_values(
-                team=self.request.team,
-                llm_providers=llm_providers,
-                llm_provider_models=llm_provider_models,
-                synthetic_voices=synthetic_voices,
-            ),
-            "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "parameter_values": get_node_parameter_values(team=self.request.team, synthetic_voices=synthetic_voices),
+            "default_values": get_node_default_values(self.request.team),
             "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],

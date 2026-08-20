@@ -1,7 +1,12 @@
 import pytest
 from django.forms import ValidationError
 
-from apps.utils.prompt import PROMPT_VARS_REQUIRING_RESOURCES, PromptVars, validate_prompt_variables
+from apps.utils.prompt import (
+    PROMPT_VAR_DESCRIPTIONS,
+    PROMPT_VARS_REQUIRING_RESOURCES,
+    PromptVars,
+    validate_prompt_variables,
+)
 
 _context = {
     "source_material": 1,
@@ -35,3 +40,20 @@ class TestValidatePromptVariables:
                 ValidationError, match=f"{prompt_var} variable is specified, but {prompt_var} is missing"
             ):
                 validate_prompt_variables(context, prompt_key="prompt", known_vars=set(PromptVars.values))
+
+
+def test_every_offered_prompt_var_has_a_description():
+    """The v2 discovery API looks each one up by label, so a gap is a KeyError at request time."""
+    missing = sorted(
+        {
+            entry["label"]
+            for accessor in (
+                PromptVars.get_all_prompt_vars,
+                PromptVars.get_router_prompt_vars,
+                PromptVars.get_jinja_vars,
+            )
+            for entry in accessor()
+            if entry["label"] not in PROMPT_VAR_DESCRIPTIONS
+        }
+    )
+    assert not missing, f"Add these to PROMPT_VAR_DESCRIPTIONS in apps/utils/prompt.py: {missing}"

@@ -11,7 +11,6 @@ from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView
 
 from apps.annotations.models import Tag
-from apps.custom_actions.schema_utils import resolve_references
 from apps.evaluations import evaluators
 from apps.evaluations.exceptions import InFlightRunsError
 from apps.evaluations.forms import EvaluatorForm, EvaluatorTagRuleFormSet
@@ -20,6 +19,7 @@ from apps.evaluations.tables import EvaluatorTable
 from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 from apps.teams.mixins import LoginAndTeamRequiredMixin
+from apps.utils.schema_utils import collapse_optional_types, resolve_references
 from apps.web.waf import WafRule, waf_allow
 
 
@@ -242,11 +242,7 @@ def _get_evaluator_schema(evaluator_class):
         schema["properties"].pop(field_name, None)
     schema["required"] = [name for name in schema.get("required", []) if name not in evaluators.LLM_PROVIDER_FIELDS]
 
-    # Remove type ambiguity for optional fields
-    for _key, value in schema["properties"].items():
-        if "anyOf" in value:
-            any_of = value.pop("anyOf")
-            value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
+    collapse_optional_types(schema)
 
     evaluator_schema = evaluator_class.model_config.get("evaluator_schema")
     if evaluator_schema:
