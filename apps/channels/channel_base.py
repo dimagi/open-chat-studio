@@ -261,9 +261,23 @@ class ChannelBase(ABC):
 
         Runs a mini pipeline: ResponseFormattingStage -> terminal stages.
         Voice/text decision, citation formatting, and file handling all apply.
+
+        Nothing is sent on a disabled channel. ``ChannelDisabledStage`` cannot do this job:
+        it answers an inbound message, so on a channel with a static ``disabled_message`` it
+        would swap that text in for the bot's and deliver it -- turning a suppressed reminder
+        into an unsolicited "we are offline" push. Callers usually check first
+        (``ad_hoc_bot_message``); this is the backstop at the door itself.
         """
         if self.experiment_session is None:
             raise ValueError("Cannot send ad hoc message without an experiment session")
+
+        if self.experiment_channel.is_disabled:
+            logger.info(
+                "Not sending message on disabled channel %s (%s)",
+                self.experiment_channel.id,
+                self.experiment_channel.platform,
+            )
+            return
 
         files = files or []
 
