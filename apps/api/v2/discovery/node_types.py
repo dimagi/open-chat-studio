@@ -54,7 +54,7 @@ def unknown_node_type(requested_type: str) -> NotFound:
     return NotFound({"detail": detail, "valid_types": _valid_type_names()})
 
 
-def etag(payload) -> str:
+def etag(payload: list | dict) -> str:
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
     return f'W/"{digest[:32]}"'
 

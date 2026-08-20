@@ -5,6 +5,8 @@ Both reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which
 raw. The reshaping rules live in ``contract.py`` and ``node_types.py``.
 """
 
+from typing import Any
+
 from django.http import HttpResponseNotModified
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
@@ -79,7 +81,7 @@ class NodeTypesView(DiscoveryView):
     serializer_class = NodeTypeSerializer
 
     @staticmethod
-    def _etagged(request, payload) -> Response | HttpResponseNotModified:
+    def _etagged(request, payload: list | dict) -> Response | HttpResponseNotModified:
         """`payload` under its `ETag`, or a bare 304 for a client whose cached copy still matches."""
         payload_etag = etag(payload)
         if request.headers.get("If-None-Match") == payload_etag:
@@ -214,7 +216,7 @@ class TeamOptionsView(DiscoveryView):
         return cls._describe_prompt_vars(options)
 
     @classmethod
-    def _clean_options(cls, value):
+    def _clean_options(cls, value: Any) -> Any:
         """Strip the builder-only affordances off every option list. Recurses -- ``built_in_tools``
         and ``tool_config`` nest their lists inside dicts keyed by provider type."""
         if isinstance(value, dict):
@@ -224,12 +226,12 @@ class TeamOptionsView(DiscoveryView):
         return value
 
     @staticmethod
-    def _is_placeholder(option) -> bool:
+    def _is_placeholder(option: Any) -> bool:
         """A builder entry standing in for "nothing chosen". It names no resource to reference."""
         return isinstance(option, dict) and option.get("value") == ""
 
     @staticmethod
-    def _clean_option(option):
+    def _clean_option(option: Any) -> Any:
         """One option entry, with its ``edit_url`` link into the Django UI dropped."""
         if not isinstance(option, dict):
             return option

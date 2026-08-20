@@ -91,7 +91,7 @@ def get_speakable_voices(
     )
 
 
-def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QuerySet):
+def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QuerySet) -> dict:
     return {
         OptionsSource.llm_provider_id: [
             _option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers
@@ -103,7 +103,7 @@ def _llm_provider_options(llm_providers: list[dict], llm_provider_models: QueryS
     }
 
 
-def _team_resource_options(team, include_versions: bool):
+def _team_resource_options(team: Team, include_versions: bool) -> dict:
     """The team's referenceable resources, each with a link into the UI for the builder's edit button."""
     common_filters = {"team": team}
     if not include_versions:
@@ -118,7 +118,7 @@ def _team_resource_options(team, include_versions: bool):
         .all()
     )
 
-    def _collection_url(collection_id: int):
+    def _collection_url(collection_id: int) -> str:
         return reverse("documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection_id})
 
     return {
@@ -161,7 +161,7 @@ def _team_resource_options(team, include_versions: bool):
     }
 
 
-def _tool_options(team):
+def _tool_options(team: Team) -> dict:
     custom_action_operations = []
     for _custom_action_name, operations_disp in get_custom_action_operation_choices(team):
         custom_action_operations.extend(operations_disp)
@@ -179,7 +179,7 @@ def _tool_options(team):
     }
 
 
-def _built_in_tool_options(llm_providers: list[dict]):
+def _built_in_tool_options(llm_providers: list[dict]) -> dict:
     """Built-in tools and the config fields they take, both keyed by provider type -- each provider
     exposes a different set, and a type the team holds no provider for is not offered at all."""
     provider_types = {provider["type"].lower() for provider in llm_providers if provider.get("type")}
@@ -196,7 +196,7 @@ def _built_in_tool_options(llm_providers: list[dict]):
     }
 
 
-def _prompt_var_options():
+def _prompt_var_options() -> dict:
     return {
         OptionsSource.llm_prompt_variables: PromptVars.get_all_prompt_vars(),
         OptionsSource.router_prompt_variables: PromptVars.get_router_prompt_vars(),
@@ -204,7 +204,7 @@ def _prompt_var_options():
     }
 
 
-def _synthetic_voice_options(synthetic_voices):
+def _synthetic_voice_options(synthetic_voices: QuerySet | list[SyntheticVoice]) -> dict:
     return {
         OptionsSource.synthetic_voice_id: sorted(
             [
@@ -216,7 +216,13 @@ def _synthetic_voice_options(synthetic_voices):
     }
 
 
-def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
+def _option(
+    value: int | str,
+    label: str,
+    type_: str | None = None,
+    edit_url: str | None = None,
+    max_token_limit: int | None = None,
+) -> dict:
     data = {"value": value, "label": label}
     data = data | ({"type": type_} if type_ else {})
     data = data | ({"edit_url": edit_url} if edit_url else {})
@@ -247,7 +253,7 @@ def get_node_default_values(team: Team, usable_models_only: bool = False) -> dic
     }
 
 
-def get_node_schemas():
+def get_node_schemas() -> list[dict]:
     schemas = []
 
     node_classes = [
@@ -262,7 +268,7 @@ def get_node_schemas():
     return schemas
 
 
-def _get_node_schema(node_class):
+def _get_node_schema(node_class: type) -> dict:
     schema = resolve_references(node_class.model_json_schema())
     schema.pop("$defs", None)
     collapse_optional_types(schema)
