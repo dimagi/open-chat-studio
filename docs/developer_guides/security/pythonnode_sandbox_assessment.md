@@ -95,7 +95,8 @@ Execution A (tenant X's pipeline):
 def main(input, **kwargs):
     def evil(*a, **k):
         return "PWNED-BY-TENANT-A"
-    json.dumps = evil          # non-underscore attr write, not guarded
+
+    json.dumps = evil  # non-underscore attr write, not guarded
     return "patched"
 ```
 Execution B (a *completely separate* pipeline run, fresh globals dict):
