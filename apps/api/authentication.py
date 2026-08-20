@@ -198,12 +198,6 @@ class ChatOAuthAuthentication(authentication.BaseAuthentication):
 
         token = validated_machine_token(request, experiment)
         self._check_origin(request, channel)
-        # What OAuth2AccessTokenAuthentication does for every other OAuth endpoint. Nothing on
-        # this path writes an audited row today -- `record_widget_version` deliberately bypasses
-        # auditing, and neither Participant nor ExperimentSession is audited -- so this is for
-        # consistency and attribution (the Sentry team tag, the rate limiter's team scope) rather
-        # than to fix a live gap. It is also what keeps a later audited write here from silently
-        # landing without a team. Unset by the request_finished signal.
         request.team = token.team
         set_current_team(token.team)
         return (AnonymousUser(), channel)
