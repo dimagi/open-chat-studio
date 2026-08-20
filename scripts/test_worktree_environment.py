@@ -43,16 +43,68 @@ def _write_executable(path: Path, contents: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _record_dependency_fingerprint(worktree: Path) -> None:
-    _run(
+def _run_worktree_helper(
+    worktree: Path,
+    function_name: str,
+    *arguments: str | Path,
+    env: dict[str, str] | None = None,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    return _run(
         "bash",
         "-c",
-        'source "$1"; ocs_record_dependency_fingerprint "$2"',
+        f'source "$1"; shift; {function_name} "$@"',
         "_",
         worktree / "scripts" / "worktree-environment.sh",
-        worktree,
+        *arguments,
         cwd=worktree,
+        env=env,
+        check=check,
     )
+
+
+def _record_dependency_fingerprint(worktree: Path) -> None:
+    _run_worktree_helper(worktree, "ocs_record_dependency_fingerprint", worktree)
+
+
+def _allocate_redis_database(worktree: Path, env: dict[str, str], resource_name: str) -> int:
+    result = _run_worktree_helper(
+        worktree,
+        "ocs_allocate_redis_database",
+        resource_name,
+        env=env,
+    )
+    return int(result.stdout)
+
+
+def _prepare_session_guard(
+    worktree: Path,
+    env: dict[str, str],
+    command_log: Path,
+    *,
+    database_name: str,
+    thread_id: str,
+    setup_script: str,
+    redis_url: str | None = None,
+) -> Path:
+    redis_database = _allocate_redis_database(worktree, env, "codex_a1b2")
+    expected_redis_url = redis_url or f"redis://localhost:6379/{redis_database}"
+    (worktree / ".env").write_text(
+        "SECRET_KEY=test-only\n"
+        f"DATABASE_URL=postgres://postgres:postgres@localhost:5432/{database_name}\n"
+        f"REDIS_URL={expected_redis_url}\n"
+    )
+    (worktree / ".venv").mkdir()
+    (worktree / "node_modules").mkdir()
+    _record_dependency_fingerprint(worktree)
+    _write_executable(worktree / "scripts" / "setup-worktree.sh", setup_script)
+    env.update(
+        {
+            "CODEX_THREAD_ID": thread_id,
+            "TMPDIR": str(command_log.parent),
+        }
+    )
+    return command_log.parent / f"ocs-worktree-setup-{thread_id}.log"
 
 
 @pytest.fixture()
@@ -102,6 +154,7 @@ def worktree_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         'printf "psql:%s\\n" "$*" >> "$OCS_TEST_COMMAND_LOG"\n'
+        'if [[ "${OCS_TEST_FAIL_PSQL:-false}" == "true" ]]; then exit 1; fi\n'
         'if [[ "$*" == *"SELECT 1 FROM pg_database"* ]]; then exit 0; fi\n',
     )
     _write_executable(
@@ -110,11 +163,64 @@ def worktree_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
     )
     _write_executable(
         fake_bin / "redis-cli",
-        '#!/usr/bin/env bash\nset -euo pipefail\nprintf "redis-cli:%s\\n" "$*" >> "$OCS_TEST_COMMAND_LOG"\n',
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ "${*: -1}" == "FLUSHDB" ]]; then\n'
+        '    printf "redis-cli:%s\\n" "$*" >> "$OCS_TEST_COMMAND_LOG"\n'
+        '    [[ "${OCS_TEST_FAIL_REDIS_FLUSH:-false}" != "true" ]]\n'
+        "    exit 0\n"
+        "fi\n"
+        "operation=\n"
+        "resource_name=\n"
+        "database=\n"
+        'for argument in "$@"; do\n'
+        '    if [[ "$argument" =~ ^(allocate|lookup|release)$ ]]; then\n'
+        "        operation=$argument\n"
+        "        continue\n"
+        "    fi\n"
+        '    if [[ -n "$operation" && -z "$resource_name" ]]; then\n'
+        "        resource_name=$argument\n"
+        '    elif [[ "$operation" == "release" && -n "$resource_name" ]]; then\n'
+        "        database=$argument\n"
+        "    fi\n"
+        "done\n"
+        'printf "redis-registry:%s:%s:%s\\n" "$operation" "$resource_name" "$database" '
+        '>> "$OCS_TEST_COMMAND_LOG"\n'
+        'touch "$OCS_TEST_REDIS_REGISTRY"\n'
+        "existing=$(awk -v resource=\"$resource_name\" '$1 == resource { print $2 }' "
+        '"$OCS_TEST_REDIS_REGISTRY")\n'
+        'if [[ "$operation" == "lookup" ]]; then\n'
+        '    [[ -n "$existing" ]] || exit 1\n'
+        '    printf "%s\\n" "$existing"\n'
+        "    exit 0\n"
+        "fi\n"
+        'if [[ "$operation" == "allocate" ]]; then\n'
+        '    if [[ -n "$existing" ]]; then printf "%s\\n" "$existing"; exit 0; fi\n'
+        "    for candidate in $(seq 1 14); do\n"
+        "        if ! awk -v database=\"$candidate\" '$2 == database { found = 1 } END { exit !found }' "
+        '"$OCS_TEST_REDIS_REGISTRY"; then\n'
+        '            printf "%s %s\\n" "$resource_name" "$candidate" >> "$OCS_TEST_REDIS_REGISTRY"\n'
+        '            printf "%s\\n" "$candidate"\n'
+        "            exit 0\n"
+        "        fi\n"
+        "    done\n"
+        '    echo "Redis database registry exhausted" >&2\n'
+        "    exit 1\n"
+        "fi\n"
+        'if [[ "$operation" == "release" ]]; then\n'
+        '    [[ "$existing" == "$database" ]] || exit 1\n'
+        '    awk -v resource="$resource_name" \'$1 != resource\' "$OCS_TEST_REDIS_REGISTRY" '
+        '> "$OCS_TEST_REDIS_REGISTRY.tmp"\n'
+        '    mv "$OCS_TEST_REDIS_REGISTRY.tmp" "$OCS_TEST_REDIS_REGISTRY"\n'
+        "    echo 1\n"
+        "    exit 0\n"
+        "fi\n"
+        "exit 1\n",
     )
 
     env = {
         "OCS_TEST_COMMAND_LOG": str(command_log),
+        "OCS_TEST_REDIS_REGISTRY": str(tmp_path / "redis-registry"),
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
     }
     return root, worktree, env, command_log
@@ -155,6 +261,68 @@ def test_setup_uses_an_explicit_worktrunk_identifier(
 
     assert "5432/feature_database" in (worktree / ".env").read_text()
     assert 'CREATE DATABASE "feature_database"' in command_log.read_text()
+
+
+@pytest.mark.parametrize(
+    ("first_identifier", "second_identifier"),
+    [
+        pytest.param("feature/a", "feature_a", id="sanitization"),
+        pytest.param(f"{'x' * 63}a", f"{'x' * 63}b", id="truncation"),
+    ],
+)
+def test_resource_names_do_not_collide_after_sanitization(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    first_identifier: str,
+    second_identifier: str,
+) -> None:
+    _, worktree, _, _ = worktree_fixture
+
+    first_name = _run_worktree_helper(
+        worktree,
+        "ocs_sanitize_resource_name",
+        first_identifier,
+    ).stdout.strip()
+    second_name = _run_worktree_helper(
+        worktree,
+        "ocs_sanitize_resource_name",
+        second_identifier,
+    ).stdout.strip()
+
+    assert first_name != second_name
+    assert len(first_name) <= 63
+    assert len(second_name) <= 63
+
+
+def test_redis_registry_allocates_distinct_databases_and_reuses_assignments(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+
+    first_database = _allocate_redis_database(worktree, env, "feature_6")
+    second_database = _allocate_redis_database(worktree, env, "feature_17")
+    repeated_database = _allocate_redis_database(worktree, env, "feature_6")
+
+    assert first_database != second_database
+    assert repeated_database == first_database
+
+
+def test_redis_registry_reports_exhaustion(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+    for index in range(14):
+        _allocate_redis_database(worktree, env, f"feature_{index}")
+
+    result = _run_worktree_helper(
+        worktree,
+        "ocs_allocate_redis_database",
+        "one_too_many",
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "exhausted" in result.stderr.lower()
 
 
 def test_setup_runs_from_the_worktree_root_when_started_in_a_subdirectory(
@@ -230,6 +398,7 @@ def test_teardown_removes_only_the_worktree_resources(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
     _, worktree, env, command_log = worktree_fixture
+    redis_database = _allocate_redis_database(worktree, env, "codex_a1b2")
 
     _run(TEARDOWN_SCRIPT, cwd=worktree, env=env)
 
@@ -237,6 +406,15 @@ def test_teardown_removes_only_the_worktree_resources(
     assert 'DROP DATABASE IF EXISTS "codex_a1b2" WITH (FORCE)' in command_output
     assert "redis-cli:-n " in command_output
     assert " FLUSHDB" in command_output
+    lookup = _run_worktree_helper(
+        worktree,
+        "ocs_lookup_redis_database",
+        "codex_a1b2",
+        env=env,
+        check=False,
+    )
+    assert lookup.returncode != 0
+    assert str(redis_database) not in lookup.stdout
 
 
 def test_teardown_refuses_to_clean_the_root_checkout(
@@ -260,12 +438,41 @@ def test_teardown_allows_worktrunk_to_clean_after_removal(
             "OCS_WORKTREE_ID": "feature_database",
         }
     )
+    _allocate_redis_database(root, env, "feature_database")
 
     _run(TEARDOWN_SCRIPT, cwd=root, env=env)
 
     command_output = command_log.read_text()
     assert 'DROP DATABASE IF EXISTS "feature_database" WITH (FORCE)' in command_output
     assert "redis-cli:-n " in command_output
+
+
+@pytest.mark.parametrize(
+    "failure_variable",
+    [
+        pytest.param("OCS_TEST_FAIL_PSQL", id="postgres"),
+        pytest.param("OCS_TEST_FAIL_REDIS_FLUSH", id="redis"),
+    ],
+)
+def test_teardown_propagates_cleanup_failures(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+    failure_variable: str,
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+    _allocate_redis_database(worktree, env, "codex_a1b2")
+    env[failure_variable] = "true"
+
+    result = _run(TEARDOWN_SCRIPT, cwd=worktree, env=env, check=False)
+
+    assert result.returncode != 0
+    assert "Cleaned resources" not in result.stdout
+    lookup = _run_worktree_helper(
+        worktree,
+        "ocs_lookup_redis_database",
+        "codex_a1b2",
+        env=env,
+    )
+    assert lookup.stdout.strip().isdigit()
 
 
 def test_root_teardown_requires_an_explicit_worktree_identifier(
@@ -306,82 +513,74 @@ def test_codex_session_setup_skips_an_initialized_checkout(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
     _, worktree, env, command_log = worktree_fixture
-    (worktree / ".env").write_text(
-        "SECRET_KEY=test-only\nDATABASE_URL=postgres://postgres:postgres@localhost:5432/codex_a1b2\n"
-    )
-    (worktree / ".venv").mkdir()
-    (worktree / "node_modules").mkdir()
-    _record_dependency_fingerprint(worktree)
-    _write_executable(
-        worktree / "scripts" / "setup-worktree.sh",
-        "#!/usr/bin/env bash\nexit 99\n",
-    )
-    env.update(
-        {
-            "CODEX_THREAD_ID": "initialized-thread",
-            "TMPDIR": str(command_log.parent),
-        }
+    log_file = _prepare_session_guard(
+        worktree,
+        env,
+        command_log,
+        database_name="codex_a1b2",
+        thread_id="initialized-thread",
+        setup_script="#!/usr/bin/env bash\nexit 99\n",
     )
 
     _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
 
-    assert not (command_log.parent / "ocs-worktree-setup-initialized-thread.log").exists()
+    assert not log_file.exists()
 
 
 def test_codex_session_setup_refreshes_stale_dependencies(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
     _, worktree, env, command_log = worktree_fixture
-    (worktree / ".env").write_text(
-        "SECRET_KEY=test-only\nDATABASE_URL=postgres://postgres:postgres@localhost:5432/codex_a1b2\n"
+    log_file = _prepare_session_guard(
+        worktree,
+        env,
+        command_log,
+        database_name="codex_a1b2",
+        thread_id="stale-dependencies-thread",
+        setup_script="#!/usr/bin/env bash\necho 'refreshed dependencies'\n",
     )
-    (worktree / ".venv").mkdir()
-    (worktree / "node_modules").mkdir()
-    _record_dependency_fingerprint(worktree)
     (worktree / ".python-version").write_text("3.14\n")
-    _write_executable(
-        worktree / "scripts" / "setup-worktree.sh",
-        "#!/usr/bin/env bash\necho 'refreshed dependencies'\n",
-    )
-    env.update(
-        {
-            "CODEX_THREAD_ID": "stale-dependencies-thread",
-            "TMPDIR": str(command_log.parent),
-        }
-    )
 
     _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
 
-    assert (command_log.parent / "ocs-worktree-setup-stale-dependencies-thread.log").read_text() == (
-        "refreshed dependencies\n"
-    )
+    assert log_file.read_text() == "refreshed dependencies\n"
 
 
 def test_codex_session_setup_repairs_a_shared_database_configuration(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
     _, worktree, env, command_log = worktree_fixture
-    (worktree / ".env").write_text(
-        "SECRET_KEY=test-only\nDATABASE_URL=postgres://postgres:postgres@localhost:5432/root_database\n"
-    )
-    (worktree / ".venv").mkdir()
-    (worktree / "node_modules").mkdir()
-    _write_executable(
-        worktree / "scripts" / "setup-worktree.sh",
-        "#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
-    )
-    env.update(
-        {
-            "CODEX_THREAD_ID": "shared-database-thread",
-            "TMPDIR": str(command_log.parent),
-        }
+    log_file = _prepare_session_guard(
+        worktree,
+        env,
+        command_log,
+        database_name="root_database",
+        thread_id="shared-database-thread",
+        setup_script="#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
     )
 
     _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
 
-    assert (command_log.parent / "ocs-worktree-setup-shared-database-thread.log").read_text() == (
-        "reconfigured worktree\n"
+    assert log_file.read_text() == "reconfigured worktree\n"
+
+
+def test_codex_session_setup_repairs_a_shared_redis_configuration(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    log_file = _prepare_session_guard(
+        worktree,
+        env,
+        command_log,
+        database_name="codex_a1b2",
+        thread_id="shared-redis-thread",
+        setup_script="#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
+        redis_url="redis://localhost:6379/0",
     )
+
+    _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
+
+    assert log_file.read_text() == "reconfigured worktree\n"
 
 
 def test_codex_hook_runs_when_a_session_resumes() -> None:

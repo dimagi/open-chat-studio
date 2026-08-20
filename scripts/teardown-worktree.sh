@@ -22,14 +22,21 @@ if ocs_is_root_worktree "$CURRENT_PATH" "$ROOT_WORKTREE_PATH"; then
 fi
 
 resource_name=$(ocs_worktree_resource_name "$CURRENT_PATH")
-redis_database=$(ocs_redis_database "$resource_name")
 
 PGPASSWORD=postgres psql \
     -h localhost \
     -U postgres \
     -v ON_ERROR_STOP=1 \
-    -c "DROP DATABASE IF EXISTS \"$resource_name\" WITH (FORCE)" \
-    || true
-redis-cli -n "$redis_database" FLUSHDB || true
+    -c "DROP DATABASE IF EXISTS \"$resource_name\" WITH (FORCE)"
+
+if redis_database=$(ocs_lookup_redis_database "$resource_name"); then
+    redis-cli -n "$redis_database" FLUSHDB
+    ocs_release_redis_database "$resource_name" "$redis_database"
+else
+    lookup_status=$?
+    if [[ "$lookup_status" -ne 1 ]]; then
+        exit "$lookup_status"
+    fi
+fi
 
 echo "[ocs] Cleaned resources for $resource_name."

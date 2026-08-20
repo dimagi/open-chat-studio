@@ -16,12 +16,20 @@ ocs_is_root_worktree() {
 }
 
 ocs_sanitize_resource_name() {
+    local original="$1"
+    local hash_suffix
+    local prefix_length
     local sanitized
-    sanitized=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_]+/_/g; s/^_+//; s/_+$//')
-    sanitized=${sanitized:0:63}
+    sanitized=$(printf '%s' "$original" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_]+/_/g; s/^_+//; s/_+$//')
     if [[ -z "$sanitized" ]]; then
         echo "Unable to derive a safe worktree resource name." >&2
         return 1
+    fi
+
+    if [[ "$sanitized" != "$original" || ${#sanitized} -gt 63 ]]; then
+        hash_suffix=$(printf '%s' "$original" | cksum | awk '{printf "%08x", $1}')
+        prefix_length=$((63 - ${#hash_suffix} - 1))
+        sanitized="${sanitized:0:prefix_length}_${hash_suffix}"
     fi
     printf '%s\n' "$sanitized"
 }
@@ -47,8 +55,114 @@ ocs_worktree_resource_name() {
     ocs_sanitize_resource_name "$raw_name"
 }
 
-ocs_redis_database() {
-    printf '%s' "$1" | cksum | awk '{print ($1 % 15) + 1}'
+ocs_redis_registry_command() {
+    local operation="$1"
+    local resource_name="$2"
+    local expected_database="${3:-}"
+    local registry_database="${OCS_REDIS_REGISTRY_DATABASE:-15}"
+    local registry_key="ocs:worktree:redis-registry"
+    local registry_script
+
+    registry_script='local operation = ARGV[1]
+local resource = ARGV[2]
+local expected_database = ARGV[3]
+local resource_field = "resource:" .. resource
+
+local function database_field(database)
+    return "database:" .. database
+end
+
+if operation == "lookup" then
+    local database = redis.call("HGET", KEYS[1], resource_field)
+    if not database then
+        return "missing"
+    end
+    if redis.call("HGET", KEYS[1], database_field(database)) ~= resource then
+        return "missing"
+    end
+    return database
+end
+
+
+if operation == "allocate" then
+    local database = redis.call("HGET", KEYS[1], resource_field)
+    if database and redis.call("HGET", KEYS[1], database_field(database)) == resource then
+        return database
+    end
+    redis.call("HDEL", KEYS[1], resource_field)
+
+    for candidate = 1, 14 do
+        local field = database_field(candidate)
+        if not redis.call("HGET", KEYS[1], field) then
+            redis.call("HSET", KEYS[1], field, resource)
+            redis.call("HSET", KEYS[1], resource_field, candidate)
+            return candidate
+        end
+    end
+    return redis.error_reply("No Redis databases available for another worktree")
+end
+
+
+if operation == "release" then
+    local database = redis.call("HGET", KEYS[1], resource_field)
+    if database ~= expected_database then
+        return 0
+    end
+    if redis.call("HGET", KEYS[1], database_field(database)) ~= resource then
+        return 0
+    end
+    redis.call("HDEL", KEYS[1], resource_field, database_field(database))
+    return 1
+end
+
+
+return redis.error_reply("Unknown worktree Redis registry operation")'
+
+    redis-cli \
+        -e \
+        -n "$registry_database" \
+        --raw \
+        EVAL "$registry_script" 1 "$registry_key" \
+        "$operation" "$resource_name" "$expected_database"
+}
+
+ocs_allocate_redis_database() {
+    local resource_name="$1"
+    local database
+
+    database=$(ocs_redis_registry_command allocate "$resource_name")
+    if [[ ! "$database" =~ ^([1-9]|1[0-4])$ ]]; then
+        echo "Unable to allocate a Redis database for $resource_name: ${database:-no response}" >&2
+        return 1
+    fi
+    printf '%s\n' "$database"
+}
+
+ocs_lookup_redis_database() {
+    local resource_name="$1"
+    local database
+
+    database=$(ocs_redis_registry_command lookup "$resource_name") || return 2
+    if [[ "$database" == "missing" ]]; then
+        return 1
+    fi
+    if [[ ! "$database" =~ ^([1-9]|1[0-4])$ ]]; then
+        echo "Invalid Redis database allocation for $resource_name: ${database:-no response}" >&2
+        return 2
+    fi
+    printf '%s\n' "$database"
+}
+
+ocs_release_redis_database() {
+    local resource_name="$1"
+    local database="$2"
+    local released
+
+    released=$(ocs_redis_registry_command release "$resource_name" "$database")
+    if [[ "$released" != "1" ]]; then
+        echo "Unable to release Redis database $database for $resource_name." >&2
+        return 1
+    fi
 }
 
 ocs_dependency_fingerprint() {

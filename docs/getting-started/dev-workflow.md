@@ -54,13 +54,14 @@ automatically on create:
 - Copies `.env` (and `.envrc`, `.python-version`) from the main worktree, then runs
   `bootstrap.sh` to install Python and Node dependencies (`uv sync`, `pnpm install`).
 - Points `DATABASE_URL` and `REDIS_URL` at a **per-branch** database and Redis DB, so a migration
-  or a wiped table on one branch can't affect another.
+  or a wiped table on one branch can't affect another. Redis database 15 stores an atomic
+  allocation registry, leaving databases 1–14 for concurrent worktrees without collisions.
 - Creates that database, migrates it, and seeds it with `bootstrap_data` — you get a working
   superuser (`test@example.com` / `letmein`), a team, and sample data rather than an empty app.
 - Builds the frontend assets.
 
-On `wt remove` the branch database is dropped and its Redis DB flushed, so worktrees leave nothing
-behind.
+On `wt remove` the branch database is dropped, its Redis DB is flushed, and its allocation is
+released, so worktrees leave nothing behind.
 
 Once it's set up, run [`inv dev`](local-setup.md#running-the-dev-environment) in the worktree.
 

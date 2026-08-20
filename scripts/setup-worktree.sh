@@ -48,7 +48,7 @@ if [[ ! -f "$CURRENT_PATH/.env" ]]; then
 fi
 
 resource_name=$(ocs_worktree_resource_name "$CURRENT_PATH")
-redis_database=$(ocs_redis_database "$resource_name")
+redis_database=$(ocs_allocate_redis_database "$resource_name")
 database_url="postgres://postgres:postgres@localhost:5432/$resource_name"
 redis_url="redis://localhost:6379/$redis_database"
 

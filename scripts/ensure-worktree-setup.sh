@@ -19,10 +19,15 @@ if [[ -f "$PROJECT_ROOT/.env" \
     fi
 
     resource_name=$(ocs_worktree_resource_name "$PROJECT_ROOT")
-    if grep -Fqx \
-        "DATABASE_URL=postgres://postgres:postgres@localhost:5432/$resource_name" \
-        "$PROJECT_ROOT/.env"; then
-        exit 0
+    if redis_database=$(ocs_lookup_redis_database "$resource_name"); then
+        if grep -Fqx \
+            "DATABASE_URL=postgres://postgres:postgres@localhost:5432/$resource_name" \
+            "$PROJECT_ROOT/.env" \
+            && grep -Fqx \
+                "REDIS_URL=redis://localhost:6379/$redis_database" \
+                "$PROJECT_ROOT/.env"; then
+            exit 0
+        fi
     fi
 fi
 
