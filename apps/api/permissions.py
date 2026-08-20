@@ -13,16 +13,32 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
+from apps.api.authentication import embed_key_authorizes_channel
 from apps.api.session_tokens import session_token_expired, validate_session_token
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
 from apps.oauth.permissions import is_client_credentials_request
 from apps.teams.helpers import get_team_membership_for_request
 from apps.teams.utils import set_current_team
+from apps.utils.rate_limit import check as check_rate_limit
+from apps.utils.rate_limit import client_ip
 
 from .models import UserAPIKey
 
 logger = logging.getLogger("ocs.api")
+
+
+def _count_failed_credential_attempt(request):
+    """Count a rejected key presentation against the credentials scope.
+
+    The exemption flag is not consulted: resolving it reads `request.user`,
+    which re-enters authentication from inside an authentication class, and a
+    rejected key has no team for a team-scoped exemption to apply to.
+    """
+    result = check_rate_limit("credentials", "ip", client_ip(request))
+    request._request.rate_limit_result = result
+    if not result.allowed:
+        raise exceptions.Throttled(wait=result.retry_after)
 
 
 class BaseKeyAuthentication(BaseAuthentication):
@@ -37,15 +53,18 @@ class BaseKeyAuthentication(BaseAuthentication):
         try:
             token = UserAPIKey.objects.get_from_key(key)
         except UserAPIKey.DoesNotExist:
+            _count_failed_credential_attempt(request)
             raise exceptions.AuthenticationFailed(_("Invalid token.")) from None
 
         if not token.user.is_active:
+            _count_failed_credential_attempt(request)
             raise exceptions.AuthenticationFailed(_("User inactive or deleted."))
         user = token.user
         request.user = user
         request.team = token.team
         request.team_membership = get_team_membership_for_request(request)
         if not request.team_membership:
+            _count_failed_credential_attempt(request)
             raise exceptions.AuthenticationFailed()
 
         # this is unset by the request_finished signal
@@ -131,6 +150,14 @@ class SessionAccessPermission(BasePermission):
             # A valid embed key + domain check satisfies EMBED_KEY and NONE channels. It
             # never satisfies a SESSION_TOKEN channel — that always requires the token,
             # even if the session was (mis)configured with session_token_required=False.
+            return level != WidgetAuthLevel.SESSION_TOKEN
+
+        # ADR-0053: a Django session cookie preempts EmbeddedWidgetAuthentication, so a
+        # same-origin widget's embed key never reaches `request.auth`. Honour a key that
+        # rode along with another authenticator, under the same channel and origin checks
+        # as the branch above — otherwise the site help widget could start a session on an
+        # EMBED_KEY channel and then be denied every follow-up request.
+        if embed_key_authorizes_channel(request, channel):
             return level != WidgetAuthLevel.SESSION_TOKEN
 
         # No embed key. At EMBED_KEY and above a valid embed key is mandatory, so the

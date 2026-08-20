@@ -27,6 +27,8 @@
                 <div class="text-right">
                   {% if field_data.type == "numeric" and field_data.mean %}
                     <span class="text-sm">mean: {{ field_data.mean }}</span>
+                  {% elif field_data.type == "binary" and field_data.mean is not None %}
+                    <span class="text-sm">mean: {{ field_data.mean }}</span>
                   {% elif field_data.type == "categorical" and field_data.mode %}
                     <span class="text-sm">mode: {{ field_data.mode }}</span>
                   {% endif %}

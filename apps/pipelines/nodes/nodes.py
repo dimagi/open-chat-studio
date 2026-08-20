@@ -187,7 +187,7 @@ class RenderTemplate(PipelineNode, OutputMessageTagMixin):
     )
     template_string: str = Field(
         description="Use {{your_variable_name}} to refer to designate input",
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.template_variables),
     )
 
     @field_validator("template_string", mode="before")
@@ -280,9 +280,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
             "`{current_datetime}` -- each of which must appear at most once. Literal braces have to be "
             "doubled."
         ),
-        json_schema_extra=UiSchema(
-            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_llm_node
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.text_editor, options_source=OptionsSource.llm_prompt_variables),
     )
     collection_id: OptionalInt = Field(
         None,
@@ -326,7 +324,7 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
     tools: list[str] = Field(
         default_factory=list,
         description="The tools to enable for the bot",
-        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.agent_tools),
+        json_schema_extra=UiSchema(widget=Widgets.multiselect, options_source=OptionsSource.tools),
     )
     custom_actions: list[str] = Field(
         default_factory=list,
@@ -363,9 +361,10 @@ class LLMResponseWithPrompt(LLMResponse, HistoryMixin, OutputMessageTagMixin):
         None,
         title="Voice Model",
         description=(
-            "The text-to-speech voice this node's reply is spoken in. Must belong to the voice "
-            "provider configured on the chatbot -- each option carries the `provider_id` it needs to "
-            "match. Leave unset to reply in text only."
+            "The text-to-speech voice this node's reply is spoken in. Only applies where the chatbot "
+            "has a voice provider configured, and the voice has to be one that provider can speak -- "
+            "each option carries the `type` and `provider_id` to match it against. Leave unset to "
+            "reply in text only."
         ),
         json_schema_extra=UiSchema(widget=Widgets.voice_widget, options_source=OptionsSource.synthetic_voice_id),
     )
@@ -522,16 +521,20 @@ class SendEmail(PipelineNode, OutputMessageTagMixin):
 
     recipient_list: str = Field(
         description="A comma-separated list of email addresses. Supports Jinja2 templates.",
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
+        json_schema_extra=UiSchema(
+            widget=Widgets.jinja_template, options_source=OptionsSource.template_variables, rows=1
+        ),
     )
     subject: str = Field(
         description="Email subject. Supports Jinja2 templates.",
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node, rows=1),
+        json_schema_extra=UiSchema(
+            widget=Widgets.jinja_template, options_source=OptionsSource.template_variables, rows=1
+        ),
     )
     body: str = Field(
         default="",
         description="Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
-        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.jinja_node),
+        json_schema_extra=UiSchema(widget=Widgets.jinja_template, options_source=OptionsSource.template_variables),
     )
 
     @field_validator("subject", "body", mode="before")
@@ -681,9 +684,7 @@ class RouterNode(RouterMixin, PipelineRouterNode, HistoryMixin):
             "to return one of them, so describe when each applies rather than asking for free text. "
             "A narrower set of template variables is available here than on an LLM node."
         ),
-        json_schema_extra=UiSchema(
-            widget=Widgets.text_editor, options_source=OptionsSource.text_editor_autocomplete_vars_router_node
-        ),
+        json_schema_extra=UiSchema(widget=Widgets.text_editor, options_source=OptionsSource.router_prompt_variables),
     )
     history_type: PipelineChatHistoryTypes = Field(
         PipelineChatHistoryTypes.NODE,

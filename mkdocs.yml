@@ -67,12 +67,12 @@ nav:
   - Getting Started:
     - Overview: getting-started/index.md
     - Local Setup: getting-started/local-setup.md
-    - Docker Setup: getting-started/docker-setup.md
-    - Common Tasks: getting-started/common-tasks.md
+    - Docker-Only Setup: getting-started/docker-setup.md
+    - Development Workflow: getting-started/dev-workflow.md
     - AI Tool Setup: getting-started/ai-setup.md
   - Architecture:
     - Overview: architecture/index.md
-    - Package map: architecture/package-map.md
+    - Package Map: architecture/package-map.md
     - Decisions:
       - Index: adr/index.md
       - 0000 Record architecture decisions: adr/0000-record-architecture-decisions.md
@@ -126,15 +126,21 @@ nav:
       - 0048 Evaluation spend is team spend, never entity spend: adr/0048-evaluation-spend-is-team-spend-not-entity-spend.md
       - 0049 Node rows own pipeline layout; Pipeline.data keeps only edges and viewport: adr/0049-node-rows-own-pipeline-layout.md
       - 0050 Eval-driven generation is evaluation spend: adr/0050-eval-driven-generation-is-evaluation-spend.md
+      - 0051 One set of activity-metric definitions across usage surfaces: adr/0051-usage-activity-metric-definitions.md
+      - 0052 App-layer rate limiting: adr/0052-app-layer-rate-limiting-mechanism.md
+      - 0053 Starting a chat session requires team membership or the embed key: adr/0053-chat-session-start-requires-membership-or-embed-key.md
+      - 0054 Chat session tokens expire on absolute age, not inactivity: adr/0054-chat-session-tokens-expire-on-absolute-age.md
+      - 0055 Binary field type extends the field definition union: adr/0055-binary-field-type-extends-the-field-definition-union.md
+      - 0056 Client-credentials applications name the chatbots they may reach: adr/0056-client-credentials-applications-name-their-chatbots.md
   - Developer Guides:
     - Processes:
-      - Claude Code Agents: developer_guides/claude_code_agent.md
-      - AI-Assisted Development: developer_guides/ai_development.md
+      - Claude GitHub Automation: developer_guides/claude_github_automation.md
       - User Docs: developer_guides/user_docs.md
       - API Documentation: developer_guides/api_documentation.md
       - Pull Requests: contributing/pull_requests.md
       - Data Migrations: developer_guides/custom_migrations.md
       - Deployment: developer_guides/deployment.md
+      - Architecture Decision Records: developer_guides/adr_process.md
       - Feature Deprecation: developer_guides/feature_deprecation.md
       - Widget Versioning: developer_guides/widget_versioning.md
       - Managing LLM Models: developer_guides/managing_models.md
@@ -158,6 +164,7 @@ nav:
   - Self-Hosting:
     - Overview: hosting/index.md
     - Configuration: hosting/configuration.md
+    - Rate Limiting: hosting/rate_limiting.md
     - Docker Compose: hosting/docker.md
     - Heroku: hosting/heroku.md
     - AWS Fargate: hosting/aws.md

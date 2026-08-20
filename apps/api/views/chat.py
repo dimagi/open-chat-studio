@@ -9,12 +9,18 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    parser_classes,
+    permission_classes,
+    throttle_classes,
+)
 from rest_framework.exceptions import NotFound
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from apps.api.authentication import EmbeddedWidgetAuthentication
+from apps.api.authentication import EmbeddedWidgetAuthentication, get_embed_key_channel
 from apps.api.permissions import SessionAccessPermission, WidgetDomainPermission
 from apps.api.serializers import (
     ChatPollResponse,
@@ -25,6 +31,7 @@ from apps.api.serializers import (
     MessageSerializer,
 )
 from apps.api.session_tokens import issue_session_token
+from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
@@ -134,6 +141,7 @@ def validate_file_upload(file):
     ],
 )
 @api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 @parser_classes([MultiPartParser])
@@ -225,21 +233,104 @@ def _issue_or_opt_out_session_token(session, channel):
     return _opt_out_session_token(session)
 
 
-def _resolve_experiment_channel(request, team, session_data):
-    """Return the ExperimentChannel for this request.
+def _resolve_embed_key_channel(request, experiment) -> ExperimentChannel | None:
+    """The widget channel this request's embed key proves, if any.
 
-    Embed-key auth resolves to the widget's own channel; for widget traffic we also
-    record the reported version (or a placeholder for pre-0.5.1 widgets that send no
-    header). Recording is gated on `is_widget_request` so a non-widget caller using an
-    embed key isn't tagged with a placeholder version. Everything else (authenticated
-    users) falls back to the team API channel.
+    Resolved once: it both authorizes the caller and owns the session. `request.auth` already
+    holds it when the key did the authenticating, so this only queries for keys that rode along
+    with another authenticator.
     """
-    if not isinstance(request.auth, ExperimentChannel):
+    if isinstance(request.auth, ExperimentChannel):
+        return request.auth
+    return get_embed_key_channel(request, experiment)
+
+
+def _check_start_session_access(request, experiment, embed_key_channel, version_number) -> Response | None:
+    """A 403 response if this caller may not start the session they asked for, else None.
+
+    ADR-0053: being logged in to OCS is not, on its own, access to every chatbot. A
+    session-authenticated caller needs either team membership or the chatbot's embed key — the
+    same proof an anonymous embedder must present. The key path is what keeps the site help
+    widget working, since its users are logged in but are not members of the support bot's team.
+
+    Selecting a version is narrower still: only a team member may do it, so `version_number` must
+    be None on every other route through here. `chat_send_message` gates it the same way.
+    """
+    if not request.user.is_authenticated:
+        # Otherwise unaffected: the permission classes are the only gate on the anonymous path.
+        if version_number is None:
+            return None
+        return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
+    if experiment.team.members.filter(id=request.user.id).exists():
+        return None
+    # Not a member: the embed key is the only other proof, and it does not grant version selection.
+    if embed_key_channel is not None and version_number is None:
+        return None
+    return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
+
+
+def _record_participant_name(participant, experiment, team, name: str) -> None:
+    """Store the caller-supplied display name on the participant and their experiment data.
+
+    Written in both places because they are read in different contexts: the participant record
+    labels them across the team, while the ParticipantData copy is what a pipeline sees as
+    ``{participant_data.name}``. Both writes are conditional so a repeat session start with an
+    unchanged name is a no-op rather than a pair of UPDATEs.
+    """
+    if participant.name != name:
+        participant.name = name
+        participant.save(update_fields=["name"])
+    participant_data, _ = ParticipantData.objects.get_or_create(
+        participant=participant, experiment=experiment, team=team, defaults={"data": {}}
+    )
+    if participant_data.data.get("name") != name:
+        participant_data.data["name"] = name
+        participant_data.save(update_fields=["data"])
+
+
+def _channel_disabled_response(experiment_channel) -> Response | None:
+    """A 403 when an admin has switched this channel off, else None.
+
+    Refused here rather than left to the pipeline: the session start is what the widget calls
+    first, and letting it succeed hands back a session and a token on a channel that will not
+    talk. Relays the admin's own static message when they configured one; a silent disable still
+    owes the caller an HTTP body, so it falls back to a generic line.
+    """
+    if not experiment_channel.is_disabled:
+        return None
+    detail = experiment_channel.disabled_message or "This chatbot is currently unavailable."
+    return Response({"error": detail}, status=status.HTTP_403_FORBIDDEN)
+
+
+def _get_requested_version(experiment, version_number):
+    """The explicitly requested version, or None to use the working version."""
+    if version_number is None or version_number == Experiment.DEFAULT_VERSION_NUMBER:
+        return None
+    try:
+        return experiment.get_version(version_number)
+    except Experiment.DoesNotExist:
+        raise NotFound(f"Experiment with version {version_number} not found") from None
+
+
+def _resolve_experiment_channel(request, team, session_data, embed_key_channel):
+    """Return the ExperimentChannel that owns this session.
+
+    ADR-0053: a widget's own channel owns the session whenever the request carries that widget's
+    embed key, whether the key authenticated the request (an anonymous embed) or merely
+    accompanied it (the site help widget, where a Django session cookie authenticates first).
+    Attribution therefore tracks the widget, not the authenticator, so one widget cannot produce
+    two channels — and two participants — depending on who is looking at the page.
+
+    For widget traffic we also record the reported version (or a placeholder for pre-0.5.1
+    widgets that send no header). Recording is gated on `is_widget_request` so a non-widget
+    caller using an embed key isn't tagged with a placeholder version. Everything else
+    (authenticated users with no key) falls back to the team API channel.
+    """
+    if embed_key_channel is None:
         return ExperimentChannel.objects.get_team_api_channel(team)
-    channel = request.auth
     if is_widget_request(request, session_data):
-        channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
-    return channel
+        embed_key_channel.record_widget_version(request.headers.get(WIDGET_VERSION_HEADER))
+    return embed_key_channel
 
 
 @extend_schema(
@@ -308,6 +399,7 @@ def _resolve_experiment_channel(request, team, session_data):
 )
 @widget_sunset_headers
 @api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes([WidgetDomainPermission])
 def chat_start_session(request):
@@ -327,34 +419,24 @@ def chat_start_session(request):
     if is_widget_request(request, session_data):
         mark_widget_request(request)
 
-    # Security check: Only authenticated users can specify version numbers
-    if version_number is not None and not request.user.is_authenticated:
-        return Response(
-            {"error": "Version number requires authentication"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
     # Always look up the working version by public_id
     experiment = get_object_or_404(Experiment, public_id=experiment_id, working_version_id__isnull=True)
 
-    experiment_version = None
-    if version_number is not None:
-        # Verify the authenticated user belongs to the experiment's team
-        if not experiment.team.members.filter(id=request.user.id).exists():
-            return Response(
-                {"error": "You do not have access to this chatbot"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    embed_key_channel = _resolve_embed_key_channel(request, experiment)
 
-        if version_number != Experiment.DEFAULT_VERSION_NUMBER:
-            try:
-                experiment_version = experiment.get_version(version_number)
-            except Experiment.DoesNotExist:
-                raise NotFound(f"Experiment with version {version_number} not found") from None
+    denied = _check_start_session_access(request, experiment, embed_key_channel, version_number)
+    if denied:
+        return denied
+
+    experiment_version = _get_requested_version(experiment, version_number)
 
     team = experiment.team
 
-    experiment_channel = _resolve_experiment_channel(request, team, session_data)
+    experiment_channel = _resolve_experiment_channel(request, team, session_data, embed_key_channel)
+
+    # Before the participant work below, which creates records as a side effect.
+    if disabled := _channel_disabled_response(experiment_channel):
+        return disabled
 
     if request.user.is_authenticated:
         user = request.user
@@ -380,15 +462,7 @@ def chat_start_session(request):
         participant = Participant.create_anonymous(team, experiment_channel.platform, remote_id)
 
     if name:
-        if participant.name != name:
-            participant.name = name
-            participant.save(update_fields=["name"])
-        participant_data, _ = ParticipantData.objects.get_or_create(
-            participant=participant, experiment=experiment, team=team, defaults={"data": {}}
-        )
-        if participant_data.data.get("name") != name:
-            participant_data.data["name"] = name
-            participant_data.save(update_fields=["data"])
+        _record_participant_name(participant, experiment, team, name)
 
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
 
@@ -460,6 +534,7 @@ class ChatSendMessageRequestWithAttachments(ChatSendMessageRequest):
 )
 @widget_sunset_headers
 @api_view(["POST"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_send_message(request, session_id):
@@ -606,6 +681,7 @@ def _verify_task_belongs_to_session(task_id: str, session_id: str) -> None:
     ],
 )
 @api_view(["GET"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_task_response(request, session_id, task_id):
@@ -673,6 +749,7 @@ def chat_poll_task_response(request, session_id, task_id):
     ],
 )
 @api_view(["GET"])
+@throttle_classes([ChatAPIRateThrottle])
 @authentication_classes(AUTH_CLASSES)
 @permission_classes(SESSION_PERMISSION_CLASSES)
 def chat_poll_response(request, session_id):

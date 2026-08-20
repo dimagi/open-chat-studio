@@ -110,28 +110,28 @@ For better code organization and maintainability, **preferably add your notifica
 - **`level`** (LevelChoices): Severity level (INFO, WARNING, ERROR)
 - **`team`** (Team): Team to notify (determines who receives this notification)
 - **`slug`** (str): Identifier for notification type; groups related notifications
-  - Use format: `"feature-event-type"` (e.g., `"custom-action-health-check"`)
-  - Same slug + same event_data = same event thread
+    - Use format: `"feature-event-type"` (e.g., `"custom-action-health-check"`)
+    - Same slug + same event_data = same event thread
 
 ### Optional Parameters
 
 - **`event_data`** (dict): Additional JSON data stored with the notification
-  - Combined with `slug` to create the deduplication identifier
-  - Use for: IDs, status flags, context needed for re-delivery decisions
-  - **Best practice**: Include minimal identifiers needed for deduplication logic
-  - Default: empty dict
+    - Combined with `slug` to create the deduplication identifier
+    - Use for: IDs, status flags, context needed for re-delivery decisions
+    - **Best practice**: Include minimal identifiers needed for deduplication logic
+    - Default: empty dict
 
 - **`permissions`** (`list[str]`): Django permission codenames to filter recipients
-  - Format: `"app_label.action"` (e.g., `"custom_actions.change_customaction"`)
-  - Only team members with **ALL** specified permissions will receive the notification
-  - Permissions are checked per-team (combines Django perms + team membership)
-  - Default: None (notify all team members in the team)
+    - Format: `"app_label.action"` (e.g., `"custom_actions.change_customaction"`)
+    - Only team members with **ALL** specified permissions will receive the notification
+    - Permissions are checked per-team (combines Django perms + team membership)
+    - Default: None (notify all team members in the team)
 
 - **`links`** (dict): A dictionary of label → URL pairs to attach to the notification
-  - These are rendered as clickable chips/buttons in the notification UI
-  - Use for: linking to the relevant bot, session, or admin page
-  - Example: `{"View Bot": "/experiments/123/", "View Session": "/sessions/456/"}`
-  - Default: empty dict
+    - These are rendered as clickable chips/buttons in the notification UI
+    - Use for: linking to the relevant bot, session, or admin page
+    - Example: `{"View Bot": "/experiments/123/", "View Session": "/sessions/456/"}`
+    - Default: empty dict
 
 ### Delivery Behavior
 
@@ -202,7 +202,7 @@ with self.trace_service.span(
 
 ### When to Use Span-Driven Notifications
 
-- Preferrably always when you use a span and want users to be notified if that specific span encounters an error.
+- Preferably always when you use a span and want users to be notified if that specific span encounters an error.
 
 Use direct `create_notification()` calls when:
 - The error occurs outside of a trace context (e.g., background tasks, health checks)

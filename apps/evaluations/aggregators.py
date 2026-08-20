@@ -150,3 +150,23 @@ def aggregate_field(values: list) -> dict:
             result[agg.name] = computed
 
     return result
+
+
+def aggregate_binary_field(values: list) -> dict:
+    """Aggregate a binary field's stored 1/0 values as a rate.
+
+    Values other than 0 and 1 (bools count as their integer values) are excluded
+    from count/mean/true_count and reported as excluded_count when present -
+    annotation data is not schema-constrained outside the form.
+    """
+    present = [v for v in values if v is not None]
+    counted = [int(v) for v in present if v in (0, 1)]
+
+    result = {"type": "binary", "count": len(counted)}
+    if counted:
+        result["mean"] = round(sum(counted) / len(counted), 4)
+        result["true_count"] = sum(counted)
+    excluded = len(present) - len(counted)
+    if excluded:
+        result["excluded_count"] = excluded
+    return result

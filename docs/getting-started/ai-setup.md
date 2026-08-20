@@ -1,16 +1,19 @@
 # Setup for AI-Assisted Development
 
-New to AI-assisted development on this project? Complete this setup first for your local environment, then follow the [AI development workflow](../developer_guides/ai_development.md).
+New to AI-assisted development on this project? Complete this setup for your local environment,
+then follow the [development workflow](dev-workflow.md).
 
 !!! NOTE
-    The core principle of this project's AI development workflow is **design before code**, built around [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). If you don't use Claude Code, see the [section below](#other-ai-coding-tools).
+    The core principle of this project's workflow is **design before code**, built around
+    [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview). If you don't use Claude
+    Code, see the [section below](#other-ai-coding-tools).
 
 ## Do I need this?
 
 | Situation | Action |
 |-----------|--------|
-| You plan to use Claude Code for feature work | **Required** — complete this page, then follow the recommended [AI development workflow](../developer_guides/ai_development.md) |
-| You want occasional AI assistance and plan to use the [Claude Agents](../developer_guides/claude_code_agent.md), but won't adopt the full workflow | **Optional** — at minimum, [install Claude Code](#install-claude-code); skip the skills plugin setup below |
+| You plan to use Claude Code for feature work | **Required** — complete this page, then follow the [development workflow](dev-workflow.md) |
+| You want occasional AI assistance and plan to use the [GitHub Claude automation](../developer_guides/claude_github_automation.md), but won't adopt the full workflow | **Optional** — at minimum, [install Claude Code](#install-claude-code); skip the skills plugin setup below |
 | You're getting the project running, fixing a quick bug, or don't plan to use AI tooling | **Skip for now** — nothing here is needed to run the project or contribute code |
 
 ## Install Claude Code
@@ -18,9 +21,20 @@ New to AI-assisted development on this project? Complete this setup first for yo
 1. Purchase a Claude subscription.
 2. Install Claude Code by following the [official docs](https://docs.anthropic.com/en/docs/claude-code/overview).
 
+## Install the worktree and dev-server tooling
+
+The [development workflow](dev-workflow.md) assumes two small tools. Neither is required, but the
+workflow is noticeably better with both:
+
+| Tool | Why | Install |
+|---|---|---|
+| [worktrunk](https://worktrunk.dev/) (`wt`) | Per-branch git worktrees with per-branch database, seeded data and dependencies — so several agents can work in parallel | See [worktrunk.dev](https://worktrunk.dev/) |
+| [portless](https://www.npmjs.com/package/portless) | Stable `ocs.localhost` URLs instead of port numbers, so parallel worktrees don't collide | `npm install -g portless` |
+
 ## Set Up Claude Skills and Plugins
 
-Skills are reusable instruction sets that guide Claude through specific workflows. Plugins are collections of skills installed from a marketplace. OCS uses both.
+Skills are reusable instruction sets that guide Claude through specific workflows. Plugins are
+collections of skills installed from a marketplace. OCS uses both.
 
 ### OCS project-specific skills
 
@@ -28,25 +42,54 @@ These are in the `.claude/skills/` folder and are active automatically — no in
 
 Refer to relevant documentation for details on the skills in this folder.
 
-### Superpowers plugin for design-before-code skills
+### The Dimagi marketplace
 
-The OCS team's recommended [AI development workflow](../developer_guides/ai_development.md) follows a design-before-code process. The **superpowers** plugin provides the skills that guide Claude through each phase — exploring the problem, planning the implementation, executing it, and reviewing the result.
+[dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) is a Claude Code
+marketplace of Dimagi plugins, plus a curated set of external ones. The project's
+`.claude/settings.json` already registers it, so everything below is one `/plugins` away — there is
+no marketplace to add by hand.
 
-Install it from the official Claude plugin marketplace: https://claude.com/plugins/superpowers
+#### `dev-utils` — the PR side of the workflow
 
-### Dimagi plugin skills
+Already enabled for you by `.claude/settings.json` (and auto-loaded by `claude-code-action` in CI).
+It provides the PR-side pieces of the [development workflow](dev-workflow.md):
 
-The [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository contains reusable Dimagi Claude workflows, commands, and configuration. OCS uses the `dev-utils` plugin so its skills (`create-pr`, `iterate-pr`, `review-plan`, etc.) are auto-loaded by `claude-code-action` in CI as well as in local sessions.
+| | Purpose |
+|---|---|
+| `/review-plan` | Review a plan across architecture, code quality, tests and performance, before any code is written |
+| `/create-pr` | Commit, push and open a PR, filling in the repo's PR template |
+| `/iterate-pr` | One pass over the current branch's PR — gather review feedback, fix CI, verify, push, reply to threads. `--dry-run` prints the plan only |
 
-The project's `.claude/settings.json` already registers the `dimagi-claude-workflows` marketplace and enables the `dev-utils` plugin automatically — no installation needed.
+Its [README](https://github.com/dimagi/dimagi-claude-workflows/tree/main/plugins/dev_utils) covers
+the rest — `/pr-walkthrough`, `babysit-prs`, `git-rebase`, `audit-dependencies` and others.
 
-To enable other recommended plugins, open the [dimagi-claude-workflows](https://github.com/dimagi/dimagi-claude-workflows) repository and follow the setup instructions in `plugins/README.md` for:
+#### `superpowers` — design-before-code skills
 
-- `code-review` — AI code review workflows with specialist agents
+The OCS [development workflow](dev-workflow.md) follows a design-before-code process.
+[Superpowers](https://github.com/obra/superpowers) provides the skills that guide Claude through
+each phase — exploring the problem, planning the implementation, executing it, and reviewing the
+result. Install it from the same marketplace:
+
+```text
+/plugins
+```
+
+Then pick `superpowers`. `/plugins` is also how you'd browse the rest of the marketplace.
+
+### Code review
+
+Use Claude Code's **built-in `/code-review`** command. It needs no plugin and takes the working
+diff, a PR number, a branch or a path:
+
+```text
+/code-review          # report findings
+/code-review --fix    # report findings and apply them
+```
 
 ## What's in the project for Claude-assisted development
 
-OCS ships with instruction files that shape how AI agents work in this codebase. They are already checked in and active — you don't need to configure them.
+OCS ships with instruction files that shape how AI agents work in this codebase. They are already
+checked in and active — you don't need to configure them.
 
 ### Code Agent instruction files
 
@@ -62,11 +105,20 @@ Contextual guides for specific areas of the codebase. `AGENTS.md` tells the agen
 
 ### Claude Code settings
 
-`.claude/settings.json` pre-approves safe commands (pytest, ruff, git, gh, etc.) so Claude Code runs them without prompting, and configures hooks for session startup.
+`.claude/settings.json` pre-approves safe commands (pytest, ruff, git, gh, etc.) so Claude Code
+runs them without prompting, and configures hooks for session startup — including the environment
+setup that runs when you open a session in a fresh worktree.
+
+### Worktree setup (`.config/wt.toml`)
+
+Defines what happens when `wt` creates a worktree: per-branch database and Redis DB, dependency
+install, migrations and seed data. See
+[What worktree setup does](dev-workflow.md#what-worktree-setup-does).
 
 ## Other AI coding tools
 
-Other agentic coding tools (Gemini CLI, Codex CLI, OpenCode, Aider, Cline, etc.) can follow a similar [AI development workflow](../developer_guides/ai_development.md). Refer to your tool's documentation for details.
+Other agentic coding tools (Gemini CLI, Codex CLI, OpenCode, Aider, Cline, etc.) can follow the
+same [development workflow](dev-workflow.md). Refer to your tool's documentation for details.
 
 ### What works with any AI tool
 

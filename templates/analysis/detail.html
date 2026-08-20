@@ -123,4 +123,6 @@
       </div>
     </div>
   </div>
+  {# The sessions table swapped in above renders Continue Chat buttons, which need ocsContinueSessionChat. #}
+  {% include "chatbots/components/session_chat_widget_launcher.html" %}
 {% endblock app %}

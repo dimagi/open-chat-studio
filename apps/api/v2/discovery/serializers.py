@@ -1,7 +1,8 @@
-"""Serializers describing the discovery endpoint responses for the OpenAPI schema.
+"""Serializers describing the discovery endpoint responses, for the OpenAPI schema and to shape the
+responses themselves.
 
-Documentation only -- the views build plain dicts and hand them back. Each field's ``help_text`` is
-what a client reads about that field.
+The views build a plain dict and hand it to the matching serializer, which decides what actually
+reaches the client. Each field's ``help_text`` is what a client reads about that field.
 """
 
 from rest_framework import serializers
@@ -44,7 +45,7 @@ class NodeTypeSerializer(serializers.Serializer):
 
 
 class NodeTypeNotFoundSerializer(serializers.Serializer):
-    """The body DRF renders for the `NotFound` raised on an unknown `type`."""
+    """The body DRF renders for the `NotFound` raised on a node type name nothing answers to."""
 
     detail = serializers.CharField()
     valid_types = serializers.ListField(
@@ -108,8 +109,9 @@ class SyntheticVoiceOptionSerializer(serializers.Serializer):
     provider_id = serializers.IntegerField(
         allow_null=True,
         help_text=(
-            "The `voice_provider_id` option this voice belongs to, or null for a shared voice that "
-            "any provider of the same `type` can speak."
+            "The voice provider that owns this voice, or null for a shared voice any provider of the "
+            "same `type` can speak. The chatbot's own provider is its `voice.provider_id` -- see the "
+            "chatbot detail endpoint."
         ),
     )
 
@@ -128,19 +130,11 @@ class DefaultLlmProviderSerializer(serializers.Serializer):
 
 class PipelineOptionsSerializer(serializers.Serializer):
     """The documented keys. Each holds the values for the node param of the same name. A response
-    carries a subset when `?node_type=` is given, and may carry keys not listed here as new node
-    params are added."""
+    from `/pipeline/options/{node_type}/` carries a subset, and any response may carry keys not
+    listed here as new node params are added."""
 
     llm_provider_id = ProviderOptionSerializer(many=True, required=False)
     llm_provider_model_id = LlmProviderModelOptionSerializer(many=True, required=False)
-    voice_provider_id = ProviderOptionSerializer(
-        many=True,
-        required=False,
-        help_text=(
-            "The team's configured voice providers. No node param sources its options from this -- "
-            "it is here to resolve the `provider_id` on a `synthetic_voice_id` entry."
-        ),
-    )
     synthetic_voice_id = SyntheticVoiceOptionSerializer(many=True, required=False)
     source_material = ResourceOptionSerializer(many=True, required=False)
     collection = ResourceOptionSerializer(
@@ -171,7 +165,7 @@ class PipelineOptionsSerializer(serializers.Serializer):
             "The variables a Jinja param may reference, written double-braced -- `{{input}}`. Covers "
             "`RenderTemplate`'s `template_string` and `SendEmail`'s `recipient_list`, `subject` and "
             "`body`. Distinct from the two prompt lists in both content and syntax: those are "
-            "single-braced. Use `?node_type=` to get the list that applies."
+            "single-braced. Fetch `/pipeline/options/{node_type}/` to get the list that applies."
         ),
     )
     llm_prompt_variables = PromptVariableSerializer(

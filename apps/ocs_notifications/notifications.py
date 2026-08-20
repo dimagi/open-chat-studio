@@ -169,9 +169,19 @@ def audio_transcription_failure_notification(experiment, platform: str) -> None:
 
 
 @silence_exceptions(logger, log_message="Failed to create message delivery failure notification")
-def message_delivery_failure_notification(experiment, session, platform_title: str, context: str) -> None:
-    """Create notification when message delivery fails."""
-    identifier = session.participant.identifier
+def message_delivery_failure_notification(
+    experiment, session, platform_title: str, context: str, recipient: str | None = None
+) -> None:
+    """Create notification when message delivery fails.
+
+    ``session`` is None when the pipeline short-circuits before resolving one -- a disabled
+    channel's static reply, for instance. The notification still has to reach the team, so
+    ``recipient`` names who the send was aimed at and the session link is dropped.
+    """
+    identifier = session.participant.identifier if session else recipient or "an unknown participant"
+    links = {"View Bot": experiment.get_absolute_url()}
+    if session:
+        links["View Session"] = session.get_absolute_url()
     create_notification(
         title=f"Message Delivery Failed for {experiment.name}",
         message=f"An error occurred while delivering a {context} to {identifier} via {platform_title}",
@@ -184,7 +194,7 @@ def message_delivery_failure_notification(experiment, session, platform_title: s
             "context": context,
         },
         permissions=["experiments.view_experimentsession"],
-        links={"View Bot": experiment.get_absolute_url(), "View Session": session.get_absolute_url()},
+        links=links,
     )
 
 

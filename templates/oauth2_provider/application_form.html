@@ -15,4 +15,7 @@
         </div>
     {% endif %}
     {% render_form_fields form "authorization_grant_type" "redirect_uris" "post_logout_redirect_uris" "allowed_origins" "algorithm" %}
+    {% if "allowed_chatbots" in form.fields %}
+        {% render_form_fields form "allowed_chatbots" %}
+    {% endif %}
 {% endblock form %}

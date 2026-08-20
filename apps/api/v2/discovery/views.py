@@ -5,8 +5,8 @@ Both reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which
 raw. The reshaping rules live in ``contract.py`` and ``node_types.py``.
 """
 
-from django.db.models import QuerySet
-from django.db.models.functions import Lower
+from typing import Any
+
 from django.http import HttpResponseNotModified
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
@@ -14,23 +14,21 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
-from apps.experiments.models import SyntheticVoice
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
 from apps.pipelines.nodes.base import OptionsSource
 from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values
-from apps.service_providers.models import LlmProvider, LlmProviderModel, VoiceProvider
+from apps.teams.models import Team
 from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
-from .contract import OPTION_KEY_DEPENDENCIES, OPTIONS_KEY_RENAMES
 from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
 from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
 # The option lists holding prompt variables rather than referenceable resource ids.
 PROMPT_VAR_OPTION_SOURCES = (
-    OptionsSource.jinja_node,
-    OptionsSource.text_editor_autocomplete_vars_llm_node,
-    OptionsSource.text_editor_autocomplete_vars_router_node,
+    OptionsSource.template_variables,
+    OptionsSource.llm_prompt_variables,
+    OptionsSource.router_prompt_variables,
 )
 
 
@@ -45,9 +43,55 @@ class DiscoveryView(GenericAPIView):
     pagination_class = None
 
 
-class PipelineNodesView(DiscoveryView):
+# The documented response sample for a single node type. The list endpoint reuses it -- one entry,
+# not a list, because drf-spectacular wraps a `many=True` response example itself.
+NODE_TYPE_EXAMPLE = {
+    "type": "RouterNode",
+    "description": "Routes the input to one of the linked nodes using an LLM",
+    "documentation_url": "https://docs.openchatstudio.com/how-to/pipelines/nodes/",
+    "outputs": {
+        "kind": "per_keyword",
+        "handles": None,
+        "handle_pattern": "output_{index}",
+        "description": "One output per entry in `keywords`.",
+    },
+    "schema": {
+        "title": "RouterNode",
+        "type": "object",
+        "required": ["llm_provider_id", "llm_provider_model_id", "name"],
+        "properties": {
+            "llm_provider_id": {
+                "type": "integer",
+                "title": "LLM Model",
+                "description": "The configured LLM service provider this node calls.",
+            },
+            "llm_provider_model_id": {
+                "type": "integer",
+                "must_match": {"field": "llm_provider_id", "on": "type"},
+            },
+        },
+    },
+}
+
+
+class NodeTypesView(DiscoveryView):
+    """Shared serializer and revalidation for the two node-type endpoints. Both payloads are static
+    per deploy, so both are served under an `ETag`."""
+
     serializer_class = NodeTypeSerializer
 
+    @staticmethod
+    def _etagged(request, payload: list | dict) -> Response | HttpResponseNotModified:
+        """`payload` under its `ETag`, or a bare 304 for a client whose cached copy still matches."""
+        payload_etag = etag(payload)
+        if request.headers.get("If-None-Match") == payload_etag:
+            return HttpResponseNotModified()
+        response = Response(payload)
+        response["ETag"] = payload_etag
+        return response
+
+
+class PipelineNodesView(NodeTypesView):
     @extend_schema(
         operation_id="pipeline_node_list",
         summary="List Pipeline Node Types",
@@ -57,17 +101,40 @@ class PipelineNodesView(DiscoveryView):
             "Static per deploy: revalidate a cached copy with `If-None-Match` against the `ETag`."
         ),
         tags=["Pipelines"],
+        responses={200: NodeTypeSerializer(many=True)},
+        examples=[
+            OpenApiExample(
+                name="NodeTypes",
+                summary="A router, showing the per-keyword outputs and a param-pairing rule.",
+                value=NODE_TYPE_EXAMPLE,
+                response_only=True,
+            )
+        ],
+    )
+    def get(self, request):
+        return self._etagged(request, self.get_serializer(get_node_types(), many=True).data)
+
+
+class PipelineNodeView(NodeTypesView):
+    @extend_schema(
+        operation_id="pipeline_node_retrieve",
+        summary="Retrieve a Pipeline Node Type",
+        description=(
+            "One node type, as `/pipeline/nodes/` serves it. A deprecated type is not retrievable "
+            "either -- it is not something a client may build.\n\n"
+            "Static per deploy: revalidate a cached copy with `If-None-Match` against the `ETag`."
+        ),
+        tags=["Pipelines"],
         parameters=[
             OpenApiParameter(
-                name="type",
+                name="node_type",
                 type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Return only this node type. An unknown or deprecated name returns 404.",
+                location=OpenApiParameter.PATH,
+                description="The type's name, as carried in the `type` field of a `/pipeline/nodes/` entry.",
             )
         ],
         responses={
-            200: NodeTypeSerializer(many=True),
+            200: NodeTypeSerializer,
             404: OpenApiResponse(
                 response=NodeTypeNotFoundSerializer,
                 description="No such node type, or the type is deprecated and therefore not listed.",
@@ -75,55 +142,23 @@ class PipelineNodesView(DiscoveryView):
         },
         examples=[
             OpenApiExample(
-                name="NodeTypes",
+                name="NodeType",
                 summary="A router, showing the per-keyword outputs and a param-pairing rule.",
-                # One entry, not a list: drf-spectacular wraps a `many=True` response example itself.
-                value={
-                    "type": "RouterNode",
-                    "description": "Routes the input to one of the linked nodes using an LLM",
-                    "documentation_url": "https://docs.openchatstudio.com/how-to/pipelines/nodes/",
-                    "outputs": {
-                        "kind": "per_keyword",
-                        "handles": None,
-                        "handle_pattern": "output_{index}",
-                        "description": "One output per entry in `keywords`.",
-                    },
-                    "schema": {
-                        "title": "RouterNode",
-                        "type": "object",
-                        "required": ["llm_provider_id", "llm_provider_model_id", "name"],
-                        "properties": {
-                            "llm_provider_id": {
-                                "type": "integer",
-                                "title": "LLM Model",
-                                "description": "The configured LLM service provider this node calls.",
-                            },
-                            "llm_provider_model_id": {
-                                "type": "integer",
-                                "must_match": {"field": "llm_provider_id", "on": "type"},
-                            },
-                        },
-                    },
-                },
+                value=NODE_TYPE_EXAMPLE,
                 response_only=True,
             )
         ],
     )
-    def get(self, request):
-        node_types = get_node_types()
-        requested_type = request.query_params.get("type")
-        if requested_type:
-            node_types = [node for node in node_types if node["type"] == requested_type]
-            if not node_types:
-                raise unknown_node_type(requested_type)
+    def get(self, request, node_type):
+        return self._etagged(request, self.get_serializer(self._node_type(node_type)).data)
 
-        payload = self.get_serializer(node_types, many=True).data
-        payload_etag = etag(payload)
-        if request.headers.get("If-None-Match") == payload_etag:
-            return HttpResponseNotModified()
-        response = Response(payload)
-        response["ETag"] = payload_etag
-        return response
+    @staticmethod
+    def _node_type(node_type: str) -> dict:
+        """The named node type, or a 404 naming what the client could have asked for instead."""
+        for node in get_node_types():
+            if node["type"] == node_type:
+                return node
+        raise unknown_node_type(node_type)
 
 
 # The documented response sample. Kept whole rather than inline so a test can hold it to the
@@ -131,7 +166,6 @@ class PipelineNodesView(DiscoveryView):
 PIPELINE_OPTIONS_EXAMPLE = {
     "llm_provider_id": [{"value": 1, "label": "Prod OpenAI", "type": "openai"}],
     "llm_provider_model_id": [{"value": 5, "label": "gpt-4o", "type": "openai", "max_token_limit": 128000}],
-    "voice_provider_id": [{"value": 2, "label": "Prod Polly", "type": "aws"}],
     "synthetic_voice_id": [{"value": 11, "label": "Joanna (English)", "type": "aws", "provider_id": 2}],
     "source_material": [{"value": 3, "label": "Returns policy"}],
     "collection": [{"value": 7, "label": "Policy docs"}],
@@ -165,130 +199,45 @@ PIPELINE_OPTIONS_EXAMPLE = {
 }
 
 
-class PipelineOptionsView(DiscoveryView):
-    @extend_schema(
-        operation_id="pipeline_options",
-        summary="List Pipeline Node Options",
-        description=(
-            "The values each node param accepts, scoped to the API key's team.\n\n"
-            "A key holds the values for the node param of the same name: write one of "
-            "`source_material`'s entries into a node's `source_material_id`, one of "
-            "`collection_index`'s into `collection_index_ids`.\n\n"
-            "The variable lists are the exception, because no param is named for the list it draws "
-            "on and two different params are both named `prompt`. Jinja params -- `template_string` "
-            "and `SendEmail`'s fields -- draw from `template_variables` and are written double-braced "
-            "(`{{input}}`); an LLM node's `prompt` draws from `llm_prompt_variables` and a router's "
-            "from `router_prompt_variables`, both written single-braced (`{source_material}`). Pass "
-            "`?node_type=` to receive only the list that applies -- the sets are not interchangeable."
-        ),
-        tags=["Pipelines"],
-        parameters=[
-            OpenApiParameter(
-                name="node_type",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description=(
-                    "Return only the keys this node type's params can reference, plus its "
-                    "`default_llm_provider` where it has one. An unknown or deprecated name returns 404."
-                ),
-            )
-        ],
-        responses={
-            200: PipelineOptionsSerializer,
-            404: OpenApiResponse(
-                response=NodeTypeNotFoundSerializer,
-                description="No such node type, or the type is deprecated and therefore not listed.",
-            ),
-        },
-        examples=[
-            OpenApiExample(
-                name="PipelineOptions",
-                summary="Every key the endpoint serves, for a team that has one of each resource.",
-                value=PIPELINE_OPTIONS_EXAMPLE,
-                response_only=True,
-            )
-        ],
-    )
-    def get(self, request):
-        wanted = self._wanted_keys(request.query_params.get("node_type"))
-        options = self._options_for_team(request.team)
-        return Response({key: value for key, value in options.items() if key in wanted})
+class TeamOptionsView(DiscoveryView):
+    """Shared payload for the two option endpoints. Both build every option list the team can draw
+    on and differ only in which keys they keep."""
 
-    @staticmethod
-    def _wanted_keys(requested_type: str | None) -> frozenset[str]:
-        """The keys this response carries: everything served, or just what one node type can read."""
-        if requested_type:
-            wanted = option_keys_for_node_type(requested_type)
-            if wanted is None:
-                raise unknown_node_type(requested_type)
-        else:
-            wanted = served_option_keys()
-        # A key that cannot be read on its own brings its resolver along, whichever branch chose it.
-        return wanted.union(*(OPTION_KEY_DEPENDENCIES.get(key, ()) for key in wanted))
+    serializer_class = PipelineOptionsSerializer
 
     @classmethod
-    def _options_for_team(cls, team) -> dict:
-        """Every option list the team can draw on, in API vocabulary and with the builder-only
-        affordances stripped. Scoping to a node type happens after this."""
-        llm_providers = list(LlmProvider.objects.filter(team=team).values("id", "name", "type"))
-        llm_provider_types = {provider["type"] for provider in llm_providers}
-        voice_providers = list(VoiceProvider.objects.filter(team=team))
+    def _options_for_team(cls, team: Team) -> dict:
+        """Every option list the team can draw on, with the builder-only affordances stripped.
+        Scoping to a node type happens after this.
 
-        # A model the team holds no provider for cannot be called, so it is not an option. Models with
-        # no team are shared with every team, which makes this the only filter that scopes them.
-        # Deprecated models are absent rather than flagged, the same as a deprecated node type.
-        llm_provider_models = LlmProviderModel.objects.for_team(team).filter(
-            type__in=llm_provider_types, deprecated=False
-        )
-
-        options = cls._clean_options(
-            get_node_parameter_values(
-                team=team,
-                llm_providers=llm_providers,
-                llm_provider_models=llm_provider_models,
-                synthetic_voices=cls._speakable_voices(team, voice_providers),
-            )
-        )
-        options[OptionsSource.tool_config] = {
-            provider_type: config
-            for provider_type, config in options[OptionsSource.tool_config].items()
-            if provider_type in llm_provider_types
-        }
-        # See `OPTION_KEY_DEPENDENCIES` -- no node param sources its options from this list.
-        options[OptionsSource.voice_provider_id] = [
-            {"value": provider.id, "label": provider.name, "type": provider.type} for provider in voice_providers
-        ]
-        options["default_llm_provider"] = get_node_default_values(llm_providers, llm_provider_models)
-        return cls._to_api_vocabulary(cls._describe_prompt_vars(options))
-
-    @staticmethod
-    def _speakable_voices(team, voice_providers: list) -> QuerySet:
-        """The voices the team has a provider to speak. `SyntheticVoice.service` ("AWS") and the
-        provider type ("aws") differ in case, so the match is made on a lowered annotation."""
-        reachable_services = {provider.type.lower() for provider in voice_providers}
-        if not reachable_services:
-            return SyntheticVoice.objects.none()
-        return (
-            SyntheticVoice.get_for_team(team, [])
-            .annotate(service_lower=Lower("service"))
-            .filter(service_lower__in=reachable_services)
-        )
+        Unlike the builders, this serves only what a client may write, so the models the team cannot
+        call are left out.
+        """
+        options = cls._clean_options(get_node_parameter_values(team=team, usable_models_only=True))
+        options["default_llm_provider"] = get_node_default_values(team, usable_models_only=True)
+        return cls._describe_prompt_vars(options)
 
     @classmethod
-    def _clean_options(cls, value):
-        """Strip builder-only affordances: placeholder entries with an empty ``value`` and
-        ``edit_url`` links into the Django UI. Recurses -- ``built_in_tools`` and ``tool_config`` nest
-        their lists inside dicts keyed by provider type."""
+    def _clean_options(cls, value: Any) -> Any:
+        """Strip the builder-only affordances off every option list. Recurses -- ``built_in_tools``
+        and ``tool_config`` nest their lists inside dicts keyed by provider type."""
         if isinstance(value, dict):
             return {key: cls._clean_options(item) for key, item in value.items()}
         if isinstance(value, list):
-            return [
-                {key: item for key, item in option.items() if key != "edit_url"} if isinstance(option, dict) else option
-                for option in value
-                if not (isinstance(option, dict) and option.get("value") == "")
-            ]
+            return [cls._clean_option(option) for option in value if not cls._is_placeholder(option)]
         return value
+
+    @staticmethod
+    def _is_placeholder(option: Any) -> bool:
+        """A builder entry standing in for "nothing chosen". It names no resource to reference."""
+        return isinstance(option, dict) and option.get("value") == ""
+
+    @staticmethod
+    def _clean_option(option: Any) -> Any:
+        """One option entry, with its ``edit_url`` link into the Django UI dropped."""
+        if not isinstance(option, dict):
+            return option
+        return {key: item for key, item in option.items() if key != "edit_url"}
 
     @staticmethod
     def _describe_prompt_vars(options: dict) -> dict:
@@ -303,8 +252,73 @@ class PipelineOptionsView(DiscoveryView):
                 ]
         return options
 
-    @staticmethod
-    def _to_api_vocabulary(options: dict) -> dict:
-        """Rename the option keys named for a builder widget rather than for the param that reads
-        them. Runs before the whitelist filter so both compare the same vocabulary."""
-        return {OPTIONS_KEY_RENAMES.get(key, key): value for key, value in options.items()}
+
+class PipelineOptionsView(TeamOptionsView):
+    @extend_schema(
+        operation_id="pipeline_options",
+        summary="List Pipeline Node Options",
+        description=(
+            "The values each node param accepts, scoped to the API key's team.\n\n"
+            "A key holds the values for the node param of the same name: write one of "
+            "`source_material`'s entries into a node's `source_material_id`, one of "
+            "`collection_index`'s into `collection_index_ids`.\n\n"
+            "The variable lists are the exception, because no param is named for the list it draws "
+            "on and two different params are both named `prompt`. Jinja params -- `template_string` "
+            "and `SendEmail`'s fields -- draw from `template_variables` and are written double-braced "
+            "(`{{input}}`); an LLM node's `prompt` draws from `llm_prompt_variables` and a router's "
+            "from `router_prompt_variables`, both written single-braced (`{source_material}`). Fetch "
+            "`/pipeline/options/{node_type}/` to receive only the list that applies -- the sets are "
+            "not interchangeable."
+        ),
+        tags=["Pipelines"],
+        responses={200: PipelineOptionsSerializer},
+        examples=[
+            OpenApiExample(
+                name="PipelineOptions",
+                summary="Every key the endpoint serves, for a team that has one of each resource.",
+                value=PIPELINE_OPTIONS_EXAMPLE,
+                response_only=True,
+            )
+        ],
+    )
+    def get(self, request):
+        served = served_option_keys()
+        options = self._options_for_team(request.team)
+        filtered = {key: value for key, value in options.items() if key in served}
+        return Response(self.get_serializer(filtered).data)
+
+
+class PipelineNodeOptionsView(TeamOptionsView):
+    @extend_schema(
+        operation_id="pipeline_node_options",
+        summary="List One Node Type's Options",
+        description=(
+            "The keys this node type's params can reference, plus its `default_llm_provider` where "
+            "it has one -- `/pipeline/options/` cut down to what building this one node needs. Which "
+            "of the three variable lists applies is settled here rather than left to the client: the "
+            "sets are not interchangeable."
+        ),
+        tags=["Pipelines"],
+        parameters=[
+            OpenApiParameter(
+                name="node_type",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.PATH,
+                description="The type's name, as carried in the `type` field of a `/pipeline/nodes/` entry.",
+            )
+        ],
+        responses={
+            200: PipelineOptionsSerializer,
+            404: OpenApiResponse(
+                response=NodeTypeNotFoundSerializer,
+                description="No such node type, or the type is deprecated and therefore not listed.",
+            ),
+        },
+    )
+    def get(self, request, node_type):
+        wanted = option_keys_for_node_type(node_type)
+        if wanted is None:
+            raise unknown_node_type(node_type)
+        options = self._options_for_team(request.team)
+        filtered = {key: value for key, value in options.items() if key in wanted}
+        return Response(self.get_serializer(filtered).data)

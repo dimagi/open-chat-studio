@@ -1,0 +1,12 @@
+{% extends "error_base.html" %}
+{% load i18n %}
+{% block error_details %}
+  <h1 class="pg-title">{% translate "Temporarily unavailable" %}</h1>
+  <h2 class="pg-subtitle">
+    {% if disabled_message %}
+      {{ disabled_message }}
+    {% else %}
+      {% translate "This chatbot is not accepting new conversations right now. Please try again later." %}
+    {% endif %}
+  </h2>
+{% endblock error_details %}

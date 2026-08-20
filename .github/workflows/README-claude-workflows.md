@@ -1,6 +1,6 @@
 # Maintaining Claude Code Agent Workflows
 
-For engineers responsible for extending, debugging, or operating the Claude workflows. For day-to-day usage, see [docs/developer_guides/claude_code_agent.md](../../docs/developer_guides/claude_code_agent.md).
+For engineers responsible for extending, debugging, or operating the Claude workflows. For day-to-day usage, see [docs/developer_guides/claude_github_automation.md](../../docs/developer_guides/claude_github_automation.md).
 
 These workflows use [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action) to run Claude Code inside GitHub Actions. Each run gives Claude access to the repository, a shell, and the GitHub CLI. Claude autonomously reads code, writes changes, runs tests, and opens PRs based on its instructions.
 

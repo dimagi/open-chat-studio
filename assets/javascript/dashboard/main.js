@@ -7,6 +7,7 @@ import TomSelect from "tom-select";
 import {formatDistanceToNow} from "date-fns";
 
 import {serializeCSVTildeValues} from "../filters/csvTilde.js";
+import {formatCost} from "./costBreakdown.js";
 
 // Constants
 const DEFAULTS = {
@@ -54,6 +55,8 @@ function dashboard() {
         },
         userEngagementData: [],
         tagAnalyticsData: {},
+        costBreakdown: null,
+        serviceKindMode: 'cost',
 
         loadingStates: {
             overview: false,
@@ -367,9 +370,13 @@ function dashboard() {
                 const response = await fetch(`api/cost-tracking-panel/?${urlParams}`);
                 if (response.ok) {
                     container.innerHTML = await response.text();
-                    // The panel HTML (and its chart canvas) is replaced on each
-                    // refresh, so render the chart after the swap.
-                    await this.loadCostTimeseriesChart();
+                    // The panel HTML (and its chart canvases) is replaced on each
+                    // refresh, so render the charts after the swap.
+                    await Promise.all([
+                        this.loadCostTimeseriesChart(),
+                        this.loadCostBreakdownCharts(),
+                        this.loadCostP95Chart()
+                    ]);
                 }
             } catch (error) {
                 console.error("Failed to refresh cost tracking panel:", error);
@@ -387,6 +394,44 @@ function dashboard() {
             }
         },
 
+        async loadCostBreakdownCharts() {
+            if (!document.getElementById("costProviderChart")) return;
+            // Drop the previous filter scope's data so a mode toggle during the
+            // fetch (or after a failed one) doesn't render stale numbers.
+            this.costBreakdown = null;
+
+            try {
+                const data = await this.apiRequest('api/cost-breakdown/');
+                this.costBreakdown = data;
+                window.chartManager.renderCostProviderChart(data.by_model);
+                window.chartManager.renderCostModelChart(data.by_model);
+                this.renderServiceKindChart();
+            } catch (error) {
+                console.error("Failed to load cost breakdown charts:", error);
+            }
+        },
+
+        async loadCostP95Chart() {
+            if (!document.getElementById("costP95Chart")) return;
+
+            try {
+                const data = await this.apiRequest('api/cost-p95/');
+                window.chartManager.renderCostP95Chart(data || []);
+            } catch (error) {
+                console.error("Failed to load cost p95 chart:", error);
+            }
+        },
+
+        renderServiceKindChart() {
+            const rows = this.costBreakdown?.by_service_kind || [];
+            window.chartManager.renderCostServiceKindChart(rows, this.serviceKindMode);
+        },
+
+        setServiceKindMode(mode) {
+            this.serviceKindMode = mode;
+            this.renderServiceKindChart();
+        },
+
         async loadOverviewStats() {
             this.setLoadingState('overview', true);
 
@@ -402,6 +447,7 @@ function dashboard() {
                     },
                     {
                         label: 'Active Participants',
+                        tooltip: 'Participants who sent a message in the selected date range, out of every participant on this team.',
                         numerator: data.active_participants || 0,
                         denominator: data.total_participants || 0,
                         icon: 'fas fa-users',
@@ -409,6 +455,7 @@ function dashboard() {
                     },
                     {
                         label: 'Completed Sessions',
+                        tooltip: 'Completed sessions out of active sessions - those with a message sent or received in the selected date range.',
                         numerator: data.completed_sessions || 0,
                         denominator: data.total_sessions || 0,
                         icon: 'fas fa-comments',
@@ -416,6 +463,7 @@ function dashboard() {
                     },
                     {
                         label: 'Total Messages',
+                        tooltip: 'Messages sent and received in the selected date range. Internal system messages are not counted.',
                         numerator: data.total_messages || 0,
                         icon: 'fas fa-envelope',
                         color: 'text-orange-500'
@@ -742,12 +790,8 @@ function dashboard() {
             return num.toString();
         },
 
-        // Mirrors the server-side `cost_display` filter: 2 decimals for $0.01+,
-        // 4 for sub-cent so small early-usage spend doesn't flatten to $0.00.
         formatCurrency(value) {
-            const num = value || 0;
-            const decimals = num !== 0 && num < 0.01 ? 4 : 2;
-            return `$${num.toFixed(decimals)}`;
+            return formatCost(value);
         },
 
         formatDuration(minutes) {

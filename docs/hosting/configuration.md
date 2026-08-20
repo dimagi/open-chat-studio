@@ -21,9 +21,20 @@ All configuration is via environment variables. In production, set `DJANGO_SETTI
 | `DJANGO_DATABASE_PASSWORD` | — | Database password |
 | `DJANGO_DATABASE_HOST` | `localhost` | Database host |
 | `DJANGO_DATABASE_PORT` | `5432` | Database port |
-| `DJANGO_DATABASE_POOL_MIN_SIZE` | — | Connection pool minimum size |
-| `DJANGO_DATABASE_POOL_MAX_SIZE` | — | Connection pool maximum size |
-| `DJANGO_DATABASE_POOL_TIMEOUT` | — | Connection pool timeout (seconds) |
+
+## Connection behaviour
+
+These apply whether the connection comes from `DATABASE_URL` or the variables above.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DJANGO_DATABASE_USE_POOL` | `True` | Use a psycopg connection pool. When disabled, `DJANGO_DATABASE_CONN_MAX_AGE` applies instead |
+| `DJANGO_DATABASE_POOL_MIN_SIZE` | `2` | Connection pool minimum size |
+| `DJANGO_DATABASE_POOL_MAX_SIZE` | `35` | Connection pool maximum size |
+| `DJANGO_DATABASE_POOL_TIMEOUT` | `10` | Connection pool timeout (seconds) |
+| `DJANGO_DATABASE_CONN_MAX_AGE` | `0` | Persistent connection lifetime, in seconds. Ignored when the pool is enabled |
+| `DJANGO_DATABASE_SSLMODE` | `require` (`prefer` when `DEBUG`) | psycopg `sslmode`. AWS RDS Proxy requires TLS |
+| `DJANGO_DISABLE_SERVER_SIDE_CURSORS` | `False` | Set to `True` to stop Django using server-side cursors for `QuerySet.iterator()`. Behind a connection proxy in transaction-pooling mode (e.g. AWS RDS Proxy) these are declared `WITH HOLD` and pin the session to a backend connection. Disabling them costs memory: each `iterator()` call then buffers its whole result set client-side |
 
 ## Redis (alternative to REDIS_URL)
 
@@ -45,13 +56,26 @@ All configuration is via environment variables. In production, set `DJANGO_SETTI
 | `OAUTH_PKCE_REQUIRED` | `True` | Require PKCE for OAuth2 flows. |
 | `HEALTH_CHECK_TOKENS` | `[]` | Comma-separated tokens for the `/status` health check endpoint. |
 
+## Rate Limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATE_LIMIT_ENFORCE` | `False` | When `False`, over-limit requests are served and logged as `rate_limit.would_block` (sampled after the first crossing, not every request); when `True`, they receive HTTP 429. The `channels` scope does not answer to this switch: it counts and logs in both states and never returns 429. |
+| `RATE_LIMIT_API` | `2000/5m` | Request limit for the `api` scope, format `count/window` with `s`/`m`/`h` units. Fails open: if the limiter's cache is unreachable, requests are served. |
+| `RATE_LIMIT_ADMIN_API` | `100/5m` | Request limit for the `admin_api` scope (the `/admin/api/*` autocomplete and provider-reporting endpoints). Keyed by authenticated user, then the provider-reporting token, then client IP, so anonymous traffic cannot spend a staff member's allowance. Set `RATE_LIMIT_TRUSTED_PROXY_COUNT` before enforcing, or all anonymous callers behind a proxy share one bucket. Fails open: if the limiter's cache is unreachable, requests are served. |
+| `RATE_LIMIT_CHAT_API` | `300/5m` | Request limit for the `chat_api` scope (the `/api/chat/*` endpoints; the embedded chat widget is the primary caller, but non-widget clients use these endpoints too). Keyed per chat session, then per widget channel on session creation since no session exists yet, then by client IP for legacy clients that present neither. Set `RATE_LIMIT_TRUSTED_PROXY_COUNT` before enforcing behind a proxy, or those legacy callers all share one bucket. Sits apart from `RATE_LIMIT_API` so one busy conversation cannot spend the team's interactive API allowance. Fails open: if the limiter's cache is unreachable, requests are served. |
+| `RATE_LIMIT_PUBLIC_CHAT` | `100/5m` | Request limit for the `public_chat` scope (the public web chat views). Applies in both `flag_chat_widget` states: the flag selects which frontend the chat page embeds, so with it on the in-conversation message traffic moves to the `chat_api` scope while page loads, session creation and the end/review/complete flow stay under this one. Keyed per chat session, then by client IP on the paths that create a session, since no session exists there yet. Set `RATE_LIMIT_TRUSTED_PROXY_COUNT` before enforcing behind a proxy, or every visitor starting a conversation shares one bucket. The poll that runs while a reply is being composed is excluded from the scope, so a slow answer does not spend a conversation's allowance. Over-limit requests receive the site's error page rather than a JSON body, since these views are reached in a browser. Fails open: if the limiter's cache is unreachable, requests are served. |
+| `RATE_LIMIT_CHANNELS` | `3000/5m` | Request limit for the `channels` scope (inbound channel deliveries: Telegram, Twilio, Meta Cloud API, Turn, SureAdhere, CommCare Connect, Slack). Keyed per chatbot channel: each delivery is counted inside its view, once it has resolved to a channel and passed the provider's signature check, so a delivery that resolves to no channel is not counted and no caller can spend another tenant's allowance. A Meta payload carrying several phone numbers is counted once per number, against each one's own channel. On Slack this covers the messages the bot answers (mentions, DMs and replies in an existing thread); other channel traffic resolves no chatbot channel and is not counted. This scope counts but never refuses, in both `RATE_LIMIT_ENFORCE` states: an over-limit delivery is logged as `rate_limit.would_block` and still processed, since refusing it would discard a participant's message rather than delay it. Traffic that never resolves to a channel is outside this scope entirely, and is bounded by the WAF rather than here. Fails open: if the limiter's cache is unreachable, deliveries are served. |
+| `RATE_LIMIT_CREDENTIALS` | `100/5m` | Request limit for the `credentials` scope (the OAuth client-credential endpoints at `/o/token/`, `/o/revoke_token/` and `/o/introspect/`, API requests whose key or bearer token is rejected, and the CommCare Connect key exchange at `/api/commcare_connect/generate_key`, which issues an outbound request to CommCare Connect before it knows whether the caller's token is valid). Keyed by client IP, because a caller failing authentication has no identity to key on. Set `RATE_LIMIT_TRUSTED_PROXY_COUNT` before enforcing behind a proxy, or every caller shares one bucket. The one scope that fails closed: where the others serve the request when the limiter's cache is unreachable, this one refuses it once enforcement is on, so that a counter nobody can read does not become a way to brute force credentials unobserved. Successful API requests are counted under `RATE_LIMIT_API` instead, so a working integration is never charged to this scope. |
+| `RATE_LIMIT_TRUSTED_PROXY_COUNT` | `0` | Number of trusted reverse proxies; required for correct client IPs behind a proxy or tunnel before enabling any IP-keyed scope. |
+
 ## Email
 
 One of the following email backends must be configured. Set `DJANGO_EMAIL_BACKEND` to choose:
 
 ### Mailgun (default)
 
-```
+```env
 DJANGO_EMAIL_BACKEND=anymail.backends.mailgun.EmailBackend
 MAILGUN_API_KEY=your-mailgun-api-key
 MAILGUN_SENDER_DOMAIN=mail.yourdomain.com
@@ -59,7 +83,7 @@ MAILGUN_SENDER_DOMAIN=mail.yourdomain.com
 
 ### Amazon SES
 
-```
+```env
 DJANGO_EMAIL_BACKEND=anymail.backends.amazon_ses.EmailBackend
 # Omit these if using IAM roles:
 AWS_SES_ACCESS_KEY=
@@ -98,7 +122,7 @@ The settings above also work with any S3-compatible service (MinIO, Cloudflare R
 
 MinIO (path-style addressing — note the bucket is included in `AWS_S3_CUSTOM_DOMAIN`):
 
-```
+```env
 USE_S3_STORAGE=True
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
@@ -112,7 +136,7 @@ WHATSAPP_S3_AUDIO_BUCKET=whatsapp-audio
 
 Cloudflare R2 (virtual-host addressing):
 
-```
+```env
 USE_S3_STORAGE=True
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
@@ -140,6 +164,12 @@ Required only if you want users to connect Slack channels to their chatbots.
 | `SLACK_CLIENT_SECRET` | Slack app client secret |
 | `SLACK_SIGNING_SECRET` | Slack app signing secret |
 | `SLACK_BOT_NAME` | Display name for the Slack bot |
+
+### Telegram
+
+| Variable | Description |
+|----------|-------------|
+| `TELEGRAM_SECRET_TOKEN` | Optional. Secret token for verifying inbound webhook authenticity via the `X-Telegram-Bot-Api-Secret-Token` header. When configured, OCS registers it with Telegram's `setWebhook` API and rejects requests without matching tokens. |
 
 ## Observability
 

@@ -1159,10 +1159,9 @@ class Participant(BaseTeamModel):
         if self.is_anonymous:
             suffix = str(self.public_id)[:6]
             return f"Anonymous [{suffix}]"
-        if self.name:
-            return f"{self.name} ({self.identifier})"
-        if self.user and self.user.get_full_name():
-            return f"{self.user.get_full_name()} ({self.identifier})"
+        name = self.name or (self.user.get_full_name() if self.user else "")
+        if name and name != self.identifier:
+            return f"{name} ({self.identifier})"
         return self.identifier
 
     def get_platform_display(self):
@@ -1374,6 +1373,15 @@ class SessionStatus(models.TextChoices):
     UNKNOWN = "unknown", gettext("Unknown")
 
 
+def last_activity_expression():
+    """Order-by expression matching :attr:`ExperimentSession.last_activity`.
+
+    Returned fresh on each call rather than shared as a module constant so callers can
+    safely attach their own ``.desc()``/``.asc()`` wrappers.
+    """
+    return functions.Coalesce("last_activity_at", "created_at")
+
+
 class ExperimentSessionQuerySet(models.QuerySet):
     def annotate_with_message_count(self):
         message_count_subquery = Subquery(
@@ -1395,7 +1403,10 @@ class ExperimentSessionObjectManager(models.Manager):
             queryset = queryset.filter(experiment__id=experiment_id)
 
         queryset = queryset.select_related("experiment", "participant__user", "chat")
-        return queryset.annotate_with_message_count().order_by(F("last_activity_at").desc(nulls_last=True))
+        # Order by the same expression the "Last activity" column renders, so a session whose
+        # `last_activity_at` is null doesn't sort to the bottom while displaying a recent
+        # `created_at`. Backed by `expsession_team_lastact_c_idx`.
+        return queryset.annotate_with_message_count().order_by(last_activity_expression().desc())
 
 
 class ExperimentSession(BaseTeamModel):
@@ -1445,10 +1456,30 @@ class ExperimentSession(BaseTeamModel):
             models.Index(fields=["team", "first_activity_at"], name="expsession_team_firstact_idx"),
             # Supports the global (cross-team) date-range scans in the admin dashboard.
             models.Index(fields=["created_at"], name="expsession_created_at_idx"),
+            # Supports the sessions-table default ordering, which sorts by `last_activity`
+            # (coalesced) rather than the raw column — the index above can't serve that.
+            models.Index(
+                "team",
+                functions.Coalesce("last_activity_at", "created_at").desc(),
+                name="expsession_team_lastact_c_idx",
+            ),
         ]
 
     def __str__(self):
         return f"ExperimentSession(id={self.external_id})"
+
+    @property
+    def last_activity(self) -> datetime:
+        """The timestamp shown as the session's "last activity".
+
+        `last_activity_at` is only written when the participant sends a message, so sessions
+        created without one — bot-initiated sessions via `trigger_bot_api`, or rows predating
+        the field — have it null. Creating a session is itself activity, so fall back to
+        `created_at` rather than rendering an empty cell. `last_activity_expression()` is the
+        DB-side equivalent used for ordering, and `LastActivityFilter` filters on the same
+        fallback; keep all three in sync.
+        """
+        return self.last_activity_at or self.created_at
 
     def save(self, *args, **kwargs):
         if not hasattr(self, "chat"):
@@ -1558,6 +1589,15 @@ class ExperimentSession(BaseTeamModel):
         if commit and trigger_type:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
+    @property
+    def channel_is_disabled(self) -> bool:
+        """Whether an admin has switched off the channel this session runs on.
+
+        The FK is nullable, so "no channel" reads as not disabled -- there is nothing to
+        deliver on either way, and the send path fails on its own terms.
+        """
+        return self.experiment_channel is not None and self.experiment_channel.is_disabled
+
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str | None,
@@ -1583,6 +1623,19 @@ class ExperimentSession(BaseTeamModel):
         if (instruction_prompt is None) == (message_text is None):
             raise ValueError("Exactly one of instruction_prompt or message_text must be provided")
 
+        if self.channel_is_disabled:
+            # A disabled channel blocks bot-initiated traffic too -- scheduled messages, event
+            # actions, API triggers. Checked here rather than at the send, so a disabled channel
+            # costs no LLM call and leaves no undelivered AI message in the chat history.
+            # Deliberately not an error: the admin asked for this, so retrying it or logging a
+            # failed attempt against the schedule would both be wrong.
+            log.info(
+                "Not sending bot message to session %s: channel %s is disabled",
+                self.id,
+                self.experiment_channel_id,
+            )
+            return {}
+
         trace_service = None
         try:
             with transaction.atomic(), current_team(self.team):
@@ -1595,12 +1648,9 @@ class ExperimentSession(BaseTeamModel):
                     metadata=trace_info.metadata,
                     notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
                 ) as span:
-                    if message_text is not None:
-                        bot_message = self._save_direct_bot_message(message_text, experiment, trace_service)
-                    else:
-                        bot_message = self._bot_prompt_for_user(
-                            instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
-                        )
+                    bot_message = self._resolve_ad_hoc_message(
+                        instruction_prompt, message_text, experiment, trace_info, use_experiment, trace_service
+                    )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
                     trace_metadata = trace_service.get_trace_metadata()
@@ -1612,6 +1662,26 @@ class ExperimentSession(BaseTeamModel):
                     trace_metadata = trace_service.get_trace_metadata()
                     e.trace_metadata = trace_metadata
                 raise e
+
+    def _resolve_ad_hoc_message(
+        self,
+        instruction_prompt: str | None,
+        message_text: str | None,
+        experiment: Experiment,
+        trace_info: TraceInfo,
+        use_experiment: Experiment | None,
+        trace_service: TracingService,
+    ) -> str:
+        """The text to deliver, recorded in history either way.
+
+        ``message_text`` goes out verbatim; otherwise the LLM writes it from
+        ``instruction_prompt``. Exactly one of the two is set (the caller has already checked).
+        """
+        if message_text is not None:
+            return self._save_direct_bot_message(message_text, experiment, trace_service)
+        return self._bot_prompt_for_user(
+            instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
+        )
 
     def _save_direct_bot_message(self, message: str, experiment: Experiment, trace_service: TracingService) -> str:
         """Records a direct (non-LLM) bot message in the chat history and returns it.

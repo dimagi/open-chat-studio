@@ -1,16 +1,25 @@
 import re
+from decimal import Decimal
 from html import unescape
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 from django.urls import reverse
 
-from apps.cost_tracking.models import ServiceKind
+from apps.cost_tracking.models import Confidence, PricingRule, ServiceKind
+from apps.generics.actions import CHIP_BUTTON_STYLE
+from apps.teams.models import Flag
 from apps.trace.models import TraceStatus
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentSessionFactory
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
+
+
+def _enable_cost_tracking_flag_for(team):
+    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
+    flag.teams.add(team)
+    flag.flush()
 
 
 def _make_trace(team, **kwargs):
@@ -104,6 +113,139 @@ def test_trace_detail_view_without_usage_records(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_trace_detail_view_hides_cost_data_when_flag_off(client, team_with_users):
+    """Cost/confidence rendering is gated by flag_ai_cost_monitoring; the flag being off
+    must not affect the token counts, which predate the cost-tracking feature."""
+    team = team_with_users
+    user = team.members.first()
+    trace = _make_trace(team)
+    UsageRecordFactory.create(
+        team=team,
+        trace=trace,
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        cost=Decimal("1.00"),
+        confidence=Confidence.ESTIMATED,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    assert response.context_data["cost_tracking_enabled"] is False
+    content = response.content.decode()
+    assert b'data-testid="trace-cost"' not in response.content
+    assert b'data-testid="trace-confidence-badge"' not in response.content
+    assert "100" in content  # token count still renders
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_shows_total_cost_when_flag_on(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    trace = _make_trace(team)
+    rule = PricingRule.objects.create(
+        team=None,
+        provider_type="openai",
+        model_name="test-priced-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        unit_price="0.00015",
+    )
+    UsageRecordFactory.create(
+        team=team,
+        trace=trace,
+        model_name="test-priced-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        cost=Decimal("1.50"),
+        pricing_rule=rule,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    assert response.context_data["cost_tracking_enabled"] is True
+    assert response.context_data["token_usage"].total_cost == Decimal("1.50000000")
+    assert b'data-testid="trace-cost"' in response.content
+    assert "1.50" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_shows_zero_cost_for_fully_priced_model(client, team_with_users):
+    """A fully priced model (pricing_rule set) that happens to cost $0 must render "$0.00" in
+    its per-model row, not fall through to blank because `model.cost` is a falsy Decimal 0."""
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    trace = _make_trace(team)
+    rule = PricingRule.objects.create(
+        team=None,
+        provider_type="openai",
+        model_name="test-priced-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        unit_price="0.00015",
+    )
+    UsageRecordFactory.create(
+        team=team,
+        trace=trace,
+        model_name="test-priced-model",
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        cost=Decimal("0"),
+        pricing_rule=rule,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "$0.00" in content
+    assert "unpriced" not in content
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_shows_no_pricing_data_when_unpriced(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    trace = _make_trace(team)
+    UsageRecordFactory.create(
+        team=team, trace=trace, service_kind=ServiceKind.LLM_INPUT, quantity=100, cost=Decimal("0")
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    assert "No pricing data" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_trace_detail_view_shows_confidence_badge_for_estimated_rows(client, team_with_users):
+    team = team_with_users
+    user = team.members.first()
+    _enable_cost_tracking_flag_for(team)
+    trace = _make_trace(team)
+    UsageRecordFactory.create(
+        team=team,
+        trace=trace,
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=100,
+        confidence=Confidence.ESTIMATED,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("trace:trace_detail", args=[team.slug, trace.pk]))
+
+    assert response.status_code == 200
+    assert b'data-testid="trace-confidence-badge"' in response.content
+    assert "Estimated" in response.content.decode()
+
+
+@pytest.mark.django_db()
 def test_trace_table_view_filters_by_team(client, team_with_users):
     """The trace list view must return only traces belonging to the requesting team."""
     team = team_with_users
@@ -120,3 +262,22 @@ def test_trace_table_view_filters_by_team(client, team_with_users):
     visible_ids = {row.record.id for row in response.context_data["table"].rows}
     assert own_trace.id in visible_ids
     assert foreign_trace.id not in visible_ids
+
+
+@pytest.mark.django_db()
+def test_trace_table_renders_chips_like_other_tables(client, team_with_users):
+    """The bot and session columns stand in for the record, so they carry the shared chip styling
+    and the same one-line truncation as the participant chips in the session tables."""
+    team = team_with_users
+    user = team.members.first()
+    _make_trace(team)
+
+    client.force_login(user)
+    response = client.get(reverse("trace:table", args=[team.slug]))
+
+    chips = re.findall(r'<a [^>]*class="([^"]*)"', response.content.decode())
+    assert chips
+    for classes in chips:
+        assert CHIP_BUTTON_STYLE in classes
+        assert "max-w-xs" in classes
+    assert response.content.decode().count("min-w-0 truncate") == 2

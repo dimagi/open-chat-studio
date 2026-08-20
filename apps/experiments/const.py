@@ -1,9 +1,9 @@
-from datetime import UTC, datetime
+from datetime import date
 
-# Sunset details for the legacy embedded web chat flow (the `/embed/start/` endpoints
-# and the pages they serve). Replaced by the chat widget backed by `/api/chat/*`.
+# The legacy embedded web chat flow (the `/embed/start/` endpoints and the pages they
+# served) was removed on this date. Replaced by the chat widget backed by `/api/chat/*`.
 # Tracking issue: https://github.com/dimagi/open-chat-studio/issues/3540
-EMBED_FLOW_SUNSET_AT = datetime(2026, 8, 3, tzinfo=UTC)
+EMBED_FLOW_REMOVED_ON = date(2026, 8, 3)
 EMBED_FLOW_SUCCESSOR_URL = "https://docs.openchatstudio.com/chat_widget/"
 
 DEFAULT_CONSENT_TEXT = """

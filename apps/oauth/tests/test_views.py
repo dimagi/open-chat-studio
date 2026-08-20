@@ -11,6 +11,7 @@ from apps.oauth.views import TeamScopedAuthorizationView
 from apps.teams.backends import TEAM_ADMIN_GROUP, get_groups
 from apps.teams.helpers import create_default_team_for_user
 from apps.teams.models import Team
+from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import MembershipFactory, TeamWithUsersFactory
 from apps.utils.factories.user import UserFactory
 
@@ -366,6 +367,85 @@ class TestTeamApplicationViews:
 
         assert response.status_code == 302
         assert OAuth2Application.objects.get(name="Machine App").team == team
+
+    def test_new_page_offers_only_the_team_s_chatbots(self, client, team, admin_user):
+        mine = ExperimentFactory.create(team=team)
+        other_team = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+
+        client.force_login(admin_user)
+        response = client.get(reverse("oauth_apps:new", args=[team.slug]))
+
+        assert response.status_code == 200
+        offered = set(response.context["form"].fields["allowed_chatbots"].queryset)
+        assert offered == {mine}
+        assert other_team not in offered
+        assert "allowed_chatbots" in response.content.decode()
+
+    @pytest.mark.usefixtures("_oidc_signing_key")
+    def test_create_pins_the_application_to_its_chatbots(self, client, team, admin_user):
+        chatbot = ExperimentFactory.create(team=team)
+
+        client.force_login(admin_user)
+        response = client.post(
+            reverse("oauth_apps:new", args=[team.slug]),
+            {
+                "name": "Machine App",
+                "client_id": "machine-client-id",
+                "client_secret": "machine-client-secret",
+                "authorization_grant_type": OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+                "algorithm": "RS256",
+                "allowed_chatbots": [chatbot.pk],
+            },
+        )
+
+        assert response.status_code == 302
+        assert list(OAuth2Application.objects.get(name="Machine App").allowed_chatbots.all()) == [chatbot]
+
+    def test_create_rejects_another_team_s_chatbot(self, client, team, admin_user):
+        victim = ExperimentFactory.create(team=TeamWithUsersFactory.create())
+
+        client.force_login(admin_user)
+        response = client.post(
+            reverse("oauth_apps:new", args=[team.slug]),
+            {
+                "name": "Machine App",
+                "client_id": "machine-client-id",
+                "client_secret": "machine-client-secret",
+                "authorization_grant_type": OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+                "algorithm": "RS256",
+                "allowed_chatbots": [victim.pk],
+            },
+        )
+
+        assert response.status_code == 200
+        assert "allowed_chatbots" in response.context["form"].errors
+        assert not OAuth2Application.objects.filter(name="Machine App").exists()
+
+    def test_edit_updates_the_allowed_chatbots(self, client, team, admin_user):
+        application = OAuth2Application.objects.create(
+            name="Machine App",
+            team=team,
+            user=admin_user,
+            client_type=OAuth2Application.CLIENT_CONFIDENTIAL,
+            authorization_grant_type=OAuth2Application.GRANT_CLIENT_CREDENTIALS,
+        )
+        was = ExperimentFactory.create(team=team)
+        now = ExperimentFactory.create(team=team)
+        application.allowed_chatbots.add(was)
+
+        client.force_login(admin_user)
+        response = client.post(
+            reverse("oauth_apps:edit", args=[team.slug, application.pk]),
+            {
+                "name": application.name,
+                "client_id": application.client_id,
+                "algorithm": "RS256",
+                "allowed_chatbots": [now.pk],
+            },
+        )
+
+        assert response.status_code == 302, response.context["form"].errors
+        assert list(application.allowed_chatbots.all()) == [now]
 
     def test_edit_is_scoped_to_the_team_in_the_url(self, client, team, admin_user):
         """An application belonging to another team is not reachable, even by its own owner."""

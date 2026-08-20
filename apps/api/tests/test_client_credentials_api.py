@@ -25,10 +25,16 @@ def session(db):
     return ExperimentSessionFactory.create(experiment=experiment)
 
 
-def _machine_client(team, scopes):
+def _machine_client(team, scopes, allowed_chatbots=None):
     # The app owner is deliberately a non-member of the pinned team to prove access does not depend
     # on any membership row.
-    return ApiTestClient(UserFactory.create(), team, auth_method="oauth_client_credentials", scopes=scopes)
+    return ApiTestClient(
+        UserFactory.create(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=scopes,
+        allowed_chatbots=allowed_chatbots,
+    )
 
 
 @pytest.mark.django_db()
@@ -195,7 +201,7 @@ def test_machine_token_reads_usage(session):
 def test_machine_token_chat_completion_uses_user_field_as_participant(mock_handle, session):
     """chatbots:interact: the OpenAI `user` field identifies the (user-less) participant."""
     mock_handle.return_value = ChatMessage(content="ok")
-    client = _machine_client(session.team, scopes=["chatbots:interact"])
+    client = _machine_client(session.team, scopes=["chatbots:interact"], allowed_chatbots=[session.experiment])
     url = reverse("api:openai-chat-completions", kwargs={"experiment_id": session.experiment.public_id})
 
     response = client.post(
@@ -214,7 +220,7 @@ def test_machine_token_chat_completion_uses_user_field_as_participant(mock_handl
 @pytest.mark.django_db()
 def test_machine_token_chat_completion_requires_user_field(session):
     """Without an authenticated user and no `user` field, there is no participant identifier."""
-    client = _machine_client(session.team, scopes=["chatbots:interact"])
+    client = _machine_client(session.team, scopes=["chatbots:interact"], allowed_chatbots=[session.experiment])
     url = reverse("api:openai-chat-completions", kwargs={"experiment_id": session.experiment.public_id})
 
     response = client.post(url, data={"messages": [{"role": "user", "content": "hi"}]}, format="json")

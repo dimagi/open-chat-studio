@@ -35,7 +35,7 @@ class LlmProviderFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     type = str(LlmProviderTypes.openai)
     name = factory.Sequence(lambda n: f"Test LLM Provider {n}")
-    config = {"openai_api_key": "123"}
+    config = factory.Dict({"openai_api_key": factory.Sequence(lambda n: f"test-openai-api-key-{n}")})
 
 
 class LlmProviderModelFactory(factory.django.DjangoModelFactory):
@@ -64,7 +64,13 @@ class VoiceProviderFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     type = VoiceProviderType.aws
     name = factory.Sequence(lambda n: f"Test Voice Provider {n}")
-    config = {"aws_access_key_id": "123", "aws_secret_access_key": "123", "aws_region": "us-east-1"}
+    config = factory.Dict(
+        {
+            "aws_access_key_id": factory.Sequence(lambda n: f"test-aws-access-key-id-{n}"),
+            "aws_secret_access_key": factory.Sequence(lambda n: f"test-aws-secret-access-key-{n}"),
+            "aws_region": "us-east-1",
+        }
+    )
 
 
 class AuthProviderFactory(factory.django.DjangoModelFactory):
@@ -74,7 +80,12 @@ class AuthProviderFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     name = factory.Sequence(lambda n: f"Test Auth Provider {n}")
     type = AuthProviderType.commcare
-    config = {"username": "user", "api_key": "key"}
+    config = factory.Dict(
+        {
+            "username": factory.Sequence(lambda n: f"test-commcare-username-{n}"),
+            "api_key": factory.Sequence(lambda n: f"test-commcare-api-key-{n}"),
+        }
+    )
 
 
 class TraceProviderFactory(factory.django.DjangoModelFactory):
@@ -84,4 +95,10 @@ class TraceProviderFactory(factory.django.DjangoModelFactory):
     team = factory.SubFactory(TeamFactory)
     name = factory.Sequence(lambda n: f"Test Trace Provider {n}")
     type = TraceProviderType.langfuse
-    config = {"public_key": "123", "secret_key": "***", "host": "https://example.com"}
+    config = factory.Dict(
+        {
+            "public_key": factory.Sequence(lambda n: f"test-langfuse-public-key-{n}"),
+            "secret_key": factory.Sequence(lambda n: f"test-langfuse-secret-key-{n}"),
+            "host": "https://example.com",
+        }
+    )

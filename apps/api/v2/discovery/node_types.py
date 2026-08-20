@@ -11,14 +11,7 @@ from rest_framework.exceptions import NotFound
 from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
-from .contract import (
-    MUST_MATCH,
-    OPTIONS_KEY_RENAMES,
-    OPTIONS_KEYED_BY,
-    PER_KEYWORD_OUTPUT,
-    SINGLE_OUTPUT,
-    UI_KEY_TRANSLATIONS,
-)
+from .contract import MUST_MATCH, OPTIONS_KEYED_BY, PER_KEYWORD_OUTPUT, SINGLE_OUTPUT, UI_KEY_TRANSLATIONS
 
 
 @cache
@@ -26,7 +19,7 @@ def get_node_types() -> list[dict]:
     """Node types reshaped for client consumption. Static per deploy, so it is memoised -- a test
     overriding ``DOCUMENTATION_BASE_URL`` needs ``get_node_types.cache_clear()``."""
     node_types = []
-    for schema in _addable_schemas():
+    for schema in _available_schemas():
         entry = {
             "type": schema["title"],
             "description": schema["description"],
@@ -45,7 +38,7 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
 
 
 def served_option_keys() -> frozenset[str]:
-    """Every option key some listed node type can reference, in API vocabulary."""
+    """Every option key some listed node type can reference."""
     return frozenset().union(*_option_keys_by_type().values())
 
 
@@ -61,12 +54,12 @@ def unknown_node_type(requested_type: str) -> NotFound:
     return NotFound({"detail": detail, "valid_types": _valid_type_names()})
 
 
-def etag(payload) -> str:
+def etag(payload: list | dict) -> str:
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
     return f'W/"{digest[:32]}"'
 
 
-def _addable_schemas() -> list[dict]:
+def _available_schemas() -> list[dict]:
     """The builder schemas behind the listed node types. ``ui:can_add`` is False for the deprecated
     types and the structural ones the server manages."""
     return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
@@ -131,14 +124,14 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
     """The `/pipeline/options/` keys each node type's params can draw from, read off
     ``ui:optionsSource``. A known type that reads nothing yields an empty set, not a missing key."""
     keys_by_type = {}
-    for schema in _addable_schemas():
+    for schema in _available_schemas():
         properties = schema["properties"]
         keys = set()
         for prop in properties.values():
             if prop.get("api:exclude"):
                 continue
             if source := prop.get("ui:optionsSource"):
-                keys.add(OPTIONS_KEY_RENAMES.get(source, source))
+                keys.add(source)
         if "llm_provider_id" in properties:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)

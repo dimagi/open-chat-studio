@@ -119,6 +119,7 @@ def test_trigger_bot_allowed_for_machine_token_with_scope(trigger_bot_message_ta
         email_experiment.team,
         auth_method="oauth_client_credentials",
         scopes=["chatbots:interact"],
+        allowed_chatbots=[email_experiment],
     )
 
     response = _post(client, url_name, email_experiment)

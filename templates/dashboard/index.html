@@ -125,7 +125,24 @@
                   <span class="text-2xl font-bold text-gray-500 dark:text-gray-500" x-text="'/ ' + formatNumber(stat.denominator)"></span>
                 </template>
               </div>
-              <div class="stat-label" x-text="stat.label"></div>
+              <div class="flex items-center gap-1">
+                <div class="stat-label" x-text="stat.label"></div>
+                {# Mirrors generic/help.html; inlined because the card list is rendered by Alpine, not Django. #}
+                <template x-if="stat.tooltip">
+                  <div class="dropdown dropdown-top dropdown-hover">
+                    <div role="button" class="btn btn-circle btn-ghost btn-xs text-info">
+                      <i class="text-xs fa-regular fa-circle-question"></i>
+                    </div>
+                    <div
+                      tabindex="0"
+                      class="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
+                      <div tabindex="0" class="card-body font-medium text-wrap">
+                        <p x-text="stat.tooltip"></p>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
             </div>
             <div class="text-2xl" :class="stat.color">
               <i :class="stat.icon"></i>
@@ -365,6 +382,9 @@
                   <th>{% translate "Participant" %}</th>
                   <th>{% translate "Messages" %}</th>
                   <th>{% translate "Sessions" %}</th>
+                  {% if cost_tracking_enabled %}
+                    <th class="text-right" data-testid="most-active-cost-header">{% translate "Cost" %}</th>
+                  {% endif %}
                   <th>{% translate "Last Activity" %}</th>
                 </tr>
               </thead>
@@ -379,6 +399,9 @@
                     </td>
                     <td x-text="formatNumber(participant.total_messages)"></td>
                     <td x-text="formatNumber(participant.total_sessions)"></td>
+                    {% if cost_tracking_enabled %}
+                      <td class="text-right" x-text="formatCurrency(participant.cost)"></td>
+                    {% endif %}
                     <td x-text="`${formatDate(participant.last_activity)} ago`"></td>
                   </tr>
                 </template>

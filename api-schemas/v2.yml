@@ -190,13 +190,6 @@ paths:
 
         Static per deploy: revalidate a cached copy with `If-None-Match` against the `ETag`.
       summary: List Pipeline Node Types
-      parameters:
-      - in: query
-        name: type
-        schema:
-          type: string
-        description: Return only this node type. An unknown or deprecated name returns
-          404.
       tags:
       - Pipelines
       security:
@@ -245,6 +238,68 @@ paths:
                   summary: A router, showing the per-keyword outputs and a param-pairing
                     rule.
           description: ''
+  /api/v2/pipeline/nodes/{node_type}/:
+    get:
+      operationId: pipeline_node_retrieve
+      description: |-
+        One node type, as `/pipeline/nodes/` serves it. A deprecated type is not retrievable either -- it is not something a client may build.
+
+        Static per deploy: revalidate a cached copy with `If-None-Match` against the `ETag`.
+      summary: Retrieve a Pipeline Node Type
+      parameters:
+      - in: path
+        name: node_type
+        schema:
+          type: string
+        description: The type's name, as carried in the `type` field of a `/pipeline/nodes/`
+          entry.
+        required: true
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeType'
+              examples:
+                NodeType:
+                  value:
+                    type: RouterNode
+                    description: Routes the input to one of the linked nodes using
+                      an LLM
+                    documentation_url: https://docs.openchatstudio.com/how-to/pipelines/nodes/
+                    outputs:
+                      kind: per_keyword
+                      handles: null
+                      handle_pattern: output_{index}
+                      description: One output per entry in `keywords`.
+                    schema:
+                      title: RouterNode
+                      type: object
+                      required:
+                      - llm_provider_id
+                      - llm_provider_model_id
+                      - name
+                      properties:
+                        llm_provider_id:
+                          type: integer
+                          title: LLM Model
+                          description: The configured LLM service provider this node
+                            calls.
+                        llm_provider_model_id:
+                          type: integer
+                          must_match:
+                            field: llm_provider_id
+                            'on': type
+                  summary: A router, showing the per-keyword outputs and a param-pairing
+                    rule.
+          description: ''
         '404':
           content:
             application/json:
@@ -260,16 +315,8 @@ paths:
 
         A key holds the values for the node param of the same name: write one of `source_material`'s entries into a node's `source_material_id`, one of `collection_index`'s into `collection_index_ids`.
 
-        The variable lists are the exception, because no param is named for the list it draws on and two different params are both named `prompt`. Jinja params -- `template_string` and `SendEmail`'s fields -- draw from `template_variables` and are written double-braced (`{{input}}`); an LLM node's `prompt` draws from `llm_prompt_variables` and a router's from `router_prompt_variables`, both written single-braced (`{source_material}`). Pass `?node_type=` to receive only the list that applies -- the sets are not interchangeable.
+        The variable lists are the exception, because no param is named for the list it draws on and two different params are both named `prompt`. Jinja params -- `template_string` and `SendEmail`'s fields -- draw from `template_variables` and are written double-braced (`{{input}}`); an LLM node's `prompt` draws from `llm_prompt_variables` and a router's from `router_prompt_variables`, both written single-braced (`{source_material}`). Fetch `/pipeline/options/{node_type}/` to receive only the list that applies -- the sets are not interchangeable.
       summary: List Pipeline Node Options
-      parameters:
-      - in: query
-        name: node_type
-        schema:
-          type: string
-        description: Return only the keys this node type's params can reference, plus
-          its `default_llm_provider` where it has one. An unknown or deprecated name
-          returns 404.
       tags:
       - Pipelines
       security:
@@ -295,10 +342,6 @@ paths:
                       label: gpt-4o
                       type: openai
                       max_token_limit: 128000
-                    voice_provider_id:
-                    - value: 2
-                      label: Prod Polly
-                      type: aws
                     synthetic_voice_id:
                     - value: 11
                       label: Joanna (English)
@@ -347,6 +390,36 @@ paths:
                       llm_provider_model_id: 5
                   summary: Every key the endpoint serves, for a team that has one
                     of each resource.
+          description: ''
+  /api/v2/pipeline/options/{node_type}/:
+    get:
+      operationId: pipeline_node_options
+      description: 'The keys this node type''s params can reference, plus its `default_llm_provider`
+        where it has one -- `/pipeline/options/` cut down to what building this one
+        node needs. Which of the three variable lists applies is settled here rather
+        than left to the client: the sets are not interchangeable.'
+      summary: List One Node Type's Options
+      parameters:
+      - in: path
+        name: node_type
+        schema:
+          type: string
+        description: The type's name, as carried in the `type` field of a `/pipeline/nodes/`
+          entry.
+        required: true
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineOptions'
           description: ''
         '404':
           content:
@@ -439,13 +512,19 @@ paths:
               examples:
                 ChannelNotConfigured:
                   value:
-                    detail: Experiment cannot send messages on the whatsapp channel.
+                    detail: Chatbot cannot send messages on the whatsapp channel.
                       Create the channel first.
-                  summary: Experiment cannot send messages on the specified channel
+                  summary: Chatbot cannot send messages on the specified channel
                 ConsentNotGiven:
                   value:
                     detail: User has not given consent
                   summary: User has not given consent
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                description: The OAuth application is not authorized for this chatbot
           description: ''
         '404':
           content:
@@ -2118,7 +2197,8 @@ components:
       - type
     NodeTypeNotFound:
       type: object
-      description: The body DRF renders for the `NotFound` raised on an unknown `type`.
+      description: The body DRF renders for the `NotFound` raised on a node type name
+        nothing answers to.
       properties:
         detail:
           type: string
@@ -2236,8 +2316,8 @@ components:
       type: object
       description: |-
         The documented keys. Each holds the values for the node param of the same name. A response
-        carries a subset when `?node_type=` is given, and may carry keys not listed here as new node
-        params are added.
+        from `/pipeline/options/{node_type}/` carries a subset, and any response may carry keys not
+        listed here as new node params are added.
       properties:
         llm_provider_id:
           type: array
@@ -2247,13 +2327,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LlmProviderModelOption'
-        voice_provider_id:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProviderOption'
-          description: The team's configured voice providers. No node param sources
-            its options from this -- it is here to resolve the `provider_id` on a
-            `synthetic_voice_id` entry.
         synthetic_voice_id:
           type: array
           items:
@@ -2302,7 +2375,7 @@ components:
           description: 'The variables a Jinja param may reference, written double-braced
             -- `{{input}}`. Covers `RenderTemplate`''s `template_string` and `SendEmail`''s
             `recipient_list`, `subject` and `body`. Distinct from the two prompt lists
-            in both content and syntax: those are single-braced. Use `?node_type=`
+            in both content and syntax: those are single-braced. Fetch `/pipeline/options/{node_type}/`
             to get the list that applies.'
         llm_prompt_variables:
           type: array
@@ -2348,7 +2421,7 @@ components:
         * `slack` - Slack
         * `commcare_connect` - CommCare Connect
         * `evaluations` - Evaluations
-        * `embedded_widget` - Embedded Widget
+        * `embedded_widget` - Chat Widget & API
         * `email` - Email
     PromptVariable:
       type: object
@@ -2547,8 +2620,9 @@ components:
         provider_id:
           type: integer
           nullable: true
-          description: The `voice_provider_id` option this voice belongs to, or null
-            for a shared voice that any provider of the same `type` can speak.
+          description: The voice provider that owns this voice, or null for a shared
+            voice any provider of the same `type` can speak. The chatbot's own provider
+            is its `voice.provider_id` -- see the chatbot detail endpoint.
       required:
       - label
       - provider_id

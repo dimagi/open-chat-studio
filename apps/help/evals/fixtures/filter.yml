@@ -1,3 +1,6 @@
+# A bare recency query ("within the last week") is about the session, not specifically about the
+# participant's messages, so it belongs on `last_activity` — which also matches sessions whose
+# participant never replied. `last_message`/`first_message` are for explicitly message-based queries.
 - id: sessions_last_week
   input:
     query: "sessions within the last week"
@@ -5,7 +8,7 @@
   checks:
     - type: exact_filters
       expected:
-        - column: last_message
+        - column: last_activity
           operator: range
           value: "7d"
 
@@ -66,7 +69,7 @@
         - column: state
           operator: any of
           value: ["complete"]
-        - column: last_message
+        - column: last_activity
           operator: range
           value: "30d"
         - column: channels
@@ -128,7 +131,7 @@
         - column: channels
           operator: any of
           value: ["Facebook"]
-        - column: last_message
+        - column: last_activity
           operator: range
           value: "1h"
         - column: tags

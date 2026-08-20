@@ -10,7 +10,10 @@ from apps.utils.fields import SanitizedJSONField
 
 
 class ServiceKind(models.TextChoices):
-    """Billing dimension. Each kind has its own PricingRule per (provider, model)."""
+    """Billing dimension. Each kind has its own PricingRule per (provider, model).
+
+    NOTE: Keep in sync with SERVICE_KINDS in assets/javascript/dashboard/costBreakdown.js.
+    """
 
     LLM_INPUT = "llm_input"
     LLM_OUTPUT = "llm_output"

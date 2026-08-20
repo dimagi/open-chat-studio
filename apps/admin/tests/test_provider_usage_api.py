@@ -15,13 +15,6 @@ INVALID_RANGE = {"range_type": "custom", "start": "not-a-date", "end": "2026-05-
 WHEN = timezone.make_aware(datetime(2026, 5, 15, 12, 0))
 
 
-@pytest.fixture()
-def superuser_client(client):
-    user = CustomUser.objects.create(username="admin@acme.com", is_staff=True, is_superuser=True)
-    client.force_login(user)
-    return client
-
-
 def _usage(team, **kwargs):
     kwargs.setdefault("at", WHEN)
     return UsageRecordFactory(team=team, **kwargs)

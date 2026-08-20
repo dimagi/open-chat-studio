@@ -107,13 +107,14 @@ class PipelineState(dict):
     # List of (previous, current, next) tuples used for aiding in routing decisions.
     path: Annotated[Sequence[tuple[str | None, str, list[str]]], operator.add]
 
-    # inputs to the current node
+    # Every input delivered to the current node so far, oldest first. One entry per incoming node
+    # run that routed here, so a node on a merge accumulates an entry per branch that reaches it.
     node_inputs: list[str]
 
-    # input from the last executed node prior to this one
+    # The most recently delivered of those inputs: the current node's primary input.
     last_node_input: str
 
-    # source node for the current node
+    # The node that produced `last_node_input`.
     node_source: str
 
     intents: Annotated[list[Intents], _merge_intents]
@@ -204,23 +205,31 @@ class PipelineState(dict):
                 return [out["message"] for out in output]
         return None
 
-    def get_node_inputs(self, node_id: str, incoming_nodes: list[str]) -> dict[str, Any]:
-        """
-        Get the inputs for the given node based on the node's incoming edges.
+    def get_node_inputs(self, node_id: str, incoming_nodes: list[str]) -> list[tuple[str, Any]]:
+        """Every input delivered to ``node_id`` so far, oldest first, as ``(source_node_id, output)``.
 
-        Returns:
-            A dictionary mapping incoming node IDs to their respective outputs in the state.
-            If there is no output for an incoming edge or if that edge was not targeted,
-            the value in the output will be None.
+        An input is delivered when an incoming node runs and routes to this node, so ``path`` — one
+        entry per node run, appended in execution order — is what orders them. Ordering by arrival
+        rather than by the order the edges happen to be stored keeps a node's input independent of
+        how its graph was drawn.
+
+        An incoming node that ran more than once contributes one input per run that targeted this
+        node. A run that produced no output (a Python node that aborted via ``require_node_outputs``)
+        contributes none: it appends neither an output nor a path entry.
         """
-        inputs = {}
-        for incoming_node_id in incoming_nodes:
-            targets = [step[2] for step in self["path"] if step[1] == incoming_node_id]
-            if targets and node_id in targets[0]:
-                # only include outputs from nodes that targeted the current node
-                inputs[incoming_node_id] = self.get_node_outputs(incoming_node_id)
-            else:
-                inputs[incoming_node_id] = None
+        outputs_by_node = {source_id: self.get_node_outputs(source_id) or [] for source_id in set(incoming_nodes)}
+        runs_seen: dict[str, int] = {}
+        inputs = []
+        for _previous, source_id, targets in self["path"]:
+            if source_id not in outputs_by_node:
+                continue
+            # A node's nth path entry and its nth output are written by the same state update, so the
+            # run's own output is the one at that index.
+            run_index = runs_seen.get(source_id, 0)
+            runs_seen[source_id] = run_index + 1
+            outputs = outputs_by_node[source_id]
+            if node_id in targets and run_index < len(outputs):
+                inputs.append((source_id, outputs[run_index]))
         return inputs
 
     @classmethod
@@ -280,18 +289,11 @@ class BasePipelineNode(BaseModel, ABC):
                 Attachment.model_validate(att) for att in state.get("attachments", [])
             ]
         else:
-            for incoming_node_id, outputs in reversed(state.get_node_inputs(node_id, incoming_nodes).items()):
-                if outputs is not None:
-                    # Handle the edge case where a node is downstream of a 'join' node connected to
-                    # multiple parallel nodes. This isn't really a supported workflow, and it's hard to detect
-                    # in the pipeline during the build step.
-                    # By taking the last message, we at least get different outputs for each invocation of
-                    # the node in the case where the parallel branches are of different lengths.
-                    state["last_node_input"] = outputs[-1]
-                    state["node_inputs"] = outputs
-                    state["node_source"] = incoming_node_id
-                    break
-            else:
+            # A node on a merge runs once per branch that reaches it, so it can have several inputs by
+            # the time it runs: all of them are exposed as `node_inputs`, and the one that arrived most
+            # recently is this run's primary input.
+            inputs = state.get_node_inputs(node_id, incoming_nodes)
+            if not inputs:
                 raise PipelineNodeRunError(
                     f"Cannot determine which input to use for node {node_id}",
                     {
@@ -302,6 +304,10 @@ class BasePipelineNode(BaseModel, ABC):
                         "pipeline_path": state["path"],
                     },
                 )
+            source_node_id, last_input = inputs[-1]
+            state["last_node_input"] = last_input
+            state["node_inputs"] = [value for _source_node_id, value in inputs]
+            state["node_source"] = source_node_id
         return state
 
     @property
@@ -471,16 +477,16 @@ class OptionsSource(StrEnum):
     llm_provider_model_id = "llm_provider_model_id"
     source_material = "source_material"
     assistant = "assistant"
-    agent_tools = "agent_tools"
+    tools = "tools"
     custom_actions = "custom_actions"
     collection = "collection"
     built_in_tools = "built_in_tools"
     mcp_tools = "mcp_tools"
     collection_index = "collection_index"
     tool_config = "tool_config"
-    text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
-    text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
-    jinja_node = "jinja_node"
+    llm_prompt_variables = "llm_prompt_variables"
+    router_prompt_variables = "router_prompt_variables"
+    template_variables = "template_variables"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
 

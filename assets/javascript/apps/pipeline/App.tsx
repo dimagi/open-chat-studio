@@ -7,7 +7,8 @@ import usePipelineStore from "./stores/pipelineStore";
 type WidgetElement = HTMLElement & { pageContext?: Record<string, unknown> };
 
 function getWidget(): WidgetElement | null {
-  return document.querySelector("open-chat-studio-widget") as WidgetElement | null;
+  // The support widget, by id — a bare tag selector can match a page's own chat widget instead.
+  return document.getElementById("ocs-support-widget") as WidgetElement | null;
 }
 
 function syncPipelineToWidget(nodes: unknown[], edges: unknown[]) {

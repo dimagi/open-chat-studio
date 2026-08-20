@@ -6,6 +6,7 @@ node_modules
 npm-debug.log
 pnpm-debug.log
 .env
+.env.prod
 .direnv
 .pytest_cache
 .venv

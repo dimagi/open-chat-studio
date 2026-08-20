@@ -93,7 +93,11 @@ def index_collection_files(collection_files_queryset: QuerySet[CollectionFile]) 
         CollectionFile.objects.filter(id__in=ids).update(status=FileStatus.IN_PROGRESS, failure_reason="")
 
         collection.add_files_to_index(
-            collection_files=CollectionFile.objects.filter(id__in=ids).select_related("file").iterator(100),
+            # `collection` is select_related because indexing reads the collection's search
+            # language per file to build the lexical vectors; without it that is a query per file.
+            collection_files=CollectionFile.objects.filter(id__in=ids)
+            .select_related("file", "collection")
+            .iterator(100),
             chunk_size=strategy.chunk_size,
             chunk_overlap=strategy.chunk_overlap,
         )

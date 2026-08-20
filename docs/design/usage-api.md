@@ -107,11 +107,13 @@ plus a **max window** relative to granularity (e.g. reject `daily` over a multi-
 
 ### Metrics → sources
 
+> The metric *definitions* below are superseded by [ADR-0051](../adr/0051-usage-activity-metric-definitions.md); this table describes the sources they read, not their semantics.
+
 | Metric | Source | Shape |
 |---|---|---|
 | `messages` | `ChatMessage` grouped by `message_type`, scoped `chat__team`, participant via `chat__experiment_session__participant` | `{human, ai, total}` |
-| `sessions` | `ExperimentSession` count | integer |
-| `participants` | distinct `Participant` count (only meaningful when **not** grouped by participant) | integer |
+| `sessions` | `sessions_started` - `ExperimentSession` created in the window, SETUP and evaluation sessions excluded | integer |
+| `participants` | `active_participants` - distinct participants who authored a human message in the window (only meaningful when **not** grouped by participant) | integer |
 | `cost` | `reporting.cost_summary` / `cost_timeseries` with `CostFilters` | `{total, currency}` |
 | `tokens` | `UsageRecord.quantity` summed, split by `service_kind` | `{prompt, completion, total}` |
 

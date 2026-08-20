@@ -17,7 +17,7 @@
       "description": "A comma-separated list of email addresses. Supports Jinja2 templates.",
       "title": "Recipient List",
       "type": "string",
-      "ui:optionsSource": "jinja_node",
+      "ui:optionsSource": "template_variables",
       "ui:rows": 1,
       "ui:widget": "jinja_template"
     },
@@ -25,7 +25,7 @@
       "description": "Email subject. Supports Jinja2 templates.",
       "title": "Subject",
       "type": "string",
-      "ui:optionsSource": "jinja_node",
+      "ui:optionsSource": "template_variables",
       "ui:rows": 1,
       "ui:widget": "jinja_template"
     },
@@ -34,7 +34,7 @@
       "description": "Optional Jinja2 template for the email body. If empty, the pipeline input is used.",
       "title": "Body",
       "type": "string",
-      "ui:optionsSource": "jinja_node",
+      "ui:optionsSource": "template_variables",
       "ui:widget": "jinja_template"
     }
   },

@@ -1,0 +1,72 @@
+"""DRF adapter for the shared rate limiting core (#2140 / #2349).
+
+Counting, enforcement, and logging live in apps.utils.rate_limit; this module
+resolves the request identity and translates the result into DRF semantics.
+"""
+
+from rest_framework.throttling import BaseThrottle
+
+from apps.api.models import UserAPIKey
+from apps.channels.models import ExperimentChannel
+from apps.oauth.models import OAuth2AccessToken
+from apps.utils.rate_limit import check, client_ip, is_exempt
+
+
+class APIRateThrottle(BaseThrottle):
+    scope = "api"
+    _wait = None
+
+    def allow_request(self, request, view):
+        if is_exempt(request):
+            return True
+        identity_type, identity = self.identity(request, view)
+        team = getattr(request, "team", None)
+        result = check(self.scope, identity_type, identity, team_id=team.pk if team else None)
+        # Auth attributes live on the DRF Request; the headers middleware reads
+        # the underlying HttpRequest, so the result is attached there.
+        request._request.rate_limit_result = result
+        self._wait = result.retry_after
+        return result.allowed
+
+    def wait(self):
+        return self._wait
+
+    def identity(self, request, view) -> tuple[str, str]:
+        # `team` may be a lazily-resolved proxy set by TeamsMiddleware on the underlying
+        # HttpRequest (present on every request) rather than a plain Team instance set
+        # by our auth classes; a truthiness check evaluates it safely instead of raising
+        # when the proxy resolves to None.
+        team = getattr(request, "team", None)
+        if team:
+            return "team", str(team.pk)
+        auth = getattr(request, "auth", None)
+        if isinstance(auth, UserAPIKey):
+            return "api_key", str(auth.pk)
+        if isinstance(auth, OAuth2AccessToken):
+            return "oauth_client", str(auth.application_id)
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated:
+            return "user", str(user.pk)
+        return "ip", client_ip(request)
+
+
+class ChatAPIRateThrottle(APIRateThrottle):
+    """Traffic to the /api/chat/* endpoints, bucketed per conversation.
+
+    The embedded chat widget is the primary caller, but non-widget clients
+    use these endpoints too. A per-session bucket keeps one visitor from
+    consuming the allowance of every other visitor to the same chatbot.
+    Session creation has no session to key on yet, so it buckets on the
+    widget channel instead.
+    """
+
+    scope = "chat_api"
+
+    def identity(self, request, view) -> tuple[str, str]:
+        session_id = getattr(view, "kwargs", {}).get("session_id")
+        if session_id is not None:
+            return "session", str(session_id)
+        auth = getattr(request, "auth", None)
+        if isinstance(auth, ExperimentChannel):
+            return "channel", str(auth.pk)
+        return "ip", client_ip(request)

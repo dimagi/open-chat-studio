@@ -362,6 +362,55 @@ class ConsentCheckStage(ProcessingStage):
 
 
 # ---------------------------------------------------------------------------
+# ChannelDisabledStage
+# ---------------------------------------------------------------------------
+
+
+class ChannelDisabledStage(ProcessingStage):
+    """Blocks inbound messages on a channel an admin has switched off.
+
+    Runs as late as it can while still preventing every effect that matters: no session
+    is created, no bot is invoked, and the inbound message is never recorded. When a
+    static ``disabled_message`` is configured it goes back to the user through the
+    terminal stages; otherwise the pipeline halts silently.
+
+    This stage only sees traffic that reaches a pipeline. Sessions opened *before* any pipeline
+    runs are refused by ``start_experiment_session``; the routes that would otherwise create
+    participant records on the way there (widget and API session starts, the trigger-bot
+    endpoint, the public web chat, the Slack listener) check ``is_disabled`` themselves first.
+    Bot-initiated sends are refused by ``ad_hoc_bot_message`` and
+    ``ChannelBase.send_message_to_user``.
+
+    It deliberately does *not* run first. Delivering the static message needs the same
+    groundwork any other reply needs, so it sits behind the participant stages:
+
+    * ``ParticipantResolverStage`` supplies ``ctx.participant`` (WhatsApp addresses the
+      reply to the stored phone number, since the identifier may be a non-sendable BSUID)
+      and ``ctx.participant_data`` (CommCare Connect cannot send without it).
+    * ``ConsentCheckStage`` still gets to abort first, so we never push a message at a
+      participant who has withdrawn consent or blocked the bot.
+
+    The cost is that a first-time sender to a disabled channel gets a ``Participant``
+    record. Channels that carry a pre-set session (Web, Slack) also persist the static
+    reply to chat history and bump ``last_activity_at``, exactly as any other early exit
+    on those channels does.
+    """
+
+    span_input_fields = ("experiment_channel.enabled",)
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        return ctx.experiment_channel.is_disabled
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        channel = ctx.experiment_channel
+        logger.info("Ignoring message for disabled channel %s (%s)", channel.id, channel.platform)
+
+        if channel.disabled_message:
+            raise EarlyExitResponse(channel.disabled_message)
+        raise EarlyAbort()
+
+
+# ---------------------------------------------------------------------------
 # ConsentFlowStage
 # ---------------------------------------------------------------------------
 

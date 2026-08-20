@@ -11,7 +11,7 @@ from rest_framework import serializers
 
 from apps.api.v2.discovery.node_types import _property, option_keys_for_node_type
 from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
-from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE, PipelineOptionsView
+from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE, PipelineOptionsView, TeamOptionsView
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory
 from apps.utils.factories.experiment import SourceMaterialFactory, SyntheticVoiceFactory
@@ -123,11 +123,11 @@ def test_no_namespaced_schema_key_survives_anywhere(team):
     ],
 )
 def test_scoping_covers_every_param_that_reads_an_option_list(team_with_resources, node_type, expected_keys):
-    """`?node_type=` derives its payload from `ui:optionsSource`, so a param missing the declaration
-    leaves the client unable to fill it from the scoped response."""
+    """The scoped endpoint derives its payload from `ui:optionsSource`, so a param missing the
+    declaration leaves the client unable to fill it from the scoped response."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type}).json()
+    scoped = client.get(reverse("api:v2:pipeline-node-options", args=[node_type])).json()
 
     assert expected_keys <= set(scoped)
 
@@ -137,8 +137,7 @@ def test_every_option_key_is_named_for_the_param_that_reads_it(team_with_resourc
     """The payload's central promise, and the only thing tying a list to a param: `_property()` strips
     `ui:optionsSource`, so a client has nothing but the name -- give or take an `_id`/`_ids` suffix --
     to match them up. The variable lists have no param named for them and are documented as the
-    exception; `voice_provider_id` and `default_llm_provider` are read alongside another key rather
-    than written into a param of their own."""
+    exception; `default_llm_provider` is a starting pair for two params rather than a list of its own."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
     params = {
         name for entry in client.get(reverse("api:v2:pipeline-nodes")).json() for name in entry["schema"]["properties"]
@@ -151,22 +150,8 @@ def test_every_option_key_is_named_for_the_param_that_reads_it(team_with_resourc
         "template_variables",
         "llm_prompt_variables",
         "router_prompt_variables",
-        "voice_provider_id",
         "default_llm_provider",
     }
-
-
-@pytest.mark.django_db()
-def test_scoped_options_carry_the_key_that_resolves_a_voice(team_with_resources):
-    """Each `synthetic_voice_id` entry carries a `provider_id`, and `voice_provider_id` is the only
-    list that resolves it. No param reads that list, so it is not reachable through
-    `ui:optionsSource` and scoping has to bring it along on its own."""
-    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
-
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "LLMResponseWithPrompt"}).json()
-
-    assert "synthetic_voice_id" in scoped
-    assert "voice_provider_id" in scoped
 
 
 @pytest.mark.django_db()
@@ -185,7 +170,8 @@ def test_every_key_a_node_type_scopes_to_is_actually_served(team_with_resources)
 
 @pytest.mark.django_db()
 def test_every_key_served_is_read_by_some_listed_node_type(team_with_resources):
-    """Pins the size of `API_ONLY_OPTION_KEYS` -- every other key must be reachable from a param."""
+    """The other half of the promise above: a key no param can reach is one a client has nothing to
+    write into, so the unscoped payload holds no more than the scoped ones add up to."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
     option_keys = set(client.get(reverse("api:v2:pipeline-options")).json())
 
@@ -195,7 +181,7 @@ def test_every_key_served_is_read_by_some_listed_node_type(team_with_resources):
         assert scoped_keys is not None, f"{entry['type']} is listed but cannot be scoped to"
         read |= scoped_keys
 
-    assert option_keys - read == {"voice_provider_id"}
+    assert not option_keys - read
 
 
 @pytest.mark.django_db()
@@ -309,13 +295,15 @@ def test_a_withheld_param_reaches_neither_endpoint(team_with_resources):
 
 
 @pytest.mark.django_db()
-def test_type_filter_returns_a_single_element_array(team):
-    """`?type=` narrows the list rather than switching to a bare object, so one parser handles both."""
+def test_one_node_type_is_retrievable_by_name(team):
+    """The detail endpoint serves the same entry the list holds, as a bare object."""
     client = ApiTestClient(team.members.first(), team)
-    response = client.get(reverse("api:v2:pipeline-nodes"), {"type": "RouterNode"})
+    response = client.get(reverse("api:v2:pipeline-node", args=["RouterNode"]))
 
     assert response.status_code == 200
-    assert [entry["type"] for entry in response.json()] == ["RouterNode"]
+    assert response.json() == next(
+        entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json() if entry["type"] == "RouterNode"
+    )
 
 
 @pytest.mark.django_db()
@@ -327,11 +315,11 @@ def test_type_filter_returns_a_single_element_array(team):
         pytest.param("AssistantNode", id="deprecated-type-whose-builder-advice-is-markup"),
     ],
 )
-def test_type_filter_404s(team, node_type):
+def test_node_detail_404s(team, node_type):
     """A name that was never a node type and one that is no longer buildable get the same answer:
     neither is something a client may build, and the body carries no builder markup either way."""
     client = ApiTestClient(team.members.first(), team)
-    response = client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type})
+    response = client.get(reverse("api:v2:pipeline-node", args=[node_type]))
 
     assert response.status_code == 404
     assert response.json()["detail"] == f"Unknown node type: {node_type}"
@@ -343,7 +331,7 @@ def test_404_body_lists_the_types_the_client_could_have_asked_for(team):
     """`valid_types` is exactly the unfiltered list, so a failed call can be corrected from its own
     error body rather than a second request."""
     client = ApiTestClient(team.members.first(), team)
-    body = client.get(reverse("api:v2:pipeline-nodes"), {"type": "Frobnicator"}).json()
+    body = client.get(reverse("api:v2:pipeline-node", args=["Frobnicator"])).json()
 
     listed = {entry["type"] for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
     assert set(body["valid_types"]) == listed
@@ -361,7 +349,7 @@ def test_404_body_lists_the_types_the_client_could_have_asked_for(team):
 def test_structural_type_is_reported_as_server_managed_not_unknown(team, node_type):
     """These are unlisted, but `/inspect/` still reports them as the `type` of real nodes."""
     client = ApiTestClient(team.members.first(), team)
-    response = client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type})
+    response = client.get(reverse("api:v2:pipeline-node", args=[node_type]))
 
     assert response.status_code == 404
     assert "managed by the server" in response.json()["detail"]
@@ -383,21 +371,29 @@ def test_node_list_is_revalidatable(team):
 
 
 @pytest.mark.django_db()
-def test_etag_distinguishes_the_filtered_response(team):
-    """One ETag covering both would let a filtered request revalidate against the full list."""
+def test_node_detail_is_revalidatable(team):
+    """One node type is as static as the whole list, and carries its own ETag -- one covering both
+    would let a detail request revalidate against the full list."""
     client = ApiTestClient(team.members.first(), team)
-    full = client.get(reverse("api:v2:pipeline-nodes")).headers["ETag"]
+    url = reverse("api:v2:pipeline-node", args=["RouterNode"])
+    response = client.get(url)
+    etag = response.headers["ETag"]
 
-    filtered = client.get(reverse("api:v2:pipeline-nodes"), {"type": "RouterNode"})
+    assert etag != client.get(reverse("api:v2:pipeline-nodes")).headers["ETag"]
 
-    assert filtered.headers["ETag"] != full
+    revalidated = client.get(url, HTTP_IF_NONE_MATCH=etag)
+
+    assert revalidated.status_code == 304
+    assert not revalidated.content
 
 
 @pytest.mark.django_db()
 def test_unauthenticated_request_is_rejected(team, client):
-    """Both endpoints answer for the caller's team, so neither serves an anonymous request."""
+    """Every endpoint answers for the caller's team, so none serves an anonymous request."""
     assert client.get(reverse("api:v2:pipeline-nodes")).status_code == 401
+    assert client.get(reverse("api:v2:pipeline-node", args=["RouterNode"])).status_code == 401
     assert client.get(reverse("api:v2:pipeline-options")).status_code == 401
+    assert client.get(reverse("api:v2:pipeline-node-options", args=["RouterNode"])).status_code == 401
 
 
 @pytest.mark.django_db()
@@ -478,10 +474,11 @@ def test_clean_options_recurses_into_nested_dicts():
 
 @pytest.mark.django_db()
 def test_options_can_be_scoped_to_one_node_type(team_with_resources):
-    """`?node_type=` cuts the payload down to the keys that node type's params can read."""
+    """`/pipeline/options/{node_type}/` cuts the payload down to the keys that node type's params can
+    read."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "RenderTemplate"}).json()
+    scoped = client.get(reverse("api:v2:pipeline-node-options", args=["RenderTemplate"])).json()
 
     assert set(scoped) == {"template_variables"}
 
@@ -491,7 +488,7 @@ def test_scoped_options_keep_the_provider_defaults_for_llm_nodes(team_with_resou
     """A scoped response still has to be enough to build the node on its own."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "LLMResponseWithPrompt"}).json()
+    scoped = client.get(reverse("api:v2:pipeline-node-options", args=["LLMResponseWithPrompt"])).json()
 
     assert "default_llm_provider" in scoped
     assert "llm_provider_id" in scoped
@@ -506,12 +503,12 @@ def test_scoped_options_keep_the_provider_defaults_for_llm_nodes(team_with_resou
         pytest.param("StartNode", "managed by the server", id="server-managed-type"),
     ],
 )
-def test_scoped_options_404_like_the_node_list(team_with_resources, node_type, expected_detail):
-    """A client walks both endpoints with the same type name, so an unusable name has to fail the
-    same way on each -- body included."""
+def test_scoped_options_404_like_the_node_detail(team_with_resources, node_type, expected_detail):
+    """A client walks both endpoints with the same type name in the path, so an unusable name has to
+    fail the same way on each -- body included."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    response = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type})
+    response = client.get(reverse("api:v2:pipeline-node-options", args=[node_type]))
 
     assert response.status_code == 404
     assert expected_detail in response.json()["detail"]
@@ -524,10 +521,30 @@ def test_a_node_type_that_references_nothing_scopes_to_an_empty_object(team_with
     different answer from "no such type"."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    response = client.get(reverse("api:v2:pipeline-options"), {"node_type": "CodeNode"})
+    response = client.get(reverse("api:v2:pipeline-node-options", args=["CodeNode"]))
 
     assert response.status_code == 200
     assert response.json() == {}
+
+
+@pytest.mark.django_db()
+def test_the_response_is_shaped_by_the_serializer_not_passed_through_raw(team_with_resources, monkeypatch):
+    """`ResourceOptionSerializer.value` documents an integer. If the endpoint just forwarded the built
+    dict, a value that happened to arrive as a string would reach the client as one instead of being
+    coerced -- proof the response actually goes through `PipelineOptionsSerializer`."""
+    real_options_for_team = TeamOptionsView._options_for_team.__func__
+
+    def stringified_value(cls, team):
+        options = real_options_for_team(cls, team)
+        options["source_material"][0]["value"] = str(options["source_material"][0]["value"])
+        return options
+
+    monkeypatch.setattr(TeamOptionsView, "_options_for_team", classmethod(stringified_value))
+    client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
+
+    value = client.get(reverse("api:v2:pipeline-options")).json()["source_material"][0]["value"]
+
+    assert isinstance(value, int)
 
 
 def test_the_documented_example_carries_every_key_the_serializer_declares():

@@ -6,7 +6,9 @@ hide:
 
 # Architecture Decisions
 
-This section captures architectural decisions made on Open Chat Studio as Architecture Decision Records (ADRs). See [ADR-0000](0000-record-architecture-decisions.md) for the introduction.
+This section captures architectural decisions made on Open Chat Studio as Architecture Decision Records (ADRs). See [ADR-0000](0000-record-architecture-decisions.md) for why this exists.
+
+See the [ADR process developer guide](../developer_guides/adr_process.md) for the step-by-step instructions to create an ADR by hand or manually extract ADRs with AI agent.
 
 ## Index
 
@@ -40,17 +42,17 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0018](0018-scope-team-querysets-by-fk-not-slug-join.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Scope team querysets by FK identity, not slug join |
 | [0019](0019-poll-source-experiments-to-auto-populate-eval-datasets.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Poll source experiments to auto-populate evaluation datasets |
 | [0020](0020-delta-evaluation-runs-scoped-to-appended-messages.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Delta evaluation runs scoped to newly appended messages |
-| [0021](0021-invest-in-api-surface-not-readonly-role.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Invest in API surface, not a read-only role |
-| [0022](0022-url-path-api-versioning.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | URL-path API versioning, v1 frozen / v2 new |
-| [0023](0023-rename-experiment-to-chatbot-in-v2.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Rename experiment to chatbot in the v2 API |
-| [0024](0024-inspect-denormalized-readonly-projection.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | inspect as a denormalized read-only projection |
-| [0025](0025-inline-nested-resource-tree.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inline nested resource tree for the inspect payload |
-| [0026](0026-identify-resources-by-primary-key.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Identify v2-exposed resources by database primary key |
-| [0027](0027-secrets-exclusion-via-allowlist-serializers.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Secrets exclusion via per-resource allowlist serializers |
-| [0028](0028-inspect-authorization-team-scoped.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Inspect authorizes on chatbot view + team scope, not per-resource permissions |
+| [0021](0021-invest-in-api-surface-not-readonly-role.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Invest in API surface, not a read-only role |
+| [0022](0022-url-path-api-versioning.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | URL-path API versioning, v1 frozen / v2 new |
+| [0023](0023-rename-experiment-to-chatbot-in-v2.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Rename experiment to chatbot in the v2 API |
+| [0024](0024-inspect-denormalized-readonly-projection.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | inspect as a denormalized read-only projection |
+| [0025](0025-inline-nested-resource-tree.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Inline nested resource tree for the inspect payload |
+| [0026](0026-identify-resources-by-primary-key.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Identify v2-exposed resources by database primary key |
+| [0027](0027-secrets-exclusion-via-allowlist-serializers.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Secrets exclusion via per-resource allowlist serializers |
+| [0028](0028-inspect-authorization-team-scoped.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Inspect authorizes on chatbot view + team scope, not per-resource permissions |
 | [0029](0029-download-whatsapp-inbound-attachments-in-hydration-stage.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Download WhatsApp inbound attachments in an overridden hydration stage |
 | [0030](0030-email-channel-allowed-domains-global-setting.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Gate the email channel with a global allowed-domains setting |
-| [0031](0031-collection-content-is-live-shared-resource.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Collection content is a live shared resource |
+| [0031](0031-collection-content-is-live-shared-resource.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Collection content is a live shared resource |
 | [0032](0032-server-side-jinja-template-validation.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Validate Jinja templates server-side by parsing the AST |
 | [0033](0033-structured-runtime-jinja-error-messages.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Structured runtime Jinja error messages |
 | [0034](0034-tiered-feature-deprecation-by-usage-audit.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Tiered feature deprecation gated by a usage audit |
@@ -59,14 +61,20 @@ Where {lowercase-status} is one of: draft, proposed, accepted, rejected, superse
 | [0037](0037-row-multiplying-filters-use-exists-not-distinct.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Row-multiplying list filters use EXISTS, not a blanket DISTINCT |
 | [0038](0038-redirect-version-snapshot-urls-to-working-version.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Redirect version snapshot URLs to the working version |
 | [0039](0039-require-proof-of-possession-for-chat-session-access.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Require proof of possession for chat session access |
-| [0040](0040-stateless-signed-session-tokens-with-inactivity-expiry.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Stateless signed session tokens with server-side inactivity expiry |
+| [0040](0040-stateless-signed-session-tokens-with-inactivity-expiry.md) | <span class="adr-status adr-status-superseded">SUPERSEDED</span> | Stateless signed session tokens with server-side inactivity expiry |
 | [0041](0041-fail-closed-session-token-enforcement-rollout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Fail-closed session-token enforcement rollout |
 | [0042](0042-settings-driven-internal-team-metadata.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Settings-driven internal team metadata in a JSON field |
 | [0043](0043-whatsapp-bsuid-participant-identity.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | BSUID participant identity for WhatsApp |
 | [0044](0044-durable-per-channel-widget-auth-policy.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Durable per-channel widget auth policy |
 | [0045](0045-ratchet-widget-auth-level-on-upgrade.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Ratchet widget auth level up on upgrade |
 | [0046](0046-layout-only-pipeline-data.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Node rows are the sole source of pipeline node content |
-| [0047](0047-deploy-safe-evaluation-runs.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Deploy-safe evaluation runs via a beat coordinator over a frozen plan |
-| [0048](0048-evaluation-spend-is-team-spend-not-entity-spend.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Evaluation spend is team spend, never entity spend |
+| [0047](0047-deploy-safe-evaluation-runs.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Deploy-safe evaluation runs via a beat coordinator over a frozen plan |
+| [0048](0048-evaluation-spend-is-team-spend-not-entity-spend.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Evaluation spend is team spend, never entity spend |
 | [0049](0049-node-rows-own-pipeline-layout.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Node rows own pipeline layout; `Pipeline.data` keeps only edges |
-| [0050](0050-eval-driven-generation-is-evaluation-spend.md) | <span class="adr-status adr-status-proposed">PROPOSED</span> | Eval-driven generation is evaluation spend, billed without a trace |
+| [0050](0050-eval-driven-generation-is-evaluation-spend.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Eval-driven generation is evaluation spend, billed without a trace |
+| [0051](0051-usage-activity-metric-definitions.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | One set of activity-metric definitions across usage surfaces |
+| [0052](0052-app-layer-rate-limiting-mechanism.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | App-layer rate limiting via an in-house fixed-window core |
+| [0053](0053-chat-session-start-requires-membership-or-embed-key.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Starting a chat session requires team membership or the embed key |
+| [0054](0054-chat-session-tokens-expire-on-absolute-age.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Chat session tokens expire on absolute age, not inactivity |
+| [0055](0055-binary-field-type-extends-the-field-definition-union.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Binary field type extends the field definition union |
+| [0056](0056-client-credentials-applications-name-their-chatbots.md) | <span class="adr-status adr-status-accepted">ACCEPTED</span> | Client-credentials applications name the chatbots they may reach |

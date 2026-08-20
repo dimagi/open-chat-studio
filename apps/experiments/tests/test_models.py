@@ -17,6 +17,7 @@ from apps.experiments.models import (
     ConsentForm,
     Experiment,
     ExperimentSession,
+    Participant,
     SyntheticVoice,
 )
 from apps.pipelines.models import Pipeline
@@ -24,6 +25,7 @@ from apps.service_providers.llm_service.prompt_context import ParticipantDataPro
 from apps.service_providers.tracing import TraceInfo, TracingService
 from apps.teams.utils import get_slug_for_team
 from apps.trace.models import Trace, TraceStatus
+from apps.users.models import CustomUser
 from apps.utils.factories.assistants import OpenAiAssistantFactory
 from apps.utils.factories.events import (
     EventActionFactory,
@@ -1143,3 +1145,35 @@ def test_experiment_may_have_no_owner():
     experiment = ExperimentFactory.create(owner=None)
     experiment.refresh_from_db()
     assert experiment.owner is None
+
+
+class TestParticipantStr:
+    """Chips and other participant labels come from ``__str__``; a name equal to the identifier
+    used to render it twice (e.g. "user@example.com (user@example.com)")."""
+
+    @pytest.mark.parametrize(
+        ("name", "identifier", "expected"),
+        [
+            pytest.param("Jane Doe", "jane@example.com", "Jane Doe (jane@example.com)", id="name-and-identifier"),
+            pytest.param("jane@example.com", "jane@example.com", "jane@example.com", id="name-is-identifier"),
+            pytest.param("", "8778042649", "8778042649", id="identifier-only"),
+        ],
+    )
+    def test_name_variants(self, name, identifier, expected):
+        assert str(Participant(name=name, identifier=identifier)) == expected
+
+    @pytest.mark.parametrize(
+        ("full_name", "identifier", "expected"),
+        [
+            pytest.param("Jane Doe", "jane@example.com", "Jane Doe (jane@example.com)", id="user-name-differs"),
+            pytest.param("jane@example.com", "jane@example.com", "jane@example.com", id="user-name-is-identifier"),
+        ],
+    )
+    def test_falls_back_to_user_full_name(self, full_name, identifier, expected):
+        user = CustomUser(first_name=full_name)
+        assert str(Participant(name="", identifier=identifier, user=user)) == expected
+
+    def test_anonymous(self):
+        participant = Participant(name="")
+        participant.identifier = f"anon:{participant.public_id}"
+        assert str(participant) == f"Anonymous [{str(participant.public_id)[:6]}]"

@@ -42,6 +42,7 @@ class TriggerBotMessageView(APIView):
         responses={
             200: TriggerBotMessageResponse,
             400: {"description": "Bad Request"},
+            403: {"description": "The OAuth application is not authorized for this chatbot"},
             404: {"description": "Not Found"},
         },
         examples=[
@@ -85,8 +86,8 @@ class TriggerBotMessageView(APIView):
             ),
             OpenApiExample(
                 name="ChannelNotConfigured",
-                summary="Experiment cannot send messages on the specified channel",
-                value={"detail": "Experiment cannot send messages on the whatsapp channel. Create the channel first."},
+                summary="Chatbot cannot send messages on the specified channel",
+                value={"detail": "Chatbot cannot send messages on the whatsapp channel. Create the channel first."},
                 response_only=True,
                 status_codes=[400],
             ),

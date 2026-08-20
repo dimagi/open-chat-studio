@@ -23,7 +23,7 @@ from apps.channels.datamodels import (
 from apps.channels.datamodels import EmailMessage as EmailMessageDatamodel
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.facebook_channel import FacebookMessengerChannel
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel
 from apps.channels.sureadhere_channel import SureAdhereChannel
 from apps.channels.telegram_channel import TelegramChannel
 from apps.channels.whatsapp_channel import WhatsappChannel
@@ -312,10 +312,15 @@ def ratchet_widget_auth_levels():
     widget version the new level needs) and the pending level is recorded; once the
     grace period elapses the level is applied. Monotonic — never lowers a level, so a
     spoofed or stale version header can only tighten auth, never relax it.
+
+    Channels in a non-embed-key credential mode are excluded: the mode already pins them
+    to SESSION_TOKEN, so there is nothing left to ratchet.
     """
     now = timezone.now()
     channels = (
-        ExperimentChannel.objects.filter(platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False)
+        ExperimentChannel.objects.filter(
+            platform=ChannelPlatform.EMBEDDED_WIDGET, deleted=False, credential_mode=CredentialMode.EMBED_KEY
+        )
         .select_related("experiment", "team")
         .order_by("team_id")
     )

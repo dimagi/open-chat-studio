@@ -17,6 +17,49 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+_ScoreValueParts = tuple["Score.DataType", Decimal | None, str | None]
+
+
+def _binary_parts(name: str, raw_value: Any, schema_field: dict | None) -> _ScoreValueParts | None:
+    if raw_value not in (0, 1):
+        logger.warning("Score field %s: binary value %r is not 0 or 1; skipping", name, raw_value)
+        return None
+    is_true = int(raw_value) == 1
+    label = (schema_field or {}).get("true_label" if is_true else "false_label", str(is_true))
+    return Score.DataType.BOOLEAN, Decimal(int(raw_value)), sanitize_control_chars(str(label))
+
+
+def _numeric_parts(name: str, raw_value: Any) -> _ScoreValueParts | None:
+    try:
+        return Score.DataType.NUMERIC, Decimal(str(raw_value)), None
+    except InvalidOperation:
+        logger.warning("Score field %s: cannot convert %r to Decimal; skipping", name, raw_value)
+        return None
+
+
+def _score_value_parts(name: str, raw_value: Any, schema_field: dict | None) -> _ScoreValueParts | None:
+    """Resolve (data_type, value_numeric, value_string) for a field value, or None if unsupported."""
+    schema_type = (schema_field or {}).get("type")
+    # Force categorical when the schema declares a choice — handles numeric-looking
+    # choice values like "0" / "1" without misclassifying them as numeric.
+    if schema_type == "choice":
+        return Score.DataType.CATEGORICAL, None, sanitize_control_chars(str(raw_value))
+    if schema_type == "binary":
+        return _binary_parts(name, raw_value, schema_field)
+    if isinstance(raw_value, bool):
+        return Score.DataType.BOOLEAN, Decimal(1) if raw_value else Decimal(0), None
+    if isinstance(raw_value, int | float | Decimal):
+        return _numeric_parts(name, raw_value)
+    if isinstance(raw_value, str):
+        return Score.DataType.CATEGORICAL, None, sanitize_control_chars(raw_value)
+    logger.warning(
+        "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
+        name,
+        type(raw_value).__name__,
+    )
+    return None
+
+
 def _score_from_field(
     *,
     team,
@@ -33,35 +76,10 @@ def _score_from_field(
     if raw_value is None:
         return None
 
-    schema_type = (schema_field or {}).get("type")
-    value_numeric: Decimal | None = None
-    value_string: str | None = None
-
-    # Force categorical when the schema declares a choice — handles numeric-looking
-    # choice values like "0" / "1" without misclassifying them as numeric.
-    if schema_type == "choice":
-        data_type = Score.DataType.CATEGORICAL
-        value_string = sanitize_control_chars(str(raw_value))
-    elif isinstance(raw_value, bool):
-        data_type = Score.DataType.BOOLEAN
-        value_numeric = Decimal(1) if raw_value else Decimal(0)
-    elif isinstance(raw_value, int | float | Decimal):
-        try:
-            value_numeric = Decimal(str(raw_value))
-        except InvalidOperation:
-            logger.warning("Score field %s: cannot convert %r to Decimal; skipping", name, raw_value)
-            return None
-        data_type = Score.DataType.NUMERIC
-    elif isinstance(raw_value, str):
-        data_type = Score.DataType.CATEGORICAL
-        value_string = sanitize_control_chars(raw_value)
-    else:
-        logger.warning(
-            "Score field %s: unsupported value type %s; skipping (v1 only supports bool/int/float/str)",
-            name,
-            type(raw_value).__name__,
-        )
+    parts = _score_value_parts(name, raw_value, schema_field)
+    if parts is None:
         return None
+    data_type, value_numeric, value_string = parts
 
     return Score(
         team=team,
@@ -76,6 +94,20 @@ def _score_from_field(
         review=review,
         author=author,
     )
+
+
+def _build_scores(payload: dict, schema: dict, **score_kwargs) -> list[Score]:
+    candidates = (
+        _score_from_field(name=name, raw_value=raw_value, schema_field=schema.get(name), **score_kwargs)
+        for name, raw_value in payload.items()
+    )
+    return [score for score in candidates if score is not None]
+
+
+def _replace_scores(existing_filter: dict, scores: list[Score]) -> None:
+    with transaction.atomic():
+        Score.objects.filter(**existing_filter).delete()
+        Score.objects.bulk_create(scores)
 
 
 def _source_for_evaluator(evaluator) -> str:
@@ -103,26 +135,16 @@ def write_scores_from_evaluation_result(result: EvaluationResult) -> None:
     if not isinstance(result_payload, dict):
         return
 
-    source = _source_for_evaluator(result.evaluator)
     schema = (result.evaluator.params or {}).get("output_schema", {}) or {}
-
-    scores = []
-    for name, raw_value in result_payload.items():
-        score = _score_from_field(
-            team=result.team,
-            target=session,
-            name=name,
-            raw_value=raw_value,
-            source=source,
-            automated_result=result,
-            schema_field=schema.get(name),
-        )
-        if score is not None:
-            scores.append(score)
-
-    with transaction.atomic():
-        Score.objects.filter(automated_result=result).delete()
-        Score.objects.bulk_create(scores)
+    scores = _build_scores(
+        result_payload,
+        schema,
+        team=result.team,
+        target=session,
+        source=_source_for_evaluator(result.evaluator),
+        automated_result=result,
+    )
+    _replace_scores({"automated_result": result}, scores)
 
 
 def write_scores_from_annotation(annotation: Annotation) -> None:
@@ -139,24 +161,13 @@ def write_scores_from_annotation(annotation: Annotation) -> None:
     if target is None:
         return
 
-    schema = item.queue.schema or {}
-    data = annotation.data or {}
-
-    scores = []
-    for name, raw_value in data.items():
-        score = _score_from_field(
-            team=annotation.team,
-            target=target,
-            name=name,
-            raw_value=raw_value,
-            source=Score.Source.HUMAN_REVIEW,
-            review=annotation,
-            author=annotation.reviewer,
-            schema_field=schema.get(name),
-        )
-        if score is not None:
-            scores.append(score)
-
-    with transaction.atomic():
-        Score.objects.filter(review=annotation).delete()
-        Score.objects.bulk_create(scores)
+    scores = _build_scores(
+        annotation.data or {},
+        item.queue.schema or {},
+        team=annotation.team,
+        target=target,
+        source=Score.Source.HUMAN_REVIEW,
+        review=annotation,
+        author=annotation.reviewer,
+    )
+    _replace_scores({"review": annotation}, scores)

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -66,6 +67,11 @@ class TestEmbeddedWidgetChannelForm:
         assert form.is_valid()
         assert form.cleaned_data["allowed_domains"] == expected_domains
 
+    def test_credential_mode_is_not_user_editable_yet(self):
+        """Nothing resolves an OAuth token, so selecting that mode would strand the channel."""
+        form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
+        assert "credential_mode" not in form.fields
+
     def test_required_auth_level_is_not_user_editable(self):
         """required_auth_level is a system-managed policy; it must not be exposed on the form."""
         form = EmbeddedWidgetChannelForm(data={"allowed_domains": "example.com"}, experiment=Mock())
@@ -89,6 +95,73 @@ class TestEmbeddedWidgetChannelForm:
         form.post_save(channel)
         channel.refresh_from_db()
         assert channel.required_auth_level == WidgetAuthLevel.SESSION_TOKEN
+
+    @pytest.mark.django_db()
+    def test_session_token_lifetime_round_trips_without_leaking_into_extra_data(self):
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+        )
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com", "session_token_lifetime": "12:00:00"},
+            channel=channel,
+            experiment=channel.experiment,
+        )
+        assert form.is_valid()
+        # cleaned_data becomes the channel's extra_data, and this one has a column of its own
+        assert "session_token_lifetime" not in form.cleaned_data
+
+        form.post_save(channel)
+        channel.refresh_from_db()
+        assert channel.session_token_lifetime == timedelta(hours=12)
+
+        # An edit form on the saved channel shows the stored value back
+        reloaded = EmbeddedWidgetChannelForm(channel=channel, experiment=channel.experiment)
+        assert reloaded.initial["session_token_lifetime"] == timedelta(hours=12)
+
+    @pytest.mark.parametrize(
+        "lifetime",
+        [
+            pytest.param("00:01:00", id="under-the-floor"),
+            pytest.param("-1 00:00:00", id="negative"),
+        ],
+    )
+    def test_session_token_lifetime_floor(self, lifetime):
+        """A lifetime this short would make every session on the channel dead on arrival."""
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com", "session_token_lifetime": lifetime}, experiment=Mock()
+        )
+        assert not form.is_valid()
+        assert "session_token_lifetime" in form.errors
+
+    @pytest.mark.django_db()
+    def test_building_the_form_does_not_pollute_extra_data(self):
+        """`initial` is the channel's own extra_data dict, and a timedelta cannot go in a JSONField."""
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            session_token_lifetime=timedelta(hours=4),
+            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+        )
+        channel.extra_form(experiment=channel.experiment)
+        assert set(channel.extra_data) == {"widget_token", "allowed_domains"}
+        channel.save()  # would raise TypeError if a timedelta had leaked in
+
+    @pytest.mark.django_db()
+    def test_blank_session_token_lifetime_clears_the_override(self):
+        channel = ExperimentChannelFactory.create(
+            platform=ChannelPlatform.EMBEDDED_WIDGET,
+            session_token_lifetime=timedelta(hours=4),
+            extra_data={"widget_token": "tok_123456789012345678901234", "allowed_domains": ["example.com"]},
+        )
+        form = EmbeddedWidgetChannelForm(
+            data={"allowed_domains": "example.com", "session_token_lifetime": ""},
+            channel=channel,
+            experiment=channel.experiment,
+        )
+        assert form.is_valid()
+        form.post_save(channel)
+        channel.refresh_from_db()
+        assert channel.session_token_lifetime is None
 
 
 class TestEmbeddedWidgetUtils:
