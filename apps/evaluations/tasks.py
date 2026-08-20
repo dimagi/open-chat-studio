@@ -146,7 +146,7 @@ def _run_evaluator_on_message(
     On evaluator failure an error result is stored (matching the no-retry behaviour);
     on success the result is written and its Score rows are derived.
     """
-    usage_context = _usage_context_for(evaluation_run, session_id)
+    usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id)
     try:
         output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
     except Exception as e:
@@ -165,7 +165,9 @@ def _run_evaluator_on_message(
         logger.exception("Failed to write Score rows for EvaluationResult %s", evaluation_result.id)
 
 
-def _usage_context_for(evaluation_run: EvaluationRun, session_id: int | None) -> EvaluatorUsageContext:
+def _usage_context_for(
+    evaluation_run: EvaluationRun, session_id: int | None, evaluator_id: int | None = None
+) -> EvaluatorUsageContext:
     """Attribution for the LLM spend an evaluator incurs judging one message.
 
     Judge calls bypass the tracer, so they carry no trace. The generation experiment
@@ -179,6 +181,7 @@ def _usage_context_for(evaluation_run: EvaluationRun, session_id: int | None) ->
         evaluation_config_id=evaluation_run.config_id,
         experiment_id=generation_experiment.get_working_version_id() if generation_experiment else None,
         session_id=session_id,
+        evaluator_id=evaluator_id,
     )
 
 

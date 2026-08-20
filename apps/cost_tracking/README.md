@@ -46,10 +46,11 @@ The canonical pricing seed lives in `seed_data/llm_pricing.json` (per-1K-tokens,
 
 ## Surface
 
-Two places consume the data, both gated by `flag_ai_cost_monitoring`:
+Three places consume the data, all gated by `flag_ai_cost_monitoring`:
 
 - **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`.
 - **LLM Provider page** shows each model's current per-1K rate inline. Admins can override at team scope via an HTMX modal (`pricing_override` view) or revert to global. The custom-model creation dialog accepts optional input/output rates that persist as team-scoped `PricingRule` rows in the same transaction as the model save.
+- **Evaluations UI** (`apps/evaluations/views/evaluation_config_views.py`): a Cost column on the run list, a per-evaluator/per-model breakdown on the run detail page, and a last-30-days/all-time summary on the config page. Reads `evaluation_run_cost`/`evaluation_run_costs`/`evaluation_config_cost_summary` below — the dedicated evaluation-scoped path, since the team-scoped reads above deliberately exclude evaluation spend from per-entity reads (ADR-0048).
 
 ## Layout
 
@@ -67,5 +68,6 @@ apps/cost_tracking/
     pricing.py              PricingResolver + cache
     recorder.py             record_usage_bulk + UsageEvent / UsageContext
     estimation.py           tiktoken + response_text helpers
-    reporting.py            cost_summary, costs_by_experiment, coverage_gaps, cost_timeseries
+    reporting.py            cost_summary, costs_by_experiment, coverage_gaps, cost_timeseries,
+                             evaluation_run_cost, evaluation_run_costs, evaluation_config_cost_summary
 ```

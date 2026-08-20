@@ -41,6 +41,11 @@ class EvaluatorUsageContext:
     session-mode run, since generation is not supported for session-mode datasets.
     `participant` is left off deliberately: it's only ever the synthetic evaluations
     participant, and reading it back would cost a query per evaluator per message.
+
+    `evaluator_id` is only set for judge calls (never for generation, which isn't any
+    evaluator's spend); it lands in `extra` rather than as a UsageRecord FK because
+    there is no per-record evaluator column, and a queryable column wasn't worth a
+    migration for one report.
     """
 
     team_id: int
@@ -48,6 +53,7 @@ class EvaluatorUsageContext:
     evaluation_config_id: int | None = None
     experiment_id: int | None = None
     session_id: int | None = None
+    evaluator_id: int | None = None
 
 
 def generation_usage_tracer(experiment: "Experiment", evaluation_run: "EvaluationRun") -> UsageOnlyTracer:
@@ -100,6 +106,8 @@ def _record(collector: MetricsCollector, context: EvaluatorUsageContext) -> None
         events = list(collector.iter_cost_events())
         for event in events:
             event.extra = {**(event.extra or {}), "evaluation_run_id": context.evaluation_run_id}
+            if context.evaluator_id is not None:
+                event.extra["evaluator_id"] = context.evaluator_id
         record_usage_bulk(
             events,
             UsageContext(
