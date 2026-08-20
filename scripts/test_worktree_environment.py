@@ -66,6 +66,10 @@ existing=$(awk -v resource="$resource_name" '$1 == resource { print $2 }' \
     "$OCS_TEST_REDIS_REGISTRY")
 
 if [[ "$operation" == "lookup" ]]; then
+    if [[ "${OCS_TEST_FAIL_REDIS_LOOKUP:-false}" == "true" ]]; then
+        echo "Redis registry unavailable" >&2
+        exit 2
+    fi
     [[ -n "$existing" ]] || exit 1
     printf "%s\n" "$existing"
     exit 0
@@ -518,6 +522,27 @@ def test_teardown_propagates_cleanup_failures(
         env=env,
     )
     assert lookup.stdout.strip().isdigit()
+
+
+def test_teardown_propagates_redis_registry_lookup_failures(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+    redis_database = _allocate_redis_database(worktree, env, "codex_a1b2")
+    env["OCS_TEST_FAIL_REDIS_LOOKUP"] = "true"
+
+    result = _run(TEARDOWN_SCRIPT, cwd=worktree, env=env, check=False)
+
+    assert result.returncode == 2
+    assert "Cleaned resources" not in result.stdout
+    env.pop("OCS_TEST_FAIL_REDIS_LOOKUP")
+    lookup = _run_worktree_helper(
+        worktree,
+        "ocs_lookup_redis_database",
+        "codex_a1b2",
+        env=env,
+    )
+    assert int(lookup.stdout) == redis_database
 
 
 def test_root_teardown_requires_an_explicit_worktree_identifier(
