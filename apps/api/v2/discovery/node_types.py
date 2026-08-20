@@ -19,7 +19,7 @@ def get_node_types() -> list[dict]:
     """Node types reshaped for client consumption. Static per deploy, so it is memoised -- a test
     overriding ``DOCUMENTATION_BASE_URL`` needs ``get_node_types.cache_clear()``."""
     node_types = []
-    for schema in _addable_schemas():
+    for schema in _available_schemas():
         entry = {
             "type": schema["title"],
             "description": schema["description"],
@@ -59,7 +59,7 @@ def etag(payload) -> str:
     return f'W/"{digest[:32]}"'
 
 
-def _addable_schemas() -> list[dict]:
+def _available_schemas() -> list[dict]:
     """The builder schemas behind the listed node types. ``ui:can_add`` is False for the deprecated
     types and the structural ones the server manages."""
     return [schema for schema in get_node_schemas() if schema.get("ui:can_add")]
@@ -124,7 +124,7 @@ def _option_keys_by_type() -> dict[str, frozenset[str]]:
     """The `/pipeline/options/` keys each node type's params can draw from, read off
     ``ui:optionsSource``. A known type that reads nothing yields an empty set, not a missing key."""
     keys_by_type = {}
-    for schema in _addable_schemas():
+    for schema in _available_schemas():
         properties = schema["properties"]
         keys = set()
         for prop in properties.values():
