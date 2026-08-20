@@ -48,21 +48,14 @@ if [[ ! -f "$CURRENT_PATH/.env" ]]; then
 fi
 
 resource_name=$(ocs_worktree_resource_name "$CURRENT_PATH")
-redis_database=$(ocs_allocate_redis_database "$resource_name")
 database_url="postgres://postgres:postgres@localhost:5432/$resource_name"
-redis_url="redis://localhost:6379/$redis_database"
 
 ocs_set_env_value \
     "$CURRENT_PATH/.env" \
     DATABASE_URL \
     "$database_url"
-ocs_set_env_value \
-    "$CURRENT_PATH/.env" \
-    REDIS_URL \
-    "$redis_url"
 
 export DATABASE_URL="$database_url"
-export REDIS_URL="$redis_url"
 
 if ! PGPASSWORD=postgres psql \
     -h localhost \
@@ -75,6 +68,14 @@ if ! PGPASSWORD=postgres psql \
         -v ON_ERROR_STOP=1 \
         -c "CREATE DATABASE \"$resource_name\""
 fi
+
+redis_database=$(ocs_allocate_redis_database "$resource_name")
+redis_url="redis://localhost:6379/$redis_database"
+ocs_set_env_value \
+    "$CURRENT_PATH/.env" \
+    REDIS_URL \
+    "$redis_url"
+export REDIS_URL="$redis_url"
 
 uv run python manage.py migrate
 uv run python manage.py bootstrap_data \

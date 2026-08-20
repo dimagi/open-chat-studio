@@ -168,6 +168,8 @@ ocs_release_redis_database() {
 ocs_dependency_fingerprint() {
     local worktree_path="$1"
     local dependency_file
+    local migration_file
+    local relative_migration_file
     local dependency_files=(
         .python-version
         .npmrc
@@ -178,14 +180,30 @@ ocs_dependency_fingerprint() {
         scripts/bootstrap.sh
     )
 
-    for dependency_file in "${dependency_files[@]}"; do
-        printf '%s:' "$dependency_file"
-        if [[ -f "$worktree_path/$dependency_file" ]]; then
-            cksum < "$worktree_path/$dependency_file"
-        else
-            printf 'missing\n'
+    {
+        for dependency_file in "${dependency_files[@]}"; do
+            printf '%s:' "$dependency_file"
+            if [[ -f "$worktree_path/$dependency_file" ]]; then
+                cksum < "$worktree_path/$dependency_file"
+            else
+                printf 'missing\n'
+            fi
+        done
+
+        if [[ -d "$worktree_path/apps" ]]; then
+            while IFS= read -r -d '' migration_file; do
+                relative_migration_file=${migration_file#"$worktree_path/"}
+                printf '%s:' "$relative_migration_file"
+                cksum < "$migration_file"
+            done < <(
+                find "$worktree_path/apps" \
+                    -type f \
+                    -path '*/migrations/*.py' \
+                    -print0 \
+                    | sort -z
+            )
         fi
-    done | cksum | awk '{print $1 ":" $2}'
+    } | cksum | awk '{print $1 ":" $2}'
 }
 
 ocs_record_dependency_fingerprint() {

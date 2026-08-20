@@ -107,6 +107,7 @@ class SessionGuardScenario:
     expected_log: str | None
     redis_url: str | None = None
     python_version: str | None = None
+    migration_path: str | None = None
 
 
 def _run(
@@ -396,6 +397,34 @@ def test_setup_records_dependencies_only_after_services_are_ready(
 
     assert result.returncode != 0
     assert not (worktree / ".venv" / ".ocs-dependency-fingerprint").exists()
+    lookup = _run_worktree_helper(
+        worktree,
+        "ocs_lookup_redis_database",
+        "codex_a1b2",
+        env=env,
+        check=False,
+    )
+    assert lookup.returncode != 0
+
+
+def test_failed_setup_preserves_an_existing_redis_allocation(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, _ = worktree_fixture
+    existing_database = _allocate_redis_database(worktree, env, "codex_a1b2")
+    fake_bin = Path(env["PATH"].split(":", maxsplit=1)[0])
+    _write_executable(fake_bin / "psql", "#!/usr/bin/env bash\nexit 1\n")
+
+    result = _run(SETUP_SCRIPT, cwd=worktree, env=env, check=False)
+
+    assert result.returncode != 0
+    lookup = _run_worktree_helper(
+        worktree,
+        "ocs_lookup_redis_database",
+        "codex_a1b2",
+        env=env,
+    )
+    assert int(lookup.stdout) == existing_database
 
 
 def test_setup_does_not_reconfigure_the_root_checkout(
@@ -549,6 +578,16 @@ def test_codex_session_setup_keeps_bootstrap_output_out_of_context(
         ),
         pytest.param(
             SessionGuardScenario(
+                database_name="codex_a1b2",
+                thread_id="new-migration-thread",
+                setup_script="#!/usr/bin/env bash\necho 'applied migrations'\n",
+                expected_log="applied migrations\n",
+                migration_path="apps/test_app/migrations/0002_new_field.py",
+            ),
+            id="new-migration",
+        ),
+        pytest.param(
+            SessionGuardScenario(
                 database_name="root_database",
                 thread_id="shared-database-thread",
                 setup_script="#!/usr/bin/env bash\necho 'reconfigured worktree'\n",
@@ -576,6 +615,10 @@ def test_codex_session_setup_guard(
     log_file = _prepare_session_guard(worktree, env, scenario)
     if scenario.python_version:
         (worktree / ".python-version").write_text(f"{scenario.python_version}\n")
+    if scenario.migration_path:
+        migration_file = worktree / scenario.migration_path
+        migration_file.parent.mkdir(parents=True)
+        migration_file.write_text("# test migration\n")
 
     _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
 
