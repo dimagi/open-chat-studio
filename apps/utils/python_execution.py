@@ -2,6 +2,7 @@ import datetime
 import inspect
 import json
 import logging
+import operator
 import random
 import re
 import sys
@@ -14,9 +15,42 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
-from RestrictedPython.Guards import guarded_iter_unpack_sequence, guarded_unpack_sequence
+from RestrictedPython.Guards import full_write_guard, guarded_iter_unpack_sequence, guarded_unpack_sequence
 
 logger = logging.getLogger("ocs.utils")
+
+# Operators permitted for augmented assignment (``x += 1``). RestrictedPython rewrites
+# augmented assignment to ``_inplacevar_(op, x, y)`` but ships no implementation, so we
+# provide one that only dispatches to a fixed allowlist of in-place operators.
+_INPLACE_OPERATORS = {
+    "+=": operator.iadd,
+    "-=": operator.isub,
+    "*=": operator.imul,
+    "/=": operator.itruediv,
+    "//=": operator.ifloordiv,
+    "%=": operator.imod,
+    "**=": operator.ipow,
+    ">>=": operator.irshift,
+    "<<=": operator.ilshift,
+    "&=": operator.iand,
+    "^=": operator.ixor,
+    "|=": operator.ior,
+    "@=": operator.imatmul,
+}
+
+
+def restricted_inplacevar(op: str, x: Any, y: Any) -> Any:
+    """Implement augmented assignment (``x += y``) for the restricted sandbox.
+
+    RestrictedPython compiles ``x += y`` to ``_inplacevar_('+=', x, y)`` and expects the
+    execution environment to supply ``_inplacevar_``. We restrict it to a known set of
+    operators so sandbox code cannot smuggle arbitrary behaviour through this hook.
+    """
+    try:
+        func = _INPLACE_OPERATORS[op]
+    except KeyError:
+        raise SyntaxError(f"Augmented assignment operator {op!r} is not supported") from None
+    return func(x, y)
 
 
 class RestrictedPythonExecutionMixin(BaseModel):
@@ -114,7 +148,13 @@ class RestrictedPythonExecutionMixin(BaseModel):
             "_getiter_": default_guarded_getiter,
             "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
             "_unpack_sequence_": guarded_unpack_sequence,
-            "_write_": lambda x: x,
+            # full_write_guard lets item assignment through on plain dict/list but wraps
+            # every other object so attribute/item writes raise. This prevents sandbox
+            # code from mutating shared objects such as the module singletons injected
+            # below (e.g. ``json.dumps = evil``), which would otherwise persist across
+            # executions on the same worker process.
+            "_write_": full_write_guard,
+            "_inplacevar_": restricted_inplacevar,
         }
         return custom_globals
 
