@@ -11,6 +11,7 @@ discovery. ``settings`` is the one nested block, because it is dict-shaped in th
 """
 
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
 from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
@@ -82,14 +83,21 @@ class ChatbotCreatedSerializer(serializers.Serializer):
     version_number = serializers.IntegerField(read_only=True)
 
 
+@extend_schema_serializer(
+    description="Chatbot settings. Omitted keys are left unchanged; send only what you want to edit."
+)
 class ChatbotSettingsSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     """The writable half of the inspect ``settings`` block.
 
-    Read-side twin: ``apps.api.v2.inspect.serializers.InspectSettingsSerializer``. Mounted with
-    ``source="*"`` on the parent, so DRF merges these straight onto the experiment (``set_value``
-    with empty ``source_attrs`` does a ``dict.update``) and an omitted key under a partial PATCH is
-    skipped rather than reset -- which is the whole merge semantics, with no custom code.
+    Read-side twin: ``apps.api.v2.inspect.serializers.InspectSettingsSerializer``.
+
+    The public description is set on the decorator above rather than taken from this docstring,
+    which drf-spectacular would otherwise publish verbatim into the OpenAPI document.
     """
+
+    # Mounted with source="*" on the parent, so DRF merges these straight onto the experiment
+    # (set_value with empty source_attrs does a dict.update) and an omitted key under a partial
+    # PATCH is skipped rather than reset -- which is the whole merge semantics, with no custom code.
 
     class Meta:
         model = Experiment
@@ -109,13 +117,23 @@ class ChatbotSettingsSerializer(RejectsUnknownKeys, serializers.ModelSerializer)
         return normalize_participant_allowlist(value)
 
 
+@extend_schema_serializer(
+    description=(
+        "Editable chatbot configuration. Omitted keys are left unchanged. References are given as "
+        "ids, which can be read from the discovery endpoints."
+    )
+)
 class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     """The PATCH request body.
 
     The writable set is exactly what ``ChatbotSettingsForm`` edits in the UI -- one API field per
     form field, with references narrowed to ids. It is also ``Experiment.VERSIONED_CONTENT_FIELDS``
-    minus ``pipeline``, which has its own façade; ``apps/api/v2/write/tests/test_writable_fields.py``
-    pins both. Inspect returns more than this, because inspecting and editing are different jobs.
+    minus ``pipeline``, which has its own façade. Both are pinned by
+    ``apps/api/v2/write/tests/test_writable_fields.py``. Inspect returns more than this, because
+    inspecting and editing are different jobs.
+
+    The public description is set on the decorator above rather than taken from this docstring,
+    which drf-spectacular would otherwise publish verbatim into the OpenAPI document.
     """
 
     name = NfcCharField(max_length=128)

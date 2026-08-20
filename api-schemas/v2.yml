@@ -1167,13 +1167,8 @@ components:
       - voice
     ChatbotSettings:
       type: object
-      description: |-
-        The writable half of the inspect ``settings`` block.
-
-        Read-side twin: ``apps.api.v2.inspect.serializers.InspectSettingsSerializer``. Mounted with
-        ``source="*"`` on the parent, so DRF merges these straight onto the experiment (``set_value``
-        with empty ``source_attrs`` does a ``dict.update``) and an omitted key under a partial PATCH is
-        skipped rather than reset -- which is the whole merge semantics, with no custom code.
+      description: Chatbot settings. Omitted keys are left unchanged; send only what
+        you want to edit.
       properties:
         seed_message:
           type: string
@@ -2253,13 +2248,8 @@ components:
       - public_id
     PatchedChatbotWrite:
       type: object
-      description: |-
-        The PATCH request body.
-
-        The writable set is exactly what ``ChatbotSettingsForm`` edits in the UI -- one API field per
-        form field, with references narrowed to ids. It is also ``Experiment.VERSIONED_CONTENT_FIELDS``
-        minus ``pipeline``, which has its own façade; ``apps/api/v2/write/tests/test_writable_fields.py``
-        pins both. Inspect returns more than this, because inspecting and editing are different jobs.
+      description: Editable chatbot configuration. Omitted keys are left unchanged.
+        References are given as ids, which can be read from the discovery endpoints.
       properties:
         name:
           type: string
