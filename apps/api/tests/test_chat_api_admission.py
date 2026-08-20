@@ -216,6 +216,24 @@ def test_chatbots_interact_scope_does_not_admit(chatbot):
 
 
 @pytest.mark.django_db()
+def test_a_broad_token_that_also_carries_chat_start_is_admitted(chatbot):
+    """`chat:start` is *required*, not exclusive: `token.is_valid()` is a subset test, so a token
+    minted with `chatbots:interact chat:start` gets in here while remaining a full
+    outbound-messaging credential elsewhere.
+
+    Pinned deliberately rather than left to chance. Exact-match was considered and dropped -- it
+    would be the only door in the codebase not using subset semantics, and it would force a server
+    integration that also uses /api/openai/ to hold a second token. So the scope buys hosts the
+    *ability* to mint a narrow page token, not a ceiling on what a page token may also carry; the
+    per-application scope allowlist is what would close that.
+    """
+    _channel(chatbot)
+    client = _machine_client(chatbot.team, allowed_chatbots=[chatbot], scopes=("chatbots:interact", "chat:start"))
+
+    assert _start(client, chatbot.public_id).status_code == 201
+
+
+@pytest.mark.django_db()
 def test_expired_token_is_refused(chatbot):
     _channel(chatbot)
     client = _machine_client(chatbot.team, allowed_chatbots=[chatbot])

@@ -542,11 +542,22 @@ channel-scoped embed key with a team-wide outbound-messaging capability — a la
 name of a security improvement.
 
 So `chat:start` is added to `OAUTH2_PROVIDER["SCOPES"]` ("Start a chat session") and to
-`OAUTH_CLIENT_CREDENTIALS_SCOPES`, and `/api/chat/start/` accepts **only** that scope. A
-`chatbots:interact` token is refused there. Requiring it exclusively is what makes the narrowing
-real: a host cannot reach for the broad token it already has, so the page token is narrow by
-construction. Nothing breaks — no OAuth caller can reach this endpoint today — and the cost is that a
-server-only integration requests one extra scope.
+`OAUTH_CLIENT_CREDENTIALS_SCOPES`, and `/api/chat/start/` **requires** it. A token that does not
+carry it is refused there, `chatbots:interact` included. Nothing breaks — no OAuth caller can reach
+this endpoint today — and the cost is that a server-only integration requests one extra scope.
+
+**Required, not exclusive.** An earlier draft of this section said the endpoint "accepts *only* that
+scope" and that requiring it exclusively is "what makes the narrowing real". That overstates what
+the check does, and implementation made the gap concrete: `token.is_valid([CHAT_API_SCOPE])` is a
+*subset* test (`AccessToken.allow_scopes`), so a token minted with `chatbots:interact chat:start`
+is admitted here while remaining a full outbound-messaging credential everywhere else. Exact-match
+was considered and dropped: it would be the only door in the codebase not using subset semantics
+(every other endpoint goes through `TokenHasOAuthScope`), and it contradicts "requests one extra
+scope" — a server integration that also uses `/api/openai/` would need a *second token* rather than
+one more scope. So the narrowing this scope buys is the *ability* to mint a narrow page token, plus
+the documentation telling hosts to; it is not an enforced ceiling on what a page token may also
+carry. That remains the residual foot-gun below, and the per-application scope allowlist is what
+would actually close it.
 
 The scope authorises exactly one endpoint, which is honest rather than brittle: [D5](#d5-session-bound-endpoints-are-untouched)
 keeps `message/`, `poll/` and `upload/` on ADR-0039's session token, so there is no second endpoint
@@ -558,9 +569,10 @@ list/retrieve only, so no scope creates a session today.
 > *ability* to mint a narrow page token; it does not prevent a careless host from minting a broad one
 > and putting it in the page. `allowed_chatbots` bounds *which chatbots* such a token reaches, but not
 > which other APIs — a broad-scope token in a page still reaches `/api/openai/` and
-> `TriggerBotMessageView`. Closing that needs a per-application *scope* allowlist, noted under
-> [Out of scope](#deliberately-out-of-scope). Docs must say plainly: request `chat:start` alone for any
-> token that reaches a browser.
+> `TriggerBotMessageView`, **and reaches this door too**, since the scope check is a subset test
+> (see *Required, not exclusive* above). Closing that needs a per-application *scope* allowlist,
+> noted under [Out of scope](#deliberately-out-of-scope). Docs must say plainly: request
+> `chat:start` alone for any token that reaches a browser.
 
 ### D5: Session-bound endpoints are untouched
 
@@ -870,6 +882,7 @@ what follows tests the *chat door*, not the allowlist:
 | Machine token valid for chatbot A, replayed against chatbot B in the same team | `401` — the leak-a-page-token case |
 | Application with an empty `allowed_chatbots` | `401` — empty means none, not all |
 | Machine token carrying `chatbots:interact` but not `chat:start` | `401` — the narrow scope is mandatory (D4) |
+| Machine token carrying **both** `chatbots:interact` and `chat:start` | `201` — required, not exclusive; the subset test admits it. Pinned so the residual foot-gun is a tested property rather than an accident (D4) |
 | Machine token expired / revoked | `401` |
 | Authorization-code token | `401` |
 | Valid token + a stale/invalid `X-Embed-Key`, `oauth` mode | `201` — the key is ignored, not rejected |
