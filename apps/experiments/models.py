@@ -1586,6 +1586,15 @@ class ExperimentSession(BaseTeamModel):
         if commit and trigger_type:
             enqueue_static_triggers.delay(self.id, trigger_type)
 
+    @property
+    def channel_is_disabled(self) -> bool:
+        """Whether an admin has switched off the channel this session runs on.
+
+        The FK is nullable, so "no channel" reads as not disabled -- there is nothing to
+        deliver on either way, and the send path fails on its own terms.
+        """
+        return self.experiment_channel is not None and self.experiment_channel.is_disabled
+
     def ad_hoc_bot_message(
         self,
         instruction_prompt: str | None,
@@ -1611,6 +1620,19 @@ class ExperimentSession(BaseTeamModel):
         if (instruction_prompt is None) == (message_text is None):
             raise ValueError("Exactly one of instruction_prompt or message_text must be provided")
 
+        if self.channel_is_disabled:
+            # A disabled channel blocks bot-initiated traffic too -- scheduled messages, event
+            # actions, API triggers. Checked here rather than at the send, so a disabled channel
+            # costs no LLM call and leaves no undelivered AI message in the chat history.
+            # Deliberately not an error: the admin asked for this, so retrying it or logging a
+            # failed attempt against the schedule would both be wrong.
+            log.info(
+                "Not sending bot message to session %s: channel %s is disabled",
+                self.id,
+                self.experiment_channel_id,
+            )
+            return {}
+
         trace_service = None
         try:
             with transaction.atomic(), current_team(self.team):
@@ -1623,12 +1645,9 @@ class ExperimentSession(BaseTeamModel):
                     metadata=trace_info.metadata,
                     notification_config=SpanNotificationConfig(permissions=["experiments.change_experiment"]),
                 ) as span:
-                    if message_text is not None:
-                        bot_message = self._save_direct_bot_message(message_text, experiment, trace_service)
-                    else:
-                        bot_message = self._bot_prompt_for_user(
-                            instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
-                        )
+                    bot_message = self._resolve_ad_hoc_message(
+                        instruction_prompt, message_text, experiment, trace_info, use_experiment, trace_service
+                    )
                     self.try_send_message(message=bot_message)
                     span.set_outputs({"response": bot_message})
                     trace_metadata = trace_service.get_trace_metadata()
@@ -1640,6 +1659,26 @@ class ExperimentSession(BaseTeamModel):
                     trace_metadata = trace_service.get_trace_metadata()
                     e.trace_metadata = trace_metadata
                 raise e
+
+    def _resolve_ad_hoc_message(
+        self,
+        instruction_prompt: str | None,
+        message_text: str | None,
+        experiment: Experiment,
+        trace_info: TraceInfo,
+        use_experiment: Experiment | None,
+        trace_service: TracingService,
+    ) -> str:
+        """The text to deliver, recorded in history either way.
+
+        ``message_text`` goes out verbatim; otherwise the LLM writes it from
+        ``instruction_prompt``. Exactly one of the two is set (the caller has already checked).
+        """
+        if message_text is not None:
+            return self._save_direct_bot_message(message_text, experiment, trace_service)
+        return self._bot_prompt_for_user(
+            instruction_prompt, trace_info, use_experiment=use_experiment, trace_service=trace_service
+        )
 
     def _save_direct_bot_message(self, message: str, experiment: Experiment, trace_service: TracingService) -> str:
         """Records a direct (non-LLM) bot message in the chat history and returns it.

@@ -43,7 +43,8 @@ from apps.analysis.const import LANGUAGE_CHOICES
 from apps.analysis.translation import translate_messages_with_llm
 from apps.annotations.models import CustomTaggedItem, Tag
 from apps.channels.datamodels import Attachment
-from apps.channels.models import ChannelPlatform
+from apps.channels.exceptions import ChannelDisabledException
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.web_channel import WebChannel
 from apps.chat.models import ChatAttachment, ChatMessage, ChatMessageType
 from apps.chatbots.version_resolver import resolve_published_or_working
@@ -249,6 +250,44 @@ def _poll_messages(request):
     return HttpResponse()
 
 
+def _channel_disabled_page(request, disabled_message: str) -> TemplateResponse:
+    """The maintenance page shown when the channel a participant is trying to reach is off."""
+    return TemplateResponse(
+        request,
+        "experiments/channel_disabled.html",
+        {"disabled_message": disabled_message},
+        status=503,
+    )
+
+
+def _disabled_web_channel_response(request) -> TemplateResponse | None:
+    """The maintenance page when an admin has switched off the team's web channel, else None.
+
+    Looked up rather than fetched via ``get_team_web_channel``, which is a ``get_or_create``:
+    this runs on every anonymous GET of the consent page, so creating here would both write on
+    a read and race two first-time loads against ``unique_global_channel_per_team``. A channel
+    that does not exist yet cannot be disabled, so its absence is not a refusal.
+    """
+    web_channel = ExperimentChannel.objects.filter(team=request.team, platform=ChannelPlatform.WEB).first()
+    if not (web_channel and web_channel.is_disabled):
+        return None
+    return _channel_disabled_page(request, web_channel.disabled_message)
+
+
+def _resolve_consent_identifier(consent, form, user, team) -> tuple[str, bool]:
+    """The participant identifier from a submitted consent form, and whether to verify it.
+
+    When the form captures an identifier we take theirs and verify it. When it does not, the
+    field was disabled, so we supply one -- the signed-in user's email, or a fresh anonymous
+    identifier -- and there is nothing to verify.
+    """
+    if consent.capture_identifier:
+        return form.cleaned_data.get("identifier", None), True
+    if user:
+        return user.email, False
+    return Participant.create_anonymous(team, ChannelPlatform.WEB).identifier, False
+
+
 @public_chat_rate_limited
 @team_required
 def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
@@ -262,6 +301,20 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     if not experiment_version.is_public:
         raise Http404
 
+    # Checked before the consent form is rendered, so a participant never fills it in only to be
+    # refused on submit. The channel is checked again inside start_experiment_session, which is
+    # what the except below catches: an admin switching the channel off mid-request should get
+    # the same maintenance page, not a 500 on a public URL.
+    if disabled_response := _disabled_web_channel_response(request):
+        return disabled_response
+    try:
+        return _run_public_consent_flow(request, team_slug, experiment, experiment_version)
+    except ChannelDisabledException as e:
+        return _channel_disabled_page(request, e.disabled_message)
+
+
+def _run_public_consent_flow(request, team_slug: str, experiment, experiment_version):
+    """Collect consent if the chatbot asks for it, then start the participant's session."""
     consent = experiment_version.consent_form
     user = get_real_user_or_none(request.user)
     if not consent:
@@ -277,16 +330,7 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
     if request.method == "POST":
         form = ConsentForm(consent, request.POST, initial={"identifier": user.email if user else None})
         if form.is_valid():
-            verify_user = True
-            if consent.capture_identifier:
-                identifier = form.cleaned_data.get("identifier", None)
-            else:
-                # The identifier field will be disabled, so we must generate one
-                verify_user = False
-                if user:
-                    identifier = user.email
-                else:
-                    identifier = Participant.create_anonymous(request.team, ChannelPlatform.WEB).identifier
+            identifier, verify_user = _resolve_consent_identifier(consent, form, user, request.team)
 
             session = WebChannel.start_new_session(
                 working_experiment=experiment,

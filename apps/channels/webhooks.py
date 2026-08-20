@@ -27,7 +27,7 @@ class TelegramWebhookManager:
 
     def set_incoming_webhook(self, extra_data: dict, webhook_url: str) -> None:
         bot = TeleBot(extra_data.get("bot_token", ""), threaded=False)
-        bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN)
+        bot.set_webhook(webhook_url, secret_token=settings.TELEGRAM_SECRET_TOKEN or None)
         bot.set_my_commands(commands=[types.BotCommand(ExperimentChannel.RESET_COMMAND, "Restart chat")])
 
     def remove_incoming_webhook(self, extra_data: dict, webhook_url: str) -> None:

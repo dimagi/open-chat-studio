@@ -76,6 +76,34 @@
             <canvas id="costTimeseriesChart"></canvas>
           </div>
         </div>
+
+        <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div>
+            <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">{% translate "Spend by provider" %}</div>
+            <div class="h-64"><canvas id="costProviderChart"></canvas></div>
+          </div>
+          <div>
+            <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">{% translate "Spend by model" %}</div>
+            <div class="h-64"><canvas id="costModelChart"></canvas></div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-xs uppercase text-gray-500 dark:text-gray-400">{% translate "Spend by token type" %}</div>
+              <div class="join" data-testid="service-kind-toggle">
+                <button type="button" class="join-item btn btn-xs" :class="serviceKindMode === 'cost' && 'btn-active'" :aria-pressed="serviceKindMode === 'cost'" @click="setServiceKindMode('cost')">{% translate "Cost" %}</button>
+                <button type="button" class="join-item btn btn-xs" :class="serviceKindMode === 'tokens' && 'btn-active'" :aria-pressed="serviceKindMode === 'tokens'" @click="setServiceKindMode('tokens')">{% translate "Tokens" %}</button>
+              </div>
+            </div>
+            <div class="h-64"><canvas id="costServiceKindChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="mt-6">
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">{% translate "p95 cost per trace" %}</div>
+          <div class="h-64">
+            <canvas id="costP95Chart"></canvas>
+          </div>
+        </div>
       {% endif %}
     {% else %}
       <div class="mt-4 text-sm text-gray-500 dark:text-gray-400">
