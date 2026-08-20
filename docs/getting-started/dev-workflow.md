@@ -38,16 +38,18 @@ a Claude Code session in the new directory.
 
     ```bash
     alias wtc='wt switch --create --execute claude'
+    alias wtx='wt switch --create --execute codex'
     alias wts='wt switch'
     alias wtl='wt list'
     ```
 
-    Then `wtc my-branch-name` is the whole setup step. You can pass an initial prompt through:
-    `wtc my-branch-name -- 'Fix GH #322'`.
+    Then `wtc my-branch-name` starts Claude and `wtx my-branch-name` starts Codex after running the
+    same setup. You can pass an initial prompt through: `wtc my-branch-name -- 'Fix GH #322'`.
 
 ### What worktree setup does
 
-The hooks live in `.config/wt.toml` and run automatically on create:
+The hooks in `.config/wt.toml` delegate to the tool-neutral `scripts/setup-worktree.sh` and run
+automatically on create:
 
 - Copies `.env` (and `.envrc`, `.python-version`) from the main worktree, then runs
   `bootstrap.sh` to install Python and Node dependencies (`uv sync`, `pnpm install`).
