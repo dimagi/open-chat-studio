@@ -46,10 +46,16 @@ The canonical pricing seed lives in `seed_data/llm_pricing.json` (per-1K-tokens,
 
 ## Surface
 
-Two places consume the data:
+Every surface reads through `services/reporting.py`; none of them are gated.
 
-- **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`.
+- **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`. The Bot Performance and Most Active Participants tables on the same page carry per-entity cost columns.
 - **LLM Provider page** shows each model's current per-1K rate inline. Admins can override at team scope via an HTMX modal (`pricing_override` view) or revert to global. The custom-model creation dialog accepts optional input/output rates that persist as team-scoped `PricingRule` rows in the same transaction as the model save.
+- **Chatbot home** shows a 30-day spend / sessions / messages widget (`get_latest_chatbot_usage_summary`).
+- **Session detail** shows the session's tokens and cost, via `session_usage`. Team members only - a participant viewing their own session does not see spend.
+- **Participants table** carries a 30-day cost column, computed one page at a time (`UsageRecord` has no `(team, participant)` index, so the column is not sortable).
+- **Trace detail** shows per-model tokens and cost for the trace, via `trace_token_usage`.
+
+The chatbot home, session detail and trace detail widgets render the shared `templates/cost_tracking/_usage_summary.html`, so the cost figure and its confidence badge read identically across the three.
 
 ## Layout
 
