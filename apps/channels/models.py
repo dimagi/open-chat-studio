@@ -3,6 +3,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Self, cast
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import JSONField, Q
 from django.urls import reverse
@@ -37,7 +38,7 @@ class ChannelPlatform(models.TextChoices):
     SLACK = "slack", "Slack"
     COMMCARE_CONNECT = "commcare_connect", "CommCare Connect"
     EVALUATIONS = "evaluations", "Evaluations"
-    EMBEDDED_WIDGET = "embedded_widget", "Embedded Widget"
+    EMBEDDED_WIDGET = "embedded_widget", "Chat Widget & API"
     EMAIL = "email", "Email"
 
     @classmethod
@@ -169,6 +170,18 @@ class WidgetAuthLevel(models.IntegerChoices):
     SESSION_TOKEN = 2, "Session token required (0.9.0+)"
 
 
+class CredentialMode(models.TextChoices):
+    """What a caller must present to start a session on this channel. An admin's choice.
+
+    Distinct from `WidgetAuthLevel`, which is version-ratcheted: an authorization policy
+    an admin chooses must never be switched on by a widget upgrade. Only meaningful for
+    EMBEDDED_WIDGET channels.
+    """
+
+    EMBED_KEY = "embed_key", "Embed key (public widget)"
+    OAUTH = "oauth", "OAuth token"
+
+
 class ExperimentChannelObjectManager(AuditingManager):
     def filter_extras(self, team_slug: str, platform: ChannelPlatform, key: str, value: str):
         extra_data_filter = Q(extra_data__contains={key: value})
@@ -252,6 +265,25 @@ class ExperimentChannel(BaseTeamModel):
     # ratchet_widget_auth_levels; not audited (the audited change is required_auth_level itself).
     pending_auth_level = models.PositiveSmallIntegerField(choices=WidgetAuthLevel.choices, null=True, blank=True)
     auth_level_notified_at = models.DateTimeField(null=True, blank=True)
+    credential_mode = models.CharField(
+        max_length=32,
+        choices=CredentialMode.choices,
+        default=CredentialMode.EMBED_KEY,
+        help_text="What a caller must present to start a chat session on this channel.",
+    )
+    # Per-channel override of settings.CHAT_SESSION_TOKEN_LIFETIME. Null means "use the
+    # global": the lifetime is mandatory, so this only ever narrows or widens it, never
+    # switches it off.
+    session_token_lifetime = models.DurationField(
+        null=True,
+        blank=True,
+        verbose_name="Session lifetime",
+        help_text=(
+            "How long a chat session stays usable after it is created. Leave blank to use the "
+            "system default. Format: <code>HH:MM:SS</code>, or <code>D HH:MM:SS</code> for days "
+            "(e.g. <code>12:00:00</code> for 12 hours, <code>2 00:00:00</code> for 2 days)."
+        ),
+    )
 
     class Meta:
         db_table = "channels_experimentchannel"
@@ -262,14 +294,44 @@ class ExperimentChannel(BaseTeamModel):
                 name="unique_global_channel_per_team",
                 condition=Q(platform__in=ChannelPlatform.team_global_platforms(), deleted=False),
             ),
+            # An oauth channel below SESSION_TOKEN is a dead channel: the request path issues
+            # no session token, and every follow-up call then fails the legacy-access check
+            # because the embed key is not what admitted the caller. save() pins the level, but
+            # the constraint is what makes the combination unrepresentable rather than merely
+            # un-enterable through the form.
+            models.CheckConstraint(
+                condition=Q(credential_mode=CredentialMode.EMBED_KEY)
+                | Q(required_auth_level=WidgetAuthLevel.SESSION_TOKEN),
+                name="oauth_credential_mode_requires_session_token",
+            ),
         ]
 
     def __str__(self):
         return f"Channel: {self.name} ({self.platform})"
 
+    def clean(self):
+        super().clean()
+        needs_session_token = self.credential_mode != CredentialMode.EMBED_KEY
+        if needs_session_token and self.required_auth_level != WidgetAuthLevel.SESSION_TOKEN:
+            raise ValidationError({"required_auth_level": "An OAuth channel must require a session token."})
+
     def save(self, *args, **kwargs):
         if not self.name:
             self.name = self.experiment.name
+        if self.credential_mode != CredentialMode.EMBED_KEY:
+            # The mode pins the level. Any ratchet already in flight is abandoned: the channel
+            # is at the top rung, so applying the pending level could only ever be a no-op.
+            self.required_auth_level = WidgetAuthLevel.SESSION_TOKEN
+            self.pending_auth_level = None
+            self.auth_level_notified_at = None
+            if update_fields := kwargs.get("update_fields"):
+                # A partial save must carry the pin too, or the row lands in exactly the
+                # combination oauth_credential_mode_requires_session_token forbids.
+                kwargs["update_fields"] = set(update_fields) | {
+                    "required_auth_level",
+                    "pending_auth_level",
+                    "auth_level_notified_at",
+                }
         return super().save(*args, **kwargs)
 
     @property

@@ -1,4 +1,3 @@
-import inspect
 import json
 
 import pydantic
@@ -8,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.db import transaction
-from django.db.models import QuerySet, Subquery, prefetch_related_objects
+from django.db.models import Subquery, prefetch_related_objects
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -18,24 +17,22 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 from django_tables2 import SingleTableView
 
-from apps.assistants.models import OpenAiAssistant
-from apps.custom_actions.form_utils import get_custom_action_operation_choices
-from apps.custom_actions.schema_utils import resolve_references
-from apps.documents.models import Collection
 from apps.events.models import EventActionType, StaticTrigger, StaticTriggerType, TimeoutTrigger
-from apps.experiments.models import AgentTools, BuiltInTools, Experiment, SourceMaterial
+from apps.experiments.models import Experiment
 from apps.pipelines.exceptions import MissingNodeDataError
 from apps.pipelines.flow import FlowPipelineData, PipelineDiffPayload, split_flow_data
 from apps.pipelines.jinja_utils import djlint_check, parse_jinja_template
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes import nodes as pipeline_nodes
-from apps.pipelines.nodes.base import OptionsSource
+from apps.pipelines.nodes.node_metadata import (
+    get_node_default_values,
+    get_node_parameter_values,
+    get_node_schemas,
+)
 from apps.pipelines.patching import apply_pipeline_patch
 from apps.pipelines.tables import PipelineTable
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
 from apps.service_providers.llm_service.default_models import LLM_MODEL_PARAMETERS
 from apps.service_providers.llm_service.model_parameters import LLM_MODEL_PARAMETER_SCHEMAS
-from apps.service_providers.models import LlmProvider, LlmProviderModel
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
@@ -44,7 +41,6 @@ from apps.web.waf import WafRule, waf_allow
 from ..generics.chips import Chip
 from ..generics.help import render_help_with_link
 from ..generics.referenced_objects import render_referenced_objects_modal
-from ..utils.prompt import PromptVars
 
 
 class PipelineHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -167,22 +163,19 @@ class EditPipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateV
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         pipeline = Pipeline.objects.get(id=kwargs["pk"], team=self.request.team)
         return {
             **data,
             "pipeline_id": kwargs["pk"],
             "pipeline_name": pipeline.name,
-            "node_schemas": _pipeline_node_schemas(),
-            "parameter_values": _pipeline_node_parameter_values(
+            "node_schemas": get_node_schemas(),
+            "parameter_values": get_node_parameter_values(
                 team=self.request.team,
-                llm_providers=llm_providers,
-                llm_provider_models=llm_provider_models,
+                # A pipeline is edited outside any one chatbot, so there is no voice provider to offer.
                 synthetic_voices=[],
                 include_versions=pipeline.is_a_version,
             ),
-            "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "default_values": get_node_default_values(self.request.team),
             "allow_edit_name": True,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
             "read_only": pipeline.is_a_version,
@@ -216,158 +209,6 @@ class DeletePipeline(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
                 experiments=experiments,
                 static_trigger_experiments=static_trigger_experiments,
             )
-
-
-def _pipeline_node_parameter_values(team, llm_providers, llm_provider_models, synthetic_voices, include_versions=False):
-    """Returns the possible values for each input type"""
-    common_filters = {"team": team}
-    if not include_versions:
-        common_filters["working_version"] = None
-    source_materials = SourceMaterial.objects.filter(**common_filters).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.filter(**common_filters).values("id", "name").all()
-    collections = Collection.objects.filter(**common_filters).filter(is_index=False).values("id", "name").all()
-    collection_indexes = (
-        Collection.objects.filter(**common_filters)
-        .filter(team=team, is_index=True)
-        .values("id", "name", "is_remote_index")
-        .all()
-    )
-
-    def _option(value, label, type_=None, edit_url: str | None = None, max_token_limit=None):
-        data = {"value": value, "label": label}
-        data = data | ({"type": type_} if type_ else {})
-        data = data | ({"edit_url": edit_url} if edit_url else {})
-        data = data | ({"max_token_limit": max_token_limit} if max_token_limit else {})
-        return data
-
-    def _get_assistant_url(assistant_id: int):
-        """
-        Always link to the working version. If `working_version_id` is None, it means the assistant is the working
-        version
-        """
-        return reverse("assistants:edit", args=[team.slug, assistant_id])
-
-    custom_action_operations = []
-    for _custom_action_name, operations_disp in get_custom_action_operation_choices(team):
-        custom_action_operations.extend(operations_disp)
-
-    mcp_tools = [
-        (f"{server.id}:{tool}", f"{server.name}: {tool}")
-        for server in team.mcpserver_set.all()
-        for tool in server.available_tools
-    ]
-
-    return {
-        "LlmProviderId": [_option(provider["id"], provider["name"], provider["type"]) for provider in llm_providers],
-        "LlmProviderModelId": [
-            _option(provider.id, str(provider), provider.type, None, provider.max_token_limit)
-            for provider in llm_provider_models
-        ],
-        OptionsSource.source_material: (
-            [_option("", "Select a topic")]
-            + [_option(material["id"], material["topic"]) for material in source_materials]
-        ),
-        OptionsSource.assistant: (
-            [_option("", "Select an Assistant")]
-            + [
-                _option(
-                    value=assistant["id"],
-                    label=assistant["name"],
-                    edit_url=_get_assistant_url(assistant["id"]),
-                )
-                for assistant in assistants
-            ]
-        ),
-        OptionsSource.collection: (
-            [_option("", "Select a Collection")]
-            + [
-                _option(
-                    value=collection["id"],
-                    label=collection["name"],
-                    edit_url=reverse(
-                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": collection["id"]}
-                    ),
-                )
-                for collection in collections
-            ]
-        ),
-        OptionsSource.collection_index: (
-            [
-                _option(
-                    value=index["id"],
-                    label=f"{index['name']} ({'Remote' if index['is_remote_index'] else 'Local'})",
-                    edit_url=reverse(
-                        "documents:single_collection_home", kwargs={"team_slug": team.slug, "pk": index["id"]}
-                    ),
-                )
-                for index in collection_indexes
-            ]
-        ),
-        OptionsSource.agent_tools: [_option(value, label) for value, label in AgentTools.user_tool_choices()],
-        OptionsSource.mcp_tools: [_option(value, label) for value, label in mcp_tools],
-        OptionsSource.custom_actions: [_option(val, display_val) for val, display_val in custom_action_operations],
-        OptionsSource.built_in_tools: {
-            provider["type"].lower(): [
-                _option(value, label) for value, label in BuiltInTools.choices_for_provider(provider["type"].lower())
-            ]
-            for provider in llm_providers
-            if provider.get("type")
-        },
-        OptionsSource.built_in_tools_config: BuiltInTools.get_tool_configs_by_provider(),
-        OptionsSource.text_editor_autocomplete_vars_llm_node: PromptVars.get_all_prompt_vars(),
-        OptionsSource.text_editor_autocomplete_vars_router_node: PromptVars.get_router_prompt_vars(),
-        OptionsSource.jinja_node: PromptVars.get_jinja_vars(),
-        OptionsSource.synthetic_voice_id: sorted(
-            [
-                _option(voice.id, str(voice), voice.service.lower()) | {"provider_id": voice.voice_provider_id}
-                for voice in synthetic_voices
-            ],
-            key=lambda v: v["label"],
-        ),
-    }
-
-
-def _pipeline_node_default_values(llm_providers: list[dict], llm_provider_models: QuerySet):
-    llm_provider_model = None
-    provider_id = None
-    if len(llm_providers) > 0:
-        for provider in llm_providers:
-            llm_provider_model = llm_provider_models.filter(type=provider["type"]).first()
-            if llm_provider_model:
-                provider_id = provider["id"]
-                break
-
-    return {
-        "llm_provider_id": provider_id,
-        "llm_provider_model_id": llm_provider_model.id if llm_provider_model else None,
-    }
-
-
-def _pipeline_node_schemas():
-    schemas = []
-
-    node_classes = [
-        cls
-        for _, cls in inspect.getmembers(pipeline_nodes, inspect.isclass)
-        if issubclass(cls, pipeline_nodes.PipelineNode | pipeline_nodes.PipelineRouterNode)
-        and cls not in (pipeline_nodes.PipelineNode, pipeline_nodes.PipelineRouterNode)
-    ]
-    for node_class in node_classes:
-        schemas.append(_get_node_schema(node_class))
-
-    return schemas
-
-
-def _get_node_schema(node_class):
-    schema = resolve_references(node_class.model_json_schema())
-    schema.pop("$defs", None)
-
-    # Remove type ambiguity for optional fields
-    for _key, value in schema["properties"].items():
-        if "anyOf" in value:
-            any_of = value.pop("anyOf")
-            value["type"] = [item["type"] for item in any_of if item["type"] != "null"][0]  # take the first type
-    return schema
 
 
 def llm_model_parameter_context():

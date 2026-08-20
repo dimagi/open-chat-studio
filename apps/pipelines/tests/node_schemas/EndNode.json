@@ -3,6 +3,7 @@
   "properties": {
     "name": {
       "default": "end",
+      "description": "Fixed at `end`. The server creates this node; there is never more than one.",
       "title": "Name",
       "type": "string"
     }

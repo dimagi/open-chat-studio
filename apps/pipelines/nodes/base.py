@@ -262,7 +262,14 @@ class BasePipelineNode(BaseModel, ABC):
     node_id: SkipJsonSchema[str] = Field(exclude=True)
     django_node: SkipJsonSchema[Any] = Field(exclude=True)
 
-    name: str = Field(title="Node Name", json_schema_extra={"ui:widget": "node_name"})
+    name: str = Field(
+        title="Node Name",
+        description=(
+            "Identifies the node within its pipeline. Another node reaches this one's result through "
+            "`temp_state.outputs.<name>`, so renaming it breaks any template that does."
+        ),
+        json_schema_extra={"ui:widget": "node_name"},
+    )
 
     def _prepare_state(self, node_id: str, incoming_nodes: list, state: PipelineState):
         """This function initializes the state before executing the node function. This is primarily
@@ -429,7 +436,7 @@ def resolve_node_class(node_type: str) -> type[BasePipelineNode] | None:
     helper function, a class that isn't a node. A bare ``getattr`` would hand one of those to
     ``issubclass``/``model_validate``/instantiation and raise; here they all collapse to ``None``,
     which callers already report as an unknown type. The accepted set is exactly the one the editor
-    offers (see ``apps.pipelines.views._pipeline_node_schemas``): concrete node classes only, so the
+    offers (see ``apps.pipelines.nodes.node_metadata.get_node_schemas``): concrete node classes only, so the
     two abstract bases are rejected as well.
     """
     from apps.pipelines.nodes import nodes as pipeline_nodes  # noqa: PLC0415 - circular: nodes.nodes→base
@@ -466,18 +473,20 @@ class Widgets(StrEnum):
 
 
 class OptionsSource(StrEnum):
+    llm_provider_id = "llm_provider_id"
+    llm_provider_model_id = "llm_provider_model_id"
     source_material = "source_material"
     assistant = "assistant"
-    agent_tools = "agent_tools"
+    tools = "tools"
     custom_actions = "custom_actions"
     collection = "collection"
     built_in_tools = "built_in_tools"
     mcp_tools = "mcp_tools"
     collection_index = "collection_index"
-    built_in_tools_config = "built_in_tools_config"
-    text_editor_autocomplete_vars_llm_node = "text_editor_autocomplete_vars_llm_node"
-    text_editor_autocomplete_vars_router_node = "text_editor_autocomplete_vars_router_node"
-    jinja_node = "jinja_node"
+    tool_config = "tool_config"
+    llm_prompt_variables = "llm_prompt_variables"
+    router_prompt_variables = "router_prompt_variables"
+    template_variables = "template_variables"
     voice_provider_id = "voice_provider_id"
     synthetic_voice_id = "synthetic_voice_id"
 
@@ -495,6 +504,17 @@ class VisibleWhen(BaseModel):
     operator: Literal["==", "!=", "in", "not_in", "is_empty", "is_not_empty"] = "=="
 
 
+# The UiSchema fields that go straight into the schema under a key of the same meaning, when set.
+_UI_SCHEMA_KEYS = {
+    "widget": "ui:widget",
+    "enum_labels": "ui:enumLabels",
+    "options_source": "ui:optionsSource",
+    "flag_required": "ui:flagRequired",
+    "rows": "ui:rows",
+    "default_on_show": "ui:onShowDefault",
+}
+
+
 class UiSchema(BaseModel):
     widget: Widgets | None = None
 
@@ -502,9 +522,12 @@ class UiSchema(BaseModel):
     enum_labels: list[str] | None = None
 
     # Use this with 'select' type fields to indicate where the options should come from
-    # See `apps.pipelines.views._pipeline_node_parameter_values`
+    # See `apps.pipelines.nodes.node_metadata.get_node_parameter_values`
     options_source: OptionsSource | None = None
     flag_required: str | None = None
+
+    # Withholds the param and its option list from the v2 discovery API.
+    api_exclude: bool = False
 
     # Use this to conditionally show/hide a field based on another field's value.
     # Can be a single condition or a list of conditions (all must be satisfied).
@@ -520,23 +543,19 @@ class UiSchema(BaseModel):
     rows: int | None = None
 
     def __call__(self, schema: JsonDict):
-        if self.widget:
-            schema["ui:widget"] = self.widget
-        if self.enum_labels:
-            schema["ui:enumLabels"] = self.enum_labels
-        if self.options_source:
-            schema["ui:optionsSource"] = self.options_source
-        if self.flag_required:
-            schema["ui:flagRequired"] = self.flag_required
-        if self.rows is not None:
-            schema["ui:rows"] = self.rows
+        for field, schema_key in _UI_SCHEMA_KEYS.items():
+            value = getattr(self, field)
+            if value is not None:
+                schema[schema_key] = value
+        if self.api_exclude:
+            schema["api:exclude"] = True
         if self.visible_when is not None:
-            if isinstance(self.visible_when, list):
-                schema["ui:visibleWhen"] = [cond.model_dump() for cond in self.visible_when]
-            else:
-                schema["ui:visibleWhen"] = self.visible_when.model_dump()
-        if self.default_on_show is not None:
-            schema["ui:onShowDefault"] = self.default_on_show
+            conditions = self.visible_when
+            schema["ui:visibleWhen"] = (
+                [condition.model_dump() for condition in conditions]
+                if isinstance(conditions, list)
+                else conditions.model_dump()
+            )
 
 
 class NodeSchema(BaseModel):

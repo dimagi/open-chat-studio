@@ -15,6 +15,7 @@
       "type": "string"
     },
     "name": {
+      "description": "Identifies the node within its pipeline. Another node reaches this one's result through `temp_state.outputs.<name>`, so renaming it breaks any template that does.",
       "title": "Node Name",
       "type": "string",
       "ui:widget": "node_name"

@@ -162,6 +162,22 @@ def test_the_rendered_schema_flags_the_provider_instead_of_listing_its_ids(evalu
     assert not set(evaluators.LLM_PROVIDER_FIELDS) & set(schema["required"])
 
 
+@pytest.mark.parametrize(
+    "evaluator_class",
+    [
+        pytest.param(evaluators.LlmEvaluator, id="llm-evaluator"),
+        pytest.param(evaluators.PythonEvaluator, id="python-evaluator"),
+    ],
+)
+def test_the_rendered_schema_keeps_no_reference_to_the_definitions_it_drops(evaluator_class):
+    """`_get_evaluator_schema` inlines the `$ref`s and then drops `$defs`, and substitution goes only
+    one level deep, so a param whose model nests another model two deep leaves an inner `$ref` the
+    form builder cannot follow. Mirrors the node-schema guard in `apps/pipelines/tests/test_schemas.py`."""
+    schema = _get_evaluator_schema(evaluator_class)
+
+    assert "$ref" not in json.dumps(schema)
+
+
 @pytest.mark.django_db()
 class TestEvaluatorPickerInitialState:
     """What the provider picker starts on — it is seeded from the FKs, not from params."""

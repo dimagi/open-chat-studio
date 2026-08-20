@@ -54,16 +54,15 @@ So "this Chatbot has no Chat API Channel" means "no outside embedder can reach i
 
 A Chat API Channel carries two settings that are easy to confuse, deliberately kept apart:
 
-- **Credential Mode** — *planned, not shipped* ([oauth-chat-widget.md](docs/design/oauth-chat-widget.md) D1): the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone.
-Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
-- **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin wants required.
+- **Credential Mode** — the column exists (`ExperimentChannel.credential_mode`) but nothing reads it yet, so it is not admin-selectable and every Channel sits at `embed_key`. Once the OAuth path lands ([oauth-chat-widget.md](docs/design/oauth-chat-widget.md) D1) it is the *admin's* choice of what an *external* caller must present: the **Embed Key**, or an OAuth token. (A signed-in team member reaches an in-app embed through membership, presenting neither.) Under the OAuth mode an Embed Key is *ignored rather than rejected*, so an existing snippet needs no edit beyond adding the token — but the token is required, and the key alone no longer admits anyone. Whether that mode serves a browser or a server integration is told by the Channel's allowed domains, not by a separate setting: a blank list means server-only.
+- **Widget Auth Level** — a *version floor*, raised automatically as the deployed widget is upgraded (ADR-0045). It describes what old widgets on the page are capable of, never what the admin requires.
 
 An admin's policy must never be switched on by a widget upgrade, which is why these are two separate settings and not rungs of one ladder.
 
 Once the OAuth mode exists, exposure will take **two** admin acts that must agree: the Channel says *this Chatbot is reachable over OAuth*, and the **OAuth Application** separately names the Chatbots it may reach. Neither alone admits anyone.
-_Backed by_: `ChannelPlatform.EMBEDDED_WIDGET`, labelled *Embedded Widget* — the stored value stays `embedded_widget` because it is also a `Participant.platform` value. `Widget Auth Level` is `ExperimentChannel.required_auth_level`.
-_Planned_: the label becomes **Chat Widget & API** and `credential_mode` is added, per `oauth-chat-widget.md` D1. Neither has shipped; the label change is what makes "Chat Widget & API" the name to use in the UI.
-_Avoid_: leaning on the current *Embedded Widget* label when the channel is serving a server integration — say "Chat API Channel". "The widget channel" is fine when a widget really is the client.
+_Backed by_: `ChannelPlatform.EMBEDDED_WIDGET`, labelled **Chat Widget & API** — the stored value stays `embedded_widget` because it is also a `Participant.platform` value. `Credential Mode` is `ExperimentChannel.credential_mode`; `Widget Auth Level` is `ExperimentChannel.required_auth_level`.
+_Planned_: the OAuth path that gives `credential_mode` its meaning (`oauth-chat-widget.md` D1–D4) — until it lands the column is inert.
+_Avoid_: "the Embedded Widget channel" (the old label) when the channel is serving a server integration — say "Chat API Channel". "The widget channel" is fine when a widget really is the client.
 
 **Embed Key**:
 The per-Channel secret an embedded widget presents (`X-Embed-Key`) to prove it may talk to a Chatbot. Validated together with the request's origin against the Channel's allowed domains — the key alone is not enough. Rotatable, and revoked when the Channel is deleted. Not a secret from the *page* (it ships in the embed snippet); it is a secret from everyone who was not given the snippet.

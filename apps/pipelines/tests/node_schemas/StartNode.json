@@ -3,6 +3,7 @@
   "properties": {
     "name": {
       "default": "start",
+      "description": "Fixed at `start`. The server creates this node; there is never more than one.",
       "title": "Name",
       "type": "string"
     }

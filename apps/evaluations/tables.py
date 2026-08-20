@@ -5,6 +5,7 @@ from django.utils.safestring import mark_safe
 from django_tables2 import TemplateColumn, columns, tables
 
 from apps.chatbots.version_resolver import VersionSelectionRule
+from apps.cost_tracking.templatetags.cost_tracking import cost_display
 from apps.evaluations.models import (
     DatasetAutoPopulationRule,
     EvaluationConfig,
@@ -146,6 +147,8 @@ class EvaluationRunTable(tables.Table):
 
     results = columns.Column(accessor="results__count", verbose_name="Result count", orderable=False)
 
+    cost = columns.Column(verbose_name="Cost", orderable=False, empty_values=())
+
     actions = actions.ActionsColumn(
         actions=[
             actions.Action(
@@ -160,9 +163,20 @@ class EvaluationRunTable(tables.Table):
         ]
     )
 
+    def __init__(self, *args, cost_tracking_enabled: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not cost_tracking_enabled:
+            self.columns.hide("cost")
+
+    def render_cost(self, record):
+        cost = getattr(record, "cost", None)
+        if cost is None:
+            return "—"
+        return f"${cost_display(cost)}"
+
     class Meta:
         model = EvaluationRun
-        fields = ("created_at", "type", "status", "finished_at", "results", "actions")
+        fields = ("created_at", "type", "status", "finished_at", "results", "cost", "actions")
         row_attrs = settings.DJANGO_TABLES2_ROW_ATTRS
         orderable = False
         empty_text = "No runs found."

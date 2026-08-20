@@ -2,17 +2,22 @@
   "description": "Routes the input to one of the linked nodes using an LLM",
   "properties": {
     "llm_provider_id": {
+      "description": "The configured LLM service provider this node calls, e.g. the team's OpenAI account.",
       "title": "LLM Model",
       "type": "integer",
+      "ui:optionsSource": "llm_provider_id",
       "ui:widget": "llm_provider_model"
     },
     "llm_provider_model_id": {
+      "description": "The model to call, e.g. gpt-4o. Must belong to the same provider type as `llm_provider_id` -- an OpenAI provider cannot run an Anthropic model.",
       "title": "Llm Provider Model Id",
       "type": "integer",
+      "ui:optionsSource": "llm_provider_model_id",
       "ui:widget": "none"
     },
     "llm_model_parameters": {
       "additionalProperties": true,
+      "description": "Generation settings passed to the model, such as `temperature`. Which keys are accepted depends on the model; leave empty to use its defaults.",
       "title": "Llm Model Parameters",
       "type": "object",
       "ui:widget": "none"
@@ -27,6 +32,7 @@
       "title": "PipelineChatHistoryTypes",
       "type": "string",
       "default": "node",
+      "description": "Which past messages to put in the prompt. `none` sends only the current input; `node` remembers just this node's own turns; `named` shares one history between every node set to the same `history_name`; `global` uses the participant's whole conversation.",
       "ui:enumLabels": [
         "Node",
         "Named",
@@ -37,6 +43,7 @@
     },
     "history_name": {
       "default": null,
+      "description": "The shared history to read and write. Only used when `history_type` is `named`.",
       "title": "History Name",
       "ui:widget": "none",
       "type": "string"
@@ -50,6 +57,7 @@
       "title": "PipelineChatHistoryModes",
       "type": "string",
       "default": "summarize",
+      "description": "How to shrink history that outgrows its limit: `summarize` replaces old messages with a summary, `truncate_tokens` drops them to fit `user_max_token_limit`, and `max_history_length` keeps only the most recent `max_history_length` messages.",
       "ui:enumLabels": [
         "Summarize",
         "Truncate Tokens",
@@ -83,11 +91,13 @@
       }
     },
     "name": {
+      "description": "Identifies the node within its pipeline. Another node reaches this one's result through `temp_state.outputs.<name>`, so renaming it breaks any template that does.",
       "title": "Node Name",
       "type": "string",
       "ui:widget": "node_name"
     },
     "keywords": {
+      "description": "The routes this node can take, one per output. Uppercased and deduplicated on save. Entry `i` is served by output handle `output_i`, so adding, removing or reordering keywords rewires the node's outgoing edges.",
       "items": {
         "type": "string"
       },
@@ -97,6 +107,7 @@
     },
     "default_keyword_index": {
       "default": 0,
+      "description": "Position in `keywords` to fall back to when no route matches. Must be a valid index into `keywords`.",
       "title": "Default Keyword Index",
       "type": "integer",
       "ui:widget": "none"
@@ -110,10 +121,11 @@
     },
     "prompt": {
       "default": "You are an extremely helpful router",
+      "description": "Instructions telling the LLM how to choose between `keywords`. The model is constrained to return one of them, so describe when each applies rather than asking for free text. A narrower set of template variables is available here than on an LLM node.",
       "minLength": 1,
       "title": "Prompt",
       "type": "string",
-      "ui:optionsSource": "text_editor_autocomplete_vars_router_node",
+      "ui:optionsSource": "router_prompt_variables",
       "ui:widget": "text_editor_widget"
     }
   },
