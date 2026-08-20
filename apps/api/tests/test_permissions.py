@@ -3,7 +3,12 @@ from django.conf import settings
 
 from apps.api.openai import ChatCompletionsView
 from apps.api.permissions import BASE_PERMISSION_CLASSES, ReadOnlyAPIKeyPermission
-from apps.api.v2.discovery.views import PipelineNodesView, PipelineOptionsView
+from apps.api.v2.discovery.views import (
+    PipelineNodeOptionsView,
+    PipelineNodesView,
+    PipelineNodeView,
+    PipelineOptionsView,
+)
 from apps.api.v2.usage.views import UsageView
 from apps.api.v2.views import ChatbotViewSet, MeView
 from apps.api.views.channels import TriggerBotMessageView
@@ -23,7 +28,9 @@ API_KEY_VIEWS = [
     FileContentView,
     MeView,
     ParticipantView,
+    PipelineNodeOptionsView,
     PipelineNodesView,
+    PipelineNodeView,
     PipelineOptionsView,
     TriggerBotMessageView,
     UsageView,

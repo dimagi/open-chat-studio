@@ -123,11 +123,11 @@ def test_no_namespaced_schema_key_survives_anywhere(team):
     ],
 )
 def test_scoping_covers_every_param_that_reads_an_option_list(team_with_resources, node_type, expected_keys):
-    """`?node_type=` derives its payload from `ui:optionsSource`, so a param missing the declaration
-    leaves the client unable to fill it from the scoped response."""
+    """The scoped endpoint derives its payload from `ui:optionsSource`, so a param missing the
+    declaration leaves the client unable to fill it from the scoped response."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type}).json()
+    scoped = client.get(reverse("api:v2:pipeline-node-options", args=[node_type])).json()
 
     assert expected_keys <= set(scoped)
 
@@ -295,13 +295,15 @@ def test_a_withheld_param_reaches_neither_endpoint(team_with_resources):
 
 
 @pytest.mark.django_db()
-def test_type_filter_returns_a_single_element_array(team):
-    """`?type=` narrows the list rather than switching to a bare object, so one parser handles both."""
+def test_one_node_type_is_retrievable_by_name(team):
+    """The detail endpoint serves the same entry the list holds, as a bare object."""
     client = ApiTestClient(team.members.first(), team)
-    response = client.get(reverse("api:v2:pipeline-nodes"), {"type": "RouterNode"})
+    response = client.get(reverse("api:v2:pipeline-node", args=["RouterNode"]))
 
     assert response.status_code == 200
-    assert [entry["type"] for entry in response.json()] == ["RouterNode"]
+    assert response.json() == next(
+        entry for entry in client.get(reverse("api:v2:pipeline-nodes")).json() if entry["type"] == "RouterNode"
+    )
 
 
 @pytest.mark.django_db()
@@ -313,11 +315,11 @@ def test_type_filter_returns_a_single_element_array(team):
         pytest.param("AssistantNode", id="deprecated-type-whose-builder-advice-is-markup"),
     ],
 )
-def test_type_filter_404s(team, node_type):
+def test_node_detail_404s(team, node_type):
     """A name that was never a node type and one that is no longer buildable get the same answer:
     neither is something a client may build, and the body carries no builder markup either way."""
     client = ApiTestClient(team.members.first(), team)
-    response = client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type})
+    response = client.get(reverse("api:v2:pipeline-node", args=[node_type]))
 
     assert response.status_code == 404
     assert response.json()["detail"] == f"Unknown node type: {node_type}"
@@ -329,7 +331,7 @@ def test_404_body_lists_the_types_the_client_could_have_asked_for(team):
     """`valid_types` is exactly the unfiltered list, so a failed call can be corrected from its own
     error body rather than a second request."""
     client = ApiTestClient(team.members.first(), team)
-    body = client.get(reverse("api:v2:pipeline-nodes"), {"type": "Frobnicator"}).json()
+    body = client.get(reverse("api:v2:pipeline-node", args=["Frobnicator"])).json()
 
     listed = {entry["type"] for entry in client.get(reverse("api:v2:pipeline-nodes")).json()}
     assert set(body["valid_types"]) == listed
@@ -347,7 +349,7 @@ def test_404_body_lists_the_types_the_client_could_have_asked_for(team):
 def test_structural_type_is_reported_as_server_managed_not_unknown(team, node_type):
     """These are unlisted, but `/inspect/` still reports them as the `type` of real nodes."""
     client = ApiTestClient(team.members.first(), team)
-    response = client.get(reverse("api:v2:pipeline-nodes"), {"type": node_type})
+    response = client.get(reverse("api:v2:pipeline-node", args=[node_type]))
 
     assert response.status_code == 404
     assert "managed by the server" in response.json()["detail"]
@@ -369,21 +371,29 @@ def test_node_list_is_revalidatable(team):
 
 
 @pytest.mark.django_db()
-def test_etag_distinguishes_the_filtered_response(team):
-    """One ETag covering both would let a filtered request revalidate against the full list."""
+def test_node_detail_is_revalidatable(team):
+    """One node type is as static as the whole list, and carries its own ETag -- one covering both
+    would let a detail request revalidate against the full list."""
     client = ApiTestClient(team.members.first(), team)
-    full = client.get(reverse("api:v2:pipeline-nodes")).headers["ETag"]
+    url = reverse("api:v2:pipeline-node", args=["RouterNode"])
+    response = client.get(url)
+    etag = response.headers["ETag"]
 
-    filtered = client.get(reverse("api:v2:pipeline-nodes"), {"type": "RouterNode"})
+    assert etag != client.get(reverse("api:v2:pipeline-nodes")).headers["ETag"]
 
-    assert filtered.headers["ETag"] != full
+    revalidated = client.get(url, HTTP_IF_NONE_MATCH=etag)
+
+    assert revalidated.status_code == 304
+    assert not revalidated.content
 
 
 @pytest.mark.django_db()
 def test_unauthenticated_request_is_rejected(team, client):
-    """Both endpoints answer for the caller's team, so neither serves an anonymous request."""
+    """Every endpoint answers for the caller's team, so none serves an anonymous request."""
     assert client.get(reverse("api:v2:pipeline-nodes")).status_code == 401
+    assert client.get(reverse("api:v2:pipeline-node", args=["RouterNode"])).status_code == 401
     assert client.get(reverse("api:v2:pipeline-options")).status_code == 401
+    assert client.get(reverse("api:v2:pipeline-node-options", args=["RouterNode"])).status_code == 401
 
 
 @pytest.mark.django_db()
@@ -464,10 +474,11 @@ def test_clean_options_recurses_into_nested_dicts():
 
 @pytest.mark.django_db()
 def test_options_can_be_scoped_to_one_node_type(team_with_resources):
-    """`?node_type=` cuts the payload down to the keys that node type's params can read."""
+    """`/pipeline/options/{node_type}/` cuts the payload down to the keys that node type's params can
+    read."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "RenderTemplate"}).json()
+    scoped = client.get(reverse("api:v2:pipeline-node-options", args=["RenderTemplate"])).json()
 
     assert set(scoped) == {"template_variables"}
 
@@ -477,7 +488,7 @@ def test_scoped_options_keep_the_provider_defaults_for_llm_nodes(team_with_resou
     """A scoped response still has to be enough to build the node on its own."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    scoped = client.get(reverse("api:v2:pipeline-options"), {"node_type": "LLMResponseWithPrompt"}).json()
+    scoped = client.get(reverse("api:v2:pipeline-node-options", args=["LLMResponseWithPrompt"])).json()
 
     assert "default_llm_provider" in scoped
     assert "llm_provider_id" in scoped
@@ -492,12 +503,12 @@ def test_scoped_options_keep_the_provider_defaults_for_llm_nodes(team_with_resou
         pytest.param("StartNode", "managed by the server", id="server-managed-type"),
     ],
 )
-def test_scoped_options_404_like_the_node_list(team_with_resources, node_type, expected_detail):
-    """A client walks both endpoints with the same type name, so an unusable name has to fail the
-    same way on each -- body included."""
+def test_scoped_options_404_like_the_node_detail(team_with_resources, node_type, expected_detail):
+    """A client walks both endpoints with the same type name in the path, so an unusable name has to
+    fail the same way on each -- body included."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    response = client.get(reverse("api:v2:pipeline-options"), {"node_type": node_type})
+    response = client.get(reverse("api:v2:pipeline-node-options", args=[node_type]))
 
     assert response.status_code == 404
     assert expected_detail in response.json()["detail"]
@@ -510,7 +521,7 @@ def test_a_node_type_that_references_nothing_scopes_to_an_empty_object(team_with
     different answer from "no such type"."""
     client = ApiTestClient(team_with_resources.members.first(), team_with_resources)
 
-    response = client.get(reverse("api:v2:pipeline-options"), {"node_type": "CodeNode"})
+    response = client.get(reverse("api:v2:pipeline-node-options", args=["CodeNode"]))
 
     assert response.status_code == 200
     assert response.json() == {}

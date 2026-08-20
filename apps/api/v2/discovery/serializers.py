@@ -44,7 +44,7 @@ class NodeTypeSerializer(serializers.Serializer):
 
 
 class NodeTypeNotFoundSerializer(serializers.Serializer):
-    """The body DRF renders for the `NotFound` raised on an unknown `type`."""
+    """The body DRF renders for the `NotFound` raised on a node type name nothing answers to."""
 
     detail = serializers.CharField()
     valid_types = serializers.ListField(
@@ -129,8 +129,8 @@ class DefaultLlmProviderSerializer(serializers.Serializer):
 
 class PipelineOptionsSerializer(serializers.Serializer):
     """The documented keys. Each holds the values for the node param of the same name. A response
-    carries a subset when `?node_type=` is given, and may carry keys not listed here as new node
-    params are added."""
+    from `/pipeline/options/{node_type}/` carries a subset, and any response may carry keys not
+    listed here as new node params are added."""
 
     llm_provider_id = ProviderOptionSerializer(many=True, required=False)
     llm_provider_model_id = LlmProviderModelOptionSerializer(many=True, required=False)
@@ -164,7 +164,7 @@ class PipelineOptionsSerializer(serializers.Serializer):
             "The variables a Jinja param may reference, written double-braced -- `{{input}}`. Covers "
             "`RenderTemplate`'s `template_string` and `SendEmail`'s `recipient_list`, `subject` and "
             "`body`. Distinct from the two prompt lists in both content and syntax: those are "
-            "single-braced. Use `?node_type=` to get the list that applies."
+            "single-braced. Fetch `/pipeline/options/{node_type}/` to get the list that applies."
         ),
     )
     llm_prompt_variables = PromptVariableSerializer(
