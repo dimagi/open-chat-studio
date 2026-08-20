@@ -228,6 +228,12 @@ paths:
                       remote_id: abc
                   summary: Session started with specific version
           description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatAccessDenied'
+          description: ''
   /api/experiments/:
     get:
       operationId: experiment_list
@@ -1060,6 +1066,17 @@ components:
       required:
       - attachments
       - response
+    ChatAccessDenied:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Always `chat_access_denied`.
+      required:
+      - code
+      - error
     ChatCompletionResponseChoices:
       type: object
       properties:

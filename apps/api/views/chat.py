@@ -385,7 +385,19 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
     summary="Start a new chat session for a widget",
     tags=["Chat"],
     request=ChatStartSessionRequest,
-    responses={201: ChatStartSessionResponse},
+    responses={
+        201: ChatStartSessionResponse,
+        # Every admission failure at this door shares one body and one code, so a caller probing
+        # for which check failed learns nothing. Session-authenticated callers keep their 403
+        # (ADR-0053); a 401 at an authenticated caller would read as a broken session.
+        401: inline_serializer(
+            "ChatAccessDenied",
+            {
+                "error": serializers.CharField(),
+                "code": serializers.CharField(help_text="Always `chat_access_denied`."),
+            },
+        ),
+    },
     # auth=["{}"],
     examples=[
         OpenApiExample(
