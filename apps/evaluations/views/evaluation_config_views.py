@@ -313,6 +313,9 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         # Show progress if pending/processing, otherwise show results table
         if evaluation_run.status in (EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING):
             context["celery_job_id"] = evaluation_run.job_id
+            # Explicit None (not just absent) so the template's `default_if_none` can tell
+            # "no count yet" from a terminal run that legitimately has zero results.
+            context["total_results"] = None
         else:
             table_url = reverse(
                 "evaluations:evaluation_results_table",

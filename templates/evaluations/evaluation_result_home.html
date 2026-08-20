@@ -61,7 +61,7 @@
       <div class="card card-border bg-base-100">
         <div class="card-body p-4">
           <span class="text-xs uppercase tracking-wide text-base-content/60">Total results</span>
-          <div class="text-3xl font-bold mt-2">{{ total_results|default:"—" }}</div>
+          <div class="text-3xl font-bold mt-2">{{ total_results|default_if_none:"—" }}</div>
         </div>
       </div>
       <div class="card card-border bg-base-100">
