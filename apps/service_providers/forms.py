@@ -463,11 +463,25 @@ class LangfuseTraceProviderForm(ObfuscatingMixin, ProviderTypeConfigForm):
         return instance
 
 
+# `PricingRule.unit_price` is numeric(14, 8) and stores the *per-1K* rate, so the
+# per-million input has to fit that domain once divided by 1000: at most 6 whole
+# digits and 8 decimal places after the conversion. Without these bounds a large
+# value overflows the column (a DataError inside the insert's atomic block, so a
+# 500), and a 6th decimal place silently rounds to a $0 rate in Postgres.
+_MAX_PRICE_PER_MILLION = Decimal("999999999.99999")
+
+
 def _price_per_million_field(label):
     """Per-million-token decimal field used by both the custom-model creation
     form and the team-scoped pricing-override form. Single source of truth
-    for the (required, min_value, decimal_places) contract."""
-    return forms.DecimalField(label=label, required=False, min_value=Decimal("0"), decimal_places=6)
+    for the (required, min_value, max_value, decimal_places) contract."""
+    return forms.DecimalField(
+        label=label,
+        required=False,
+        min_value=Decimal("0"),
+        max_value=_MAX_PRICE_PER_MILLION,
+        decimal_places=5,
+    )
 
 
 class LlmProviderModelForm(forms.ModelForm):

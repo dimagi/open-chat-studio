@@ -96,6 +96,26 @@ class TestPricingOverride:
         assert response["HX-Reswap"] == "innerHTML"
         assert b"Set at least one rate." in response.content
 
+    @pytest.mark.parametrize(
+        "price",
+        [
+            pytest.param("1000000000", id="overflows-unit-price-whole-digits"),
+            pytest.param("0.000001", id="more-precision-than-unit-price-holds"),
+        ],
+    )
+    def test_rejects_prices_outside_the_unit_price_domain(self, price):
+        """`unit_price` is numeric(14, 8) holding the per-1K rate. Values that do not
+        survive the /1000 conversion have to fail form validation: reaching the insert
+        would either raise a DataError (500) or silently round the rate to $0."""
+        team = TeamWithUsersFactory.create()
+        model = _custom_model(team, name="test-pe")
+        url = reverse("service_providers:pricing_override", kwargs={"team_slug": team.slug, "pk": model.id})
+
+        response = _client_for(team).post(url, {"input_price_per_million_tokens": price})
+
+        assert response.status_code == 400
+        assert not PricingRule.objects.filter(team=team, model_name="test-pe").exists()
+
 
 @pytest.mark.django_db()
 class TestPricingRevert:
@@ -150,6 +170,25 @@ class TestCreateModelWithPricing:
         kinds = {r.service_kind: r.unit_price for r in rules}
         assert kinds[ServiceKind.LLM_INPUT] == Decimal("0.00250000")
         assert kinds[ServiceKind.LLM_OUTPUT] == Decimal("0.01000000")
+
+    def test_rejects_price_that_overflows_unit_price(self):
+        """A price too large for `unit_price` must fail validation rather than reach
+        the insert, where it would 500 from inside the atomic block."""
+        team = TeamWithUsersFactory.create()
+        url = reverse("service_providers:llm_provider_model_new", kwargs={"team_slug": team.slug})
+
+        response = _client_for(team).post(
+            url,
+            {
+                "type": "openai",
+                "name": "test-create-overflow",
+                "max_token_limit": "128000",
+                "input_price_per_million_tokens": "1000000000",
+            },
+        )
+
+        assert response.status_code == 400
+        assert not LlmProviderModel.objects.filter(team=team, name="test-create-overflow").exists()
 
 
 @pytest.mark.django_db()
