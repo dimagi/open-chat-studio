@@ -130,9 +130,12 @@
                 {# Mirrors generic/help.html; inlined because the card list is rendered by Alpine, not Django. #}
                 <template x-if="stat.tooltip">
                   <div class="dropdown dropdown-top dropdown-hover">
-                    <div role="button" class="btn btn-circle btn-ghost btn-xs text-info">
-                      <i class="text-xs fa-regular fa-circle-question"></i>
-                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-circle btn-ghost btn-xs text-info"
+                      aria-label="{% translate 'More information' %}">
+                      <i class="text-xs fa-regular fa-circle-question" aria-hidden="true"></i>
+                    </button>
                     <div
                       tabindex="0"
                       class="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
