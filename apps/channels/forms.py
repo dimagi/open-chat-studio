@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import secrets
+from datetime import timedelta
 from functools import cached_property
 
 import phonenumbers
@@ -627,6 +628,11 @@ class WidgetParams(forms.Widget):
         return context
 
 
+# Floor for the per-channel session lifetime override: anything shorter would make every
+# session on the channel dead on arrival.
+MIN_SESSION_TOKEN_LIFETIME = timedelta(minutes=5)
+
+
 class EmbeddedWidgetChannelForm(ExtraFormBase):
     allow_all_domains = forms.BooleanField(
         label="Allow all domains", required=False, help_text="Allow access from any domain."
@@ -648,6 +654,17 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         help_text="Enter the domains where this widget is allowed to be embedded (one per line).",
     )
 
+    session_token_lifetime = forms.DurationField(
+        label="Session lifetime",
+        required=False,
+        help_text=(
+            "How long a chat session stays usable after it is created. Activity does not extend it. "
+            "Leave blank to use the system default. Format <code>HH:MM:SS</code>, or "
+            "<code>D HH:MM:SS</code> for days — e.g. <code>12:00:00</code> or <code>2 00:00:00</code>."
+        ),
+        widget=forms.TextInput(attrs={"placeholder": "e.g. 12:00:00"}),
+    )
+
     widget_token = forms.CharField(
         label="Widget Configuration",
         required=False,
@@ -657,7 +674,16 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # `initial` is the channel's own extra_data dict (see ExperimentChannel.extra_form), so
+        # seed a copy: the values this form puts there — a timedelta among them — must never
+        # reach the JSON column.
+        self.initial = dict(self.initial)
+        # A real column rather than extra_data, so it round-trips through the instance
+        # rather than through the config dict the other fields on this form become. Seeded
+        # from the channel so a post_save that runs without clean() cannot silently clear it.
+        self._session_token_lifetime = self.channel.session_token_lifetime if self.channel else None
         if self.channel:
+            self.initial["session_token_lifetime"] = self.channel.session_token_lifetime
             allowed_domains = self.channel.extra_data.get("allowed_domains", [])
             self.initial["allowed_domains"] = [domain for domain in allowed_domains if domain != ALL_DOMAINS]
             if not self.is_bound:
@@ -681,9 +707,24 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         self.fields["allow_all_domains"].widget.attrs["x-model.boolean"] = "allowAllDomains"
         self.fields["allowed_domains"].widget.attrs[":disabled"] = "allowAllDomains === true"
 
+    @staticmethod
+    def _pop_session_token_lifetime(cleaned_data):
+        """Take the lifetime out of `cleaned_data`, which becomes the channel's extra_data.
+
+        It has a column of its own, so it must not also land in the JSON blob — the same
+        reason `allow_all_domains` is popped.
+        """
+        lifetime = cleaned_data.pop("session_token_lifetime", None)
+        if lifetime is not None and lifetime < MIN_SESSION_TOKEN_LIFETIME:
+            # A lifetime this short makes every session on the channel dead on arrival.
+            raise ValidationError({"session_token_lifetime": "The session lifetime must be at least 5 minutes."})
+        return lifetime
+
     def clean(self):
         """Generate or preserve the widget token"""
         cleaned_data = super().clean()
+
+        self._session_token_lifetime = self._pop_session_token_lifetime(cleaned_data)
 
         allow_all_domains = cleaned_data.pop("allow_all_domains", False)
         if not allow_all_domains and not cleaned_data.get("allowed_domains"):
@@ -704,6 +745,9 @@ class EmbeddedWidgetChannelForm(ExtraFormBase):
         return cleaned_data
 
     def post_save(self, channel: ExperimentChannel):
+        if channel.session_token_lifetime != self._session_token_lifetime:
+            channel.session_token_lifetime = self._session_token_lifetime
+            channel.save(update_fields=["session_token_lifetime"])
         self.success_message = "Channel saved successfully"
 
 

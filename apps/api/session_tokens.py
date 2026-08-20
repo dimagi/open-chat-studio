@@ -35,5 +35,14 @@ def session_token_expired(session: ExperimentSession) -> bool:
     The lifetime is absolute: activity does not extend it, so an admitted caller's
     access is bounded no matter how much they talk. Once it fires the caller must
     start a new session and be re-admitted under whatever rules apply then.
+
+    The session's channel may override the global, because the modes want different
+    values: a mid-conversation restart on a public widget is pure UX cost, while a
+    channel exposed for abuse-resistance wants it tight. Null means "use the global" —
+    there is no "off", since without the lifetime a session would never expire at all.
     """
-    return timezone.now() - session.created_at > settings.CHAT_SESSION_TOKEN_LIFETIME
+    channel = session.experiment_channel
+    lifetime = channel.session_token_lifetime if channel else None
+    if lifetime is None:
+        lifetime = settings.CHAT_SESSION_TOKEN_LIFETIME
+    return timezone.now() - session.created_at > lifetime
