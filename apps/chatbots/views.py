@@ -21,6 +21,7 @@ from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.session_tokens import issue_session_token
+from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
@@ -657,6 +658,12 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         messages.error(request, "Cannot create a new session from a web session.")
         return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
+    if experiment_channel.is_disabled:
+        # Checked before ending the old session, so a refusal leaves the participant where they were.
+        platform_label = experiment_channel.get_platform_display()
+        messages.error(request, f"Cannot create a new session: the {platform_label} channel is disabled.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
+
     _end_session_from_request(old_session, request)
 
     experiment = old_session.experiment
@@ -664,13 +671,19 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
 
     # Create new session using the same channel as the old session
     channel_cls = get_channel_class_for_platform(experiment_channel.platform)
-    new_session = channel_cls.start_new_session(
-        working_experiment=experiment,
-        participant_identifier=participant.identifier,
-        participant_user=participant.user,
-        session_status=SessionStatus.ACTIVE,
-        experiment_channel=experiment_channel,
-    )
+    try:
+        new_session = channel_cls.start_new_session(
+            working_experiment=experiment,
+            participant_identifier=participant.identifier,
+            participant_user=participant.user,
+            session_status=SessionStatus.ACTIVE,
+            experiment_channel=experiment_channel,
+        )
+    except ChannelDisabledException:
+        # Switched off between the check above and here. The old session is already ended, so
+        # say so plainly rather than 500 after a destructive step.
+        messages.error(request, "The channel was disabled while creating the new session.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
     send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
 
@@ -730,13 +743,17 @@ def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid
 @login_and_team_required
 def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_user=request.user,
-        participant_identifier=request.user.email,
-        timezone=request.session.get("detected_tz", None),
-        version=version_number,
-    )
+    try:
+        session = WebChannel.start_new_session(
+            working_experiment=experiment,
+            participant_user=request.user,
+            participant_identifier=request.user.email,
+            timezone=request.session.get("detected_tz", None),
+            version=version_number,
+        )
+    except ChannelDisabledException:
+        messages.error(request, "The web channel is disabled, so no new chat sessions can be started.")
+        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
     return HttpResponseRedirect(
         reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
     )
@@ -765,15 +782,21 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                 participant_email = post_form.cleaned_data["email"]
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
-                with transaction.atomic():
-                    session = WebChannel.start_new_session(
-                        chatbot,
-                        participant_identifier=post_form.cleaned_data["email"],
-                        session_status=SessionStatus.SETUP,
-                        timezone=request.session.get("detected_tz", None),
-                    )
-                if post_form.cleaned_data["invite_now"]:
-                    send_experiment_invitation(session)
+                try:
+                    with transaction.atomic():
+                        session = WebChannel.start_new_session(
+                            chatbot,
+                            participant_identifier=post_form.cleaned_data["email"],
+                            session_status=SessionStatus.SETUP,
+                            timezone=request.session.get("detected_tz", None),
+                        )
+                except ChannelDisabledException:
+                    # Inviting someone to a channel that will not talk to them is worse than
+                    # refusing the invite.
+                    messages.error(request, "The web channel is disabled, so invitations cannot be sent.")
+                else:
+                    if post_form.cleaned_data["invite_now"]:
+                        send_experiment_invitation(session)
         else:
             form = post_form
 
