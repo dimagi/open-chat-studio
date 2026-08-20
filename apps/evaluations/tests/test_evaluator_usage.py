@@ -148,8 +148,9 @@ def test_judge_call_writes_usage_records(get_llm_service, llm_provider, llm_prov
     assert input_row.confidence == Confidence.EXACT
     # 1000 tokens / 1000 * $0.00015
     assert input_row.cost == Decimal("0.00015000")
-    # The run id lives in `extra` because runs get pruned; the config is the FK.
-    assert input_row.extra == {"evaluation_run_id": run.id}
+    # The run id lives in `extra` because runs get pruned; the config is the FK. The
+    # evaluator id lives there too, for the run detail page's per-evaluator breakdown.
+    assert input_row.extra == {"evaluation_run_id": run.id, "evaluator_id": evaluator.id}
     # 500 tokens / 1000 * $0.00060
     assert rows[ServiceKind.LLM_OUTPUT].cost == Decimal("0.00030000")
     # Judge calls never carry a trace, and with no generation experiment there's nothing
@@ -194,6 +195,32 @@ def test_usage_context_links_generation_experiment_working_version():
         experiment_id=working.id,
         session_id=42,
     )
+
+
+@pytest.mark.django_db()
+def test_usage_context_for_carries_evaluator_id():
+    """`_usage_context_for` threads the evaluator id through so judge-call usage can be
+    broken down per evaluator on the run detail page."""
+    config = cast(EvaluationConfig, EvaluationConfigFactory.create())
+    run = EvaluationRun.objects.create(team=config.team, config=config)
+    evaluator = EvaluatorFactory.create(team=config.team)
+
+    context = _usage_context_for(run, session_id=None, evaluator_id=evaluator.id)
+
+    assert context.evaluator_id == evaluator.id
+
+
+@pytest.mark.django_db()
+def test_evaluator_id_omitted_from_extra_when_not_set(team):
+    """A context built without an evaluator id (e.g. bot generation) stamps only the
+    run id, so `evaluator_id is None` in `extra` reads as "no evaluator" downstream."""
+    context = EvaluatorUsageContext(team_id=team.id, evaluation_run_id=7)
+
+    with track_evaluator_usage(context) as callbacks:
+        _emit_usage(callbacks[0])
+
+    row = UsageRecord.objects.get(service_kind=ServiceKind.LLM_INPUT)
+    assert row.extra == {"evaluation_run_id": 7}
 
 
 @pytest.mark.django_db()

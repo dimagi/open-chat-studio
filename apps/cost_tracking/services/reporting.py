@@ -1,13 +1,12 @@
-"""Read path for cost tracking. The dashboard, REST endpoints, and weekly
-digest all consume this. Aggregations are single-query where possible,
-team-scoped, and hit the `(team, timestamp)` / `(team, experiment, timestamp)`
-indexes.
+"""Read path for cost tracking. The dashboard, REST endpoints, weekly digest, and the
+evaluations UI all consume this. Aggregations are single-query, team-scoped, and hit
+the `(team, timestamp)` / `(team, experiment, timestamp)` indexes.
 """
 
 import logging
 import math
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -18,6 +17,7 @@ from django.db.models.functions import Coalesce, TruncDate, TruncMonth, TruncWee
 from django.utils import timezone
 
 from apps.cost_tracking.models import Confidence, ServiceKind, UsageRecord, UsageSource
+from apps.evaluations.models import EvaluationConfig, EvaluationRun, Evaluator
 from apps.experiments.models import Experiment, ExperimentSession
 from apps.teams.models import Team
 from apps.trace.models import Trace
@@ -617,6 +617,208 @@ def session_usage(session: ExperimentSession) -> SessionUsage:
         has_estimated=any(row.has_estimated for row in by_model),
         has_unknown=any(row.has_unknown for row in by_model),
         by_model=by_model,
+    )
+
+
+@dataclass(frozen=True)
+class EvaluationModelSpend:
+    """One (provider, model) row of an evaluation run's cost breakdown."""
+
+    provider_type: str
+    model_name: str
+    cost: Decimal
+    tokens: int
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
+
+
+@dataclass(frozen=True)
+class EvaluatorSpend:
+    """One row of a run's cost broken down by what incurred it: an evaluator's judge
+    calls, or (`evaluator_id=None`) the bot generation the run drove."""
+
+    evaluator_id: int | None
+    evaluator_name: str
+    cost: Decimal
+    tokens: int
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
+
+
+@dataclass(frozen=True)
+class EvaluationRunCost:
+    """One evaluation run's cost: the total plus two breakdowns of the same rows —
+    by (provider, model) and by what incurred the spend (an evaluator, or generation)."""
+
+    total_cost: Decimal
+    total_tokens: int
+    currency: str
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
+    by_evaluator: list[EvaluatorSpend] = field(default_factory=list)
+    by_model: list[EvaluationModelSpend] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class EvaluationPeriodCost:
+    """One window's worth of `EvaluationConfigCostSummary` — cost plus the same
+    confidence flags as `EvaluationRunCost`, scoped to that window rather than a run."""
+
+    total_cost: Decimal
+    has_unpriced: bool
+    has_estimated: bool
+    has_unknown: bool
+
+
+@dataclass(frozen=True)
+class EvaluationConfigCostSummary:
+    """Aggregate spend across every run of one evaluation config, for the config page:
+    last 30 days and all time, each with its own confidence flags since a model priced
+    today may have been unpriced (or estimated) 45 days ago."""
+
+    last_30_days: EvaluationPeriodCost
+    all_time: EvaluationPeriodCost
+    currency: str
+
+
+def evaluation_run_cost(run: EvaluationRun) -> EvaluationRunCost:
+    """Total cost for one evaluation run, broken down by (provider, model) and by
+    evaluator. Both breakdowns and the currency are grouped/aggregated in the DB;
+    only the totals — a sum/any() over a handful of already-aggregated model rows —
+    happen in Python.
+
+    Scoped by the indexed `evaluation_config` FK first; `extra.evaluation_run_id` (a
+    JSON key, not a FK, since runs get pruned) narrows to the run within that. Every row
+    scoped this way is `source=EVALUATION` by construction (`evaluation_config` is only
+    ever set on evaluation rows), so this needs none of the source filtering the team-scoped
+    reads above apply (ADR-0048) — it's already narrowed to exactly the evaluation spend
+    the run detail page wants to show.
+    """
+    scoped = UsageRecord.objects.filter(evaluation_config_id=run.config_id, extra__evaluation_run_id=run.id)
+    currency = _single_currency(scoped)
+
+    model_rows = (
+        scoped.values("provider_type", "model_name")
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
+            estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+            unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
+        )
+        .order_by("-cost")
+    )
+    by_model = [
+        EvaluationModelSpend(
+            provider_type=row["provider_type"],
+            model_name=row["model_name"],
+            cost=row["cost"],
+            tokens=int(row["tokens"]),
+            has_unpriced=bool(row["unpriced_count"]),
+            has_estimated=bool(row["estimated_count"]),
+            has_unknown=bool(row["unknown_count"]),
+        )
+        for row in model_rows
+    ]
+
+    evaluator_rows = list(
+        scoped.values("extra__evaluator_id")
+        .annotate(
+            cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+            tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD),
+            unpriced_count=Count("id", filter=Q(pricing_rule__isnull=True)),
+            estimated_count=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+            unknown_count=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
+        )
+        .order_by("-cost")
+    )
+    evaluator_ids = [row["extra__evaluator_id"] for row in evaluator_rows if row["extra__evaluator_id"] is not None]
+    evaluator_names = dict(Evaluator.objects.filter(id__in=evaluator_ids).values_list("id", "name"))
+    by_evaluator = [
+        EvaluatorSpend(
+            evaluator_id=row["extra__evaluator_id"],
+            evaluator_name=(
+                evaluator_names.get(row["extra__evaluator_id"], f"Evaluator {row['extra__evaluator_id']}")
+                if row["extra__evaluator_id"] is not None
+                else "Bot generation"
+            ),
+            cost=row["cost"],
+            tokens=int(row["tokens"]),
+            has_unpriced=bool(row["unpriced_count"]),
+            has_estimated=bool(row["estimated_count"]),
+            has_unknown=bool(row["unknown_count"]),
+        )
+        for row in evaluator_rows
+    ]
+
+    return EvaluationRunCost(
+        total_cost=sum((row.cost for row in by_model), _ZERO),
+        total_tokens=sum(row.tokens for row in by_model),
+        currency=currency,
+        has_unpriced=any(row.has_unpriced for row in by_model),
+        has_estimated=any(row.has_estimated for row in by_model),
+        has_unknown=any(row.has_unknown for row in by_model),
+        by_evaluator=by_evaluator,
+        by_model=by_model,
+    )
+
+
+def evaluation_run_costs(config_id: int, run_ids: list[int]) -> dict[int, Decimal]:
+    """Total cost per run, keyed by run id, for a page of runs in one config.
+
+    Filters on both the indexed `evaluation_config` FK and `extra.evaluation_run_id__in`,
+    so the GROUP BY is bounded to the runs asked for rather than the whole config's
+    history — every row the query touches already has its run id in `run_ids`, so no
+    further filtering is needed once the rows come back.
+    """
+    if not run_ids:
+        return {}
+    rows = (
+        UsageRecord.objects.filter(evaluation_config_id=config_id, extra__evaluation_run_id__in=run_ids)
+        .values("extra__evaluation_run_id")
+        .annotate(cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD))
+        .order_by()
+    )
+    return {row["extra__evaluation_run_id"]: row["cost"] for row in rows}
+
+
+def evaluation_config_cost_summary(config: EvaluationConfig) -> EvaluationConfigCostSummary:
+    """Aggregate spend across every run of one config: last 30 days and all time, each
+    with its own confidence flags (mirrors `cost_summary`'s per-period counters).
+
+    Single aggregate query — a cost sum plus three confidence counts per period — over
+    the indexed `evaluation_config` FK.
+    """
+    qs = UsageRecord.objects.filter(evaluation_config_id=config.id)
+    recent_q = Q(timestamp__gte=timezone.now() - timedelta(days=30))
+    agg = qs.aggregate(
+        all_time_cost=Coalesce(Sum("cost"), _ZERO, output_field=_COST_FIELD),
+        all_time_unpriced=Count("id", filter=Q(pricing_rule__isnull=True)),
+        all_time_estimated=Count("id", filter=Q(confidence=Confidence.ESTIMATED)),
+        all_time_unknown=Count("id", filter=Q(confidence=Confidence.UNKNOWN)),
+        last_30_days_cost=Coalesce(Sum("cost", filter=recent_q), _ZERO, output_field=_COST_FIELD),
+        last_30_days_unpriced=Count("id", filter=recent_q & Q(pricing_rule__isnull=True)),
+        last_30_days_estimated=Count("id", filter=recent_q & Q(confidence=Confidence.ESTIMATED)),
+        last_30_days_unknown=Count("id", filter=recent_q & Q(confidence=Confidence.UNKNOWN)),
+    )
+    currency = _single_currency(qs)
+    return EvaluationConfigCostSummary(
+        last_30_days=EvaluationPeriodCost(
+            total_cost=agg["last_30_days_cost"],
+            has_unpriced=bool(agg["last_30_days_unpriced"]),
+            has_estimated=bool(agg["last_30_days_estimated"]),
+            has_unknown=bool(agg["last_30_days_unknown"]),
+        ),
+        all_time=EvaluationPeriodCost(
+            total_cost=agg["all_time_cost"],
+            has_unpriced=bool(agg["all_time_unpriced"]),
+            has_estimated=bool(agg["all_time_estimated"]),
+            has_unknown=bool(agg["all_time_unknown"]),
+        ),
+        currency=currency,
     )
 
 
