@@ -6,9 +6,11 @@ that will use them (#4140-#4145), so they are exercised directly here.
 
 import pytest
 from django.http import Http404
+from rest_framework.exceptions import PermissionDenied
 
 from apps.api.permissions import ReadOnlyAPIKeyPermission
 from apps.api.v2.write.base import ChatbotCompositionPermission, ChatbotWriteMixin
+from apps.oauth.models import OAuth2AccessToken
 from apps.teams.backends import CHAT_VIEWER_GROUP, CHATBOT_ADMIN_GROUP, add_user_to_team, create_default_groups
 from apps.teams.utils import set_current_team, unset_current_team
 from apps.utils.factories.experiment import ChatbotFactory, ExperimentFactory
@@ -18,11 +20,12 @@ from apps.utils.tests.clients import ApiTestClient
 
 
 class _FakeRequest:
-    def __init__(self, user, team, method="DELETE"):
+    def __init__(self, user, team, method="DELETE", auth=None):
         self.user = user
         self.team = team
         self.method = method
-        self.auth = object()  # not an OAuth2AccessToken, so not a machine token
+        # Default is deliberately not an OAuth2AccessToken, so the request is not a machine token.
+        self.auth = auth if auth is not None else object()
 
 
 @pytest.fixture()
@@ -143,3 +146,61 @@ def test_patch_requires_change_experiment(team_with_roles, group, allowed):
     )
 
     assert response.status_code == (200 if allowed else 403), response.content
+
+
+def _machine_write_client(team, allowed_chatbots=None):
+    """A machine (client-credentials) client holding chatbots:write.
+
+    The app owner is deliberately a non-member of the team, matching
+    `apps/api/tests/test_application_chatbot_allowlist.py`: authorization must rest on the scope and
+    the allowlist, never on a membership row.
+    """
+    return ApiTestClient(
+        UserFactory.create(),
+        team,
+        auth_method="oauth_client_credentials",
+        scopes=["chatbots:write"],
+        allowed_chatbots=allowed_chatbots,
+    )
+
+
+# The allowed case is `test_machine_token_can_patch` in test_chatbot_patch.py; only the refusals
+# live here. `application_allows_chatbot` filters on the chatbot's pk, so an empty allowlist and one
+# naming a different chatbot are the same code path -- one refusal case covers both.
+@pytest.mark.django_db()
+def test_patch_refuses_an_unlisted_chatbot(team_with_roles):
+    chatbot = ChatbotFactory.create(team=team_with_roles)
+    client = _machine_write_client(team_with_roles, allowed_chatbots=[])
+
+    response = client.patch(f"/api/v2/chatbots/{chatbot.public_id}/", {"name": "Nope"}, format="json")
+
+    assert response.status_code == 403, response.content
+    chatbot.refresh_from_db()
+    assert chatbot.name != "Nope"
+
+
+@pytest.mark.django_db()
+def test_create_is_not_gated_by_the_allowlist(team_with_roles):
+    """A new chatbot has no id yet, so it cannot be on any allowlist. Gating POST would leave a
+    machine token unable to create one at all -- an asymmetry that reads as an oversight without
+    this test to say it was deliberate."""
+    response = _machine_write_client(team_with_roles, allowed_chatbots=[]).post(
+        "/api/v2/chatbots/", {"name": "Bootstrapped"}, format="json"
+    )
+
+    assert response.status_code == 201, response.content
+
+
+@pytest.mark.django_db()
+def test_get_chatbot_enforces_the_allowlist_for_every_sub_resource(team_with_roles):
+    """The gate lives in `get_chatbot` so the sub-resources in #4140-#4145 inherit it. Enforcing it
+    per view instead would mean each new endpoint is one forgotten call away from an ungated write."""
+    chatbot = ChatbotFactory.create(team=team_with_roles)
+    # A real OAuth2AccessToken on a client-credentials application: `is_client_credentials_request`
+    # inspects the token's grant type, so a stub would test the branch's existence, not the branch.
+    client = _machine_write_client(team_with_roles, allowed_chatbots=[])
+    token = OAuth2AccessToken.objects.get(application=client.application)
+    view = _View(_FakeRequest(user=None, team=team_with_roles, method="PATCH", auth=token), chatbot.public_id)
+
+    with pytest.raises(PermissionDenied):
+        view.get_chatbot()

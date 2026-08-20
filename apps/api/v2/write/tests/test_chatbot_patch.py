@@ -320,12 +320,18 @@ def test_oauth_token_without_the_write_scope_cannot_patch(chatbot):
 @pytest.mark.django_db()
 def test_machine_token_can_patch(chatbot):
     """A client-credentials token has no user, so every user-derived permission gate defers to the
-    OAuth scope. That path is what a headless agent uses, and only create was covering it."""
+    OAuth scope. That path is what a headless agent uses, and only create was covering it.
+
+    The application has to be pinned to this chatbot: the scope alone is not enough, since the
+    allowlist is the finer boundary for a credential with no user behind it. The refusal case lives
+    in `test_auth.py` alongside the rest of the authorization gates.
+    """
     client = ApiTestClient(
         chatbot.team.members.first(),
         chatbot.team,
         auth_method="oauth_client_credentials",
         scopes=["chatbots:write"],
+        allowed_chatbots=[chatbot],
     )
 
     response = client.patch(_url(chatbot), {"name": "Headless edit"}, format="json")

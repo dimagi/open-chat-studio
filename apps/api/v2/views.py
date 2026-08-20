@@ -1,6 +1,6 @@
 from django.db import transaction
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
@@ -20,7 +20,7 @@ from apps.api.v2.write.serializers import (
     ChatbotDetailSerializer,
     ChatbotWriteSerializer,
 )
-from apps.oauth.permissions import TokenHasOAuthResourceScope
+from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 from apps.teams.models import Team
 
 
@@ -156,7 +156,17 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             ),
         ],
         request=ChatbotWriteSerializer,
-        responses={200: ChatbotDetailSerializer},
+        responses={
+            200: ChatbotDetailSerializer,
+            403: OpenApiResponse(
+                description=(
+                    "The caller is authenticated but not authorised to modify this chatbot: either "
+                    "its role lacks permission to change chatbots, or it is a machine "
+                    "(client-credentials) token whose application is not authorised for this "
+                    "chatbot. Retrying will not help; the application's chatbot list has to change."
+                )
+            ),
+        },
     )
     def partial_update(self, request, *args, **kwargs):
         with transaction.atomic():
@@ -165,6 +175,10 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
             # API writes only: ChatbotSettingsForm.save() takes no lock, so a settings-page save
             # racing a PATCH can still clobber. Locking the form too is the fix, if that matters.
             chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
+            # A machine token reaches only the chatbots its application was pinned to. Checked after
+            # resolution because the allowlist is keyed on the chatbot, and before any write, so the
+            # refusal costs nothing but the lock this block releases on the way out.
+            enforce_application_chatbot_write(request, chatbot)
             serializer = ChatbotWriteSerializer(
                 chatbot, data=request.data, partial=True, context=self.get_serializer_context()
             )

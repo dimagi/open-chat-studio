@@ -73,7 +73,7 @@ def is_client_credentials_request(request) -> bool:
 
 
 def application_allows_chatbot(request, experiment) -> bool:
-    """True when the request may start a chat with `experiment`.
+    """True when the request is authorised for `experiment` at all -- to chat with it or to edit it.
 
     Only client-credentials (machine) applications are pinned to a set of chatbots: their token is
     handed to a machine (and, for the chat widget, to a browser) with no user behind it, so the team
@@ -97,6 +97,18 @@ def enforce_application_chatbot_access(request, experiment) -> None:
     """
     if not application_allows_chatbot(request, experiment):
         raise exceptions.PermissionDenied("This application is not authorized to interact with this chatbot.")
+
+
+def enforce_application_chatbot_write(request, experiment) -> None:
+    """Raise `PermissionDenied` unless the request may modify `experiment`'s configuration.
+
+    Same allowlist as the chat path, different message: reconfiguring a chatbot is at least as
+    sensitive as conversing with it, so a machine token reaches only the chatbots it was pinned to.
+    Creating a chatbot is deliberately *not* gated -- a chatbot that does not exist yet cannot be on
+    any allowlist, so gating it would leave a machine token unable to bootstrap one.
+    """
+    if not application_allows_chatbot(request, experiment):
+        raise exceptions.PermissionDenied("This application is not authorized to modify this chatbot.")
 
 
 class TokenHasOAuthScope(TokenHasScope):

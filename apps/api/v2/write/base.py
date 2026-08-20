@@ -6,7 +6,7 @@ Ships ahead of the sub-resource views that consume it (#4140-#4145).
 from apps.api.permissions import BASE_PERMISSION_CLASSES, RequiresTeamPermission
 from apps.api.v2.lookups import get_working_chatbot, request_team
 from apps.experiments.models import Experiment
-from apps.oauth.permissions import TokenHasOAuthResourceScope
+from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
 
 
 class ChatbotCompositionPermission(RequiresTeamPermission):
@@ -42,5 +42,12 @@ class ChatbotWriteMixin:
         Resolved through ``request_team`` rather than ``self.request.team``, which is ``None``
         whenever DRF hands a view a ``clone_request`` -- OPTIONS metadata being the path that
         already caught out the top-level viewset.
+
+        The application allowlist is enforced here rather than in each view so a sub-resource cannot
+        forget it: every write under ``/chatbots/{id}/`` has to resolve its chatbot through this
+        method first. Composition edits are edits to the chatbot, so a machine token reaches only the
+        chatbots its application was pinned to.
         """
-        return get_working_chatbot(request_team(self.request), self.kwargs["id"])
+        chatbot = get_working_chatbot(request_team(self.request), self.kwargs["id"])
+        enforce_application_chatbot_write(self.request, chatbot)
+        return chatbot

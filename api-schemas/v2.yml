@@ -130,6 +130,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotDetail'
           description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
   /api/v2/chatbots/{id}/inspect/:
     get:
       operationId: chatbot_inspect
