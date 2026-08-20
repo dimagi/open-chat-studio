@@ -338,3 +338,34 @@ def test_messages_the_bot_does_not_answer_are_not_counted(bolt_context, rate_lim
         new_message(CHANNEL_MESSAGE_EVENT, bolt_context)
 
     assert _would_block_records(rate_limit_logs) == []
+
+
+@pytest.mark.django_db()
+def test_disabled_channel_replies_with_the_static_message(bolt_context, experiment_channel):
+    """A new thread has no session yet, so the pipeline -- and its ChannelDisabledStage -- never
+    runs. The listener has to mirror that stage itself."""
+    experiment_channel.enabled = False
+    experiment_channel.disabled_message = "The bot is offline for maintenance"
+    experiment_channel.save()
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    new_message(BOT_MENTION_EVENT, bolt_context)
+
+    assert bolt_context.say.call_args_list == [
+        (("The bot is offline for maintenance",), {"thread_ts": BOT_MENTION_EVENT["ts"]})
+    ]
+    bolt_context.client.chat_postMessage.assert_not_called()
+    assert ExperimentSession.objects.count() == 0
+
+
+@pytest.mark.django_db()
+def test_disabled_channel_stays_silent_without_a_static_message(bolt_context, experiment_channel):
+    experiment_channel.enabled = False
+    experiment_channel.save()
+    bolt_context.client.chat_postMessage = MagicMock()
+
+    new_message(BOT_MENTION_EVENT, bolt_context)
+
+    assert bolt_context.say.call_args_list == []
+    bolt_context.client.chat_postMessage.assert_not_called()
+    assert ExperimentSession.objects.count() == 0

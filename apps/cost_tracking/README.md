@@ -54,8 +54,10 @@ Every surface reads through `services/reporting.py`; none of them are gated.
 - **Session detail** shows the session's tokens and cost, via `session_usage`. Team members only - a participant viewing their own session does not see spend.
 - **Participants table** carries a 30-day cost column, computed one page at a time (`UsageRecord` has no `(team, participant)` index, so the column is not sortable).
 - **Trace detail** shows per-model tokens and cost for the trace, via `trace_token_usage`.
+- **Evaluations UI** (`apps/evaluations/views/evaluation_config_views.py`): a Cost column on the run list, a per-evaluator/per-model breakdown on the run detail page, and a last-30-days/all-time summary on the config page. Reads `evaluation_run_cost`/`evaluation_run_costs`/`evaluation_config_cost_summary` below — the dedicated evaluation-scoped path, since the team-scoped reads above deliberately exclude evaluation spend from per-entity reads (ADR-0048).
 
 The chatbot home, session detail and trace detail widgets render the shared `templates/cost_tracking/_usage_summary.html`, so the cost figure and its confidence badge read identically across the three.
+
 
 ## Layout
 
@@ -73,5 +75,6 @@ apps/cost_tracking/
     pricing.py              PricingResolver + cache
     recorder.py             record_usage_bulk + UsageEvent / UsageContext
     estimation.py           tiktoken + response_text helpers
-    reporting.py            cost_summary, costs_by_experiment, coverage_gaps, cost_timeseries
+    reporting.py            cost_summary, costs_by_experiment, coverage_gaps, cost_timeseries,
+                             evaluation_run_cost, evaluation_run_costs, evaluation_config_cost_summary
 ```

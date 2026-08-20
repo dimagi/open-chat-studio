@@ -374,6 +374,13 @@ class ChannelDisabledStage(ProcessingStage):
     static ``disabled_message`` is configured it goes back to the user through the
     terminal stages; otherwise the pipeline halts silently.
 
+    This stage only sees traffic that reaches a pipeline. Sessions opened *before* any pipeline
+    runs are refused by ``start_experiment_session``; the routes that would otherwise create
+    participant records on the way there (widget and API session starts, the trigger-bot
+    endpoint, the public web chat, the Slack listener) check ``is_disabled`` themselves first.
+    Bot-initiated sends are refused by ``ad_hoc_bot_message`` and
+    ``ChannelBase.send_message_to_user``.
+
     It deliberately does *not* run first. Delivering the static message needs the same
     groundwork any other reply needs, so it sits behind the participant stages:
 

@@ -160,6 +160,7 @@ def test_evaluate_single_message_with_bot_generation(
             evaluation_config_id=config.id,
             experiment_id=experiment.get_working_version_id(),
             session_id=session_id,
+            evaluator_id=evaluator.id,
         ),
     )
 
@@ -189,7 +190,7 @@ def test_evaluate_single_message_handles_bot_generation_error(
         evaluation_message,
         "",
         usage_context=EvaluatorUsageContext(
-            team_id=run.team_id, evaluation_run_id=run.id, evaluation_config_id=run.config_id
+            team_id=run.team_id, evaluation_run_id=run.id, evaluation_config_id=run.config_id, evaluator_id=evaluator.id
         ),
     )
 

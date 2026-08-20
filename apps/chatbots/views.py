@@ -21,6 +21,7 @@ from waffle import flag_is_active
 
 from apps.annotations.prefetch import attach_chat_tagged_items
 from apps.api.session_tokens import issue_session_token
+from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
@@ -52,14 +53,13 @@ from apps.generics import actions
 from apps.generics.help import render_help_with_link
 from apps.generics.views import paginate_session, render_session_details
 from apps.pipelines.exceptions import has_errors
-from apps.pipelines.views import (
-    _pipeline_node_default_values,
-    _pipeline_node_parameter_values,
-    _pipeline_node_schemas,
-    get_widget_page_context,
-    llm_model_parameter_context,
+from apps.pipelines.nodes.node_metadata import (
+    get_node_default_values,
+    get_node_parameter_values,
+    get_node_schemas,
+    get_speakable_voices,
 )
-from apps.service_providers.models import LlmProvider, LlmProviderModel
+from apps.pipelines.views import get_widget_page_context, llm_model_parameter_context
 from apps.teams.decorators import login_and_team_required, team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.teams.models import Flag
@@ -353,8 +353,6 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        llm_providers = LlmProvider.objects.filter(team=self.request.team).values("id", "name", "type").all()
-        llm_provider_models = LlmProviderModel.objects.for_team(self.request.team).all()
         experiment = get_object_or_404(
             Experiment.objects.get_all().select_related("voice_provider", "pipeline"),
             id=kwargs["pk"],
@@ -365,22 +363,19 @@ class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateVi
             exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
             if flag_is_active(self.request, "flag_open_ai_voice_engine"):
                 exclude_services = []
-            synthetic_voices = SyntheticVoice.get_for_team(self.request.team, exclude_services=exclude_services)
-            synthetic_voices = synthetic_voices.filter(service__iexact=experiment.voice_provider.type)
+            # Only the experiment's own provider can speak, so the other providers' voices are not offered.
+            synthetic_voices = get_speakable_voices(
+                self.request.team, [experiment.voice_provider], exclude_services=exclude_services
+            )
 
         return {
             **data,
             "pipeline_id": experiment.pipeline_id,
-            "node_schemas": _pipeline_node_schemas(),
+            "node_schemas": get_node_schemas(),
             "experiment": experiment,
             "page_title": f"Edit {experiment.name}",
-            "parameter_values": _pipeline_node_parameter_values(
-                team=self.request.team,
-                llm_providers=llm_providers,
-                llm_provider_models=llm_provider_models,
-                synthetic_voices=synthetic_voices,
-            ),
-            "default_values": _pipeline_node_default_values(llm_providers, llm_provider_models),
+            "parameter_values": get_node_parameter_values(team=self.request.team, synthetic_voices=synthetic_voices),
+            "default_values": get_node_default_values(self.request.team),
             "origin": "chatbots",
             "allow_edit_name": False,
             "flags_enabled": [flag.name for flag in Flag.objects.all() if flag.is_active_for_team(self.request.team)],
@@ -651,6 +646,12 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
         messages.error(request, "Cannot create a new session from a web session.")
         return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
+    if experiment_channel.is_disabled:
+        # Checked before ending the old session, so a refusal leaves the participant where they were.
+        platform_label = experiment_channel.get_platform_display()
+        messages.error(request, f"Cannot create a new session: the {platform_label} channel is disabled.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
+
     _end_session_from_request(old_session, request)
 
     experiment = old_session.experiment
@@ -658,13 +659,19 @@ def new_chatbot_session(request, team_slug: str, experiment_id: uuid.UUID, sessi
 
     # Create new session using the same channel as the old session
     channel_cls = get_channel_class_for_platform(experiment_channel.platform)
-    new_session = channel_cls.start_new_session(
-        working_experiment=experiment,
-        participant_identifier=participant.identifier,
-        participant_user=participant.user,
-        session_status=SessionStatus.ACTIVE,
-        experiment_channel=experiment_channel,
-    )
+    try:
+        new_session = channel_cls.start_new_session(
+            working_experiment=experiment,
+            participant_identifier=participant.identifier,
+            participant_user=participant.user,
+            session_status=SessionStatus.ACTIVE,
+            experiment_channel=experiment_channel,
+        )
+    except ChannelDisabledException:
+        # Switched off between the check above and here. The old session is already ended, so
+        # say so plainly rather than 500 after a destructive step.
+        messages.error(request, "The channel was disabled while creating the new session.")
+        return redirect("chatbots:chatbot_session_view", team_slug, experiment_id, session_id)
 
     send_bot_message.delay(session_id=new_session.id, instruction_prompt=request.POST.get("prompt", "").strip())
 
@@ -724,13 +731,17 @@ def chatbot_session_pagination_view(request, team_slug: str, experiment_id: uuid
 @login_and_team_required
 def start_authed_web_session(request, team_slug: str, experiment_id: int, version_number: int):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
-    session = WebChannel.start_new_session(
-        working_experiment=experiment,
-        participant_user=request.user,
-        participant_identifier=request.user.email,
-        timezone=request.session.get("detected_tz", None),
-        version=version_number,
-    )
+    try:
+        session = WebChannel.start_new_session(
+            working_experiment=experiment,
+            participant_user=request.user,
+            participant_identifier=request.user.email,
+            timezone=request.session.get("detected_tz", None),
+            version=version_number,
+        )
+    except ChannelDisabledException:
+        messages.error(request, "The web channel is disabled, so no new chat sessions can be started.")
+        return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment_id)
     return HttpResponseRedirect(
         reverse("chatbots:chatbot_chat_session", args=[team_slug, experiment_id, version_number, session.id])
     )
@@ -759,15 +770,21 @@ def chatbot_invitations(request, team_slug: str, experiment_id: int):
                 participant_email = post_form.cleaned_data["email"]
                 messages.info(request, f"{participant_email} already has a pending invitation.")
             else:
-                with transaction.atomic():
-                    session = WebChannel.start_new_session(
-                        chatbot,
-                        participant_identifier=post_form.cleaned_data["email"],
-                        session_status=SessionStatus.SETUP,
-                        timezone=request.session.get("detected_tz", None),
-                    )
-                if post_form.cleaned_data["invite_now"]:
-                    send_experiment_invitation(session)
+                try:
+                    with transaction.atomic():
+                        session = WebChannel.start_new_session(
+                            chatbot,
+                            participant_identifier=post_form.cleaned_data["email"],
+                            session_status=SessionStatus.SETUP,
+                            timezone=request.session.get("detected_tz", None),
+                        )
+                except ChannelDisabledException:
+                    # Inviting someone to a channel that will not talk to them is worse than
+                    # refusing the invite.
+                    messages.error(request, "The web channel is disabled, so invitations cannot be sent.")
+                else:
+                    if post_form.cleaned_data["invite_now"]:
+                        send_experiment_invitation(session)
         else:
             form = post_form
 

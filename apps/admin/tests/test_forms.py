@@ -50,12 +50,12 @@ class TestOcsConfigurationFormChatbotId:
         experiment = ExperimentFactory.create()
         form = OcsConfigurationForm(data=form_data(chatbot_id=str(experiment.public_id)))
         assert not form.is_valid()
-        assert "No embedded widget channel" in form.errors["chatbot_id"][0]
+        assert "No chat widget channel" in form.errors["chatbot_id"][0]
 
     def test_rejects_an_unknown_chatbot_id(self):
         form = OcsConfigurationForm(data=form_data(chatbot_id="not-a-chatbot"))
         assert not form.is_valid()
-        assert "No embedded widget channel" in form.errors["chatbot_id"][0]
+        assert "No chat widget channel" in form.errors["chatbot_id"][0]
 
     def test_saving_refreshes_the_cached_embed_key(self, widget_channel):
         """A freshly configured chatbot must not be shadowed by a cached miss."""

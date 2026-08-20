@@ -2,8 +2,8 @@ from django.db.models import TextChoices
 from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
 
-from apps.custom_actions.schema_utils import resolve_references
 from apps.pipelines.nodes.base import UiSchema, VisibleWhen, Widgets
+from apps.utils.schema_utils import resolve_references
 
 
 class OpenAIReasoningEffortParameter(TextChoices):

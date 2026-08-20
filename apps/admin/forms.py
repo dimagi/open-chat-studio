@@ -122,7 +122,7 @@ class OcsConfigurationForm(forms.Form):
         required=False,
         label="Chatbot ID",
         help_text=(
-            "ID of the chatbot to use for the widget. The chatbot needs an 'Embedded Widget' channel "
+            "ID of the chatbot to use for the widget. The chatbot needs a 'Chat Widget & API' channel "
             "that allows this site's domain — the widget authorizes itself with that channel's embed key."
         ),
         widget=forms.TextInput(attrs={"placeholder": "Enter chatbot ID"}),
@@ -183,8 +183,8 @@ class OcsConfigurationForm(forms.Form):
         chatbot_id = self.cleaned_data["chatbot_id"].strip()
         if chatbot_id and not fetch_widget_embed_key(chatbot_id):
             raise forms.ValidationError(
-                "No embedded widget channel with an embed key was found for this chatbot. Add an "
-                "'Embedded Widget' channel to the chatbot, and allow this site's domain on it."
+                "No chat widget channel with an embed key was found for this chatbot. Add a "
+                "'Chat Widget & API' channel to the chatbot, and allow this site's domain on it."
             )
         return chatbot_id
 
