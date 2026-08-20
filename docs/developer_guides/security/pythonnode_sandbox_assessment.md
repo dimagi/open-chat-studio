@@ -11,7 +11,9 @@ verified by reading the production code paths.
 
 > **Scope note.** This is a defensive assessment of our own sandbox. It documents
 > where the isolation boundary holds and where it leaks, with reproductions and
-> remediations. No fixes are applied in this document.
+> remediations. The tractable fixes (findings 1, 4, 5 and the `+=` half of 6) are
+> implemented in the same PR as this document; the remainder are tracked as issues.
+> See the "Remediation status" callout and per-finding "Remediation" sections.
 
 ---
 
