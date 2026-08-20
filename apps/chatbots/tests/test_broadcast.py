@@ -1,9 +1,10 @@
+import re
 from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
 
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chatbots.forms import BroadcastMessageForm
 from apps.chatbots.tasks import send_broadcast_message
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -54,6 +55,46 @@ def test_broadcast_reaches_each_participant_once_per_selected_channel(delay, exp
     messaged = {call.kwargs["session_id"] for call in delay.call_args_list}
     assert messaged == {latest_telegram.id, on_whatsapp_too.id, other_participant.id}
     assert {call.kwargs["message"] for call in delay.call_args_list} == {"Hi all"}
+
+
+@pytest.mark.django_db()
+def test_chatbot_home_offers_only_the_broadcastable_channels(experiment, logged_in_client):
+    """The API, web and evaluation channels can't be broadcast on, so they aren't offered."""
+    telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
+    ExperimentChannel.objects.get_team_api_channel(experiment.team)
+    ExperimentChannel.objects.get_team_web_channel(experiment.team)
+    ExperimentChannel.objects.get_team_evaluations_channel(experiment.team)
+
+    response = logged_in_client.get(reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id]))
+
+    assert response.status_code == 200
+    assert list(response.context["broadcast_channels"]) == [telegram]
+    content = response.content.decode()
+    assert "Broadcast message" in content
+    assert _broadcast_url(experiment) in content
+
+
+@pytest.mark.django_db()
+def test_broadcast_modal_arms_the_whatsapp_template_warning(experiment, logged_in_client):
+    """The warning is driven by which of the rendered channels are WhatsApp ones."""
+    ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
+    whatsapp = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.WHATSAPP)
+
+    content = logged_in_client.get(
+        reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id])
+    ).content.decode()
+
+    assert re.search(rf"whatsappChannels:\s*\[\s*'{whatsapp.id}',\s*\]", content)
+    assert "new_bot_message" in content
+    assert "whatsapp_meta_cloud_api/#create-the-required-template-in-meta-business-manager" in content
+
+
+@pytest.mark.django_db()
+def test_chatbot_home_hides_the_broadcast_button_without_a_channel(experiment, logged_in_client):
+    response = logged_in_client.get(reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id]))
+
+    assert response.status_code == 200
+    assert "Broadcast message" not in response.content.decode()
 
 
 @pytest.mark.django_db()

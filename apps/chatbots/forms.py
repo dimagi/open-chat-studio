@@ -152,4 +152,4 @@ class BroadcastMessageForm(forms.Form):
 
     def __init__(self, experiment: Experiment, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["channels"].queryset = get_broadcast_channels(experiment)  # ty: ignore[unresolved-attribute]
+        self.fields["channels"].queryset = get_broadcast_channels(experiment)
