@@ -25,9 +25,15 @@ from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
-from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
+from apps.chatbots.forms import (
+    BroadcastMessageForm,
+    ChatbotForm,
+    ChatbotSettingsForm,
+    CopyChatbotForm,
+    get_broadcast_channels,
+)
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
-from apps.chatbots.tasks import send_bot_message
+from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
@@ -335,6 +341,8 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "highlight_version_id": request.GET.get("version_id"),
         "cost_tracking_enabled": cost_tracking_enabled,
         "usage_summary": usage_summary,
+        "broadcast_channels": get_broadcast_channels(experiment),
+        "broadcast_char_limit": BroadcastMessageForm.MESSAGE_CHAR_LIMIT,
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
@@ -351,6 +359,28 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     context.update(filter_context)
 
     return TemplateResponse(request, "chatbots/single_chatbot_home.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("experiments.invite_participants", raise_exception=True)
+def broadcast_message(request, team_slug: str, experiment_id: int):
+    """Queue a message for every participant of this chatbot on the selected channels."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    form = BroadcastMessageForm(experiment, data=request.POST)
+    if not form.is_valid():
+        for error in form.errors.values():
+            messages.error(request, error[0])
+    else:
+        channels = form.cleaned_data["channels"]
+        send_broadcast_message.delay(
+            experiment_id=experiment.id,
+            channel_ids=[channel.id for channel in channels],
+            message=form.cleaned_data["message"],
+        )
+        platforms = ", ".join(sorted(channel.platform_enum.label for channel in channels))
+        messages.success(request, f"Your message is being sent to all participants on {platforms}.")
+    return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment.id)
 
 
 class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

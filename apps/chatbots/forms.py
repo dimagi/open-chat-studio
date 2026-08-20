@@ -2,8 +2,10 @@ from django import forms
 from django.db import transaction
 from waffle import flag_is_active
 
+from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
+from apps.service_providers.messaging_service import MetaCloudAPIService
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
 
 
@@ -115,3 +117,39 @@ class CopyChatbotForm(forms.Form):
         max_length=255,
         required=True,
     )
+
+
+def get_broadcast_channels(experiment: Experiment):
+    """The channels a broadcast can go out on.
+
+    The team-global platforms are excluded: API and web sessions have no address to push a
+    message to, and evaluation sessions have no human on the other end. Disabled channels are
+    excluded too -- the send path drops bot-initiated traffic on them, so offering one would
+    only ever be a broadcast that silently goes nowhere.
+    """
+    return experiment.experimentchannel_set.exclude(platform__in=ChannelPlatform.team_global_platforms()).exclude(
+        enabled=False
+    )
+
+
+class BroadcastMessageForm(forms.Form):
+    """A one-off message sent to every participant of a chatbot on the chosen channels."""
+
+    # The limit is WhatsApp's: a broadcast lands outside the 24-hour service window, so it goes
+    # out as a template message. Applied to every platform so the same text is deliverable on
+    # all of the selected channels rather than being silently split on one of them.
+    MESSAGE_CHAR_LIMIT = MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT
+
+    channels = forms.ModelMultipleChoiceField(
+        queryset=ExperimentChannel.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        error_messages={"required": "Select at least one channel to broadcast on."},
+    )
+    message = forms.CharField(
+        max_length=MESSAGE_CHAR_LIMIT,
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+
+    def __init__(self, experiment: Experiment, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["channels"].queryset = get_broadcast_channels(experiment)  # ty: ignore[unresolved-attribute]

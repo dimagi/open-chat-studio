@@ -1,16 +1,29 @@
 from unittest.mock import patch
 
 import pytest
+from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
+from apps.chatbots.forms import BroadcastMessageForm
 from apps.chatbots.tasks import send_broadcast_message
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
+from apps.utils.factories.team import TeamWithUsersFactory
 
 
 @pytest.fixture()
 def experiment():
-    return ExperimentFactory()
+    return ExperimentFactory(team=TeamWithUsersFactory())
+
+
+@pytest.fixture()
+def logged_in_client(client, experiment):
+    client.force_login(experiment.team.members.first())
+    return client
+
+
+def _broadcast_url(experiment):
+    return reverse("chatbots:broadcast_message", args=[experiment.team.slug, experiment.id])
 
 
 @pytest.mark.django_db()
@@ -41,3 +54,47 @@ def test_broadcast_reaches_each_participant_once_per_selected_channel(delay, exp
     messaged = {call.kwargs["session_id"] for call in delay.call_args_list}
     assert messaged == {latest_telegram.id, on_whatsapp_too.id, other_participant.id}
     assert {call.kwargs["message"] for call in delay.call_args_list} == {"Hi all"}
+
+
+@pytest.mark.django_db()
+@patch("apps.chatbots.views.send_broadcast_message.delay")
+def test_broadcast_view_queues_the_selected_channels(delay, experiment, logged_in_client):
+    telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
+
+    response = logged_in_client.post(
+        _broadcast_url(experiment), data={"channels": [telegram.id], "message": "We're back online"}
+    )
+
+    assert response.status_code == 302
+    delay.assert_called_once_with(experiment_id=experiment.id, channel_ids=[telegram.id], message="We're back online")
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("channel", "message"),
+    [
+        pytest.param(None, "Hi", id="no-channel-selected"),
+        pytest.param("other-chatbot", "Hi", id="channel-of-another-chatbot"),
+        pytest.param("disabled", "Hi", id="disabled-channel"),
+        pytest.param("own", "", id="empty-message"),
+        pytest.param("own", "x" * (BroadcastMessageForm.MESSAGE_CHAR_LIMIT + 1), id="message-over-char-limit"),
+    ],
+)
+@patch("apps.chatbots.views.send_broadcast_message.delay")
+def test_broadcast_view_rejects_invalid_input(delay, channel, message, experiment, logged_in_client):
+    """Nothing is queued unless a live channel of *this* chatbot and a message within the limit are given."""
+    channels = {
+        "own": ExperimentChannelFactory(team=experiment.team, experiment=experiment),
+        "other-chatbot": ExperimentChannelFactory(team=experiment.team),
+        "disabled": ExperimentChannelFactory(
+            team=experiment.team, experiment=experiment, platform=ChannelPlatform.WHATSAPP, enabled=False
+        ),
+    }
+    data = {"message": message}
+    if channel:
+        data["channels"] = [channels[channel].id]
+
+    response = logged_in_client.post(_broadcast_url(experiment), data=data)
+
+    assert response.status_code == 302
+    delay.assert_not_called()

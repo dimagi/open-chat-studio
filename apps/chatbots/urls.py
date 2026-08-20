@@ -29,6 +29,7 @@ urlpatterns = [
         views.revert_chatbot_version,
         name="revert-version",
     ),
+    path("<int:experiment_id>/broadcast/", views.broadcast_message, name="broadcast_message"),
     path("<int:experiment_id>/events/", include("apps.events.urls")),
     path(
         "<int:experiment_id>/versions/status",
