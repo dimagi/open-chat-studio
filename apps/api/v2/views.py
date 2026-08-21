@@ -12,7 +12,7 @@ from rest_framework.viewsets import GenericViewSet
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView, ReadOnlyAPIKeyPermission
 from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
 from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_version
-from apps.api.v2.lookups import get_working_chatbot, request_team, working_chatbots
+from apps.api.v2.lookups import get_working_chatbot, working_chatbots
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.api.v2.write.serializers import (
     ChatbotCreatedSerializer,
@@ -55,8 +55,8 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
 
     @property
     def team(self) -> Team | None:
-        """The team the credential authenticated with. See ``request_team``."""
-        return request_team(self.request)
+        """The team the credential authenticated with."""
+        return self.request.team
 
     def get_queryset(self):
         return working_chatbots(self.team).select_related("team").prefetch_related("versions")

@@ -14,21 +14,6 @@ from django.db.models import QuerySet
 from rest_framework.generics import get_object_or_404
 
 from apps.experiments.models import Experiment
-from apps.teams.models import Team
-from apps.teams.utils import get_current_team
-
-
-def request_team(request) -> Team | None:
-    """The team the credential authenticated with.
-
-    Not simply ``request.team``: the auth layer sets that on the *DRF* request, and DRF's OPTIONS
-    metadata re-runs the permission checks against a ``clone_request``, which wraps the same Django
-    request but does not copy that attribute. There ``request.team`` falls through to the
-    middleware's lazy lookup, which is ``None`` on an API path -- and ``DjangoModelPermissions``
-    calls ``get_queryset()`` with it, so the read raises rather than 404s. The auth layer also calls
-    ``set_current_team``, so fall back to that.
-    """
-    return request.team or get_current_team()
 
 
 def working_chatbots(team) -> QuerySet[Experiment]:
