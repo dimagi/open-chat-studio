@@ -4,6 +4,7 @@ from django.conf import settings
 from apps.api.openai import ChatCompletionsView
 from apps.api.permissions import BASE_PERMISSION_CLASSES, ReadOnlyAPIKeyPermission
 from apps.api.v2.discovery.views import (
+    ChatbotOptionsView,
     PipelineNodeOptionsView,
     PipelineNodesView,
     PipelineNodeView,
@@ -21,6 +22,7 @@ from apps.oauth.permissions import TokenHasOAuthScope
 # Every view that accepts API-key authentication, whether it takes the project defaults or sets its
 # own ``permission_classes``.
 API_KEY_VIEWS = [
+    ChatbotOptionsView,
     ChatbotViewSet,
     ChatCompletionsView,
     ExperimentSessionViewSet,

@@ -4,6 +4,56 @@ info:
   version: v2
   description: Build, deploy and monitor chatbots.
 paths:
+  /api/v2/chatbot/options/:
+    get:
+      operationId: chatbot_options
+      description: |-
+        The values each chatbot setting accepts, scoped to the API key's team.
+
+        A key holds the values for the setting of the same name: write one of `consent_form`'s entries into a chatbot's `consent_form`, one of `voice_response_behaviour`'s into `voice_response_behaviour`.
+
+        Only the settings drawn from a fixed set of values appear. A free-text setting (`name`, `seed_message`) or a boolean one (`file_uploads_enabled`) constrains nothing and so has no entry here.
+
+        `voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that one provider.
+      summary: List Chatbot Setting Options
+      tags:
+      - Chatbots
+      security:
+      - OAuth2:
+        - chatbots:read
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotOptions'
+              examples:
+                ChatbotOptions:
+                  value:
+                    voice_provider:
+                    - value: 2
+                      label: Prod Polly
+                      type: aws
+                    synthetic_voice:
+                    - value: 11
+                      label: Joanna (English)
+                      type: aws
+                      provider_id: 2
+                    voice_response_behaviour:
+                    - value: reciprocal
+                      label: Reciprocal
+                    trace_provider:
+                    - value: 4
+                      label: Prod Langfuse
+                      type: langfuse
+                    consent_form:
+                    - value: 7
+                      label: Returns consent
+                  summary: Every key the endpoint serves, for a team that has one
+                    of each resource.
+          description: ''
   /api/v2/chatbots/:
     get:
       operationId: chatbot_list
@@ -1011,6 +1061,40 @@ components:
       - unwired_handles
       - version_description
       - voice
+    ChatbotOptions:
+      type: object
+      description: |-
+        The documented keys. Each holds the values for the chatbot setting of the same name.
+
+        The keys are derived from the settings form rather than listed by hand, so a response may carry
+        keys not documented here as new settings are added.
+      properties:
+        voice_provider:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingProviderOption'
+          description: The voice providers the team has configured.
+        synthetic_voice:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingSyntheticVoiceOption'
+          description: Every voice the team can reach. A voice is only speakable by
+            a `voice_provider` of the same `type`, so pick the pair together.
+        voice_response_behaviour:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingChoiceOption'
+          description: When the chatbot answers with voice.
+        trace_provider:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingProviderOption'
+          description: Where the chatbot's traces are sent.
+        consent_form:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingResourceOption'
+          description: The consent forms the team has written.
     ChatbotVersion:
       type: object
       properties:
@@ -2336,6 +2420,78 @@ components:
         body:
           type: string
           description: Jinja2 body template; the pipeline input is used when blank.
+    SettingChoiceOption:
+      type: object
+      description: One value of a setting drawn from a fixed list rather than from
+        the team's resources.
+      properties:
+        value:
+          type: string
+          description: Write this into the setting of the same name.
+        label:
+          type: string
+          description: How the value reads in the UI.
+      required:
+      - label
+      - value
+    SettingProviderOption:
+      type: object
+      description: One of the team's configured service providers.
+      properties:
+        value:
+          type: integer
+          description: The resource's id. Write this into the setting of the same
+            name.
+        label:
+          type: string
+          description: What the resource is called.
+        type:
+          type: string
+          description: What the provider talks to -- `aws`, `azure`, `langfuse`.
+      required:
+      - label
+      - type
+      - value
+    SettingResourceOption:
+      type: object
+      description: One of the team's stored resources, selectable for a chatbot setting.
+      properties:
+        value:
+          type: integer
+          description: The resource's id. Write this into the setting of the same
+            name.
+        label:
+          type: string
+          description: What the resource is called.
+      required:
+      - label
+      - value
+    SettingSyntheticVoiceOption:
+      type: object
+      description: A voice the chatbot can speak in.
+      properties:
+        value:
+          type: integer
+          description: The resource's id. Write this into the setting of the same
+            name.
+        label:
+          type: string
+          description: What the resource is called.
+        type:
+          type: string
+          description: The service the voice comes from. Must equal the `voice_provider`'s
+            type.
+        provider_id:
+          type: integer
+          nullable: true
+          description: The voice provider that owns this voice, or null for a shared
+            voice any provider of the same `type` can speak. A voice owned by a provider
+            can only be paired with that one.
+      required:
+      - label
+      - provider_id
+      - type
+      - value
     SourceMaterial:
       type: object
       properties:
