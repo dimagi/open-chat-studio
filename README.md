@@ -34,7 +34,7 @@ git clone https://github.com/dimagi/open-chat-studio.git
 cd open-chat-studio
 uv venv --python 3.13
 source .venv/bin/activate
-uv sync
+uv sync --locked
 inv setup-dev-env   # installs hooks, starts services, migrates DB, builds frontend, creates superuser
 ./manage.py runserver
 ```
