@@ -55,6 +55,7 @@ def test_openai_service_uses_responses_api():
     [
         (LlmProviderTypes.groq, {"openai_api_key": "test"}),
         (LlmProviderTypes.perplexity, {"openai_api_key": "test"}),
+        pytest.param(LlmProviderTypes.openrouter, {"openai_api_key": "test"}, id="openrouter"),
         (LlmProviderTypes.minimax, {"openai_api_key": "test"}),
     ],
 )
@@ -76,6 +77,17 @@ def test_minimax_is_openai_compatible_chat_provider():
     service = LlmProviderTypes.minimax.get_llm_service({"openai_api_key": "test"})
     assert isinstance(service, OpenAIGenericService)
     assert service._type == "minimax"
+    assert service._use_responses_api is False
+
+
+def test_openrouter_is_openai_compatible_chat_provider():
+    """OpenRouter exposes an OpenAI-compatible chat endpoint, so it is routed through
+    OpenAIGenericService (like Groq/Perplexity) with the OpenRouter base URL and must
+    not use the OpenAI-specific Responses API."""
+    assert LlmProviderTypes.openrouter.additional_config["openai_api_base"] == "https://openrouter.ai/api/v1"
+    service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test"})
+    assert isinstance(service, OpenAIGenericService)
+    assert service._type == "openrouter"
     assert service._use_responses_api is False
 
 
@@ -104,6 +116,7 @@ def test_voyage_ai_service_returns_local_index_manager():
         ),
         pytest.param(LlmProviderTypes.groq, {"openai_api_key": "test"}, "groq", id="groq"),
         pytest.param(LlmProviderTypes.perplexity, {"openai_api_key": "test"}, "perplexity", id="perplexity"),
+        pytest.param(LlmProviderTypes.openrouter, {"openai_api_key": "test"}, "openrouter", id="openrouter"),
         pytest.param(LlmProviderTypes.minimax, {"openai_api_key": "test"}, "minimax", id="minimax"),
     ],
 )
@@ -146,3 +159,17 @@ def test_anthropic_service_returns_prompt_caching_middleware():
 )
 def test_non_anthropic_services_have_no_prompt_caching_middleware(service):
     assert service.get_prompt_caching_middleware() is None
+
+
+def test_openrouter_attribution_headers_forwarded_to_chat_model():
+    """OpenRouter requires HTTP-Referer and X-Title headers for attribution.
+
+    Verify that headers stored in ``default_headers`` on the service are
+    forwarded verbatim to the constructed ``ChatOpenAI`` client so they
+    appear on every outgoing request.
+    """
+    headers = {"HTTP-Referer": "https://example.com", "X-Title": "Test App"}
+    service = LlmProviderTypes.openrouter.get_llm_service({"openai_api_key": "test", "default_headers": headers})
+    assert service.default_headers == headers
+    chat_model = service.get_chat_model("openai/gpt-4.1-mini")
+    assert chat_model.default_headers == headers

@@ -191,6 +191,10 @@ class LlmService(pydantic.BaseModel):
 class OpenAIGenericService(LlmService):
     openai_api_key: str
     openai_api_base: str
+    # Extra HTTP headers forwarded verbatim to every request.
+    # Used by OpenRouter to carry attribution headers (HTTP-Referer / X-Title);
+    # None for all other generic providers so ChatOpenAI uses its own defaults.
+    default_headers: dict[str, str] | None = None
     # Subclasses can override this to enable the OpenAI Responses API.
     # Generic OpenAI-compatible providers (e.g. Groq, Perplexity) do not support it.
     _use_responses_api: ClassVar[bool] = False
@@ -221,7 +225,10 @@ class OpenAIGenericService(LlmService):
         if effort := kwargs.pop("effort", None):
             kwargs["reasoning"] = {"effort": effort}
 
-        return {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
+        model_kwargs = {"openai_api_key": self.openai_api_key, "openai_api_base": self.openai_api_base, **kwargs}
+        if self.default_headers:
+            model_kwargs["default_headers"] = self.default_headers
+        return model_kwargs
 
     def attach_built_in_tools(self, built_in_tools: list[str], config: dict[str, BaseModel] | None = None) -> list:
         return []
