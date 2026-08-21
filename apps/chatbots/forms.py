@@ -2,7 +2,7 @@ from django import forms
 from django.db import transaction
 from waffle import flag_is_active
 
-from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.models import ExperimentChannel
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -119,29 +119,21 @@ class CopyChatbotForm(forms.Form):
     )
 
 
-# Platforms with no way to push a message at a participant out of band. API and web sessions
-# have no address to deliver to and evaluation sessions have no human on the other end; the
-# chat widget routes through `ApiChannel`, whose sender is a `NoOpSender`, so a broadcast there
-# would land in the chat history and be delivered nowhere.
-#
-# Listed out rather than derived from `ChannelPlatform.team_global_platforms()`, which answers a
-# different question -- which platforms allow only one channel per team -- and no longer matches.
-NON_BROADCASTABLE_PLATFORMS = [
-    ChannelPlatform.API,
-    ChannelPlatform.WEB,
-    ChannelPlatform.EVALUATIONS,
-    ChannelPlatform.EMBEDDED_WIDGET,
-]
-
-
 def get_broadcast_channels(experiment: Experiment):
-    """The channels a broadcast can go out on.
+    """Every channel of this chatbot a broadcast can go out on.
 
-    Disabled channels are excluded alongside the platforms that can't be pushed to at all --
-    the send path drops bot-initiated traffic on a disabled channel, so offering one would
-    only ever be a broadcast that silently goes nowhere.
+    A broadcast runs through `ad_hoc_bot_message`, the same path as a scheduled message, so any
+    channel that can carry one can carry the other. On the chat widget that means the message
+    is written to the chat history and picked up by the widget's polling rather than pushed,
+    which is how a scheduled message reaches a widget participant too.
+
+    Nothing filters by platform. The API, web and evaluations channels belong to the team
+    rather than a chatbot (`ExperimentChannel.objects.get_team_*_channel` leaves `experiment`
+    null), so they are already absent from this set and their sessions are unreachable through
+    it. Disabled channels are excluded because `ad_hoc_bot_message` refuses to send on one --
+    offering it would only ever be a broadcast that silently goes nowhere.
     """
-    return experiment.experimentchannel_set.exclude(platform__in=NON_BROADCASTABLE_PLATFORMS).exclude(enabled=False)
+    return experiment.experimentchannel_set.exclude(enabled=False)
 
 
 class BroadcastChannelWidget(forms.CheckboxSelectMultiple):
