@@ -8,6 +8,7 @@ from apps.service_providers.models import LlmProviderTypes
 from apps.users.models import CustomUser
 from apps.utils.factories.service_provider_factories import LlmProviderFactory, TraceProviderFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.user import UserFactory
 
 OPENAI_KEY = "sk-abcdefghijklJrYA"
 ANTHROPIC_KEY = "sk-ant-api03-cLVxxxxxxxxxxlAAA"
@@ -85,6 +86,20 @@ def test_exposes_team_slug_and_filtered_metadata(superuser_client, settings):
     assert record["team_slug"] == team.slug
     # Only configured fields are exposed; unconfigured keys stay hidden, missing ones blank.
     assert record["metadata"] == {"team_owner": "Jia", "region": ""}
+
+
+@pytest.mark.django_db()
+def test_exposes_team_creator_for_llm_and_trace_providers(superuser_client):
+    creator = UserFactory(username="creator", email="creator@example.com")
+    team = TeamFactory(name="Alpha", created_by=creator)
+    LlmProviderFactory(team=team, type=str(LlmProviderTypes.openai), config={"openai_api_key": OPENAI_KEY})
+    TraceProviderFactory(team=team)
+
+    payload = superuser_client.get(reverse("ocs_admin:provider_keys_api")).json()
+
+    expected = {"id": creator.id, "username": "creator", "email": "creator@example.com"}
+    assert payload["providers"][0]["created_by"] == expected
+    assert payload["trace_providers"][0]["created_by"] == expected
 
 
 @pytest.mark.django_db()
