@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -137,16 +138,19 @@ def test_litellm_normalizes_base_url_with_trailing_slash_and_v1(clean_env):
 
 
 def test_openrouter_minimal_config(clean_env):
+    """HTTP-Referer and X-Title must come from the site config, not env vars."""
     clean_env.setenv("OPENROUTER_API_KEY", "or-test")
-    creds = get_provider_credentials_for_type(LlmProviderTypes.openrouter)
+    mock_site = MagicMock()
+    mock_site.name = "My OCS Instance"
+    with (
+        patch("apps.web.meta.get_server_root", return_value="https://example.com"),
+        patch("django.contrib.sites.models.Site.objects.get_current", return_value=mock_site),
+    ):
+        creds = get_provider_credentials_for_type(LlmProviderTypes.openrouter)
     assert creds is not None
-    assert creds.config == {
-        "openai_api_key": "or-test",
-        "default_headers": {
-            "HTTP-Referer": "https://github.com/dimagi/open-chat-studio",
-            "X-Title": "Open Chat Studio",
-        },
-    }
+    assert creds.config["openai_api_key"] == "or-test"
+    assert creds.config["default_headers"]["HTTP-Referer"] == "https://example.com"
+    assert creds.config["default_headers"]["X-Title"] == "My OCS Instance"
 
 
 
