@@ -188,3 +188,65 @@ class PipelineOptionsSerializer(serializers.Serializer):
     default_llm_provider = DefaultLlmProviderSerializer(
         required=False, help_text="A provider/model pair that already satisfies the `must_match` rule."
     )
+
+
+class SettingResourceOptionSerializer(serializers.Serializer):
+    """One of the team's stored resources, selectable for a chatbot setting."""
+
+    value = serializers.IntegerField(help_text="The resource's id. Write this into the setting of the same name.")
+    label = serializers.CharField(help_text="What the resource is called.")
+
+
+class SettingProviderOptionSerializer(SettingResourceOptionSerializer):
+    """One of the team's configured service providers."""
+
+    type = serializers.CharField(help_text="What the provider talks to -- `aws`, `azure`, `langfuse`.")
+
+
+class SettingSyntheticVoiceOptionSerializer(SettingResourceOptionSerializer):
+    """A voice the chatbot can speak in."""
+
+    type = serializers.CharField(help_text="The service the voice comes from. Must equal the `voice_provider`'s type.")
+    provider_id = serializers.IntegerField(
+        allow_null=True,
+        help_text=(
+            "The voice provider that owns this voice, or null for a shared voice any provider of the "
+            "same `type` can speak. A voice owned by a provider can only be paired with that one."
+        ),
+    )
+
+
+class SettingChoiceOptionSerializer(serializers.Serializer):
+    """One value of a setting drawn from a fixed list rather than from the team's resources."""
+
+    value = serializers.CharField(help_text="Write this into the setting of the same name.")
+    label = serializers.CharField(help_text="How the value reads in the UI.")
+
+
+class ChatbotOptionsSerializer(serializers.Serializer):
+    """The documented keys. Each holds the values for the chatbot setting of the same name.
+
+    The keys are derived from the settings form rather than listed by hand, so a response may carry
+    keys not documented here as new settings are added.
+    """
+
+    voice_provider = SettingProviderOptionSerializer(
+        many=True, required=False, help_text="The voice providers the team has configured."
+    )
+    synthetic_voice = SettingSyntheticVoiceOptionSerializer(
+        many=True,
+        required=False,
+        help_text=(
+            "Every voice the team can reach. A voice is only speakable by a `voice_provider` of the "
+            "same `type`, so pick the pair together."
+        ),
+    )
+    voice_response_behaviour = SettingChoiceOptionSerializer(
+        many=True, required=False, help_text="When the chatbot answers with voice."
+    )
+    trace_provider = SettingProviderOptionSerializer(
+        many=True, required=False, help_text="Where the chatbot's traces are sent."
+    )
+    consent_form = SettingResourceOptionSerializer(
+        many=True, required=False, help_text="The consent forms the team has written."
+    )
