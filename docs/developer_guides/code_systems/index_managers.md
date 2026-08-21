@@ -86,7 +86,9 @@ index_manager.delete_remote_index()
 
 ### Local Index Operations
 
-`get_embedding_vector` requires an `input_type` of `"document"` or `"query"`. For Voyage and Google embedding providers, this routes to different underlying calls (`embed_documents` vs `embed_query`), which return different vectors — labelling each side correctly is what makes retrieval work as well as the provider can deliver. OpenAI's API currently treats `embed_documents` and `embed_query` identically (its embeddings have no input-type concept), so the choice is behaviourally a no-op there today; the routing is still applied in case that ever changes upstream or behind an OpenAI-compatible proxy.
+`get_embedding_vector` requires an `input_type` of `"document"` or `"query"`.
+ - For Voyage and Google embedding providers, this routes to different underlying calls (`embed_documents` vs `embed_query`), which return different vectors — labelling each side correctly is what makes retrieval work as well as the provider can deliver.
+ - OpenAI's API currently treats `embed_documents` and `embed_query` identically (its embeddings have no input-type concept), so the choice is behaviourally a no-op there today; the routing is still applied in case that ever changes upstream or behind an OpenAI-compatible proxy.
 
 ```python
 # Embed a retrieval query (matches the path used by Collection.get_query_vector)
