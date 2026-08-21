@@ -284,6 +284,30 @@ def test_setup_uses_an_explicit_worktrunk_identifier(
     assert 'CREATE DATABASE "feature_database"' in command_log.read_text()
 
 
+def test_agent_guard_reuses_the_worktrunk_resource_name(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    env["OCS_WORKTREE_ID"] = "feature_database"
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+    env.pop("OCS_WORKTREE_ID")
+    _write_executable(
+        worktree / "scripts" / "setup-worktree.sh",
+        "#!/usr/bin/env bash\nexit 99\n",
+    )
+    env.update(
+        {
+            "CODEX_THREAD_ID": "worktrunk-resource-thread",
+            "TMPDIR": str(command_log.parent),
+        }
+    )
+
+    _run(ENSURE_SETUP_SCRIPT, cwd=worktree, env=env)
+
+    assert "OCS_WORKTREE_ID=feature_database" in (worktree / ".env").read_text()
+    assert not (command_log.parent / "ocs-worktree-setup-worktrunk-resource-thread.log").exists()
+
+
 @pytest.mark.parametrize(
     ("first_identifier", "second_identifier"),
     [

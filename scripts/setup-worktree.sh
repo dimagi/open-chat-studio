@@ -52,6 +52,10 @@ database_url="postgres://postgres:postgres@localhost:5432/$resource_name"
 
 ocs_set_env_value \
     "$CURRENT_PATH/.env" \
+    OCS_WORKTREE_ID \
+    "$resource_name"
+ocs_set_env_value \
+    "$CURRENT_PATH/.env" \
     DATABASE_URL \
     "$database_url"
 

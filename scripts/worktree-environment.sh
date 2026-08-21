@@ -34,21 +34,55 @@ ocs_sanitize_resource_name() {
     printf '%s\n' "$sanitized"
 }
 
+ocs_persisted_worktree_resource_name() {
+    local current_path="$1"
+    local env_file="$current_path/.env"
+    local persisted_name
+
+    [[ -f "$env_file" ]] || return 1
+    persisted_name=$(awk '
+        index($0, "OCS_WORKTREE_ID=") == 1 {
+            value = substr($0, length("OCS_WORKTREE_ID=") + 1)
+        }
+        END {
+            if (value != "") {
+                print value
+            }
+        }
+    ' "$env_file")
+    [[ -n "$persisted_name" ]] || return 1
+    if [[ ! "$persisted_name" =~ ^[a-z0-9_]{1,63}$ ]]; then
+        echo "Invalid persisted worktree resource name: $persisted_name" >&2
+        return 2
+    fi
+    printf '%s\n' "$persisted_name"
+}
+
 ocs_worktree_resource_name() {
     local current_path="$1"
-    local branch_name parent_name raw_name
+    local branch_name parent_name persisted_status raw_name
 
     if [[ -n "${OCS_WORKTREE_ID:-}" ]]; then
         raw_name=$OCS_WORKTREE_ID
-    elif [[ "$current_path" == */.codex/worktrees/*/* ]]; then
-        parent_name=$(basename "$(dirname "$current_path")")
-        raw_name="codex_${parent_name}"
     else
-        branch_name=$(git -C "$current_path" branch --show-current)
-        if [[ -n "$branch_name" ]]; then
-            raw_name=$branch_name
+        if raw_name=$(ocs_persisted_worktree_resource_name "$current_path"); then
+            :
         else
-            raw_name="worktree_$(printf '%s' "$current_path" | cksum | awk '{print $1}')"
+            persisted_status=$?
+            if [[ "$persisted_status" -ne 1 ]]; then
+                return "$persisted_status"
+            fi
+            if [[ "$current_path" == */.codex/worktrees/*/* ]]; then
+                parent_name=$(basename "$(dirname "$current_path")")
+                raw_name="codex_${parent_name}"
+            else
+                branch_name=$(git -C "$current_path" branch --show-current)
+                if [[ -n "$branch_name" ]]; then
+                    raw_name=$branch_name
+                else
+                    raw_name="worktree_$(printf '%s' "$current_path" | cksum | awk '{print $1}')"
+                fi
+            fi
         fi
     fi
 
