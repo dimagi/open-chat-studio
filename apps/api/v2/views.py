@@ -86,8 +86,8 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         summary="Create Chatbot",
         description=(
             "Create a chatbot's working (draft) version, seeded with a Start -> LLM -> End "
-            "pipeline. Nothing is published: use POST /chatbots/{id}/versions/ for that. On a team "
-            "with no LLM provider the seed is Start + End with no edge between them, so the new "
+            "pipeline. Nothing is published: use POST /api/v2/chatbots/{id}/versions/ for that. On a "
+            "team with no LLM provider the seed is Start + End with no edge between them, so the new "
             "chatbot reports pipeline_valid: false until you wire it. A key that is not listed "
             "below is rejected rather than ignored."
         ),
@@ -142,10 +142,10 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         description=(
             "Update the working (draft) chatbot's settings and its wiring to existing resources. "
             "The writable fields are the ones the chatbot settings page edits, with references "
-            "given as ids (listed by GET /pipeline/options/). GET /chatbots/{id}/inspect/ returns "
-            "more than this -- names, types and resolved values that describe a reference rather "
-            "than address it -- so it is not a template for this body. Only the keys you send are "
-            "changed, and a key that is not listed below is rejected rather than ignored. The "
+            "given as ids (listed by GET /api/v2/pipeline/options/). GET /api/v2/chatbots/{id}/inspect/ "
+            "returns more than this -- names, types and resolved values that describe a reference "
+            "rather than address it -- so it is not a template for this body. Only the keys you send "
+            "are changed, and a key that is not listed below is rejected rather than ignored. The "
             "response includes read-only fields (id, pipeline_id, version_number) that the request "
             "does not accept."
         ),
