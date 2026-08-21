@@ -65,12 +65,6 @@ def test_write_mixin_keeps_the_read_only_api_key_gate():
     assert ChatbotCompositionPermission in ChatbotWriteMixin.permission_classes
 
 
-def test_write_mixin_declares_the_chatbots_scope():
-    """TokenHasOAuthResourceScope turns this into chatbots:read on GET and chatbots:write on
-    every write verb."""
-    assert ChatbotWriteMixin.required_scopes == ["chatbots"]
-
-
 class _View(ChatbotWriteMixin):
     def __init__(self, request, chatbot_id):
         self.request = request

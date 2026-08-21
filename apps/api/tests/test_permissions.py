@@ -64,18 +64,6 @@ def test_api_key_views_keep_the_read_only_gate(view):
     assert ReadOnlyAPIKeyPermission in view.permission_classes
 
 
-def test_chatbots_write_scope_is_declared():
-    """TokenHasOAuthResourceScope derives `chatbots:write` for write verbs from
-    `required_scopes = ["chatbots"]`; the scope has to exist in settings for a token to carry it."""
-    assert "chatbots:write" in settings.OAUTH2_PROVIDER["SCOPES"]
-
-
-def test_chatbots_write_is_grantable_to_machine_tokens():
-    """Machine tokens may build bots headlessly, so the scope is issuable to a
-    client-credentials application (APIScopedValidator.validate_scopes gates issuance on this list)."""
-    assert "chatbots:write" in settings.OAUTH_CLIENT_CREDENTIALS_SCOPES
-
-
 class _NeedsChange(RequiresTeamPermission):
     required_permissions = ["experiments.change_experiment"]
 

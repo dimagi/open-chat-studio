@@ -228,25 +228,27 @@ def test_a_nonexistent_reference_is_a_400_on_that_field(client, chatbot, field):
 
 
 @pytest.mark.django_db()
-def test_an_unrecognised_key_is_a_400_naming_it(client, chatbot):
+@pytest.mark.parametrize(
+    ("body", "under", "key"),
+    [
+        pytest.param({"nmae": "Typo"}, None, "nmae", id="at-the-root"),
+        pytest.param({"settings": {"seed_mesage": "Hi!"}}, "settings", "seed_mesage", id="under-settings"),
+    ],
+)
+def test_an_unrecognised_key_is_a_400_naming_it(client, chatbot, body, under, key):
     """DRF drops undeclared keys silently, so a typo is a 200 that wrote nothing. A human notices
-    that from the echoed body; an agent reads the 200 and moves on."""
-    response = client.patch(_url(chatbot), {"nmae": "Typo"}, format="json")
+    that from the echoed body; an agent reads the 200 and moves on.
+
+    ``settings`` gets the check too, which it cannot take from ``initial_data`` -- that is set on the
+    root serializer alone.
+    """
+    response = client.patch(_url(chatbot), body, format="json")
 
     assert response.status_code == 400
-    assert "nmae" in response.json()
+    errors = response.json()
+    assert key in (errors[under] if under else errors)
     chatbot.refresh_from_db()
     assert chatbot.name == "Support bot"
-
-
-@pytest.mark.django_db()
-def test_an_unrecognised_settings_key_is_a_400_naming_it(client, chatbot):
-    """`settings` needs the check too, and cannot get it from `initial_data`, which is set on the
-    root serializer alone."""
-    response = client.patch(_url(chatbot), {"settings": {"seed_mesage": "Hi!"}}, format="json")
-
-    assert response.status_code == 400
-    assert "seed_mesage" in response.json()["settings"]
 
 
 @pytest.mark.django_db()

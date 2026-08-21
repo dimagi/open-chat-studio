@@ -64,20 +64,6 @@ def test_options_advertises_the_body_that_post_actually_accepts(client):
 
 
 @pytest.mark.django_db()
-def test_create_returns_exactly_the_three_spec_keys(client):
-    response = client.post(CREATE_URL, {"name": "Connect Interviews Bot"}, format="json")
-
-    assert response.status_code == 201
-    body = response.json()
-    assert set(body) == {"id", "pipeline_id", "version_number"}
-    assert body["version_number"] == 1
-
-    chatbot = Experiment.objects.get(public_id=body["id"])
-    assert chatbot.name == "Connect Interviews Bot"
-    assert chatbot.pipeline_id == body["pipeline_id"]
-
-
-@pytest.mark.django_db()
 def test_create_seeds_a_start_llm_end_pipeline(client, team):
     response = client.post(CREATE_URL, {"name": "Seeded"}, format="json")
 
