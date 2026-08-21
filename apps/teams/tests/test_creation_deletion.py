@@ -22,6 +22,7 @@ def test_create_for_user():
     team = create_default_team_for_user(user)
     assert team.name == "Alice"
     assert team.slug == "alice"
+    assert team.created_by == user
     membership = team.membership_set.filter(user=user).first()
     assert membership.is_team_admin()
     assert [group.name for group in membership.groups.all()] == [SUPER_ADMIN_GROUP]
@@ -36,6 +37,7 @@ def test_slug_generation_on_team_creation(client):
     client.post(reverse("teams:create_team"), {"name": "Foo"})
     created_team = Team.objects.get(name="Foo")
     assert created_team is not None
+    assert created_team.created_by == user
     assert created_team.slug is not None
     assert created_team.slug != ""
 

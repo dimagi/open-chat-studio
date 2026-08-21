@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.users.models import CustomUser
 from apps.utils.factories.team import TeamFactory
 from apps.utils.factories.traces import TraceFactory
+from apps.utils.factories.user import UserFactory
 
 DATE_RANGE = {"range_type": "custom", "start": "2026-05-01", "end": "2026-05-31"}
 INVALID_RANGE = {"range_type": "custom", "start": "not-a-date", "end": "2026-05-31"}
@@ -78,6 +79,21 @@ def test_reports_the_three_counts_separately(superuser_client):
     assert alpha["turns"] == 4
     assert alpha["toolcalls"] == 2
     assert "units" not in alpha
+
+
+@pytest.mark.django_db()
+def test_includes_team_creator(superuser_client):
+    creator = UserFactory(username="creator", email="creator@example.com")
+    team = TeamFactory(name="Alpha", created_by=creator)
+    _trace(team)
+
+    alpha = _teams(superuser_client.get(reverse("ocs_admin:tracing_usage_api"), DATE_RANGE))["Alpha"]
+
+    assert alpha["created_by"] == {
+        "id": creator.id,
+        "username": "creator",
+        "email": "creator@example.com",
+    }
 
 
 @pytest.mark.django_db()
