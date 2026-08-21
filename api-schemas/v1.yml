@@ -1971,6 +1971,7 @@ components:
           tokenUrl: /o/token/
           scopes:
             chatbots:read: List and Retrieve Chatbot Data
+            chatbots:write: Create and modify Chatbots
             chatbots:interact: Converse with a Chatbot and trigger bot messages
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions

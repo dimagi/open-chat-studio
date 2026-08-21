@@ -36,6 +36,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedChatbotList'
           description: ''
+    post:
+      operationId: chatbot_create
+      description: 'Create a chatbot''s working (draft) version, seeded with a Start
+        -> LLM -> End pipeline. Nothing is published: use POST /api/v2/chatbots/{id}/versions/
+        for that. On a team with no LLM provider the seed is Start + End with no edge
+        between them, so the new chatbot reports pipeline_valid: false until you wire
+        it. A key that is not listed below is rejected rather than ignored.'
+      summary: Create Chatbot
+      tags:
+      - Chatbots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatbotCreate'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotCreated'
+          description: ''
   /api/v2/chatbots/{id}/:
     get:
       operationId: chatbot_retrieve
@@ -63,6 +91,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/Chatbot'
           description: ''
+    patch:
+      operationId: chatbot_update
+      description: Update the working (draft) chatbot's settings and its wiring to
+        existing resources. The writable fields are the ones the chatbot settings
+        page edits, with references given as ids (listed by GET /api/v2/pipeline/options/).
+        GET /api/v2/chatbots/{id}/inspect/ returns more than this -- names, types
+        and resolved values that describe a reference rather than address it -- so
+        it is not a template for this body. Only the keys you send are changed, and
+        a key that is not listed below is rejected rather than ignored. The response
+        includes read-only fields (id, pipeline_id, version_number) that the request
+        does not accept.
+      summary: Update Chatbot
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Chatbots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedChatbotWrite'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatbotDetail'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot. Retrying will not help; the application''s chatbot list
+            has to change.'
   /api/v2/chatbots/{id}/inspect/:
     get:
       operationId: chatbot_inspect
@@ -902,6 +975,95 @@ components:
       - name
       - url
       - versions
+    ChatbotCreate:
+      type: object
+      description: 'The create request: a working draft and its seeded pipeline, nothing
+        published.'
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          default: ''
+      required:
+      - name
+      additionalProperties: false
+    ChatbotCreated:
+      type: object
+      description: 'The create response: the ids needed to keep working with the new
+        chatbot, and nothing more.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        pipeline_id:
+          type: integer
+          readOnly: true
+        version_number:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - pipeline_id
+      - version_number
+    ChatbotDetail:
+      type: object
+      description: 'The PATCH response: the same shape the request accepts, plus read-only
+        identity.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        pipeline_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        version_number:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+          nullable: true
+          title: A longer description of the experiment.
+        settings:
+          allOf:
+          - $ref: '#/components/schemas/ChatbotSettings'
+          readOnly: true
+        consent_form_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        trace_provider_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        voice_provider_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        synthetic_voice_id:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - consent_form_id
+      - description
+      - id
+      - name
+      - pipeline_id
+      - settings
+      - synthetic_voice_id
+      - trace_provider_id
+      - version_number
+      - voice_provider_id
     ChatbotIdentity:
       type: object
       properties:
@@ -1011,6 +1173,44 @@ components:
       - unwired_handles
       - version_description
       - voice
+    ChatbotSettings:
+      type: object
+      description: Chatbot settings. Omitted keys are left unchanged; send only what
+        you want to edit.
+      properties:
+        seed_message:
+          type: string
+          description: If set, send this message to the bot when the session starts,
+            and prompt the user with the initial response.
+        conversational_consent_enabled:
+          type: boolean
+          description: 'If enabled, the consent form will be sent at the start of
+            a conversation for external channels. Note: This requires the experiment
+            to have a seed message.'
+        voice_response_behaviour:
+          allOf:
+          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
+          description: |-
+            This tells the bot when to reply with voice messages
+
+            * `always` - Always
+            * `reciprocal` - Reciprocal
+            * `never` - Never
+        echo_transcript:
+          type: boolean
+          description: Whether or not the bot should tell the user what it heard when
+            the user sends voice messages
+        debug_mode_enabled:
+          type: boolean
+        file_uploads_enabled:
+          type: boolean
+          description: Enables file attachments in the web chat interface.
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+      additionalProperties: false
     ChatbotVersion:
       type: object
       properties:
@@ -2055,6 +2255,33 @@ components:
       - identifier
       - platform
       - public_id
+    PatchedChatbotWrite:
+      type: object
+      description: Editable chatbot configuration. Omitted keys are left unchanged.
+        References are given as ids, which can be read from the discovery endpoints.
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          nullable: true
+          title: A longer description of the experiment.
+        settings:
+          $ref: '#/components/schemas/ChatbotSettings'
+        consent_form_id:
+          type: integer
+          nullable: true
+        trace_provider_id:
+          type: integer
+          nullable: true
+        voice_provider_id:
+          type: integer
+          nullable: true
+        synthetic_voice_id:
+          type: integer
+          nullable: true
+      additionalProperties: false
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects
@@ -2626,6 +2853,16 @@ components:
       - type: array
         items:
           $ref: '#/components/schemas/UsageBucketResult'
+    VoiceResponseBehaviourEnum:
+      enum:
+      - always
+      - reciprocal
+      - never
+      type: string
+      description: |-
+        * `always` - Always
+        * `reciprocal` - Reciprocal
+        * `never` - Never
   securitySchemes:
     OAuth2:
       type: oauth2
@@ -2635,6 +2872,7 @@ components:
           tokenUrl: /o/token/
           scopes:
             chatbots:read: List and Retrieve Chatbot Data
+            chatbots:write: Create and modify Chatbots
             chatbots:interact: Converse with a Chatbot and trigger bot messages
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions

@@ -1,7 +1,7 @@
 from django import forms
 from django.db import transaction
-from waffle import flag_is_active
 
+from apps.experiments.helpers import excluded_voice_services, normalize_participant_allowlist
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.utils import get_first_llm_provider_by_team, get_first_llm_provider_model
@@ -79,9 +79,8 @@ class ChatbotSettingsForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.request = request
         team = request.team
-        exclude_services = [SyntheticVoice.OpenAIVoiceEngine]
-        if flag_is_active(request, "flag_open_ai_voice_engine"):
-            exclude_services = []
+        # Shared with the write API so the two offer the same set (see excluded_voice_services).
+        exclude_services = excluded_voice_services(request)
         self.fields["voice_provider"].queryset = team.voiceprovider_set.exclude(
             syntheticvoice__service__in=exclude_services
         )
@@ -94,11 +93,7 @@ class ChatbotSettingsForm(forms.ModelForm):
         }
 
     def clean_participant_allowlist(self):
-        cleaned_identifiers = []
-        identifiers = filter(None, self.cleaned_data["participant_allowlist"].split(","))
-        for identifier in identifiers:
-            cleaned_identifiers.append(identifier.replace(" ", ""))
-        return cleaned_identifiers
+        return normalize_participant_allowlist(self.cleaned_data["participant_allowlist"].split(","))
 
     @transaction.atomic()
     def save(self, commit=True):

@@ -469,6 +469,7 @@ SPECTACULAR_SETTINGS = {
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
+        "apps.api.schema.mirror_unknown_key_rejection",
         "apps.api.schema.set_export_description",
         "apps.api.schema.set_example_urls",
     ],
@@ -1098,6 +1099,7 @@ OAUTH2_PROVIDER = {
     "OAUTH2_VALIDATOR_CLASS": "apps.oauth.validator.APIScopedValidator",
     "SCOPES": {
         "chatbots:read": "List and Retrieve Chatbot Data",
+        "chatbots:write": "Create and modify Chatbots",
         "chatbots:interact": "Converse with a Chatbot and trigger bot messages",
         "sessions:read": "List and Read Sessions",
         "sessions:write": "Manage Sessions",
@@ -1125,6 +1127,7 @@ if OIDC_RSA_PRIVATE_KEY := env.str("OIDC_RSA_PRIVATE_KEY", multiline=True, defau
 # machine token has no user. Enforced at token issuance by APIScopedValidator.validate_scopes.
 OAUTH_CLIENT_CREDENTIALS_SCOPES = [
     "chatbots:read",
+    "chatbots:write",
     "chatbots:interact",
     "sessions:read",
     "sessions:write",

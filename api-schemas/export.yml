@@ -4046,6 +4046,7 @@ components:
           description: Enables file attachments in the web chat interface.
         owner:
           type: integer
+          nullable: true
         pipeline:
           type: integer
           nullable: true
@@ -4070,7 +4071,6 @@ components:
       - created_at
       - id
       - name
-      - owner
       - updated_at
       - working_version
     ExperimentList:
