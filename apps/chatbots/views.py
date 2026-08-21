@@ -68,8 +68,6 @@ from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
 
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
-
 
 def _get_alpine_context(request, experiment=None):
     """Add context required by the experiments/settings_content.html template."""
@@ -317,10 +315,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     published = resolve_published_or_working(experiment)
     deployed_version = published.version_number if experiment != published else None
 
-    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
-    usage_summary = None
-    if cost_tracking_enabled:
-        usage_summary = get_latest_chatbot_usage_summary(request.team, experiment.id)
+    usage_summary = get_latest_chatbot_usage_summary(request.team, experiment.id)
 
     context = {
         "active_tab": "chatbots",
@@ -333,7 +328,6 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         # the "chat to the published version" launcher must read them off this, not `experiment`.
         "published_version": published,
         "highlight_version_id": request.GET.get("version_id"),
-        "cost_tracking_enabled": cost_tracking_enabled,
         "usage_summary": usage_summary,
         **_get_events_context(experiment, team_slug),
     }

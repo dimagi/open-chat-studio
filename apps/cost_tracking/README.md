@@ -1,6 +1,6 @@
 # Cost Tracking App
 
-This app records the cost of every LLM call OCS makes and surfaces it to the team that owns the chat. The whole feature is gated by the `flag_ai_cost_monitoring` team-scoped Waffle flag, so teams opt in.
+This app records the cost of every LLM call OCS makes and surfaces it to the team that owns the chat.
 
 There are two halves: the capture path (record what happened) and the resolution path (price what was recorded). A small operational layer (seed loader, auto-update workflow) keeps pricing data fresh.
 
@@ -46,11 +46,18 @@ The canonical pricing seed lives in `seed_data/llm_pricing.json` (per-1K-tokens,
 
 ## Surface
 
-Three places consume the data, all gated by `flag_ai_cost_monitoring`:
+Every surface reads through `services/reporting.py`; none of them are gated.
 
-- **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`.
+- **Dashboard panel** (`templates/dashboard/_cost_tracking_panel.html`). Period spend, delta vs prior period, exact/estimated breakdown, top-N chatbots. Reacts to the dashboard date filter via `dashboard:api_cost_tracking_panel`. The Bot Performance and Most Active Participants tables on the same page carry per-entity cost columns.
 - **LLM Provider page** shows each model's current per-1K rate inline. Admins can override at team scope via an HTMX modal (`pricing_override` view) or revert to global. The custom-model creation dialog accepts optional input/output rates that persist as team-scoped `PricingRule` rows in the same transaction as the model save.
+- **Chatbot home** shows a 30-day spend / sessions / messages widget (`get_latest_chatbot_usage_summary`).
+- **Session detail** shows the session's tokens and cost, via `session_usage`. Team members only - a participant viewing their own session does not see spend.
+- **Participants table** carries a 30-day cost column, computed one page at a time (`UsageRecord` has no `(team, participant)` index, so the column is not sortable).
+- **Trace detail** shows per-model tokens and cost for the trace, via `trace_token_usage`.
 - **Evaluations UI** (`apps/evaluations/views/evaluation_config_views.py`): a Cost column on the run list, a per-evaluator/per-model breakdown on the run detail page, and a last-30-days/all-time summary on the config page. Reads `evaluation_run_cost`/`evaluation_run_costs`/`evaluation_config_cost_summary` below — the dedicated evaluation-scoped path, since the team-scoped reads above deliberately exclude evaluation spend from per-entity reads (ADR-0048).
+
+The chatbot home, session detail and trace detail widgets render the shared `templates/cost_tracking/_usage_summary.html`, so the cost figure and its confidence badge read identically across the three.
+
 
 ## Layout
 

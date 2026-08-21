@@ -12,7 +12,6 @@ from django.views import View
 from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, TemplateView
 from django_tables2 import RequestConfig, SingleTableView
-from waffle import flag_is_active
 
 from apps.annotations.prefetch import chat_tagged_items_prefetch
 from apps.api.tasks import trigger_bot_message_task
@@ -41,7 +40,6 @@ IMPORT_PERMISSIONS = [
     "experiments.change_participantdata",
 ]
 
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 # Same window as the dashboard's default date range (apps/dashboard/forms.py).
 PARTICIPANT_COST_WINDOW_DAYS = 30
 
@@ -173,7 +171,7 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, S
         return query
 
     def get_table(self, **kwargs):
-        """Attach per-page cost when the team has the cost-monitoring flag.
+        """Attach per-page cost to the table.
 
         Hooking after `RequestConfig.configure` means the queryset is already
         paginated, so the cost read is bounded to one page of participants -
@@ -181,9 +179,6 @@ class ParticipantTableView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, S
         column is not sortable.
         """
         table = super().get_table(**kwargs)
-        if not flag_is_active(self.request, COST_TRACKING_FLAG):
-            table.exclude = ("cost",)
-            return table
         page = getattr(table, "page", None)
         # `page.object_list` holds django-tables2 `BoundRow` wrappers, not the underlying
         # `Participant` instances - unwrap via `.record`, the same pattern
