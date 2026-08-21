@@ -20,8 +20,19 @@
 
 {% block app %}
   <div class="container mx-auto px-4 py-8">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold">{{ title }}</h1>
+    <div class="flex flex-wrap justify-between items-center gap-2 mb-6">
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold">{{ title }}</h1>
+        {% if evaluation_run.status == "pending" %}
+          <span class="badge badge-warning">{{ evaluation_run.get_status_display }}</span>
+        {% elif evaluation_run.status == "processing" %}
+          <span class="badge badge-info">{{ evaluation_run.get_status_display }}</span>
+        {% elif evaluation_run.status == "completed" %}
+          <span class="badge badge-success">{{ evaluation_run.get_status_display }}</span>
+        {% elif evaluation_run.status == "failed" %}
+          <span class="badge badge-error">{{ evaluation_run.get_status_display }}</span>
+        {% endif %}
+      </div>
       {% if evaluation_run.status == "completed" %}
         <div class="flex gap-2">
           {% if evaluation_run.type == "preview" %}
@@ -32,130 +43,138 @@
             </a>
           {% endif %}
           <a href="{% url 'evaluations:evaluation_run_download' request.team.slug evaluation_run.config_id evaluation_run.id %}"
-             class="btn btn-primary">
+             class="btn btn-ghost btn-sm">
             <i class="fa-solid fa-download"></i>
-            Download Results
+            Download
           </a>
           <a href="{% url 'evaluations:evaluation_run_update' request.team.slug evaluation_run.config_id evaluation_run.id %}"
-             class="btn btn-outline">
+             class="btn btn-ghost btn-sm">
             <i class="fa-solid fa-upload"></i>
-            Edit Results
+            Edit
           </a>
         </div>
       {% endif %}
     </div>
 
-    <div class="mb-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <h2 class="text-lg font-semibold mb-2">Run Details</h2>
-          <p><strong>Status:</strong>
-            {% if evaluation_run.status == "pending" %}
-              <span class="badge badge-warning">{{ evaluation_run.get_status_display }}</span>
-            {% elif evaluation_run.status == "processing" %}
-              <span class="badge badge-info">{{ evaluation_run.get_status_display }}</span>
-            {% elif evaluation_run.status == "completed" %}
-              <span class="badge badge-success">{{ evaluation_run.get_status_display }}</span>
-            {% elif evaluation_run.status == "failed" %}
-              <span class="badge badge-error">{{ evaluation_run.get_status_display }}</span>
-            {% endif %}
-          </p>
-          <p><strong>Created:</strong> {{ evaluation_run.created_at|date:"Y-m-d H:i:s" }}</p>
-          {% if evaluation_run.finished_at %}
-            <p><strong>Finished:</strong> {{ evaluation_run.finished_at|date:"Y-m-d H:i:s" }}</p>
-          {% endif %}
-          {% if run_duration %}
-            <p><strong>Duration:</strong> {{ run_duration }}</p>
-          {% endif %}
-          {% if total_results %}
-            <p><strong>Total Results:</strong> {{ total_results }}</p>
-          {% endif %}
-          <p><strong>Configuration:</strong>
-            <a href="{% url 'evaluations:edit' request.team.slug evaluation_run.config.id %}" class="link">
-              {{ evaluation_run.config.name }}
-            </a>
-          </p>
-          <p><strong>Dataset:</strong>
-            <a href="{% url 'evaluations:dataset_edit' request.team.slug evaluation_run.config.dataset.id %}" class="link">
-              {{ evaluation_run.config.dataset.name }}
-            </a>
-          </p>
-          <p><strong>Evaluators:</strong>
-            {% for evaluator in evaluation_run.config.evaluators.all %}
-              <a href="{% url 'evaluations:evaluator_edit' request.team.slug evaluator.id %}" class="link">
-                {{ evaluator.name }}
-              </a>{% if not forloop.last %}, {% endif %}
-            {% endfor %}
-          </p>
-          {% if evaluation_run.generation_experiment %}
-            <p><strong>Generation Chatbot:</strong>
-              <a href="{% url 'chatbots:single_chatbot_home' request.team.slug evaluation_run.generation_experiment.id %}" class="link">
-                {{ evaluation_run.generation_experiment.name }}
-                {% if evaluation_run.generation_experiment.version_display %}({{ evaluation_run.generation_experiment.version_display }}){% endif %}
-              </a>
-            </p>
-          {% else %}
-            <p><strong>Generation Chatbot:</strong> <span class="text-gray-500">None configured</span></p>
-          {% endif %}
-          {% if evaluation_run.error_message %}
-            <p><strong>Error:</strong> <span class="text-error">{{ evaluation_run.error_message }}</span></p>
-          {% endif %}
+    {# Summary cards #}
+    <div class="grid grid-cols-1 {% if cost_tracking_enabled %}md:grid-cols-3{% else %}md:grid-cols-2{% endif %} gap-4 mb-6">
+      <div class="card card-border bg-base-100">
+        <div class="card-body p-4">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Total results</span>
+          <div class="text-3xl font-bold mt-2">{{ total_results|default_if_none:"—" }}</div>
         </div>
-        {% if cost_tracking_enabled %}
-          <div>
-            <h2 class="text-lg font-semibold mb-2">Cost</h2>
+      </div>
+      <div class="card card-border bg-base-100">
+        <div class="card-body p-4">
+          <span class="text-xs uppercase tracking-wide text-base-content/60">Duration</span>
+          <div class="text-3xl font-bold mt-2">{{ run_duration|default:"—" }}</div>
+        </div>
+      </div>
+      {% if cost_tracking_enabled %}
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <span class="text-xs uppercase tracking-wide text-base-content/60">LLM cost</span>
             {% if run_cost.by_model %}
-              <div class="flex items-center gap-2">
-                <strong>Total:</strong>
+              <div class="text-3xl font-bold mt-2">
                 {% include "cost_tracking/_usage_summary.html" with total_cost=run_cost.total_cost unpriced=run_cost.has_unpriced estimated=run_cost.has_estimated unknown=run_cost.has_unknown testid_prefix="eval-run-cost" %}
-                <span class="text-base-content/60">({{ run_cost.total_tokens|intcomma }} tokens)</span>
               </div>
-              <div class="mt-3">
-                <h3 class="text-sm font-semibold text-base-content/70 mb-1">By evaluator</h3>
-                <table class="table table-sm">
-                  <tbody>
-                    {% for row in run_cost.by_evaluator %}
-                      <tr>
-                        <td>{{ row.evaluator_name }}</td>
-                        <td class="text-right">
-                          {% if row.has_unpriced %}
-                            <span class="text-base-content/40">unpriced</span>
-                          {% else %}
-                            ${{ row.cost|cost_display }}
-                          {% endif %}
-                        </td>
-                        <td class="text-right text-base-content/60">{{ row.tokens|intcomma }} tokens</td>
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-              <div class="mt-3">
-                <h3 class="text-sm font-semibold text-base-content/70 mb-1">By model</h3>
-                <table class="table table-sm">
-                  <tbody>
-                    {% for row in run_cost.by_model %}
-                      <tr>
-                        <td>{{ row.model_name }}</td>
-                        <td class="text-right">
-                          {% if row.has_unpriced %}
-                            <span class="text-base-content/40">unpriced</span>
-                          {% else %}
-                            ${{ row.cost|cost_display }}
-                          {% endif %}
-                        </td>
-                        <td class="text-right text-base-content/60">{{ row.tokens|intcomma }} tokens</td>
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+              <details class="mt-2 text-xs">
+                <summary class="cursor-pointer text-base-content/60">{{ run_cost.total_tokens|intcomma }} tokens · breakdown</summary>
+                <div class="mt-2">
+                  <div class="font-semibold text-base-content/70 mb-1">By evaluator</div>
+                  <table class="table table-xs">
+                    <tbody>
+                      {% for row in run_cost.by_evaluator %}
+                        <tr>
+                          <td>{{ row.evaluator_name }}</td>
+                          <td class="text-right">
+                            {% if row.has_unpriced %}
+                              <span class="text-base-content/40">unpriced</span>
+                            {% else %}
+                              ${{ row.cost|cost_display }}
+                            {% endif %}
+                          </td>
+                          <td class="text-right text-base-content/60">{{ row.tokens|intcomma }} tokens</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                <div class="mt-2">
+                  <div class="font-semibold text-base-content/70 mb-1">By model</div>
+                  <table class="table table-xs">
+                    <tbody>
+                      {% for row in run_cost.by_model %}
+                        <tr>
+                          <td>{{ row.model_name }}</td>
+                          <td class="text-right">
+                            {% if row.has_unpriced %}
+                              <span class="text-base-content/40">unpriced</span>
+                            {% else %}
+                              ${{ row.cost|cost_display }}
+                            {% endif %}
+                          </td>
+                          <td class="text-right text-base-content/60">{{ row.tokens|intcomma }} tokens</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
             {% else %}
-              <p class="text-base-content/60">No LLM cost recorded for this run.</p>
+              <div class="text-3xl font-bold mt-2 text-base-content/40">Not recorded</div>
             {% endif %}
           </div>
+        </div>
+      {% endif %}
+    </div>
+
+    {# Details #}
+    {% url 'evaluations:edit' request.team.slug evaluation_run.config.id as config_url %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 text-sm mb-8">
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
+        <span class="text-base-content/60">Created</span>
+        <span>{{ evaluation_run.created_at|date:"Y-m-d H:i:s" }}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
+        <span class="text-base-content/60">Configuration</span>
+        {% include "generic/chip_button.html" with url=config_url label=evaluation_run.config.name %}
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
+        <span class="text-base-content/60">Finished</span>
+        <span>{{ evaluation_run.finished_at|date:"Y-m-d H:i:s"|default:"—" }}</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
+        <span class="text-base-content/60">Dataset</span>
+        {% include "generic/chip_button.html" with url=evaluation_run.config.dataset.get_absolute_url label=evaluation_run.config.dataset.name %}
+      </div>
+      <div class="flex justify-between items-start py-2 border-b border-base-200">
+        <span class="text-base-content/60">Evaluators</span>
+        <div class="flex flex-wrap gap-1 justify-end">
+          {% for evaluator in evaluation_run.config.evaluators.all %}
+            {% include "generic/chip_button.html" with url=evaluator.get_absolute_url label=evaluator.name %}
+          {% endfor %}
+        </div>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-base-200">
+        <span class="text-base-content/60">Generation chatbot</span>
+        {% if evaluation_run.generation_experiment %}
+          <span class="flex items-center gap-1">
+            {% include "generic/chip.html" with chip=evaluation_run.generation_experiment.as_chatbot_chip %}
+            {% if evaluation_run.generation_experiment.version_display %}
+              <span class="text-xs text-base-content/60">{{ evaluation_run.generation_experiment.version_display }}</span>
+            {% endif %}
+          </span>
+        {% else %}
+          <span class="text-base-content/40">None configured</span>
         {% endif %}
       </div>
+      {% if evaluation_run.error_message %}
+        <div class="flex justify-between py-2 border-b border-base-200 md:col-span-2">
+          <span class="text-base-content/60">Error</span>
+          <span class="text-error">{{ evaluation_run.error_message }}</span>
+        </div>
+      {% endif %}
     </div>
 
     {% if celery_job_id %}
