@@ -212,3 +212,35 @@ class OAuth2TeamsScheme(OpenApiAuthenticationExtension):
                 }
             },
         }
+
+
+class ChatOAuthScheme(OpenApiAuthenticationExtension):
+    """Security scheme for the bearer credential at ``/api/chat/start/``.
+
+    A separate scheme from ``OAuth2TeamsScheme`` rather than a reuse of it: this door accepts
+    client-credentials tokens only (and only ``CHAT_API_SCOPE``), where that scheme documents the
+    authorization-code flow every other OAuth endpoint uses. It also has to be declared at all —
+    ``ChatOAuthAuthentication`` is not an ``OAuth2Authentication`` subclass, so without this
+    drf-spectacular warns about an unresolvable authenticator and silently drops the credential
+    from the operation's ``security``. The scope is named here because the authenticator checks it
+    itself rather than through a permission class.
+    """
+
+    target_class = "apps.api.authentication.ChatOAuthAuthentication"
+    name = "chatOAuth2"
+    match_subclasses = True
+    priority = -1
+
+    def get_security_requirement(self, auto_schema):
+        return {self.name: [settings.CHAT_API_SCOPE]}
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "oauth2",
+            "flows": {
+                "clientCredentials": {
+                    "tokenUrl": "/o/token/",
+                    "scopes": {settings.CHAT_API_SCOPE: settings.OAUTH2_PROVIDER["SCOPES"][settings.CHAT_API_SCOPE]},
+                }
+            },
+        }

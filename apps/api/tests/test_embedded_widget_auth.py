@@ -85,8 +85,10 @@ def test_start_session_with_invalid_embed_key(api_client, embedded_widget_channe
         HTTP_X_EMBED_KEY="invalid_token_123456789012345",
     )
 
-    # Should fail authentication
-    assert response.status_code == 403
+    # 401, not 403: ChatOAuthAuthentication sits first in this endpoint's authentication classes
+    # and returns an authenticate_header, so DRF no longer coerces the failure down. The other
+    # three 403s in this module are on session-bound endpoints, which keep AUTH_CLASSES.
+    assert response.status_code == 401
     assert "Invalid widget embed key" in response.json()["detail"]
 
 
