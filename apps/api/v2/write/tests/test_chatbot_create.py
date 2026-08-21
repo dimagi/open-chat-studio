@@ -1,4 +1,4 @@
-"""POST /api/v2/chatbots/ -- create a working draft (#4139, spec 5.1)."""
+"""POST /api/v2/chatbots/ -- create a working draft (#4139)."""
 
 import unicodedata
 
@@ -87,7 +87,7 @@ def test_create_publishes_nothing(client):
 @pytest.mark.django_db()
 def test_create_without_an_llm_provider_yields_an_invalid_shell():
     """With no provider the seed has no middle node and therefore no edges, so End is unreachable.
-    That is reported, not rejected (spec W6, "lenient on structure")."""
+    That is reported, not rejected: the write API is lenient on structure."""
     team = TeamWithUsersFactory.create()
     client = ApiTestClient(team.members.first(), team)
 

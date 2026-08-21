@@ -76,7 +76,7 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
 
 
 class ChatbotCreatedSerializer(serializers.Serializer):
-    """The create response: spec 5.1's three keys and nothing more."""
+    """The create response: the ids needed to keep working with the new chatbot, and nothing more."""
 
     id = serializers.UUIDField(source="public_id", read_only=True)
     pipeline_id = serializers.IntegerField(read_only=True)

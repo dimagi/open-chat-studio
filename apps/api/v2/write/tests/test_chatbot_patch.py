@@ -1,4 +1,4 @@
-"""PATCH /api/v2/chatbots/{id}/ -- settings and wiring by id (#4139, spec 5.1).
+"""PATCH /api/v2/chatbots/{id}/ -- settings and wiring by id (#4139).
 
 The writable surface is the same field set the UI's ChatbotSettingsForm exposes, with references
 as ``<field>_id`` keys. The ``settings`` block's nesting matches the inspect response. Unrecognised

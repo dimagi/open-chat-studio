@@ -171,9 +171,7 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
     def partial_update(self, request, *args, **kwargs):
         with transaction.atomic():
             # Model.save() writes every column, so without the row lock two concurrent PATCHes
-            # naming different fields would silently clobber one another (spec W7). This serialises
-            # API writes only: ChatbotSettingsForm.save() takes no lock, so a settings-page save
-            # racing a PATCH can still clobber. Locking the form too is the fix, if that matters.
+            # naming different fields would silently clobber one another.
             chatbot = get_working_chatbot(self.team, self.kwargs[self.lookup_url_kwarg], lock=True)
             # A machine token reaches only the chatbots its application was pinned to. Checked after
             # resolution because the allowlist is keyed on the chatbot, and before any write, so the
