@@ -102,11 +102,12 @@ def test_broadcast_falls_back_to_an_older_session_that_is_still_active(delay, ex
 
 @pytest.mark.django_db()
 def test_chatbot_home_offers_only_the_broadcastable_channels(experiment, logged_in_client):
-    """The API, web and evaluation channels can't be broadcast on, so they aren't offered."""
+    """Nothing can be pushed at a participant on the API, web, evaluation or widget channels."""
     telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
     ExperimentChannel.objects.get_team_api_channel(experiment.team)
     ExperimentChannel.objects.get_team_web_channel(experiment.team)
     ExperimentChannel.objects.get_team_evaluations_channel(experiment.team)
+    ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET)
 
     response = logged_in_client.get(reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id]))
 
@@ -174,6 +175,7 @@ def test_broadcast_view_rejects_a_chatbot_that_is_not_editable(delay, experiment
         pytest.param(None, "Hi", id="no-channel-selected"),
         pytest.param("other-chatbot", "Hi", id="channel-of-another-chatbot"),
         pytest.param("disabled", "Hi", id="disabled-channel"),
+        pytest.param("widget", "Hi", id="chat-widget-channel"),
         pytest.param("own", "", id="empty-message"),
         pytest.param("own", "x" * (BroadcastMessageForm.MESSAGE_CHAR_LIMIT + 1), id="message-over-char-limit"),
     ],
@@ -186,6 +188,9 @@ def test_broadcast_view_rejects_invalid_input(delay, channel, message, experimen
         "other-chatbot": ExperimentChannelFactory(team=experiment.team),
         "disabled": ExperimentChannelFactory(
             team=experiment.team, experiment=experiment, platform=ChannelPlatform.WHATSAPP, enabled=False
+        ),
+        "widget": ExperimentChannelFactory(
+            team=experiment.team, experiment=experiment, platform=ChannelPlatform.EMBEDDED_WIDGET
         ),
     }
     data = {"message": message}

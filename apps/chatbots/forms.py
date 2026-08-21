@@ -119,17 +119,29 @@ class CopyChatbotForm(forms.Form):
     )
 
 
+# Platforms with no way to push a message at a participant out of band. API and web sessions
+# have no address to deliver to and evaluation sessions have no human on the other end; the
+# chat widget routes through `ApiChannel`, whose sender is a `NoOpSender`, so a broadcast there
+# would land in the chat history and be delivered nowhere.
+#
+# Listed out rather than derived from `ChannelPlatform.team_global_platforms()`, which answers a
+# different question -- which platforms allow only one channel per team -- and no longer matches.
+NON_BROADCASTABLE_PLATFORMS = [
+    ChannelPlatform.API,
+    ChannelPlatform.WEB,
+    ChannelPlatform.EVALUATIONS,
+    ChannelPlatform.EMBEDDED_WIDGET,
+]
+
+
 def get_broadcast_channels(experiment: Experiment):
     """The channels a broadcast can go out on.
 
-    The team-global platforms are excluded: API and web sessions have no address to push a
-    message to, and evaluation sessions have no human on the other end. Disabled channels are
-    excluded too -- the send path drops bot-initiated traffic on them, so offering one would
+    Disabled channels are excluded alongside the platforms that can't be pushed to at all --
+    the send path drops bot-initiated traffic on a disabled channel, so offering one would
     only ever be a broadcast that silently goes nowhere.
     """
-    return experiment.experimentchannel_set.exclude(platform__in=ChannelPlatform.team_global_platforms()).exclude(
-        enabled=False
-    )
+    return experiment.experimentchannel_set.exclude(platform__in=NON_BROADCASTABLE_PLATFORMS).exclude(enabled=False)
 
 
 class BroadcastChannelWidget(forms.CheckboxSelectMultiple):
