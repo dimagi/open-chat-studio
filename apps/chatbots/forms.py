@@ -132,6 +132,28 @@ def get_broadcast_channels(experiment: Experiment):
     )
 
 
+class BroadcastChannelWidget(forms.CheckboxSelectMultiple):
+    """Checkboxes tagged with their platform so the dialog can react to what is ticked.
+
+    The `data-platform` attribute is what arms the WhatsApp template warning; `x-model` feeds
+    the same selection to the send button.
+    """
+
+    def __init__(self, attrs=None):
+        super().__init__(attrs={"x-model": "selectedChannels", **(attrs or {})})
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        # `value` is a ModelChoiceIteratorValue wrapping the channel's pk; the instance is on it.
+        option["attrs"]["data-platform"] = value.instance.platform
+        return option
+
+
+class BroadcastChannelField(forms.ModelMultipleChoiceField):
+    def label_from_instance(self, obj):
+        return f"{obj.platform_enum.label} — {obj.name}"
+
+
 class BroadcastMessageForm(forms.Form):
     """A one-off message sent to every participant of a chatbot on the chosen channels."""
 
@@ -140,16 +162,21 @@ class BroadcastMessageForm(forms.Form):
     # all of the selected channels rather than being silently split on one of them.
     MESSAGE_CHAR_LIMIT = MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT
 
-    channels = forms.ModelMultipleChoiceField(
+    channels = BroadcastChannelField(
         queryset=ExperimentChannel.objects.none(),
-        widget=forms.CheckboxSelectMultiple,
+        widget=BroadcastChannelWidget,
         error_messages={"required": "Select at least one channel to broadcast on."},
     )
     message = forms.CharField(
         max_length=MESSAGE_CHAR_LIMIT,
-        widget=forms.Textarea(attrs={"rows": 4}),
+        widget=forms.Textarea(attrs={"rows": 5, "x-model": "message"}),
     )
 
     def __init__(self, experiment: Experiment, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["channels"].queryset = get_broadcast_channels(experiment)
+
+    @property
+    def eligible_channels(self):
+        """The channels on offer. Empty means there is nothing to broadcast on, so no dialog."""
+        return self.fields["channels"].queryset

@@ -1,12 +1,7 @@
-{% load i18n %}
+{% load form_tags i18n %}
 <dialog id="broadcast_message_modal" class="modal">
-  {# `whatsappChannels` is the subset of the rendered channels that needs the template warning below. #}
-  <div class="modal-box" x-data="{
-         selectedChannels: [],
-         whatsappChannels: [{% for channel in broadcast_channels %}{% if channel.platform == 'whatsapp' %}'{{ channel.id }}',{% endif %}{% endfor %}],
-         message: '',
-         get whatsappSelected() { return this.selectedChannels.some(id => this.whatsappChannels.includes(id)) },
-       }">
+  <div class="modal-box" x-data="{ selectedChannels: [], message: '', whatsappSelected: false }"
+       x-on:change="whatsappSelected = !!$el.querySelectorAll('input[data-platform=whatsapp]:checked').length">
     <h3 class="font-bold text-lg">{% translate "Broadcast message" %}</h3>
     <p class="text-sm pg-text-muted mt-1">
       {% translate "Send a message to everyone who has chatted to this bot on the channels you pick." %}
@@ -15,16 +10,7 @@
     <form id="broadcast-message-form" method="post"
           action="{% url 'chatbots:broadcast_message' request.team.slug experiment.id %}">
       {% csrf_token %}
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">{% translate "Channels" %}</legend>
-        {% for channel in broadcast_channels %}
-          <label class="label cursor-pointer justify-start gap-2">
-            <input type="checkbox" name="channels" value="{{ channel.id }}" x-model="selectedChannels"
-                   class="checkbox checkbox-sm checkbox-primary">
-            <span class="label-text">{{ channel.platform_enum.label }} — {{ channel.name }}</span>
-          </label>
-        {% endfor %}
-      </fieldset>
+      {% render_field broadcast_form.channels %}
 
       <div role="alert" class="alert alert-warning text-sm my-2" x-show="whatsappSelected" x-cloak>
         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -41,14 +27,8 @@
         </span>
       </div>
 
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">{% translate "Message" %}</legend>
-        <textarea required rows="5" name="message" x-model="message"
-                  maxlength="{{ broadcast_char_limit }}"
-                  class="textarea textarea-bordered w-full"
-                  placeholder="{% translate 'The message to send to every participant' %}"></textarea>
-        <p class="label" x-text="`${message.length} / {{ broadcast_char_limit }}`"></p>
-      </fieldset>
+      {% render_field broadcast_form.message %}
+      <p class="label" x-text="`${message.length} / {{ broadcast_form.fields.message.max_length }}`"></p>
     </form>
 
     <div class="modal-action">

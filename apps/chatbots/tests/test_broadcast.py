@@ -69,7 +69,7 @@ def test_chatbot_home_offers_only_the_broadcastable_channels(experiment, logged_
     response = logged_in_client.get(reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id]))
 
     assert response.status_code == 200
-    assert list(response.context["broadcast_channels"]) == [telegram]
+    assert list(response.context["broadcast_form"].eligible_channels) == [telegram]
     content = response.content.decode()
     assert "Broadcast message" in content
     assert _broadcast_url(experiment) in content
@@ -77,15 +77,16 @@ def test_chatbot_home_offers_only_the_broadcastable_channels(experiment, logged_
 
 @pytest.mark.django_db()
 def test_broadcast_modal_arms_the_whatsapp_template_warning(experiment, logged_in_client):
-    """The warning is driven by which of the rendered channels are WhatsApp ones."""
-    ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
+    """Each checkbox carries its platform, which is what the warning keys off."""
+    telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)
     whatsapp = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.WHATSAPP)
 
     content = logged_in_client.get(
         reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id])
     ).content.decode()
 
-    assert re.search(rf"whatsappChannels:\s*\[\s*'{whatsapp.id}',\s*\]", content)
+    assert re.search(rf'value="{whatsapp.id}"[^>]*data-platform="whatsapp"', content)
+    assert re.search(rf'value="{telegram.id}"[^>]*data-platform="telegram"', content)
     assert "new_bot_message" in content
     assert "whatsapp_meta_cloud_api/#create-the-required-template-in-meta-business-manager" in content
 

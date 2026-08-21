@@ -25,13 +25,7 @@ from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
-from apps.chatbots.forms import (
-    BroadcastMessageForm,
-    ChatbotForm,
-    ChatbotSettingsForm,
-    CopyChatbotForm,
-    get_broadcast_channels,
-)
+from apps.chatbots.forms import BroadcastMessageForm, ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
 from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
@@ -341,8 +335,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         "highlight_version_id": request.GET.get("version_id"),
         "cost_tracking_enabled": cost_tracking_enabled,
         "usage_summary": usage_summary,
-        "broadcast_channels": get_broadcast_channels(experiment),
-        "broadcast_char_limit": BroadcastMessageForm.MESSAGE_CHAR_LIMIT,
+        "broadcast_form": BroadcastMessageForm(experiment),
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
