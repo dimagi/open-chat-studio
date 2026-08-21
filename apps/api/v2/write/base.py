@@ -3,10 +3,7 @@
 Ships ahead of the sub-resource views that consume it (#4140-#4145).
 """
 
-from apps.api.permissions import BASE_PERMISSION_CLASSES, RequiresTeamPermission
-from apps.api.v2.lookups import get_working_chatbot, request_team
-from apps.experiments.models import Experiment
-from apps.oauth.permissions import TokenHasOAuthResourceScope, enforce_application_chatbot_write
+from apps.api.permissions import RequiresTeamPermission
 
 
 class ChatbotCompositionPermission(RequiresTeamPermission):
@@ -18,36 +15,3 @@ class ChatbotCompositionPermission(RequiresTeamPermission):
     """
 
     required_permissions = ["experiments.change_experiment"]
-
-
-class ChatbotWriteMixin:
-    """Auth and chatbot resolution for the sub-resources under ``/chatbots/{id}/``.
-
-    Locking is deliberately *not* done here: the pipeline façade locks the ``Pipeline`` row and the
-    trigger endpoints lock nothing, so the lock target belongs to each view.
-    """
-
-    # Built on BASE_PERMISSION_CLASSES so the read-only API-key gate survives (ADR-0021).
-    permission_classes = [
-        *BASE_PERMISSION_CLASSES,
-        ChatbotCompositionPermission,
-        TokenHasOAuthResourceScope,
-    ]
-    # TokenHasOAuthResourceScope derives chatbots:read for safe methods, chatbots:write otherwise.
-    required_scopes = ["chatbots"]
-
-    def get_chatbot(self) -> Experiment:
-        """The working (draft) chatbot named by the URL, scoped to the request's team.
-
-        Resolved through ``request_team`` rather than ``self.request.team``, which is ``None``
-        whenever DRF hands a view a ``clone_request`` -- OPTIONS metadata being the path that
-        already caught out the top-level viewset.
-
-        The application allowlist is enforced here rather than in each view so a sub-resource cannot
-        forget it: every write under ``/chatbots/{id}/`` has to resolve its chatbot through this
-        method first. Composition edits are edits to the chatbot, so a machine token reaches only the
-        chatbots its application was pinned to.
-        """
-        chatbot = get_working_chatbot(request_team(self.request), self.kwargs["id"])
-        enforce_application_chatbot_write(self.request, chatbot)
-        return chatbot
