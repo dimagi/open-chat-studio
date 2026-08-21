@@ -8,6 +8,8 @@ from django.urls import reverse
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.experiments.models import Experiment
 from apps.pipelines.build_state import pipeline_build_state
+from apps.service_providers.llm_service.default_models import get_default_model
+from apps.service_providers.models import LlmProviderModel, LlmProviderTypes
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 from apps.utils.tests.clients import ApiTestClient
@@ -17,16 +19,26 @@ CREATE_URL = "/api/v2/chatbots/"
 
 @pytest.fixture()
 def team(db):
-    """A provider alone is enough to seed an LLM node.
+    """A team with a provider and the global model row the seeded LLM node resolves to.
 
     `get_first_llm_provider_model` filters by the provider type's *default* model name
-    (`gpt-4.1-mini` for openai), and migration `service_providers.0020` seeds those default models
-    as global rows, so it resolves without a team-owned LlmProviderModel. Creating one with
-    `LlmProviderModelFactory` would in fact be filtered straight back out, since that factory names
-    models `test-model-N`.
+    (`gpt-4.1-mini` for openai), so a team-owned row from `LlmProviderModelFactory` would be
+    filtered straight back out -- that factory names models `test-model-N`.
+
+    The global row is created here rather than taken from migration `service_providers.0020`, which
+    seeds exactly these rows: a test running `transaction=True` without `serialized_rollback`
+    flushes migration data for the rest of that xdist worker's session, and this fixture would then
+    silently produce a Start + End pipeline with no LLM node.
     """
     team = TeamWithUsersFactory.create()
     LlmProviderFactory.create(team=team)
+    default_model = get_default_model(str(LlmProviderTypes.openai))
+    LlmProviderModel.objects.get_or_create(
+        team=None,
+        type=str(LlmProviderTypes.openai),
+        name=default_model.name,
+        max_token_limit=default_model.token_limit,
+    )
     return team
 
 
