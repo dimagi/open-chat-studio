@@ -1,6 +1,6 @@
 default: true
 
-# Disable rules that are NOT important for AI agent parsing - structural integrity and link/reference correctness
+# Enable rules that are important for AI agent parsing, structural integrity and link/reference correctness
 
 # List markers can be either - or *
 MD004: false
@@ -12,7 +12,7 @@ MD012: false
 
 # Line length — reduce progressively after long lines are fixed
 MD013:
-  line_length: 2000
+  line_length: 1000
   code_blocks: false
   tables: false
   headings: false
@@ -46,6 +46,7 @@ MD033:
     - figure
     - iframe
     - kbd
+    - p
     - small
     - span
     - sub
@@ -65,11 +66,15 @@ MD046: false
 MD049: false
 MD050: false
 
-# TO DO- enable as need link-fragment validation, there can be broken in-document links after heading changes
-MD051: false
+# Link-fragment validation to catch broken in-document links after heading changes
+MD051: true
 
 MD053: false
 MD054: false
 MD058: false
-MD059: false
+
+# Require descriptive link text (no "click here") — agents extracting a link
+# out of context need the anchor text itself to say what it points to.
+MD059: true
+
 MD060: false

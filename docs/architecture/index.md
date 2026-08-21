@@ -22,7 +22,7 @@ Open Chat Studio is a multi-tenant platform: teams build and configure chatbots 
 
 Internally it's a modular Django app: the web process serves the UI, API, and channel webhooks synchronously, while Celery workers handle everything that shouldn't block a request (message processing, evaluations, document/media ingestion, scheduled events).
 
-For the production process topology and backing services (PostgreSQL, Redis), see the [Self-Hosting overview](../hosting/index.md#architecture-overview); for the third-party services that keep it observable in production, see [Monitoring & Observability](#monitoring-observability) below.
+For the production process topology and backing services (PostgreSQL, Redis), see the [Self-Hosting overview](../hosting/index.md#architecture-overview); for the third-party services that keep it observable in production, see [Monitoring & Observability](#monitoring--observability) below.
 
 ## Technology Stack
 

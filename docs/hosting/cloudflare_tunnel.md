@@ -6,7 +6,8 @@ Cloudflare Tunnel is one option for exposing Open Chat Studio without opening in
 
 ## How it works
 
-`cloudflared` runs as a Docker container alongside your app. It opens outbound connections to Cloudflare's network. Cloudflare routes incoming traffic through those connections to your `web` container. Your server never needs an inbound firewall rule. It also add `extra_hosts` that takes in private hostname and APP IP that provides private DNS resolution so team members can access the app by hostname (e.g. `ocs.your-org`) instead of IP address. This hostname only resolves when WARP is connected; it does not appear in public DNS, certificate transparency logs, or any external registry.
+`cloudflared` runs as a Docker container alongside your app. It opens outbound connections to Cloudflare's network. Cloudflare routes incoming traffic through those connections to your `web` container.
+Your server never needs an inbound firewall rule. It also add `extra_hosts` that takes in private hostname and APP IP that provides private DNS resolution so team members can access the app by hostname (e.g. `ocs.your-org`) instead of IP address. This hostname only resolves when WARP is connected; it does not appear in public DNS, certificate transparency logs, or any external registry.
 
 ```mermaid
 flowchart LR

@@ -94,7 +94,8 @@ def create_team(request):
     if request.method == "POST":
         form = TeamChangeForm(request.POST)
         if form.is_valid():
-            team = form.save()
+            team = form.save(commit=False)
+            team.created_by = request.user
             team.save()
             with current_team(team):
                 make_user_team_owner(team=team, user=request.user)

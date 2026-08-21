@@ -115,10 +115,42 @@ Defines what happens when `wt` creates a worktree: per-branch database and Redis
 install, migrations and seed data. See
 [What worktree setup does](dev-workflow.md#what-worktree-setup-does).
 
+The underlying setup and cleanup scripts live in `scripts/setup-worktree.sh` and
+`scripts/teardown-worktree.sh` so Claude, Codex and Worktrunk share the same behavior.
+
 ## Other AI coding tools
 
 Other agentic coding tools (Gemini CLI, Codex CLI, OpenCode, Aider, Cline, etc.) can follow the
 same [development workflow](dev-workflow.md). Refer to your tool's documentation for details.
+
+### Codex
+
+Codex reads `AGENTS.md` directly. The checked-in `.codex/hooks.json` also runs a quiet setup guard
+when a Codex session starts or resumes. The first time you open the project in Codex CLI, run
+`/hooks` and trust the project hook, then resume or restart the session. A fresh native Codex
+worktree then receives:
+
+- The root checkout's `.env`, `.envrc` and `.python-version` files.
+- Python and Node dependencies.
+- An isolated PostgreSQL database and Redis database derived from the Codex worktree ID.
+- Migrations and the standard development seed data.
+
+The setup guard exits immediately when `.env`, `.venv` and `node_modules` already exist, their
+dependency fingerprint matches the current lockfiles, and the database URL is correct for the
+worktree. Its full output goes to a temporary log instead of being added to the model context.
+
+Codex Desktop users can additionally create a shared Local Environment in the project settings.
+Use `scripts/setup-worktree.sh` as its setup script and add these actions:
+
+| Action | Command |
+|---|---|
+| Run development environment | `uv run inv dev` |
+| Clean worktree services | `scripts/teardown-worktree.sh` |
+
+Run the cleanup action before deleting a native Codex worktree. Codex session-end hooks are not
+worktree-deletion hooks, so automatically dropping the database there would be unsafe. Worktrees
+created and removed through Worktrunk retain automatic cleanup; use `wtx` from the
+[development workflow](dev-workflow.md#1-create-a-worktree) to launch Codex that way.
 
 ### What works with any AI tool
 
