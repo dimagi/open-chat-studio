@@ -469,6 +469,7 @@ SPECTACULAR_SETTINGS = {
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.api.schema.prune_unused_tags",
+        "apps.api.schema.mirror_unknown_key_rejection",
         "apps.api.schema.set_export_description",
         "apps.api.schema.set_example_urls",
     ],

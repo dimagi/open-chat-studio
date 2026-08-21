@@ -989,6 +989,7 @@ components:
           default: ''
       required:
       - name
+      additionalProperties: false
     ChatbotCreated:
       type: object
       description: 'The create response: the ids needed to keep working with the new
@@ -1209,6 +1210,7 @@ components:
           items:
             type: string
             maxLength: 128
+      additionalProperties: false
     ChatbotVersion:
       type: object
       properties:
@@ -2279,6 +2281,7 @@ components:
         synthetic_voice_id:
           type: integer
           nullable: true
+      additionalProperties: false
     PipelineBuildErrors:
       type: object
       description: The normalized three-bucket errors report the publish gate rejects

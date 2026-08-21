@@ -9,10 +9,17 @@ Both are compared as *model* attribute names: `_writable_model_fields` reads eac
 which is where the API's `<resource>_id` names map back to the FK they write.
 """
 
+import pytest
+import yaml
 from rest_framework import serializers
 
 from apps.api.v2.write.fields import TeamScopedRelatedField
-from apps.api.v2.write.serializers import ChatbotWriteSerializer
+from apps.api.v2.write.serializers import (
+    ChatbotCreateSerializer,
+    ChatbotSettingsSerializer,
+    ChatbotWriteSerializer,
+    RejectsUnknownKeys,
+)
 from apps.chatbots.forms import ChatbotSettingsForm
 from apps.experiments.models import Experiment
 
@@ -60,3 +67,48 @@ def test_every_reference_on_the_patch_body_is_team_scoped():
     than left to whoever adds the next FK."""
     for name, field in _related_fields(ChatbotWriteSerializer()):
         assert isinstance(field, TeamScopedRelatedField), f"{name} is a relation but is not team-scoped"
+
+
+def _v2_components(pytestconfig) -> dict:
+    """The committed v2 schema's component schemas.
+
+    Read from the file rather than regenerated: `test_schema_is_up_to_date_and_valid` already pins
+    it to what generation produces, and reading is a great deal cheaper.
+    """
+    with open(f"{pytestconfig.rootdir}/api-schemas/v2.yml") as schema:
+        return yaml.safe_load(schema)["components"]["schemas"]
+
+
+@pytest.mark.parametrize(
+    ("component", "serializer"),
+    [
+        pytest.param("ChatbotCreate", ChatbotCreateSerializer, id="create-body"),
+        pytest.param("ChatbotSettings", ChatbotSettingsSerializer, id="nested-settings-block"),
+        pytest.param("PatchedChatbotWrite", ChatbotWriteSerializer, id="patch-body"),
+    ],
+)
+def test_the_schema_closes_each_body_that_rejects_unknown_keys(pytestconfig, component, serializer):
+    """`RejectsUnknownKeys` 400s on a key it does not declare, but OpenAPI permits extra properties
+    by default -- so left open, a generated client or a validator would accept a body the API
+    refuses, and the consumer this API is built for reads the schema rather than the prose.
+
+    The declared properties are compared against `serializer().fields`, which is the set
+    `RejectsUnknownKeys` itself checks against, so the two cannot drift apart.
+    """
+    schema = _v2_components(pytestconfig)[component]
+
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == set(serializer().fields)
+
+
+def test_every_serializer_that_rejects_unknown_keys_is_closed_in_the_schema(pytestconfig):
+    """`mirror_unknown_key_rejection` derives component names from the class names, so a serializer
+    drf-spectacular happens to name differently would silently keep OpenAPI's permissive default.
+    `Patched` is the prefix it gives a PATCH body."""
+    closed = {
+        name for name, schema in _v2_components(pytestconfig).items() if schema.get("additionalProperties") is False
+    }
+
+    assert {name.removeprefix("Patched") for name in closed} == {
+        cls.__name__.removesuffix("Serializer") for cls in RejectsUnknownKeys.__subclasses__()
+    }
