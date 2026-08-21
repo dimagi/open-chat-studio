@@ -1,7 +1,7 @@
 from celery import shared_task
 from celery.utils.log import get_task_logger
 
-from apps.experiments.models import ExperimentSession
+from apps.experiments.models import ExperimentSession, SessionStatus
 from apps.service_providers.tracing import TraceInfo
 from apps.utils.celery import Queues
 
@@ -31,16 +31,23 @@ def send_broadcast_message(experiment_id: int, channel_ids: list[int], message: 
 
 
 def get_broadcast_session_ids(experiment_id: int, channel_ids: list[int]) -> list[int]:
-    """The most recent session per (participant, channel) for a broadcast.
+    """The most recent active session per (participant, channel) for a broadcast.
 
     A participant is reachable only through a session they already have -- that is what holds
     the address to deliver to -- and only their latest session on a channel is the live
     conversation, so older ones are skipped. Someone on two channels is messaged on both.
+
+    Only `ACTIVE` sessions count. A session resting at `SETUP` or `PENDING` has no conversation
+    in it yet, and one that has been ended sits at `PENDING_REVIEW` or `COMPLETE` -- broadcasting
+    into either would push a message at someone who is not in a conversation with the bot. The
+    status is filtered before the newest-per-group pick, so a participant whose newest session
+    has been ended is still reached on an older one that is still active.
     """
     return list(
         ExperimentSession.objects.filter(
             experiment_id=experiment_id,
             experiment_channel_id__in=channel_ids,
+            status=SessionStatus.ACTIVE,
         )
         # `-id` breaks ties on `created_at` so the newest session is picked deterministically.
         .order_by("participant_id", "experiment_channel_id", "-created_at", "-id")

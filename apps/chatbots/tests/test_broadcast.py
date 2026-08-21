@@ -7,6 +7,7 @@ from django.urls import reverse
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chatbots.forms import BroadcastMessageForm
 from apps.chatbots.tasks import send_broadcast_message
+from apps.experiments.models import SessionStatus
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -56,6 +57,47 @@ def test_broadcast_reaches_each_participant_once_per_selected_channel(delay, exp
     assert delay.call_count == 3, "each (participant, channel) pair must be messaged exactly once"
     assert messaged == {latest_telegram.id, on_whatsapp_too.id, other_participant.id}
     assert {call.kwargs["message"] for call in delay.call_args_list} == {"Hi all"}
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(SessionStatus.SETUP, id="setup"),
+        pytest.param(SessionStatus.PENDING, id="pending"),
+        pytest.param(SessionStatus.PENDING_REVIEW, id="pending-review"),
+        pytest.param(SessionStatus.COMPLETE, id="complete"),
+        pytest.param(SessionStatus.UNKNOWN, id="unknown"),
+    ],
+)
+@patch("apps.chatbots.tasks.send_broadcast_message_to_session.delay")
+def test_broadcast_skips_a_session_that_is_not_active(delay, status, experiment):
+    """Only a live conversation is broadcast into -- anything else has no participant in it."""
+    channel = ExperimentChannelFactory(team=experiment.team, experiment=experiment)
+    ExperimentSessionFactory(experiment=experiment, experiment_channel=channel, status=status)
+
+    send_broadcast_message(experiment_id=experiment.id, channel_ids=[channel.id], message="Hi")
+
+    delay.assert_not_called()
+
+
+@pytest.mark.django_db()
+@patch("apps.chatbots.tasks.send_broadcast_message_to_session.delay")
+def test_broadcast_falls_back_to_an_older_session_that_is_still_active(delay, experiment):
+    """Status is filtered before the newest-per-group pick, so an ended newer session is stepped over."""
+    channel = ExperimentChannelFactory(team=experiment.team, experiment=experiment)
+    participant = ParticipantFactory(team=experiment.team)
+    still_active = ExperimentSessionFactory(experiment=experiment, participant=participant, experiment_channel=channel)
+    ExperimentSessionFactory(
+        experiment=experiment,
+        participant=participant,
+        experiment_channel=channel,
+        status=SessionStatus.PENDING_REVIEW,
+    )
+
+    send_broadcast_message(experiment_id=experiment.id, channel_ids=[channel.id], message="Hi")
+
+    delay.assert_called_once_with(session_id=still_active.id, message="Hi")
 
 
 @pytest.mark.django_db()
