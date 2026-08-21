@@ -991,7 +991,8 @@ components:
       - name
     ChatbotCreated:
       type: object
-      description: 'The create response: spec 5.1''s three keys and nothing more.'
+      description: 'The create response: the ids needed to keep working with the new
+        chatbot, and nothing more.'
       properties:
         id:
           type: string
