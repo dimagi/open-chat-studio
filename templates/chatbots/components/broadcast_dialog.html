@@ -21,7 +21,7 @@
           <label class="label cursor-pointer justify-start gap-2">
             <input type="checkbox" name="channels" value="{{ channel.id }}" x-model="selectedChannels"
                    class="checkbox checkbox-sm checkbox-primary">
-            <span class="label-text">{{ channel.platform_enum.label }} &mdash; {{ channel.name }}</span>
+            <span class="label-text">{{ channel.platform_enum.label }} — {{ channel.name }}</span>
           </label>
         {% endfor %}
       </fieldset>

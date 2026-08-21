@@ -42,7 +42,8 @@ def get_broadcast_session_ids(experiment_id: int, channel_ids: list[int]) -> lis
             experiment_id=experiment_id,
             experiment_channel_id__in=channel_ids,
         )
-        .order_by("participant_id", "experiment_channel_id", "-created_at")
+        # `-id` breaks ties on `created_at` so the newest session is picked deterministically.
+        .order_by("participant_id", "experiment_channel_id", "-created_at", "-id")
         .distinct("participant_id", "experiment_channel_id")
         .values_list("id", flat=True)
     )
