@@ -113,7 +113,6 @@ def test_chatbot_settings_form_normalises_the_participant_allowlist(team_with_us
     request = RequestFactory().get("/")
     request.team = team_with_users
     request.user = team_with_users.members.first()
-    set_current_team(team_with_users)
 
     form = ChatbotSettingsForm(request, data={"name": "Bot", "participant_allowlist": entered})
     form.is_valid()
