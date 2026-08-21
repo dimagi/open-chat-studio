@@ -119,6 +119,23 @@ def test_chatbot_home_offers_only_the_broadcastable_channels(experiment, logged_
 
 
 @pytest.mark.django_db()
+def test_broadcast_channel_is_labelled_by_platform_alone(experiment, logged_in_client):
+    """The channel name defaults to the chatbot's, so it says nothing the reader doesn't know."""
+    ExperimentChannelFactory(
+        team=experiment.team, experiment=experiment, platform=ChannelPlatform.WHATSAPP, name=experiment.name
+    )
+
+    content = logged_in_client.get(
+        reverse("chatbots:single_chatbot_home", args=[experiment.team.slug, experiment.id])
+    ).content.decode()
+
+    start = content.index('id="broadcast_message_modal"')
+    dialog = content[start : content.index("</dialog>", start)]
+    assert "WhatsApp" in dialog
+    assert experiment.name not in dialog
+
+
+@pytest.mark.django_db()
 def test_broadcast_modal_arms_the_whatsapp_template_warning(experiment, logged_in_client):
     """Each checkbox carries its platform, which is what the warning keys off."""
     telegram = ExperimentChannelFactory(team=experiment.team, experiment=experiment, platform=ChannelPlatform.TELEGRAM)

@@ -163,7 +163,14 @@ class BroadcastChannelWidget(forms.CheckboxSelectMultiple):
 
 class BroadcastChannelField(forms.ModelMultipleChoiceField):
     def label_from_instance(self, obj):
-        return f"{obj.platform_enum.label} — {obj.name}"
+        """The platform is the whole label.
+
+        `ExperimentChannel.__str__` would add the channel's name, which defaults to the
+        chatbot's -- the same on every row, so it only tells the reader which chatbot they are
+        already looking at. A chatbot can hold only one channel per platform
+        (`validate_platform_availability`), so the platform on its own is unambiguous.
+        """
+        return obj.platform_enum.label
 
 
 class BroadcastMessageForm(forms.Form):
