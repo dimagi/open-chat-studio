@@ -123,14 +123,19 @@ def _openrouter() -> ProviderCredentials | None:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         return None
+
+    from django.contrib.sites.models import Site  # noqa: PLC0415 - local import to avoid circular dep at module load
+
+    from apps.web.meta import get_server_root  # noqa: PLC0415 - local import to avoid circular dep at module load
+
     return ProviderCredentials(
         LlmProviderTypes.openrouter,
         "OpenRouter",
         {
             "openai_api_key": api_key,
             "default_headers": {
-                "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://github.com/dimagi/open-chat-studio"),
-                "X-Title": os.environ.get("OPENROUTER_TITLE", "Open Chat Studio"),
+                "HTTP-Referer": get_server_root(),
+                "X-Title": Site.objects.get_current().name,
             },
         },
     )
