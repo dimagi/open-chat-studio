@@ -7,7 +7,7 @@
                 {% with total=table.paginator.count %}
                     {% if total %}
                         <div class="mb-1 text-sm text-base-content/60" data-cy="table-record-count">
-                            {{ total|intcomma }} record{{ total|pluralize }}
+                            {% blocktranslate with total_display=total|intcomma count total=total %}{{ total_display }} record{% plural %}{{ total_display }} records{% endblocktranslate %}
                         </div>
                     {% endif %}
                 {% endwith %}
