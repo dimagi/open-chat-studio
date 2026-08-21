@@ -1234,6 +1234,48 @@ def test_session_view_shows_usage_summary(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_session_view_hides_usage_summary_from_participant(client, team_with_users):
+    """A participant viewing their own session has no team membership, so the
+    team-internal usage/cost summary must not render for them."""
+    team = team_with_users
+    session = ExperimentSessionFactory.create(experiment__team=team, status=SessionStatus.SETUP)
+    session.participant = Participant.objects.create(team=team, identifier="someone@example.com", platform="web")
+    session.save()
+    UsageRecordFactory.create(
+        team=team,
+        session=session,
+        model_name="gpt-4o",
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=1000,
+        cost=Decimal("1.50"),
+    )
+    # Consenting sets the session-access cookie the participant-facing view requires.
+    consent_response = client.post(
+        reverse(
+            "experiments:start_session_from_invite",
+            args=[team.slug, session.experiment.public_id, session.external_id],
+        ),
+        data={
+            "consent_agreement": "on",
+            "experiment_id": session.experiment.id,
+            "participant_id": session.participant.id,
+        },
+    )
+    assert consent_response.status_code == 302
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context_data["show_usage_summary"] is False
+    assert response.context_data["usage_summary"] is None
+    assert b'data-testid="session-usage-summary"' not in response.content
+
+
+@pytest.mark.django_db()
 def test_session_view_shows_no_pricing_data_when_unpriced(client, team_with_users):
     team = team_with_users
     user = team.members.first()
