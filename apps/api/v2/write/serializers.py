@@ -14,6 +14,7 @@ from django.db import transaction
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
+from apps.api.v2.lookups import request_team
 from apps.api.v2.write.fields import NfcCharField, OptionalTextField, TeamScopedRelatedField
 from apps.experiments.helpers import excluded_voice_services, normalize_participant_allowlist
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
@@ -56,7 +57,7 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
         # Reimplements the ~10 lines of ChatbotForm.save that cannot be reused because they take a
         # request. Unlike the UI's CreateChatbot this deliberately does not publish a version.
         request = self.context["request"]
-        team = request.team
+        team = request_team(request)
         llm_provider = get_first_llm_provider_by_team(team.id)
         llm_provider_model = get_first_llm_provider_model(llm_provider, team.id)
         pipeline = Pipeline.create_default_pipeline_with_name(
@@ -143,13 +144,15 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     settings = ChatbotSettingsSerializer(source="*", required=False)
     consent_form_id = TeamScopedRelatedField(
         source="consent_form",
-        scoped_queryset=lambda request: ConsentForm.objects.working_versions_queryset().filter(team=request.team),
+        scoped_queryset=lambda request: ConsentForm.objects.working_versions_queryset().filter(
+            team=request_team(request)
+        ),
         required=False,
         allow_null=True,
     )
     trace_provider_id = TeamScopedRelatedField(
         source="trace_provider",
-        scoped_queryset=lambda request: TraceProvider.objects.filter(team=request.team),
+        scoped_queryset=lambda request: TraceProvider.objects.filter(team=request_team(request)),
         required=False,
         allow_null=True,
     )
@@ -157,7 +160,7 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     # cannot wire a voice the settings page would refuse to re-save.
     voice_provider_id = TeamScopedRelatedField(
         source="voice_provider",
-        scoped_queryset=lambda request: VoiceProvider.objects.filter(team=request.team).exclude(
+        scoped_queryset=lambda request: VoiceProvider.objects.filter(team=request_team(request)).exclude(
             syntheticvoice__service__in=excluded_voice_services(request)
         ),
         required=False,
@@ -166,7 +169,9 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     synthetic_voice_id = TeamScopedRelatedField(
         source="synthetic_voice",
         # The team's own voices plus the general ones -- the same set /pipeline/options/ draws on.
-        scoped_queryset=lambda request: SyntheticVoice.get_for_team(request.team, excluded_voice_services(request)),
+        scoped_queryset=lambda request: SyntheticVoice.get_for_team(
+            request_team(request), excluded_voice_services(request)
+        ),
         required=False,
         allow_null=True,
     )
