@@ -4,29 +4,28 @@ For engineers responsible for extending, debugging, or operating the Claude work
 
 These workflows use [`anthropics/claude-code-action`](https://github.com/anthropics/claude-code-action) to run Claude Code inside GitHub Actions. Claude autonomously reads code, writes changes, runs tests, and opens PRs based on its instructions.
 
-## Setup
+## Setup secrets and permissions
 
-- **`ANTHROPIC_API_KEY`**: Claude API key.
+- `ANTHROPIC_API_KEY`: Anthropic API key for Claude.
 - `auto-update-models.yml`'s `reconcile` job needs `LLM_STATS_BEARER_TOKEN`.
+- A workflow's `permissions:` block governs the default `GITHUB_TOKEN`.
+- Each run is also restricted to an explicit allowlist of tools, passed via `--allowedTools` in the `claude_args` field of the workflow file — Claude cannot call anything outside that list. Together, `permissions:` and `--allowedTools` are the main safeguard against a compromised or malicious prompt (e.g. a hostile issue/PR body) taking unintended action.
+
+> [!WARNING]
+> If Claude tries to use a tool that isn't permitted, that call is denied and it continues without it — **the run won't fail**. A missing tool usually surfaces as an **incomplete result rather than an error**, so check the run transcript for denied tool calls if the output looks truncated.
 
 ## Workflow files
 
 | File | Actions UI name | Trigger |
 |---|---|---|
-| `.github/workflows/claude.yml` | Claude Code | Issue labelled `claude`, `@claude` mention, daily schedule, manual dispatch |
-| `.github/workflows/claude-followup.yml` | Claude Followup | CI (i.e. Lint and Test) workflow completes on any `claude/**` branch |
-| `.github/workflows/claude-dependabot.yml` | Claude Dependabot PR Review | Dependabot PR opened or updated, manual dispatch |
-| `.github/workflows/claude-code-review.yml` | Claude Code Review | PR opened, marked ready for review, or pushed to (non-Dependabot, non-draft) |
-| `.github/workflows/auto-update-models.yml` | Auto Update LLM Models pricing | Daily schedule, manual dispatch |
+| `claude.yml` | Claude Code | Issue labelled `claude`, `@claude` mention, daily schedule, manual dispatch |
+| `claude-followup.yml` | Claude Followup | CI (i.e. Lint and Test) workflow completes on any `claude/**` branch |
+| `claude-dependabot.yml` | Claude Dependabot PR Review | Dependabot PR opened or updated, manual dispatch |
+| `claude-code-review.yml` | Claude Code Review | PR opened, marked ready for review, or pushed to (non-Dependabot, non-draft) |
+| `auto-update-models.yml` | Auto Update LLM Models pricing | Daily schedule, manual dispatch |
 
 ## Forked PRs
 Since fork PRs can't get an OIDC token, these pull requests do **not** run the Claude Code Review workflow.
-
-## Tool allowlist
-
-Each run is restricted to an explicit allowlist of tools defined in the `claude_args` field of the workflow file. Claude cannot call anything outside that list. If it needs a tool that isn't permitted, the run fails rather than silently taking an unintended action.
-
-For more information on `claude_args`, see [GitHub for claude-code-action usage guide](https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md).
 
 ## Plugins
 
