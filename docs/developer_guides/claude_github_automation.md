@@ -47,6 +47,7 @@ Use this to ask Claude a question in context, request a specific change to an ex
 
 - An **issue comment** — to ask a question or kick off an implementation
 - A **PR comment** — to request a specific code change
+- An **inline PR review comment** — to point Claude at a specific line and have it act on that feedback
 - A **PR review body** — to have Claude respond to your review feedback
 
 Claude will push changes to the branch or reply in a new comment.
