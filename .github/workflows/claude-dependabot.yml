@@ -8,6 +8,9 @@
 #
 # Triggered on: Dependabot PRs (opened, synchronize), or manual dispatch
 # Requirements: ANTHROPIC_API_KEY secret must be configured
+#
+# Notes:
+# - No concurrency group is set, so runs are independent of one another.
 
 name: Claude Dependabot PR Review
 

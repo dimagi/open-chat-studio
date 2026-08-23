@@ -1,4 +1,4 @@
-# Claude Followup
+# Claude Followup Workflow
 #
 # Runs a single automatic follow-up pass on PRs from claude/** branches
 # after their CI run completes: fixes CI failures and addresses actionable
@@ -7,6 +7,14 @@
 #
 # Triggered on: "Lint and Test" workflow completing on a claude/** branch
 # Requirements: ANTHROPIC_API_KEY secret must be configured
+#
+# Notes:
+# - Fork PRs are skipped — workflow_run grants this job write permissions
+#   on the base repository, so it only acts on runs whose head branch
+#   lives in this repo, never a fork's.
+# - Runs are grouped per branch (`cancel-in-progress: false`), so a second
+#   trigger for the same branch waits for the in-progress run to finish
+#   rather than replacing it.
 
 name: Claude Followup
 

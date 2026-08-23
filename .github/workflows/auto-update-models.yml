@@ -1,4 +1,4 @@
-# Auto Update LLM Models
+# Auto Update LLM Models Workflow
 #
 # Daily reconciliation against llm-stats.com (via the zeroeval Stats API):
 # scripts/reconcile_models.py runs once and produces three signals:
@@ -19,6 +19,14 @@
 # Triggered on: daily schedule, or manual dispatch
 # Requirements: LLM_STATS_BEARER_TOKEN secret (job 1, reconcile);
 #   ANTHROPIC_API_KEY secret (job 2, new-models-pr)
+#
+# Notes:
+# - The new-model PR (job 2) gets the `claude` and `auto-models` labels.
+# - The missing-pricing issue (job 1) gets the `cost-tracking` and
+#   `auto-models` labels.
+# - Uses a single global concurrency group (not per-issue/PR), so only one
+#   run of the whole workflow — scheduled or manual — executes at a time
+#   across the repository.
 
 name: Auto Update LLM Models
 

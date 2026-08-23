@@ -1,4 +1,4 @@
-# Claude Code
+# Claude Code Workflow
 #
 # Runs Claude Code against issues and PR/issue conversations in two modes:
 # - Scheduled/manual (find-work + scheduled jobs): picks the oldest open
@@ -11,6 +11,13 @@
 # Triggered on: daily schedule, manual dispatch, `@claude` mention (issue
 # comment, PR review comment, or PR review), or issue labelled `claude`
 # Requirements: ANTHROPIC_API_KEY secret must be configured
+#
+# Notes:
+# - Applies the `claude` label to PRs it opens when instructed by the prompt
+#   (the scheduled/manual mode aims to create one PR per completed task).
+# - Runs are grouped per issue/PR (`cancel-in-progress: false`), so a
+#   second trigger for the same issue or PR waits for the in-progress run
+#   to finish rather than replacing it.
 
 name: Claude Code
 
