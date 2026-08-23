@@ -14,9 +14,10 @@ This project has GitHub Actions workflows that use Claude Code for [autonomous i
 
 **Automatic behaviours** (no action needed):
 
+- **PR Code Review** — every non-draft, non-fork, non-Dependabot PR automatically receives a Claude code review with findings posted as inline diff comments. [How it works](#pr-code-review)
 - **Auto-repair** — Claude fixes its own CI failures and addresses reviewer comments automatically, so PRs are in a clean state by the time you review them. [How it works](#automatic-follow-up)
 - **Dependabot review** — every Dependabot PR includes a Claude-written assessment: what changed, whether anything is breaking, and a clear merge recommendation, saving engineers time. [How it works](#dependabot-pr-review)
-- **PR Code Review** — every non-draft, non-fork, non-Dependabot PR automatically receives a Claude code review with findings posted as inline diff comments. [How it works](#pr-code-review)
+
 
 ## How to Use
 
@@ -50,7 +51,11 @@ Use this to ask Claude a question in context, request a specific change to an ex
 - An **inline PR review comment** — to point Claude at a specific line and have it act on that feedback
 - A **PR review body** — to have Claude respond to your review feedback
 
-Claude will push changes to the branch or reply in a new comment. This also works on PRs from a fork, where the automatic PR Code Review doesn't run — it's the fallback for getting Claude's help there.
+Claude will push changes to the branch or reply in a new comment.
+
+!!! note
+
+    This requires write access to the repository. `@claude` only responds to comments and reviews from people with write access or higher — everyone else's mention fails rather than getting a response. If you're an external contributor without write access, ask a maintainer to invoke Claude on your behalf.
 
 **Example prompts:**
 
@@ -130,7 +135,8 @@ Every non-draft, non-fork, non-Dependabot PR triggers an automated Claude code r
 It runs when a PR is opened, when it is marked **ready for review**, and on every push. Drafts are skipped — which is why the [development workflow](../getting-started/dev-workflow.md#then-hand-it-over) has you clean up the PR as a draft first, then flip it to ready to get this review. There is no manual trigger; to get a fresh review, push a new commit.
 
 !!! note
-    Pull requests from a fork do **not** trigger this automatic review — GitHub withholds the permissions this workflow needs from fork-originated PRs. If you're contributing from a fork, comment `@claude review this PR` instead to get the same review on demand — see [Asking or directing Claude with @claude](#3-asking-or-directing-claude-with-claude).
+
+    Pull requests from a fork do **not** trigger this automatic review. Claude Code actions require write access, so an external contributor should ask a maintainer trigger a Claude review.
 
 ## Maintaining These Workflows
 

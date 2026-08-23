@@ -27,7 +27,7 @@ Check the comment block at the top of each file for what it does, when it is ski
 
 ## Forked PR limitations
 
-`claude-code-review.yml` and `claude-followup.yml` both skip fork-originated PRs — see the `Notes:` in each header comment for why.
+`claude-code-review.yml` and `claude-followup.yml` both skip fork-originated PRs and `claude.yml`'s `claude` job fails with "User does not have write access on this repository". See the `Notes:` in each header comment for why.
 
 ## Concurrency and run cancellation
 
@@ -49,6 +49,7 @@ For the other labels used, see each workflow's header comment.
 
 ## Troubleshooting
 - **Run fails immediately in the `claude-code-action` step** — check that `ANTHROPIC_API_KEY` is set and valid; that's the most common cause across all these workflows.
+- **`claude.yml`'s `claude` job fails with "User does not have write access on this repository"** — expected. That job has no job-level actor check of its own (see its header comment); it relies entirely on claude-code-action's built-in write-access check, so an `@claude` mention or review from anyone without write access — commonly a fork PR's own author — fails the run instead of being skipped. A maintainer commenting `@claude` works normally.
 - **`claude-code-review.yml` didn't run on a PR from a fork** — expected, see Forked PR limitations above. There's no failed job to debug; the run was skipped.
 - **`auto-update-models.yml`'s `reconcile` job fails** — check its header comment's `Requirements:` line for which secret it needs, and confirm it's set and valid.
 - **A Claude-created PR didn't get a second follow-up round** — by design, see `claude-followup.yml`'s header comment for the `claude-followup-done` mechanics. Removing the label doesn't start a run by itself — it only clears the skip for the next "Lint and Test" completion, so push a new commit (or re-run "Lint and Test") after removing it. Commenting `@claude` on the PR works immediately instead, independent of the label.

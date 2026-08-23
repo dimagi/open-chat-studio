@@ -18,6 +18,12 @@
 # - Runs are grouped per issue/PR (`cancel-in-progress: false`), so a
 #   second trigger for the same issue or PR waits for the in-progress run
 #   to finish rather than replacing it.
+# - The `claude` job has no actor/permission gate of its own — it relies on
+#   claude-code-action's built-in check that the triggering user has write
+#   access to this repo. A mention or review from anyone without write
+#   access (most fork PR authors included) fails the "Run Claude Code" step
+#   with "Action failed with error: User does not have write access on this
+#   repository" rather than being silently skipped.
 
 name: Claude Code
 
