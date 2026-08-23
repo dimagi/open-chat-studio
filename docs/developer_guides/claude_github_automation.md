@@ -50,7 +50,7 @@ Use this to ask Claude a question in context, request a specific change to an ex
 - An **inline PR review comment** — to point Claude at a specific line and have it act on that feedback
 - A **PR review body** — to have Claude respond to your review feedback
 
-Claude will push changes to the branch or reply in a new comment.
+Claude will push changes to the branch or reply in a new comment. This also works on PRs from a fork, where the automatic PR Code Review doesn't run — it's the fallback for getting Claude's help there.
 
 **Example prompts:**
 
@@ -130,7 +130,7 @@ Every non-draft, non-fork, non-Dependabot PR triggers an automated Claude code r
 It runs when a PR is opened, when it is marked **ready for review**, and on every push. Drafts are skipped — which is why the [development workflow](../getting-started/dev-workflow.md#then-hand-it-over) has you clean up the PR as a draft first, then flip it to ready to get this review. There is no manual trigger; to get a fresh review, push a new commit.
 
 !!! note
-    For a fork, pull requests do **not** run the Claude Code Review workflow due to permission restrictions.
+    Pull requests from a fork do **not** trigger this automatic review — GitHub withholds the permissions this workflow needs from fork-originated PRs. If you're contributing from a fork, comment `@claude review this PR` instead to get the same review on demand — see [Asking or directing Claude with @claude](#3-asking-or-directing-claude-with-claude).
 
 ## Maintaining These Workflows
 
