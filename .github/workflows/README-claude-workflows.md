@@ -6,13 +6,12 @@ These workflows use [`anthropics/claude-code-action`](https://github.com/anthrop
 
 ## Required secrets and permissions
 
-- Secret requirements differ per workflow — check the `Requirements:` line in each workflow file's header comment.
-- Together, `permissions:` and `--allowedTools` are the main safeguard against a compromised or malicious prompt (e.g. a hostile issue/PR body) taking unintended action.
-  - Each workflow's `permissions:` block governs the default `GITHUB_TOKEN`.
-  - Each run is restricted to an explicit allowlist of tools, passed via `--allowedTools` in the `claude_args` field of the workflow file — Claude cannot call anything outside that list.
+Secret requirements differ per workflow — check the `Requirements:` line in each workflow file's header comment.
+
+Two independent mechanisms scope what Claude can do in every run: the `permissions:` block (what the `GITHUB_TOKEN` can access) and `--allowedTools` in `claude_args` (which tools **run without a prompt for permission**). Getting either wrong is the main way a compromised or malicious prompt — e.g. a hostile issue/PR body — could take unintended action, so treat changes to them as security-sensitive. See [claude-code-action's security docs](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md) and the [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference) for how they actually behave.
 
 > [!WARNING]
-> If Claude tries to use a tool that isn't permitted, that call is denied and it continues without it — **the run won't fail**. A missing tool usually surfaces as an **incomplete result rather than an error**, so check the run transcript for denied tool calls if the output looks truncated.
+> If Claude tries to use a tool that isn't pre-approved, the call is denied and Claude continues without it — **the run won't fail**. A missing tool usually surfaces as an **incomplete result rather than an error**, so check the run transcript for denied tool calls if the output looks truncated.
 
 ## GitHub workflows at a glance
 
@@ -52,6 +51,6 @@ For the other labels used, see each workflow's header comment.
 - **Run fails immediately in the `claude-code-action` step** — check that `ANTHROPIC_API_KEY` is set and valid; that's the most common cause across all these workflows.
 - **`claude-code-review.yml` didn't run on a PR from a fork** — expected, see Forked PR limitations above. There's no failed job to debug; the run was skipped.
 - **`auto-update-models.yml`'s `reconcile` job fails** — check its header comment's `Requirements:` line for which secret it needs, and confirm it's set and valid.
-- **A Claude-created PR didn't get a second follow-up round** — by design, see `claude-followup.yml`'s header comment for the `claude-followup-done` mechanics. Remove the label, or comment `@claude` on the PR, to trigger another pass.
+- **A Claude-created PR didn't get a second follow-up round** — by design, see `claude-followup.yml`'s header comment for the `claude-followup-done` mechanics. Removing the label doesn't start a run by itself — it only clears the skip for the next "Lint and Test" completion, so push a new commit (or re-run "Lint and Test") after removing it. Commenting `@claude` on the PR works immediately instead, independent of the label.
 - **Output looks incomplete, or a step Claude should have taken didn't happen** — check the run transcript for denied tool calls, see Required secrets and permissions above.
 - **Output quality needs improvement** — comment `@claude` on the issue or PR with what to revise, or update the relevant prompt in the workflow file if the issue is systemic.
