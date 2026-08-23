@@ -6,7 +6,7 @@
 # - Assess breaking changes and security impacts
 # - Provide actionable recommendations for the development team
 #
-# Triggered on: Dependabot PRs (opened, synchronize)
+# Triggered on: Dependabot PRs (opened, synchronize), or manual dispatch
 # Requirements: ANTHROPIC_API_KEY secret must be configured
 
 name: Claude Dependabot PR Review

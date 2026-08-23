@@ -1,3 +1,17 @@
+# Claude Code
+#
+# Runs Claude Code against issues and PR/issue conversations in two modes:
+# - Scheduled/manual (find-work + scheduled jobs): picks the oldest open
+#   issue labelled `claude` that doesn't already have an open PR, and
+#   implements its next unchecked task.
+# - Event-driven (claude job): responds to an `@claude` mention in an issue
+#   comment, PR review comment, or PR review, or to an issue being labelled
+#   `claude`.
+#
+# Triggered on: daily schedule, manual dispatch, `@claude` mention (issue
+# comment, PR review comment, or PR review), or issue labelled `claude`
+# Requirements: ANTHROPIC_API_KEY secret must be configured
+
 name: Claude Code
 
 on:

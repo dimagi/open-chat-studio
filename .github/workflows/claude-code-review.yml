@@ -4,15 +4,17 @@
 # code-review plugin. Findings are verified by the plugin's review agents
 # and posted as inline comments on the PR diff.
 #
-# Triggered on: PR opened, marked ready for review, or pushed to
+# Triggered on: PR opened, marked ready for review, or pushed
 # Requirements: ANTHROPIC_API_KEY secret must be configured
 #
 # Notes:
+# - Fork PRs are skipped — they can't get an OIDC token, so there's no
+#   credential for the review to run with
 # - Dependabot PRs are excluded — they get their own review via
 #   claude-dependabot.yml
-# - Sentry (Seer) bot PRs are reviewed; the action's non-human-actor guard
-#   is opened for them via allowed_bots
 # - Draft PRs are skipped; the review runs when the PR is marked ready
+# - sentry[bot] and ocs-agent[bot] PRs are reviewed; the action's
+#   non-human-actor guard is opened for them via allowed_bots
 # - A new push cancels any in-progress review of the same PR
 
 name: Claude Code Review

@@ -6,8 +6,7 @@ These workflows use [`anthropics/claude-code-action`](https://github.com/anthrop
 
 ## Required secrets and permissions
 
-- `ANTHROPIC_API_KEY` for Claude Code.
-- `auto-update-models.yml`'s `reconcile` job needs `LLM_STATS_BEARER_TOKEN`.
+- Secret requirements differ per workflow — check the `Requirements:` line in each workflow file's header comment.
 - Each workflow's `permissions:` block governs the default `GITHUB_TOKEN`.
 - Each run is also restricted to an explicit allowlist of tools, passed via `--allowedTools` in the `claude_args` field of the workflow file — Claude cannot call anything outside that list. Together, `permissions:` and `--allowedTools` are the main safeguard against a compromised or malicious prompt (e.g. a hostile issue/PR body) taking unintended action.
 
@@ -16,20 +15,19 @@ These workflows use [`anthropics/claude-code-action`](https://github.com/anthrop
 
 ## GitHub workflows at a glance
 
-| File | Actions UI name | Trigger |
-|---|---|---|
-| `claude.yml` | Claude Code | Issue labelled `claude`, `@claude` mention, daily schedule, manual dispatch |
-| `claude-followup.yml` | Claude Followup | CI (i.e. Lint and Test) workflow completes on any `claude/**` branch |
-| `claude-dependabot.yml` | Claude Dependabot PR Review | Dependabot PR opened or updated, manual dispatch |
-| `claude-code-review.yml` | Claude Code Review | PR opened, marked ready for review, or pushed (non-Dependabot, non-draft) |
-| `auto-update-models.yml` | Auto Update LLM Models pricing | Daily schedule, manual dispatch |
+| File | Actions UI name |
+|---|---|
+| `claude.yml` | Claude Code |
+| `claude-followup.yml` | Claude Followup |
+| `claude-dependabot.yml` | Claude Dependabot PR Review |
+| `claude-code-review.yml` | Claude Code Review |
+| `auto-update-models.yml` | Auto Update LLM Models |
+
+Check the comment block at the top of each file for what it does, when it triggers, and what it needs.
 
 ## Forked PR limitations
-Since fork PRs can't get an OIDC token, these pull requests do **not** run the Claude Code Review workflow.
 
-## Claude Code plugins
-
-The code-review workflow (`claude-code-review.yml`) uses an official Anthropic plugin.
+`claude-code-review.yml` skips fork PRs — see the `Notes:` in its header comment for why.
 
 ## Concurrency and run cancellation
 
@@ -41,14 +39,14 @@ The code-review workflow (`claude-code-review.yml`) uses an official Anthropic p
 ## GitHub labels used by these workflows
 
 - **`claude` label** — apply to an issue to trigger the one-shot or incremental workflow. Claude also applies it to PRs it opens, including the new-model PR from `auto-update-models.yml`.
-- **`claude-followup-done` label** — applied by the follow-up workflow after it runs. Prevents a second round. Remove it manually if you need Claude to re-run follow-up on a PR.
+- **`claude-followup-done` label** — one-round limiter for the follow-up workflow; see the header comment in `claude-followup.yml` for the mechanics.
 - **`auto-models` label** — applied by `auto-update-models.yml` to both its new-model PR and to its missing-pricing issue.
 - **`cost-tracking` label** — applied by `auto-update-models.yml` to its missing-pricing issue.
 
 ## Troubleshooting
 - **Run fails immediately in the `claude-code-action` step** — check that `ANTHROPIC_API_KEY` is set and valid; that's the most common cause across all these workflows.
-- **`claude-code-review.yml` didn't run on a PR from a fork** — expected, see Forked PRs above. There's no failed job to debug; the run was skipped.
-- **`auto-update-models.yml`'s `reconcile` job fails** — verify `LLM_STATS_BEARER_TOKEN` is set and valid; the job needs it to call the llm-stats.com Stats API.
+- **`claude-code-review.yml` didn't run on a PR from a fork** — expected, see Forked PR limitations above. There's no failed job to debug; the run was skipped.
+- **`auto-update-models.yml`'s `reconcile` job fails** — check its header comment's `Requirements:` line for which secret it needs, and confirm it's set and valid.
 - **A Claude-created PR didn't get a second follow-up round** — by design, see the `claude-followup-done` label above. Remove the label, or comment `@claude` on the PR, to trigger another pass.
-- **Output looks incomplete, or a step Claude should have taken didn't happen** — check the run transcript for denied tool calls, see Tool allowlist above.
+- **Output looks incomplete, or a step Claude should have taken didn't happen** — check the run transcript for denied tool calls, see Required secrets and permissions above.
 - **Output quality needs improvement** — comment `@claude` on the issue or PR with what to revise, or update the relevant prompt in the workflow file if the issue is systemic.

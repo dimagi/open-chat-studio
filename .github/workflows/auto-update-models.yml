@@ -1,5 +1,5 @@
-name: Auto Update LLM Models
-
+# Auto Update LLM Models
+#
 # Daily reconciliation against llm-stats.com (via the zeroeval Stats API):
 # scripts/reconcile_models.py runs once and produces three signals:
 #
@@ -15,6 +15,12 @@ name: Auto Update LLM Models
 # docs/developer_guides/managing_models.md.
 #
 # Model metadata is sourced from https://llm-stats.com (via api.zeroeval.com).
+#
+# Triggered on: daily schedule, or manual dispatch
+# Requirements: LLM_STATS_BEARER_TOKEN secret (job 1, reconcile);
+#   ANTHROPIC_API_KEY secret (job 2, new-models-pr)
+
+name: Auto Update LLM Models
 
 on:
   schedule:

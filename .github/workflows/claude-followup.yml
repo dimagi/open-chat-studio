@@ -1,3 +1,13 @@
+# Claude Followup
+#
+# Runs a single automatic follow-up pass on PRs from claude/** branches
+# after their CI run completes: fixes CI failures and addresses actionable
+# PR review feedback, then labels the PR claude-followup-done so it only
+# runs once. Remove that label to allow another round.
+#
+# Triggered on: "Lint and Test" workflow completing on a claude/** branch
+# Requirements: ANTHROPIC_API_KEY secret must be configured
+
 name: Claude Followup
 
 on:
