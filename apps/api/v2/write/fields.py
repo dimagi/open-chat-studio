@@ -1,8 +1,11 @@
 """Serializer fields shared by the v2 write endpoints."""
 
 import unicodedata
+from collections.abc import Callable
 
+from django.db.models import QuerySet
 from rest_framework import serializers
+from rest_framework.request import Request
 
 
 class NfcCharField(serializers.CharField):
@@ -68,7 +71,7 @@ class TeamScopedRelatedField(serializers.PrimaryKeyRelatedField):
     is to leak whether the id exists in another team.
     """
 
-    def __init__(self, scoped_queryset, **kwargs):
+    def __init__(self, scoped_queryset: Callable[[Request], QuerySet], **kwargs):
         self.scoped_queryset = scoped_queryset
         super().__init__(**kwargs)
 
