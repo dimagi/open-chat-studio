@@ -104,6 +104,27 @@ def test_options_on_the_detail_route_describes_the_patch_body(client, chatbot):
 
 
 @pytest.mark.django_db()
+def test_options_on_the_collection_route_describes_the_post_body(client, chatbot):
+    """One view serves both routes, so the body described has to be resolved per verb, not per
+    class -- otherwise this would advertise the *edit* body, missing `type`, which POST requires."""
+    response = client.options(nodes_url(chatbot))
+
+    assert response.status_code == 200, response.content
+    assert set(response.json()["actions"]["POST"]) == {"type", "label", "params"}
+
+
+@pytest.mark.django_db()
+def test_a_verb_the_route_does_not_offer_is_a_405(client, chatbot):
+    """Each `path()` narrows `http_method_names` to the verbs its own route offers -- without that,
+    a verb from the other route reaches its handler with the wrong path kwargs and raises a 500."""
+    node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
+
+    assert client.patch(nodes_url(chatbot), {"params": {}}, format="json").status_code == 405
+    assert client.delete(nodes_url(chatbot)).status_code == 405
+    assert client.post(node_url(chatbot, node_id), {"type": "CodeNode"}, format="json").status_code == 405
+
+
+@pytest.mark.django_db()
 def test_a_write_to_an_archived_pipeline_is_a_404(client, chatbot):
     """The default manager hides archived rows, so reaching for one by pk is a ``DoesNotExist``
     rather than a miss -- a 404 is the answer, not a 500."""

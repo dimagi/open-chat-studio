@@ -9,7 +9,7 @@ from apps.api.v2.discovery import (
     PipelineNodeView,
     PipelineOptionsView,
 )
-from apps.api.v2.pipeline_edit.views import PipelineNodeDetailView, PipelineNodeListView
+from apps.api.v2.pipeline_edit.views import PipelineNodeEditView
 from apps.api.v2.usage.views import UsageView
 
 app_name = "v2"
@@ -28,11 +28,17 @@ urlpatterns = [
     path("pipeline/options/", PipelineOptionsView.as_view(), name="pipeline-options"),
     path("pipeline/options/<str:node_type>/", PipelineNodeOptionsView.as_view(), name="pipeline-node-options"),
     # Listed before the router so they win over its ``chatbots/{id}/`` detail route.
-    path("chatbots/<str:id>/pipeline/nodes/", PipelineNodeListView.as_view(), name="pipeline-node-list"),
+    # One view serves both, so each route keeps only the verbs it offers -- else a PATCH to the
+    # collection would reach ``patch`` with no ``node_id`` and raise instead of 405ing.
+    path(
+        "chatbots/<str:id>/pipeline/nodes/",
+        PipelineNodeEditView.as_view(http_method_names=["post", "options"]),
+        name="pipeline-node-create",
+    ),
     path(
         "chatbots/<str:id>/pipeline/nodes/<str:node_id>/",
-        PipelineNodeDetailView.as_view(),
-        name="pipeline-node-detail",
+        PipelineNodeEditView.as_view(http_method_names=["patch", "delete", "options"]),
+        name="pipeline-node-update",
     ),
     path("", include(router.urls)),
 ]

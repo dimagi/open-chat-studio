@@ -62,12 +62,15 @@ SERVER_MANAGED = OpenApiResponse(
 )
 
 
-class PipelineEditBase(GenericAPIView):
-    """Shared auth for the façade.
+class PipelineNodeEditView(GenericAPIView):
+    """The façade's node endpoints: add a node, edit one, remove one.
 
-    Editing a chatbot's composition is a *change* to the chatbot whatever the verb -- deleting a
-    node is not deleting the chatbot -- so the stock ``DjangoModelPermissions`` verb->permission map
-    is replaced rather than extended.
+    Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers --
+    otherwise a PATCH to the collection route would reach ``patch`` with no ``node_id`` and raise
+    instead of answering 405.
+
+    Deleting a node is a *change* to the chatbot, not a deletion of it, so the stock
+    ``DjangoModelPermissions`` verb map is replaced rather than extended.
     """
 
     permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
@@ -78,27 +81,13 @@ class PipelineEditBase(GenericAPIView):
     # Only here so the generic view has a queryset; permissions are not derived from it.
     queryset = Pipeline.objects.none()
 
-    @staticmethod
-    def _envelope(pipeline: Pipeline, node_id: str | None) -> dict:
-        """The build state every façade write reports, with the written node in front of it."""
-        state = pipeline_build_state(pipeline)
-        body = {
-            "pipeline_valid": state["pipeline_valid"],
-            "pipeline_errors": state["errors"],
-            "unwired_handles": state["unwired_handles"],
-        }
-        if node_id is None:
-            return body
-        node = next((node for node in pipeline.node_set.all() if node.flow_id == node_id), None)
-        if node is None:
-            # The patch engine applied the diff, so the row is there; not finding it means the
-            # graph and the rows disagree, which is a bug here rather than anything the client did.
-            raise APIException(f"Node '{node_id}' was written but could not be read back.")
-        return {"node": WrittenNodeSerializer(node).data, **body}
+    def get_serializer_class(self):
+        """POST takes a `type`, PATCH takes params -- keyed on the method since one class serves both.
 
-
-class PipelineNodeListView(PipelineEditBase):
-    serializer_class = NodeCreateSerializer
+        `DescribesPatch` calls this once per verb it describes via a `clone_request`, so OPTIONS
+        still resolves the right body for each.
+        """
+        return NodeCreateSerializer if self.request.method == "POST" else NodeUpdateSerializer
 
     @extend_schema(
         operation_id="pipeline_node_create",
@@ -122,7 +111,7 @@ class PipelineNodeListView(PipelineEditBase):
             404: OpenApiResponse(description="No such chatbot."),
         },
     )
-    def post(self, request, id):  # feedback. this class' name is a misnomer. list view, but it has a POST.
+    def post(self, request, id):
         body = self.get_serializer(data=request.data)
         body.is_valid(raise_exception=True)
         params = body.validated_data["params"]
@@ -137,10 +126,6 @@ class PipelineNodeListView(PipelineEditBase):
             edit_pipeline(request, id, lambda flow: plan_create(flow, served, label, params), self._envelope),
             status=status.HTTP_201_CREATED,
         )
-
-
-class PipelineNodeDetailView(PipelineEditBase):
-    serializer_class = NodeUpdateSerializer
 
     @extend_schema(
         operation_id="pipeline_node_update",
@@ -211,3 +196,21 @@ class PipelineNodeDetailView(PipelineEditBase):
         # `plan_delete` names no node, so the envelope reports the pipeline alone: there is no node
         # left to describe.
         return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._envelope))
+
+    @staticmethod
+    def _envelope(pipeline: Pipeline, node_id: str | None) -> dict:
+        """The build state every façade write reports, with the written node in front of it."""
+        state = pipeline_build_state(pipeline)
+        body = {
+            "pipeline_valid": state["pipeline_valid"],
+            "pipeline_errors": state["errors"],
+            "unwired_handles": state["unwired_handles"],
+        }
+        if node_id is None:
+            return body
+        node = next((node for node in pipeline.node_set.all() if node.flow_id == node_id), None)
+        if node is None:
+            # The patch engine applied the diff, so the row is there; not finding it means the
+            # graph and the rows disagree, which is a bug here rather than anything the client did.
+            raise APIException(f"Node '{node_id}' was written but could not be read back.")
+        return {"node": WrittenNodeSerializer(node).data, **body}
