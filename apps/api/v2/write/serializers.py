@@ -7,7 +7,7 @@ Inspecting and editing are different jobs, so inspect returns plenty that is not
 
 Each field carries its form field's name, with references narrowed to ids under the same
 ``<resource>_id`` convention the discovery endpoints use, so an agent lifts ids straight out of
-discovery. ``settings`` is the one nested block, because it is dict-shaped in the API already.
+discovery. The body is flat, so the key an agent writes is the key it reads back.
 """
 
 from django.db import transaction
@@ -29,9 +29,9 @@ class RejectsUnknownKeys:
     response and for an agent is a 200 that wrote nothing. The consumer here is an agent, so a
     misspelled key has to be an error it can act on.
 
-    Hooked into ``to_internal_value`` rather than ``validate`` because that is the only place a
-    *nested* serializer sees its own raw input: ``initial_data`` is set on the root serializer
-    alone, so a ``validate``-based check could not reach ``settings`` or ``voice``.
+    Hooked into ``to_internal_value`` rather than ``validate`` because that is where a serializer
+    sees its own raw input wherever it is mounted. A ``validate``-based check would have to read
+    ``initial_data``, which DRF sets on the root serializer alone.
     """
 
     def to_internal_value(self, data):
@@ -76,40 +76,6 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
 
 
 @extend_schema_serializer(
-    description="Chatbot settings. Omitted keys are left unchanged; send only what you want to edit."
-)
-class ChatbotSettingsSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
-    """The writable half of the inspect ``settings`` block.
-
-    Read-side twin: ``apps.api.v2.inspect.serializers.InspectSettingsSerializer``.
-
-    The public description is set on the decorator above rather than taken from this docstring,
-    which drf-spectacular would otherwise publish verbatim into the OpenAPI document.
-    """
-
-    # Mounted with source="*" on the parent, so DRF merges these straight onto the experiment
-    # (set_value with empty source_attrs does a dict.update) and an omitted key under a partial
-    # PATCH is skipped rather than reset -- which is the whole merge semantics, with no custom code.
-
-    class Meta:
-        model = Experiment
-        fields = [
-            "seed_message",
-            "conversational_consent_enabled",
-            "voice_response_behaviour",
-            "echo_transcript",
-            "debug_mode_enabled",
-            "file_uploads_enabled",
-            "participant_allowlist",
-        ]
-
-    def validate_participant_allowlist(self, value):
-        # Same normalisation the UI form applies, for the same reason: identifiers are matched
-        # exactly, so an unstripped one silently matches nothing.
-        return normalize_participant_allowlist(value)
-
-
-@extend_schema_serializer(
     description=(
         "Editable chatbot configuration. Omitted keys are left unchanged. References are given as "
         "ids, which can be read from the discovery endpoints."
@@ -132,7 +98,6 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
     # Labelled from the model because declaring the field explicitly drops the label ModelSerializer
     # would have derived, and that label is the field's `title` in the published OpenAPI schema.
     description = OptionalTextField(label=Experiment._meta.get_field("description").verbose_name)
-    settings = ChatbotSettingsSerializer(source="*", required=False)
     consent_form_id = TeamScopedRelatedField(
         source="consent_form",
         scoped_queryset=lambda request: ConsentForm.objects.working_versions_queryset().filter(team=request.team),
@@ -172,12 +137,23 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
         fields = [
             "name",
             "description",
-            "settings",
-            "consent_form_id",
-            "trace_provider_id",
             "voice_provider_id",
             "synthetic_voice_id",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "trace_provider_id",
+            "debug_mode_enabled",
+            "conversational_consent_enabled",
+            "consent_form_id",
+            "participant_allowlist",
+            "seed_message",
+            "file_uploads_enabled",
         ]
+
+    def validate_participant_allowlist(self, value):
+        # Same normalisation the UI form applies, for the same reason: identifiers are matched
+        # exactly, so an unstripped one silently matches nothing.
+        return normalize_participant_allowlist(value)
 
     def validate(self, attrs):
         supplied = [name for name, source in self.VOICE_FIELDS if source in attrs]
@@ -235,7 +211,6 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
     # field and would otherwise be generated as writable in the OpenAPI schema.
     pipeline_id = serializers.IntegerField(read_only=True, allow_null=True)
     version_number = serializers.IntegerField(read_only=True)
-    settings = ChatbotSettingsSerializer(source="*", read_only=True)
     consent_form_id = serializers.IntegerField(read_only=True, allow_null=True)
     trace_provider_id = serializers.IntegerField(read_only=True, allow_null=True)
     voice_provider_id = serializers.IntegerField(read_only=True, allow_null=True)
@@ -249,13 +224,29 @@ class ChatbotDetailSerializer(serializers.ModelSerializer):
             "version_number",
             "name",
             "description",
-            "settings",
-            "consent_form_id",
-            "trace_provider_id",
             "voice_provider_id",
             "synthetic_voice_id",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "trace_provider_id",
+            "debug_mode_enabled",
+            "conversational_consent_enabled",
+            "consent_form_id",
+            "participant_allowlist",
+            "seed_message",
+            "file_uploads_enabled",
         ]
-        # Nothing here is writable: this serializer only ever renders a response. `name` and
-        # `description` are the two ModelSerializer generates, and generated clients would
-        # otherwise model them as writable on a response-only component.
-        read_only_fields = ["name", "description"]
+        # Nothing here is writable: this serializer only ever renders a response. These are the
+        # fields ModelSerializer generates, and generated clients would otherwise model them as
+        # writable on a response-only component.
+        read_only_fields = [
+            "name",
+            "description",
+            "voice_response_behaviour",
+            "echo_transcript",
+            "debug_mode_enabled",
+            "conversational_consent_enabled",
+            "participant_allowlist",
+            "seed_message",
+            "file_uploads_enabled",
+        ]

@@ -1014,18 +1014,6 @@ components:
           readOnly: true
           nullable: true
           title: A longer description of the experiment.
-        settings:
-          allOf:
-          - $ref: '#/components/schemas/ChatbotSettings'
-          readOnly: true
-        consent_form_id:
-          type: integer
-          readOnly: true
-          nullable: true
-        trace_provider_id:
-          type: integer
-          readOnly: true
-          nullable: true
         voice_provider_id:
           type: integer
           readOnly: true
@@ -1034,17 +1022,70 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        voice_response_behaviour:
+          allOf:
+          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
+          readOnly: true
+          description: |-
+            This tells the bot when to reply with voice messages
+
+            * `always` - Always
+            * `reciprocal` - Reciprocal
+            * `never` - Never
+        echo_transcript:
+          type: boolean
+          readOnly: true
+          description: Whether or not the bot should tell the user what it heard when
+            the user sends voice messages
+        trace_provider_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        debug_mode_enabled:
+          type: boolean
+          readOnly: true
+        conversational_consent_enabled:
+          type: boolean
+          readOnly: true
+          description: 'If enabled, the consent form will be sent at the start of
+            a conversation for external channels. Note: This requires the experiment
+            to have a seed message.'
+        consent_form_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+          readOnly: true
+        seed_message:
+          type: string
+          readOnly: true
+          description: If set, send this message to the bot when the session starts,
+            and prompt the user with the initial response.
+        file_uploads_enabled:
+          type: boolean
+          readOnly: true
+          description: Enables file attachments in the web chat interface.
       required:
       - consent_form_id
+      - conversational_consent_enabled
+      - debug_mode_enabled
       - description
+      - echo_transcript
+      - file_uploads_enabled
       - id
       - name
+      - participant_allowlist
       - pipeline_id
-      - settings
+      - seed_message
       - synthetic_voice_id
       - trace_provider_id
       - version_number
       - voice_provider_id
+      - voice_response_behaviour
     ChatbotIdentity:
       type: object
       properties:
@@ -1154,44 +1195,6 @@ components:
       - unwired_handles
       - version_description
       - voice
-    ChatbotSettings:
-      type: object
-      description: Chatbot settings. Omitted keys are left unchanged; send only what
-        you want to edit.
-      properties:
-        seed_message:
-          type: string
-          description: If set, send this message to the bot when the session starts,
-            and prompt the user with the initial response.
-        conversational_consent_enabled:
-          type: boolean
-          description: 'If enabled, the consent form will be sent at the start of
-            a conversation for external channels. Note: This requires the experiment
-            to have a seed message.'
-        voice_response_behaviour:
-          allOf:
-          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
-          description: |-
-            This tells the bot when to reply with voice messages
-
-            * `always` - Always
-            * `reciprocal` - Reciprocal
-            * `never` - Never
-        echo_transcript:
-          type: boolean
-          description: Whether or not the bot should tell the user what it heard when
-            the user sends voice messages
-        debug_mode_enabled:
-          type: boolean
-        file_uploads_enabled:
-          type: boolean
-          description: Enables file attachments in the web chat interface.
-        participant_allowlist:
-          type: array
-          items:
-            type: string
-            maxLength: 128
-      additionalProperties: false
     ChatbotVersion:
       type: object
       properties:
@@ -2248,20 +2251,50 @@ components:
           type: string
           nullable: true
           title: A longer description of the experiment.
-        settings:
-          $ref: '#/components/schemas/ChatbotSettings'
-        consent_form_id:
-          type: integer
-          nullable: true
-        trace_provider_id:
-          type: integer
-          nullable: true
         voice_provider_id:
           type: integer
           nullable: true
         synthetic_voice_id:
           type: integer
           nullable: true
+        voice_response_behaviour:
+          allOf:
+          - $ref: '#/components/schemas/VoiceResponseBehaviourEnum'
+          description: |-
+            This tells the bot when to reply with voice messages
+
+            * `always` - Always
+            * `reciprocal` - Reciprocal
+            * `never` - Never
+        echo_transcript:
+          type: boolean
+          description: Whether or not the bot should tell the user what it heard when
+            the user sends voice messages
+        trace_provider_id:
+          type: integer
+          nullable: true
+        debug_mode_enabled:
+          type: boolean
+        conversational_consent_enabled:
+          type: boolean
+          description: 'If enabled, the consent form will be sent at the start of
+            a conversation for external channels. Note: This requires the experiment
+            to have a seed message.'
+        consent_form_id:
+          type: integer
+          nullable: true
+        participant_allowlist:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+        seed_message:
+          type: string
+          description: If set, send this message to the bot when the session starts,
+            and prompt the user with the initial response.
+        file_uploads_enabled:
+          type: boolean
+          description: Enables file attachments in the web chat interface.
       additionalProperties: false
     PipelineBuildErrors:
       type: object

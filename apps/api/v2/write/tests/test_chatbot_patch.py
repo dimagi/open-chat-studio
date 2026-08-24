@@ -1,8 +1,7 @@
 """PATCH /api/v2/chatbots/{id}/ -- settings and wiring by id (#4139).
 
-The writable surface is the same field set the UI's ChatbotSettingsForm exposes, with references
-as ``<field>_id`` keys. The ``settings`` block's nesting matches the inspect response. Unrecognised
-keys are rejected with 400.
+The writable surface is the same field set the UI's ChatbotSettingsForm exposes, flat, with
+references as ``<field>_id`` keys. Unrecognised keys are rejected with 400.
 """
 
 import unicodedata
@@ -38,7 +37,7 @@ def _url(chatbot):
 
 
 @pytest.mark.django_db()
-def test_patch_updates_top_level_fields(client, chatbot):
+def test_patch_updates_name_and_description(client, chatbot):
     response = client.patch(_url(chatbot), {"name": "Renamed", "description": "New"}, format="json")
 
     assert response.status_code == 200
@@ -122,16 +121,18 @@ def test_a_name_that_nfc_lengthens_past_the_column_is_a_400(client, chatbot):
 
 
 @pytest.mark.django_db()
-def test_settings_merge_rather_than_replace(client, chatbot):
-    """A partial PATCH of one settings key must not reset the other six to their defaults."""
+def test_a_partial_patch_leaves_the_unsent_fields_alone(client, chatbot):
+    """One key sent must not reset the rest to their defaults, and the key written is the key read
+    back -- the mirror that makes read-modify-write cheap for an agent."""
     chatbot.echo_transcript = False
     chatbot.file_uploads_enabled = True
     chatbot.participant_allowlist = ["alice"]
     chatbot.save()
 
-    response = client.patch(_url(chatbot), {"settings": {"seed_message": "Hi!"}}, format="json")
+    response = client.patch(_url(chatbot), {"seed_message": "Hi!"}, format="json")
 
     assert response.status_code == 200
+    assert response.json()["seed_message"] == "Hi!"
     chatbot.refresh_from_db()
     assert chatbot.seed_message == "Hi!"
     assert chatbot.echo_transcript is False
@@ -140,19 +141,11 @@ def test_settings_merge_rather_than_replace(client, chatbot):
 
 
 @pytest.mark.django_db()
-def test_response_settings_path_matches_the_request_path(client, chatbot):
-    """The mirror that makes read-modify-write cheap: the key you write is the key you read back."""
-    body = client.patch(_url(chatbot), {"settings": {"seed_message": "Hi!"}}, format="json").json()
-
-    assert body["settings"]["seed_message"] == "Hi!"
-
-
-@pytest.mark.django_db()
 def test_the_allowlist_is_normalized_the_way_the_form_normalizes_it(client, chatbot):
     """`is_participant_allowed` matches identifiers exactly, and the UI form strips spaces on the
     way in. Stored as written, a human-formatted phone number -- which is what an LLM produces --
     gives an allowlist that looks configured and admits nobody, with no error to say so."""
-    response = client.patch(_url(chatbot), {"settings": {"participant_allowlist": ["+27 82 000 0000"]}}, format="json")
+    response = client.patch(_url(chatbot), {"participant_allowlist": ["+27 82 000 0000"]}, format="json")
 
     assert response.status_code == 200
     chatbot.refresh_from_db()
@@ -228,25 +221,13 @@ def test_a_nonexistent_reference_is_a_400_on_that_field(client, chatbot, field):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize(
-    ("body", "under", "key"),
-    [
-        pytest.param({"nmae": "Typo"}, None, "nmae", id="at-the-root"),
-        pytest.param({"settings": {"seed_mesage": "Hi!"}}, "settings", "seed_mesage", id="under-settings"),
-    ],
-)
-def test_an_unrecognised_key_is_a_400_naming_it(client, chatbot, body, under, key):
+def test_an_unrecognised_key_is_a_400_naming_it(client, chatbot):
     """DRF drops undeclared keys silently, so a typo is a 200 that wrote nothing. A human notices
-    that from the echoed body; an agent reads the 200 and moves on.
-
-    ``settings`` gets the check too, which it cannot take from ``initial_data`` -- that is set on the
-    root serializer alone.
-    """
-    response = client.patch(_url(chatbot), body, format="json")
+    that from the echoed body; an agent reads the 200 and moves on."""
+    response = client.patch(_url(chatbot), {"nmae": "Typo"}, format="json")
 
     assert response.status_code == 400
-    errors = response.json()
-    assert key in (errors[under] if under else errors)
+    assert "nmae" in response.json()
     chatbot.refresh_from_db()
     assert chatbot.name == "Support bot"
 

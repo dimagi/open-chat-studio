@@ -16,7 +16,6 @@ from rest_framework import serializers
 from apps.api.v2.write.fields import TeamScopedRelatedField
 from apps.api.v2.write.serializers import (
     ChatbotCreateSerializer,
-    ChatbotSettingsSerializer,
     ChatbotWriteSerializer,
     RejectsUnknownKeys,
 )
@@ -25,16 +24,7 @@ from apps.experiments.models import Experiment
 
 
 def _writable_model_fields(serializer) -> set[str]:
-    """Every model attribute the serializer can write, following nesting and `source`."""
-    covered = set()
-    for field in serializer.fields.values():
-        if field.read_only:
-            continue
-        if isinstance(field, serializers.BaseSerializer):
-            covered |= _writable_model_fields(field)
-        else:
-            covered.add(field.source)
-    return covered
+    return {field.source for field in serializer.fields.values() if not field.read_only}
 
 
 def test_patch_covers_every_versioned_field_except_the_pipeline():
@@ -52,11 +42,9 @@ def test_patch_writes_exactly_what_the_settings_form_edits():
 
 
 def _related_fields(serializer):
-    """Every relational field on the serializer, following nesting."""
+    """Every relational field on the serializer."""
     for name, field in serializer.fields.items():
-        if isinstance(field, serializers.BaseSerializer):
-            yield from _related_fields(field)
-        elif isinstance(field, serializers.RelatedField):
+        if isinstance(field, serializers.RelatedField):
             yield name, field
 
 
@@ -83,7 +71,6 @@ def _v2_components(pytestconfig) -> dict:
     ("component", "serializer"),
     [
         pytest.param("ChatbotCreate", ChatbotCreateSerializer, id="create-body"),
-        pytest.param("ChatbotSettings", ChatbotSettingsSerializer, id="nested-settings-block"),
         pytest.param("PatchedChatbotWrite", ChatbotWriteSerializer, id="patch-body"),
     ],
 )
