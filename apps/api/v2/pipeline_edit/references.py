@@ -25,7 +25,6 @@ from .param_types import is_array_param
 #: A caller's lazy handle on the team's option lists, as :func:`team_options` builds it.
 OptionsAccessor = Callable[[], dict]
 
-#: Where :func:`team_options` parks its memo on the ``Team`` instance.
 OPTIONS_MEMO_ATTR = "_pipeline_option_lists"
 
 #: Values meaning "this reference is unset". ``[]`` matters as much as ``None``: a list-valued
@@ -49,30 +48,31 @@ def team_options(team: Team) -> OptionsAccessor:
     return getattr(team, OPTIONS_MEMO_ATTR)
 
 
-def check_references(options: OptionsAccessor, node_type: str, properties: dict, params: dict[str, Any]) -> None:
-    """Refuse ``params`` naming a resource the team cannot reference.
+def check_references(team: Team, node_type_schema: dict, params: dict[str, Any]) -> None:
+    """Refuse ``params`` naming a resource ``team`` cannot reach.
 
-    ``options`` is the accessor from ``team_options``, called only if there is something to check.
+    By the time this runs the params are known to be ones the node type declares, and to hold values
+    of the declared shape, so all that is left is whose resources they name.
 
     Only the params actually sent are checked, so a PATCH never fails on a stale value it is not
     touching. A nonexistent id and another team's id are the same answer on purpose: separating
     them would report whether an id exists in some other team.
     """
-    if errors := reference_errors(options, node_type, properties, params):
+    if errors := reference_errors(team, node_type_schema, params):
         raise ValidationError({"params": errors})
 
 
-def reference_errors(
-    options: OptionsAccessor, node_type: str, properties: dict, params: dict[str, Any]
-) -> dict[str, str]:
+def reference_errors(team: Team, node_type_schema: dict, params: dict[str, Any]) -> dict[str, str]:
     """``param -> why its value names something out of reach``, for the params actually sent."""
+    node_type = node_type_schema["type"]
+    properties = node_type_schema["schema"]["properties"]
     sources = reference_sources_for_type(node_type)
     referencing = {param: value for param, value in params.items() if param in sources and value not in UNSET}
     if not referencing:
         # No reference to check, so don't pay for the team's option lists.
         return {}
 
-    available = options()
+    available = team_options(team)()
     errors: dict[str, str] = {}
     for param, value in referencing.items():
         source = sources[param]

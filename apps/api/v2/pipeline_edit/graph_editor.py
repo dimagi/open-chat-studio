@@ -93,7 +93,7 @@ def check_params(node_type_schema: dict, team: Team, params: dict[str, Any]) -> 
     check_param_names(node_type_schema, params)
     if errors := param_type_errors(node_type_schema["schema"]["properties"], params):
         raise ValidationError({"params": errors})
-    check_references(team_options(team), node_type_schema["type"], node_type_schema["schema"]["properties"], params)
+    check_references(team, node_type_schema, params)
 
 
 def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: dict[str, Any]) -> PipelineEdit:
