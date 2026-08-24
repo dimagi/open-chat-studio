@@ -52,7 +52,13 @@ def _enable_voice_engine_flag_for(team):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("auth_method", ["api_key", "oauth"])
+@pytest.mark.parametrize(
+    "auth_method",
+    [
+        pytest.param("api_key", id="api-key"),
+        pytest.param("oauth", id="oauth"),
+    ],
+)
 def test_serves_the_settings_that_take_a_fixed_set_of_values(auth_method, team_with_every_resource):
     """The endpoint answers "what may I write into this setting", so every setting drawn from a list
     has to be here -- and the ones that take any string or any boolean must not be, because an empty
