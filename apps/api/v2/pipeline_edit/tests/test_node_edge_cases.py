@@ -67,7 +67,7 @@ def test_a_colliding_node_id_is_redrawn(client, chatbot):
 
     # The first draw repeats the id already in the graph, the second is free.
     draws = [Mock(hex=f"{collision}0000000"), Mock(hex="abcde" + "0" * 27)]
-    with patch("apps.api.v2.pipeline_edit.nodes.uuid4", side_effect=draws):
+    with patch("apps.api.v2.pipeline_edit.graph_editor.uuid4", side_effect=draws):
         response = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json")
 
     assert response.status_code == 201, response.content
@@ -82,7 +82,7 @@ def test_an_id_source_that_only_collides_still_answers(client, chatbot):
     created = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json")
     collision = created.json()["node"]["node_id"].removeprefix("CodeNode-")
 
-    with patch("apps.api.v2.pipeline_edit.nodes.uuid4", return_value=Mock(hex=f"{collision}{'0' * 27}")):
+    with patch("apps.api.v2.pipeline_edit.graph_editor.uuid4", return_value=Mock(hex=f"{collision}{'0' * 27}")):
         response = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json")
 
     assert response.status_code == 201, response.content

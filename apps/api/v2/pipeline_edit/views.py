@@ -19,7 +19,7 @@ from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Pipeline
 
 from .facade import edit_pipeline
-from .nodes import check_params, plan_create, plan_delete, plan_update, served_type_for_body, warm_option_lists
+from .graph_editor import check_params, plan_create, plan_delete, plan_update, served_type_for_body, warm_option_lists
 from .references import team_options
 from .serializers import (
     NodeCreateSerializer,

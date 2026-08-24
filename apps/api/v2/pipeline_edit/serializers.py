@@ -10,7 +10,7 @@ from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.pipelines.build_state import node_output_handles
 from apps.pipelines.models import Node
 
-from .nodes import settable_params
+from .graph_editor import settable_params
 
 #: Keys a client might reasonably try to set that the server owns, and why it does (W5). Called out
 #: by name because the generic "unrecognised field" answer reads as a typo rather than as a rule.
