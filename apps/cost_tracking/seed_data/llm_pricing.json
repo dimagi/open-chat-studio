@@ -445,6 +445,24 @@
   },
   {
     "provider_type": "deepseek",
+    "model_name": "deepseek-v4-flash-vision-exp",
+    "rules": [
+      {
+        "service_kind": "llm_input",
+        "unit_price": "0.00044"
+      },
+      {
+        "service_kind": "llm_output",
+        "unit_price": "0.00132"
+      },
+      {
+        "service_kind": "llm_cache_write",
+        "unit_price": "0"
+      }
+    ]
+  },
+  {
+    "provider_type": "deepseek",
     "model_name": "deepseek-chat",
     "rules": [
       {
