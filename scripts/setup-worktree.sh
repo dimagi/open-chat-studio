@@ -36,8 +36,15 @@ fi
 
 "$CURRENT_PATH/scripts/bootstrap.sh" --force --yes
 
+# Hashing the migrations is the slowest bookkeeping step here, so it happens once and
+# the result is handed to every step that needs it: the template name, the ancestor
+# search and the dependency fingerprint.
+migration_stamp_file=$(mktemp)
+trap 'rm -f "$migration_stamp_file"' EXIT
+ocs_migration_stamp_lines "$CURRENT_PATH" > "$migration_stamp_file"
+
 if ocs_is_root_worktree "$CURRENT_PATH" "$ROOT_WORKTREE_PATH"; then
-    ocs_record_dependency_fingerprint "$CURRENT_PATH"
+    ocs_record_dependency_fingerprint "$CURRENT_PATH" "$migration_stamp_file"
     echo "[ocs] Setup complete for root checkout."
     exit 0
 fi
@@ -61,16 +68,42 @@ ocs_set_env_value \
 
 export DATABASE_URL="$database_url"
 
-if ! PGPASSWORD=postgres psql \
-    -h localhost \
-    -U postgres \
-    -tAc "SELECT 1 FROM pg_database WHERE datname='$resource_name'" \
-    | grep -q 1; then
-    PGPASSWORD=postgres psql \
-        -h localhost \
-        -U postgres \
-        -v ON_ERROR_STOP=1 \
-        -c "CREATE DATABASE \"$resource_name\""
+template_name=$(ocs_template_name "$CURRENT_PATH" "$migration_stamp_file")
+template_source=""
+
+# Copying a template database is milliseconds of work where replaying every migration
+# and seeding the result is minutes of it, so a fresh worktree only builds its database
+# by hand when no template it can start from exists.
+if ocs_database_exists "$resource_name"; then
+    provisioning=migrate
+    echo "[ocs] Migrating the existing $resource_name database."
+elif ocs_templates_are_enabled && ocs_database_exists "$template_name"; then
+    provisioning=copy
+    template_source=$template_name
+    echo "[ocs] Copying $template_name into $resource_name."
+elif ocs_templates_are_enabled \
+    && template_source=$(ocs_find_ancestor_template "$CURRENT_PATH" "$migration_stamp_file"); then
+    provisioning=copy_and_migrate
+    echo "[ocs] Copying $template_source into $resource_name and migrating forward."
+else
+    provisioning=build
+    echo "[ocs] Building $resource_name from scratch; later worktrees copy the result."
+fi
+
+# The database is created before any Redis bookkeeping so that a PostgreSQL failure
+# leaves no Redis allocation behind for a worktree that never finished setting up.
+if [[ -n "$template_source" ]]; then
+    # A template can go away between the check above and the copy: another worktree
+    # prunes stale templates and drops and recreates the one it is snapshotting. That
+    # costs this worktree its head start, not its database, so a copy that will not
+    # succeed falls back to building by hand.
+    if ! ocs_create_database "$resource_name" "$template_source"; then
+        echo "[ocs] Could not copy $template_source; building $resource_name from scratch instead." >&2
+        provisioning=build
+        ocs_create_database "$resource_name"
+    fi
+elif [[ "$provisioning" == build ]]; then
+    ocs_create_database "$resource_name"
 fi
 
 redis_database=$(ocs_allocate_redis_database "$resource_name")
@@ -81,11 +114,30 @@ ocs_set_env_value \
     "$redis_url"
 export REDIS_URL="$redis_url"
 
-uv run python manage.py migrate
-uv run python manage.py bootstrap_data \
-    --email test@example.com \
-    --password letmein \
-    --superuser
+if [[ "$provisioning" != copy ]]; then
+    uv run python manage.py migrate
+fi
 
-ocs_record_dependency_fingerprint "$CURRENT_PATH"
+if [[ "$provisioning" == build ]] || ! ocs_database_is_seeded "$resource_name"; then
+    # Seeding is not idempotent -- sample sessions, messages, traces and usage records
+    # are created outright -- so copies inherit the seed data instead of re-running the
+    # command over data that already exists. An existing database with no users at all
+    # is the exception: a setup that died before finishing the seed left it that way.
+    uv run python manage.py bootstrap_data \
+        --email test@example.com \
+        --password letmein \
+        --superuser
+fi
+
+if [[ "$provisioning" == copy_and_migrate || "$provisioning" == build ]]; then
+    ocs_snapshot_template \
+        "$CURRENT_PATH" \
+        "$template_name" \
+        "$resource_name" \
+        "$migration_stamp_file"
+fi
+
+ocs_prune_template_databases "$CURRENT_PATH" "$template_name"
+
+ocs_record_dependency_fingerprint "$CURRENT_PATH" "$migration_stamp_file"
 echo "[ocs] Setup complete for $resource_name."
