@@ -1,6 +1,5 @@
 """Turning a node request body into the graph edit that carries it out (#4140)."""
 
-from functools import cache
 from typing import Any, cast
 from uuid import uuid4
 
@@ -224,9 +223,8 @@ def stored_params(content: FlowNodeData) -> dict[str, Any]:
     """
     node_class = resolve_node_class(content.type)
     declared = set(node_class.model_fields) if node_class is not None else set()
-    return {
-        name: value for name, value in content.params.items() if name in declared or name not in _resource_mirror_keys()
-    }
+    mirrored = Node.resource_param_names()
+    return {name: value for name, value in content.params.items() if name in declared or name not in mirrored}
 
 
 def settable_params(node: Node) -> dict[str, Any]:
@@ -298,12 +296,6 @@ def _unused_node_id(flow: dict, node_type: str) -> str:
         if candidate not in taken:
             return candidate
     return f"{node_type}-{uuid4().hex}"
-
-
-@cache
-def _resource_mirror_keys() -> frozenset[str]:
-    """The param names ``Node.resource_params`` merges into every node's params, whatever its type."""
-    return frozenset({f"{field}_id" for field in Node.resource_fk_fields()} | {"collection_index_ids"})
 
 
 def _output_handles(content: FlowNodeData) -> OutputHandles:

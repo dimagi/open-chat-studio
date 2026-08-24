@@ -57,6 +57,11 @@ def reference_sources_for_type(node_type: str) -> dict[str, str]:
 
     Only the params whose value names something the team holds; see
     ``NON_REFERENCE_OPTION_SOURCES`` for what that leaves out. An unserved node type has none.
+
+    Read off the schemas rather than off ``Node``'s resource FK columns, which cover a different
+    set: ``custom_actions`` and ``tools`` are team-scoped and have no column, while ``assistant_id``
+    has one and is not a param of any served type. The columns also could not supply the option-list
+    key each param draws from, which is what a rejection has to name for the client to fix it.
     """
     return {
         param: source
