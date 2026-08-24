@@ -1,19 +1,24 @@
-# Claude Code Review
+# Claude Code Review Workflow
 #
 # Automated code review on pull requests using the official Anthropic
 # code-review plugin. Findings are verified by the plugin's review agents
 # and posted as inline comments on the PR diff.
 #
-# Triggered on: PR opened, marked ready for review, or pushed to
+# Triggered on: PR opened, marked ready for review, or pushed
 # Requirements: ANTHROPIC_API_KEY secret must be configured
 #
 # Notes:
-# - Dependabot PRs are excluded — they get their own review via
-#   claude-dependabot.yml
-# - Sentry (Seer) bot PRs are reviewed; the action's non-human-actor guard
-#   is opened for them via allowed_bots
+# - Fork PRs are skipped — they can't get an OIDC token, so there's no
+#   credential for the review to run with
+# - Runs triggered by Dependabot are excluded — Dependabot PRs get their own
+#   review via claude-dependabot.yml when Dependabot is the triggering actor
 # - Draft PRs are skipped; the review runs when the PR is marked ready
-# - A new push cancels any in-progress review of the same PR
+# - sentry[bot] and ocs-agent[bot] are trusted bot identities allowed via
+#   allowed_bots, which opens the action's non-human-actor guard for them
+#   without verifying repository permissions — it matches by name only, so
+#   keep this list intentionally narrow
+# - A new push cancels any in-progress review of the same PR — a review of
+#   stale code is wasted spend
 
 name: Claude Code Review
 
