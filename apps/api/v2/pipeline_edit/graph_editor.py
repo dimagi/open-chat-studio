@@ -20,10 +20,11 @@ from apps.pipelines.flow import (
 )
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
+from apps.teams.models import Team
 
 from .facade import PipelineEdit
 from .param_types import param_type_errors
-from .references import OptionsAccessor, check_references
+from .references import check_references, team_options
 
 #: A node's output handles as ``{handle: branch label}``. The label is ``None`` for the single
 #: standard output, and a router's branch keyword otherwise.
@@ -68,22 +69,22 @@ def served_type_for_body(node_type: str) -> dict:
         raise ValidationError({"type": unknown.detail}) from unknown
 
 
-def warm_option_lists(options: OptionsAccessor, params: dict[str, Any]) -> None:
+def warm_option_lists(team: Team, params: dict[str, Any]) -> None:
     """Build the team's option lists before the pipeline row is locked, if this body needs them.
 
     ``options_for_team`` is around fifteen queries and parses every custom action's OpenAPI schema.
     The reference check that consumes it runs inside the lock -- it needs the node's type, and for
     a PATCH that comes from the graph -- so the build is done here, ahead of the transaction, and
-    the memoised accessor hands the result over for free once the lock is held.
+    ``team_options``'s memo hands the result over for free once the lock is held.
 
     Only for a body that names something referenceable: a write touching no reference must not pay
     for the lists at all.
     """
     if params and not reference_param_names().isdisjoint(params):
-        options()
+        team_options(team)()
 
 
-def check_params(node_type_schema: dict, options: OptionsAccessor, params: dict[str, Any]) -> None:
+def check_params(node_type_schema: dict, team: Team, params: dict[str, Any]) -> None:
     """Everything a param has to satisfy before it is allowed anywhere near the graph.
 
     Order matters: a name has to be recognised before its type means anything, and a type has to
@@ -92,7 +93,7 @@ def check_params(node_type_schema: dict, options: OptionsAccessor, params: dict[
     check_param_names(node_type_schema, params)
     if errors := param_type_errors(node_type_schema["schema"]["properties"], params):
         raise ValidationError({"params": errors})
-    check_references(options, node_type_schema["type"], node_type_schema["schema"]["properties"], params)
+    check_references(team_options(team), node_type_schema["type"], node_type_schema["schema"]["properties"], params)
 
 
 def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: dict[str, Any]) -> PipelineEdit:
@@ -123,9 +124,7 @@ def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: d
     return PipelineEdit(diff=_diff(NodeDiff(add=[node])), node_id=node_id)
 
 
-def plan_update(
-    flow: dict, options: OptionsAccessor, node_id: str, label: str | None, params: dict[str, Any]
-) -> PipelineEdit:
+def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
     """Edit one node's params and label in place.
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
@@ -145,7 +144,7 @@ def plan_update(
         # 404s a type the API does not publish at all -- a deprecated one, say, whose params it
         # cannot describe and so cannot check. Only when there are params to check: renaming a node
         # of such a type is not something the API has to withhold.
-        check_params(get_node_type_schema(content.type), options, params)
+        check_params(get_node_type_schema(content.type), team, params)
 
     before = _output_handles(content)
     content.params = {**stored_params(content), **params}

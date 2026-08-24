@@ -20,7 +20,6 @@ from apps.pipelines.models import Pipeline
 
 from .facade import edit_pipeline
 from .graph_editor import check_params, plan_create, plan_delete, plan_update, served_type_for_body, warm_option_lists
-from .references import team_options
 from .serializers import (
     NodeCreateSerializer,
     NodeUpdateSerializer,
@@ -120,8 +119,7 @@ class PipelineNodeEditView(GenericAPIView):
         # type is right here in the body, and the option lists the reference check needs are the
         # expensive part of the whole request.
         node_type_schema = served_type_for_body(body.validated_data["type"])
-        options = team_options(request.team)
-        check_params(node_type_schema, options, params)
+        check_params(node_type_schema, request.team, params)
         return Response(
             edit_pipeline(
                 request, id, lambda flow: plan_create(flow, node_type_schema, label, params), self._write_response
@@ -164,14 +162,13 @@ class PipelineNodeEditView(GenericAPIView):
         body.is_valid(raise_exception=True)
         params = body.validated_data["params"]
         label = body.validated_data.get("label")
-        options = team_options(request.team)
         # The node's type comes from the graph, so its params can only be checked under the lock.
         # Building the option lists that check needs is the slow half, and does not depend on the
         # graph at all -- so it is done here rather than in the critical section.
-        warm_option_lists(options, params)
+        warm_option_lists(request.team, params)
         return Response(
             edit_pipeline(
-                request, id, lambda flow: plan_update(flow, options, node_id, label, params), self._write_response
+                request, id, lambda flow: plan_update(flow, request.team, node_id, label, params), self._write_response
             )
         )
 
