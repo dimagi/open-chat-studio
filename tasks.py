@@ -11,7 +11,7 @@ from invoke import Context, Exit, call, task
 from packaging.version import Version
 from termcolor import cprint
 
-MIN_NODE_VERSION = "18"
+MIN_NODE_VERSION = "24"
 
 
 @task(help={"command": "Docker command to run: 'up' to start services, 'down' to stop services"})
@@ -116,7 +116,7 @@ def setup_dev_env(c: Context, step=False):
 
     _run_with_confirm(c, "Run DB migrations", "python manage.py migrate", step)
 
-    cprint(f"\nChecking node version (>{MIN_NODE_VERSION} required)", "green")
+    cprint(f"\nChecking node version (>={MIN_NODE_VERSION} required)", "green")
     if not _check_node_version(c):
         cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
         cprint("\nSkipping front end build. Run 'inv pnpm --install' once you have upgraded node.", "yellow")
@@ -136,8 +136,10 @@ def _run_with_confirm(c: Context, message, command, step=False):
 
 
 def _check_node_version(c: Context):
-    res = c.run("node -v", echo=True)
+    res = c.run("node -v", echo=True, warn=True)
     version = res.stdout.strip()
+    if not res.ok or not version:
+        return False
     if version.startswith("v"):
         version = version[1:]
     ver = Version(version)
