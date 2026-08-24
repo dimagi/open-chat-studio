@@ -75,14 +75,6 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
         )
 
 
-class ChatbotCreatedSerializer(serializers.Serializer):
-    """The create response: the ids needed to keep working with the new chatbot, and nothing more."""
-
-    id = serializers.UUIDField(source="public_id", read_only=True)
-    pipeline_id = serializers.IntegerField(read_only=True)
-    version_number = serializers.IntegerField(read_only=True)
-
-
 @extend_schema_serializer(
     description="Chatbot settings. Omitted keys are left unchanged; send only what you want to edit."
 )
@@ -236,7 +228,7 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
 
 
 class ChatbotDetailSerializer(serializers.ModelSerializer):
-    """The PATCH response: the same shape the request accepts, plus read-only identity."""
+    """The create and PATCH response: the same shape the request accepts, plus read-only identity."""
 
     id = serializers.UUIDField(source="public_id", read_only=True)
     # Declared explicitly rather than left to ModelSerializer: `version_number` is a real model

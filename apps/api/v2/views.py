@@ -15,7 +15,6 @@ from apps.api.v2.inspect.versioning import InspectVersionError, resolve_inspect_
 from apps.api.v2.lookups import get_working_chatbot, working_chatbots
 from apps.api.v2.serializers import ChatbotSerializer, MeSerializer
 from apps.api.v2.write.serializers import (
-    ChatbotCreatedSerializer,
     ChatbotCreateSerializer,
     ChatbotDetailSerializer,
     ChatbotWriteSerializer,
@@ -89,13 +88,13 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         ),
         tags=["Chatbots"],
         request=ChatbotCreateSerializer,
-        responses={201: ChatbotCreatedSerializer},
+        responses={201: ChatbotDetailSerializer},
     )
     def create(self, request, *args, **kwargs):
         serializer = ChatbotCreateSerializer(data=request.data, context=self.get_serializer_context())
         serializer.is_valid(raise_exception=True)
         chatbot = serializer.save()
-        return Response(ChatbotCreatedSerializer(chatbot).data, status=status.HTTP_201_CREATED)
+        return Response(ChatbotDetailSerializer(chatbot).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         operation_id="chatbot_inspect",

@@ -62,7 +62,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ChatbotCreated'
+                $ref: '#/components/schemas/ChatbotDetail'
           description: ''
   /api/v2/chatbots/{id}/:
     get:
@@ -990,29 +990,10 @@ components:
       required:
       - name
       additionalProperties: false
-    ChatbotCreated:
-      type: object
-      description: 'The create response: the ids needed to keep working with the new
-        chatbot, and nothing more.'
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        pipeline_id:
-          type: integer
-          readOnly: true
-        version_number:
-          type: integer
-          readOnly: true
-      required:
-      - id
-      - pipeline_id
-      - version_number
     ChatbotDetail:
       type: object
-      description: 'The PATCH response: the same shape the request accepts, plus read-only
-        identity.'
+      description: 'The create and PATCH response: the same shape the request accepts,
+        plus read-only identity.'
       properties:
         id:
           type: string
