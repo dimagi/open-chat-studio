@@ -50,6 +50,7 @@ from apps.admin.queries import (
     whatsapp_message_stats_to_csv,
 )
 from apps.admin.serializers import StatsSerializer
+from apps.admin.team_data import serialize_team_creator
 from apps.service_providers.usages import get_provider_usages, search_providers_by_api_key
 from apps.teams.flags import get_all_flag_info
 from apps.teams.forms import TeamMetadataForm
@@ -538,14 +539,22 @@ def teams_api(request):
     if len(query) > 100:  # Prevent excessively long queries
         return JsonResponse({"error": "Query too long"}, status=400)
 
-    teams = Team.objects.all()
+    teams = Team.objects.select_related("created_by")
 
     if query:
         teams = teams.filter(name__icontains=query)
 
     teams = teams.order_by("name")[:20]  # Limit to 20 results
 
-    data = [{"value": team.id, "text": team.name, "slug": team.slug} for team in teams]
+    data = [
+        {
+            "value": team.id,
+            "text": team.name,
+            "slug": team.slug,
+            "created_by": serialize_team_creator(team.created_by),
+        }
+        for team in teams
+    ]
     return JsonResponse(data, safe=False)
 
 

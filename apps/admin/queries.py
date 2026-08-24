@@ -8,6 +8,7 @@ from decimal import Decimal
 from django.db.models import Count, DecimalField, Q, Sum
 from django.db.models.functions import Coalesce, TruncDate
 
+from apps.admin.team_data import serialize_team_creator
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.chat.models import ChatMessage
 from apps.cost_tracking.models import UsageRecord
@@ -111,29 +112,32 @@ def build_usage_report(start: datetime, end: datetime) -> dict:
     `total_cost` is a `{currency: amount}` map, not a scalar: a team can have
     records in more than one currency and summing them would be meaningless.
 
-    Each team carries a `metadata` object with the configured staff-only team
-    metadata fields (`TEAM_METADATA_FIELDS`); their definitions are echoed at the
-    top level as `metadata_fields` so a consumer can build labelled columns.
+    Each team carries its creator and a `metadata` object with the configured
+    staff-only team metadata fields (`TEAM_METADATA_FIELDS`); their definitions
+    are echoed at the top level as `metadata_fields` so a consumer can build
+    labelled columns.
     """
     metadata_fields = get_team_metadata_fields()
     cost_rows = list(get_cost_usage_by_team(start, end))
 
     team_info = {
-        team_id: (name, slug, metadata or {})
-        for team_id, name, slug, metadata in Team.objects.filter(
-            id__in={row["team_id"] for row in cost_rows}
-        ).values_list("id", "name", "slug", "metadata")
+        team.id: team
+        for team in Team.objects.filter(id__in={row["team_id"] for row in cost_rows}).select_related("created_by")
     }
 
     teams: dict[int, dict] = {}
     for row in cost_rows:
         team_id = row["team_id"]
         if team_id not in teams:
-            name, slug, metadata = team_info.get(team_id, (None, None, {}))
+            team = team_info.get(team_id)
+            name = team.name if team else None
+            slug = team.slug if team else None
+            metadata = (team.metadata or {}) if team else {}
             teams[team_id] = {
                 "team_id": team_id,
                 "team_name": name,
                 "team_slug": slug,
+                "created_by": serialize_team_creator(team.created_by) if team else None,
                 "metadata": {field["key"]: metadata.get(field["key"], "") for field in metadata_fields},
                 "total_tokens": 0,
                 "total_cost": defaultdict(Decimal),  # currency -> amount
@@ -197,18 +201,19 @@ def build_tracing_volume_report(start: datetime, end: datetime) -> dict:
     # Name and slug fetched by PK rather than grouped on, as in `get_usage_data`: both
     # are per-team so neither affects the grouping, and it keeps the team join off the
     # high-volume Trace scan.
-    teams = Team.objects.filter(id__in=list(by_team)).values_list("id", "name", "slug")
+    teams = Team.objects.filter(id__in=list(by_team)).select_related("created_by")
 
-    result = [
+    result: list[dict] = [
         {
-            "team_id": team_id,
-            "team_name": name,
-            "team_slug": slug,
-            "traces": by_team[team_id]["traces"],
-            "turns": by_team[team_id]["turns"],
-            "toolcalls": by_team[team_id]["toolcalls"],
+            "team_id": team.id,
+            "team_name": team.name,
+            "team_slug": team.slug,
+            "created_by": serialize_team_creator(team.created_by),
+            "traces": by_team[team.id]["traces"],
+            "turns": by_team[team.id]["turns"],
+            "toolcalls": by_team[team.id]["toolcalls"],
         }
-        for team_id, name, slug in teams
+        for team in teams
     ]
     # Busiest first on the primary count, so the raw JSON reads sensibly. Ordering on a
     # sum of the three would be the same editorial choice this report declines to make.

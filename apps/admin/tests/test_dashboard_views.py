@@ -3,6 +3,7 @@ from django.urls import reverse
 
 from apps.users.models import CustomUser
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.user import UserFactory
 
 SECTION_NAMES = [
     "section_growth",
@@ -145,12 +146,25 @@ class TestTeamMetadataPage:
 
 @pytest.mark.django_db()
 class TestTeamsApi:
-    def test_returns_slug_for_navigation(self, staff_client):
+    def test_returns_slug_and_creator_for_navigation(self, staff_client):
         # Staff (not superuser): the search box is rendered in a staff-level section,
         # so the endpoint it drives must be reachable by staff.
-        TeamFactory.create(name="Searchable Team", slug="searchable-team")
+        creator = UserFactory(username="creator", email="creator@example.com")
+        TeamFactory.create(name="Searchable Team", slug="searchable-team", created_by=creator)
         response = staff_client.get(reverse("ocs_admin:teams_api"), {"q": "Searchable"})
         assert response.status_code == 200
         data = response.json()
-        assert {"value", "text", "slug"} <= set(data[0])
+        assert {"value", "text", "slug", "created_by"} <= set(data[0])
         assert data[0]["slug"] == "searchable-team"
+        assert data[0]["created_by"] == {
+            "id": creator.id,
+            "username": "creator",
+            "email": "creator@example.com",
+        }
+
+    def test_returns_null_creator_when_unknown(self, staff_client):
+        TeamFactory.create(name="Legacy Team", created_by=None)
+
+        data = staff_client.get(reverse("ocs_admin:teams_api"), {"q": "Legacy"}).json()
+
+        assert data[0]["created_by"] is None

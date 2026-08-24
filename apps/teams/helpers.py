@@ -56,7 +56,7 @@ def get_default_team_for_user(user: CustomUser):
 def create_default_team_for_user(user: CustomUser, team_name: str | None = None):
     team_name = team_name or get_default_team_name_for_user(user)
     slug = get_next_unique_team_slug(team_name)
-    team = Team.objects.create(name=team_name, slug=slug)
+    team = Team.objects.create(name=team_name, slug=slug, created_by=user)
     make_user_team_owner(team, user)
     return team
 

@@ -166,6 +166,9 @@ def chatbot_url_factory(_, __, record, value):
 
 
 class ChatbotSessionsTable(tables.Table):
+    # Show the total above the table so it's clear how many sessions a filter matched.
+    show_record_count = True
+
     chatbot = columns.Column(
         verbose_name="Chatbot",
         accessor="experiment",

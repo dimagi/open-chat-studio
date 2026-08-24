@@ -9,6 +9,7 @@ from apps.cost_tracking.models import ServiceKind, UsageSource
 from apps.users.models import CustomUser
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.team import TeamFactory
+from apps.utils.factories.user import UserFactory
 
 DATE_RANGE = {"range_type": "custom", "start": "2026-05-01", "end": "2026-05-31"}
 INVALID_RANGE = {"range_type": "custom", "start": "not-a-date", "end": "2026-05-31"}
@@ -104,6 +105,22 @@ def test_includes_team_metadata(superuser_client, settings):
     alpha = {t["team_name"]: t for t in payload["teams"]}["Alpha"]
     # Only configured fields are exposed; unconfigured keys stay hidden, missing ones blank.
     assert alpha["metadata"] == {"team_owner": "Jia", "region": ""}
+
+
+@pytest.mark.django_db()
+def test_includes_team_creator(superuser_client):
+    creator = UserFactory(username="creator", email="creator@example.com")
+    team = TeamFactory(name="Alpha", created_by=creator)
+    _usage(team, quantity=100)
+
+    payload = superuser_client.get(reverse("ocs_admin:provider_usage_api"), DATE_RANGE).json()
+
+    alpha = {t["team_name"]: t for t in payload["teams"]}["Alpha"]
+    assert alpha["created_by"] == {
+        "id": creator.id,
+        "username": "creator",
+        "email": "creator@example.com",
+    }
 
 
 @pytest.mark.django_db()
