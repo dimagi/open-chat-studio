@@ -6,7 +6,7 @@ from functools import cached_property
 from uuid import uuid4
 
 import pydantic
-from django.db import models, transaction
+from django.db import DatabaseError, models, transaction
 from django.urls import reverse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -278,6 +278,17 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # Raised from inside a validator for a broken resource reference (e.g. a deleted
             # provider model); pydantic doesn't wrap it, so fold it into the report here.
             return {"root": str(e)}
+        except DatabaseError:
+            # Never swallowed: inside an atomic block a caught database error leaves the
+            # transaction aborted, so reporting it as a node error would raise again on the next
+            # query with nothing to say about where it came from.
+            raise
+        except Exception as e:  # noqa: BLE001 - a broken node must not take the whole read down
+            # Anything a validator raises before pydantic can wrap it: a param whose value is the
+            # wrong Python type reaching a `mode="before"` validator or an FK assignment, say. This
+            # runs on every read of a pipeline, so an unparseable node has to be reportable —
+            # otherwise one bad row 500s /inspect/ and every write to that pipeline for good.
+            return {"root": f"{type(e).__name__}: {e}"}
         return {}
 
     @property
