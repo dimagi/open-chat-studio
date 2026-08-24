@@ -878,4 +878,4 @@ def test_result_home_total_results_is_zero_not_none_for_a_terminal_run_with_no_r
     assert response.status_code == 200
     assert response.context["total_results"] == 0
     content = response.content.decode()
-    assert '<div class="text-3xl font-bold mt-2">0</div>' in content
+    assert '<div class="text-2xl font-bold">0</div>' in content

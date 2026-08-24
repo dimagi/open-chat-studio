@@ -14,7 +14,12 @@ from apps.cost_tracking.services.reporting import evaluation_run_costs
 from apps.evaluations.models import EvaluationRunStatus
 from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory
-from apps.utils.factories.evaluations import EvaluationConfigFactory, EvaluationRunFactory, EvaluatorFactory
+from apps.utils.factories.evaluations import (
+    EvaluationConfigFactory,
+    EvaluationResultFactory,
+    EvaluationRunFactory,
+    EvaluatorFactory,
+)
 
 
 def _enable_flag_for(team):
@@ -123,6 +128,39 @@ class TestRunDetailCost:
         assert response.context["run_cost"].total_cost == Decimal("2.50")
         assert evaluator.name in content
         assert "gpt-4o-mini" in content
+
+    def test_avg_cost_per_result_divides_by_total_results(self, client, team_with_users, config, run):
+        _enable_flag_for(team_with_users)
+        evaluator = EvaluatorFactory.create(team=team_with_users)
+        UsageRecordFactory.create(
+            team=team_with_users,
+            evaluation_config=config,
+            cost=Decimal("4.00"),
+            extra={"evaluation_run_id": run.id, "evaluator_id": evaluator.id},
+        )
+        EvaluationResultFactory.create_batch(4, team=team_with_users, run=run, evaluator=evaluator)
+        client.force_login(team_with_users.members.first())
+        url = reverse("evaluations:evaluation_results_home", args=[team_with_users.slug, config.id, run.id])
+
+        response = client.get(url)
+
+        assert response.context["total_results"] == 4
+        assert response.context["avg_cost_per_result"] == Decimal("1.00")
+
+    def test_avg_cost_per_result_absent_when_there_are_no_results(self, client, team_with_users, config, run):
+        """Guards the division: a run with cost but zero results (still processing, or every
+        evaluator errored) must not raise ZeroDivisionError or render a bogus average."""
+        _enable_flag_for(team_with_users)
+        UsageRecordFactory.create(
+            team=team_with_users, evaluation_config=config, cost=Decimal("4.00"), extra={"evaluation_run_id": run.id}
+        )
+        client.force_login(team_with_users.members.first())
+        url = reverse("evaluations:evaluation_results_home", args=[team_with_users.slug, config.id, run.id])
+
+        response = client.get(url)
+
+        assert response.context["total_results"] == 0
+        assert "avg_cost_per_result" not in response.context
 
 
 @pytest.mark.django_db()

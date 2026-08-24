@@ -1,6 +1,7 @@
 import csv
 import json
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 from functools import cached_property
 from io import StringIO
@@ -24,18 +25,25 @@ from waffle import flag_is_active
 
 from apps.cost_tracking.services.reporting import (
     evaluation_config_cost_summary,
+    evaluation_message_tokens,
     evaluation_run_cost,
     evaluation_run_costs,
 )
 from apps.evaluations.const import EVALUATION_RUN_FIXED_HEADERS
 from apps.evaluations.exceptions import InFlightRunsError
-from apps.evaluations.export import write_evaluation_csv
+from apps.evaluations.export import (
+    CategoricalColumn,
+    categorical_columns_for_evaluators,
+    evaluator_output_columns,
+    write_evaluation_csv,
+)
 from apps.evaluations.forms import EvaluationConfigForm, get_experiment_version_choices
 from apps.evaluations.models import (
     EvaluationConfig,
     EvaluationRun,
     EvaluationRunStatus,
     EvaluationRunType,
+    Evaluator,
     raise_if_runs_in_flight,
 )
 from apps.evaluations.tables import EvaluationConfigTable, EvaluationRunTable
@@ -46,7 +54,6 @@ from apps.evaluations.tasks import (
 )
 from apps.evaluations.utils import build_trend_data, filter_aggregates_for_display, get_evaluators_with_schema
 from apps.experiments.models import Experiment
-from apps.generics import actions
 from apps.teams.decorators import login_and_team_required
 from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.time import seconds_to_human
@@ -302,8 +309,10 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             "allow_new": False,
             "cost_tracking_enabled": cost_tracking_enabled,
         }
+        run_cost = None
         if cost_tracking_enabled:
-            context["run_cost"] = evaluation_run_cost(evaluation_run)
+            run_cost = evaluation_run_cost(evaluation_run)
+            context["run_cost"] = run_cost
 
         # Calculate duration if finished
         if evaluation_run.finished_at:
@@ -311,6 +320,7 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
             context["run_duration"] = seconds_to_human(duration.total_seconds())
 
         # Show progress if pending/processing, otherwise show results table
+        total_results: int | None = None
         if evaluation_run.status in (EvaluationRunStatus.PENDING, EvaluationRunStatus.PROCESSING):
             context["celery_job_id"] = evaluation_run.job_id
             # Explicit None (not just absent) so the template's `default_if_none` can tell
@@ -326,11 +336,34 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
                 table_url = f"{table_url}?result_id={result_id}"
             context["table_url"] = table_url
             # Add total results count
-            context["total_results"] = evaluation_run.results.count()
+            total_results = evaluation_run.results.count()
+            context["total_results"] = total_results
             if evaluation_run.status == EvaluationRunStatus.COMPLETED:
                 context.update(_aggregates_context(evaluation_run, team_slug))
+                context["headline_category_stat"] = _headline_category_stat(context["aggregates"])
+
+        if run_cost is not None and total_results:
+            context["avg_cost_per_result"] = run_cost.total_cost / total_results
 
         return context
+
+
+def _headline_category_stat(aggregates: list[dict]) -> dict[str, Any] | None:
+    """The stat row's summary percentage: the mode value (and its share) of the first
+    categorical field across the run's evaluators, in the same evaluator/field order the
+    Aggregates card renders in - so the headline always matches whatever appears first
+    there. No schema concept says which field or value is "the" one to headline, so
+    "first" is the only generic, deterministic choice; returns None when the run has no
+    categorical field to summarise.
+    """
+    for agg in aggregates:
+        for stats in agg["aggregates"].values():
+            if stats.get("type") != "categorical" or stats.get("mode") is None:
+                continue
+            pct = stats.get("distribution", {}).get(stats["mode"])
+            if pct is not None:
+                return {"value": stats["mode"], "pct": pct}
+    return None
 
 
 def _aggregates_context(evaluation_run: EvaluationRun, team_slug: str) -> dict[str, Any]:
@@ -362,6 +395,40 @@ class EvaluationRunAggregatesView(LoginAndTeamRequiredMixin, PermissionRequiredM
         return _aggregates_context(evaluation_run, team_slug)
 
 
+@dataclass(frozen=True)
+class ResultFilterPill:
+    """One button in the results table's filter row: "All", or one specific
+    (field, value) to narrow to. `field`/`value` are None for the "All" pill."""
+
+    label: str
+    field: str | None
+    value: str | None
+    active: bool
+
+
+def _build_result_filter_pills(
+    categorical_columns: list[CategoricalColumn], *, active_field: str | None, active_value: str | None
+) -> list[ResultFilterPill]:
+    """ "All" plus one pill per distinct value across every choice/binary output field in
+    the run. Prefixed by field name only when more than one such field is in play, so the
+    common case (one evaluator, one categorical field) gets bare value labels.
+    """
+    prefix_with_field = len(categorical_columns) > 1
+    pills = [ResultFilterPill(label="All", field=None, value=None, active=active_field is None)]
+    for column in categorical_columns:
+        for value in column.values:
+            label = f"{column.field_label}: {value.label}" if prefix_with_field else value.label
+            pills.append(
+                ResultFilterPill(
+                    label=label,
+                    field=column.column_key,
+                    value=value.raw,
+                    active=active_field == column.column_key and active_value == value.raw,
+                )
+            )
+    return pills
+
+
 class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty: ignore[invalid-method-override]
     permission_required = "evaluations.view_evaluationrun"
     template_name = "evaluations/evaluation_results_table.html"
@@ -377,9 +444,54 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty
             pk=self.kwargs["evaluation_run_pk"],
         )
 
+    @cached_property
+    def cost_tracking_enabled(self) -> bool:
+        return bool(flag_is_active(self.request, COST_TRACKING_FLAG))
+
+    @cached_property
+    def evaluators(self) -> list[Evaluator]:
+        return list(Evaluator.objects.filter(id__in=self.evaluation_run.evaluator_ids))
+
+    @cached_property
+    def categorical_columns(self) -> list[CategoricalColumn]:
+        return categorical_columns_for_evaluators(self.evaluators)
+
+    @cached_property
+    def categorical_column_keys(self) -> set[str]:
+        return {column.column_key for column in self.categorical_columns}
+
+    @cached_property
+    def dynamic_columns(self) -> list[tuple[str, str]]:
+        """(column_key, label) for every evaluator output field. The results table
+        shows a curated column per field (below), not the full grab-bag of context/tag/
+        session-link columns `build_evaluation_table_data` also produces.
+        """
+        return evaluator_output_columns(self.evaluators)
+
+    @cached_property
+    def tokens_by_message(self) -> dict[int, int]:
+        if not self.cost_tracking_enabled:
+            return {}
+        return evaluation_message_tokens(self.evaluation_run.config_id, self.evaluation_run.id)
+
+    def get_filter_field(self) -> str | None:
+        field = self.request.GET.get("filter_field")
+        return field if field in self.categorical_column_keys else None
+
+    def get_filter_value(self) -> str | None:
+        return self.request.GET.get("filter_value") if self.get_filter_field() else None
+
     def get_table_data(self):
-        """Return all table data for pagination."""
-        return self.evaluation_run.get_table_data(include_ids=True)
+        """Return all table data for pagination, narrowed to the selected filter pill."""
+        data = self.evaluation_run.get_table_data(include_ids=True)
+        field = self.get_filter_field()
+        if field is not None:
+            value = self.get_filter_value()
+            data = [row for row in data if str(row.get(field)) == value]
+        if self.cost_tracking_enabled:
+            for row in data:
+                row["Tokens"] = self.tokens_by_message.get(row.get("id"))
+        return data
 
     def get_table_pagination(self, table):
         """Configure pagination and calculate page for highlighted result."""
@@ -413,27 +525,36 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["highlight_result_id"] = self.get_highlight_result_id()
+        # Own URL (no query string) so the filter pills can re-fetch themselves with
+        # `filter_field`/`filter_value` set, the same way `result_id` deep-links do.
+        context["table_url"] = self.request.path
+        context["filter_pills"] = _build_result_filter_pills(
+            self.categorical_columns, active_field=self.get_filter_field(), active_value=self.get_filter_value()
+        )
+        # The "Results N total" heading lives in this fragment (not the parent template)
+        # so it can sit on the same row as the filter pills, right-aligned, and both
+        # re-render together on every pill click.
+        context["total_results"] = self.evaluation_run.results.count()
+        context["is_preview"] = self.evaluation_run.type == EvaluationRunType.PREVIEW
         return context
 
     def get_table_class(self):
+        """Build a Table subclass with one Column per curated field: #, Dataset Input,
+        Generated Response, one per evaluator output field, and Tokens (cost tracking
+        permitting) — not the full grab-bag of keys `build_evaluation_table_data`
+        produces (message context, Applied Tags, session links aren't shown here).
         """
-        Inspect the first row's keys and build a Table subclass
-        with one Column per field.
-        """
-
         data = self.get_table_data()
         if not data:
             return type("EmptyTable", (tables.Table,), {})
 
         highlight_result_id = self.get_highlight_result_id()
 
-        # Build column attributes
-        attrs = {}
-        for row in data:
-            for key in row:
-                if key in attrs:
-                    continue
-                attrs[key] = self.get_column(key)
+        column_keys = ["#", "Dataset Input", "Generated Response"]
+        column_keys += [key for key, _label in self.dynamic_columns]
+        if self.cost_tracking_enabled:
+            column_keys.append("Tokens")
+        attrs = {key: self.get_column(key) for key in column_keys}
 
         # Define row class factory to add highlighting
         def _row_class_factory(record):
@@ -442,11 +563,14 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty
                 return f"{class_defaults} bg-yellow-100 dark:bg-yellow-900/20"
             return class_defaults
 
-        # Create Meta class with row_attrs for highlighting and data-result-id
+        # Create Meta class with row_attrs for highlighting and data-result-id. Drops
+        # table-zebra from the default table attrs - alternating row stripes read as
+        # noise against the badge/token columns here.
         Meta = type(
             "Meta",
             (),
             {
+                "attrs": {**settings.DJANGO_TABLES2_TABLE_ATTRS, "class": "w-full table"},
                 "row_attrs": {
                     **settings.DJANGO_TABLES2_ROW_ATTRS,
                     "class": _row_class_factory,
@@ -459,48 +583,24 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty
         return type("EvaluationResultTableTable", (tables.Table,), attrs)
 
     def get_column(self, key):
-        def generated_session_url_factory(_, __, record, value):
-            if not value or not self.evaluation_run.generation_experiment_id:
-                return "#"  # Return placeholder URL to ensure button is rendered
-            return reverse(
-                "chatbots:chatbot_session_view",
-                args=[self.kwargs["team_slug"], self.evaluation_run.generation_experiment.public_id, value],
+        if key in self.categorical_column_keys:
+            column = next(c for c in self.categorical_columns if c.column_key == key)
+            return columns.TemplateColumn(
+                template_name="evaluations/components/category_badge_column.html",
+                verbose_name=column.field_label,
+                orderable=False,
+                extra_context={"category_values": column.values},
             )
 
-        def generated_session_enabled_condition(_, record):
-            return bool(record.get("session"))
+        dynamic_labels = dict(self.dynamic_columns)
+        if key in dynamic_labels:
+            return columns.Column(verbose_name=dynamic_labels[key])
 
-        def source_session_url_factory(_, __, record, ___):
-            external_id = record.get("source_session")
-            experiment_id = record.get("source_experiment_id")
-            if not external_id or not experiment_id:
-                return "#"
-            return reverse(
-                "chatbots:chatbot_session_view",
-                args=[self.kwargs["team_slug"], experiment_id, external_id],
-            )
-
-        def source_session_enabled_condition(_, record):
-            return bool(record.get("source_session") and record.get("source_experiment_id"))
-
-        def dataset_url_factory(_, __, record, value):
-            if not value:
-                return "#"
-            dataset_id = self.evaluation_run.config.dataset_id
-            message_id = record.get("message_id")
-
-            url = reverse("evaluations:dataset_edit", args=[self.kwargs["team_slug"], dataset_id])
-            return f"{url}?message_id={message_id}"
-
-        def dataset_enabled_condition(_, record):
-            return bool(record.get("message_id"))
-
-        header = key.replace("_", " ").title()
         match key:
             case "#":
                 return columns.TemplateColumn(
                     template_name="evaluations/evaluation_result_id_column.html",
-                    verbose_name=header,
+                    verbose_name="#",
                     orderable=False,
                     extra_context={
                         "team_slug": self.kwargs["team_slug"],
@@ -508,45 +608,15 @@ class EvaluationResultTableView(PermissionRequiredMixin, SingleTableView):  # ty
                         "evaluation_run_pk": self.kwargs["evaluation_run_pk"],
                     },
                 )
-            case "id":
-                # Hide the id column but keep it in the data
-                return columns.Column(verbose_name=header, visible=False)
-            case "session":
-                return actions.ActionsColumn(
-                    verbose_name="Links",
-                    actions=[
-                        actions.chip_action(
-                            label_factory=lambda _r, _v: "",
-                            icon_class="fa-regular fa-comments",
-                            title="Source session",
-                            url_factory=source_session_url_factory,
-                            enabled_condition=source_session_enabled_condition,
-                            open_url_in_new_tab=True,
-                        ),
-                        actions.chip_action(
-                            label_factory=lambda _r, _v: "",
-                            icon_class="fa-solid fa-code-fork",
-                            title="Generated session",
-                            url_factory=generated_session_url_factory,
-                            enabled_condition=generated_session_enabled_condition,
-                            open_url_in_new_tab=True,
-                        ),
-                        actions.chip_action(
-                            label_factory=lambda _r, _v: "",
-                            icon_class="fa-regular fa-comment",
-                            title="Dataset message",
-                            url_factory=dataset_url_factory,
-                            enabled_condition=dataset_enabled_condition,
-                            open_url_in_new_tab=True,
-                        ),
-                    ],
-                    align="right",
-                    extra_context={"join_class": "join"},
+            case "Tokens":
+                return columns.TemplateColumn(
+                    template_code=(
+                        "{% load humanize %}{% if value is not None %}{{ value|intcomma }}{% else %}—{% endif %}"
+                    ),
+                    verbose_name="Tokens",
+                    orderable=False,
                 )
-            case "message_id" | "source_session" | "source_experiment_id":
-                # Carried in row data for the Links column's url factories; not rendered as columns.
-                return None
-        return columns.Column(verbose_name=header)
+        return columns.Column(verbose_name=key)
 
 
 @permission_required("evaluations.add_evaluationrun")

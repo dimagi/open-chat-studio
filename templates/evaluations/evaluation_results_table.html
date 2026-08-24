@@ -1,4 +1,22 @@
 {% load render_table from django_tables2 %}
+<div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+  <h2 class="text-lg font-semibold">
+    Results {% if is_preview %}(Preview){% endif %}
+    {% if total_results %}<span class="text-sm font-normal text-base-content/60">{{ total_results }} total</span>{% endif %}
+  </h2>
+  {% if filter_pills|length > 1 %}
+    <div class="flex flex-wrap gap-2">
+      {% for pill in filter_pills %}
+        <button class="btn btn-sm {% if pill.active %}btn-active{% endif %}"
+                hx-get="{% if pill.field %}{{ table_url }}?filter_field={{ pill.field|urlencode }}&filter_value={{ pill.value|urlencode }}{% else %}{{ table_url }}{% endif %}"
+                hx-target="#results-table"
+                hx-swap="innerHTML">
+          {{ pill.label }}
+        </button>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
 {% render_table table %}
 
 {% if highlight_result_id %}

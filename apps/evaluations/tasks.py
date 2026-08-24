@@ -146,7 +146,7 @@ def _run_evaluator_on_message(
     On evaluator failure an error result is stored (matching the no-retry behaviour);
     on success the result is written and its Score rows are derived.
     """
-    usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id)
+    usage_context = _usage_context_for(evaluation_run, session_id, evaluator_id=evaluator.id, message_id=message.id)
     try:
         output = evaluator.run(message, bot_response or "", usage_context=usage_context).model_dump()
     except Exception as e:
@@ -166,7 +166,10 @@ def _run_evaluator_on_message(
 
 
 def _usage_context_for(
-    evaluation_run: EvaluationRun, session_id: int | None, evaluator_id: int | None = None
+    evaluation_run: EvaluationRun,
+    session_id: int | None,
+    evaluator_id: int | None = None,
+    message_id: int | None = None,
 ) -> EvaluatorUsageContext:
     """Attribution for the LLM spend an evaluator incurs judging one message.
 
@@ -182,6 +185,7 @@ def _usage_context_for(
         experiment_id=generation_experiment.get_working_version_id() if generation_experiment else None,
         session_id=session_id,
         evaluator_id=evaluator_id,
+        message_id=message_id,
     )
 
 
@@ -702,7 +706,7 @@ def run_bot_generation(
             message_text=input_content,
             session=session,
             participant_data=participant_data,
-            usage_tracer=generation_usage_tracer(experiment, evaluation_run),
+            usage_tracer=generation_usage_tracer(experiment, evaluation_run, message_id=message.id),
         )
         response_content = bot_response.content
         logger.debug(f"Bot generated response for evaluation message {message.id}: {response_content}")

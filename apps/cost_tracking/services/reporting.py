@@ -785,6 +785,26 @@ def evaluation_run_costs(config_id: int, run_ids: list[int]) -> dict[int, Decima
     return {row["extra__evaluation_run_id"]: row["cost"] for row in rows}
 
 
+def evaluation_message_tokens(config_id: int, run_id: int) -> dict[int, int]:
+    """Total tokens per dataset message, keyed by message id, for one run - both halves
+    of a row's spend (the judge calls that scored it and the generation that produced
+    it) combined, for the results table's per-row Tokens column.
+
+    Only rows written after `EvaluatorUsageContext`/`UsageOnlyTracer` started stamping
+    `extra.message_id` carry it, so older runs simply have no entry for a given message
+    (the caller renders that as "no data", not zero).
+    """
+    rows = (
+        UsageRecord.objects.filter(
+            evaluation_config_id=config_id, extra__evaluation_run_id=run_id, extra__message_id__isnull=False
+        )
+        .values("extra__message_id")
+        .annotate(tokens=Coalesce(Sum("quantity"), _ZERO, output_field=_QUANTITY_FIELD))
+        .order_by()
+    )
+    return {row["extra__message_id"]: int(row["tokens"]) for row in rows}
+
+
 def evaluation_config_cost_summary(config: EvaluationConfig) -> EvaluationConfigCostSummary:
     """Aggregate spend across every run of one config: last 30 days and all time, each
     with its own confidence flags (mirrors `cost_summary`'s per-period counters).
