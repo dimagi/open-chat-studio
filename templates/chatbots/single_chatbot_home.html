@@ -49,7 +49,12 @@
           </div>
         {% endif %}
       </div>
-      <div class="justify-self-end">
+      <div class="justify-self-end flex items-center gap-2">
+        {% if experiment.is_editable and broadcast_form.eligible_channels and perms.experiments.invite_participants %}
+          <button class="btn btn-sm btn-outline btn-primary" onclick="broadcast_message_modal.showModal()">
+            <i class="fa-solid fa-bullhorn"></i> Broadcast message
+          </button>
+        {% endif %}
         <div class="join">
           {% if experiment.is_editable %}
             <div class="tooltip" data-tip="Chat to the bot">
@@ -132,6 +137,9 @@
       {% endif %}
     </div>
     {% if experiment.is_editable %}
+      {% if broadcast_form.eligible_channels and perms.experiments.invite_participants %}
+        {% include "chatbots/components/broadcast_dialog.html" %}
+      {% endif %}
       {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
       {% if experiment.is_public %}
         {% include "experiments/share/dialog.html" %}
