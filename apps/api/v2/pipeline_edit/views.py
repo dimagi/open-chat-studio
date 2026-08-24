@@ -123,7 +123,9 @@ class PipelineNodeEditView(GenericAPIView):
         options = team_options(request.team)
         check_params(node_type_schema, options, params)
         return Response(
-            edit_pipeline(request, id, lambda flow: plan_create(flow, node_type_schema, label, params), self._envelope),
+            edit_pipeline(
+                request, id, lambda flow: plan_create(flow, node_type_schema, label, params), self._write_response
+            ),
             status=status.HTTP_201_CREATED,
         )
 
@@ -168,7 +170,9 @@ class PipelineNodeEditView(GenericAPIView):
         # graph at all -- so it is done here rather than in the critical section.
         warm_option_lists(options, params)
         return Response(
-            edit_pipeline(request, id, lambda flow: plan_update(flow, options, node_id, label, params), self._envelope)
+            edit_pipeline(
+                request, id, lambda flow: plan_update(flow, options, node_id, label, params), self._write_response
+            )
         )
 
     @extend_schema(
@@ -193,13 +197,14 @@ class PipelineNodeEditView(GenericAPIView):
         },
     )
     def delete(self, request, id: str, node_id: str) -> Response:
-        # `plan_delete` names no node, so the envelope reports the pipeline alone: there is no node
+        # `plan_delete` names no node, so the response reports the pipeline alone: there is no node
         # left to describe.
-        return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._envelope))
+        return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._write_response))
 
     @staticmethod
-    def _envelope(pipeline: Pipeline, node_id: str | None) -> dict:
-        """The build state every façade write reports, with the written node in front of it."""
+    def _write_response(pipeline: Pipeline, node_id: str | None) -> dict:
+        """The response body every façade write returns: the pipeline's build state, and in front of
+        it the node this write created or changed (absent when the write deleted one)."""
         state = pipeline_build_state(pipeline)
         body = {
             "pipeline_valid": state["pipeline_valid"],
