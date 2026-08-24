@@ -364,7 +364,8 @@ class ChatbotOptionsView(DiscoveryView):
             "and so has no entry here.\n\n"
             "`voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable "
             "by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that "
-            "one provider."
+            "one provider. Only the voices a listed provider can speak are offered, so a team that "
+            "has configured no voice provider is offered no voice either."
         ),
         tags=["Chatbots"],
         responses={200: ChatbotOptionsSerializer},

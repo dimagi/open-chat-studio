@@ -14,6 +14,7 @@ from apps.api.v2.discovery.chatbot_settings import chatbot_setting_options
 from apps.api.v2.discovery.serializers import ChatbotOptionsSerializer
 from apps.api.v2.discovery.views import CHATBOT_OPTIONS_EXAMPLE
 from apps.experiments.models import SyntheticVoice, VoiceResponseBehaviours
+from apps.service_providers.models import VoiceProviderType
 from apps.teams.models import Flag
 from apps.utils.factories.experiment import ConsentFormFactory, SyntheticVoiceFactory
 from apps.utils.factories.service_provider_factories import TraceProviderFactory, VoiceProviderFactory
@@ -121,7 +122,11 @@ def test_versioned_consent_forms_are_not_offered(team_with_every_resource):
 def test_a_flagged_off_voice_service_is_offered_to_neither_the_ui_nor_the_api(team):
     """The form hides the OpenAI voice engine behind a team flag. The API reads its lists off that
     same form, so a team without the flag must not be told it can write those voices."""
-    provider = VoiceProviderFactory.create(team=team, type="openai", name="Prod OpenAI Voice")
+    # A voice engine voice only ever belongs to a provider of that type -- `VoiceProvider.add_files`
+    # creates it there and nowhere else -- and only such a provider can speak it.
+    provider = VoiceProviderFactory.create(
+        team=team, type=VoiceProviderType.openai_voice_engine, name="Prod OpenAI Voice"
+    )
     SyntheticVoiceFactory.create(
         name="Alloy", service=SyntheticVoice.OpenAIVoiceEngine, voice_provider=provider, language="English"
     )
@@ -152,6 +157,28 @@ def test_a_voice_carries_what_it_takes_to_pair_it_with_a_provider(team_with_ever
     assert options["voice_provider"][0]["type"] == "aws"
     assert (by_id[owned_id]["type"], by_id[owned_id]["provider_id"]) == ("aws", provider_id)
     assert (by_id[shared_id]["type"], by_id[shared_id]["provider_id"]) == ("aws", None)
+
+
+@pytest.mark.django_db()
+def test_a_voice_no_configured_provider_can_speak_is_not_offered(team_with_every_resource):
+    """A voice is only speakable by a provider of its own type. The team holds an AWS provider and no
+    Azure one, so an Azure voice is not a value it can write -- offering it invites a chatbot that
+    goes silent when it tries to speak."""
+    SyntheticVoiceFactory.create(name="Amber", service="Azure")
+
+    labels = [entry["label"] for entry in _options(team_with_every_resource)["synthetic_voice"]]
+
+    assert [label for label in labels if "Joanna" in label], labels
+    assert not [label for label in labels if "Amber" in label], labels
+
+
+@pytest.mark.django_db()
+def test_a_team_with_no_voice_provider_is_offered_no_voices(team):
+    """The shared voices belong to no provider, but they still need one of the team's own to speak
+    them. A team that has configured none can write no voice at all."""
+    SyntheticVoiceFactory.create(name="Matthew", service="AWS")
+
+    assert _options(team)["synthetic_voice"] == []
 
 
 @pytest.mark.django_db()

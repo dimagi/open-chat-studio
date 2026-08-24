@@ -14,7 +14,7 @@ paths:
 
         Only the settings drawn from a fixed set of values appear. A free-text setting (`name`, `seed_message`) or a boolean one (`file_uploads_enabled`) constrains nothing and so has no entry here.
 
-        `voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that one provider.
+        `voice_provider` and `synthetic_voice` are chosen as a pair: a voice is only speakable by a provider of the same `type`, and a voice carrying a `provider_id` belongs to that one provider. Only the voices a listed provider can speak are offered, so a team that has configured no voice provider is offered no voice either.
       summary: List Chatbot Setting Options
       tags:
       - Chatbots
@@ -1262,8 +1262,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SettingSyntheticVoiceOption'
-          description: Every voice the team can reach. A voice is only speakable by
-            a `voice_provider` of the same `type`, so pick the pair together.
+          description: Every voice one of the team's `voice_provider` entries can
+            speak. A voice is only speakable by a provider of the same `type`, so
+            pick the pair together.
         voice_response_behaviour:
           type: array
           items:

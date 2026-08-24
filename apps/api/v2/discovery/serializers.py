@@ -237,8 +237,8 @@ class ChatbotOptionsSerializer(serializers.Serializer):
         many=True,
         required=False,
         help_text=(
-            "Every voice the team can reach. A voice is only speakable by a `voice_provider` of the "
-            "same `type`, so pick the pair together."
+            "Every voice one of the team's `voice_provider` entries can speak. A voice is only "
+            "speakable by a provider of the same `type`, so pick the pair together."
         ),
     )
     voice_response_behaviour = SettingChoiceOptionSerializer(
