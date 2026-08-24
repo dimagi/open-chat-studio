@@ -63,27 +63,21 @@ def _type_error(prop: dict, value: Any) -> str | None:
     there is no ``anyOf``/``$ref`` to resolve here — ``test_every_served_param_states_a_plain_type``
     holds that true. A param the schema says nothing about is left alone; an undeclared name is
     ``check_param_names``'s to refuse, not this.
+
+    An array's entries are checked one by one, because a list-valued param is a list of ids or of
+    names and one bad entry spoils the write.
     """
     expected = prop.get("type")
     if expected is None:
         return None
     if not _matches(expected, value):
         return f"Expected {expected}, got {json_type_name(value)}."
-    if expected == "array":
-        return _item_type_error(prop, value)
+    item_type = prop.get("items", {}).get("type") if expected == "array" else None
+    if item_type:
+        for item in value:
+            if item is not None and not _matches(item_type, item):
+                return f"Expected an array of {item_type}, got {json_type_name(item)}: {item!r}."
     return None
-
-
-def _item_type_error(prop: dict, values: list) -> str | None:
-    """Why an array's entries do not fit its ``items`` type. Entries are checked one by one because
-    a list-valued param is a list of ids or of names, and one bad entry spoils the write."""
-    item_type = prop.get("items", {}).get("type")
-    if not item_type:
-        return None
-    wrong = [item for item in values if item is not None and not _matches(item_type, item)]
-    if not wrong:
-        return None
-    return f"Expected an array of {item_type}, got {json_type_name(wrong[0])}: {wrong[0]!r}."
 
 
 def _matches(expected: str, value: Any) -> bool:

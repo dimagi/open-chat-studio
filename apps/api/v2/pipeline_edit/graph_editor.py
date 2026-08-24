@@ -91,7 +91,8 @@ def check_params(node_type_schema: dict, options: OptionsAccessor, params: dict[
     hold before a value can be read as one reference or as a list of them.
     """
     check_param_names(node_type_schema, params)
-    check_param_types(node_type_schema, params)
+    if errors := param_type_errors(node_type_schema["schema"]["properties"], params):
+        raise ValidationError({"params": errors})
     check_references(options, node_type_schema["type"], node_type_schema["schema"]["properties"], params)
 
 
@@ -210,17 +211,6 @@ def check_param_names(node_type_schema: dict, params: dict[str, Any]) -> None:
     if unknown:
         message = f"'{node_type}' declares no such param. See GET /api/v2/pipeline/nodes/{node_type}/."
         raise ValidationError({"params": dict.fromkeys(unknown, message)})
-
-
-def check_param_types(node_type_schema: dict, params: dict[str, Any]) -> None:
-    """Refuse a param whose value is the wrong shape for what the type declares.
-
-    Unlike a missing or semantically wrong param, this is not reported and kept: see
-    ``param_types`` for why a value the node cannot parse has to be turned away at the door.
-    """
-    # feedback: this method is too convoluted in its calles and sub-calls. Simplyify please
-    if errors := param_type_errors(node_type_schema["schema"]["properties"], params):
-        raise ValidationError({"params": errors})
 
 
 def stored_params(content: FlowNodeData) -> dict[str, Any]:
