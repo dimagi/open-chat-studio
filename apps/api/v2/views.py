@@ -66,14 +66,10 @@ class ChatbotViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, GenericVi
         # resolves the class through here, so it has to be right.
         action = self.action
         if action == "metadata":
-            # `self.action` is "metadata" for the whole of an OPTIONS request, so the mapping below
-            # would answer the *read* serializer for every method being described. DRF's
-            # `SimpleMetadata.determine_actions` swaps in a `clone_request` carrying the method it
-            # is describing before calling `get_serializer()`, so read the method instead. Without
-            # this, OPTIONS advertises a POST body whose keys `RejectsUnknownKeys` then 400s -- and
-            # OPTIONS is exactly how the agent this API is built for discovers the body.
-            # Only POST needs mapping: `determine_actions` describes PUT and POST alone, and this
-            # viewset has no `update`, so PATCH is never described.
+            # `self.action` stays "metadata" for the whole of an OPTIONS request, so read the
+            # method off the `clone_request` DRF describes each one with instead -- otherwise
+            # OPTIONS advertises the read serializer as the POST body. Only POST needs mapping:
+            # `determine_actions` describes PUT and POST alone, and this viewset has no `update`.
             action = {"POST": "create"}.get(self.request.method, action)
         return {
             "create": ChatbotCreateSerializer,
