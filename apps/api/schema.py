@@ -5,7 +5,7 @@ from drf_spectacular.authentication import TokenScheme
 from drf_spectacular.extensions import OpenApiAuthenticationExtension, OpenApiSerializerFieldExtension
 from rest_framework.permissions import SAFE_METHODS
 
-from apps.api.v2.write.serializers import RejectsUnknownKeys
+from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
 
 # Placeholder hosts baked into the schema: DRF hardcodes ``api.example.org`` in the cursor
