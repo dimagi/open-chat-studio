@@ -11,6 +11,7 @@ discovery endpoint serves is what keeps "what we offer" and "what we accept" fro
 """
 
 from collections.abc import Callable
+from functools import cache
 from typing import Any
 
 from rest_framework.exceptions import ValidationError
@@ -24,25 +25,28 @@ from .param_types import is_array_param
 #: A caller's lazy handle on the team's option lists, as :func:`team_options` builds it.
 OptionsAccessor = Callable[[], dict]
 
+#: Where :func:`team_options` parks its memo on the ``Team`` instance.
+OPTIONS_MEMO_ATTR = "_pipeline_option_lists"
+
 #: Values meaning "this reference is unset". ``[]`` matters as much as ``None``: a list-valued
 #: param such as ``collection_index_ids`` clears by being sent empty.
 UNSET = (None, [], "")
 
 
 def team_options(team: Team) -> OptionsAccessor:
-    """A once-per-caller accessor for ``team``'s option lists.
+    """A lazy, once-per-request accessor for ``team``'s option lists.
 
     ``options_for_team`` is around fifteen queries and parses every custom action's OpenAPI schema,
-    so it is built lazily (a write touching no reference never pays for it) and at most once.
+    so it is built only if something needs checking, and at most once however many callers ask.
+
+    The memo hangs off the ``Team`` instance -- ``request.team`` is one object for the whole request
+    -- rather than off ``options_for_team`` itself. A ``@cache`` there would outlive the request and
+    go on serving the old lists after the team added a provider or a collection, which for this
+    caller means refusing a write that names a resource the team really does hold.
     """
-    built: list[dict] = []
-
-    def get() -> dict:
-        if not built:
-            built.append(options_for_team(team))
-        return built[0]
-
-    return get
+    if not hasattr(team, OPTIONS_MEMO_ATTR):
+        setattr(team, OPTIONS_MEMO_ATTR, cache(lambda: options_for_team(team)))
+    return getattr(team, OPTIONS_MEMO_ATTR)
 
 
 def check_references(options: OptionsAccessor, node_type: str, properties: dict, params: dict[str, Any]) -> None:
