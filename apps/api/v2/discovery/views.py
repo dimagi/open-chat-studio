@@ -5,8 +5,6 @@ Both reshape the shared helpers in ``apps.pipelines.nodes.node_metadata``, which
 raw. The reshaping rules live in ``contract.py`` and ``node_types.py``.
 """
 
-from typing import Any
-
 from django.http import HttpResponseNotModified
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
@@ -16,20 +14,17 @@ from rest_framework.response import Response
 from apps.api.permissions import BASE_PERMISSION_CLASSES, DjangoModelPermissionsWithView
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.models import Pipeline
-from apps.pipelines.nodes.base import OptionsSource
-from apps.pipelines.nodes.node_metadata import get_node_default_values, get_node_parameter_values
-from apps.teams.models import Team
-from apps.utils.prompt import PROMPT_VAR_DESCRIPTIONS
 
-from .node_types import etag, get_node_types, option_keys_for_node_type, served_option_keys, unknown_node_type
-from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
-
-# The option lists holding prompt variables rather than referenceable resource ids.
-PROMPT_VAR_OPTION_SOURCES = (
-    OptionsSource.template_variables,
-    OptionsSource.llm_prompt_variables,
-    OptionsSource.router_prompt_variables,
+from .node_types import (
+    etag,
+    get_node_type,
+    get_node_types,
+    option_keys_for_node_type,
+    served_option_keys,
+    unknown_node_type,
 )
+from .options import options_for_team
+from .serializers import NodeTypeNotFoundSerializer, NodeTypeSerializer, PipelineOptionsSerializer
 
 
 class DiscoveryView(GenericAPIView):
@@ -150,15 +145,7 @@ class PipelineNodeView(NodeTypesView):
         ],
     )
     def get(self, request, node_type):
-        return self._etagged(request, self.get_serializer(self._node_type(node_type)).data)
-
-    @staticmethod
-    def _node_type(node_type: str) -> dict:
-        """The named node type, or a 404 naming what the client could have asked for instead."""
-        for node in get_node_types():
-            if node["type"] == node_type:
-                return node
-        raise unknown_node_type(node_type)
+        return self._etagged(request, self.get_serializer(get_node_type(node_type)).data)
 
 
 # The documented response sample. Kept whole rather than inline so a test can hold it to the
@@ -201,56 +188,9 @@ PIPELINE_OPTIONS_EXAMPLE = {
 
 class TeamOptionsView(DiscoveryView):
     """Shared payload for the two option endpoints. Both build every option list the team can draw
-    on and differ only in which keys they keep."""
+    on (``options_for_team``) and differ only in which keys they keep."""
 
     serializer_class = PipelineOptionsSerializer
-
-    @classmethod
-    def _options_for_team(cls, team: Team) -> dict:
-        """Every option list the team can draw on, with the builder-only affordances stripped.
-        Scoping to a node type happens after this.
-
-        Unlike the builders, this serves only what a client may write, so the models the team cannot
-        call are left out.
-        """
-        options = cls._clean_options(get_node_parameter_values(team=team, usable_models_only=True))
-        options["default_llm_provider"] = get_node_default_values(team, usable_models_only=True)
-        return cls._describe_prompt_vars(options)
-
-    @classmethod
-    def _clean_options(cls, value: Any) -> Any:
-        """Strip the builder-only affordances off every option list. Recurses -- ``built_in_tools``
-        and ``tool_config`` nest their lists inside dicts keyed by provider type."""
-        if isinstance(value, dict):
-            return {key: cls._clean_options(item) for key, item in value.items()}
-        if isinstance(value, list):
-            return [cls._clean_option(option) for option in value if not cls._is_placeholder(option)]
-        return value
-
-    @staticmethod
-    def _is_placeholder(option: Any) -> bool:
-        """A builder entry standing in for "nothing chosen". It names no resource to reference."""
-        return isinstance(option, dict) and option.get("value") == ""
-
-    @staticmethod
-    def _clean_option(option: Any) -> Any:
-        """One option entry, with its ``edit_url`` link into the Django UI dropped."""
-        if not isinstance(option, dict):
-            return option
-        return {key: item for key, item in option.items() if key != "edit_url"}
-
-    @staticmethod
-    def _describe_prompt_vars(options: dict) -> dict:
-        """Swap each prompt variable's redundant ``value`` (always equal to its ``label``) for a
-        description of what the variable holds. An uncovered variable is a KeyError here, which
-        ``test_every_offered_prompt_var_has_a_description`` guards against."""
-        for source in PROMPT_VAR_OPTION_SOURCES:
-            if entries := options.get(source):
-                options[source] = [
-                    {"label": entry["label"], "description": PROMPT_VAR_DESCRIPTIONS[entry["label"]]}
-                    for entry in entries
-                ]
-        return options
 
 
 class PipelineOptionsView(TeamOptionsView):
@@ -283,7 +223,7 @@ class PipelineOptionsView(TeamOptionsView):
     )
     def get(self, request):
         served = served_option_keys()
-        options = self._options_for_team(request.team)
+        options = options_for_team(request.team)
         filtered = {key: value for key, value in options.items() if key in served}
         return Response(self.get_serializer(filtered).data)
 
@@ -319,6 +259,6 @@ class PipelineNodeOptionsView(TeamOptionsView):
         wanted = option_keys_for_node_type(node_type)
         if wanted is None:
             raise unknown_node_type(node_type)
-        options = self._options_for_team(request.team)
+        options = options_for_team(request.team)
         filtered = {key: value for key, value in options.items() if key in wanted}
         return Response(self.get_serializer(filtered).data)

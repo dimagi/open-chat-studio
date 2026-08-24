@@ -32,6 +32,14 @@ def get_node_types() -> list[dict]:
     return node_types
 
 
+def get_node_type(node_type: str) -> dict:
+    """The named node type as ``/pipeline/nodes/`` serves it, or a 404 naming the valid ones."""
+    for node in get_node_types():
+        if node["type"] == node_type:
+            return node
+    raise unknown_node_type(node_type)
+
+
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
     """The option keys a single node type reads, or ``None`` if no such type is served."""
     return _option_keys_by_type().get(node_type)
