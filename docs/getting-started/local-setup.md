@@ -108,6 +108,8 @@ inv dev
 | `worker` | Celery worker — **required** for LLM interactions and other background tasks |
 | `assets` | webpack watcher for JavaScript and CSS |
 
+Without portless (see below), the Django server listens on <http://127.0.0.1:8000>, which is the same port as a bare `inv runserver`.
+
 ### Named URLs with portless
 
 If [portless](https://www.npmjs.com/package/portless) is installed and its proxy is running, the
