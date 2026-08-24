@@ -241,6 +241,9 @@ class MessageProcessingPipeline:
             # TypeError). This is a user configuration problem, not a system bug.
             # Log a warning and return a canned reply without re-raising so that
             # Sentry does not receive a spurious error report.
+            # Deliberately narrower than its PipelineNodeRunError base: the other
+            # subclasses of that base are system bugs and must keep reaching Sentry
+            # via the generic handler below.
             logger.warning("CodeNode user code error: %s", e)
             ctx.early_exit_response = self.DEFAULT_ERROR_RESPONSE_TEXT
             ctx.processing_errors.append(str(e))

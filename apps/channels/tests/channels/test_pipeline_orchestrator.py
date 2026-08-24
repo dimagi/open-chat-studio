@@ -8,7 +8,12 @@ from apps.channels.pipeline import (
     MessageProcessingPipeline,
 )
 from apps.chat.exceptions import ChatException
-from apps.pipelines.exceptions import CodeNodeRunError, PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.exceptions import (
+    CodeNodeRunError,
+    PipelineBuildError,
+    PipelineNodeBuildError,
+    PipelineNodeRunError,
+)
 
 from .conftest import make_context
 
@@ -213,6 +218,27 @@ class TestUserCausedErrors:
         mock_gen.assert_not_called()
         assert ctx.early_exit_response == MessageProcessingPipeline.DEFAULT_ERROR_RESPONSE_TEXT
         assert str(error) in ctx.processing_errors
+        t1.assert_called_once()
+
+    @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
+    def test_plain_node_run_error_is_still_reraised(self, mock_gen):
+        """``CodeNodeRunError`` subclasses ``PipelineNodeRunError``, but only the subclass is
+        swallowed. The base class covers system bugs -- an unset repository, an unresolvable node
+        input, a provider that fails to initialise -- so it must keep taking the generic path and
+        reaching Sentry.
+        """
+        mock_gen.return_value = "error msg"
+        error = PipelineNodeRunError("ORMRepository not set")
+        s1 = _make_stage(side_effect=error)
+        t1 = _make_stage()
+
+        ctx = make_context()
+        pipeline = _pipeline(core=[s1], terminal=[t1])
+
+        with pytest.raises(PipelineNodeRunError, match="ORMRepository not set"):
+            pipeline.process(ctx)
+
+        mock_gen.assert_called_once_with(ctx, error)
         t1.assert_called_once()
 
 

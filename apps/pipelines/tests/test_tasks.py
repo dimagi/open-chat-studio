@@ -1,7 +1,7 @@
 import pytest
 
 from apps.pipelines.tasks import get_response_for_pipeline_test_message
-from apps.pipelines.tests.utils import create_pipeline_model, end_node, render_template_node, start_node
+from apps.pipelines.tests.utils import code_node, create_pipeline_model, end_node, render_template_node, start_node
 from apps.utils.factories.pipelines import PipelineFactory
 
 CONFIG_ERROR = {"error": "There are errors in the pipeline configuration. Please correct those before running a test."}
@@ -50,3 +50,20 @@ class TestGetResponseForPipelineTestMessage:
         result = get_response_for_pipeline_test_message(pipeline_id=pipeline.id, message_text="test", user_id=user.id)
 
         assert result == CONFIG_ERROR
+
+    def test_code_node_error_is_returned_not_raised(self, team_with_users):
+        """An undefined name in the user's own Python compiles fine, so it slips past ``validate()``
+        and only surfaces at run time as a ``CodeNodeRunError``. Since that now subclasses
+        ``PipelineNodeRunError``, the task's existing handler reports it back to the user instead of
+        letting the Celery task crash.
+        """
+        user = team_with_users.members.first()
+        pipeline = create_pipeline_model(
+            [start_node(), code_node("def main(input, **kwargs):\n    return undefined_name"), end_node()],
+            pipeline=PipelineFactory.create(team=team_with_users),
+        )
+        pipeline.save()
+
+        result = get_response_for_pipeline_test_message(pipeline_id=pipeline.id, message_text="test", user_id=user.id)
+
+        assert "undefined_name" in result["error"]

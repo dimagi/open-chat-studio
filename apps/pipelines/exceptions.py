@@ -79,11 +79,25 @@ class PipelineNodeBuildError(Exception):
 
 
 class PipelineNodeRunError(Exception):
-    pass
+    """A node failed while running.
+
+    This is the general runtime failure for a node, and it is *not* swallowed by the message
+    processing pipeline: some of its raise sites are genuine system bugs (an unset repository,
+    an input the graph cannot resolve, a provider that fails to initialise), so it must keep
+    reaching Sentry. Raise the ``CodeNodeRunError`` subclass instead when the cause is code the
+    user wrote.
+    """
 
 
-class CodeNodeRunError(Exception):
-    pass
+class CodeNodeRunError(PipelineNodeRunError):
+    """User-authored code in a CodeNode raised.
+
+    A subclass rather than a sibling so that anything catching ``PipelineNodeRunError`` (the
+    pipeline-test task) also catches user code errors, while the handlers that must distinguish
+    a user's mistake from a system bug -- ``apps.channels.pipeline``, which answers with a canned
+    reply and does not re-raise, and ``apps.trace.error_parser``, which tags the trace -- can
+    still catch this narrower type.
+    """
 
 
 class WaitForNextInput(Exception):
