@@ -490,8 +490,10 @@ ocs_prune_template_databases() {
     while IFS= read -r template; do
         [[ -n "$template" ]] || continue
         stamp_path="$stamp_directory/$template.stamp"
+        # Kept without spending a retention slot: this setup's own template would
+        # otherwise take one whenever it is also the newest, leaving the knob to mean
+        # a different total depending on where that template happens to sort.
         if [[ "$template" == "$retained_template" ]]; then
-            kept=$((kept + 1))
             continue
         fi
         if [[ -f "$stamp_path" && "$kept" -lt "$OCS_TEMPLATE_RETENTION" ]]; then

@@ -711,6 +711,37 @@ def test_pruning_keeps_the_retained_template_and_the_newest_few(
     assert (stamp_directory / f"{templates[0]}.stamp").exists()
 
 
+def test_pruning_does_not_spend_a_retention_slot_on_the_retained_template(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    """The retained template is usually the newest one, having just been snapshotted."""
+    _, worktree, env, command_log = worktree_fixture
+    stamp_directory = Path(
+        _run_worktree_helper(worktree, "ocs_template_stamp_directory", worktree, env=env).stdout.strip()
+    )
+    stamp_directory.mkdir(parents=True, exist_ok=True)
+    database_registry = Path(env["OCS_TEST_DATABASE_REGISTRY"])
+    templates = [f"ocs_tmpl_0000000{index}" for index in range(3)]
+    database_registry.write_text("".join(f"{template}\n" for template in templates))
+    for template in templates:
+        (stamp_directory / f"{template}.stamp").write_text("apps/example/migrations/0001_initial.py:1 2\n")
+    env["OCS_TEMPLATE_RETENTION"] = "1"
+
+    _run_worktree_helper(
+        worktree,
+        "ocs_prune_template_databases",
+        worktree,
+        templates[-1],
+        env=env,
+    )
+
+    command_output = command_log.read_text()
+    # The retained newest template, plus one older one on the retention slot it did not take.
+    assert f'DROP DATABASE IF EXISTS "{templates[2]}"' not in command_output
+    assert f'DROP DATABASE IF EXISTS "{templates[1]}"' not in command_output
+    assert f'DROP DATABASE IF EXISTS "{templates[0]}"' in command_output
+
+
 def test_teardown_removes_only_the_worktree_resources(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
