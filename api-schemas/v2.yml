@@ -169,6 +169,172 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatbotInspect'
           description: ''
+  /api/v2/chatbots/{id}/pipeline/nodes/:
+    post:
+      operationId: pipeline_node_create
+      description: |-
+        Add a node to the chatbot's working (draft) pipeline.
+
+        `type` alone is enough: the node is created with that type's defaults, which the response reports and which you can then change with PATCH. The node is not wired to anything, so it appears in `unwired_handles` until you connect it — that is advisory, not an error.
+
+        The node's `node_id` and its position on the canvas are assigned by the server and cannot be chosen.
+
+        The pipeline does not have to be valid for this to succeed. A structurally sound change is always applied, and whatever is still wrong with the graph comes back in `pipeline_errors` — so a pipeline can be built up over several calls. What is refused is a body the server cannot act on: a param whose value is the wrong type, or a reference to something that does not exist — a node type, a node id, or a resource this team cannot reach.
+      summary: Add a Pipeline Node
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      tags:
+      - Pipelines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeCreate'
+        required: true
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint can act on. Errors are keyed
+            by the field at fault, and param-level errors are nested under `params`.
+            This covers an unrecognised body key, a server-assigned key the client
+            tried to set (`node_id`, `position`), an unknown node `type`, a param
+            the type does not declare, a param whose value is the wrong type, and
+            a param naming a resource this team cannot reach.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot.
+  /api/v2/chatbots/{id}/pipeline/nodes/{node_id}/:
+    patch:
+      operationId: pipeline_node_update
+      description: |-
+        Change a node's params or its label. Params merge key by key, so send only what you want to change; everything else is left as it is.
+
+        Editing a router's `keywords` regenerates its output handles — they are positional, so `output_0` serves `keywords[0]` — and the response carries the new list. Nothing is re-indexed or pruned for you: an edge left on a handle the node no longer offers is reported in `pipeline_errors.edge` and kept, and reordering keywords rebinds handles silently, so re-read `output_handles` after any keyword edit.
+
+        A node's `type` cannot be changed — it decides what every param means. Delete the node and add one of the other type instead. The Start and End nodes cannot be edited at all, label included: they are part of the pipeline's structure.
+
+        The pipeline does not have to be valid for this to succeed. A structurally sound change is always applied, and whatever is still wrong with the graph comes back in `pipeline_errors` — so a pipeline can be built up over several calls. What is refused is a body the server cannot act on: a param whose value is the wrong type, or a reference to something that does not exist — a node type, a node id, or a resource this team cannot reach.
+      summary: Edit a Pipeline Node
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: node_id
+        schema:
+          type: string
+        description: The node's server-assigned id, as returned by a write or by GET
+          /api/v2/chatbots/{id}/inspect/.
+        required: true
+      tags:
+      - Pipelines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNodeUpdate'
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeWrite'
+          description: ''
+        '400':
+          description: The body is not one this endpoint can act on. Errors are keyed
+            by the field at fault, and param-level errors are nested under `params`.
+            This covers an unrecognised body key, a server-assigned key the client
+            tried to set (`node_id`, `position`), an unknown node `type`, a param
+            the type does not declare, a param whose value is the wrong type, and
+            a param naming a resource this team cannot reach.
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot or node, or the node is of a type this API
+            does not publish and so cannot describe the params of.
+        '409':
+          description: The node is part of the pipeline's structure (the Start or
+            End node) and cannot be edited or deleted through the API.
+    delete:
+      operationId: pipeline_node_delete
+      description: |-
+        Remove a node from the chatbot's working (draft) pipeline, along with every edge that referenced it — you do not have to unwire it first.
+
+        The hole this leaves is reported rather than refused: unsplicing a node usually breaks the path to the End node, which comes back in `pipeline_errors` for you to repair.
+
+        The Start and End nodes cannot be removed — nor edited. They are part of the pipeline's structure and cannot be added back through the API.
+      summary: Remove a Pipeline Node
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Chatbot ID
+        required: true
+      - in: path
+        name: node_id
+        schema:
+          type: string
+        description: The node's server-assigned id, as returned by a write or by GET
+          /api/v2/chatbots/{id}/inspect/.
+        required: true
+      tags:
+      - Pipelines
+      security:
+      - OAuth2:
+        - chatbots:write
+      - apiKeyAuth: []
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineWrite'
+          description: ''
+        '403':
+          description: 'The caller is authenticated but not authorised to modify this
+            chatbot: either its role lacks permission to change chatbots, or it is
+            a machine (client-credentials) token whose application is not authorised
+            for this chatbot.'
+        '404':
+          description: No such chatbot or node.
+        '409':
+          description: The node is part of the pipeline's structure and cannot be
+            deleted.
   /api/v2/me/:
     get:
       operationId: me
@@ -2124,6 +2290,29 @@ components:
       - ai
       - human
       - total
+    NodeCreate:
+      type: object
+      description: |-
+        The POST body: a node type, and what to start it off with.
+
+        ``type`` alone is enough — the server fills in the type's defaults, and whatever is still
+        missing is reported rather than refused, so a node can be built up over several calls.
+      properties:
+        type:
+          type: string
+          description: A node type from GET /api/v2/pipeline/nodes/.
+        label:
+          type: string
+          description: Display name shown in the pipeline builder. Defaults to the
+            node type's own label.
+        params:
+          type: object
+          additionalProperties: {}
+          description: The node's configuration, under the flat names its type declares.
+            Anything omitted takes the type's default.
+      required:
+      - type
+      additionalProperties: false
     NodeOutputs:
       type: object
       properties:
@@ -2198,6 +2387,33 @@ components:
       required:
       - detail
       - valid_types
+    NodeWrite:
+      type: object
+      description: 'A node write''s response: the node as written, then the pipeline''s
+        state after the write.'
+      properties:
+        node:
+          $ref: '#/components/schemas/WrittenNode'
+        pipeline_valid:
+          type: boolean
+          description: 'Whether the pipeline validates cleanly: all three error buckets
+            empty, and nothing more.'
+        pipeline_errors:
+          $ref: '#/components/schemas/PipelineBuildErrors'
+        unwired_handles:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/InspectOutputHandle'
+          description: 'Advisory ''what still needs wiring'' map, keyed by ``node_id``:
+            every output handle with no outgoing edge and every implicit ``input``
+            handle with no incoming edge. Never an error and never blocks a publish.'
+      required:
+      - node
+      - pipeline_errors
+      - pipeline_valid
+      - unwired_handles
     PaginatedChatbotList:
       type: object
       required:
@@ -2295,6 +2511,23 @@ components:
         file_uploads_enabled:
           type: boolean
           description: Enables file attachments in the web chat interface.
+      additionalProperties: false
+    PatchedNodeUpdate:
+      type: object
+      description: |-
+        The PATCH body: the params and label to change, and nothing else.
+
+        ``type`` is absent on purpose — a node's type decides what its params mean, so changing it in
+        place would reinterpret every stored value. Delete the node and add one of the other type.
+      properties:
+        label:
+          type: string
+          description: Display name shown in the pipeline builder.
+        params:
+          type: object
+          additionalProperties: {}
+          description: The params to change, under the flat names the node's type
+            declares. Others are left as they are.
       additionalProperties: false
     PipelineBuildErrors:
       type: object
@@ -2411,6 +2644,34 @@ components:
           - $ref: '#/components/schemas/DefaultLlmProvider'
           description: A provider/model pair that already satisfies the `must_match`
             rule.
+    PipelineWrite:
+      type: object
+      description: |-
+        What every façade write reports back about the pipeline it just changed.
+
+        The same three fields ``GET /chatbots/{id}/inspect/`` publishes, so one shape is parsed across
+        read and write. ``pipeline_errors`` is what the publish gate rejects on; ``unwired_handles`` is
+        advisory and never blocks anything.
+      properties:
+        pipeline_valid:
+          type: boolean
+          description: 'Whether the pipeline validates cleanly: all three error buckets
+            empty, and nothing more.'
+        pipeline_errors:
+          $ref: '#/components/schemas/PipelineBuildErrors'
+        unwired_handles:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/InspectOutputHandle'
+          description: 'Advisory ''what still needs wiring'' map, keyed by ``node_id``:
+            every output handle with no outgoing edge and every implicit ``input``
+            handle with no incoming edge. Never an error and never blocks a publish.'
+      required:
+      - pipeline_errors
+      - pipeline_valid
+      - unwired_handles
     PlatformEnum:
       enum:
       - telegram
@@ -2877,6 +3138,35 @@ components:
         * `always` - Always
         * `reciprocal` - Reciprocal
         * `never` - Never
+    WrittenNode:
+      type: object
+      description: |-
+        A node as a write returns it.
+
+        Deliberately not the inspect node shape: inspect keeps resource ids out of ``params`` and
+        renders the resolved resources instead, whereas this is the shape you can send back.
+      properties:
+        node_id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        params:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        output_handles:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectOutputHandle'
+          readOnly: true
+      required:
+      - label
+      - node_id
+      - output_handles
+      - params
+      - type
   securitySchemes:
     OAuth2:
       type: oauth2
@@ -2911,8 +3201,8 @@ tags:
   description: Information about the authenticated user and the team the token is
     scoped to.
 - name: Pipelines
-  description: Discover the pipeline node types an agent may build and the resource
-    ids it may reference.
+  description: Discover the node types a pipeline may contain and the resource ids
+    it may reference, and edit a chatbot's pipeline a node at a time.
 - name: Usage
   description: Inspect team usage and activity data (message counts, and more).
 externalDocs:

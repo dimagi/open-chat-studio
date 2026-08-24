@@ -1,0 +1,221 @@
+"""The pipeline façade's node endpoints (#4140).
+
+A chatbot's pipeline is edited one node at a time rather than replaced wholesale: the server holds
+the graph and applies the change, so a client never has to reproduce a whole document to alter one
+setting, and two façade edits to different nodes cannot overwrite each other.
+"""
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from rest_framework import status
+from rest_framework.exceptions import APIException
+from rest_framework.generics import GenericAPIView
+from rest_framework.response import Response
+
+from apps.api.permissions import BASE_PERMISSION_CLASSES
+from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
+from apps.oauth.permissions import TokenHasOAuthResourceScope
+from apps.pipelines.build_state import pipeline_build_state
+from apps.pipelines.models import Pipeline
+
+from .facade import edit_pipeline
+from .nodes import check_params, plan_create, plan_delete, plan_update, served_type_for_body, warm_option_lists
+from .references import team_options
+from .serializers import (
+    NodeCreateSerializer,
+    NodeUpdateSerializer,
+    NodeWriteSerializer,
+    PipelineWriteSerializer,
+    WrittenNodeSerializer,
+)
+
+CHATBOT_ID = OpenApiParameter(
+    name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
+)
+NODE_ID = OpenApiParameter(
+    name="node_id",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.PATH,
+    description="The node's server-assigned id, as returned by a write or by GET /api/v2/chatbots/{id}/inspect/.",
+)
+BAD_REQUEST = OpenApiResponse(
+    description=(
+        "The body is not one this endpoint can act on. Errors are keyed by the field at fault, and "
+        "param-level errors are nested under `params`. This covers an unrecognised body key, a "
+        "server-assigned key the client tried to set (`node_id`, `position`), an unknown node "
+        "`type`, a param the type does not declare, a param whose value is the wrong type, and a "
+        "param naming a resource this team cannot reach."
+    )
+)
+FORBIDDEN = OpenApiResponse(
+    description=(
+        "The caller is authenticated but not authorised to modify this chatbot: either its role "
+        "lacks permission to change chatbots, or it is a machine (client-credentials) token whose "
+        "application is not authorised for this chatbot."
+    )
+)
+SERVER_MANAGED = OpenApiResponse(
+    description=(
+        "The node is part of the pipeline's structure (the Start or End node) and cannot be edited "
+        "or deleted through the API."
+    )
+)
+LENIENT = (
+    "The pipeline does not have to be valid for this to succeed. A structurally sound change is "
+    "always applied, and whatever is still wrong with the graph comes back in `pipeline_errors` — "
+    "so a pipeline can be built up over several calls. What is refused is a body the server cannot "
+    "act on: a param whose value is the wrong type, or a reference to something that does not "
+    "exist — a node type, a node id, or a resource this team cannot reach."
+)
+
+
+class PipelineEditView(GenericAPIView):
+    """Shared auth for the façade.
+
+    Editing a chatbot's composition is a *change* to the chatbot whatever the verb -- deleting a
+    node is not deleting the chatbot -- so the stock ``DjangoModelPermissions`` verb->permission map
+    is replaced rather than extended.
+    """
+
+    permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
+    required_scopes = ["chatbots"]
+    # So that OPTIONS on the detail route describes its PATCH body: the editing verb here is PATCH,
+    # which stock DRF metadata leaves out entirely.
+    metadata_class = DescribesPatch
+    # Only here so the generic view has a queryset; permissions are not derived from it.
+    queryset = Pipeline.objects.none()
+
+    @staticmethod
+    def _envelope(pipeline: Pipeline, node_id: str | None) -> dict:
+        """The build state every façade write reports, with the written node in front of it."""
+        state = pipeline_build_state(pipeline)
+        body = {
+            "pipeline_valid": state["pipeline_valid"],
+            "pipeline_errors": state["errors"],
+            "unwired_handles": state["unwired_handles"],
+        }
+        if node_id is None:
+            return body
+        node = next((node for node in pipeline.node_set.all() if node.flow_id == node_id), None)
+        if node is None:
+            # The patch engine applied the diff, so the row is there; not finding it means the
+            # graph and the rows disagree, which is a bug here rather than anything the client did.
+            raise APIException(f"Node '{node_id}' was written but could not be read back.")
+        return {"node": WrittenNodeSerializer(node).data, **body}
+
+
+class PipelineNodeListView(PipelineEditView):
+    serializer_class = NodeCreateSerializer
+
+    @extend_schema(
+        operation_id="pipeline_node_create",
+        summary="Add a Pipeline Node",
+        description=(
+            "Add a node to the chatbot's working (draft) pipeline.\n\n"
+            "`type` alone is enough: the node is created with that type's defaults, which the "
+            "response reports and which you can then change with PATCH. The node is not wired to "
+            "anything, so it appears in `unwired_handles` until you connect it — that is advisory, "
+            "not an error.\n\n"
+            "The node's `node_id` and its position on the canvas are assigned by the server and "
+            "cannot be chosen.\n\n" + LENIENT
+        ),
+        tags=["Pipelines"],
+        parameters=[CHATBOT_ID],
+        request=NodeCreateSerializer,
+        responses={
+            201: NodeWriteSerializer,
+            400: BAD_REQUEST,
+            403: FORBIDDEN,
+            404: OpenApiResponse(description="No such chatbot."),
+        },
+    )
+    def post(self, request, id):
+        body = self.get_serializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        params = body.validated_data["params"]
+        label = body.validated_data.get("label")
+        # Everything that does not depend on the graph is settled before the row is locked -- the
+        # type is right here in the body, and the option lists the reference check needs are the
+        # expensive part of the whole request.
+        served = served_type_for_body(body.validated_data["type"])
+        options = team_options(request.team)
+        check_params(served, options, params)
+        return Response(
+            edit_pipeline(request, id, lambda flow: plan_create(flow, served, label, params), self._envelope),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PipelineNodeDetailView(PipelineEditView):
+    serializer_class = NodeUpdateSerializer
+
+    @extend_schema(
+        operation_id="pipeline_node_update",
+        summary="Edit a Pipeline Node",
+        description=(
+            "Change a node's params or its label. Params merge key by key, so send only what you "
+            "want to change; everything else is left as it is.\n\n"
+            "Editing a router's `keywords` regenerates its output handles — they are positional, so "
+            "`output_0` serves `keywords[0]` — and the response carries the new list. Nothing is "
+            "re-indexed or pruned for you: an edge left on a handle the node no longer offers is "
+            "reported in `pipeline_errors.edge` and kept, and reordering keywords rebinds handles "
+            "silently, so re-read `output_handles` after any keyword edit.\n\n"
+            "A node's `type` cannot be changed — it decides what every param means. Delete the node "
+            "and add one of the other type instead. The Start and End nodes cannot be edited at "
+            "all, label included: they are part of the pipeline's structure.\n\n" + LENIENT
+        ),
+        tags=["Pipelines"],
+        parameters=[CHATBOT_ID, NODE_ID],
+        request=NodeUpdateSerializer,
+        responses={
+            200: NodeWriteSerializer,
+            400: BAD_REQUEST,
+            403: FORBIDDEN,
+            404: OpenApiResponse(
+                description=(
+                    "No such chatbot or node, or the node is of a type this API does not publish "
+                    "and so cannot describe the params of."
+                )
+            ),
+            409: SERVER_MANAGED,
+        },
+    )
+    def patch(self, request, id, node_id):
+        body = self.get_serializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        params = body.validated_data["params"]
+        label = body.validated_data.get("label")
+        options = team_options(request.team)
+        # The node's type comes from the graph, so its params can only be checked under the lock.
+        # Building the option lists that check needs is the slow half, and does not depend on the
+        # graph at all -- so it is done here rather than in the critical section.
+        warm_option_lists(options, params)
+        return Response(
+            edit_pipeline(request, id, lambda flow: plan_update(flow, options, node_id, label, params), self._envelope)
+        )
+
+    @extend_schema(
+        operation_id="pipeline_node_delete",
+        summary="Remove a Pipeline Node",
+        description=(
+            "Remove a node from the chatbot's working (draft) pipeline, along with every edge that "
+            "referenced it — you do not have to unwire it first.\n\n"
+            "The hole this leaves is reported rather than refused: unsplicing a node usually breaks "
+            "the path to the End node, which comes back in `pipeline_errors` for you to repair.\n\n"
+            "The Start and End nodes cannot be removed — nor edited. They are part of the "
+            "pipeline's structure and cannot be added back through the API."
+        ),
+        tags=["Pipelines"],
+        parameters=[CHATBOT_ID, NODE_ID],
+        request=None,
+        responses={
+            200: PipelineWriteSerializer,
+            403: FORBIDDEN,
+            404: OpenApiResponse(description="No such chatbot or node."),
+            409: OpenApiResponse(description="The node is part of the pipeline's structure and cannot be deleted."),
+        },
+    )
+    def delete(self, request, id, node_id):
+        # `plan_delete` names no node, so the envelope reports the pipeline alone: there is no node
+        # left to describe.
+        return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._envelope))
