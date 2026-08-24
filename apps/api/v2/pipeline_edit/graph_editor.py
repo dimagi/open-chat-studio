@@ -127,6 +127,10 @@ def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params:
     node, content = find_node(flow, node_id)
     refuse_if_server_managed(content.type)
     if params:
+        # The first and only check these params get: PATCH names no type, so until the graph was
+        # read there was nothing to check them against -- `warm_option_lists` only builds the lists
+        # this needs, ahead of the lock.
+        #
         # 404s a type the API does not publish at all -- a deprecated one, say, whose params it
         # cannot describe and so cannot check. Only when there are params to check: renaming a node
         # of such a type is not something the API has to withhold.
