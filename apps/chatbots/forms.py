@@ -174,6 +174,9 @@ class BroadcastMessageForm(forms.Form):
     MESSAGE_CHAR_LIMIT = MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT
 
     DEFAULT_ACTIVE_WITHIN_DAYS = 90
+    # Bounds the audience query's lookback so a broadcast can't be pointed at years of stale
+    # sessions -- three years comfortably covers any real "recently active" cutoff.
+    MAX_ACTIVE_WITHIN_DAYS = 365 * 3
 
     channels = BroadcastChannelField(
         queryset=ExperimentChannel.objects.none(),
@@ -184,6 +187,7 @@ class BroadcastMessageForm(forms.Form):
         label="Active in the last (days)",
         initial=DEFAULT_ACTIVE_WITHIN_DAYS,
         min_value=1,
+        max_value=MAX_ACTIVE_WITHIN_DAYS,
         help_text=(
             "Only participants whose last activity falls inside this many days are messaged. "
             "A participant who has not chatted since then is left alone."
