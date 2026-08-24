@@ -419,32 +419,30 @@ ocs_find_ancestor_template() {
     local candidate_stamp
     local missing_migrations
     local size
-    local sorted_candidate
-    local sorted_current
     local template
 
-    missing_migrations=$(mktemp)
-    sorted_candidate=$(mktemp)
-    sorted_current=$(mktemp)
-    LC_ALL=C sort "$stamp_lines_file" > "$sorted_current"
-
+    # Sorted through process substitution rather than temporary files: a `trap` to clean
+    # those up would have to be installed inside this function, where it would replace
+    # the caller's own EXIT trap and leak whatever that was there to remove.
     while IFS= read -r template; do
         [[ -n "$template" ]] || continue
         candidate_stamp=$(ocs_template_stamp_path "$worktree_path" "$template")
         [[ -f "$candidate_stamp" ]] || continue
 
-        LC_ALL=C sort "$candidate_stamp" > "$sorted_candidate"
-        LC_ALL=C comm -23 "$sorted_candidate" "$sorted_current" > "$missing_migrations"
-        [[ -s "$missing_migrations" ]] && continue
+        missing_migrations=$(
+            LC_ALL=C comm -23 \
+                <(LC_ALL=C sort "$candidate_stamp") \
+                <(LC_ALL=C sort "$stamp_lines_file")
+        )
+        [[ -z "$missing_migrations" ]] || continue
 
-        size=$(wc -l < "$sorted_candidate")
+        size=$(wc -l < "$candidate_stamp")
         if [[ "$size" -gt "$best_size" ]]; then
             best_size=$size
             best_template=$template
         fi
     done < <(ocs_list_template_databases "$worktree_path")
 
-    rm -f "$missing_migrations" "$sorted_candidate" "$sorted_current"
     [[ -n "$best_template" ]] || return 1
     printf '%s\n' "$best_template"
 }
