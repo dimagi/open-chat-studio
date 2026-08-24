@@ -11,7 +11,14 @@ from rest_framework.exceptions import NotFound
 from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
-from .contract import MUST_MATCH, OPTIONS_KEYED_BY, PER_KEYWORD_OUTPUT, SINGLE_OUTPUT, UI_KEY_TRANSLATIONS
+from .contract import (
+    MUST_MATCH,
+    NON_REFERENCE_OPTION_SOURCES,
+    OPTIONS_KEYED_BY,
+    PER_KEYWORD_OUTPUT,
+    SINGLE_OUTPUT,
+    UI_KEY_TRANSLATIONS,
+)
 
 
 @cache
@@ -45,9 +52,32 @@ def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:
     return _option_keys_by_type().get(node_type)
 
 
+def reference_sources_for_type(node_type: str) -> dict[str, str]:
+    """``param -> the /pipeline/options/ key its value must be drawn from``, for one node type.
+
+    Only the params whose value names something the team holds; see
+    ``NON_REFERENCE_OPTION_SOURCES`` for what that leaves out. An unserved node type has none.
+    """
+    return {
+        param: source
+        for param, source in _sources_by_type().get(node_type, {}).items()
+        if source not in NON_REFERENCE_OPTION_SOURCES
+    }
+
+
 def served_option_keys() -> frozenset[str]:
     """Every option key some listed node type can reference."""
     return frozenset().union(*_option_keys_by_type().values())
+
+
+@cache
+def reference_param_names() -> frozenset[str]:
+    """Every param name that, on some served type, names a resource the team has to hold.
+
+    Type-agnostic on purpose: it answers "could this body need the option lists at all?" before the
+    node's type is known, which is what lets a PATCH build them outside the pipeline row lock.
+    """
+    return frozenset(param for node_type in _sources_by_type() for param in reference_sources_for_type(node_type))
 
 
 def unknown_node_type(requested_type: str) -> NotFound:
@@ -128,19 +158,27 @@ def _documentation_url(schema: dict) -> str | None:
 
 
 @cache
+def _sources_by_type() -> dict[str, dict[str, str]]:
+    """``node type -> {param: the /pipeline/options/ key it draws from}``, read off
+    ``ui:optionsSource``. Withheld params and params with no source are left out."""
+    return {
+        schema["title"]: {
+            name: prop["ui:optionsSource"]
+            for name, prop in schema["properties"].items()
+            if not prop.get("api:exclude") and prop.get("ui:optionsSource")
+        }
+        for schema in _available_schemas()
+    }
+
+
+@cache
 def _option_keys_by_type() -> dict[str, frozenset[str]]:
-    """The `/pipeline/options/` keys each node type's params can draw from, read off
-    ``ui:optionsSource``. A known type that reads nothing yields an empty set, not a missing key."""
+    """The `/pipeline/options/` keys each node type's params can draw from. A known type that reads
+    nothing yields an empty set, not a missing key."""
     keys_by_type = {}
     for schema in _available_schemas():
-        properties = schema["properties"]
-        keys = set()
-        for prop in properties.values():
-            if prop.get("api:exclude"):
-                continue
-            if source := prop.get("ui:optionsSource"):
-                keys.add(source)
-        if "llm_provider_id" in properties:
+        keys = set(_sources_by_type()[schema["title"]].values())
+        if "llm_provider_id" in schema["properties"]:
             keys.add("default_llm_provider")
         keys_by_type[schema["title"]] = frozenset(keys)
     return keys_by_type

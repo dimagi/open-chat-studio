@@ -10,7 +10,12 @@ from django.urls import reverse
 from rest_framework import serializers
 
 from apps.api.v2.discovery import options as discovery_options
-from apps.api.v2.discovery.node_types import _property, option_keys_for_node_type
+from apps.api.v2.discovery.node_types import (
+    _property,
+    option_keys_for_node_type,
+    reference_param_names,
+    reference_sources_for_type,
+)
 from apps.api.v2.discovery.options import _clean_options
 from apps.api.v2.discovery.serializers import PipelineOptionsSerializer
 from apps.api.v2.discovery.views import PIPELINE_OPTIONS_EXAMPLE
@@ -184,6 +189,40 @@ def test_every_key_served_is_read_by_some_listed_node_type(team_with_resources):
         read |= scoped_keys
 
     assert not option_keys - read
+
+
+@pytest.mark.django_db()
+def test_every_reference_param_draws_on_a_flat_list_of_values(team_with_every_resource):
+    """A write checks a param's value against the option list its source names, so every source
+    `reference_sources_for_type` hands over has to be a flat list of `value` entries. The prompt
+    variable lists hold no ids and the two tool lists nest theirs under provider types; both are
+    left out by name (`NON_REFERENCE_OPTION_SOURCES`) rather than skipped by shape."""
+    client = ApiTestClient(team_with_every_resource.members.first(), team_with_every_resource)
+    options = client.get(reverse("api:v2:pipeline-options")).json()
+
+    for entry in client.get(reverse("api:v2:pipeline-nodes")).json():
+        for param, source in reference_sources_for_type(entry["type"]).items():
+            offered = options[source]
+            where = f"{entry['type']}.{param} -> {source}"
+            assert isinstance(offered, list), where
+            assert not [option for option in offered if "value" not in option], where
+
+
+@pytest.mark.django_db()
+def test_reference_param_names_holds_every_types_reference_params(team):
+    """The type-agnostic union answers "could this body need the option lists at all?" before the
+    node's type is known, which is what lets a write build them outside the pipeline row lock. A
+    param missing from it would skip that build and then be checked against nothing."""
+    client = ApiTestClient(team.members.first(), team)
+
+    per_type = {
+        param
+        for entry in client.get(reverse("api:v2:pipeline-nodes")).json()
+        for param in reference_sources_for_type(entry["type"])
+    }
+
+    assert "llm_provider_id" in per_type, "nothing is being checked at all"
+    assert per_type == reference_param_names()
 
 
 @pytest.mark.django_db()
