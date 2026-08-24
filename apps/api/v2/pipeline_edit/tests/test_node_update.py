@@ -6,11 +6,10 @@ from apps.pipelines.models import Node
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
 
-from .conftest import add_edge, node_url, nodes_url
+from .conftest import add_edge, node_url, nodes_url, outgoing_handles
 
 
-@pytest.fixture()
-def llm_node(client, chatbot, llm):
+def add_llm_node(client, chatbot, llm) -> str:
     """An LLM node created the way an agent would, so its stored params are the full default set."""
     provider, model = llm
     response = client.post(
@@ -23,6 +22,11 @@ def llm_node(client, chatbot, llm):
     )
     assert response.status_code == 201, response.content
     return response.json()["node"]["node_id"]
+
+
+@pytest.fixture()
+def llm_node(client, chatbot, llm):
+    return add_llm_node(client, chatbot, llm)
 
 
 @pytest.mark.django_db()
@@ -138,20 +142,122 @@ def test_a_new_router_branch_shows_up_as_unwired_not_as_an_error(client, chatbot
 
 
 @pytest.mark.django_db()
-def test_removing_a_keyword_strands_its_edge_instead_of_pruning_it(client, chatbot, router):
-    """Unlike the builder's own deleteKeyword, the façade never silently re-indexes or drops
-    edges: the edge stays and is reported, so the agent decides what to do with it."""
+def test_dropping_a_keyword_deletes_the_edge_that_served_it(client, chatbot, llm, router):
+    """A branch that no longer exists cannot keep an edge: the builder's own deleteKeyword drops it
+    too, and there is no edge endpoint an agent could use to clear up after itself."""
     start = chatbot.pipeline.node_set.get(type="StartNode").flow_id
-    end = chatbot.pipeline.node_set.get(type="EndNode").flow_id
     add_edge(chatbot.pipeline, start, router)
-    stranded = add_edge(chatbot.pipeline, router, end, source_handle="output_1")
+    dropped = add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_1")
 
     response = client.patch(node_url(chatbot, router), {"params": {"keywords": ["schedule"]}}, format="json")
 
     assert response.status_code == 200, response.content
+    assert dropped not in outgoing_handles(chatbot.pipeline, router)
+    assert response.json()["pipeline_errors"]["edge"] == []
+
+
+@pytest.mark.django_db()
+def test_dropping_a_middle_keyword_moves_the_branches_below_it_up(client, chatbot, llm, router):
+    """Handles are positional, so dropping RESCHEDULE renumbers CANCEL from `output_2` to
+    `output_1`. Old handles are matched to new ones by keyword, so CANCEL's edge follows it down and
+    keeps its target -- dropping `output_2` on position alone would have left CANCEL routing to
+    RESCHEDULE's target instead."""
+    client.patch(
+        node_url(chatbot, router), {"params": {"keywords": ["schedule", "reschedule", "cancel"]}}, format="json"
+    )
+    scheduled, rescheduled, cancelled = (add_llm_node(client, chatbot, llm) for _ in range(3))
+    kept = add_edge(chatbot.pipeline, router, scheduled, source_handle="output_0")
+    dropped = add_edge(chatbot.pipeline, router, rescheduled, source_handle="output_1")
+    moved = add_edge(chatbot.pipeline, router, cancelled, source_handle="output_2")
+
+    response = client.patch(node_url(chatbot, router), {"params": {"keywords": ["schedule", "cancel"]}}, format="json")
+
+    assert response.status_code == 200, response.content
+    assert outgoing_handles(chatbot.pipeline, router) == {
+        kept: ("output_0", scheduled),
+        moved: ("output_1", cancelled),
+    }
+    assert dropped not in outgoing_handles(chatbot.pipeline, router)
+
+
+@pytest.mark.django_db()
+def test_reordering_keywords_keeps_each_branch_on_its_own_target(client, chatbot, llm, router):
+    """Reordering rebinds every handle it moves. Following the keywords means the wiring an agent
+    can see -- SCHEDULE goes here, RESCHEDULE goes there -- survives a reorder it did not ask for."""
+    scheduled, rescheduled = (add_llm_node(client, chatbot, llm) for _ in range(2))
+    first = add_edge(chatbot.pipeline, router, scheduled, source_handle="output_0")
+    second = add_edge(chatbot.pipeline, router, rescheduled, source_handle="output_1")
+
+    response = client.patch(
+        node_url(chatbot, router), {"params": {"keywords": ["reschedule", "schedule"]}}, format="json"
+    )
+
+    assert response.status_code == 200, response.content
+    assert outgoing_handles(chatbot.pipeline, router) == {
+        first: ("output_1", scheduled),
+        second: ("output_0", rescheduled),
+    }
+
+
+@pytest.mark.django_db()
+def test_renaming_a_keyword_deletes_its_edge_rather_than_handing_it_over(client, chatbot, llm, router):
+    """A rename reads as one branch gone and another new, because nothing in the body says
+    otherwise. The old branch's edge goes with it and the new branch comes back unwired, rather than
+    quietly inheriting a target nobody chose for it."""
+    scheduled, rescheduled = (add_llm_node(client, chatbot, llm) for _ in range(2))
+    kept = add_edge(chatbot.pipeline, router, scheduled, source_handle="output_0")
+    add_edge(chatbot.pipeline, router, rescheduled, source_handle="output_1")
+
+    response = client.patch(node_url(chatbot, router), {"params": {"keywords": ["schedule", "cancel"]}}, format="json")
+
+    assert response.status_code == 200, response.content
+    assert outgoing_handles(chatbot.pipeline, router) == {kept: ("output_0", scheduled)}
+    assert {"handle": "output_1", "label": "CANCEL"} in response.json()["unwired_handles"][router]
+
+
+@pytest.mark.django_db()
+def test_an_edge_already_stranded_before_the_edit_is_left_alone(client, chatbot, llm, router):
+    """Only the handles this edit removed are followed. An edge on a handle the node never offered
+    -- an import, or a builder session -- is still reported and still the agent's to deal with."""
+    start = chatbot.pipeline.node_set.get(type="StartNode").flow_id
+    add_edge(chatbot.pipeline, start, router)
+    stranded = add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_7")
+
+    response = client.patch(node_url(chatbot, router), {"label": "Triage"}, format="json")
+
+    assert response.status_code == 200, response.content
     assert response.json()["pipeline_errors"]["edge"] == [stranded]
-    chatbot.pipeline.refresh_from_db()
-    assert stranded in [edge["id"] for edge in chatbot.pipeline.data["edges"]]
+    assert stranded in outgoing_handles(chatbot.pipeline, router)
+
+
+@pytest.mark.django_db()
+def test_duplicate_keywords_only_drop_the_handles_that_vanished(client, chatbot, llm, router):
+    """Duplicate keywords are invalid but still writable, and which edge belongs to which of them is
+    a guess -- so a router in that state has its handles followed by position, and only an edge left
+    with no handle at all is dropped."""
+    client.patch(node_url(chatbot, router), {"params": {"keywords": ["schedule", "schedule"]}}, format="json")
+    scheduled, rescheduled = (add_llm_node(client, chatbot, llm) for _ in range(2))
+    kept = add_edge(chatbot.pipeline, router, scheduled, source_handle="output_0")
+    dropped = add_edge(chatbot.pipeline, router, rescheduled, source_handle="output_1")
+
+    response = client.patch(node_url(chatbot, router), {"params": {"keywords": ["schedule"]}}, format="json")
+
+    assert response.status_code == 200, response.content
+    assert outgoing_handles(chatbot.pipeline, router) == {kept: ("output_0", scheduled)}
+    assert dropped not in outgoing_handles(chatbot.pipeline, router)
+
+
+@pytest.mark.django_db()
+def test_editing_a_plain_node_leaves_its_edge_alone(client, chatbot, llm_node):
+    """Only a node whose handles depend on its params can lose one. A plain node offers the single
+    standard output whatever is edited, so nothing about its wiring is this endpoint's business."""
+    end = chatbot.pipeline.node_set.get(type="EndNode").flow_id
+    edge = add_edge(chatbot.pipeline, llm_node, end)
+
+    response = client.patch(node_url(chatbot, llm_node), {"params": {"prompt": "Be terse."}}, format="json")
+
+    assert response.status_code == 200, response.content
+    assert outgoing_handles(chatbot.pipeline, llm_node) == {edge: ("output", end)}
 
 
 @pytest.mark.django_db()

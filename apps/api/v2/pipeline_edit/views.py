@@ -60,16 +60,9 @@ SERVER_MANAGED = OpenApiResponse(
         "or deleted through the API."
     )
 )
-LENIENT = (
-    "The pipeline does not have to be valid for this to succeed. A structurally sound change is "
-    "always applied, and whatever is still wrong with the graph comes back in `pipeline_errors` — "
-    "so a pipeline can be built up over several calls. What is refused is a body the server cannot "
-    "act on: a param whose value is the wrong type, or a reference to something that does not "
-    "exist — a node type, a node id, or a resource this team cannot reach."
-)
 
 
-class PipelineEditView(GenericAPIView):
+class PipelineEditBase(GenericAPIView):
     """Shared auth for the façade.
 
     Editing a chatbot's composition is a *change* to the chatbot whatever the verb -- deleting a
@@ -104,7 +97,7 @@ class PipelineEditView(GenericAPIView):
         return {"node": WrittenNodeSerializer(node).data, **body}
 
 
-class PipelineNodeListView(PipelineEditView):
+class PipelineNodeListView(PipelineEditBase):
     serializer_class = NodeCreateSerializer
 
     @extend_schema(
@@ -117,7 +110,7 @@ class PipelineNodeListView(PipelineEditView):
             "anything, so it appears in `unwired_handles` until you connect it — that is advisory, "
             "not an error.\n\n"
             "The node's `node_id` and its position on the canvas are assigned by the server and "
-            "cannot be chosen.\n\n" + LENIENT
+            "cannot be chosen."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
@@ -129,7 +122,7 @@ class PipelineNodeListView(PipelineEditView):
             404: OpenApiResponse(description="No such chatbot."),
         },
     )
-    def post(self, request, id):
+    def post(self, request, id):  # feedback. this class' name is a misnomer. list view, but it has a POST.
         body = self.get_serializer(data=request.data)
         body.is_valid(raise_exception=True)
         params = body.validated_data["params"]
@@ -146,7 +139,7 @@ class PipelineNodeListView(PipelineEditView):
         )
 
 
-class PipelineNodeDetailView(PipelineEditView):
+class PipelineNodeDetailView(PipelineEditBase):
     serializer_class = NodeUpdateSerializer
 
     @extend_schema(
@@ -156,13 +149,12 @@ class PipelineNodeDetailView(PipelineEditView):
             "Change a node's params or its label. Params merge key by key, so send only what you "
             "want to change; everything else is left as it is.\n\n"
             "Editing a router's `keywords` regenerates its output handles — they are positional, so "
-            "`output_0` serves `keywords[0]` — and the response carries the new list. Nothing is "
-            "re-indexed or pruned for you: an edge left on a handle the node no longer offers is "
-            "reported in `pipeline_errors.edge` and kept, and reordering keywords rebinds handles "
-            "silently, so re-read `output_handles` after any keyword edit.\n\n"
-            "A node's `type` cannot be changed — it decides what every param means. Delete the node "
-            "and add one of the other type instead. The Start and End nodes cannot be edited at "
-            "all, label included: they are part of the pipeline's structure.\n\n" + LENIENT
+            "`output_0` serves `keywords[0]` — and the response carries the new list. The node's "
+            "edges follow their keyword: dropping a keyword deletes the edge that served it, and a "
+            "keyword that merely moved keeps its target on whichever handle it moved to. A renamed "
+            "keyword counts as one branch gone and another new, so its edge goes and the new branch "
+            "comes back unwired. Handle names are not stable across a keyword edit, so re-read "
+            "`output_handles` after one."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID, NODE_ID],

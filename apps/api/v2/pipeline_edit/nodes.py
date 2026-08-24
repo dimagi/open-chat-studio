@@ -8,7 +8,17 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 
 from apps.api.v2.discovery.node_types import get_node_type, reference_param_names
-from apps.pipelines.flow import FlowNode, FlowNodeData, NodeDiff, PipelineDiffPayload, react_flow_node_type
+from apps.pipelines.build_state import output_handles
+from apps.pipelines.const import STANDARD_OUTPUT_NAME
+from apps.pipelines.flow import (
+    EdgeDiff,
+    FlowEdge,
+    FlowNode,
+    FlowNodeData,
+    NodeDiff,
+    PipelineDiffPayload,
+    react_flow_node_type,
+)
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import NodeSchema, resolve_node_class
 
@@ -113,9 +123,12 @@ def plan_update(flow: dict, options, node_id: str, label: str | None, params: di
     """Edit one node's params and label in place.
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
-    changing one setting does not mean resending the whole node. Nothing is pruned or re-indexed as
-    a side effect either — an edit that leaves an edge stranded reports it (``errors.edge``) and
-    leaves the edge alone, because which one to drop is the agent's call, not ours.
+    changing one setting does not mean resending the whole node.
+
+    An edit that changes which output handles the node offers takes that node's edges with it: a
+    dropped router keyword drops the edge that served it, and a keyword that only moved carries its
+    edge along. See :func:`_rewired_edges` -- there is no edge endpoint an agent could use to clear
+    up after itself, so leaving the wreckage would only strand it.
 
     Start and End are refused outright, whichever half of the body is sent: a label-only edit to
     one is as refused as a change to its params.
@@ -128,10 +141,12 @@ def plan_update(flow: dict, options, node_id: str, label: str | None, params: di
         # of such a type is not something the API has to withhold.
         check_params(get_node_type(content.type), options, params)
 
+    before = _output_handles(content)
     content.params = {**stored_params(content), **params}
     if label is not None:
         content.label = label
-    return PipelineEdit(diff=_diff(NodeDiff(update=[node])), node_id=node_id)
+    edges = _rewired_edges(flow, node_id, before, _output_handles(content))
+    return PipelineEdit(diff=_diff(NodeDiff(update=[node]), edges), node_id=node_id)
 
 
 def plan_delete(flow: dict, node_id: str) -> PipelineEdit:
@@ -293,6 +308,64 @@ def _resource_mirror_keys() -> frozenset[str]:
     return frozenset({f"{field}_id" for field in Node.resource_fk_fields()} | {"collection_index_ids"})
 
 
-def _diff(nodes: NodeDiff) -> PipelineDiffPayload:
-    """One node change, in the shape the builder's patch engine takes."""
-    return PipelineDiffPayload(base_revision=UNUSED_BASE_REVISION, nodes=nodes)
+def _output_handles(content: FlowNodeData) -> dict[str, str | None]:
+    """A node's output handles as ``{handle: branch label}``.
+
+    The label is what identifies a router's branch across an edit: the handle is only a position in
+    ``keywords``, and positions move. A node whose type names no node class reports no handles, so
+    nothing about its wiring is inferred from an edit either.
+    """
+    return {handle["handle"]: handle["label"] for handle in output_handles(content.type, content.params, content.id)}
+
+
+def _rewired_edges(flow: dict, node_id: str, before: dict, after: dict) -> EdgeDiff:
+    """What an edit that changed a node's output handles does to the edges leaving it.
+
+    Handles are positional (``output_i`` serves ``keywords[i]``), so dropping the second of three
+    keywords renumbers the third rather than freeing a slot. Going by position alone would delete
+    the third branch's edge and quietly hand its target to the second, so old handles are matched to
+    new ones by branch label instead: an edge follows its branch wherever it moved, and a branch
+    that is gone takes its edge with it -- which is what the builder's own ``deleteKeyword`` does.
+
+    Only the handles this edit removed are acted on. An edge already stranded when the edit arrived
+    -- left by an import, or a builder session -- stays, and stays reported in ``errors.edge``.
+    """
+    moved_to = _handle_remap(before, after)
+    update, delete = [], []
+    for stored in flow.get("edges", []):
+        edge = FlowEdge(**stored)
+        handle = edge.sourceHandle or STANDARD_OUTPUT_NAME
+        if edge.source != node_id or handle not in before:
+            continue
+        destination = moved_to.get(handle)
+        if destination is None:
+            delete.append(edge.id)
+        elif destination != handle:
+            update.append(edge.model_copy(update={"sourceHandle": destination}))
+    return EdgeDiff(update=update, delete=delete)
+
+
+def _handle_remap(before: dict, after: dict) -> dict[str, str]:
+    """Where each handle the node used to offer has ended up, keyed by the handle it was.
+
+    A handle whose branch the edit removed is absent from the result: its edge has nowhere to go.
+    A rename counts as a removal, because nothing in the body says otherwise -- the old branch is
+    not in the new list, and inheriting its target would wire the new one somewhere nobody chose.
+    """
+    if _labels_are_distinct(before) and _labels_are_distinct(after):
+        destinations = {label: handle for handle, label in after.items()}
+        return {handle: destinations[label] for handle, label in before.items() if label in destinations}
+    # Duplicate branch labels: keywords have to be unique, but a router that breaks that is still
+    # writable, and which edge belongs to which of two identical branches is a guess. So handles are
+    # followed by position instead, and only an edge left with no handle at all is dropped.
+    return {handle: handle for handle in before if handle in after}
+
+
+def _labels_are_distinct(handles: dict) -> bool:
+    """Whether every handle in the map carries a different branch label."""
+    return len(set(handles.values())) == len(handles)
+
+
+def _diff(nodes: NodeDiff, edges: EdgeDiff | None = None) -> PipelineDiffPayload:
+    """One node change, and whatever it does to that node's edges, in the shape the patch engine takes."""
+    return PipelineDiffPayload(base_revision=UNUSED_BASE_REVISION, nodes=nodes, edges=edges or EdgeDiff())

@@ -178,8 +178,6 @@ paths:
         `type` alone is enough: the node is created with that type's defaults, which the response reports and which you can then change with PATCH. The node is not wired to anything, so it appears in `unwired_handles` until you connect it — that is advisory, not an error.
 
         The node's `node_id` and its position on the canvas are assigned by the server and cannot be chosen.
-
-        The pipeline does not have to be valid for this to succeed. A structurally sound change is always applied, and whatever is still wrong with the graph comes back in `pipeline_errors` — so a pipeline can be built up over several calls. What is refused is a body the server cannot act on: a param whose value is the wrong type, or a reference to something that does not exist — a node type, a node id, or a resource this team cannot reach.
       summary: Add a Pipeline Node
       parameters:
       - in: path
@@ -229,11 +227,7 @@ paths:
       description: |-
         Change a node's params or its label. Params merge key by key, so send only what you want to change; everything else is left as it is.
 
-        Editing a router's `keywords` regenerates its output handles — they are positional, so `output_0` serves `keywords[0]` — and the response carries the new list. Nothing is re-indexed or pruned for you: an edge left on a handle the node no longer offers is reported in `pipeline_errors.edge` and kept, and reordering keywords rebinds handles silently, so re-read `output_handles` after any keyword edit.
-
-        A node's `type` cannot be changed — it decides what every param means. Delete the node and add one of the other type instead. The Start and End nodes cannot be edited at all, label included: they are part of the pipeline's structure.
-
-        The pipeline does not have to be valid for this to succeed. A structurally sound change is always applied, and whatever is still wrong with the graph comes back in `pipeline_errors` — so a pipeline can be built up over several calls. What is refused is a body the server cannot act on: a param whose value is the wrong type, or a reference to something that does not exist — a node type, a node id, or a resource this team cannot reach.
+        Editing a router's `keywords` regenerates its output handles — they are positional, so `output_0` serves `keywords[0]` — and the response carries the new list. The node's edges follow their keyword: dropping a keyword deletes the edge that served it, and a keyword that merely moved keeps its target on whichever handle it moved to. A renamed keyword counts as one branch gone and another new, so its edge goes and the new branch comes back unwired. Handle names are not stable across a keyword edit, so re-read `output_handles` after one.
       summary: Edit a Pipeline Node
       parameters:
       - in: path

@@ -66,26 +66,38 @@ def _dangling_handles(node: Node, wired_inputs: set[str], wired_outputs: set[tup
 
 
 def node_output_handles(node: Node) -> list[dict]:
-    """The output handles a :class:`~apps.pipelines.models.Node` offers, as ``{handle, label}``.
+    """The output handles a :class:`~apps.pipelines.models.Node` offers, as ``{handle, label}``."""
+    return output_handles(node.type, node.params or {}, node.flow_id, django_node=node)
+
+
+def output_handles(node_type: str, params: dict, node_id: str, django_node: Node | None = None) -> list[dict]:
+    """The output handles a node of this type and these params offers, as ``{handle, label}``.
 
     Routers get one handle per branch from ``get_output_map()`` (``output_0``, ``output_1``, …,
     labelled with the branch keyword); plain nodes get the single standard output with no label;
     End has no outputs.
+
+    Takes the params rather than only a stored :class:`~apps.pipelines.models.Node` so a caller
+    holding an edit that has not been written yet can ask what the node *would* offer. ``django_node``
+    is what the row-backed caller passes to get full validation; without it a router falls back to
+    the unvalidated path below, which is enough because no router's branches depend on its row.
     """
-    if node.type == EndNode.__name__:
+    if node_type == EndNode.__name__:
         return []
-    node_class = resolve_node_class(node.type)
+    node_class = resolve_node_class(node_type)
     if node_class is None:
         # A type naming no node class (removed since, or never one): validation reports it; we can't
         # know its handles.
         return []
     if issubclass(node_class, PipelineRouterNode):
-        output_map = _router_output_map(node_class, node)
+        output_map = _router_output_map(node_class, params, node_id, django_node)
         return [{"handle": handle, "label": label} for handle, label in output_map.items()]
     return [{"handle": STANDARD_OUTPUT_NAME, "label": None}]
 
 
-def _router_output_map(node_class: type[PipelineRouterNode], node: Node) -> dict:
+def _router_output_map(
+    node_class: type[PipelineRouterNode], params: dict, node_id: str, django_node: Node | None
+) -> dict:
     """A router's handle -> branch-label map, tolerant of invalid params.
 
     Prefer full validation so every field normalization applies — a router type whose
@@ -95,9 +107,8 @@ def _router_output_map(node_class: type[PipelineRouterNode], node: Node) -> dict
     ``PipelineNodeBuildError``), and must still report its handles, so fall back to an unvalidated
     instance with the keywords upper-cased to match ``RouterMixin.ensure_keywords_are_uppercase``.
     """
-    params = node.params or {}
     try:
-        instance = node_class.model_validate({**params, "node_id": node.flow_id, "django_node": node})
+        instance = node_class.model_validate({**params, "node_id": node_id, "django_node": django_node})
     except (pydantic.ValidationError, PipelineNodeBuildError):
         fallback = dict(params)
         if isinstance(fallback.get("keywords"), list):

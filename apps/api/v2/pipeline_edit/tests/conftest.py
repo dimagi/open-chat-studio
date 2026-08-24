@@ -62,3 +62,17 @@ def add_edge(pipeline, source: str, target: str, source_handle: str = "output") 
     )
     pipeline.save(update_fields=["data"])
     return edge_id
+
+
+def outgoing_handles(pipeline, source: str) -> dict[str, tuple[str, str]]:
+    """``{edge_id: (sourceHandle, target)}`` for the stored edges leaving ``source``.
+
+    Handle and target together, so one assertion says which edges survived an edit, which handle
+    each ended up on, and that none of them changed where it points.
+    """
+    pipeline.refresh_from_db()
+    return {
+        edge["id"]: (edge["sourceHandle"], edge["target"])
+        for edge in pipeline.data["edges"]
+        if edge["source"] == source
+    }
