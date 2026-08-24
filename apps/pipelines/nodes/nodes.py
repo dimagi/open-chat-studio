@@ -1175,6 +1175,12 @@ class CodeNode(PipelineNode, OutputMessageTagMixin, RestrictedPythonExecutionMix
         def set_session_state_key(key_name: str, value):
             """Sets the value of the session state's key with the given name to the provided data.
             This will override any existing data."""
+            # Enforce reserved keys at runtime. The ``check_reserved_session_state_keys``
+            # source validator only inspects literal calls, so aliasing, computed keys or
+            # star/kwargs unpacking would otherwise bypass it and write reserved keys such
+            # as ``remote_context``, which are populated with trusted server-side context.
+            if key_name in settings.RESERVED_SESSION_STATE_KEYS:
+                raise CodeNodeRunError(f"The key '{key_name}' is a reserved session state key and is read-only.")
             session_state = state.setdefault("session_state", {})
             session_state[key_name] = value
 
