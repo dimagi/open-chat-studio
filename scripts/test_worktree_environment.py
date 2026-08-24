@@ -534,7 +534,7 @@ def test_setup_does_not_reconfigure_the_root_checkout(
     assert command_log.read_text() == "bootstrap:--force --yes\n"
 
 
-def test_setup_copies_a_matching_template_instead_of_migrating(
+def test_setup_copies_a_matching_template_instead_of_rebuilding(
     worktree_fixture: tuple[Path, Path, dict[str, str], Path],
 ) -> None:
     _, worktree, env, command_log = worktree_fixture
@@ -548,7 +548,9 @@ def test_setup_copies_a_matching_template_instead_of_migrating(
 
     command_output = command_log.read_text()
     assert f'CREATE DATABASE "second_worktree" TEMPLATE "{template_name}"' in _created_databases(command_log)
-    assert "manage.py migrate" not in command_output
+    # Migrated even though the template matched exactly: the stamp says nothing about
+    # migrations shipped by the packages in `uv.lock`.
+    assert "uv:run python manage.py migrate" in command_output
     assert "bootstrap_data" not in command_output
 
 

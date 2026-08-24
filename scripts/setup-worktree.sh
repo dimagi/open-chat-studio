@@ -114,9 +114,12 @@ ocs_set_env_value \
     "$redis_url"
 export REDIS_URL="$redis_url"
 
-if [[ "$provisioning" != copy ]]; then
-    uv run python manage.py migrate
-fi
+# Always migrated, even on an exact template match: the stamp a template is named for
+# covers this repository's migrations, not those of the packages in `uv.lock`. A
+# dependency bump that ships a migration leaves the stamp -- and so the template --
+# byte-identical, and only an unconditional migrate keeps that schema from going stale.
+# It costs a second or two against a database that is already up to date.
+uv run python manage.py migrate
 
 if [[ "$provisioning" == build ]] || ! ocs_database_is_seeded "$resource_name"; then
     # Seeding is not idempotent -- sample sessions, messages, traces and usage records
