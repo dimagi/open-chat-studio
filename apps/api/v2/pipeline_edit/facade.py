@@ -16,6 +16,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.generics import get_object_or_404
 
 from apps.api.v2.lookups import get_working_chatbot
+from apps.experiments.models import Experiment
 from apps.oauth.permissions import enforce_application_chatbot_write
 from apps.pipelines.flow import PipelineDiffPayload
 from apps.pipelines.models import Pipeline
@@ -59,7 +60,7 @@ def edit_pipeline(
         return respond(pipeline, edit.node_id)
 
 
-def _locked_pipeline(chatbot) -> Pipeline:
+def _locked_pipeline(chatbot: Experiment) -> Pipeline:
     """The chatbot's pipeline, locked for the rest of the transaction.
 
     Team-scoped as well as addressed by pk: tenancy would hold through the chatbot alone, but the

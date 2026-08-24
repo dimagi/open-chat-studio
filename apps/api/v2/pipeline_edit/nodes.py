@@ -1,7 +1,7 @@
 """Turning a node request body into the graph edit that carries it out (#4140)."""
 
 from functools import cache
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from rest_framework import status
@@ -20,11 +20,15 @@ from apps.pipelines.flow import (
     react_flow_node_type,
 )
 from apps.pipelines.models import Node
-from apps.pipelines.nodes.base import NodeSchema, resolve_node_class
+from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
 
 from .facade import PipelineEdit
 from .param_types import param_type_errors
-from .references import check_references
+from .references import OptionsAccessor, check_references
+
+#: A node's output handles as ``{handle: branch label}``. The label is ``None`` for the single
+#: standard output, and a router's branch keyword otherwise.
+OutputHandles = dict[str, str | None]
 
 #: How far right of the rightmost node a new one is parked, and the row it is parked on.
 PARKING_STEP_X = 200
@@ -65,7 +69,7 @@ def served_type_for_body(node_type: str) -> dict:
         raise ValidationError({"type": unknown.detail}) from unknown
 
 
-def warm_option_lists(options, params: dict) -> None:
+def warm_option_lists(options: OptionsAccessor, params: dict[str, Any]) -> None:
     """Build the team's option lists before the pipeline row is locked, if this body needs them.
 
     ``options_for_team`` is around fifteen queries and parses every custom action's OpenAPI schema.
@@ -80,7 +84,7 @@ def warm_option_lists(options, params: dict) -> None:
         options()
 
 
-def check_params(served_type: dict, options, params: dict) -> None:
+def check_params(served_type: dict, options: OptionsAccessor, params: dict[str, Any]) -> None:
     """Everything a param has to satisfy before it is allowed anywhere near the graph.
 
     Order matters: a name has to be recognised before its type means anything, and a type has to
@@ -91,7 +95,7 @@ def check_params(served_type: dict, options, params: dict) -> None:
     check_references(options, served_type["type"], served_type["schema"]["properties"], params)
 
 
-def plan_create(flow: dict, served_type: dict, label: str | None, params: dict) -> PipelineEdit:
+def plan_create(flow: dict, served_type: dict, label: str | None, params: dict[str, Any]) -> PipelineEdit:
     """Add a node of ``served_type`` to ``flow``.
 
     The id is the server's to assign (W5), in the ``{type}-{5 chars}`` form the builder's own
@@ -103,7 +107,7 @@ def plan_create(flow: dict, served_type: dict, label: str | None, params: dict) 
     node_type = served_type["type"]
     # The types `/pipeline/nodes/` serves are exactly the resolvable node classes, and
     # `served_type_for_body` has already refused any other name, so this cannot come back None.
-    node_class = cast(type, resolve_node_class(node_type))
+    node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
     node_id = _unused_node_id(flow, node_type)
     node = FlowNode(
         id=node_id,
@@ -119,7 +123,9 @@ def plan_create(flow: dict, served_type: dict, label: str | None, params: dict) 
     return PipelineEdit(diff=_diff(NodeDiff(add=[node])), node_id=node_id)
 
 
-def plan_update(flow: dict, options, node_id: str, label: str | None, params: dict) -> PipelineEdit:
+def plan_update(
+    flow: dict, options: OptionsAccessor, node_id: str, label: str | None, params: dict[str, Any]
+) -> PipelineEdit:
     """Edit one node's params and label in place.
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
@@ -192,7 +198,7 @@ def find_node(flow: dict, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
-def check_param_names(served_type: dict, params: dict) -> None:
+def check_param_names(served_type: dict, params: dict[str, Any]) -> None:
     """Refuse a param the node type does not declare.
 
     Node models ignore unknown fields, so an unrecognised param would be stored, never read, and the
@@ -207,17 +213,18 @@ def check_param_names(served_type: dict, params: dict) -> None:
         raise ValidationError({"params": dict.fromkeys(unknown, message)})
 
 
-def check_param_types(served_type: dict, params: dict) -> None:
+def check_param_types(served_type: dict, params: dict[str, Any]) -> None:
     """Refuse a param whose value is the wrong shape for what the type declares.
 
     Unlike a missing or semantically wrong param, this is not reported and kept: see
     ``param_types`` for why a value the node cannot parse has to be turned away at the door.
     """
+    # feedback: this method is too convoluted in its calles and sub-calls. Simplyify please
     if errors := param_type_errors(served_type["schema"]["properties"], params):
         raise ValidationError({"params": errors})
 
 
-def stored_params(content: FlowNodeData) -> dict:
+def stored_params(content: FlowNodeData) -> dict[str, Any]:
     """The params a node's row actually holds, out of the graph's copy of them.
 
     ``Node.to_flow_node`` merges the resource-id mirror into *every* node type's params, so the
@@ -233,7 +240,7 @@ def stored_params(content: FlowNodeData) -> dict:
     }
 
 
-def settable_params(node) -> dict:
+def settable_params(node: Node) -> dict[str, Any]:
     """A node row's params, narrowed to the ones a client may send back.
 
     The write response is documented as a valid request body, so it must not carry a param that
@@ -249,7 +256,7 @@ def settable_params(node) -> dict:
     return {name: value for name, value in params.items() if name in served["schema"]["properties"]}
 
 
-def initial_params(node_class: type, node_id: str, supplied: dict) -> dict:
+def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: dict[str, Any]) -> dict[str, Any]:
     """The params a new node starts life with: the type's defaults, then what the client sent.
 
     The defaults are written to the row rather than only reported, so the node reads back through
@@ -278,9 +285,11 @@ def parking_position(flow: dict) -> dict:
     return {"x": rightmost + PARKING_STEP_X, "y": PARKING_Y}
 
 
-def node_schema(node_class: type) -> NodeSchema:
+def node_schema(node_class: type[BasePipelineNode]) -> NodeSchema:
     """A node class's ``NodeSchema``: its display label, and whether it can be added or deleted."""
-    return node_class.model_config["json_schema_extra"]
+    # Cast because pydantic types this config key as a plain JSON dict or a callable, while every
+    # node class here stores a `NodeSchema` in it -- `deprecated_node` reads it back the same way.
+    return cast(NodeSchema, node_class.model_config["json_schema_extra"])
 
 
 def _unused_node_id(flow: dict, node_type: str) -> str:
@@ -308,7 +317,7 @@ def _resource_mirror_keys() -> frozenset[str]:
     return frozenset({f"{field}_id" for field in Node.resource_fk_fields()} | {"collection_index_ids"})
 
 
-def _output_handles(content: FlowNodeData) -> dict[str, str | None]:
+def _output_handles(content: FlowNodeData) -> OutputHandles:
     """A node's output handles as ``{handle: branch label}``.
 
     The label is what identifies a router's branch across an edit: the handle is only a position in
@@ -318,7 +327,7 @@ def _output_handles(content: FlowNodeData) -> dict[str, str | None]:
     return {handle["handle"]: handle["label"] for handle in output_handles(content.type, content.params, content.id)}
 
 
-def _rewired_edges(flow: dict, node_id: str, before: dict, after: dict) -> EdgeDiff:
+def _rewired_edges(flow: dict, node_id: str, before: OutputHandles, after: OutputHandles) -> EdgeDiff:
     """What an edit that changed a node's output handles does to the edges leaving it.
 
     Handles are positional (``output_i`` serves ``keywords[i]``), so dropping the second of three
@@ -331,7 +340,8 @@ def _rewired_edges(flow: dict, node_id: str, before: dict, after: dict) -> EdgeD
     -- left by an import, or a builder session -- stays, and stays reported in ``errors.edge``.
     """
     moved_to = _handle_remap(before, after)
-    update, delete = [], []
+    update: list[FlowEdge] = []
+    delete: list[str] = []
     for stored in flow.get("edges", []):
         edge = FlowEdge(**stored)
         handle = edge.sourceHandle or STANDARD_OUTPUT_NAME
@@ -345,7 +355,7 @@ def _rewired_edges(flow: dict, node_id: str, before: dict, after: dict) -> EdgeD
     return EdgeDiff(update=update, delete=delete)
 
 
-def _handle_remap(before: dict, after: dict) -> dict[str, str]:
+def _handle_remap(before: OutputHandles, after: OutputHandles) -> dict[str, str]:
     """Where each handle the node used to offer has ended up, keyed by the handle it was.
 
     A handle whose branch the edit removed is absent from the result: its edge has nowhere to go.
@@ -361,7 +371,7 @@ def _handle_remap(before: dict, after: dict) -> dict[str, str]:
     return {handle: handle for handle in before if handle in after}
 
 
-def _labels_are_distinct(handles: dict) -> bool:
+def _labels_are_distinct(handles: OutputHandles) -> bool:
     """Whether every handle in the map carries a different branch label."""
     return len(set(handles.values())) == len(handles)
 

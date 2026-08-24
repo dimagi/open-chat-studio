@@ -10,25 +10,32 @@ What counts as valid is the option list ``/pipeline/options/`` already offered f
 discovery endpoint serves is what keeps "what we offer" and "what we accept" from drifting apart.
 """
 
+from collections.abc import Callable
+from typing import Any
+
 from rest_framework.exceptions import ValidationError
 
 from apps.api.v2.discovery.node_types import reference_sources_for_type
 from apps.api.v2.discovery.options import options_for_team
+from apps.teams.models import Team
 
 from .param_types import is_array_param
+
+#: A caller's lazy handle on the team's option lists, as :func:`team_options` builds it.
+OptionsAccessor = Callable[[], dict]
 
 #: Values meaning "this reference is unset". ``[]`` matters as much as ``None``: a list-valued
 #: param such as ``collection_index_ids`` clears by being sent empty.
 UNSET = (None, [], "")
 
 
-def team_options(team):
+def team_options(team: Team) -> OptionsAccessor:
     """A once-per-caller accessor for ``team``'s option lists.
 
     ``options_for_team`` is around fifteen queries and parses every custom action's OpenAPI schema,
     so it is built lazily (a write touching no reference never pays for it) and at most once.
     """
-    built = []
+    built: list[dict] = []
 
     def get() -> dict:
         if not built:
@@ -38,7 +45,7 @@ def team_options(team):
     return get
 
 
-def check_references(options, node_type: str, properties: dict, params: dict) -> None:
+def check_references(options: OptionsAccessor, node_type: str, properties: dict, params: dict[str, Any]) -> None:
     """Refuse ``params`` naming a resource the team cannot reference.
 
     ``options`` is the accessor from ``team_options``, called only if there is something to check.
@@ -51,7 +58,9 @@ def check_references(options, node_type: str, properties: dict, params: dict) ->
         raise ValidationError({"params": errors})
 
 
-def reference_errors(options, node_type: str, properties: dict, params: dict) -> dict[str, str]:
+def reference_errors(
+    options: OptionsAccessor, node_type: str, properties: dict, params: dict[str, Any]
+) -> dict[str, str]:
     """``param -> why its value names something out of reach``, for the params actually sent."""
     sources = reference_sources_for_type(node_type)
     referencing = {param: value for param, value in params.items() if param in sources and value not in UNSET}
@@ -60,7 +69,7 @@ def reference_errors(options, node_type: str, properties: dict, params: dict) ->
         return {}
 
     available = options()
-    errors = {}
+    errors: dict[str, str] = {}
     for param, value in referencing.items():
         source = sources[param]
         offered = available.get(source, [])

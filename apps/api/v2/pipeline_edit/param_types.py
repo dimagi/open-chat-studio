@@ -13,6 +13,8 @@ response to the write that stored it -- so the caller would never learn the ``no
 delete the node again.
 """
 
+from typing import Any
+
 #: JSON Schema type -> the Python types a decoded JSON value of that type can have. ``bool`` is
 #: handled separately below: it is an ``int`` subclass in Python, but a client that sent ``true``
 #: for an integer param did not mean ``1``.
@@ -29,13 +31,13 @@ JSON_TYPES: dict[str, tuple[type, ...]] = {
 BOOL_IS_VALID_FOR = frozenset({"boolean"})
 
 
-def param_type_errors(properties: dict, params: dict) -> dict[str, str]:
+def param_type_errors(properties: dict, params: dict[str, Any]) -> dict[str, str]:
     """``param -> why its value does not fit the declared type``, for the params actually sent.
 
     ``None`` is skipped whatever the declared type: it is how a param is cleared, and the node
     models take it for every optional field.
     """
-    errors = {}
+    errors: dict[str, str] = {}
     for name, value in params.items():
         if value is None:
             continue
@@ -54,7 +56,7 @@ def is_array_param(properties: dict, name: str) -> bool:
     return properties.get(name, {}).get("type") == "array"
 
 
-def _type_error(prop: dict, value) -> str | None:
+def _type_error(prop: dict, value: Any) -> str | None:
     """Why ``value`` does not fit ``prop``, or ``None`` if it does.
 
     Served properties only ever state a plain ``type``, optionally with ``items`` or ``enum``, so
@@ -84,7 +86,7 @@ def _item_type_error(prop: dict, values: list) -> str | None:
     return f"Expected an array of {item_type}, got {json_type_name(wrong[0])}: {wrong[0]!r}."
 
 
-def _matches(expected: str, value) -> bool:
+def _matches(expected: str, value: Any) -> bool:
     allowed = JSON_TYPES.get(expected)
     if allowed is None:
         # A type the map does not cover ("null", or something added to JSON Schema later) is not

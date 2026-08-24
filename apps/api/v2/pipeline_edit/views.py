@@ -7,7 +7,7 @@ setting, and two façade edits to different nodes cannot overwrite each other.
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
@@ -81,7 +81,7 @@ class PipelineNodeEditView(GenericAPIView):
     # Only here so the generic view has a queryset; permissions are not derived from it.
     queryset = Pipeline.objects.none()
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[serializers.Serializer]:
         """POST takes a `type`, PATCH takes params -- keyed on the method since one class serves both.
 
         `DescribesPatch` calls this once per verb it describes via a `clone_request`, so OPTIONS
@@ -111,7 +111,7 @@ class PipelineNodeEditView(GenericAPIView):
             404: OpenApiResponse(description="No such chatbot."),
         },
     )
-    def post(self, request, id):
+    def post(self, request, id: str) -> Response:
         body = self.get_serializer(data=request.data)
         body.is_valid(raise_exception=True)
         params = body.validated_data["params"]
@@ -157,7 +157,7 @@ class PipelineNodeEditView(GenericAPIView):
             409: SERVER_MANAGED,
         },
     )
-    def patch(self, request, id, node_id):
+    def patch(self, request, id: str, node_id: str) -> Response:
         body = self.get_serializer(data=request.data)
         body.is_valid(raise_exception=True)
         params = body.validated_data["params"]
@@ -192,7 +192,7 @@ class PipelineNodeEditView(GenericAPIView):
             409: OpenApiResponse(description="The node is part of the pipeline's structure and cannot be deleted."),
         },
     )
-    def delete(self, request, id, node_id):
+    def delete(self, request, id: str, node_id: str) -> Response:
         # `plan_delete` names no node, so the envelope reports the pipeline alone: there is no node
         # left to describe.
         return Response(edit_pipeline(request, id, lambda flow: plan_delete(flow, node_id), self._envelope))

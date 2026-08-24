@@ -2,6 +2,7 @@
 
 import unicodedata
 from collections.abc import Callable
+from typing import Any
 
 from django.db.models import QuerySet
 from rest_framework import serializers
@@ -20,7 +21,7 @@ class NfcCharField(serializers.CharField):
     is a 500 for what is only an over-long name.
     """
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: Any) -> str:
         return unicodedata.normalize("NFC", super().to_internal_value(data))
 
 
@@ -38,13 +39,13 @@ class OptionalTextField(serializers.CharField):
     writes too: its ``description`` is ``required=False``, which cleans blank input to ``""``.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         kwargs.setdefault("required", False)
         kwargs.setdefault("allow_blank", True)
         kwargs.setdefault("allow_null", True)
         super().__init__(**kwargs)
 
-    def validate_empty_values(self, data):
+    def validate_empty_values(self, data: Any) -> tuple[bool, Any]:
         # `to_internal_value` never sees None: `run_validation` short-circuits on it when
         # `allow_null` is set, so the coercion has to happen here.
         is_empty, value = super().validate_empty_values(data)
@@ -71,9 +72,9 @@ class TeamScopedRelatedField(serializers.PrimaryKeyRelatedField):
     is to leak whether the id exists in another team.
     """
 
-    def __init__(self, scoped_queryset: Callable[[Request], QuerySet], **kwargs):
+    def __init__(self, scoped_queryset: Callable[[Request], QuerySet], **kwargs) -> None:
         self.scoped_queryset = scoped_queryset
         super().__init__(**kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         return self.scoped_queryset(self.context["request"])

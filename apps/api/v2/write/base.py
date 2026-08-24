@@ -1,5 +1,7 @@
 """Shared plumbing for the v2 chatbot write endpoints -- the settings surface and the pipeline façade."""
 
+from typing import Any
+
 from django.http import Http404
 from rest_framework import exceptions, serializers
 from rest_framework.metadata import SimpleMetadata
@@ -20,8 +22,8 @@ class DescribesPatch(SimpleMetadata):
 
     describes = ("PUT", "POST", "PATCH")
 
-    def determine_actions(self, request, view):
-        actions = {}
+    def determine_actions(self, request, view) -> dict[str, dict]:
+        actions: dict[str, dict] = {}
         for method in [method for method in self.describes if method in view.allowed_methods]:
             view.request = clone_request(request, method)
             try:
@@ -63,7 +65,7 @@ class RejectsUnknownKeys:
     ``initial_data``, which DRF sets on the root serializer alone.
     """
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: Any) -> Any:
         if isinstance(data, dict):
             unknown = sorted(set(data) - set(self.fields))
             if unknown:

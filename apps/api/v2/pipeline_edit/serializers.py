@@ -1,11 +1,14 @@
 """Request and response shapes for the pipeline façade (#4140)."""
 
+from typing import Any
+
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.api.v2.inspect.serializers import OutputHandleSerializer, PipelineBuildErrorsSerializer
 from apps.api.v2.write.base import RejectsUnknownKeys
 from apps.pipelines.build_state import node_output_handles
+from apps.pipelines.models import Node
 
 from .nodes import settable_params
 
@@ -20,7 +23,7 @@ SERVER_ASSIGNED_KEYS = {
 class RejectsServerAssignedKeys:
     """Answer a client-supplied server-owned key with the rule, not with 'no such field'."""
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: Any) -> Any:
         if isinstance(data, dict):
             claimed = {key: reason for key, reason in SERVER_ASSIGNED_KEYS.items() if key in data}
             if claimed:
@@ -65,14 +68,14 @@ class WrittenNodeSerializer(serializers.Serializer):
     output_handles = serializers.SerializerMethodField()
 
     @extend_schema_field(serializers.DictField())
-    def get_params(self, node) -> dict:
+    def get_params(self, node: Node) -> dict:
         # Narrowed to what a client may send back: a node is stored with a default for every field
         # its type declares, including the ones the API withholds from the schema, and reporting
         # one of those would make this response a body PATCH refuses.
         return settable_params(node)
 
     @extend_schema_field(OutputHandleSerializer(many=True))
-    def get_output_handles(self, node) -> list:
+    def get_output_handles(self, node: Node) -> list:
         # Server-derived (W5): a router gets one handle per branch keyword, a plain node the single
         # standard output. Returned on every write so the next call can wire an edge from it
         # without a re-read.
@@ -123,7 +126,7 @@ class NodeWriteSerializer(PipelineWriteSerializer):
 
     node = WrittenNodeSerializer()
 
-    def get_fields(self):
+    def get_fields(self) -> dict[str, serializers.Field]:
         # `node` first: it is what the caller asked about, and the build state is the context.
         fields = super().get_fields()
         return {"node": fields.pop("node"), **fields}

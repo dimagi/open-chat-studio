@@ -242,7 +242,7 @@ class RequiresTeamPermission(BasePermission):
     # what they require.
     required_permissions: list[str]
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs) -> None:
         # At import rather than at request time: a subclass that forgot this would otherwise be an
         # open door that only shows itself when someone calls the endpoint it guards.
         super().__init_subclass__(**kwargs)
@@ -252,7 +252,7 @@ class RequiresTeamPermission(BasePermission):
                 "grants access to everyone."
             )
 
-    def has_permission(self, request, view):
+    def has_permission(self, request, view) -> bool:
         if is_client_credentials_request(request):
             return True
         return bool(request.user and request.user.has_perms(self.required_permissions))
