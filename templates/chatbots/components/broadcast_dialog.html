@@ -4,7 +4,7 @@
        x-on:change="whatsappSelected = !!$el.querySelectorAll('input[data-platform=whatsapp]:checked').length">
     <h3 class="font-bold text-lg">{% translate "Broadcast message" %}</h3>
     <p class="text-sm pg-text-muted mt-1">
-      {% translate "Send a message to everyone who has chatted to this bot on the channels you pick." %}
+      {% translate "Send a message to the participants who have chatted to this bot recently on the channels you pick." %}
     </p>
 
     <form id="broadcast-message-form" method="post"
@@ -26,6 +26,8 @@
           </a>
         </span>
       </div>
+
+      {% render_field broadcast_form.active_within_days %}
 
       {% render_field broadcast_form.message %}
       <p class="label" x-text="`${message.length} / {{ broadcast_form.fields.message.max_length }}`"></p>

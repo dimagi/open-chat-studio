@@ -358,7 +358,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
 @login_and_team_required
 @permission_required("experiments.invite_participants", raise_exception=True)
 def broadcast_message(request, team_slug: str, experiment_id: int):
-    """Queue a message for every participant of this chatbot on the selected channels."""
+    """Queue a message for the recently active participants of this chatbot on the selected channels."""
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
     form = BroadcastMessageForm(experiment, data=request.POST)
     if not form.is_valid():
@@ -366,13 +366,19 @@ def broadcast_message(request, team_slug: str, experiment_id: int):
             messages.error(request, error[0])
     else:
         channels = form.cleaned_data["channels"]
+        days = form.cleaned_data["active_within_days"]
         send_broadcast_message.delay(
             experiment_id=experiment.id,
             channel_ids=[channel.id for channel in channels],
             message=form.cleaned_data["message"],
+            active_within_days=days,
         )
         platforms = ", ".join(sorted(channel.platform_enum.label for channel in channels))
-        messages.success(request, f"Your message is being sent to all participants on {platforms}.")
+        messages.success(
+            request,
+            f"Your message is being sent to participants on {platforms} "
+            f"who were active in the last {days} {'day' if days == 1 else 'days'}.",
+        )
     return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment.id)
 
 

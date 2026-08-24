@@ -166,17 +166,28 @@ class BroadcastChannelField(forms.ModelMultipleChoiceField):
 
 
 class BroadcastMessageForm(forms.Form):
-    """A one-off message sent to every participant of a chatbot on the chosen channels."""
+    """A one-off message sent to the recently active participants of a chatbot on the chosen channels."""
 
     # The limit is WhatsApp's: a broadcast lands outside the 24-hour service window, so it goes
     # out as a template message. Applied to every platform so the same text is deliverable on
     # all of the selected channels rather than being silently split on one of them.
     MESSAGE_CHAR_LIMIT = MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT
 
+    DEFAULT_ACTIVE_WITHIN_DAYS = 90
+
     channels = BroadcastChannelField(
         queryset=ExperimentChannel.objects.none(),
         widget=BroadcastChannelWidget,
         error_messages={"required": "Select at least one channel to broadcast on."},
+    )
+    active_within_days = forms.IntegerField(
+        label="Active in the last (days)",
+        initial=DEFAULT_ACTIVE_WITHIN_DAYS,
+        min_value=1,
+        help_text=(
+            "Only participants whose last activity falls inside this many days are messaged. "
+            "A participant who has not chatted since then is left alone."
+        ),
     )
     message = forms.CharField(
         max_length=MESSAGE_CHAR_LIMIT,
