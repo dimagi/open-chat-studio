@@ -7,7 +7,7 @@ from uuid import uuid4
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 
-from apps.api.v2.discovery.node_types import get_node_type, reference_param_names
+from apps.api.v2.discovery.node_types import get_node_type_schema, reference_param_names
 from apps.pipelines.build_state import output_handles
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.flow import (
@@ -58,13 +58,13 @@ class NodeIsServerManaged(APIException):
 def served_type_for_body(node_type: str) -> dict:
     """The named node type, or a 400 -- the name came out of a request body, not out of the URL.
 
-    ``get_node_type`` answers 404 because its own caller was addressed by path
+    ``get_node_type_schema`` answers 404 because its own caller was addressed by path
     (``/pipeline/nodes/{type}/``), where an unknown name really is a wrong URL. Here the same name
     is a field the client chose, so it is reported the way every other bad field is, and an agent
     does not have to tell "no such chatbot" apart from "no such node type" by reading prose.
     """
     try:
-        return get_node_type(node_type)
+        return get_node_type_schema(node_type)
     except NotFound as unknown:
         raise ValidationError({"type": unknown.detail}) from unknown
 
@@ -145,7 +145,7 @@ def plan_update(
         # 404s a type the API does not publish at all -- a deprecated one, say, whose params it
         # cannot describe and so cannot check. Only when there are params to check: renaming a node
         # of such a type is not something the API has to withhold.
-        check_params(get_node_type(content.type), options, params)
+        check_params(get_node_type_schema(content.type), options, params)
 
     before = _output_handles(content)
     content.params = {**stored_params(content), **params}
@@ -248,7 +248,7 @@ def settable_params(node: Node) -> dict[str, Any]:
     """
     params = node.params or {}
     try:
-        served = get_node_type(node.type)
+        served = get_node_type_schema(node.type)
     except NotFound:
         # A node of a type the API does not publish. Nothing about it is settable, but reporting
         # what it holds is still better than reporting nothing.

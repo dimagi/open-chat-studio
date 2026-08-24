@@ -39,7 +39,7 @@ def get_node_types() -> list[dict]:
     return node_types
 
 
-def get_node_type(node_type: str) -> dict:
+def get_node_type_schema(node_type: str) -> dict:
     """The named node type as ``/pipeline/nodes/`` serves it, or a 404 naming the valid ones."""
     for node in get_node_types():
         if node["type"] == node_type:

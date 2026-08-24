@@ -17,7 +17,7 @@ from apps.pipelines.models import Pipeline
 
 from .node_types import (
     etag,
-    get_node_type,
+    get_node_type_schema,
     get_node_types,
     option_keys_for_node_type,
     served_option_keys,
@@ -145,7 +145,7 @@ class PipelineNodeView(NodeTypesView):
         ],
     )
     def get(self, request, node_type):
-        return self._etagged(request, self.get_serializer(get_node_type(node_type)).data)
+        return self._etagged(request, self.get_serializer(get_node_type_schema(node_type)).data)
 
 
 # The documented response sample. Kept whole rather than inline so a test can hold it to the
