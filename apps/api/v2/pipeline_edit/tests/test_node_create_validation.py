@@ -18,12 +18,12 @@ from .conftest import nodes_url
 
 @pytest.mark.django_db()
 def test_an_unknown_node_type_is_refused(client, chatbot):
-    """400, not 404: `type` is a field the client chose, so it is reported like any other bad
-    field. A 404 here would mean "no such chatbot" to anything reading status codes alone."""
+    """404, the same answer /pipeline/nodes/{type}/ gives: the name is of a type that does not
+    exist, whichever way the client happened to name it. The valid ones come back with it."""
     response = client.post(nodes_url(chatbot), {"type": "Frobnicator"}, format="json")
 
-    assert response.status_code == 400, response.content
-    assert "LLMResponseWithPrompt" in response.json()["type"]["valid_types"]
+    assert response.status_code == 404, response.content
+    assert "LLMResponseWithPrompt" in response.json()["valid_types"]
     assert not chatbot.pipeline.node_set.filter(type="Frobnicator").exists()
 
 
@@ -33,8 +33,8 @@ def test_a_server_managed_node_type_is_refused(client, chatbot):
     same refusal /pipeline/nodes/{type}/ already gives for them."""
     response = client.post(nodes_url(chatbot), {"type": "StartNode"}, format="json")
 
-    assert response.status_code == 400, response.content
-    assert "managed by the server" in response.json()["type"]["detail"]
+    assert response.status_code == 404, response.content
+    assert "managed by the server" in response.json()["detail"]
 
 
 @pytest.mark.django_db()

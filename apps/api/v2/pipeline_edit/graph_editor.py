@@ -55,20 +55,6 @@ class NodeIsServerManaged(APIException):
     status_code = status.HTTP_409_CONFLICT
 
 
-def served_type_for_body(node_type: str) -> dict:
-    """The named node type, or a 400 -- the name came out of a request body, not out of the URL.
-
-    ``get_node_type_schema`` answers 404 because its own caller was addressed by path
-    (``/pipeline/nodes/{type}/``), where an unknown name really is a wrong URL. Here the same name
-    is a field the client chose, so it is reported the way every other bad field is, and an agent
-    does not have to tell "no such chatbot" apart from "no such node type" by reading prose.
-    """
-    try:
-        return get_node_type_schema(node_type)
-    except NotFound as unknown:
-        raise ValidationError({"type": unknown.detail}) from unknown
-
-
 def warm_option_lists(team: Team, params: dict[str, Any]) -> None:
     """Build the team's option lists before the pipeline row is locked, if this body needs them.
 
@@ -107,7 +93,7 @@ def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: d
     """
     node_type = node_type_schema["type"]
     # The types `/pipeline/nodes/` serves are exactly the resolvable node classes, and
-    # `served_type_for_body` has already refused any other name, so this cannot come back None.
+    # `get_node_type_schema` has already refused any other name, so this cannot come back None.
     node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
     node_id = _unused_node_id(flow, node_type)
     node = FlowNode(

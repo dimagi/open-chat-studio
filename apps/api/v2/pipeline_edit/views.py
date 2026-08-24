@@ -13,13 +13,14 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
+from apps.api.v2.discovery.node_types import get_node_type_schema
 from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Pipeline
 
 from .facade import edit_pipeline
-from .graph_editor import check_params, plan_create, plan_delete, plan_update, served_type_for_body, warm_option_lists
+from .graph_editor import check_params, plan_create, plan_delete, plan_update, warm_option_lists
 from .serializers import (
     NodeCreateSerializer,
     NodeUpdateSerializer,
@@ -41,9 +42,9 @@ BAD_REQUEST = OpenApiResponse(
     description=(
         "The body is not one this endpoint can act on. Errors are keyed by the field at fault, and "
         "param-level errors are nested under `params`. This covers an unrecognised body key, a "
-        "server-assigned key the client tried to set (`node_id`, `position`), an unknown node "
-        "`type`, a param the type does not declare, a param whose value is the wrong type, and a "
-        "param naming a resource this team cannot reach."
+        "server-assigned key the client tried to set (`node_id`, `position`), a param the type does "
+        "not declare, a param whose value is the wrong type, and a param naming a resource this "
+        "team cannot reach."
     )
 )
 FORBIDDEN = OpenApiResponse(
@@ -107,7 +108,13 @@ class PipelineNodeEditView(GenericAPIView):
             201: NodeWriteSerializer,
             400: BAD_REQUEST,
             403: FORBIDDEN,
-            404: OpenApiResponse(description="No such chatbot."),
+            404: OpenApiResponse(
+                description=(
+                    "No such chatbot, or no such node `type`. An unknown type names the valid ones "
+                    "in `valid_types`; the Start and End types are refused here too, since the "
+                    "server creates those with the pipeline."
+                )
+            ),
         },
     )
     def post(self, request, id: str) -> Response:
@@ -118,7 +125,7 @@ class PipelineNodeEditView(GenericAPIView):
         # Everything that does not depend on the graph is settled before the row is locked -- the
         # type is right here in the body, and the option lists the reference check needs are the
         # expensive part of the whole request.
-        node_type_schema = served_type_for_body(body.validated_data["type"])
+        node_type_schema = get_node_type_schema(body.validated_data["type"])
         check_params(node_type_schema, request.team, params)
         return Response(
             edit_pipeline(
@@ -168,7 +175,10 @@ class PipelineNodeEditView(GenericAPIView):
         warm_option_lists(request.team, params)
         return Response(
             edit_pipeline(
-                request, id, lambda flow: plan_update(flow, request.team, node_id, label, params), self._write_response
+                request,
+                id,
+                lambda flow: plan_update(flow, request.team, node_id, label, params),
+                self._write_response,
             )
         )
 

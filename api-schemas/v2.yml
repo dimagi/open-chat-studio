@@ -211,16 +211,18 @@ paths:
           description: The body is not one this endpoint can act on. Errors are keyed
             by the field at fault, and param-level errors are nested under `params`.
             This covers an unrecognised body key, a server-assigned key the client
-            tried to set (`node_id`, `position`), an unknown node `type`, a param
-            the type does not declare, a param whose value is the wrong type, and
-            a param naming a resource this team cannot reach.
+            tried to set (`node_id`, `position`), a param the type does not declare,
+            a param whose value is the wrong type, and a param naming a resource this
+            team cannot reach.
         '403':
           description: 'The caller is authenticated but not authorised to modify this
             chatbot: either its role lacks permission to change chatbots, or it is
             a machine (client-credentials) token whose application is not authorised
             for this chatbot.'
         '404':
-          description: No such chatbot.
+          description: No such chatbot, or no such node `type`. An unknown type names
+            the valid ones in `valid_types`; the Start and End types are refused here
+            too, since the server creates those with the pipeline.
   /api/v2/chatbots/{id}/pipeline/nodes/{node_id}/:
     patch:
       operationId: pipeline_node_update
@@ -267,9 +269,9 @@ paths:
           description: The body is not one this endpoint can act on. Errors are keyed
             by the field at fault, and param-level errors are nested under `params`.
             This covers an unrecognised body key, a server-assigned key the client
-            tried to set (`node_id`, `position`), an unknown node `type`, a param
-            the type does not declare, a param whose value is the wrong type, and
-            a param naming a resource this team cannot reach.
+            tried to set (`node_id`, `position`), a param the type does not declare,
+            a param whose value is the wrong type, and a param naming a resource this
+            team cannot reach.
         '403':
           description: 'The caller is authenticated but not authorised to modify this
             chatbot: either its role lacks permission to change chatbots, or it is
