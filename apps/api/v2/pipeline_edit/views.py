@@ -119,11 +119,11 @@ class PipelineNodeEditView(GenericAPIView):
         # Everything that does not depend on the graph is settled before the row is locked -- the
         # type is right here in the body, and the option lists the reference check needs are the
         # expensive part of the whole request.
-        served = served_type_for_body(body.validated_data["type"])
+        node_type_schema = served_type_for_body(body.validated_data["type"])
         options = team_options(request.team)
-        check_params(served, options, params)
+        check_params(node_type_schema, options, params)
         return Response(
-            edit_pipeline(request, id, lambda flow: plan_create(flow, served, label, params), self._envelope),
+            edit_pipeline(request, id, lambda flow: plan_create(flow, node_type_schema, label, params), self._envelope),
             status=status.HTTP_201_CREATED,
         )
 

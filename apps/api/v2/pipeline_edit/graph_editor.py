@@ -84,19 +84,19 @@ def warm_option_lists(options: OptionsAccessor, params: dict[str, Any]) -> None:
         options()
 
 
-def check_params(served_type: dict, options: OptionsAccessor, params: dict[str, Any]) -> None:
+def check_params(node_type_schema: dict, options: OptionsAccessor, params: dict[str, Any]) -> None:
     """Everything a param has to satisfy before it is allowed anywhere near the graph.
 
     Order matters: a name has to be recognised before its type means anything, and a type has to
     hold before a value can be read as one reference or as a list of them.
     """
-    check_param_names(served_type, params)
-    check_param_types(served_type, params)
-    check_references(options, served_type["type"], served_type["schema"]["properties"], params)
+    check_param_names(node_type_schema, params)
+    check_param_types(node_type_schema, params)
+    check_references(options, node_type_schema["type"], node_type_schema["schema"]["properties"], params)
 
 
-def plan_create(flow: dict, served_type: dict, label: str | None, params: dict[str, Any]) -> PipelineEdit:
-    """Add a node of ``served_type`` to ``flow``.
+def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: dict[str, Any]) -> PipelineEdit:
+    """Add a node of ``node_type_schema``'s type to ``flow``.
 
     The id is the server's to assign (W5), in the ``{type}-{5 chars}`` form the builder's own
     ``getNodeId`` produces, so an API-built graph is indistinguishable from a hand-built one.
@@ -104,7 +104,7 @@ def plan_create(flow: dict, served_type: dict, label: str | None, params: dict[s
     Params are already checked by the time this runs: the type is known from the request body, so
     nothing here has to wait on the graph.
     """
-    node_type = served_type["type"]
+    node_type = node_type_schema["type"]
     # The types `/pipeline/nodes/` serves are exactly the resolvable node classes, and
     # `served_type_for_body` has already refused any other name, so this cannot come back None.
     node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
@@ -198,29 +198,28 @@ def find_node(flow: dict, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
-def check_param_names(served_type: dict, params: dict[str, Any]) -> None:
+def check_param_names(node_type_schema: dict, params: dict[str, Any]) -> None:
     """Refuse a param the node type does not declare.
 
     Node models ignore unknown fields, so an unrecognised param would be stored, never read, and the
     write would look like it had taken effect. The names checked against are the ones
     ``/pipeline/nodes/`` published, so a param the API withholds is not settable either.
     """
-    unknown = sorted(set(params) - set(served_type["schema"]["properties"]))
+    node_type = node_type_schema["type"]
+    unknown = sorted(set(params) - set(node_type_schema["schema"]["properties"]))
     if unknown:
-        message = (
-            f"'{served_type['type']}' declares no such param. See GET /api/v2/pipeline/nodes/{served_type['type']}/."
-        )
+        message = f"'{node_type}' declares no such param. See GET /api/v2/pipeline/nodes/{node_type}/."
         raise ValidationError({"params": dict.fromkeys(unknown, message)})
 
 
-def check_param_types(served_type: dict, params: dict[str, Any]) -> None:
+def check_param_types(node_type_schema: dict, params: dict[str, Any]) -> None:
     """Refuse a param whose value is the wrong shape for what the type declares.
 
     Unlike a missing or semantically wrong param, this is not reported and kept: see
     ``param_types`` for why a value the node cannot parse has to be turned away at the door.
     """
     # feedback: this method is too convoluted in its calles and sub-calls. Simplyify please
-    if errors := param_type_errors(served_type["schema"]["properties"], params):
+    if errors := param_type_errors(node_type_schema["schema"]["properties"], params):
         raise ValidationError({"params": errors})
 
 
@@ -248,12 +247,12 @@ def settable_params(node: Node) -> dict[str, Any]:
     """
     params = node.params or {}
     try:
-        served = get_node_type_schema(node.type)
+        node_type_schema = get_node_type_schema(node.type)
     except NotFound:
         # A node of a type the API does not publish. Nothing about it is settable, but reporting
         # what it holds is still better than reporting nothing.
         return params
-    return {name: value for name, value in params.items() if name in served["schema"]["properties"]}
+    return {name: value for name, value in params.items() if name in node_type_schema["schema"]["properties"]}
 
 
 def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: dict[str, Any]) -> dict[str, Any]:
