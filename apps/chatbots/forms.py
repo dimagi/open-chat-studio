@@ -173,10 +173,8 @@ class BroadcastMessageForm(forms.Form):
     # all of the selected channels rather than being silently split on one of them.
     MESSAGE_CHAR_LIMIT = MetaCloudAPIService.TEMPLATE_MESSAGE_CHAR_LIMIT
 
-    DEFAULT_ACTIVE_WITHIN_DAYS = 90
-    # Bounds the audience query's lookback so a broadcast can't be pointed at years of stale
-    # sessions -- three years comfortably covers any real "recently active" cutoff.
-    MAX_ACTIVE_WITHIN_DAYS = 365 * 3
+    DEFAULT_ACTIVE_WITHIN_DAYS = 14
+    MAX_ACTIVE_WITHIN_DAYS = 90
 
     channels = BroadcastChannelField(
         queryset=ExperimentChannel.objects.none(),
