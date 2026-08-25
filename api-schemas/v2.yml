@@ -177,7 +177,7 @@ paths:
 
         `type` alone is enough: the node is created with that type's defaults, which the response reports and which you can then change with PATCH. The node is not wired to anything, so it appears in `unwired_handles` until you connect it — that is advisory, not an error.
 
-        The node's `node_id` and its position on the canvas are assigned by the server and cannot be chosen.
+        The node's `node_id` and its position on the canvas are assigned by the server and cannot be chosen. It is parked clear to the right of the nodes already there, and the End node is moved further right if the new node reaches it, so the End node stays the rightmost node on the canvas.
       summary: Add a Pipeline Node
       parameters:
       - in: path
