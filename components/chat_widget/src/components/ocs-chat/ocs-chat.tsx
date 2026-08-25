@@ -1794,7 +1794,11 @@ export class OcsChat {
   private getStorage(): Storage | undefined {
     const mode = this.getPersistenceMode();
     if (mode === 'off') return undefined;
-    return mode === 'tab' ? window.sessionStorage : window.localStorage;
+    try {
+      return mode === 'tab' ? window.sessionStorage : window.localStorage;
+    } catch {
+      return undefined;
+    }
   }
 
   private isStorageAvailable(): boolean {

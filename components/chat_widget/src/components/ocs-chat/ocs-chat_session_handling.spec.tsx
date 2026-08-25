@@ -89,6 +89,7 @@ describe('ocs-chat session creation', () => {
     Object.defineProperty(window, 'localStorage', {
       value: localStorageMock,
       writable: true,
+      configurable: true,
     });
 
     // Mock crypto.getRandomValues for user ID generation
@@ -537,6 +538,90 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
         html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true" persistent-session="true"></open-chat-studio-widget>',
       }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('ocs-chat storage getter blocked', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockStartSession.mockResolvedValue({ session_id: 'test-session-id' });
+    mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'test-task-id' });
+    mockPollTask.mockReturnValue({ cancel: jest.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    global.fetch = setupFetchMock();
+
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new DOMException('blocked', 'SecurityError');
+      },
+    });
+
+    Object.defineProperty(window, 'crypto', {
+      value: {
+        getRandomValues: jest.fn((arr: Uint8Array) => {
+          for (let i = 0; i < arr.length; i++) {
+            arr[i] = Math.floor(Math.random() * 256);
+          }
+          return arr;
+        }),
+        randomUUID: jest.fn(() => '00000000-0000-4000-8000-000000000000'),
+      },
+      writable: true,
+    });
+  });
+
+  afterEach(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: {
+        getItem: jest.fn(),
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+        clear: jest.fn(),
+      },
+    });
+    jest.restoreAllMocks();
+  });
+
+  it('renders when the localStorage getter itself throws', async () => {
+    await expect(
+      newSpecPage({
+        components: [OcsChat],
+        html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('treats storage as unavailable when the getter throws', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+    await page.waitForChanges();
+
+    expect(page.rootInstance['getStorage']()).toBeUndefined();
+  });
+
+  it('still starts a session when the storage getter throws', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+    await page.waitForChanges();
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
+    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
+    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
+
+    await page.rootInstance.sendMessage('hello');
+    await page.waitForChanges();
+
+    expect(mockStartSession).toHaveBeenCalled();
+    expect(page.rootInstance.activeSessionId).toBe('test-session-id');
   });
 });
 
