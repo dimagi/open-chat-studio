@@ -136,8 +136,8 @@ def categorical_columns_for_evaluators(evaluators: "list[Evaluator]") -> list[Ca
                     values = [CategoricalValue(raw=choice, label=choice) for choice in choices]
             elif field_type == "binary":
                 values = [
-                    CategoricalValue(raw="1", label=field_def.get("true_label", "True")),
-                    CategoricalValue(raw="0", label=field_def.get("false_label", "False")),
+                    CategoricalValue(raw="1", label=field_def.get("true_label", "True"), polarity="positive"),
+                    CategoricalValue(raw="0", label=field_def.get("false_label", "False"), polarity="negative"),
                 ]
             else:
                 continue
