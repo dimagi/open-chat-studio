@@ -1037,3 +1037,111 @@ describe('ocs-chat session tokens', () => {
     expect(systemMessage).toBeDefined();
   });
 });
+
+describe('ocs-chat kiosk restart after session end', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockStartSession.mockResolvedValue({ session_id: 'kiosk-session' });
+    mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
+    mockPollTask.mockReturnValue({ cancel: jest.fn() });
+    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
+    const store: Record<string, string> = {};
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: jest.fn((k: string) => store[k] ?? null),
+        setItem: jest.fn((k: string, v: string) => {
+          store[k] = v;
+        }),
+        removeItem: jest.fn((k: string) => {
+          delete store[k];
+        }),
+        clear: jest.fn(),
+      },
+      writable: true,
+    });
+    global.fetch = setupFetchMock('kiosk-session');
+  });
+
+  async function endedPage(attrs: string) {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true" ${attrs}></open-chat-studio-widget>`,
+    });
+    // The jest.mock('../../services/chat-session-service') factory above is inert
+    // under Stencil's jest preset, so the real ChatSessionService is instantiated;
+    // spy on it directly (mirrors the 'bound session' suite's newBoundPage helper).
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
+    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
+    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
+    await page.waitForChanges();
+    await page.rootInstance.sendMessage('hello');
+    await page.waitForChanges();
+    const callbacks = mockStartMessagePolling.mock.calls[0][1];
+    callbacks.onSessionEnded();
+    await page.waitForChanges();
+    return page;
+  }
+
+  it('shows a restart button in kiosk mode once the session has ended', async () => {
+    const page = await endedPage('mode="kiosk"');
+    const button = page.root?.shadowRoot?.querySelector('.kiosk-restart') as HTMLButtonElement;
+    expect(button).not.toBeNull();
+    expect(button.textContent).toBe('Start new chat');
+  });
+
+  it('does not show the restart button before the session has ended', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>',
+    });
+    await page.waitForChanges();
+    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
+  });
+
+  it('does not show the restart button in standard mode (the header button covers it)', async () => {
+    const page = await endedPage('');
+    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
+  });
+
+  it('does not show the restart button for a bound kiosk session', async () => {
+    mockFetchAllMessages.mockResolvedValue([]);
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" session-id="server-session"></open-chat-studio-widget>',
+    });
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'fetchAllMessages').mockImplementation(mockFetchAllMessages);
+    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    await page.waitForChanges();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+    mockStartMessagePolling.mock.calls[0][1].onSessionEnded();
+    await page.waitForChanges();
+
+    expect(page.rootInstance.sessionEnded).toBe(true);
+    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
+  });
+
+  it('clicking restart clears the ended session so the next message starts a new one', async () => {
+    const page = await endedPage('mode="kiosk"');
+    const button = page.root?.shadowRoot?.querySelector('.kiosk-restart') as HTMLButtonElement;
+
+    button.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+
+    expect(page.rootInstance.sessionEnded).toBe(false);
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
+    expect(page.rootInstance.messages).toEqual([]);
+    expect(window.localStorage.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
+    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
+    const textarea = page.root?.shadowRoot?.querySelector('.message-textarea') as HTMLTextAreaElement;
+    expect(textarea.hasAttribute('disabled')).toBe(false);
+
+    mockStartSession.mockClear();
+    await page.rootInstance.sendMessage('again');
+    expect(mockStartSession).toHaveBeenCalledTimes(1);
+  });
+});

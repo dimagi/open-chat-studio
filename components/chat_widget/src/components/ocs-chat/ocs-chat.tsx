@@ -480,7 +480,8 @@ export class OcsChat {
   /**
    * The server reported the session has ended (e.g. closed from another tab or
    * by the bot). Polling has already stopped; disable the composer and tell the
-   * user. Unbound widgets can recover via the "new chat" button (clearSession).
+   * user. Unbound widgets can recover via the header's new-chat button, or the
+   * kiosk restart button below the composer (both call clearSession).
    */
   private handleSessionEnded(): void {
     if (this.sessionEnded) {
@@ -2049,6 +2050,11 @@ export class OcsChat {
 
               {/* Input Area — kept visible but disabled when the widget is read-only */}
               <div class="input-area">
+                {this.sessionEnded && this.isKioskMode() && !this.isSessionBound() && (
+                  <button class="kiosk-restart send-button send-button-enabled" onClick={() => void this.clearSession()}>
+                    {this.translationManager.get('window.newChat')}
+                  </button>
+                )}
                 <div class="input-container">
                   <textarea
                     ref={el => (this.textareaRef = el)}
