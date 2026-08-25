@@ -33,7 +33,7 @@ Three things end together, because the last two are only reachable through the f
 |---|---|---|
 | 1 | Keyless `chat/start/` | `_check_start_session_access`, `apps/api/views/chat.py` |
 | 2 | `WidgetAuthLevel.NONE` — "embed key optional", the pre-0.5.1 rung | `apps/channels/models.py` |
-| 3 | The `is_public` / participant-allowlist fallback | `SessionAccessPermission._has_legacy_access`, `apps/api/permissions.py` |
+| 3 | The `is_public` / participant-allowlist fallback (already removed with the allowlist itself, ADR-0057, #3682 Phasing step 0) | `SessionAccessPermission._has_legacy_access`, `apps/api/permissions.py` |
 
 Afterwards `_has_legacy_access` reduces to "a valid embed key for *this* session's channel (however the
 request authenticated), and the channel is not `SESSION_TOKEN`" — a real simplification of the
@@ -200,7 +200,7 @@ that live channels have *moved off* `NONE`, not that a migration has overwritten
 | 5 | Triage the teams still producing `KEYLESS_START` markers, and the channels still at `NONE` (ADR-0034: contacted, migrated, or breakage accepted by the owner). |
 | 6 | `apps/channels/migrations/`: data migration `WidgetAuthLevel.NONE` → `EMBED_KEY` (D4) — after triage, before the gate opens. |
 | 7 | Open the gate. |
-| 8 | Delete the keyless branch in `_check_start_session_access`, the `NONE` handling, and the `is_public` fallback in `_has_legacy_access`; drop the date check and the gate. |
+| 8 | Delete the keyless branch in `_check_start_session_access` and the `NONE` handling; drop the date check and the gate. (The `is_public` fallback in `_has_legacy_access` is already gone: it was removed with the participant allowlist, ADR-0057, #3682 Phasing step 0.) |
 
 No database migration in Phase 1 at all — the marker lives in existing session metadata and the gate is
 a settings value.
@@ -224,13 +224,14 @@ a settings value.
 
 Regression guards: `test_chat_api_anon.py` (updated for the marker and headers),
 `test_widget_auth_level.py`, `test_chat_session_token.py` and `test_embedded_widget_auth.py` stay green.
-After Phase 2, a test asserting `_has_legacy_access` no longer consults `is_public`.
+`_has_legacy_access` no longer consults `is_public`: that read was removed with the participant allowlist (ADR-0057, #3682 Phasing step 0), ahead of this document's own Phase 2.
 
 ## Deliberately out of scope
 
 - **The OAuth credential and the Chat API Channel's credential mode** — [oauth-chat-widget.md](oauth-chat-widget.md).
-- **Retiring `is_public` as an `Experiment` field.** Phase 2 removes the last chat-API path that reads
-  it; other surfaces may still. Dropping the column is its own deprecation under ADR-0034.
+- **Retiring `is_public` as an `Experiment` field.** The last chat-API path that read it was removed
+  with the participant allowlist (ADR-0057, #3682 Phasing step 0), ahead of this document's own
+  Phase 2. Dropping the column is its own deprecation under ADR-0034.
 - **The non-API chat surfaces** (Django web-chat views, messaging platforms) — untouched.
 
 ## Open questions
