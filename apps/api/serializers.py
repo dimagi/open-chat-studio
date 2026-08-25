@@ -1,6 +1,6 @@
 import textwrap
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import pytz
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -340,17 +340,12 @@ class ChatStartSessionRequest(serializers.Serializer):
         required=False,
         allow_blank=True,
         help_text="Optional IANA time zone name of the participant's device (e.g. 'Africa/Johannesburg'), "
-        "recorded in the participant's data for this chatbot.",
+        "recorded in the participant's data for this chatbot. Unrecognised values are ignored.",
     )
 
     def validate_timezone(self, value):
-        if not value:
-            return None
-        try:
-            ZoneInfo(value)
-        except (ZoneInfoNotFoundError, ValueError) as err:
-            raise serializers.ValidationError("Unknown time zone.") from err
-        return value
+        # An unrecognised zone must not block the session start; drop it instead.
+        return value if value and value in pytz.all_timezones_set else None
 
 
 class ChatStartSessionResponse(serializers.Serializer):
