@@ -77,11 +77,60 @@ def test_create_accepts_a_label(client, chatbot):
 
 @pytest.mark.django_db()
 def test_create_parks_the_node_clear_of_the_existing_ones(client, chatbot):
-    """Nothing wires a new node yet, so there is no source to place it beside; it is parked to the
-    right of everything already on the canvas so it never lands on top of another node."""
+    """Nothing wires a new node yet, so there is no source to place it beside; it is parked a node's
+    width right of every node already on the canvas -- bar the output, which the next tests cover."""
     chatbot.pipeline.node_set.update(position_x=400, position_y=50)
 
     response = client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
 
     node = Node.objects.get(pipeline=chatbot.pipeline, flow_id=response.json()["node"]["node_id"])
-    assert (node.position_x, node.position_y) == (600, 200)
+    assert (node.position_x, node.position_y) == (800, 200)
+
+
+@pytest.mark.django_db()
+def test_create_leaves_the_output_node_where_it_is_when_the_new_node_lands_short_of_it(client, chatbot):
+    """A layout someone arranged in the builder is not rearranged for the sake of it: a new node
+    that fits to the output's left leaves it alone."""
+    _place(chatbot.pipeline, start=100, end=800)
+
+    client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
+
+    end = _end_node(chatbot.pipeline)
+    assert (end.position_x, end.position_y) == (800, 200)
+
+
+@pytest.mark.django_db()
+def test_create_moves_the_output_node_clear_of_a_new_node_that_overtakes_it(client, chatbot):
+    """A node level with or past the output would read as running after the end of the pipeline, so
+    the output is moved a node's width beyond it: it is always the last node in the x direction."""
+    _place(chatbot.pipeline, start=100, end=300)
+
+    response = client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
+
+    node = Node.objects.get(pipeline=chatbot.pipeline, flow_id=response.json()["node"]["node_id"])
+    end = _end_node(chatbot.pipeline)
+    assert (node.position_x, end.position_x, end.position_y) == (500, 900, 200)
+
+
+@pytest.mark.django_db()
+def test_create_moves_the_output_node_without_rewriting_what_it_holds(client, chatbot):
+    """Moving the output means writing its row, and the graph's copy of a node's params carries the
+    resource-id mirror `to_flow_node` merges in -- which the move must not store on the row."""
+    _place(chatbot.pipeline, start=100, end=300)
+
+    client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
+
+    end = _end_node(chatbot.pipeline)
+    assert end.params == {"name": "end"}
+    assert end.label == ""
+
+
+def _place(pipeline, start: int, end: int) -> None:
+    """Give the start and end nodes an x each: the factory leaves positions null, so a test about
+    layout has to supply them."""
+    pipeline.node_set.filter(type="StartNode").update(position_x=start, position_y=200)
+    pipeline.node_set.filter(type="EndNode").update(position_x=end, position_y=200)
+
+
+def _end_node(pipeline) -> Node:
+    return Node.objects.get(pipeline=pipeline, type="EndNode")

@@ -104,7 +104,9 @@ class PipelineNodeEditView(GenericAPIView):
             "anything, so it appears in `unwired_handles` until you connect it — that is advisory, "
             "not an error.\n\n"
             "The node's `node_id` and its position on the canvas are assigned by the server and "
-            "cannot be chosen."
+            "cannot be chosen. It is parked clear to the right of the nodes already there, and the "
+            "End node is moved further right if the new node reaches it, so the End node stays the "
+            "rightmost node on the canvas."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],

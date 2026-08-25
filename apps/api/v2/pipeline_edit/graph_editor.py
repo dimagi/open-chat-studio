@@ -10,6 +10,7 @@ from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schem
 from apps.pipelines.build_state import output_handles
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.flow import (
+    REACT_FLOW_END_TYPE,
     EdgeDiff,
     FlowEdge,
     FlowNode,
@@ -29,8 +30,9 @@ from .references import check_references
 #: standard output, and a router's branch keyword otherwise.
 OutputHandles = dict[str, str | None]
 
-#: How far right of the rightmost node a new one is parked, and the row it is parked on.
-PARKING_STEP_X = 200
+#: How far right of the rightmost node a new one is parked, and the row it is parked on. The step is
+#: about a node's width, so a parked node clears the one before it rather than half covering it.
+PARKING_STEP_X = 400
 PARKING_Y = 200
 
 #: The id suffix the builder's own ``getNodeId`` produces, and how many draws are spent trying to
@@ -67,10 +69,11 @@ def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str,
     # `get_node_type_schema` has already refused any other name, so this cannot come back None.
     node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
     node_id = _unused_node_id(flow, node_type)
+    position = parking_position(flow)
     node = FlowNode(
         id=node_id,
         type=react_flow_node_type(node_type),
-        position=parking_position(flow),
+        position=position,
         data=FlowNodeData(
             id=node_id,
             type=node_type,
@@ -78,7 +81,8 @@ def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str,
             params=initial_params(node_class, node_id, params),
         ),
     )
-    return PipelineEdit(diff=_diff(NodeDiff(add=[node])), node_id=node_id)
+    end_nodes = _reparked_end_nodes(flow, position["x"])
+    return PipelineEdit(diff=_diff(NodeDiff(add=[node], update=end_nodes)), node_id=node_id)
 
 
 def plan_update(flow: dict, options: dict, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
@@ -212,13 +216,15 @@ def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: d
 
 
 def parking_position(flow: dict) -> dict:
-    """Where a node with no wiring goes: clear to the right of every node already placed.
+    """Where a node with no wiring goes: clear to the right of every node already placed, bar the
+    End node, which is moved out of the way instead (see :func:`_reparked_end_nodes`).
 
     Positions are cosmetic — they exist so a human opening the builder can read the graph, and
     nothing about execution or validity depends on them. Placing a node beside the source it is
     wired to is a later refinement (W11); until then this only has to avoid stacking nodes.
     """
-    rightmost = max((node.get("position", {}).get("x") or 0 for node in flow.get("nodes", [])), default=0)
+    placed = [node for node in flow.get("nodes", []) if node.get("type") != REACT_FLOW_END_TYPE]
+    rightmost = max((node.get("position", {}).get("x") or 0 for node in placed), default=0)
     return {"x": rightmost + PARKING_STEP_X, "y": PARKING_Y}
 
 
@@ -246,6 +252,28 @@ def _unused_node_id(flow: dict, node_type: str) -> str:
         if candidate not in taken:
             return candidate
     return f"{node_type}-{uuid4().hex}"
+
+
+def _reparked_end_nodes(flow: dict, new_node_x: float) -> list[FlowNode]:
+    """The End nodes a node parked at ``new_node_x`` has caught up with, moved clear of it.
+
+    The End node has to stay rightmost: a node level with it or past it reads as a step after the
+    end. One already clear to the right is left where someone put it, and only its x ever moves.
+
+    The move carries content because that is the only kind of node diff ``apply_pipeline_patch``
+    writes position columns for, and its params are narrowed like an edit's -- writing the graph's
+    copy back would store the resource-id mirror ``to_flow_node`` merges into every node.
+    """
+    moved = []
+    for stored in flow.get("nodes", []):
+        node = FlowNode(**stored)
+        if node.type != REACT_FLOW_END_TYPE or (node.position.get("x") or 0) > new_node_x:
+            continue
+        content = cast(FlowNodeData, node.data)
+        content.params = stored_params(content)
+        position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
+        moved.append(node.model_copy(update={"position": position}))
+    return moved
 
 
 def _output_handles(content: FlowNodeData) -> OutputHandles:
