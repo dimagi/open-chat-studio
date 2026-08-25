@@ -27,13 +27,13 @@ because widgets older than 0.5.1 have no embed key to send.
 The published deprecation covering those widgets sunsets on **2026-10-01**. This document closes the
 path once that date has passed **and** the remaining affected teams have been triaged.
 
-Of the three below, the first two end together here because the second is only reachable through the first; the third already ended with the allowlist's own removal (ADR-0057).
+Three things end together, because the last two are only reachable through the first. The third lost its `is_public` / participant-allowlist condition with ADR-0057 and is now an unconditional keyless fallback; the fallback itself still ends here.
 
 | # | What ends | Where |
 |---|---|---|
 | 1 | Keyless `chat/start/` | `_check_start_session_access`, `apps/api/views/chat.py` |
 | 2 | `WidgetAuthLevel.NONE` — "embed key optional", the pre-0.5.1 rung | `apps/channels/models.py` |
-| 3 | The `is_public` / participant-allowlist fallback (already removed with the allowlist itself, ADR-0057, #3682 Phasing step 0) | `SessionAccessPermission._has_legacy_access`, `apps/api/permissions.py` |
+| 3 | The keyless fallback for token-less sessions (its `is_public` / participant-allowlist condition already went with ADR-0057; the fallback remains until Phase 2) | `SessionAccessPermission._has_legacy_access`, `apps/api/permissions.py` |
 
 Afterwards `_has_legacy_access` reduces to "a valid embed key for *this* session's channel (however the
 request authenticated), and the channel is not `SESSION_TOKEN`" — a real simplification of the
@@ -200,7 +200,7 @@ that live channels have *moved off* `NONE`, not that a migration has overwritten
 | 5 | Triage the teams still producing `KEYLESS_START` markers, and the channels still at `NONE` (ADR-0034: contacted, migrated, or breakage accepted by the owner). |
 | 6 | `apps/channels/migrations/`: data migration `WidgetAuthLevel.NONE` → `EMBED_KEY` (D4) — after triage, before the gate opens. |
 | 7 | Open the gate. |
-| 8 | Delete the keyless branch in `_check_start_session_access` and the `NONE` handling; drop the date check and the gate. (The `is_public` fallback in `_has_legacy_access` is already gone: it was removed with the participant allowlist, ADR-0057, #3682 Phasing step 0.) |
+| 8 | Delete the keyless branch in `_check_start_session_access`, the `NONE` handling, and the keyless fallback in `_has_legacy_access` (its `is_public` / allowlist condition already went with ADR-0057); drop the date check and the gate. |
 
 No database migration in Phase 1 at all — the marker lives in existing session metadata and the gate is
 a settings value.
