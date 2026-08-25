@@ -267,13 +267,20 @@ def _reparked_end_nodes(flow: dict, new_node_x: float) -> list[FlowNode]:
     moved = []
     for stored in flow.get("nodes", []):
         node = FlowNode(**stored)
-        if node.type != REACT_FLOW_END_TYPE or (node.position.get("x") or 0) > new_node_x:
+        if not _is_overtaken_end_node(node, new_node_x):
             continue
         content = cast(FlowNodeData, node.data)
         content.params = stored_params(content)
         position = {"x": new_node_x + PARKING_STEP_X, "y": node.position.get("y", PARKING_Y)}
         moved.append(node.model_copy(update={"position": position}))
     return moved
+
+
+def _is_overtaken_end_node(node: FlowNode, new_node_x: float) -> bool:
+    """Whether ``node`` is an End node that a node parked at ``new_node_x`` has reached or passed."""
+    if node.type != REACT_FLOW_END_TYPE:
+        return False
+    return (node.position.get("x") or 0) <= new_node_x
 
 
 def _output_handles(content: FlowNodeData) -> OutputHandles:
