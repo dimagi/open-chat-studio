@@ -8,7 +8,7 @@
 
 ## Context
 
-`Experiment.participant_allowlist` gated three surfaces: the per-message `ParticipantValidationStage` run on every channel, the token-less fallback in `SessionAccessPermission._has_legacy_access` (described in ADR-0039 line 26 and ADR-0044 line 15), and the legacy public start page plus its Share button. The public channel (#3682) serves anonymous visitors, and the consent page's identifier capture goes with #4196, so on web nothing can match the list; on messaging channels it was barely used. The maintainer decided to remove it entirely, with no deprecation window for the v2 inspect API field.
+`Experiment.participant_allowlist` gated three surfaces: the per-message `ParticipantValidationStage` run on every channel, the token-less fallback in `SessionAccessPermission._has_legacy_access` (described in ADR-0039 line 26 and ADR-0044 line 15), and the legacy public start page plus its Share button. The public channel (#3682) serves anonymous visitors, and the consent page's identifier capture goes with #4196. It is removed entirely, with no deprecation window for the v2 inspect API field: nothing on web can match it once identifier capture goes, and the messaging-channel use was negligible.
 
 ## Decision
 
@@ -28,5 +28,5 @@ We will remove the feature in two phases.
 
 ## Alternatives considered
 
-- **Keep the check on messaging channels until #4196** - rejected by the maintainer.
+- **Keep the check on messaging channels until #4196** - rejected: it would leave a half-removed feature and a per-message check whose only remaining users were negligible.
 - **Block creating a public channel while an allowlist is set** - moot, since the allowlist no longer exists.
