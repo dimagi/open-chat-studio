@@ -405,15 +405,15 @@
     "rules": [
       {
         "service_kind": "llm_input",
-        "unit_price": "0.00014"
+        "unit_price": "0.00044"
       },
       {
         "service_kind": "llm_output",
-        "unit_price": "0.00028"
+        "unit_price": "0.00132"
       },
       {
         "service_kind": "llm_cached_input",
-        "unit_price": "0.0000028"
+        "unit_price": "0.000014"
       },
       {
         "service_kind": "llm_cache_write",
@@ -427,15 +427,15 @@
     "rules": [
       {
         "service_kind": "llm_input",
-        "unit_price": "0.000435"
+        "unit_price": "0.00132"
       },
       {
         "service_kind": "llm_output",
-        "unit_price": "0.00087"
+        "unit_price": "0.00396"
       },
       {
         "service_kind": "llm_cached_input",
-        "unit_price": "0.00000363"
+        "unit_price": "0.000044"
       },
       {
         "service_kind": "llm_cache_write",
@@ -454,6 +454,10 @@
       {
         "service_kind": "llm_output",
         "unit_price": "0.00132"
+      },
+      {
+        "service_kind": "llm_cached_input",
+        "unit_price": "0.000014"
       },
       {
         "service_kind": "llm_cache_write",

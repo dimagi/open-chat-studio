@@ -21,7 +21,8 @@ class Migration(migrations.Migration):
     operations = [
         # Re-sync the whole model list, seeding the DeepSeek deepseek-v4-flash-vision-exp model.
         llm_model_migration(),
-        # Seed pricing for deepseek-v4-flash-vision-exp. load_ai_pricing is idempotent and
+        # Seed pricing for deepseek-v4-flash-vision-exp and supersede the stale deepseek-v4-flash
+        # and -v4-pro rates with DeepSeek's current card. load_ai_pricing is idempotent and
         # supersedes on change, so this is safe to leave in place alongside earlier calls.
         load_pricing_data(),
     ]
