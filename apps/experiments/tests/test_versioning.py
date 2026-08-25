@@ -437,5 +437,5 @@ def test_allowlist_is_gone_from_the_version_diff_but_still_cloned():
 
     version = experiment.create_new_version()
     # Phase 1 of the two-phase drop: the column and its VERSIONED_CONTENT_FIELDS entry
-    # survive to the #4196 sweep, so the dormant value is still cloned.
+    # survive to Phase 2 (#4278), so the dormant value is still cloned.
     assert version.participant_allowlist == ["+27123456789"]
