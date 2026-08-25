@@ -80,7 +80,7 @@ class EvaluationChannel(ChannelBase):
         # SessionActivationStage omitted: the eval bot does not gate on session status.
         # PersistenceStage omitted: eval runs never record early-exit text, voice or tags
         # into the eval session's chat. Before ctx.participant_allowed was removed, the
-        # missing ParticipantIdentifierStage left that flag False and switched persistence off.
+        # missing ParticipantValidationStage left that flag False and switched persistence off.
         return MessageProcessingPipeline(
             core_stages=[
                 MessageTypeValidationStage(),
