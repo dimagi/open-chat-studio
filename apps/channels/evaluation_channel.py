@@ -74,13 +74,12 @@ class EvaluationChannel(ChannelBase):
         # admin toggle, and an eval run is not participant access to the bot. Honouring a
         # disabled flag here would silently substitute the static message for the bot's
         # output and corrupt the run's results.
-        # ParticipantValidationStage omitted: the "evaluations" participant is internal,
-        # validating against participant_allowlist is meaningless (and would block private
-        # experiments). Nothing downstream in this pipeline reads ctx.participant_identifier.
+        # ParticipantIdentifierStage omitted: the "evaluations" participant is internal and
+        # nothing downstream in this pipeline reads ctx.participant_identifier.
         # SessionActivationStage omitted: the eval bot does not gate on session status.
         # PersistenceStage omitted: eval runs never record early-exit text, voice or tags
         # into the eval session's chat. Before ctx.participant_allowed was removed, the
-        # missing ParticipantValidationStage left that flag False and switched persistence off.
+        # missing ParticipantIdentifierStage left that flag False and switched persistence off.
         return MessageProcessingPipeline(
             core_stages=[
                 MessageTypeValidationStage(),

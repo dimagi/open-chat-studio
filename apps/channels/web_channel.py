@@ -16,7 +16,7 @@ from apps.channels.stages.core import (
     ChannelDisabledStage,
     ChatMessageCreationStage,
     MessageTypeValidationStage,
-    ParticipantValidationStage,
+    ParticipantIdentifierStage,
     QueryExtractionStage,
     ResponseFormattingStage,
     SessionActivationStage,
@@ -74,7 +74,7 @@ class WebChannel(ChannelBase):
     def _build_pipeline(self) -> MessageProcessingPipeline:
         return MessageProcessingPipeline(
             core_stages=[
-                ParticipantValidationStage(),
+                ParticipantIdentifierStage(),
                 # Embedded-widget sessions are served here, not by ApiChannel, so the
                 # admin's channel toggle has to be enforced on this pipeline too.
                 ChannelDisabledStage(),

@@ -14,8 +14,8 @@ from apps.channels.stages.core import (
     ConsentCheckStage,
     ConsentFlowStage,
     MessageTypeValidationStage,
+    ParticipantIdentifierStage,
     ParticipantResolverStage,
-    ParticipantValidationStage,
     QueryExtractionStage,
     ResponseFormattingStage,
     SessionActivationStage,
@@ -126,7 +126,7 @@ class ChannelBase(ABC):
         """
         return MessageProcessingPipeline(
             core_stages=[
-                ParticipantValidationStage(),
+                ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
                 ConsentCheckStage(),
                 # After the participant stages so the static reply is addressable and

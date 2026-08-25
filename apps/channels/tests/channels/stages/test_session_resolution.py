@@ -20,15 +20,10 @@ class TestSessionResolutionStage:
     def setup_method(self):
         self.stage = SessionResolutionStage()
 
-    def test_should_not_run_when_participant_not_allowed(self):
-        ctx = make_context(participant_allowed=False)
-        assert self.stage.should_run(ctx) is True
-
     def test_pre_set_session_is_noop(self):
         session = MagicMock()
         experiment = MagicMock()
-        experiment.is_public = True
-        ctx = make_context(experiment=experiment, experiment_session=session, participant_allowed=True)
+        ctx = make_context(experiment=experiment, experiment_session=session)
 
         self.stage(ctx)
 
@@ -45,7 +40,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="new_participant",
         )
 
@@ -65,7 +59,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="returning_user",
         )
         self.stage(ctx1)
@@ -76,7 +69,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="returning_user",
         )
         self.stage(ctx2)
@@ -94,7 +86,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="reset_user",
         )
         self.stage(ctx1)
@@ -111,7 +102,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="reset_user",
             message=reset_msg,
         )
@@ -137,7 +127,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="no_engage_user",
         )
         self.stage(ctx1)
@@ -149,7 +138,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="no_engage_user",
             message=reset_msg,
         )
@@ -175,7 +163,6 @@ class TestSessionResolutionStage:
             experiment_channel=experiment_channel,
             experiment_session=None,
             participant=participant,
-            participant_allowed=True,
             participant_identifier="fresh_reset_user",
             message=reset_msg,
         )
@@ -216,7 +203,6 @@ class TestSessionResolutionStage:
             experiment_session=None,
             participant=participant,
             participant_data=participant_data,
-            participant_allowed=True,
             participant_identifier="revoked_user",
             message=reset_msg,
             capabilities=capabilities,
