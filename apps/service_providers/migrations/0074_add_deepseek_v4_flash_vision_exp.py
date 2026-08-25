@@ -1,7 +1,6 @@
 from django.db import migrations
 
 from apps.cost_tracking.migration_utils import load_pricing_data
-from apps.data_migrations.utils.migrations import RunDataMigration
 from apps.service_providers.migration_utils import llm_model_migration
 
 
