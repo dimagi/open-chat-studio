@@ -1176,6 +1176,13 @@ describe('ocs-chat kiosk restart after session end', () => {
     expect(button.textContent).toBe('Start new chat');
   });
 
+  it('does not show the restart button in a read-only (disabled) kiosk widget', async () => {
+    const page = await endedPage('mode="kiosk"');
+    page.rootInstance.disabled = true;
+    await page.waitForChanges();
+    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
+  });
+
   it('does not show the restart button before the session has ended', async () => {
     const page = await newSpecPage({
       components: [OcsChat],

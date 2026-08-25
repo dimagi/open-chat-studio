@@ -2075,7 +2075,7 @@ export class OcsChat {
 
               {/* Input Area — kept visible but disabled when the widget is read-only */}
               <div class="input-area">
-                {this.sessionEnded && this.isKioskMode() && !this.isSessionBound() && (
+                {this.sessionEnded && this.isKioskMode() && !this.isSessionBound() && !this.isReadOnly() && (
                   <button class="kiosk-restart send-button send-button-enabled" onClick={() => void this.clearSession()}>
                     {this.translationManager.get('window.newChat')}
                   </button>
