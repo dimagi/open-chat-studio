@@ -540,6 +540,105 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
   });
 });
 
+describe('ocs-chat persistent-session modes', () => {
+  let localStorageMock: Record<string, jest.Mock>;
+  let sessionStorageMock: Record<string, jest.Mock>;
+
+  function storageMock(): Record<string, jest.Mock> {
+    const store: Record<string, string> = {};
+    return {
+      getItem: jest.fn((key: string) => (key in store ? store[key] : null)),
+      setItem: jest.fn((key: string, value: string) => {
+        store[key] = value;
+      }),
+      removeItem: jest.fn((key: string) => {
+        delete store[key];
+      }),
+      clear: jest.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockStartSession.mockResolvedValue({ session_id: 'tab-session' });
+    mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
+    localStorageMock = storageMock();
+    sessionStorageMock = storageMock();
+    Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
+    Object.defineProperty(window, 'sessionStorage', { value: sessionStorageMock, writable: true });
+    global.fetch = setupFetchMock('tab-session');
+  });
+
+  async function newPage(attr: string) {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true" ${attr}></open-chat-studio-widget>`,
+    });
+    await page.waitForChanges();
+    return page;
+  }
+
+  it.each([
+    ['persistent-session="tab"', 'tab'],
+    ['persistent-session="true"', 'local'],
+    ['', 'local'],
+    ['persistent-session="false"', 'off'],
+  ])('%s resolves to mode %s', async (attr, mode) => {
+    const page = await newPage(attr);
+    expect(page.rootInstance['getPersistenceMode']()).toBe(mode);
+  });
+
+  it('resolves the boolean false prop to off', async () => {
+    const page = await newPage('');
+    page.rootInstance.persistentSession = false;
+    expect(page.rootInstance['getPersistenceMode']()).toBe('off');
+  });
+
+  it('writes the session to sessionStorage and not localStorage in tab mode', async () => {
+    const page = await newPage('persistent-session="tab"');
+    await page.rootInstance.sendMessage('hello');
+    await page.waitForChanges();
+
+    expect(sessionStorageMock.setItem).toHaveBeenCalledWith('ocs-chat-session-test-bot', 'tab-session');
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('ocs-chat-session-test-bot', expect.anything());
+  });
+
+  it('restores a session from sessionStorage in tab mode without starting a new one', async () => {
+    sessionStorageMock.setItem('ocs-chat-session-test-bot', 'stored-tab-session');
+    sessionStorageMock.setItem('ocs-chat-messages-test-bot', JSON.stringify([{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hi', attachments: [] }]));
+    sessionStorageMock.setItem.mockClear();
+
+    const page = await newPage('persistent-session="tab"');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+
+    expect(page.rootInstance.activeSessionId).toBe('stored-tab-session');
+    expect(page.rootInstance.messages).toHaveLength(1);
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
+
+  it('clears sessionStorage when the session is cleared in tab mode', async () => {
+    const page = await newPage('persistent-session="tab"');
+    await page.rootInstance.sendMessage('hello');
+    await page.waitForChanges();
+
+    await page.rootInstance.clearSession();
+
+    expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
+    expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-messages-test-bot');
+    expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-token-test-bot');
+  });
+
+  it('writes nothing when persistence is off', async () => {
+    const page = await newPage('persistent-session="false"');
+    await page.rootInstance.sendMessage('hello');
+    await page.waitForChanges();
+
+    expect(sessionStorageMock.setItem).not.toHaveBeenCalled();
+    expect(localStorageMock.setItem).not.toHaveBeenCalledWith('ocs-chat-session-test-bot', expect.anything());
+  });
+});
+
 describe('ocs-chat bound session (session-id prop)', () => {
   const history = [
     { created_at: '2026-01-01T00:00:01Z', role: 'user', content: 'Hi', attachments: [] },

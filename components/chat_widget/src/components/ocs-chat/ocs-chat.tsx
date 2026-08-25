@@ -28,6 +28,8 @@ interface SessionStorageData {
   sessionToken?: string;
 }
 
+type PersistenceMode = 'off' | 'local' | 'tab';
+
 @Component({
   tag: 'open-chat-studio-widget',
   styleUrl: 'ocs-chat.css',
@@ -165,10 +167,13 @@ export class OcsChat {
    */
   @Prop() userName?: string;
   /**
-   * Whether to persist session data to local storage to allow resuming previous conversations after page reload.
+   * Where to keep the session so a conversation can resume after a page reload.
+   * - `true` (default): `localStorage`, survives tab close.
+   * - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes.
+   * - `false`: nothing is stored; a reload starts over.
    * Ignored when `sessionId` is provided.
    */
-  @Prop() persistentSession: boolean = true;
+  @Prop() persistentSession: boolean | 'tab' | 'true' | 'false' = true;
 
   /**
    * Minutes since the most recent message after which the session data in local storage will expire. Set this to
@@ -333,7 +338,7 @@ export class OcsChat {
       // Bound to an externally-managed session: the host page is the source of truth.
       this.activeSessionId = this.sessionId;
       this.applySessionToken(this.sessionToken);
-    } else if (this.persistentSession && this.isLocalStorageAvailable()) {
+    } else if (this.isStorageAvailable()) {
       // Always try to load existing session if localStorage is available
       const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
       if (sessionId && messages) {
@@ -364,7 +369,7 @@ export class OcsChat {
     setTimeout(() => {
       // Restore visible state after dimensions are read so initializePosition
       // uses the correct CSS-derived chatWindowWidth/chatWindowHeight.
-      if (!this.isKioskMode() && this.showButton && this.persistentSession && this.isLocalStorageAvailable()) {
+      if (!this.isKioskMode() && this.showButton && this.isStorageAvailable()) {
         this.restoreVisibleState();
       }
 
@@ -1608,31 +1613,34 @@ export class OcsChat {
   }
 
   private saveSessionToStorage(): void {
-    if (!this.persistentSession || this.isSessionBound()) {
+    const storage = this.getStorage();
+    if (!storage || this.isSessionBound()) {
       return;
     }
     const keys = this.getStorageKeys();
     try {
       if (this.activeSessionId) {
-        localStorage.setItem(keys.sessionId, this.activeSessionId);
-        localStorage.setItem(keys.lastActivity, new Date().toISOString());
+        storage.setItem(keys.sessionId, this.activeSessionId);
+        storage.setItem(keys.lastActivity, new Date().toISOString());
         if (this.currentSessionToken) {
-          localStorage.setItem(keys.sessionToken, this.currentSessionToken);
+          storage.setItem(keys.sessionToken, this.currentSessionToken);
         } else {
-          localStorage.removeItem(keys.sessionToken);
+          storage.removeItem(keys.sessionToken);
         }
       }
-      localStorage.setItem(keys.messages, JSON.stringify(this.messages));
+      storage.setItem(keys.messages, JSON.stringify(this.messages));
     } catch (error) {
-      console.warn('Failed to save chat session to localStorage:', error);
+      console.warn('Failed to save chat session to storage:', error);
     }
   }
 
   private loadSessionFromStorage(): SessionStorageData {
+    const storage = this.getStorage();
+    if (!storage) return { messages: [] };
     const keys = this.getStorageKeys();
     try {
       if (this.persistentSessionExpire > 0) {
-        const lastActivity = localStorage.getItem(keys.lastActivity);
+        const lastActivity = storage.getItem(keys.lastActivity);
         if (lastActivity) {
           const lastActivityDate = new Date(lastActivity);
           const minutesSinceActivity = (Date.now() - lastActivityDate.getTime()) / (1000 * 60);
@@ -1643,10 +1651,10 @@ export class OcsChat {
         }
       }
 
-      const storedSessionId = localStorage.getItem(keys.sessionId);
+      const storedSessionId = storage.getItem(keys.sessionId);
       const sessionId = storedSessionId ? storedSessionId : undefined;
 
-      const messagesJson = localStorage.getItem(keys.messages);
+      const messagesJson = storage.getItem(keys.messages);
       let messages: ChatMessage[] = [];
 
       if (messagesJson) {
@@ -1659,7 +1667,7 @@ export class OcsChat {
         }
       }
 
-      const sessionToken = localStorage.getItem(keys.sessionToken) ?? undefined;
+      const sessionToken = storage.getItem(keys.sessionToken) ?? undefined;
 
       return { sessionId, messages, sessionToken };
     } catch (error) {
@@ -1709,10 +1717,11 @@ export class OcsChat {
   private saveVisibleState(visible: boolean): void {
     // Kiosk visibility is forced, so persisting it would only leak into a
     // standard-mode widget for the same chatbot on another page.
-    if (!this.persistentSession || this.isKioskMode()) return;
+    const storage = this.getStorage();
+    if (!storage || this.isKioskMode()) return;
     try {
       const keys = this.getStorageKeys();
-      localStorage.setItem(keys.visible, visible ? '1' : '0');
+      storage.setItem(keys.visible, visible ? '1' : '0');
     } catch {
       // ignore
     }
@@ -1721,7 +1730,7 @@ export class OcsChat {
   private restoreVisibleState(): void {
     try {
       const keys = this.getStorageKeys();
-      const stored = localStorage.getItem(keys.visible);
+      const stored = this.getStorage()?.getItem(keys.visible);
       if (stored === '1') {
         this.visible = true;
       }
@@ -1731,13 +1740,15 @@ export class OcsChat {
   }
 
   private clearSessionStorage(): void {
+    const storage = this.getStorage();
+    if (!storage) return;
     const keys = this.getStorageKeys();
     try {
-      localStorage.removeItem(keys.sessionId);
-      localStorage.removeItem(keys.messages);
-      localStorage.removeItem(keys.lastActivity);
-      localStorage.removeItem(keys.visible);
-      localStorage.removeItem(keys.sessionToken);
+      storage.removeItem(keys.sessionId);
+      storage.removeItem(keys.messages);
+      storage.removeItem(keys.lastActivity);
+      storage.removeItem(keys.visible);
+      storage.removeItem(keys.sessionToken);
     } catch (error) {
       console.warn('Failed to clear chat session from localStorage:', error);
     }
@@ -1751,10 +1762,25 @@ export class OcsChat {
     return !!this.sessionId;
   }
 
-  private isLocalStorageAvailable(): boolean {
+  private getPersistenceMode(): PersistenceMode {
+    const value = this.persistentSession;
+    if (value === 'tab') return 'tab';
+    if (value === false || value === 'false') return 'off';
+    return 'local';
+  }
+
+  private getStorage(): Storage | undefined {
+    const mode = this.getPersistenceMode();
+    if (mode === 'off') return undefined;
+    return mode === 'tab' ? window.sessionStorage : window.localStorage;
+  }
+
+  private isStorageAvailable(): boolean {
+    const storage = this.getStorage();
+    if (!storage) return false;
     try {
-      localStorage.setItem(OcsChat.LOCALSTORAGE_TEST_KEY, 'test');
-      localStorage.removeItem(OcsChat.LOCALSTORAGE_TEST_KEY);
+      storage.setItem(OcsChat.LOCALSTORAGE_TEST_KEY, 'test');
+      storage.removeItem(OcsChat.LOCALSTORAGE_TEST_KEY);
       return true;
     } catch {
       return false;
