@@ -513,7 +513,7 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
 
     expect(page.rootInstance.activeSessionId).toBe('test-session-id');
     expect(page.rootInstance.error).toBeFalsy();
-    expect(page.rootInstance.generatedUserId).toMatch(/^ocs:\d+_.+/);
+    expect(page.rootInstance.generatedUserId).toMatch(/^ocs:[0-9a-f-]{36}$/);
   });
 
   it('reuses the same in-memory user id across calls when localStorage is blocked', async () => {
@@ -526,7 +526,7 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
     const firstId = page.rootInstance.getOrGenerateUserId();
     const secondId = page.rootInstance.getOrGenerateUserId();
 
-    expect(firstId).toMatch(/^ocs:\d+_.+/);
+    expect(firstId).toMatch(/^ocs:[0-9a-f-]{36}$/);
     expect(secondId).toBe(firstId);
   });
 
@@ -1143,5 +1143,64 @@ describe('ocs-chat kiosk restart after session end', () => {
     mockStartSession.mockClear();
     await page.rootInstance.sendMessage('again');
     expect(mockStartSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ocs-chat visitor id', () => {
+  const UUID_RE = /^ocs:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  let store: Record<string, string>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    store = {};
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: jest.fn((k: string) => store[k] ?? null),
+        setItem: jest.fn((k: string, v: string) => {
+          store[k] = v;
+        }),
+        removeItem: jest.fn(),
+        clear: jest.fn(),
+      },
+      writable: true,
+    });
+  });
+
+  async function instance() {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot"></open-chat-studio-widget>',
+    });
+    return page.rootInstance;
+  }
+
+  it('generates a v4 UUID with the ocs prefix and stores it', async () => {
+    const id = (await instance())['getOrGenerateUserId']();
+    expect(id).toMatch(UUID_RE);
+    expect(store['ocs-user-id']).toBe(id);
+  });
+
+  it('reuses a stored id, including the legacy format', async () => {
+    store['ocs-user-id'] = 'ocs:1700000000000_abc123def';
+    expect((await instance())['getOrGenerateUserId']()).toBe('ocs:1700000000000_abc123def');
+  });
+
+  it('falls back to getRandomValues when randomUUID is unavailable', async () => {
+    const original = window.crypto.randomUUID;
+    Object.defineProperty(window.crypto, 'randomUUID', { value: undefined, configurable: true });
+    try {
+      expect((await instance())['getOrGenerateUserId']()).toMatch(UUID_RE);
+    } finally {
+      Object.defineProperty(window.crypto, 'randomUUID', { value: original, configurable: true });
+    }
+  });
+
+  it('prefers the user-id prop over a generated id', async () => {
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" user-id="me@example.com"></open-chat-studio-widget>',
+    });
+    expect(page.rootInstance['getOrGenerateUserId']()).toBe('me@example.com');
+    expect(store['ocs-user-id']).toBeUndefined();
   });
 });
