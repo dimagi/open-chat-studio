@@ -88,7 +88,7 @@ export namespace Components {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Where to keep the session so a conversation can resume after a page reload. - `true` (default): `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`: nothing is stored; a reload starts over. Ignored when `sessionId` is provided.
+          * Where to keep the session so a conversation can resume after a page reload. - `true` (default), `"true"`, or the bare attribute: `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`, `"false"`, `null`, `undefined`, or `0`: nothing is stored; a reload starts over. String values are trimmed and compared case-insensitively. Any other string (including `"0"`) resolves to `localStorage`. Ignored when `sessionId` is provided.
           * @default true
          */
         "persistentSession": boolean | 'tab' | 'true' | 'false';
@@ -236,7 +236,7 @@ declare namespace LocalJSX {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Where to keep the session so a conversation can resume after a page reload. - `true` (default): `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`: nothing is stored; a reload starts over. Ignored when `sessionId` is provided.
+          * Where to keep the session so a conversation can resume after a page reload. - `true` (default), `"true"`, or the bare attribute: `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`, `"false"`, `null`, `undefined`, or `0`: nothing is stored; a reload starts over. String values are trimmed and compared case-insensitively. Any other string (including `"0"`) resolves to `localStorage`. Ignored when `sessionId` is provided.
           * @default true
          */
         "persistentSession"?: boolean | 'tab' | 'true' | 'false';
