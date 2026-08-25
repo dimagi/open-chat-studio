@@ -460,8 +460,11 @@ export class ChatSessionService {
     try {
       return (await this.authTokenProvider({ forceRefresh })) || undefined;
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new ChatAuthError(401, 'auth_token_unavailable', `Could not obtain an authentication token: ${detail}`);
+      // The host's exception text stays out of the thrown message: it surfaces as a
+      // chat message and is persisted to localStorage with the transcript, so an
+      // error that quotes a token would write that token to disk.
+      console.error('[open-chat-studio-widget] authTokenProvider failed', error);
+      throw new ChatAuthError(401, 'auth_token_unavailable', 'Could not obtain an authentication token');
     }
   }
 

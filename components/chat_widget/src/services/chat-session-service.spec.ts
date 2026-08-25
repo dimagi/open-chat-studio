@@ -713,14 +713,21 @@ describe('ChatSessionService auth token', () => {
   });
 
   it('reports a provider that throws as an auth failure rather than a generic error', async () => {
-    const provider = jest.fn().mockRejectedValue(new Error('mint endpoint down'));
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const thrown = new Error('mint endpoint down for tok-secret');
+    const provider = jest.fn().mockRejectedValue(thrown);
 
     await expect(service({ authTokenProvider: provider }).startSession({})).rejects.toMatchObject({
       name: 'ChatAuthError',
       code: 'auth_token_unavailable',
-      message: 'Could not obtain an authentication token: mint endpoint down',
+      // Generic on purpose: this message is shown in the transcript and persisted,
+      // so the host's exception text must not ride along into localStorage.
+      message: 'Could not obtain an authentication token',
     });
     expect(fetchMock).not.toHaveBeenCalled();
+    // ...but it is still available to whoever is debugging the integration.
+    expect(consoleError).toHaveBeenCalledWith('[open-chat-studio-widget] authTokenProvider failed', thrown);
+    consoleError.mockRestore();
   });
 
   it('picks up a replaced provider without rebuilding the service', async () => {
