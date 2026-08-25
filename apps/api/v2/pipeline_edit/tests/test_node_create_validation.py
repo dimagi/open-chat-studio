@@ -64,15 +64,15 @@ def test_an_unrecognised_body_key_is_refused(client, chatbot):
 
 
 @pytest.mark.django_db()
-def test_an_unrecognised_param_is_refused(client, chatbot):
-    """A param the node type does not declare would be stored and then ignored at run time, which
-    for an agent is a 201 that quietly did not do what it asked for."""
+def test_an_unrecognised_param_is_dropped(client, chatbot):
     response = client.post(
         nodes_url(chatbot), {"type": "LLMResponseWithPrompt", "params": {"tempreture": 0.5}}, format="json"
     )
 
-    assert response.status_code == 400, response.content
-    assert "tempreture" in str(response.json())
+    assert response.status_code == 201, response.content
+    node_id = response.json()["node"]["node_id"]
+    assert "tempreture" not in response.json()["node"]["params"]
+    assert "tempreture" not in Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id).params
 
 
 @pytest.mark.django_db()
@@ -90,9 +90,7 @@ def test_a_missing_required_param_persists_and_is_reported(client, chatbot):
 
 
 @pytest.mark.django_db()
-def test_a_param_of_the_wrong_type_is_refused(client, chatbot, llm):
-    """A value the node type cannot parse is not a structural gap, so it is turned away rather than
-    stored and reported. See ``test_node_param_types`` for why."""
+def test_a_param_of_the_wrong_type_persists_and_is_reported(client, chatbot, llm):
     provider, model = llm
 
     response = client.post(
@@ -108,9 +106,10 @@ def test_a_param_of_the_wrong_type_is_refused(client, chatbot, llm):
         format="json",
     )
 
-    assert response.status_code == 400, response.content
-    assert "max_history_length" in response.json()["params"]
-    assert not chatbot.pipeline.node_set.filter(type="LLMResponseWithPrompt").exists()
+    assert response.status_code == 201, response.content
+    body = response.json()
+    assert body["pipeline_valid"] is False
+    assert "max_history_length" in body["pipeline_errors"]["node"][body["node"]["node_id"]]
 
 
 @pytest.mark.django_db()

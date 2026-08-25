@@ -67,11 +67,12 @@ def test_patch_of_an_unknown_node_is_a_404(client, chatbot):
 
 
 @pytest.mark.django_db()
-def test_patch_refuses_a_param_the_type_does_not_declare(client, chatbot, llm_node):
+def test_patch_drops_a_param_the_type_does_not_declare(client, chatbot, llm_node):
     response = client.patch(node_url(chatbot, llm_node), {"params": {"tempreture": 0.5}}, format="json")
 
-    assert response.status_code == 400, response.content
-    assert "tempreture" in str(response.json())
+    assert response.status_code == 200, response.content
+    assert "tempreture" not in response.json()["node"]["params"]
+    assert "tempreture" not in Node.objects.get(pipeline=chatbot.pipeline, flow_id=llm_node).params
 
 
 @pytest.mark.django_db()
@@ -82,6 +83,19 @@ def test_patch_refuses_another_teams_resource(client, chatbot, llm_node):
 
     assert response.status_code == 400, response.content
     assert "llm_provider_id" in response.json()["params"]
+
+
+@pytest.mark.django_db()
+def test_patch_accepts_the_teams_own_resource(client, chatbot, llm_node):
+    """Guards the guard. The option lists are built in the view and handed to ``plan_update``, so a
+    PATCH that names a reference has to actually get them -- handing over an empty set would refuse
+    every id, which the refusal above cannot tell apart from working."""
+    ours = LlmProviderFactory.create(team=chatbot.team, type="openai")
+
+    response = client.patch(node_url(chatbot, llm_node), {"params": {"llm_provider_id": ours.id}}, format="json")
+
+    assert response.status_code == 200, response.content
+    assert Node.objects.get(pipeline=chatbot.pipeline, flow_id=llm_node).params["llm_provider_id"] == ours.id
 
 
 @pytest.mark.django_db()

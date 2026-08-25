@@ -4,9 +4,9 @@ from typing import Any, cast
 from uuid import uuid4
 
 from rest_framework import status
-from rest_framework.exceptions import APIException, NotFound, ValidationError
+from rest_framework.exceptions import APIException, NotFound
 
-from apps.api.v2.discovery.node_types import get_node_type_schema, reference_param_names
+from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
 from apps.pipelines.build_state import output_handles
 from apps.pipelines.const import STANDARD_OUTPUT_NAME
 from apps.pipelines.flow import (
@@ -20,11 +20,10 @@ from apps.pipelines.flow import (
 )
 from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
-from apps.teams.models import Team
 
 from .facade import PipelineEdit
-from .param_types import param_type_errors
-from .references import check_references, team_options
+from .node_params import node_params, writable_params
+from .references import check_references
 
 #: A node's output handles as ``{handle: branch label}``. The label is ``None`` for the single
 #: standard output, and a router's branch keyword otherwise.
@@ -55,35 +54,8 @@ class NodeIsServerManaged(APIException):
     status_code = status.HTTP_409_CONFLICT
 
 
-def warm_option_lists(team: Team, params: dict[str, Any]) -> None:
-    """Build the team's option lists before the pipeline row is locked, if this body needs them.
-
-    ``options_for_team`` is around fifteen queries and parses every custom action's OpenAPI schema.
-    The reference check that consumes it runs inside the lock -- it needs the node's type, and for
-    a PATCH that comes from the graph -- so the build is done here, ahead of the transaction, and
-    ``team_options``'s memo hands the result over for free once the lock is held.
-
-    Only for a body that names something referenceable: a write touching no reference must not pay
-    for the lists at all.
-    """
-    if params and not reference_param_names().isdisjoint(params):
-        team_options(team)()
-
-
-def check_params(node_type_schema: dict, team: Team, params: dict[str, Any]) -> None:
-    """Everything a param has to satisfy before it is allowed anywhere near the graph.
-
-    Order matters: a name has to be recognised before its type means anything, and a type has to
-    hold before a value can be read as one reference or as a list of them.
-    """
-    check_param_names(node_type_schema, params)
-    if errors := param_type_errors(node_type_schema["schema"]["properties"], params):
-        raise ValidationError({"params": errors})
-    check_references(team, node_type_schema, params)
-
-
-def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: dict[str, Any]) -> PipelineEdit:
-    """Add a node of ``node_type_schema``'s type to ``flow``.
+def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
+    """Add a node of ``node_type`` to ``flow``.
 
     The id is the server's to assign (W5), in the ``{type}-{5 chars}`` form the builder's own
     ``getNodeId`` produces, so an API-built graph is indistinguishable from a hand-built one.
@@ -91,7 +63,6 @@ def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: d
     Params are already checked by the time this runs: the type is known from the request body, so
     nothing here has to wait on the graph.
     """
-    node_type = node_type_schema["type"]
     # The types `/pipeline/nodes/` serves are exactly the resolvable node classes, and
     # `get_node_type_schema` has already refused any other name, so this cannot come back None.
     node_class = cast(type[BasePipelineNode], resolve_node_class(node_type))
@@ -110,7 +81,7 @@ def plan_create(flow: dict, node_type_schema: dict, label: str | None, params: d
     return PipelineEdit(diff=_diff(NodeDiff(add=[node])), node_id=node_id)
 
 
-def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
+def plan_update(flow: dict, options: dict, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
     """Edit one node's params and label in place.
 
     Params merge key by key rather than replacing the stored dict: the point of the façade is that
@@ -126,18 +97,19 @@ def plan_update(flow: dict, team: Team, node_id: str, label: str | None, params:
     """
     node, content = find_node(flow, node_id)
     refuse_if_server_managed(content.type)
-    if params:
-        # The first and only check these params get: PATCH names no type, so until the graph was
-        # read there was nothing to check them against -- `warm_option_lists` only builds the lists
-        # this needs, ahead of the lock.
-        #
-        # 404s a type the API does not publish at all -- a deprecated one, say, whose params it
-        # cannot describe and so cannot check. Only when there are params to check: renaming a node
-        # of such a type is not something the API has to withhold.
-        check_params(get_node_type_schema(content.type), team, params)
-
     before = _output_handles(content)
-    content.params = {**stored_params(content), **params}
+    if params:
+        # 404s a type the API does not publish. Only when there are params to write: renaming a
+        # node of such a type is not something the API has to withhold.
+        node_class = get_node_class(content.type)
+        params = writable_params(node_class, params)
+        check_references(options, node_class, params)
+        # Merge first: the model is all-or-nothing, so it must see the whole node.
+        content.params = node_params(node_class, node_id, {**stored_params(content), **params})
+    else:
+        # Drops the resource-id mirror `to_flow_node` merged in; normalising here would write every
+        # default to a row nobody asked to change.
+        content.params = stored_params(content)
     if label is not None:
         content.label = label
     edges = _rewired_edges(flow, node_id, before, _output_handles(content))
@@ -187,20 +159,6 @@ def find_node(flow: dict, node_id: str) -> tuple[FlowNode, FlowNodeData]:
     raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
-def check_param_names(node_type_schema: dict, params: dict[str, Any]) -> None:
-    """Refuse a param the node type does not declare.
-
-    Node models ignore unknown fields, so an unrecognised param would be stored, never read, and the
-    write would look like it had taken effect. The names checked against are the ones
-    ``/pipeline/nodes/`` published, so a param the API withholds is not settable either.
-    """
-    node_type = node_type_schema["type"]
-    unknown = sorted(set(params) - set(node_type_schema["schema"]["properties"]))
-    if unknown:
-        message = f"'{node_type}' declares no such param. See GET /api/v2/pipeline/nodes/{node_type}/."
-        raise ValidationError({"params": dict.fromkeys(unknown, message)})
-
-
 def stored_params(content: FlowNodeData) -> dict[str, Any]:
     """The params a node's row actually holds, out of the graph's copy of them.
 
@@ -241,13 +199,16 @@ def initial_params(node_class: type[BasePipelineNode], node_id: str, supplied: d
 
     ``name`` is required and has no default, so the server supplies one: the node id, which is what
     the builder writes when a node is dragged onto the canvas.
+
+    Run through the model on the way out, the same as an edit is: a create and a later PATCH that
+    sends the same value should not store two different things.
     """
     defaults = {
         field_name: field.get_default(call_default_factory=True)
         for field_name, field in node_class.model_fields.items()
         if not field.is_required()
     }
-    return {**defaults, "name": node_id, **supplied}
+    return node_params(node_class, node_id, {**defaults, "name": node_id, **supplied})
 
 
 def parking_position(flow: dict) -> dict:

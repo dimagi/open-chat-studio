@@ -4,11 +4,12 @@
 import hashlib
 import json
 from functools import cache
+from typing import cast
 
 from django.conf import settings
 from rest_framework.exceptions import NotFound
 
-from apps.pipelines.nodes.base import PipelineRouterNode, resolve_node_class
+from apps.pipelines.nodes.base import BasePipelineNode, PipelineRouterNode, resolve_node_class
 from apps.pipelines.nodes.node_metadata import get_node_schemas
 
 from .contract import (
@@ -45,6 +46,16 @@ def get_node_type_schema(node_type: str) -> dict:
         if node["type"] == node_type:
             return node
     raise unknown_node_type(node_type)
+
+
+def get_node_class(node_type: str) -> type[BasePipelineNode]:
+    """The node class behind a type this API publishes, or :func:`get_node_type_schema`'s 404.
+
+    The served types are exactly the resolvable node classes, so past the schema lookup this cannot
+    come back None.
+    """
+    get_node_type_schema(node_type)
+    return cast(type[BasePipelineNode], resolve_node_class(node_type))
 
 
 def option_keys_for_node_type(node_type: str) -> frozenset[str] | None:

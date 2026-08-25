@@ -26,6 +26,9 @@ def options_for_team(team: Team) -> dict:
 
     Unlike the builders, this serves only what a client may write, so the models the team cannot
     call are left out.
+
+    A dozen queries and a few hundred milliseconds, mostly parsing custom actions' OpenAPI schemas,
+    so callers that need it twice should hold the result rather than ask again.
     """
     options = _clean_options(get_node_parameter_values(team=team, usable_models_only=True))
     options["default_llm_provider"] = get_node_default_values(team, usable_models_only=True)

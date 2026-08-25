@@ -13,14 +13,16 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
-from apps.api.v2.discovery.node_types import get_node_type_schema
+from apps.api.v2.discovery.node_types import get_node_class
 from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Pipeline
 
 from .facade import edit_pipeline
-from .graph_editor import check_params, plan_create, plan_delete, plan_update, warm_option_lists
+from .graph_editor import plan_create, plan_delete, plan_update
+from .node_params import writable_params
+from .references import check_references, option_lists_for
 from .serializers import (
     NodeCreateSerializer,
     NodeUpdateSerializer,
@@ -42,9 +44,12 @@ BAD_REQUEST = OpenApiResponse(
     description=(
         "The body is not one this endpoint can act on. Errors are keyed by the field at fault, and "
         "param-level errors are nested under `params`. This covers an unrecognised body key, a "
-        "server-assigned key the client tried to set (`node_id`, `position`), a param the type does "
-        "not declare, a param whose value is the wrong type, and a param naming a resource this "
-        "team cannot reach."
+        "server-assigned key the client tried to set (`node_id`, `position`), and a param naming a "
+        "resource this team cannot reach.\n\n"
+        "A param the type does not declare is *not* an error: it is dropped, and the response "
+        "reports the params the node actually holds. Nor is a param whose value the type cannot "
+        "parse — that is stored and reported in `pipeline_errors`, the same as a missing required "
+        "one, so a node can be built up over several calls."
     )
 )
 FORBIDDEN = OpenApiResponse(
@@ -120,17 +125,13 @@ class PipelineNodeEditView(GenericAPIView):
     def post(self, request, id: str) -> Response:
         body = self.get_serializer(data=request.data)
         body.is_valid(raise_exception=True)
-        params = body.validated_data["params"]
         label = body.validated_data.get("label")
-        # Everything that does not depend on the graph is settled before the row is locked -- the
-        # type is right here in the body, and the option lists the reference check needs are the
-        # expensive part of the whole request.
-        node_type_schema = get_node_type_schema(body.validated_data["type"])
-        check_params(node_type_schema, request.team, params)
+        node_type = body.validated_data["type"]
+        node_class = get_node_class(node_type)
+        params = writable_params(node_class, body.validated_data["params"])
+        check_references(option_lists_for(request.team, params, node_class), node_class, params)
         return Response(
-            edit_pipeline(
-                request, id, lambda flow: plan_create(flow, node_type_schema, label, params), self._write_response
-            ),
+            edit_pipeline(request, id, lambda flow: plan_create(flow, node_type, label, params), self._write_response),
             status=status.HTTP_201_CREATED,
         )
 
@@ -170,14 +171,14 @@ class PipelineNodeEditView(GenericAPIView):
         params = body.validated_data["params"]
         label = body.validated_data.get("label")
         # The node's type comes from the graph, so its params can only be checked under the lock.
-        # Building the option lists that check needs is the slow half, and does not depend on the
-        # graph at all -- so it is done here rather than in the critical section.
-        warm_option_lists(request.team, params)
+        # Building the option lists that check needs is the slow half and needs no graph, so it is
+        # done here and handed in rather than built in the critical section.
+        options = option_lists_for(request.team, params)
         return Response(
             edit_pipeline(
                 request,
                 id,
-                lambda flow: plan_update(flow, request.team, node_id, label, params),
+                lambda flow: plan_update(flow, options, node_id, label, params),
                 self._write_response,
             )
         )

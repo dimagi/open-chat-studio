@@ -4,25 +4,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from apps.api.v2.discovery.node_types import get_node_types
 from apps.pipelines.models import Node
 
 from .conftest import node_url, nodes_url
-
-
-def test_every_served_param_states_a_plain_type():
-    """``param_types`` reads ``prop["type"]`` and nothing else. A node param declared as a union
-    would arrive as ``anyOf`` with no ``type`` at all, and the check would wave it through -- so
-    this is the assumption that keeps that check honest, not a test of the schema for its own sake.
-    """
-    untyped = [
-        f"{node_type['type']}.{name}"
-        for node_type in get_node_types()
-        for name, prop in node_type["schema"]["properties"].items()
-        if "type" not in prop
-    ]
-
-    assert untyped == []
 
 
 @pytest.mark.django_db()
@@ -138,9 +122,10 @@ def test_a_write_to_an_archived_pipeline_is_a_404(client, chatbot):
 
 @pytest.mark.django_db()
 def test_an_unparseable_stored_node_is_reported_rather_than_raised(client, chatbot):
-    """Defence in depth for the class of bug the type check closes: whatever else ever reaches a
-    node row -- an import, a migration, a future param the check does not cover -- reading the
-    pipeline back has to report it rather than take the endpoint down."""
+    """What makes storing an unparseable param safe at all: `code` reaches a ``mode="before"``
+    validator that regex-searches it and raises ``TypeError``, which pydantic does not wrap. Reading
+    the pipeline back has to report that rather than take the endpoint down -- for a node from any
+    source, an import or migration as much as a façade write."""
     Node.objects.create(
         pipeline=chatbot.pipeline, type="CodeNode", flow_id="CodeNode-bad01", label="Bad", params={"code": 123}
     )
@@ -150,4 +135,4 @@ def test_an_unparseable_stored_node_is_reported_rather_than_raised(client, chatb
     response = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/")
 
     assert response.status_code == 200, response.content
-    assert "CodeNode-bad01" in response.json()["pipeline_errors"]["node"]
+    assert "TypeError" in response.json()["pipeline_errors"]["node"]["CodeNode-bad01"]["root"]
