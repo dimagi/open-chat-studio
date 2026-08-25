@@ -11,9 +11,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # llm_model_migration() and notify_deprecated_models moved to
-        # 0074_add_deepseek_v4_flash_vision_exp so they run only once per deploy (the newest
-        # migration re-syncs the whole model list, which still marks the Groq gemma2-9b-it,
-        # llama-3.3-70b-versatile and llama-3.1-8b-instant models deprecated, and re-scans
-        # deprecations to notify affected teams).
+        # llm_model_migration() moved to 0074_add_deepseek_v4_flash_vision_exp
     ]
