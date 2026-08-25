@@ -5,6 +5,8 @@
  * It contains typing information for all components that exist in this project.
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
+import { AuthTokenProvider } from "./services/chat-session-service";
+export { AuthTokenProvider } from "./services/chat-session-service";
 export namespace Components {
     interface OpenChatStudioWidget {
         /**
@@ -22,6 +24,10 @@ export namespace Components {
           * @default 'https://www.openchatstudio.com'
          */
         "apiBaseUrl"?: string;
+        /**
+          * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel requires one. Mint it in the host application's backend and return it here; the widget asks once per session start, so it never holds a credential that can go stale, and never writes one to local storage. `forceRefresh` is set when the previous token was rejected, so a caching host knows to bypass its cache. Being a function, this is a JavaScript property with no HTML attribute equivalent.
+         */
+        "authTokenProvider"?: AuthTokenProvider;
         /**
           * Optional banner message shown whenever it is set. The banner is always visible (not dismissable) and does not block normal widget usage.
          */
@@ -174,6 +180,10 @@ declare namespace LocalJSX {
           * @default 'https://www.openchatstudio.com'
          */
         "apiBaseUrl"?: string;
+        /**
+          * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel requires one. Mint it in the host application's backend and return it here; the widget asks once per session start, so it never holds a credential that can go stale, and never writes one to local storage. `forceRefresh` is set when the previous token was rejected, so a caching host knows to bypass its cache. Being a function, this is a JavaScript property with no HTML attribute equivalent.
+         */
+        "authTokenProvider"?: AuthTokenProvider;
         /**
           * Optional banner message shown whenever it is set. The banner is always visible (not dismissable) and does not block normal widget usage.
          */

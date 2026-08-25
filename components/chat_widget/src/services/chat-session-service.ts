@@ -12,6 +12,35 @@ export class SessionAccessError extends Error {
   }
 }
 
+/**
+ * The server refused to admit a new chat session (401). Raised only by
+ * `startSession`, where the chatbot's channel requires a credential the widget
+ * did not present, or presented stale: an OAuth bearer token on an `oauth`-mode
+ * channel, or the embed key on an `embed_key`-mode one.
+ *
+ * Distinct from `SessionAccessError` (403), which rejects an *existing*
+ * session's token and means the conversation is over. This one means the
+ * conversation never started, so there is nothing to discard.
+ */
+export class ChatAuthError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, code: string | undefined, message: string) {
+    super(message);
+    this.name = 'ChatAuthError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/**
+ * Supplies the OAuth bearer token for `chat/start/`. Called once per session
+ * start, and a second time with `forceRefresh` when the server rejected the
+ * first token — a host that caches tokens should bypass its cache on that call.
+ */
+export type AuthTokenProvider = (context: { forceRefresh: boolean }) => string | undefined | Promise<string | undefined>;
+
 export type ChatRole = 'system' | 'user' | 'assistant';
 
 export interface ChatAttachment {
@@ -58,6 +87,7 @@ export interface ChatSessionServiceOptions {
   embedKey?: string;
   widgetVersion: string;
   sessionToken?: string;
+  authTokenProvider?: AuthTokenProvider;
   csrfTokenProvider?: (apiBaseUrl: string) => string | undefined;
   taskPollingIntervalMs?: number;
   taskPollingMaxAttempts?: number;
@@ -92,6 +122,7 @@ export class ChatSessionService {
   private readonly embedKey?: string;
   private readonly widgetVersion: string;
   private sessionToken?: string;
+  private authTokenProvider?: AuthTokenProvider;
   private readonly csrfTokenProvider: (apiBaseUrl: string) => string | undefined;
   private readonly taskPollingIntervalMs: number;
   private readonly taskPollingMaxAttempts: number;
@@ -105,6 +136,7 @@ export class ChatSessionService {
     this.embedKey = options.embedKey;
     this.widgetVersion = options.widgetVersion;
     this.sessionToken = options.sessionToken;
+    this.authTokenProvider = options.authTokenProvider;
     this.csrfTokenProvider = options.csrfTokenProvider ?? getCSRFToken;
     this.taskPollingIntervalMs = options.taskPollingIntervalMs ?? 1000;
     this.taskPollingMaxAttempts = options.taskPollingMaxAttempts ?? 120;
@@ -112,17 +144,33 @@ export class ChatSessionService {
   }
 
   async startSession(requestBody: Record<string, unknown>): Promise<ChatStartSessionResponse> {
-    const response = await this.request(`${this.apiBaseUrl}/api/chat/start/`, {
-      method: 'POST',
-      headers: this.getJsonHeaders(),
-      body: JSON.stringify(requestBody),
-    });
+    const token = await this.resolveAuthToken(false);
+    let response = await this.startSessionRequest(requestBody, token);
+
+    // The provider may have handed back a cached token that has since expired, so
+    // ask again with `forceRefresh` before giving up. One retry only, and only for
+    // a token that actually changed -- a provider that returns the same token (or
+    // nothing) would spend the retry on a request already refused.
+    if (response.status === 401 && this.authTokenProvider) {
+      const refreshed = await this.resolveAuthToken(true);
+      if (refreshed && refreshed !== token) {
+        response = await this.startSessionRequest(requestBody, refreshed);
+      }
+    }
 
     if (!response.ok) {
       await this.raiseForStatus(response, 'Failed to start session');
     }
 
     return response.json() as Promise<ChatStartSessionResponse>;
+  }
+
+  private startSessionRequest(requestBody: Record<string, unknown>, authToken?: string): Promise<Response> {
+    return this.request(`${this.apiBaseUrl}/api/chat/start/`, {
+      method: 'POST',
+      headers: this.getStartHeaders(authToken),
+      body: JSON.stringify(requestBody),
+    });
   }
 
   async sendMessage(sessionId: string, payload: Record<string, unknown>): Promise<ChatSendMessageResponse> {
@@ -362,6 +410,9 @@ export class ChatSessionService {
     if (response.status === 403) {
       throw new SessionAccessError(response.status, code, message);
     }
+    if (response.status === 401) {
+      throw new ChatAuthError(response.status, code, message);
+    }
     throw new Error(message);
   }
 
@@ -381,6 +432,42 @@ export class ChatSessionService {
     const headers = this.getUploadHeaders();
     headers['Content-Type'] = 'application/json';
     return headers;
+  }
+
+  setAuthTokenProvider(provider?: AuthTokenProvider): void {
+    this.authTokenProvider = provider;
+  }
+
+  /**
+   * Headers for `chat/start/`. The bearer token goes here and nowhere else: it
+   * admits a *new* session, and every request after that is authorised by the
+   * session token instead. Sending it more widely would put the host's
+   * credential on three endpoints that ignore it.
+   */
+  private getStartHeaders(authToken?: string): Record<string, string> {
+    const headers = this.getJsonHeaders();
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    return headers;
+  }
+
+  /**
+   * Asks the host for a bearer token at the moment one is needed. There is no
+   * stored token to fall back on: a credential the widget holds onto goes stale
+   * without anything noticing, and the host is the only party that can mint a
+   * fresh one. A channel in `embed_key` mode has no provider and needs none.
+   */
+  private async resolveAuthToken(forceRefresh: boolean): Promise<string | undefined> {
+    if (!this.authTokenProvider) {
+      return undefined;
+    }
+    try {
+      return (await this.authTokenProvider({ forceRefresh })) || undefined;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new ChatAuthError(401, 'auth_token_unavailable', `Could not obtain an authentication token: ${detail}`);
+    }
   }
 
   private getCommonHeaders(): Record<string, string> {
