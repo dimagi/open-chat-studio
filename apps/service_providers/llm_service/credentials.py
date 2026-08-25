@@ -113,6 +113,34 @@ def _perplexity() -> ProviderCredentials | None:
     return ProviderCredentials(LlmProviderTypes.perplexity, "Perplexity", {"openai_api_key": api_key})
 
 
+def _openrouter() -> ProviderCredentials | None:
+    """Load OpenRouter credentials from environment variables.
+
+    The ``HTTP-Referer`` and ``X-Title`` headers are recommended by OpenRouter
+    so that requests are attributed to this application in the OpenRouter
+    dashboard and rate-limit tiers. Without them requests appear anonymous.
+    """
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return None
+
+    from django.contrib.sites.models import Site  # noqa: PLC0415 - local import to avoid circular dep at module load
+
+    from apps.web.meta import get_server_root  # noqa: PLC0415 - local import to avoid circular dep at module load
+
+    return ProviderCredentials(
+        LlmProviderTypes.openrouter,
+        "OpenRouter",
+        {
+            "openai_api_key": api_key,
+            "default_headers": {
+                "HTTP-Referer": get_server_root(),
+                "X-Title": Site.objects.get_current().name,
+            },
+        },
+    )
+
+
 def _minimax() -> ProviderCredentials | None:
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
@@ -129,6 +157,7 @@ _LOADERS: list[Callable[[], ProviderCredentials | None]] = [
     _azure,
     _groq,
     _perplexity,
+    _openrouter,
     _minimax,
 ]
 
