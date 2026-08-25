@@ -15,7 +15,7 @@ from rest_framework import exceptions
 
 from apps.api.exceptions import ChatApiAccessDenied
 from apps.oauth.models import OAuth2Application
-from apps.teams.helpers import SyntheticTeamMembership, get_team_membership_for_request
+from apps.teams.helpers import SyntheticTeamMembership, get_team_membership_for_request, set_request_attrs
 from apps.teams.utils import set_current_team
 
 from .models import OAuth2AccessToken
@@ -36,7 +36,7 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
             return
 
         user, access_token = response
-        request.team = access_token.team
+        set_request_attrs(request, team=access_token.team)
 
         application = access_token.application
         is_client_credentials = (
@@ -48,12 +48,13 @@ class OAuth2AccessTokenAuthentication(OAuth2Authentication):
             # team alone (a synthetic service identity), so skip the human membership gate.
             user = AnonymousUser()
             request.user = user
-            request.team_membership = SyntheticTeamMembership(access_token.team)
+            set_request_attrs(request, team_membership=SyntheticTeamMembership(access_token.team))
         else:
             request.user = user
-            request.team_membership = get_team_membership_for_request(request)
-            if not request.team_membership:
+            membership = get_team_membership_for_request(request)
+            if not membership:
                 raise exceptions.AuthenticationFailed()
+            set_request_attrs(request, team_membership=membership)
 
         # this is unset by the request_finished signal
         set_current_team(access_token.team)
@@ -116,6 +117,18 @@ def enforce_application_chatbot_access(request, experiment) -> None:
     """
     if not application_allows_chatbot(request, experiment):
         raise exceptions.PermissionDenied("This application is not authorized to interact with this chatbot.")
+
+
+def enforce_application_chatbot_write(request, experiment) -> None:
+    """Raise `PermissionDenied` unless the request may modify `experiment`'s configuration.
+
+    Same allowlist as the chat path, different message: reconfiguring a chatbot is at least as
+    sensitive as conversing with it, so a machine token reaches only the chatbots it was pinned to.
+    Creating a chatbot is deliberately *not* gated -- a chatbot that does not exist yet cannot be on
+    any allowlist, so gating it would leave a machine token unable to bootstrap one.
+    """
+    if not application_allows_chatbot(request, experiment):
+        raise exceptions.PermissionDenied("This application is not authorized to modify this chatbot.")
 
 
 def token_admits_chatbot(token, experiment) -> bool:
