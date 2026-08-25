@@ -131,7 +131,9 @@ class PipelineNodeEditView(GenericAPIView):
         node_type = body.validated_data["type"]
         node_class = get_node_class(node_type)
         params = writable_params(node_class, body.validated_data["params"])
-        check_references(option_lists_for(request.team, params, node_class), node_class, params)
+        check_references(
+            options=option_lists_for(request.team, params, node_class), node_class=node_class, params=params
+        )
         return Response(
             edit_pipeline(request, id, lambda flow: plan_create(flow, node_type, label, params), self._write_response),
             status=status.HTTP_201_CREATED,
