@@ -807,11 +807,11 @@ token it returns is sent as `Authorization: Bearer` **on `chat/start/` only** (a
 the admission decision). Nothing is written to `localStorage`: the credential belongs to the page, not
 the conversation. `embed-key` stays optional, so an `oauth`-mode embed may set only `chatbot-id`.
 
-**Rotation is a pull, not a push, and that is what makes D7 work.**
-[D7](#d7-admission-is-bounded-in-time) says the host "must push a fresh token through the `@Watch`",
-which leaves the host to work out *that* it needs to. Pulling inverts the problem: the widget asks at
-the moment it needs a credential — including at the ADR-0054 restart — so recurring admission needs no
-host-side timer and no signal back to the page. A refused token is retried exactly once, and only if
+**Rotation is a pull, not a push, and that is what makes D7 work.** An earlier draft had the host
+"push a fresh token through the `@Watch`" — which leaves the host to work out *that* it needs to.
+Pulling inverts the problem: the widget asks at the moment it needs a credential — including at the
+ADR-0054 restart ([D7](#d7-admission-is-bounded-in-time)) — so recurring admission needs no host-side
+timer and no signal back to the page. A refused token is retried exactly once, and only if
 the refresh returned a *different* one; otherwise the retry would be an identical request against the
 endpoint ADR-0052 throttles.
 
