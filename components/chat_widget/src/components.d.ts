@@ -25,7 +25,7 @@ export namespace Components {
          */
         "apiBaseUrl"?: string;
         /**
-          * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel requires one. Mint it in the host application's backend and return it here; the widget asks once per session start, so it never holds a credential that can go stale, and never writes one to local storage. `forceRefresh` is set when the previous token was rejected, so a caching host knows to bypass its cache. Being a function, this is a JavaScript property with no HTML attribute equivalent.
+          * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel requires one. Mint it in the host application's backend and return it here; the widget asks once per session start and never writes one to local storage. `forceRefresh` is set when the previous token was rejected. Being a function, this is a JavaScript property with no HTML attribute equivalent.
          */
         "authTokenProvider"?: AuthTokenProvider;
         /**
@@ -181,7 +181,7 @@ declare namespace LocalJSX {
          */
         "apiBaseUrl"?: string;
         /**
-          * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel requires one. Mint it in the host application's backend and return it here; the widget asks once per session start, so it never holds a credential that can go stale, and never writes one to local storage. `forceRefresh` is set when the previous token was rejected, so a caching host knows to bypass its cache. Being a function, this is a JavaScript property with no HTML attribute equivalent.
+          * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel requires one. Mint it in the host application's backend and return it here; the widget asks once per session start and never writes one to local storage. `forceRefresh` is set when the previous token was rejected. Being a function, this is a JavaScript property with no HTML attribute equivalent.
          */
         "authTokenProvider"?: AuthTokenProvider;
         /**

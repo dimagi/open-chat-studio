@@ -118,9 +118,8 @@ export class OcsChat {
   /**
    * Supplies the OAuth bearer token for a chatbot whose Chat Widget & API channel
    * requires one. Mint it in the host application's backend and return it here;
-   * the widget asks once per session start, so it never holds a credential that can
-   * go stale, and never writes one to local storage. `forceRefresh` is set when the
-   * previous token was rejected, so a caching host knows to bypass its cache. Being
+   * the widget asks once per session start and never writes one to local storage.
+   * `forceRefresh` is set when the previous token was rejected. Being
    * a function, this is a JavaScript property with no HTML attribute equivalent.
    */
   @Prop() authTokenProvider?: AuthTokenProvider;
@@ -917,10 +916,6 @@ export class OcsChat {
     await this.clearSession();
   }
 
-  /**
-   * The service is built once and cached, so a provider installed later has to be
-   * pushed into the live instance -- rebuilding it would drop the session token.
-   */
   @Watch('authTokenProvider')
   authTokenProviderHandler(provider?: AuthTokenProvider) {
     this.chatService?.setAuthTokenProvider(provider);
