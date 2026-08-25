@@ -96,11 +96,6 @@ def _get_alpine_context(request, experiment=None):
 def chatbots_settings(request, team_slug, experiment_id):
     experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
 
-    team_participant_identifiers = list(
-        request.team.participant_set.filter(user=None).values_list("identifier", flat=True)
-    )
-    team_participant_identifiers.extend(experiment.participant_allowlist)
-    team_participant_identifiers = list(set(team_participant_identifiers))
     alpine_context = _get_alpine_context(request, experiment)
     context = {
         "experiment": experiment,
@@ -126,7 +121,6 @@ def chatbots_settings(request, team_slug, experiment_id):
                     "edit_mode": True,
                     "form": form,
                     "updated": False,
-                    "team_participant_identifiers": team_participant_identifiers,
                 }
             )
     else:
@@ -135,7 +129,6 @@ def chatbots_settings(request, team_slug, experiment_id):
             {
                 "edit_mode": True,
                 "form": form,
-                "team_participant_identifiers": team_participant_identifiers,
             }
         )
 

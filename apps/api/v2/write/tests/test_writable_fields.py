@@ -43,13 +43,8 @@ def test_patch_covers_every_versioned_field_except_the_pipeline():
 def test_patch_writes_exactly_what_the_settings_form_edits():
     """The write API mimics the UI's own form rather than the inspect response: inspecting and
     editing are different jobs, and inspect returns plenty that is not writable. A field added to
-    the settings page therefore has to be added here too.
-
-    `participant_allowlist` is excluded here too: the settings form still edits it until it is
-    removed from the UI, but the API no longer accepts it."""
-    assert _writable_model_fields(ChatbotWriteSerializer()) == set(ChatbotSettingsForm.Meta.fields) - {
-        "participant_allowlist"
-    }
+    the settings page therefore has to be added here too."""
+    assert _writable_model_fields(ChatbotWriteSerializer()) == set(ChatbotSettingsForm.Meta.fields)
 
 
 def _related_fields(serializer):
