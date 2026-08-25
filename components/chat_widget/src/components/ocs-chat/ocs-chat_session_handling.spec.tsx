@@ -702,7 +702,7 @@ describe('ocs-chat persistent-session modes', () => {
     expect(mockStartSession).not.toHaveBeenCalled();
   });
 
-  it('clears sessionStorage when the session is cleared in tab mode', async () => {
+  it('clears both stores when the session is cleared in tab mode, so switching modes does not strand a session', async () => {
     const page = await newPage('persistent-session="tab"');
     await page.rootInstance.sendMessage('hello');
     await page.waitForChanges();
@@ -712,6 +712,9 @@ describe('ocs-chat persistent-session modes', () => {
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-messages-test-bot');
     expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-token-test-bot');
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-messages-test-bot');
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-token-test-bot');
   });
 
   it('writes nothing when persistence is off', async () => {
@@ -721,6 +724,14 @@ describe('ocs-chat persistent-session modes', () => {
 
     expect(sessionStorageMock.setItem).not.toHaveBeenCalled();
     expect(localStorageMock.setItem).not.toHaveBeenCalledWith('ocs-chat-session-test-bot', expect.anything());
+  });
+
+  it('clears both stores when persistence is off', async () => {
+    const page = await newPage('persistent-session="false"');
+    await page.rootInstance.clearSession();
+
+    expect(sessionStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
   });
 });
 

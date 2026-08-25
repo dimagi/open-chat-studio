@@ -46,7 +46,7 @@ export class OcsChat {
   private static readonly MOBILE_BREAKPOINT = 640;
   private static readonly WINDOW_MARGIN = 20;
 
-  private static readonly LOCALSTORAGE_TEST_KEY = '__ocs_test__';
+  private static readonly STORAGE_TEST_KEY = '__ocs_test__';
 
   private static readonly MAX_FILE_SIZE_MB = 50;
   private static readonly MAX_TOTAL_SIZE_MB = 50;
@@ -339,7 +339,7 @@ export class OcsChat {
       this.activeSessionId = this.sessionId;
       this.applySessionToken(this.sessionToken);
     } else if (this.isStorageAvailable()) {
-      // Always try to load existing session if localStorage is available
+      // Always try to load existing session if storage is available
       const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
       if (sessionId && messages) {
         this.activeSessionId = sessionId;
@@ -1676,7 +1676,7 @@ export class OcsChat {
           const parsedMessages = JSON.parse(messagesJson);
           messages = Array.isArray(parsedMessages) ? parsedMessages : [];
         } catch (parseError) {
-          console.warn('Failed to parse messages from localStorage:', parseError);
+          console.warn('Failed to parse messages from session storage:', parseError);
           messages = [];
         }
       }
@@ -1686,7 +1686,7 @@ export class OcsChat {
       return { sessionId, messages, sessionToken };
     } catch (error) {
       // fall back to starting a new session
-      console.warn('Failed to load chat session from localStorage, starting new session:', error);
+      console.warn('Failed to load chat session from storage, starting new session:', error);
       return { messages: [] };
     }
   }
@@ -1762,18 +1762,23 @@ export class OcsChat {
   }
 
   private clearSessionStorage(): void {
-    const storage = this.getStorage();
-    if (!storage) return;
+    // Clear both stores (not just the active persistence mode's store) so
+    // switching modes mid-session does not strand a session in the other one.
     const keys = this.getStorageKeys();
-    try {
-      storage.removeItem(keys.sessionId);
-      storage.removeItem(keys.messages);
-      storage.removeItem(keys.lastActivity);
-      storage.removeItem(keys.visible);
-      storage.removeItem(keys.sessionToken);
-    } catch (error) {
-      console.warn('Failed to clear chat session from localStorage:', error);
-    }
+    const clearStore = (getStore: () => Storage) => {
+      try {
+        const store = getStore();
+        store.removeItem(keys.sessionId);
+        store.removeItem(keys.messages);
+        store.removeItem(keys.lastActivity);
+        store.removeItem(keys.visible);
+        store.removeItem(keys.sessionToken);
+      } catch (error) {
+        console.warn('Failed to clear chat session from storage:', error);
+      }
+    };
+    clearStore(() => window.localStorage);
+    clearStore(() => window.sessionStorage);
   }
 
   private isKioskMode(): boolean {
@@ -1805,8 +1810,8 @@ export class OcsChat {
     const storage = this.getStorage();
     if (!storage) return false;
     try {
-      storage.setItem(OcsChat.LOCALSTORAGE_TEST_KEY, 'test');
-      storage.removeItem(OcsChat.LOCALSTORAGE_TEST_KEY);
+      storage.setItem(OcsChat.STORAGE_TEST_KEY, 'test');
+      storage.removeItem(OcsChat.STORAGE_TEST_KEY);
       return true;
     } catch {
       return false;
