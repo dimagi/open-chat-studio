@@ -21,10 +21,6 @@ class Migration(migrations.Migration):
     operations = [
         # Re-sync the whole model list, seeding the DeepSeek deepseek-v4-flash-vision-exp model.
         llm_model_migration(),
-        # Moved from 0073_deprecate_groq_models so the Groq deprecations are still announced
-        # exactly once per deploy. notify_deprecated_models is once-per-team-per-model, so
-        # re-scanning here does not re-notify teams that already heard about a model.
-        RunDataMigration("notify_deprecated_models", command_options={"force": True}),
         # Seed pricing for deepseek-v4-flash-vision-exp. load_ai_pricing is idempotent and
         # supersedes on change, so this is safe to leave in place alongside earlier calls.
         load_pricing_data(),
