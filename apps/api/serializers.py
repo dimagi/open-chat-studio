@@ -340,7 +340,8 @@ class ChatStartSessionRequest(serializers.Serializer):
         required=False,
         allow_blank=True,
         help_text="Optional IANA time zone name of the participant's device (e.g. 'Africa/Johannesburg'), "
-        "recorded in the participant's data for this chatbot. Unrecognised values are ignored.",
+        "recorded in the participant's data for this chatbot only. "
+        "Unrecognised time zone names are ignored.",
     )
 
     def validate_timezone(self, value):

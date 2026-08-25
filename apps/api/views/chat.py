@@ -331,6 +331,21 @@ def _record_participant_name(participant, experiment, team, name: str) -> None:
         participant_data.save(update_fields=["data"])
 
 
+def _record_participant_timezone(participant, experiment, team, participant_timezone: str) -> None:
+    """Store the caller-supplied time zone on the participant's data for this chatbot.
+
+    Scoped to one experiment because that is what the field documents: a participant may talk to
+    several chatbots from different devices, and each chat's data is read on its own. The write is
+    conditional so a repeat session start with an unchanged zone is a no-op rather than an UPDATE.
+    """
+    participant_data, _ = ParticipantData.objects.get_or_create(
+        participant=participant, experiment=experiment, team=team, defaults={"data": {}}
+    )
+    if participant_data.data.get("timezone") != participant_timezone:
+        participant_data.data = {**participant_data.data, "timezone": participant_timezone}
+        participant_data.save(update_fields=["data"])
+
+
 def _channel_disabled_response(experiment_channel) -> Response | None:
     """A 403 when an admin has switched this channel off, else None.
 
@@ -525,6 +540,9 @@ def chat_start_session(request):
     if name:
         _record_participant_name(participant, experiment, team, name)
 
+    if participant_timezone:
+        _record_participant_timezone(participant, experiment, team, participant_timezone)
+
     metadata = {Chat.MetadataKeys.EMBED_SOURCE: safe_link_url(request.headers.get("referer", None))}
 
     session = ApiChannel.start_new_session(
@@ -533,7 +551,6 @@ def chat_start_session(request):
         participant_identifier=participant.identifier,
         participant_user=user,
         metadata=metadata,
-        timezone=participant_timezone,
         version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
     )
 
