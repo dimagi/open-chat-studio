@@ -190,6 +190,8 @@ paths:
                 summary: Start session with specific version (requires auth)
         required: true
       security:
+      - chatOAuth2:
+        - chat:start
       - cookieAuth: []
       - embedKeyAuth: []
       responses:
@@ -225,6 +227,12 @@ paths:
                       identifier: abc
                       remote_id: abc
                   summary: Session started with specific version
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatAccessDenied'
           description: ''
   /api/experiments/:
     get:
@@ -1058,6 +1066,17 @@ components:
       required:
       - attachments
       - response
+    ChatAccessDenied:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Always `chat_access_denied`.
+      required:
+      - code
+      - error
     ChatCompletionResponseChoices:
       type: object
       properties:
@@ -1973,6 +1992,7 @@ components:
             chatbots:read: List and Retrieve Chatbot Data
             chatbots:write: Create and modify Chatbots
             chatbots:interact: Converse with a Chatbot and trigger bot messages
+            chat:start: Start a chat session
             sessions:read: List and Read Sessions
             sessions:write: Manage Sessions
             files:read: Download file content
@@ -1983,6 +2003,13 @@ components:
       type: apiKey
       in: header
       name: X-api-key
+    chatOAuth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /o/token/
+          scopes:
+            chat:start: Start a chat session
     cookieAuth:
       type: apiKey
       in: cookie

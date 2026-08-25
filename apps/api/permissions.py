@@ -12,7 +12,7 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import SAFE_METHODS, BasePermission, DjangoModelPermissions, IsAuthenticated
 from rest_framework_api_key.permissions import KeyParser
 
-from apps.api.authentication import embed_key_authorizes_channel
+from apps.api.authentication import embed_key_authorizes_channel, oauth_resolved_channel
 from apps.api.session_tokens import session_token_expired, validate_session_token
 from apps.channels.models import ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import extract_domain_from_headers, get_experiment_session_cached, validate_domain
@@ -88,6 +88,14 @@ class WidgetDomainPermission(BasePermission):
     def has_permission(self, request, view):
         if not isinstance(request.auth, ExperimentChannel):
             # not authed with widget token
+            return True
+
+        if oauth_resolved_channel(request) is not None:
+            # Each credential validates its own origin, and ChatOAuthAuthentication has already
+            # applied the rule for this one — including the case this check cannot express, where a
+            # blank domain list declares the channel server-only and an originless request is the
+            # correct shape. The `if not origin_domain` line below would reject it before the view
+            # ever runs.
             return True
 
         origin_domain = extract_domain_from_headers(request)

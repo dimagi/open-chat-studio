@@ -5747,12 +5747,18 @@ components:
           type: boolean
           description: When set, the team's outbound message firing is frozen while
             its data is migrated.
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: User who created this team, if known.
         files_export:
           type: integer
           nullable: true
           description: Most recently generated team-files export, if any.
       required:
       - created_at
+      - created_by
       - feature_flags
       - has_public_key
       - id

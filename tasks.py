@@ -1,6 +1,7 @@
 import platform
 import re
 import shutil
+import socket
 import sys
 import textwrap
 import time
@@ -11,7 +12,8 @@ from invoke import Context, Exit, call, task
 from packaging.version import Version
 from termcolor import cprint
 
-MIN_NODE_VERSION = "18"
+MIN_NODE_VERSION = "24"
+DEV_PORT = 8000
 
 
 @task(help={"command": "Docker command to run: 'up' to start services, 'down' to stop services"})
@@ -116,7 +118,7 @@ def setup_dev_env(c: Context, step=False):
 
     _run_with_confirm(c, "Run DB migrations", "python manage.py migrate", step)
 
-    cprint(f"\nChecking node version (>{MIN_NODE_VERSION} required)", "green")
+    cprint(f"\nChecking node version (>={MIN_NODE_VERSION} required)", "green")
     if not _check_node_version(c):
         cprint(f"Node version should be {MIN_NODE_VERSION} or higher", "red")
         cprint("\nSkipping front end build. Run 'inv pnpm --install' once you have upgraded node.", "yellow")
@@ -136,8 +138,10 @@ def _run_with_confirm(c: Context, message, command, step=False):
 
 
 def _check_node_version(c: Context):
-    res = c.run("node -v", echo=True)
+    res = c.run("node -v", echo=True, warn=True)
     version = res.stdout.strip()
+    if not res.ok or not version:
+        return False
     if version.startswith("v"):
         version = version[1:]
     ver = Version(version)
@@ -176,6 +180,10 @@ def _disable_stdin_forwarding(c: Context) -> None:
     c.config.run.in_stream = False
 
 
+def _has_portless(c: Context):
+    return c.run("which portless", hide=True, warn=True).ok
+
+
 def _get_portless_name(c: Context) -> str:
     result = c.run("portless list", hide=True, warn=True)
     used_names = set(re.findall(r"http://(\w+)\.localhost", result.stdout)) if result.ok else set()
@@ -191,8 +199,7 @@ def _get_portless_name(c: Context) -> str:
 def runserver(c: Context, public=False):
     """Start Django development server (alias: inv django)."""
     _disable_stdin_forwarding(c)
-    has_portless = c.run("which portless", hide=True, warn=True).ok
-    if has_portless:
+    if _has_portless(c):
         portless_name = _get_portless_name(c)
         runserver_command = f"portless {portless_name} uv run manage.py runserver"
     else:
@@ -248,10 +255,24 @@ def celery(c: Context, threads=False, beat=False, queues=""):
     c.run(f'watchfiles --filter python "{cmd}"', echo=True, pty=sys.stdout.isatty())
 
 
+def _ensure_port_available():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", DEV_PORT))
+        except OSError:
+            raise Exit(
+                f"Port {DEV_PORT} is already in use. Is another 'inv dev' or 'inv runserver' running?",
+                -1,
+            ) from None
+
+
 @task
 def dev(c: Context):
     """Run Django, Celery, and the webpack asset watcher together via honcho."""
-    c.run("uv run honcho -f Procfile.dev start", echo=True, pty=True)
+    if not _has_portless(c):
+        _ensure_port_available()
+    c.run(f"uv run honcho -f Procfile.dev start --port {DEV_PORT}", echo=True, pty=True)
 
 
 @task(

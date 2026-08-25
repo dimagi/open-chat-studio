@@ -2,11 +2,13 @@ import datetime
 import inspect
 import json
 import logging
+import operator
 import random
 import re
 import sys
 import time
 import traceback
+import types
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -14,9 +16,59 @@ from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import FieldValidationInfo
 from RestrictedPython import compile_restricted, limited_builtins, safe_builtins, utility_builtins
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
-from RestrictedPython.Guards import guarded_iter_unpack_sequence, guarded_unpack_sequence
+from RestrictedPython.Guards import full_write_guard, guarded_iter_unpack_sequence, guarded_unpack_sequence
 
 logger = logging.getLogger("ocs.utils")
+
+# Operators permitted for augmented assignment (``x += 1``). RestrictedPython rewrites
+# augmented assignment to ``_inplacevar_(op, x, y)`` but ships no implementation, so we
+# provide one that only dispatches to a fixed allowlist of in-place operators.
+_INPLACE_OPERATORS = {
+    "+=": operator.iadd,
+    "-=": operator.isub,
+    "*=": operator.imul,
+    "/=": operator.itruediv,
+    "//=": operator.ifloordiv,
+    "%=": operator.imod,
+    "**=": operator.ipow,
+    ">>=": operator.irshift,
+    "<<=": operator.ilshift,
+    "&=": operator.iand,
+    "^=": operator.ixor,
+    "|=": operator.ior,
+    "@=": operator.imatmul,
+}
+
+
+def restricted_inplacevar(op: str, x: Any, y: Any) -> Any:
+    """Implement augmented assignment (``x += y``) for the restricted sandbox.
+
+    RestrictedPython compiles ``x += y`` to ``_inplacevar_('+=', x, y)`` and expects the
+    execution environment to supply ``_inplacevar_``. We restrict it to a known set of
+    operators so sandbox code cannot smuggle arbitrary behaviour through this hook.
+    """
+    try:
+        func = _INPLACE_OPERATORS[op]
+    except KeyError:
+        raise SyntaxError(f"Augmented assignment operator {op!r} is not supported") from None
+    return func(x, y)
+
+
+def restricted_write(obj: Any) -> Any:
+    """Write guard applied by RestrictedPython before attribute/item assignment.
+
+    RestrictedPython compiles ``obj.attr = x`` to ``_write_(obj).attr = x``. We block
+    writes to objects that are *shared across executions* or process-global — module
+    singletons (``json``, ``re``, ``datetime``, ...) and classes/types — because mutating
+    those (e.g. ``json.dumps = evil``) would persist and poison other pipeline executions
+    on the same worker process. Per-execution data objects (``dict``, ``list``, pydantic
+    models such as ``Attachment``, etc.) remain writable so legitimate node code keeps
+    working. Underscore-prefixed attribute names are already rejected at compile time.
+    """
+    if isinstance(obj, (types.ModuleType, type)):
+        # full_write_guard wraps the object so any attribute/item write raises.
+        return full_write_guard(obj)
+    return obj
 
 
 class RestrictedPythonExecutionMixin(BaseModel):
@@ -114,7 +166,12 @@ class RestrictedPythonExecutionMixin(BaseModel):
             "_getiter_": default_guarded_getiter,
             "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
             "_unpack_sequence_": guarded_unpack_sequence,
-            "_write_": lambda x: x,
+            # restricted_write blocks writes to shared/process-global objects (module
+            # singletons injected below, and classes/types) so sandbox code cannot do
+            # e.g. ``json.dumps = evil`` and poison other executions on the same worker,
+            # while still allowing writes to per-execution data (dict, list, Attachment).
+            "_write_": restricted_write,
+            "_inplacevar_": restricted_inplacevar,
         }
         return custom_globals
 

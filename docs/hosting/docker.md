@@ -60,6 +60,7 @@ CRYPTOGRAPHY_SALT=<generate a random salt>
 See [Configuration Reference](./configuration.md) for all available options.
 
 !!! note "Environment file fallback"
+
     `docker-compose.prod.yml` reads both `.env` and `.env.prod` (either may be absent; `.env.prod` values take precedence when both define the same variable). This keeps the compose file working on platforms that only supply a standard `.env` file, such as **Dokploy, Coolify, and Portainer**. The optional `required: false` `env_file` entries require Docker Compose **v2.24+** (Docker Engine 24+ ships with a compatible Compose). The bundled PostgreSQL container requires `POSTGRES_PASSWORD` to be present for interpolation — either in `.env`, `.env.prod`, or the shell (see Step 3).
 
 ## Step 3: Start the Services

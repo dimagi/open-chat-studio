@@ -1038,6 +1038,10 @@ CORS_ALLOW_HEADERS = [
     "x-ocs-widget-version",
     "x-embed-key",
     "x-session-token",
+    # Without this the cross-origin preflight rejects an `oauth`-mode embed before the view runs.
+    # Safe here: CORS_URLS_REGEX limits CORS to the chat API and CORS_ALLOW_CREDENTIALS is False,
+    # so allowing the header only permits what the page's own JS sets -- no ambient credentials.
+    "authorization",
 ]
 
 CORS_ALLOW_METHODS = [
@@ -1101,6 +1105,7 @@ OAUTH2_PROVIDER = {
         "chatbots:read": "List and Retrieve Chatbot Data",
         "chatbots:write": "Create and modify Chatbots",
         "chatbots:interact": "Converse with a Chatbot and trigger bot messages",
+        "chat:start": "Start a chat session",
         "sessions:read": "List and Read Sessions",
         "sessions:write": "Manage Sessions",
         "files:read": "Download file content",
@@ -1129,6 +1134,7 @@ OAUTH_CLIENT_CREDENTIALS_SCOPES = [
     "chatbots:read",
     "chatbots:write",
     "chatbots:interact",
+    "chat:start",
     "sessions:read",
     "sessions:write",
     "files:read",
@@ -1136,6 +1142,13 @@ OAUTH_CLIENT_CREDENTIALS_SCOPES = [
     "participants:write",
     "usage:read",
 ]
+
+# The only scope /api/chat/start/ accepts. Deliberately not chatbots:interact, which also
+# converses with every chatbot in the team and sends outbound WhatsApp/Telegram/Connect messages
+# to arbitrary participants -- the wrong credential to put in page JavaScript. Requiring this one
+# exclusively is what makes the narrowing real: a host cannot reach for the broad token it already
+# has. It authorises exactly this endpoint; the session-bound endpoints keep their session token.
+CHAT_API_SCOPE = "chat:start"
 
 OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth.OAuth2Application"
 OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = "oauth.OAuth2AccessToken"

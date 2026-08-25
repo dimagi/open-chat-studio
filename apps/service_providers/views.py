@@ -13,11 +13,8 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpRespo
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
-from waffle import flag_is_active
-from waffle.decorators import waffle_flag
 
 from apps.assistants.models import OpenAiAssistant
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
@@ -43,7 +40,6 @@ from .utils import ServiceProvider, get_available_subtypes, get_service_provider
 
 log = logging.getLogger("ocs.service_providers")
 
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 _PRICE_PER_1K_FROM_MILLION = Decimal(1) / Decimal(1000)
 _FORM_FIELD_TO_KIND = {
     "input_price_per_million_tokens": ServiceKind.LLM_INPUT,
@@ -316,20 +312,16 @@ class CreateServiceProvider(
             default_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=None))
             embedding_models_by_type = _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None))
             custom_llm_models_by_type = _get_models_by_type(LlmProviderModel.objects.filter(team=self.request.team))
-            cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
             ctx.update(
                 {
                     "default_llm_models_by_type": default_llm_models_by_type,
                     "custom_llm_models_by_type": custom_llm_models_by_type,
                     "embedding_models_by_type": embedding_models_by_type,
                     "new_model_form": LlmProviderModelForm(self.request.team),
-                    "cost_tracking_enabled": cost_tracking_enabled,
                     "pricing_lookup": _pricing_lookup(
                         self.request.team,
                         [*_flatten(default_llm_models_by_type), *_flatten(custom_llm_models_by_type)],
-                    )
-                    if cost_tracking_enabled
-                    else {},
+                    ),
                 }
             )
         return ctx
@@ -406,13 +398,11 @@ def create_llm_provider_model(request, team_slug: str):
         if len(form.errors) == 1 and "__all__" in form.errors:
             return HttpResponseBadRequest(", ".join([str(v) for v in form.errors.values()]))
         return HttpResponseBadRequest(str(form.errors))
-    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
     with transaction.atomic():
         model = form.save(commit=False)
         model.team = request.team
         model.save()
-        if cost_tracking_enabled:
-            _persist_team_pricing_rules(request.team, model, form.cleaned_data, request.user)
+        _persist_team_pricing_rules(request.team, model, form.cleaned_data, request.user)
     custom_models = LlmProviderModel.objects.filter(team=request.team)
     return render(
         request,
@@ -421,13 +411,11 @@ def create_llm_provider_model(request, team_slug: str):
             "llm_models_by_type": _get_models_by_type(custom_models),
             "embedding_models_by_type": _get_models_by_type(EmbeddingProviderModel.objects.filter(team=None)),
             "for_type": form.cleaned_data["type"],
-            "cost_tracking_enabled": cost_tracking_enabled,
-            "pricing_lookup": _pricing_lookup(request.team, list(custom_models)) if cost_tracking_enabled else {},
+            "pricing_lookup": _pricing_lookup(request.team, list(custom_models)),
         },
     )
 
 
-@method_decorator(waffle_flag(COST_TRACKING_FLAG), name="dispatch")
 class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, django_views.View):
     """GET renders the override modal; POST persists team-scoped rules.
     Invalid submissions re-render the form (with field errors) into the modal
@@ -459,7 +447,6 @@ class PricingOverrideView(LoginAndTeamRequiredMixin, PermissionRequiredMixin, dj
 @require_POST
 @login_and_team_required
 @permission_required("service_providers.change_llmprovidermodel", raise_exception=True)
-@waffle_flag(COST_TRACKING_FLAG)
 def pricing_revert(request, team_slug: str, pk: int):
     """Close every active team-scoped rule for this (provider, model_name).
     Resolution falls back to the matching global rule on the next read."""
@@ -540,7 +527,6 @@ def _render_model_row(request, model: LlmProviderModel) -> HttpResponse:
         {
             "model": model,
             "show_delete": model.team_id == request.team.id,
-            "cost_tracking_enabled": True,
             "pricing_lookup": _pricing_lookup(request.team, [model]),
         },
     )

@@ -13,8 +13,6 @@ from apps.experiments.models import ExperimentSession
 from apps.human_annotations.models import AnnotationItem
 from apps.teams.flags import Flags
 
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
-
 
 def render_session_details(
     request, team_slug, experiment_id, session_id, active_tab, template_path, session_type="Experiment"
@@ -31,7 +29,9 @@ def render_session_details(
                 "queue__name", flat=True
             )
         )
-    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG) and bool(request.team_membership)
+    # Usage/cost is team-internal: participants viewing their own session (no team
+    # membership) don't see it.
+    show_usage_summary = bool(request.team_membership)
     return TemplateResponse(
         request,
         template_path,
@@ -40,8 +40,8 @@ def render_session_details(
             "experiment_session": session,
             "active_tab": active_tab,
             "annotation_queue_names": annotation_queue_names,
-            "cost_tracking_enabled": cost_tracking_enabled,
-            "usage_summary": session_usage(session) if cost_tracking_enabled else None,
+            "show_usage_summary": show_usage_summary,
+            "usage_summary": session_usage(session) if show_usage_summary else None,
             "details": [
                 (
                     gettext("Participant"),

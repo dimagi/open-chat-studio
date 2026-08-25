@@ -25,9 +25,9 @@ from apps.channels.exceptions import ChannelDisabledException
 from apps.channels.models import ChannelPlatform
 from apps.channels.registry import get_channel_class_for_platform
 from apps.channels.web_channel import WebChannel
-from apps.chatbots.forms import ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
+from apps.chatbots.forms import BroadcastMessageForm, ChatbotForm, ChatbotSettingsForm, CopyChatbotForm
 from apps.chatbots.tables import ChatbotSessionsTable, ChatbotTable
-from apps.chatbots.tasks import send_bot_message
+from apps.chatbots.tasks import send_bot_message, send_broadcast_message
 from apps.chatbots.version_resolver import resolve_published_or_working
 from apps.cost_tracking.services.reporting import get_latest_chatbot_usage_summary
 from apps.events.models import EventLogStatusChoices, StaticTrigger, StaticTriggerType, TimeoutTrigger
@@ -67,8 +67,6 @@ from apps.trace.models import Trace
 from apps.utils.search import similarity_search
 from apps.web.dynamic_filters.datastructures import FilterParams
 from apps.web.waf import WafRule, waf_allow
-
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
 def _get_alpine_context(request, experiment=None):
@@ -317,10 +315,7 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     published = resolve_published_or_working(experiment)
     deployed_version = published.version_number if experiment != published else None
 
-    cost_tracking_enabled = flag_is_active(request, COST_TRACKING_FLAG)
-    usage_summary = None
-    if cost_tracking_enabled:
-        usage_summary = get_latest_chatbot_usage_summary(request.team, experiment.id)
+    usage_summary = get_latest_chatbot_usage_summary(request.team, experiment.id)
 
     context = {
         "active_tab": "chatbots",
@@ -333,8 +328,8 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
         # the "chat to the published version" launcher must read them off this, not `experiment`.
         "published_version": published,
         "highlight_version_id": request.GET.get("version_id"),
-        "cost_tracking_enabled": cost_tracking_enabled,
         "usage_summary": usage_summary,
+        "broadcast_form": BroadcastMessageForm(experiment),
         **_get_events_context(experiment, team_slug),
     }
     session_table_url = reverse("chatbots:sessions-list", args=(team_slug, experiment_id))
@@ -351,6 +346,34 @@ def single_chatbot_home(request, team_slug: str, experiment_id: int):
     context.update(filter_context)
 
     return TemplateResponse(request, "chatbots/single_chatbot_home.html", context)
+
+
+@require_POST
+@login_and_team_required
+@permission_required("experiments.invite_participants", raise_exception=True)
+def broadcast_message(request, team_slug: str, experiment_id: int):
+    """Queue a message for the recently active participants of this chatbot on the selected channels."""
+    experiment = get_object_or_404(Experiment, id=experiment_id, team=request.team)
+    form = BroadcastMessageForm(experiment, data=request.POST)
+    if not form.is_valid():
+        for error in form.errors.values():
+            messages.error(request, error[0])
+    else:
+        channels = form.cleaned_data["channels"]
+        days = form.cleaned_data["active_within_days"]
+        send_broadcast_message.delay(
+            experiment_id=experiment.id,
+            channel_ids=[channel.id for channel in channels],
+            message=form.cleaned_data["message"],
+            active_within_days=days,
+        )
+        platforms = ", ".join(sorted(channel.platform_enum.label for channel in channels))
+        messages.success(
+            request,
+            f"Your message is being sent to participants on {platforms} "
+            f"who were active in the last {days} {'day' if days == 1 else 'days'}.",
+        )
+    return redirect("chatbots:single_chatbot_home", team_slug=team_slug, experiment_id=experiment.id)
 
 
 class EditChatbot(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):

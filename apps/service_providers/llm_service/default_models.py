@@ -129,6 +129,9 @@ DEFAULT_LLM_PROVIDER_MODELS = {
         # api.deepseek.com only serves the undated alias, which is what we have to send.
         Model("deepseek-v4-flash", 1000000, is_default=True),
         Model("deepseek-v4-pro", 1000000, is_translation_default=True),
+        # Experimental vision variant of deepseek-v4-flash. Same 1M context and text rates as
+        # the base model; images are tokenised by dimension and billed as input tokens.
+        Model("deepseek-v4-flash-vision-exp", 1000000),
         Model("deepseek-chat", 128000, deprecated=True, replacement="deepseek-v4-flash"),
         Model("deepseek-reasoner", 128000, deprecated=True, replacement="deepseek-v4-flash"),
     ],
