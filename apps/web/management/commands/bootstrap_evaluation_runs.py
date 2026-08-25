@@ -82,23 +82,77 @@ _REASONING = [
 # Best-first, matching the seeded sentiment evaluator's own choice order.
 _SENTIMENTS = ["positive", "neutral", "negative"]
 
-# Rates are per 1K tokens (the canonical `PricingRule.unit_price` unit) and match
-# `cost_tracking/seed_data/llm_pricing.json` exactly, including the dated Anthropic model
-# name, so `_ensure_pricing_rule` finds the pre-seeded global rule instead of creating one.
-_JUDGE_MODEL = ("openai", "gpt-4o-mini", Decimal("0.00015"), Decimal("0.00060"))
-_SECOND_JUDGE_MODEL = ("anthropic", "claude-sonnet-4-5-20250929", Decimal("0.003"), Decimal("0.015"))
-_GENERATION_MODEL = ("openai", "gpt-4o", Decimal("0.00250"), Decimal("0.01000"))
+
+@dataclass(frozen=True)
+class _ModelPricing:
+    """A model to bill seeded rows against. Rates are per 1K tokens (the canonical
+    `PricingRule.unit_price` unit) and match `cost_tracking/seed_data/llm_pricing.json`
+    exactly, including the dated Anthropic model name, so `_ensure_pricing_rule` finds the
+    pre-seeded global rule instead of creating one at a made-up rate.
+
+    No rates means no rule and no cost: that is how the "unpriced" coverage gap is seeded.
+    """
+
+    provider_type: str
+    model_name: str
+    input_price: Decimal | None = None
+    output_price: Decimal | None = None
+
+    @property
+    def priced(self) -> bool:
+        return self.input_price is not None
+
+
+_JUDGE_MODEL = _ModelPricing("openai", "gpt-4o-mini", Decimal("0.00015"), Decimal("0.00060"))
+_SECOND_JUDGE_MODEL = _ModelPricing("anthropic", "claude-sonnet-4-5-20250929", Decimal("0.003"), Decimal("0.015"))
+_GENERATION_MODEL = _ModelPricing("openai", "gpt-4o", Decimal("0.00250"), Decimal("0.01000"))
 # No pricing rule for this one, so the run's cost card shows the "unpriced" coverage gap.
-_UNPRICED_MODEL = ("openai", "gpt-5-judge-preview")
+_UNPRICED_MODEL = _ModelPricing("openai", "gpt-5-judge-preview")
 # The no-usage-reported row gets a model of its own: the cost card renders a whole
 # (provider, model) group as "unpriced" if any row in it lacks a rule, so sharing a model
 # with a priced judge would hide that judge's real cost behind this one row.
-_UNKNOWN_MODEL = ("openai", "gpt-4o-audio-preview")
+_UNKNOWN_MODEL = _ModelPricing("openai", "gpt-4o-audio-preview")
 
 
 def _token_cost(unit_price: Decimal, quantity: int) -> Decimal:
     """Cost for a token count, the way `record_usage_bulk` computes it."""
     return (Decimal(quantity) / _THOUSAND * unit_price).quantize(_CENT_QUANTUM)
+
+
+def _field_value(field_def: dict, quality: float, jitter: float, index: int):
+    """One output-schema field's value, by field type. Anything not enumerable or numeric
+    is free text."""
+    field_type = field_def.get("type")
+    if field_type == "binary":
+        # Wide jitter for the same reason as the choice branch: even the best run has to
+        # produce a few false results, or the tag rule keyed on the false value never fires.
+        return int(quality + jitter * 0.9 > 0.5)
+    if field_type == "choice":
+        return _choice_value(field_def, quality, jitter)
+    if field_type in ("int", "float"):
+        return _numeric_value(field_def, quality, jitter, field_type)
+    return _REASONING[index % len(_REASONING)]
+
+
+def _choice_value(field_def: dict, quality: float, jitter: float) -> str:
+    """Choice lists are read as best-first (the seeded sentiment field is
+    positive/neutral/negative), so a higher quality picks an earlier choice.
+
+    The jitter is wide on purpose: wide enough that even a high-quality run produces a few
+    worst-choice results, or the tag rule keyed on that choice never fires and the Applied
+    Tags column stays empty.
+    """
+    choices = field_def.get("choices") or _SENTIMENTS
+    position = int((1 - min(max(quality + jitter * 0.7, 0), 1)) * len(choices))
+    return choices[min(position, len(choices) - 1)]
+
+
+def _numeric_value(field_def: dict, quality: float, jitter: float, field_type: str) -> int | float:
+    """`quality` scaled into the field's own declared bounds."""
+    low = field_def.get("ge", 1)
+    high = field_def.get("le", 10)
+    scaled = low + (high - low) * min(max(quality + jitter * 0.15, 0), 1)
+    return int(round(scaled)) if field_type == "int" else round(scaled, 2)
 
 
 @dataclass(frozen=True)
@@ -117,6 +171,101 @@ class RunSpec:
     cost_profile: str = "priced"  # priced | mixed | none
     error_message: str = ""
     result_fraction: float = 1.0  # portion of the plan that actually produced results
+
+
+@dataclass(frozen=True)
+class _SeedContext:
+    """What every seeded run shares: where it lives, who appears to have started it, and
+    the experiment a `with_generation` run generates its responses from."""
+
+    team: Team
+    config: EvaluationConfig
+    user_id: int | None
+    generation_experiment: Experiment | None
+
+
+@dataclass(frozen=True)
+class _RunContext:
+    """The team, run and experiment every cost row for one run hangs off. `experiment` is
+    the generating experiment or None, which is not the same as the seed's: it is only set
+    for a `with_generation` run."""
+
+    team: Team
+    run: EvaluationRun
+    experiment: Experiment | None
+
+
+@dataclass(frozen=True)
+class _ModelCall:
+    """One seeded model call: what it billed, for how many tokens, and on whose behalf.
+
+    `evaluator_id` is what splits the cost card's "by evaluator" breakdown from its
+    "Bot generation" row, so a generation call leaves it unset.
+    """
+
+    model: _ModelPricing
+    input_tokens: int
+    output_tokens: int
+    confidence: str
+    evaluator_id: int | None = None
+    message_id: int | None = None
+
+
+@dataclass(frozen=True)
+class _UsageRow:
+    """One seeded `UsageRecord`'s own fields — everything `_RunContext` doesn't carry."""
+
+    model: _ModelPricing
+    service_kind: str
+    quantity: int | None
+    unit_price: Decimal | None
+    cost: Decimal
+    confidence: str
+    pricing_rule: PricingRule | None
+    evaluator_id: int | None = None
+    message_id: int | None = None
+    extra_keys: dict | None = None
+
+
+def _judge_call(spec: RunSpec, evaluator, index: int, judge_count: int, message_index: int, message_id: int):
+    """One judge's call for one message. Token counts vary by both so no two rows on the
+    cost card carry the same number."""
+    model, confidence = _judge_billing(spec, index, judge_count)
+    return _ModelCall(
+        model=model,
+        input_tokens=780 + 40 * index + 12 * (message_index % 5),
+        output_tokens=95 + 10 * index + 4 * (message_index % 5),
+        confidence=confidence,
+        evaluator_id=evaluator.id,
+        message_id=message_id,
+    )
+
+
+def _judge_billing(spec: RunSpec, index: int, judge_count: int) -> tuple[_ModelPricing, str]:
+    """What a judge call bills against, per the run's cost profile. A `mixed` run covers
+    every coverage state the cost card renders: its last judge is unpriced, its first is an
+    estimate, the rest are exact. Judges otherwise alternate between the two priced models
+    so the "by model" breakdown has more than one row."""
+    model = _SECOND_JUDGE_MODEL if index % 2 else _JUDGE_MODEL
+    if spec.cost_profile != "mixed":
+        return model, Confidence.EXACT
+    if index == judge_count - 1:
+        return _UNPRICED_MODEL, Confidence.EXACT
+    if index == 0:
+        return model, Confidence.ESTIMATED
+    return model, Confidence.EXACT
+
+
+def _generation_call(message_index: int, message_id: int) -> _ModelCall:
+    """The bot-generation call for one message. No `evaluator_id`: that is what puts it
+    under the cost card's "Bot generation" row instead of a judge's."""
+    return _ModelCall(
+        model=_GENERATION_MODEL,
+        input_tokens=310 + 9 * (message_index % 5),
+        output_tokens=180 + 7 * (message_index % 5),
+        confidence=Confidence.EXACT,
+        message_id=message_id,
+    )
 
 
 _RUN_SPECS = [
@@ -265,8 +414,9 @@ class Command(BaseCommand):
         if deleted_runs := deleted_by_model.get(EvaluationRun._meta.label, 0):
             self.stdout.write(self.style.WARNING(f"  Cleared {deleted_runs} previously seeded run(s)"))
 
+        seed = _SeedContext(team=team, config=config, user_id=user, generation_experiment=generation_experiment)
         for spec in _RUN_SPECS:
-            run = self._create_run(team, config, user, generation_experiment, spec, messages, evaluators)
+            run = self._create_run(seed, spec, messages, evaluators)
             self.stdout.write(self.style.SUCCESS(f"  Run {run.id}: {spec.status}/{spec.run_type} — {spec.note}"))
 
         self.stdout.write("")
@@ -427,15 +577,15 @@ class Command(BaseCommand):
                 return field_name, 0
         return None, None
 
-    def _create_run(self, team, config, user_id, generation_experiment, spec: RunSpec, messages, evaluators):
+    def _create_run(self, seed: _SeedContext, spec: RunSpec, messages, evaluators):
         created_at = timezone.now() - timedelta(days=spec.days_ago)
         planned = messages if spec.message_count is None else messages[: spec.message_count]
-        experiment = generation_experiment if spec.with_generation else None
+        experiment = seed.generation_experiment if spec.with_generation else None
 
         run = EvaluationRun.objects.create(
-            team=team,
-            config=config,
-            user_id=user_id,
+            team=seed.team,
+            config=seed.config,
+            user_id=seed.user_id,
             generation_experiment=experiment,
             status=spec.status,
             type=spec.run_type,
@@ -469,9 +619,9 @@ class Command(BaseCommand):
 
         if spec.status == EvaluationRunStatus.COMPLETED:
             compute_aggregates_for_run(run)
-        self._apply_tags(team, run, results)
+        self._apply_tags(seed.team, run, results)
         if spec.cost_profile != "none":
-            self._create_usage_records(team, run, spec, evaluators, scored, experiment)
+            self._create_usage_records(_RunContext(seed.team, run, experiment), spec, evaluators, scored)
         return run
 
     def _create_results(self, run, spec: RunSpec, messages, evaluators, experiment) -> list[EvaluationResult]:
@@ -502,37 +652,12 @@ class Command(BaseCommand):
     def _result_values(self, evaluator: Evaluator, quality: float, message: EvaluationMessage, index: int) -> dict:
         """Field values matching the evaluator's own output schema, spread around
         `quality` so aggregates and trend lines move between runs."""
-        # A fixed per-message offset keeps values varied within a run and stable across reseeds.
-        jitter = ((index * 37) % 11) / 10 - 0.5
         schema = (evaluator.params or {}).get("output_schema", {}) or {}
         if not schema:
             return {"response_length": len((message.output or {}).get("content", ""))}
-
-        values: dict = {}
-        for field_name, field_def in schema.items():
-            field_type = field_def.get("type")
-            if field_type == "binary":
-                # Wide jitter for the same reason as the choice branch below: even the
-                # best run has to produce a few false results, or the tag rule keyed on
-                # the false value never fires.
-                values[field_name] = int(quality + jitter * 0.9 > 0.5)
-            elif field_type == "choice":
-                # Choice lists are read as best-first (the seeded sentiment field is
-                # positive/neutral/negative), so a higher quality picks an earlier choice.
-                choices = field_def.get("choices") or _SENTIMENTS
-                # A wide jitter on purpose: it has to be wide enough that even a
-                # high-quality run produces a few worst-choice results, or the tag rule
-                # keyed on that choice never fires and the Applied Tags column stays empty.
-                position = int((1 - min(max(quality + jitter * 0.7, 0), 1)) * len(choices))
-                values[field_name] = choices[min(position, len(choices) - 1)]
-            elif field_type in ("int", "float"):
-                low = field_def.get("ge", 1)
-                high = field_def.get("le", 10)
-                scaled = low + (high - low) * min(max(quality + jitter * 0.15, 0), 1)
-                values[field_name] = int(round(scaled)) if field_type == "int" else round(scaled, 2)
-            else:
-                values[field_name] = _REASONING[index % len(_REASONING)]
-        return values
+        # A fixed per-message offset keeps values varied within a run and stable across reseeds.
+        jitter = ((index * 37) % 11) / 10 - 0.5
+        return {name: _field_value(field_def, quality, jitter, index) for name, field_def in schema.items()}
 
     def _apply_tags(self, team, run, results: list[EvaluationResult]) -> None:
         """Apply each of the evaluator's tag rules to the results that match it."""
@@ -546,14 +671,12 @@ class Command(BaseCommand):
         ]
         AppliedTag.objects.bulk_create(applied, ignore_conflicts=True)
 
-    def _create_usage_records(self, team, run, spec: RunSpec, evaluators, scored, experiment) -> None:
+    def _create_usage_records(self, ctx: _RunContext, spec: RunSpec, evaluators, scored) -> None:
         """The judge and generation spend for one run, one row pair per (message, model).
 
         Written per message, not per run, because that is the shape the recorder writes
         (one call per message) and the shape any future per-message cost read would want;
-        nothing reads `extra.message_id` today. Judge rows carry `extra.evaluator_id`,
-        generation rows don't: that is what splits the "by evaluator" breakdown from its
-        "Bot generation" row.
+        nothing reads `extra.message_id` today.
         """
         # Only LLM-backed evaluators bill anything - a PythonEvaluator makes no model call,
         # so giving it usage rows would put spend on the one evaluator that can't incur any.
@@ -561,46 +684,30 @@ class Command(BaseCommand):
         records: list[UsageRecord] = []
         for message_index, message in enumerate(scored):
             for evaluator_index, evaluator in enumerate(judges):
-                model = _SECOND_JUDGE_MODEL if evaluator_index % 2 else _JUDGE_MODEL
-                unpriced = spec.cost_profile == "mixed" and evaluator_index == len(judges) - 1
-                confidence = (
-                    Confidence.ESTIMATED if spec.cost_profile == "mixed" and evaluator_index == 0 else Confidence.EXACT
-                )
-                records += self._usage_pair(
-                    team,
-                    run,
-                    experiment,
-                    model=(*_UNPRICED_MODEL, Decimal(0), Decimal(0)) if unpriced else model,
-                    input_tokens=780 + 40 * evaluator_index + 12 * (message_index % 5),
-                    output_tokens=95 + 10 * evaluator_index + 4 * (message_index % 5),
-                    evaluator_id=evaluator.id,
-                    message_id=message.id,
-                    confidence=confidence,
-                    priced=not unpriced,
-                )
-            if experiment:
-                records += self._usage_pair(
-                    team,
-                    run,
-                    experiment,
-                    model=_GENERATION_MODEL,
-                    input_tokens=310 + 9 * (message_index % 5),
-                    output_tokens=180 + 7 * (message_index % 5),
-                    evaluator_id=None,
-                    message_id=message.id,
-                    confidence=Confidence.EXACT,
-                    priced=True,
-                )
-        if spec.cost_profile == "mixed" and scored and judges:
-            # One row with no token count at all -> the "unknown" coverage gap. Deliberately
-            # left without a message_id, the way a call that reported no usage arrives.
-            records += [
-                self._usage_record(
-                    team,
-                    run,
-                    experiment,
-                    provider_type=_UNKNOWN_MODEL[0],
-                    model_name=_UNKNOWN_MODEL[1],
+                call = _judge_call(spec, evaluator, evaluator_index, len(judges), message_index, message.id)
+                records += self._usage_pair(ctx, call)
+            if ctx.experiment:
+                records += self._usage_pair(ctx, _generation_call(message_index, message.id))
+        records += self._unreported_usage_records(ctx, spec, judges, scored)
+
+        UsageRecord.objects.bulk_create(records)
+        # `timestamp` is auto_now_add, so the rows can only be backdated after the insert.
+        UsageRecord.objects.filter(pk__in=[record.pk for record in records]).update(timestamp=ctx.run.created_at)
+
+    def _unreported_usage_records(self, ctx: _RunContext, spec: RunSpec, judges, scored) -> list[UsageRecord]:
+        """A single row with no token count at all -> the "unknown" coverage gap. Deliberately
+        left without a message_id, the way a call that reported no usage arrives."""
+        if spec.cost_profile != "mixed":
+            return []
+        if not judges:
+            return []
+        if not scored:
+            return []
+        return [
+            self._usage_record(
+                ctx,
+                _UsageRow(
+                    model=_UNKNOWN_MODEL,
                     service_kind=ServiceKind.LLM_INPUT,
                     quantity=None,
                     unit_price=None,
@@ -611,97 +718,63 @@ class Command(BaseCommand):
                     # "unpriced" if any of its rows lacks a rule, so hanging this off a
                     # priced judge would hide that judge's real cost too.
                     evaluator_id=judges[-1].id,
-                    message_id=None,
                     extra_keys={"missing_usage_calls": 2},
-                )
-            ]
-        UsageRecord.objects.bulk_create(records)
-        # `timestamp` is auto_now_add, so the rows can only be backdated after the insert.
-        UsageRecord.objects.filter(pk__in=[record.pk for record in records]).update(timestamp=run.created_at)
-
-    def _usage_pair(
-        self,
-        team,
-        run,
-        experiment,
-        *,
-        model,
-        input_tokens,
-        output_tokens,
-        evaluator_id,
-        message_id,
-        confidence,
-        priced: bool,
-    ) -> list[UsageRecord]:
-        """Unsaved input and output rows for one (model, evaluator, message), as the
-        recorder writes them — one row per billing dimension."""
-        provider_type, model_name, input_price, output_price = model
-        return [
-            self._usage_record(
-                team,
-                run,
-                experiment,
-                provider_type=provider_type,
-                model_name=model_name,
-                service_kind=service_kind,
-                quantity=quantity,
-                unit_price=unit_price if priced else None,
-                cost=_token_cost(unit_price, quantity) if priced else Decimal(0),
-                confidence=confidence,
-                pricing_rule=(
-                    self._ensure_pricing_rule(provider_type, model_name, service_kind, unit_price) if priced else None
                 ),
-                evaluator_id=evaluator_id,
-                message_id=message_id,
-            )
-            for service_kind, quantity, unit_price in (
-                (ServiceKind.LLM_INPUT, input_tokens, input_price),
-                (ServiceKind.LLM_OUTPUT, output_tokens, output_price),
             )
         ]
 
-    def _usage_record(
-        self,
-        team,
-        run,
-        experiment,
-        *,
-        provider_type,
-        model_name,
-        service_kind,
-        quantity,
-        unit_price,
-        cost,
-        confidence,
-        pricing_rule,
-        evaluator_id,
-        message_id,
-        extra_keys: dict | None = None,
-    ) -> UsageRecord:
-        extra = {"evaluation_run_id": run.id, **(extra_keys or {})}
-        if evaluator_id is not None:
-            extra["evaluator_id"] = evaluator_id
-        if message_id is not None:
-            extra["message_id"] = message_id
+    def _usage_pair(self, ctx: _RunContext, call: _ModelCall) -> list[UsageRecord]:
+        """Unsaved input and output rows for one model call, as the recorder writes them —
+        one row per billing dimension."""
+        priced = call.model.priced
+        return [
+            self._usage_record(
+                ctx,
+                _UsageRow(
+                    model=call.model,
+                    service_kind=service_kind,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    cost=_token_cost(unit_price, quantity) if priced else Decimal(0),
+                    confidence=call.confidence,
+                    pricing_rule=self._ensure_pricing_rule(call.model, service_kind, unit_price) if priced else None,
+                    evaluator_id=call.evaluator_id,
+                    message_id=call.message_id,
+                ),
+            )
+            for service_kind, quantity, unit_price in (
+                (ServiceKind.LLM_INPUT, call.input_tokens, call.model.input_price),
+                (ServiceKind.LLM_OUTPUT, call.output_tokens, call.model.output_price),
+            )
+        ]
+
+    @staticmethod
+    def _usage_record(ctx: _RunContext, row: _UsageRow) -> UsageRecord:
+        extra = {"evaluation_run_id": ctx.run.id, **(row.extra_keys or {})}
+        if row.evaluator_id is not None:
+            extra["evaluator_id"] = row.evaluator_id
+        if row.message_id is not None:
+            extra["message_id"] = row.message_id
         return UsageRecord(
-            team=team,
+            team=ctx.team,
             source=UsageSource.EVALUATION,
-            service_kind=service_kind,
-            provider_type=provider_type,
-            model_name=model_name,
-            quantity=quantity,
-            unit_price=unit_price,
-            cost=cost,
-            confidence=confidence,
-            experiment=experiment,
-            evaluation_config=run.config,
-            pricing_rule=pricing_rule,
+            service_kind=row.service_kind,
+            provider_type=row.model.provider_type,
+            model_name=row.model.model_name,
+            quantity=row.quantity,
+            unit_price=row.unit_price,
+            cost=row.cost,
+            confidence=row.confidence,
+            experiment=ctx.experiment,
+            evaluation_config=ctx.run.config,
+            pricing_rule=row.pricing_rule,
             extra=extra,
         )
 
-    def _ensure_pricing_rule(self, provider_type, model_name, service_kind, unit_price) -> PricingRule:
+    def _ensure_pricing_rule(self, model: _ModelPricing, service_kind, unit_price) -> PricingRule:
         """A global rule for the seeded model. Priced rows must reference one, or the
         cost report counts them as a pricing coverage gap."""
+        provider_type, model_name = model.provider_type, model.model_name
         cache_key = (provider_type, model_name, service_kind)
         if cached := self._pricing_rules.get(cache_key):
             return cached
