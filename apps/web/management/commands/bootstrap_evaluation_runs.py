@@ -47,6 +47,11 @@ from apps.service_providers.models import LlmProvider
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams.models import Team
 
+# Same units and rounding as the recorder, so a seeded row's cost is the one the real
+# write path would have produced for the same tokens.
+_THOUSAND = Decimal(1000)
+_CENT_QUANTUM = Decimal("0.00000001")
+
 # Topped up to this many so the results table paginates (10 rows/page).
 _DATASET_SIZE = 14
 _EXTRA_DATASET_MESSAGES = [
@@ -77,15 +82,23 @@ _REASONING = [
 # Best-first, matching the seeded sentiment evaluator's own choice order.
 _SENTIMENTS = ["positive", "neutral", "negative"]
 
-_JUDGE_MODEL = ("openai", "gpt-4o-mini", Decimal("0.00000015"), Decimal("0.0000006"))
-_SECOND_JUDGE_MODEL = ("anthropic", "claude-sonnet-4-5", Decimal("0.000003"), Decimal("0.000015"))
-_GENERATION_MODEL = ("openai", "gpt-4o", Decimal("0.0000025"), Decimal("0.00001"))
+# Rates are per 1K tokens (the canonical `PricingRule.unit_price` unit) and match
+# `cost_tracking/seed_data/llm_pricing.json` exactly, including the dated Anthropic model
+# name, so `_ensure_pricing_rule` finds the pre-seeded global rule instead of creating one.
+_JUDGE_MODEL = ("openai", "gpt-4o-mini", Decimal("0.00015"), Decimal("0.00060"))
+_SECOND_JUDGE_MODEL = ("anthropic", "claude-sonnet-4-5-20250929", Decimal("0.003"), Decimal("0.015"))
+_GENERATION_MODEL = ("openai", "gpt-4o", Decimal("0.00250"), Decimal("0.01000"))
 # No pricing rule for this one, so the run's cost card shows the "unpriced" coverage gap.
 _UNPRICED_MODEL = ("openai", "gpt-5-judge-preview")
 # The no-usage-reported row gets a model of its own: the cost card renders a whole
 # (provider, model) group as "unpriced" if any row in it lacks a rule, so sharing a model
 # with a priced judge would hide that judge's real cost behind this one row.
 _UNKNOWN_MODEL = ("openai", "gpt-4o-audio-preview")
+
+
+def _token_cost(unit_price: Decimal, quantity: int) -> Decimal:
+    """Cost for a token count, the way `record_usage_bulk` computes it."""
+    return (Decimal(quantity) / _THOUSAND * unit_price).quantize(_CENT_QUANTUM)
 
 
 @dataclass(frozen=True)
@@ -633,7 +646,7 @@ class Command(BaseCommand):
                 service_kind=service_kind,
                 quantity=quantity,
                 unit_price=unit_price if priced else None,
-                cost=(unit_price * quantity) if priced else Decimal(0),
+                cost=_token_cost(unit_price, quantity) if priced else Decimal(0),
                 confidence=confidence,
                 pricing_rule=(
                     self._ensure_pricing_rule(provider_type, model_name, service_kind, unit_price) if priced else None
