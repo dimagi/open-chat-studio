@@ -56,8 +56,15 @@ automatically on create:
 - Points `DATABASE_URL` and `REDIS_URL` at a **per-branch** database and Redis DB, so a migration
   or a wiped table on one branch can't affect another. Redis database 15 stores an atomic
   allocation registry, leaving databases 1–14 for concurrent worktrees without collisions.
-- Creates that database, migrates it, and seeds it with `bootstrap_data` — you get a working
-  superuser (`test@example.com` / `letmein`), a team, and sample data rather than an empty app.
+- Creates that database with a working superuser (`test@example.com` / `letmein`), a team, and
+  sample data rather than an empty app. Migrating and seeding from scratch takes about ten
+  minutes, so the finished database is kept as a PostgreSQL template per migration set and copied
+  in a second or two instead. A branch that adds migrations copies the closest older template and
+  migrates forward; only a migration set nothing has built yet pays the full cost, and the next
+  worktree copies that result. `migrate` runs either way, since a template is named for this
+  repository's migrations and says nothing about those shipped by packages in `uv.lock`. Set
+  `OCS_DISABLE_DATABASE_TEMPLATES=true` to always build from scratch, and
+  `OCS_TEMPLATE_RETENTION` to keep more or fewer than three templates around.
 - Builds the frontend assets.
 
 On `wt remove` the branch database is dropped, its Redis DB is flushed, and its allocation is

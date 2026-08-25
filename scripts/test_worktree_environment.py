@@ -24,11 +24,52 @@ mkdir -p "$PWD/.venv" "$PWD/node_modules"
 printf "bootstrap:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
 """
 
+# Enough of psql to answer "does this database exist?" and to remember the answer
+# changing, which is what picks between building a worktree database from scratch and
+# copying a template.
 FAKE_PSQL_SCRIPT = r"""#!/usr/bin/env bash
 set -euo pipefail
 printf "psql:%s\n" "$*" >> "$OCS_TEST_COMMAND_LOG"
 if [[ "${OCS_TEST_FAIL_PSQL:-false}" == "true" ]]; then exit 1; fi
-if [[ "$*" == *"SELECT 1 FROM pg_database"* ]]; then exit 0; fi
+
+registry="$OCS_TEST_DATABASE_REGISTRY"
+statement="${*: -1}"
+touch "$registry"
+
+if [[ "$statement" == *"SELECT 1 FROM pg_database"* ]]; then
+    database=$(sed -E "s/.*datname='([^']*)'.*/\1/" <<< "$statement")
+    grep -Fxq "$database" "$registry" && echo 1
+    exit 0
+fi
+
+if [[ "$statement" == *"FROM pg_database"* ]]; then
+    # Newest first, matching the real ordering by object id.
+    grep '^ocs_tmpl_' "$registry" | tac || true
+    exit 0
+fi
+
+if [[ "$statement" == *"FROM users_customuser"* ]]; then
+    printf '%s\n' "${OCS_TEST_USER_ROW_COUNT:-1}"
+    exit 0
+fi
+
+if [[ "$statement" == CREATE\ DATABASE* ]]; then
+    if [[ -n "${OCS_TEST_REFUSE_TEMPLATE:-}" \
+        && "$statement" == *"TEMPLATE \"$OCS_TEST_REFUSE_TEMPLATE\""* ]]; then
+        echo "source database \"$OCS_TEST_REFUSE_TEMPLATE\" does not exist" >&2
+        exit 1
+    fi
+    database=$(sed -E 's/^CREATE DATABASE "([^"]*)".*/\1/' <<< "$statement")
+    grep -Fxq "$database" "$registry" || printf '%s\n' "$database" >> "$registry"
+    exit 0
+fi
+
+if [[ "$statement" == DROP\ DATABASE* ]]; then
+    database=$(sed -E 's/.*IF EXISTS "([^"]*)".*/\1/' <<< "$statement")
+    grep -Fvx "$database" "$registry" > "$registry.tmp" || true
+    mv "$registry.tmp" "$registry"
+    exit 0
+fi
 """
 
 FAKE_UV_SCRIPT = r"""#!/usr/bin/env bash
@@ -199,8 +240,33 @@ def _prepare_session_guard(
     return command_log.parent / f"ocs-worktree-setup-{scenario.thread_id}.log"
 
 
+def _write_migration(worktree: Path, name: str, contents: str = "# migration\n") -> Path:
+    migration = worktree / "apps" / "example" / "migrations" / name
+    migration.parent.mkdir(parents=True, exist_ok=True)
+    migration.write_text(contents)
+    return migration
+
+
+def _template_name(worktree: Path, env: dict[str, str]) -> str:
+    return _run_worktree_helper(worktree, "ocs_template_name", worktree, env=env).stdout.strip()
+
+
+def _created_databases(command_log: Path) -> list[str]:
+    return [
+        line.split("-c ", maxsplit=1)[1]
+        for line in command_log.read_text().splitlines()
+        if "-c CREATE DATABASE" in line
+    ]
+
+
 @pytest.fixture()
-def worktree_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
+def worktree_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, dict[str, str], Path]:
+    # Loading the Django settings reads the developer's own .env, so running these
+    # tests from a worktree otherwise leaks that worktree's resource names into every
+    # script the fixture starts.
+    for inherited_variable in ("OCS_WORKTREE_ID", "DATABASE_URL", "REDIS_URL"):
+        monkeypatch.delenv(inherited_variable, raising=False)
+
     root = tmp_path / "main"
     worktree = tmp_path / ".codex" / "worktrees" / "a1b2" / "project"
     fake_bin = tmp_path / "bin"
@@ -242,6 +308,7 @@ def worktree_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str], Path]:
     env = {
         "OCS_TEST_COMMAND_LOG": str(command_log),
         "OCS_TEST_REDIS_REGISTRY": str(tmp_path / "redis-registry"),
+        "OCS_TEST_DATABASE_REGISTRY": str(tmp_path / "database-registry"),
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
     }
     return root, worktree, env, command_log
@@ -465,6 +532,214 @@ def test_setup_does_not_reconfigure_the_root_checkout(
 
     assert (root / ".env").read_text() == original_env
     assert command_log.read_text() == "bootstrap:--force --yes\n"
+
+
+def test_setup_copies_a_matching_template_instead_of_rebuilding(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+    template_name = _template_name(worktree, env)
+    command_log.write_text("")
+    env["OCS_WORKTREE_ID"] = "second_worktree"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    command_output = command_log.read_text()
+    assert f'CREATE DATABASE "second_worktree" TEMPLATE "{template_name}"' in _created_databases(command_log)
+    # Migrated even though the template matched exactly: the stamp says nothing about
+    # migrations shipped by the packages in `uv.lock`.
+    assert "uv:run python manage.py migrate" in command_output
+    assert "bootstrap_data" not in command_output
+
+
+def test_setup_migrates_forward_from_an_ancestor_template(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+    ancestor_template = _template_name(worktree, env)
+    _write_migration(worktree, "0002_later.py")
+    command_log.write_text("")
+    env["OCS_WORKTREE_ID"] = "second_worktree"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    command_output = command_log.read_text()
+    assert f'CREATE DATABASE "second_worktree" TEMPLATE "{ancestor_template}"' in _created_databases(command_log)
+    assert "uv:run python manage.py migrate" in command_output
+    assert "bootstrap_data" not in command_output
+    # The migrated result becomes the template for the newer migration set.
+    assert f'CREATE DATABASE "{_template_name(worktree, env)}" TEMPLATE "second_worktree"' in _created_databases(
+        command_log
+    )
+
+
+def test_setup_ignores_a_template_holding_unknown_migrations(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    later_migration = _write_migration(worktree, "0002_later.py")
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+    later_migration.unlink()
+    command_log.write_text("")
+    env["OCS_WORKTREE_ID"] = "second_worktree"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    command_output = command_log.read_text()
+    assert 'CREATE DATABASE "second_worktree"' in _created_databases(command_log)
+    assert "bootstrap_data" in command_output
+
+
+def test_setup_builds_from_scratch_when_templates_are_disabled(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    env["OCS_DISABLE_DATABASE_TEMPLATES"] = "true"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    command_output = command_log.read_text()
+    assert 'CREATE DATABASE "codex_a1b2"' in _created_databases(command_log)
+    assert "bootstrap_data" in command_output
+    assert "ocs_tmpl_" not in command_output
+
+
+def test_setup_seeds_an_existing_database_that_was_never_seeded(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    # A setup that died between creating the database and finishing the seed leaves an
+    # empty database that every later run would otherwise only migrate.
+    _, worktree, env, command_log = worktree_fixture
+    Path(env["OCS_TEST_DATABASE_REGISTRY"]).write_text("codex_a1b2\n")
+    env["OCS_TEST_USER_ROW_COUNT"] = "0"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    command_output = command_log.read_text()
+    assert _created_databases(command_log) == []
+    assert "uv:run python manage.py migrate" in command_output
+    assert "bootstrap_data" in command_output
+
+
+def test_setup_does_not_reseed_an_existing_database(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    Path(env["OCS_TEST_DATABASE_REGISTRY"]).write_text("codex_a1b2\n")
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    command_output = command_log.read_text()
+    assert "uv:run python manage.py migrate" in command_output
+    assert "bootstrap_data" not in command_output
+
+
+def test_setup_builds_from_scratch_when_the_template_copy_fails(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    _write_migration(worktree, "0001_initial.py")
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+    template_name = _template_name(worktree, env)
+    # The template vanishes the way a concurrent worktree's prune would remove it.
+    env["OCS_TEST_REFUSE_TEMPLATE"] = template_name
+    env["OCS_TEMPLATE_COPY_RETRY_DELAY"] = "0"
+    command_log.write_text("")
+    env["OCS_WORKTREE_ID"] = "second_worktree"
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    created = _created_databases(command_log)
+    command_output = command_log.read_text()
+    assert f'CREATE DATABASE "second_worktree" TEMPLATE "{template_name}"' in created
+    assert 'CREATE DATABASE "second_worktree"' in created
+    assert "uv:run python manage.py migrate" in command_output
+    assert "bootstrap_data" in command_output
+
+
+def test_setup_creates_the_database_before_allocating_redis(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+
+    _run(SETUP_SCRIPT, cwd=worktree, env=env)
+
+    command_lines = command_log.read_text().splitlines()
+    create_database = next(index for index, line in enumerate(command_lines) if "-c CREATE DATABASE" in line)
+    allocate_redis = next(
+        index for index, line in enumerate(command_lines) if line.startswith("redis-registry:allocate")
+    )
+    assert create_database < allocate_redis
+
+
+def test_pruning_keeps_the_retained_template_and_the_newest_few(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    _, worktree, env, command_log = worktree_fixture
+    stamp_directory = Path(
+        _run_worktree_helper(worktree, "ocs_template_stamp_directory", worktree, env=env).stdout.strip()
+    )
+    stamp_directory.mkdir(parents=True, exist_ok=True)
+    database_registry = Path(env["OCS_TEST_DATABASE_REGISTRY"])
+    templates = [f"ocs_tmpl_0000000{index}" for index in range(4)]
+    database_registry.write_text("".join(f"{template}\n" for template in templates))
+    for template in templates:
+        (stamp_directory / f"{template}.stamp").write_text("apps/example/migrations/0001_initial.py:1 2\n")
+    env["OCS_TEMPLATE_RETENTION"] = "1"
+
+    _run_worktree_helper(
+        worktree,
+        "ocs_prune_template_databases",
+        worktree,
+        templates[0],
+        env=env,
+    )
+
+    command_output = command_log.read_text()
+    # The retained template plus the newest one survive; the rest go, stamps and all.
+    assert f'DROP DATABASE IF EXISTS "{templates[0]}"' not in command_output
+    assert f'DROP DATABASE IF EXISTS "{templates[3]}"' not in command_output
+    assert f'DROP DATABASE IF EXISTS "{templates[1]}"' in command_output
+    assert f'DROP DATABASE IF EXISTS "{templates[2]}"' in command_output
+    assert not (stamp_directory / f"{templates[1]}.stamp").exists()
+    assert (stamp_directory / f"{templates[0]}.stamp").exists()
+
+
+def test_pruning_does_not_spend_a_retention_slot_on_the_retained_template(
+    worktree_fixture: tuple[Path, Path, dict[str, str], Path],
+) -> None:
+    """The retained template is usually the newest one, having just been snapshotted."""
+    _, worktree, env, command_log = worktree_fixture
+    stamp_directory = Path(
+        _run_worktree_helper(worktree, "ocs_template_stamp_directory", worktree, env=env).stdout.strip()
+    )
+    stamp_directory.mkdir(parents=True, exist_ok=True)
+    database_registry = Path(env["OCS_TEST_DATABASE_REGISTRY"])
+    templates = [f"ocs_tmpl_0000000{index}" for index in range(3)]
+    database_registry.write_text("".join(f"{template}\n" for template in templates))
+    for template in templates:
+        (stamp_directory / f"{template}.stamp").write_text("apps/example/migrations/0001_initial.py:1 2\n")
+    env["OCS_TEMPLATE_RETENTION"] = "1"
+
+    _run_worktree_helper(
+        worktree,
+        "ocs_prune_template_databases",
+        worktree,
+        templates[-1],
+        env=env,
+    )
+
+    command_output = command_log.read_text()
+    # The retained newest template, plus one older one on the retention slot it did not take.
+    assert f'DROP DATABASE IF EXISTS "{templates[2]}"' not in command_output
+    assert f'DROP DATABASE IF EXISTS "{templates[1]}"' not in command_output
+    assert f'DROP DATABASE IF EXISTS "{templates[0]}"' in command_output
 
 
 def test_teardown_removes_only_the_worktree_resources(
