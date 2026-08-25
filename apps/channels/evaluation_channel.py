@@ -16,7 +16,7 @@ from apps.channels.stages.core import (
     QueryExtractionStage,
     ResponseFormattingStage,
 )
-from apps.channels.stages.terminal import ActivityTrackingStage, PersistenceStage
+from apps.channels.stages.terminal import ActivityTrackingStage
 from apps.chat.exceptions import ChannelException
 from apps.service_providers.tracing import TracingService
 
@@ -78,6 +78,9 @@ class EvaluationChannel(ChannelBase):
         # validating against participant_allowlist is meaningless (and would block private
         # experiments). Nothing downstream in this pipeline reads ctx.participant_identifier.
         # SessionActivationStage omitted: the eval bot does not gate on session status.
+        # PersistenceStage omitted: eval runs never record early-exit text, voice or tags
+        # into the eval session's chat. Before ctx.participant_allowed was removed, the
+        # missing ParticipantIdentifierStage left that flag False and switched persistence off.
         return MessageProcessingPipeline(
             core_stages=[
                 MessageTypeValidationStage(),
@@ -87,7 +90,6 @@ class EvaluationChannel(ChannelBase):
                 ResponseFormattingStage(),
             ],
             terminal_stages=[
-                PersistenceStage(),
                 ActivityTrackingStage(),
             ],
         )
