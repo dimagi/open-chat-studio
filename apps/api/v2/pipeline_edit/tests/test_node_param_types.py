@@ -75,7 +75,7 @@ def test_patch_stores_an_unparseable_param_and_reports_it(client, chatbot):
     assert response.status_code == 200, response.content
     body = response.json()
     assert body["pipeline_valid"] is False
-    assert "TypeError" in body["pipeline_errors"]["node"][node_id]["root"]
+    assert body["pipeline_errors"]["node"][node_id]["root"]
     assert Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id).params["code"] == 123
 
 

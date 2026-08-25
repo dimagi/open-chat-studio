@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from functools import cached_property
@@ -38,6 +39,8 @@ from apps.teams.utils import get_slug_for_team
 from apps.utils.fields import SanitizedJSONField, as_int
 from apps.utils.llm_messages import ensure_non_empty_text
 from apps.utils.models import BaseModel
+
+logger = logging.getLogger("ocs.pipelines")
 
 
 class PipelineManager(VersionsObjectManagerMixin, models.Manager):
@@ -283,12 +286,18 @@ class Pipeline(BaseTeamModel, VersionsMixin):
             # transaction aborted, so reporting it as a node error would raise again on the next
             # query with nothing to say about where it came from.
             raise
-        except Exception as e:  # noqa: BLE001 - a broken node must not take the whole read down
+        except Exception:  # noqa: BLE001 - a broken node must not take the whole read down
             # Anything a validator raises before pydantic can wrap it: a param whose value is the
             # wrong Python type reaching a `mode="before"` validator or an FK assignment, say. This
             # runs on every read of a pipeline, so an unparseable node has to be reportable —
             # otherwise one bad row 500s /inspect/ and every write to that pipeline for good.
-            return {"root": f"{type(e).__name__}: {e}"}
+            #
+            # The exception goes to the log rather than into the report. Every other branch here
+            # reports a message written to be read by whoever sent the params; this one catches
+            # anything at all, so its message is as likely to expose how the server is put together
+            # as it is to say something useful, and the report is served over the API.
+            logger.exception("Node %s of pipeline %s could not be validated", node.flow_id, node.pipeline_id)
+            return {"root": "This node could not be read. Check the values of its params."}
         return {}
 
     @property

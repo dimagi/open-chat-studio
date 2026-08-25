@@ -135,4 +135,8 @@ def test_an_unparseable_stored_node_is_reported_rather_than_raised(client, chatb
     response = client.get(f"/api/v2/chatbots/{chatbot.public_id}/inspect/")
 
     assert response.status_code == 200, response.content
-    assert "TypeError" in response.json()["pipeline_errors"]["node"]["CodeNode-bad01"]["root"]
+    root = response.json()["pipeline_errors"]["node"]["CodeNode-bad01"]["root"]
+    assert root
+    # The exception behind it stays in the log rather than going out over the API, since the
+    # `except` that catches it catches anything at all.
+    assert "TypeError" not in root
