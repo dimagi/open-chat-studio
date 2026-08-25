@@ -224,6 +224,7 @@ def test_an_unrecognised_key_is_a_400_naming_it(client, chatbot):
         pytest.param("owner", None, id="owner"),
         pytest.param("team", None, id="team"),
         pytest.param("is_archived", True, id="is-archived"),
+        pytest.param("participant_allowlist", ["+27000000000"], id="participant_allowlist"),
     ],
 )
 def test_a_protected_model_field_stays_unwritable(client, chatbot, field, value):

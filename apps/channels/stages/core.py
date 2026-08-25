@@ -127,7 +127,7 @@ class ParticipantIdentifierStage(ProcessingStage):
 
 
 class ParticipantResolverStage(ProcessingStage):
-    """Resolves (or creates) the Participant record for the validated identifier.
+    """Resolves (or creates) the Participant record for the identifier on the context.
 
     Always sets ctx.participant; new participants are created here so that
     SessionResolutionStage can use the FK directly without a separate creation step.

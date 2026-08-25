@@ -27,7 +27,7 @@ because widgets older than 0.5.1 have no embed key to send.
 The published deprecation covering those widgets sunsets on **2026-10-01**. This document closes the
 path once that date has passed **and** the remaining affected teams have been triaged.
 
-Three things end together, because the last two are only reachable through the first:
+Of the three below, the first two end together here because the second is only reachable through the first; the third already ended with the allowlist's own removal (ADR-0057).
 
 | # | What ends | Where |
 |---|---|---|

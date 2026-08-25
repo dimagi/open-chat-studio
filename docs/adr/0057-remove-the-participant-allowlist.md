@@ -8,7 +8,7 @@
 
 ## Context
 
-`Experiment.participant_allowlist` gated three surfaces: the per-message `ParticipantValidationStage` run on every channel, the token-less fallback in `SessionAccessPermission._has_legacy_access` (described in ADR-0039 line 26 and ADR-0044 line 15), and the legacy public start page plus its Share button. The public channel (#3682) serves anonymous visitors, and the consent page's identifier capture goes with #4196. It is removed entirely, with no deprecation window for the v2 inspect API field: nothing on web can match it once identifier capture goes, and the messaging-channel use was negligible.
+`Experiment.participant_allowlist` gated three surfaces: the per-message `ParticipantValidationStage` run on every channel, the token-less fallback in `SessionAccessPermission._has_legacy_access` (described in ADR-0039 (Consequences) and ADR-0044 (Decision)), and the legacy public start page plus its Share button. The public channel (#3682) serves anonymous visitors, and the consent page's identifier capture goes with #4196. It is removed entirely, with no deprecation window for the v2 inspect API field: nothing on web can match it once identifier capture goes, and the messaging-channel use was negligible.
 
 ## Decision
 
@@ -25,6 +25,8 @@ We will remove the feature in two phases.
 - Until Phase 2, new versions keep cloning the dormant column value, and `compare_with_latest()` no longer sees allowlist changes.
 - The evaluation pipeline drops its inert `PersistenceStage` explicitly, since it had relied on the deleted flag.
 - Spans recorded before this release keep the old stage name.
+- A v2 write request (`POST`/`PATCH` chatbot) that still sends `participant_allowlist` is rejected with `400` as an unknown key, since `ChatbotWriteSerializer` rejects unknown keys; the field is not silently ignored.
+- The token-less widening is bounded: new non-widget sessions require a session token (ADR-0044), so it reaches only sessions backfilled as token-less and `NONE`-level widget channels.
 
 ## Alternatives considered
 
