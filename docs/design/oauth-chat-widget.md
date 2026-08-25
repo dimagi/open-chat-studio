@@ -208,7 +208,8 @@ is in scope.
 
 **In `oauth` mode the embed key is ignored, not rejected.** Existing snippets keep sending
 `X-Embed-Key` and keep working; the mode check refuses them only if no valid token accompanies it.
-Switching a live channel to `oauth` therefore needs no snippet change beyond adding `auth-token`.
+Switching a live channel to `oauth` therefore needs no snippet change beyond installing an
+`authTokenProvider` on the element.
 
 **The stored platform value does not change**, only its label. `embedded_widget` is also a
 `Participant.platform` value, so renaming it would fork every existing participant — the one-way split
@@ -266,7 +267,7 @@ untouched. Version *recording* stays gated on `is_widget_request`, so a server c
 is not tagged with a placeholder version.
 
 `MIN_OAUTH_WIDGET_VERSION` still earns its place in `apps/channels/widget_versions.py`: a browser
-widget in `oauth` mode needs the release that ships the `auth-token` prop, and the channel dialog
+widget in `oauth` mode needs the release that ships the `authTokenProvider` prop, and the channel dialog
 should state it. It stays **advisory** — an older widget simply cannot send a token and fails
 admission — so no new version-based rejection is introduced.
 
@@ -715,10 +716,12 @@ construction — but it is the reason the lifetime is not a free change.
 
 **The restart is the point.** When the lifetime fires in `oauth` mode, the widget's recovery calls
 `chat/start/` again — which now needs a valid bearer token ([D4](#d4-what-makes-a-token-acceptable)).
-If the page's token has expired, that is a `401` and the host must push a fresh one through the
-`auth-token` `@Watch`. Admission becomes **recurring rather than one-shot**, so whatever check the host
-puts in front of its own token-minting endpoint runs again at the cadence of the lifetime. That is the
-mechanism by which a short OAuth TTL finally does the work it looks like it is doing.
+The widget pulls it from the host's `authTokenProvider` at that moment, so the host re-mints on demand
+rather than having to notice the expiry and push. Admission becomes **recurring rather than
+one-shot**, so whatever check the host puts in front of its own token-minting endpoint runs again at
+the cadence of the lifetime. That is the mechanism by which a short OAuth TTL finally does the work it
+looks like it is doing, and it is why the credential is pulled rather than pushed — see
+[Browser embeds and the token](#browser-embeds-and-the-token).
 
 **Configuration: a mandatory global and a per-channel override — both shipped.**
 `CHAT_SESSION_TOKEN_LIFETIME` always has a value and is live. `ExperimentChannel.session_token_lifetime`
@@ -785,6 +788,7 @@ host backend ──POST /o/token/ (client_credentials)──► OCS
       │  short-lived access token
       ▼
    widget ──Authorization: Bearer … [+ X-Embed-Key]──► POST /api/chat/start/
+      │  (token pulled from the host's authTokenProvider at each start)
       │  session token in the response
       ▼
    widget ──X-Session-Token──► message / poll / upload
@@ -794,11 +798,38 @@ The page token carries `chat:start` and nothing else ([D4](#d4-what-makes-a-toke
 leak costs the ability to start chat sessions — not the team-wide outbound-messaging capability
 `chatbots:interact` would have handed over.
 
-Widget changes (`components/chat_widget`): an `auth-token` prop threaded into
-`ChatSessionServiceOptions` and emitted from `getCommonHeaders()`, a `@Watch` so the host can rotate
-it, an error surface for a `401` with `code: "chat_access_denied"`, and **no** `localStorage`
-persistence — the token belongs to the host page, not the session. `embed-key` stays optional, so an
-`oauth`-mode embed may set only `chatbot-id` + `auth-token`.
+**The widget does not hold a token; it asks for one.** The single prop is
+`authTokenProvider` — a function the host installs on the element, which the widget calls at every
+session start and which receives `{ forceRefresh: true }` when the previous token was refused. The
+token it returns is sent as `Authorization: Bearer` **on `chat/start/` only** (an earlier draft said
+`getCommonHeaders()`, which would have put the host's credential on `message/`, `poll/` and `upload/`
+— three endpoints that ignore it and that [D5](#d5-session-bound-endpoints-are-untouched) keeps out of
+the admission decision). Nothing is written to `localStorage`: the credential belongs to the page, not
+the conversation. `embed-key` stays optional, so an `oauth`-mode embed may set only `chatbot-id`.
+
+**Rotation is a pull, not a push, and that is what makes D7 work.**
+[D7](#d7-admission-is-bounded-in-time) says the host "must push a fresh token through the `@Watch`",
+which leaves the host to work out *that* it needs to. Pulling inverts the problem: the widget asks at
+the moment it needs a credential — including at the ADR-0054 restart — so recurring admission needs no
+host-side timer and no signal back to the page. A refused token is retried exactly once, and only if
+the refresh returned a *different* one; otherwise the retry would be an identical request against the
+endpoint ADR-0052 throttles.
+
+**A static `auth-token` attribute was implemented and then dropped.** It looked like the cheaper
+integration — a backend template renders the token into the snippet, no JavaScript at all — and with
+`ACCESS_TOKEN_EXPIRE_SECONDS` at its 10-hour default it works for any visit that starts a chat the same
+day. It was removed for three reasons. Anyone reaching `oauth` mode already runs a token-minting
+backend, because client credentials require a client secret the page cannot hold, so the provider asks
+for a few lines on top of work already done rather than new work. Its failure mode passes integration
+testing and fails in production: past the token's lifetime the visitor gets the deliberately opaque
+`401` and cannot recover without a page reload. And the widget deliberately emits **no event** on
+refusal, on the grounds that a provider learns by being called — reasoning that covers provider users
+only, leaving an attribute-only host with no way to know it must re-mint. Keeping both also meant a
+precedence rule (provider wins, attribute as fallback) over a branch almost nothing reached. Being a
+function the provider is a **JavaScript property with no attribute equivalent**, so the cost of
+dropping the attribute is real: a pure-snippet embed cannot use `oauth` mode, and the channel dialog's
+copy-paste snippet ([row 3](#implementation-outline)) must show a small JS block — which puts the
+token-minting requirement in front of the admin rather than behind an attribute that quietly expires.
 
 Server-side, `authorization` must be added to `CORS_ALLOW_HEADERS`, or the cross-origin preflight
 rejects the request before the view runs. Safe here: `CORS_URLS_REGEX` limits CORS to `^/api/chat/.*$`
@@ -832,17 +863,17 @@ PR #4198 delivered the per-application allowlist, so none of those appear here a
 | 12 | `apps/api/views/chat.py` | ~~`START_AUTH_CLASSES` on `chat_start_session` only; mode checks in `_check_start_session_access`; OAuth channel as an attribution source in `_resolve_experiment_channel`~~ — **shipped**. Implementing it settled one thing the sketch in [D3](#d3-extend-the-existing-authorization-site) left open: the mode is checked wherever the *embed key* is the proof, which includes ADR-0053's cookie-bearing **non-member** with a key, not only the anonymous caller. That branch keeps its `403` (D6: a `401` at an authenticated caller reads as a broken session), so only the anonymous refusal is one of the door's uniform `401`s. |
 | 13 | `apps/api/v2/inspect/serializers.py` | **No change** — one platform, so the existing `EMBEDDED_WIDGET` guards stay correct. Expose `credential_mode` if the inspect API should report it. |
 | 14 | `config/settings.py` | ~~`CORS_ALLOW_HEADERS += ["authorization"]`; `chat:start` in `OAUTH2_PROVIDER["SCOPES"]` and `OAUTH_CLIENT_CREDENTIALS_SCOPES`; `CHAT_API_SCOPE`~~ — **shipped** (the new scope also lands in the generated `api-schemas/*.yml` security definitions). `CHAT_SESSION_TOKEN_LIFETIME` already **shipped in PR #4204**. |
-| 15 | `components/chat_widget` | `auth-token` prop, header, `@Watch`, `401` surface; release + `LATEST_VERSION` bump. Nothing for D7 in an *unbound* widget; the bound-widget dead-end (D7) is ADR-0054's own follow-up, not this document's. |
+| 15 | `components/chat_widget` | ~~`authTokenProvider` (property-only, pull-based) as the single credential prop, `Authorization: Bearer` on `chat/start/` only (not `getCommonHeaders()`), `@Watch` so a provider installed later reaches the cached service, `ChatAuthError` as the `401` surface, no `localStorage`~~ — **shipped**. A static `auth-token` attribute was implemented and dropped; see [Browser embeds and the token](#browser-embeds-and-the-token) for why. Nothing for D7 in an *unbound* widget; the bound-widget dead-end (D7) is ADR-0054's own follow-up, not this document's. What remains is the **release**: npm publish, `LATEST_VERSION` bump and `MIN_OAUTH_WIDGET_VERSION` (row 2), all of which land together per `docs/developer_guides/widget_versioning.md`. |
 
 This work carries **one migration** (`credential_mode` + `session_token_lifetime` on the same
 `channels` migration; the platform change is a label only, and `allowed_chatbots` already shipped as
 `oauth.0004`) — **shipped as `bot_channels.0033`**, ahead of the rest, since the columns are inert
 until something can select the mode. The server admission path (rows 6–8, 11, 12, 14) followed as a
-second phase; what is left is the admin-facing half — `credential_mode` on the channel form and
-`MIN_OAUTH_WIDGET_VERSION` (rows 2 and 3) — plus the widget (row 15). Until the form lands the mode
-is not admin-selectable, so `oauth` mode is reachable in tests and the shell only. No
-change to `required_auth_level` semantics for existing channels — they all migrate to `EMBED_KEY` mode,
-which is exactly today's behaviour. One status code changed on an already-rejected path
+second phase, and the widget (row 15) as a third. What is left is the admin-facing half —
+`credential_mode` on the channel form (row 3) — and the widget release that `MIN_OAUTH_WIDGET_VERSION`
+(row 2) names. Until the form lands the mode is not admin-selectable, so `oauth` mode is reachable in
+tests and the shell only. No change to `required_auth_level` semantics for existing channels — they all
+migrate to `EMBED_KEY` mode, which is exactly today's behaviour. One status code changed on an already-rejected path
 (`test_start_session_with_invalid_embed_key`, `403` → `401`, [D6](#d6-getting-a-401-out-of-drf)), and
 one more path moved that earlier drafts did not name: an `Authorization: Bearer` header on
 `chat/start/` was previously ignored outright, and is now a `401` if it is not a valid `chat:start`
@@ -976,8 +1007,10 @@ is untouched by this work. Widget: header sent/omitted/rotated, never persisted.
 
 ## Open questions
 
-1. **Which release becomes `MIN_OAUTH_WIDGET_VERSION`?** Decided when the widget release lands; the
-   channel dialog and docs quote it.
+1. ~~**Which release becomes `MIN_OAUTH_WIDGET_VERSION`?**~~ **Decided: 0.12.0** — a minor bump for
+   an additive prop, over 0.11.0. The number is not yet published, so `LATEST_VERSION` and
+   `MIN_OAUTH_WIDGET_VERSION` are both still on the release's critical path; the channel dialog and
+   docs quote it.
 2. **Does the two-person setup flow hold up?** `oauth` mode needs a Team Admin (registers the
    application, names its chatbots) *and* a Chatbot Admin (creates the channel, sets the mode). Neither
    can finish alone. The Team Admin half is now live (PR #4198) and can be observed in use before the
