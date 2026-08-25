@@ -8,7 +8,7 @@
     <div class="flex flex-wrap gap-2">
       {% for pill in filter_pills %}
         <button class="btn btn-sm {% if pill.active %}btn-active{% endif %}"
-                hx-get="{% if pill.field %}{{ table_url }}?filter_field={{ pill.field|urlencode }}&filter_value={{ pill.value|urlencode }}{% else %}{{ table_url }}{% endif %}"
+                hx-get="{{ table_url }}{% if pill.field %}{% querystring filter_field=pill.field filter_value=pill.value %}{% endif %}"
                 hx-target="#results-table"
                 hx-swap="innerHTML">
           {{ pill.label }}
