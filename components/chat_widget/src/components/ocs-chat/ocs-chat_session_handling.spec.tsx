@@ -673,17 +673,28 @@ describe('ocs-chat persistent-session modes', () => {
   it.each([
     ['persistent-session="tab"', 'tab'],
     ['persistent-session="true"', 'local'],
-    ['', 'local'],
     ['persistent-session="false"', 'off'],
+    ['persistent-session="TAB"', 'tab'],
+    ['persistent-session="False"', 'off'],
+    ['persistent-session=" tab "', 'tab'],
+    ['persistent-session=""', 'local'],
+    ['', 'local'],
   ])('%s resolves to mode %s', async (attr, mode) => {
     const page = await newPage(attr);
     expect(page.rootInstance['getPersistenceMode']()).toBe(mode);
   });
 
-  it('resolves the boolean false prop to off', async () => {
+  it.each([
+    { label: 'undefined', value: undefined, mode: 'off' },
+    { label: 'null', value: null, mode: 'off' },
+    { label: 'zero', value: 0, mode: 'off' },
+    { label: 'false', value: false, mode: 'off' },
+    { label: 'true', value: true, mode: 'local' },
+    { label: 'tab', value: 'tab', mode: 'tab' },
+  ])('the $label prop resolves to mode $mode', async ({ value, mode }) => {
     const page = await newPage('');
-    page.rootInstance.persistentSession = false;
-    expect(page.rootInstance['getPersistenceMode']()).toBe('off');
+    page.rootInstance.persistentSession = value as unknown as boolean;
+    expect(page.rootInstance['getPersistenceMode']()).toBe(mode);
   });
 
   it('writes the session to sessionStorage and not localStorage in tab mode', async () => {

@@ -1824,9 +1824,14 @@ export class OcsChat {
   }
 
   private getPersistenceMode(): PersistenceMode {
-    const value = this.persistentSession;
+    // Typed as unknown because a host page can assign any value to the prop.
+    const raw: unknown = this.persistentSession;
+    // An unset or falsy value means no persistence. The prop keeps its `true`
+    // default so an absent attribute still resolves to `local`.
+    if (raw === undefined || raw === null || raw === false || raw === 0) return 'off';
+    const value = typeof raw === 'string' ? raw.trim().toLowerCase() : raw;
     if (value === 'tab') return 'tab';
-    if (value === false || value === 'false') return 'off';
+    if (value === 'false') return 'off';
     return 'local';
   }
 
