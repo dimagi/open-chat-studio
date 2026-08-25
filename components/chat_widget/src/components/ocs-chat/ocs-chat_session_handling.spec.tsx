@@ -1204,3 +1204,50 @@ describe('ocs-chat visitor id', () => {
     expect(store['ocs-user-id']).toBeUndefined();
   });
 });
+
+describe('ocs-chat start payload timezone', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockStartSession.mockResolvedValue({ session_id: 'tz-session' });
+    mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
+    Object.defineProperty(window, 'localStorage', {
+      value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn(), clear: jest.fn() },
+      writable: true,
+    });
+    global.fetch = setupFetchMock('tz-session');
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('sends the device time zone on start', async () => {
+    jest.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ timeZone: 'Africa/Johannesburg' } as Intl.ResolvedDateTimeFormatOptions);
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
+    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
+    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
+    await page.rootInstance.sendMessage('hello');
+
+    expect(mockStartSession).toHaveBeenCalledWith(expect.objectContaining({ timezone: 'Africa/Johannesburg' }));
+  });
+
+  it('omits the time zone when the browser cannot resolve one', async () => {
+    jest.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({} as Intl.ResolvedDateTimeFormatOptions);
+    const page = await newSpecPage({
+      components: [OcsChat],
+      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
+    });
+    const svc = page.rootInstance['getChatService']();
+    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
+    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
+    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
+    await page.rootInstance.sendMessage('hello');
+
+    expect(mockStartSession.mock.calls[0][0]).not.toHaveProperty('timezone');
+  });
+});

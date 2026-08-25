@@ -610,6 +610,11 @@ export class OcsChat {
         requestBody.participant_name = this.userName;
       }
 
+      const timezone = this.detectTimezone();
+      if (timezone) {
+        requestBody.timezone = timezone;
+      }
+
       if (this.versionNumber != null) {
         requestBody.version_number = this.versionNumber;
       }
@@ -627,6 +632,14 @@ export class OcsChat {
       this.handleError('Failed to start chat session');
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  private detectTimezone(): string | undefined {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+    } catch {
+      return undefined;
     }
   }
 
