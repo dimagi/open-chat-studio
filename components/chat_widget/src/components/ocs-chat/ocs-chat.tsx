@@ -338,13 +338,16 @@ export class OcsChat {
       // Bound to an externally-managed session: the host page is the source of truth.
       this.activeSessionId = this.sessionId;
       this.applySessionToken(this.sessionToken);
-    } else if (this.isStorageAvailable()) {
-      // Always try to load existing session if storage is available
-      const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
-      if (sessionId && messages) {
-        this.activeSessionId = sessionId;
-        this.messages = messages;
-        this.applySessionToken(sessionToken);
+    } else {
+      this.sweepInactiveStore();
+      if (this.isStorageAvailable()) {
+        // Always try to load existing session if storage is available
+        const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
+        if (sessionId && messages) {
+          this.activeSessionId = sessionId;
+          this.messages = messages;
+          this.applySessionToken(sessionToken);
+        }
       }
     }
     this.parseWelcomeMessages();
@@ -1775,23 +1778,41 @@ export class OcsChat {
   }
 
   private clearSessionStorage(): void {
-    // Clear both stores (not just the active persistence mode's store) so
-    // switching modes mid-session does not strand a session in the other one.
+    // Only the store this widget is using: another page in the same origin may
+    // be running the same chatbot in the other persistence mode.
+    const storage = this.getStorage();
+    if (!storage) return;
+    this.removeSessionKeys(() => storage);
+  }
+
+  /**
+   * Drop this chatbot's keys from the store the current persistence mode does
+   * not use, so switching modes does not strand a session in the other one.
+   * Scoped per `chatbotId` and run once at load, so other chatbots' sessions
+   * and the store another page is actively using are left alone.
+   */
+  private sweepInactiveStore(): void {
+    const mode = this.getPersistenceMode();
+    if (mode !== 'local') {
+      this.removeSessionKeys(() => window.localStorage);
+    }
+    if (mode !== 'tab') {
+      this.removeSessionKeys(() => window.sessionStorage);
+    }
+  }
+
+  private removeSessionKeys(getStore: () => Storage): void {
     const keys = this.getStorageKeys();
-    const clearStore = (getStore: () => Storage) => {
-      try {
-        const store = getStore();
-        store.removeItem(keys.sessionId);
-        store.removeItem(keys.messages);
-        store.removeItem(keys.lastActivity);
-        store.removeItem(keys.visible);
-        store.removeItem(keys.sessionToken);
-      } catch (error) {
-        console.warn('Failed to clear chat session from storage:', error);
-      }
-    };
-    clearStore(() => window.localStorage);
-    clearStore(() => window.sessionStorage);
+    try {
+      const store = getStore();
+      store.removeItem(keys.sessionId);
+      store.removeItem(keys.messages);
+      store.removeItem(keys.lastActivity);
+      store.removeItem(keys.visible);
+      store.removeItem(keys.sessionToken);
+    } catch (error) {
+      console.warn('Failed to clear chat session from storage:', error);
+    }
   }
 
   private isKioskMode(): boolean {
