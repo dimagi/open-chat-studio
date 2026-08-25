@@ -2,6 +2,9 @@ import { newSpecPage } from '@stencil/core/testing';
 import { OcsChat } from './ocs-chat';
 import { SessionAccessError } from '../../services/chat-session-service';
 
+// Matches the `ocs:` visitor id prefix followed by a v4 UUID.
+const UUID_RE = /^ocs:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 // Create mock functions at the module level
 const mockStartSession = jest.fn();
 const mockSendMessage = jest.fn();
@@ -514,7 +517,7 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
 
     expect(page.rootInstance.activeSessionId).toBe('test-session-id');
     expect(page.rootInstance.error).toBeFalsy();
-    expect(page.rootInstance.generatedUserId).toMatch(/^ocs:[0-9a-f-]{36}$/);
+    expect(page.rootInstance.generatedUserId).toMatch(UUID_RE);
   });
 
   it('reuses the same in-memory user id across calls when localStorage is blocked', async () => {
@@ -527,7 +530,7 @@ describe('ocs-chat localStorage blocked (SecurityError)', () => {
     const firstId = page.rootInstance.getOrGenerateUserId();
     const secondId = page.rootInstance.getOrGenerateUserId();
 
-    expect(firstId).toMatch(/^ocs:[0-9a-f-]{36}$/);
+    expect(firstId).toMatch(UUID_RE);
     expect(secondId).toBe(firstId);
   });
 
@@ -654,6 +657,10 @@ describe('ocs-chat persistent-session modes', () => {
     global.fetch = setupFetchMock('tab-session');
   });
 
+  afterEach(() => {
+    Object.defineProperty(window, 'sessionStorage', { value: storageMock(), writable: true });
+  });
+
   async function newPage(attr: string) {
     const page = await newSpecPage({
       components: [OcsChat],
@@ -699,7 +706,8 @@ describe('ocs-chat persistent-session modes', () => {
 
     expect(page.rootInstance.activeSessionId).toBe('stored-tab-session');
     expect(page.rootInstance.messages).toHaveLength(1);
-    expect(mockStartSession).not.toHaveBeenCalled();
+    const startCalls = (global.fetch as jest.Mock).mock.calls.filter(call => String(call[0]).includes('/api/chat/start/'));
+    expect(startCalls).toHaveLength(0);
   });
 
   it('clears both stores when the session is cleared in tab mode, so switching modes does not strand a session', async () => {
@@ -1250,7 +1258,6 @@ describe('ocs-chat kiosk restart after session end', () => {
 });
 
 describe('ocs-chat visitor id', () => {
-  const UUID_RE = /^ocs:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   let store: Record<string, string>;
 
   beforeEach(() => {
@@ -1320,7 +1327,10 @@ describe('ocs-chat start payload timezone', () => {
     global.fetch = setupFetchMock('tz-session');
   });
 
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    jest.restoreAllMocks();
+  });
 
   it('sends the device time zone on start', async () => {
     jest.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ timeZone: 'Africa/Johannesburg' } as Intl.ResolvedDateTimeFormatOptions);
