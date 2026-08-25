@@ -54,7 +54,12 @@ def check_references(options: dict, node_class: type[BasePipelineNode], params: 
 
 
 def _reference_errors(options: dict, node_class: type[BasePipelineNode], params: dict[str, Any]) -> dict[str, str]:
-    """``param -> why its value names something out of reach``, for the params actually sent."""
+    """``param -> why its value names something out of reach``, for the params actually sent.
+
+    A list-valued param is only read as a list when the value actually is one: nothing type-checks
+    params before this runs, so a bare id can arrive where a list belongs, and iterating that would
+    be a 500 in place of a rejected write.
+    """
     node_type = node_class.__name__
     sources = reference_sources_for_type(node_type)
     referencing = {param: value for param, value in params.items() if param in sources and value not in UNSET}
@@ -68,7 +73,7 @@ def _reference_errors(options: dict, node_class: type[BasePipelineNode], params:
             # added later from raising here rather than being skipped.
             continue
         allowed = {option["value"] for option in offered}
-        supplied = value if is_list_param(node_class, param) else [value]
+        supplied = value if is_list_param(node_class, param) and isinstance(value, list | tuple | set) else [value]
         unknown = [item for item in supplied if not _is_offered(item, allowed)]
         if unknown:
             errors[param] = (

@@ -191,6 +191,22 @@ def test_a_list_valued_reference_is_checked_per_entry(client, chatbot, team):
 
 
 @pytest.mark.django_db()
+def test_a_scalar_sent_for_a_list_valued_reference_is_refused(client, chatbot, team):
+    """Nothing type-checks params before the reference check, so a bare id can arrive where a list
+    belongs. It is one unreachable value rather than an iteration over an integer."""
+    ours = CollectionFactory.create(team=team, is_index=True)
+
+    response = client.post(
+        nodes_url(chatbot),
+        {"type": "LLMResponseWithPrompt", "params": {"collection_index_ids": ours.id + 1000}},
+        format="json",
+    )
+
+    assert response.status_code == 400, response.content
+    assert "collection_index_ids" in response.json()["params"]
+
+
+@pytest.mark.django_db()
 def test_a_malformed_custom_action_reference_is_refused(client, chatbot):
     """`custom_actions` entries are the composite "{action_id}:{operation_id}" strings the server
     hands out, and `Node.update_from_params` splits them on the colon -- so a value that is not one
