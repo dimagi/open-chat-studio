@@ -8,14 +8,14 @@
 
 ## Context
 
-`Experiment.participant_allowlist` gated three surfaces: the per-message `ParticipantValidationStage` run on every channel, the token-less fallback in `SessionAccessPermission._has_legacy_access` (described in ADR-0039 (Consequences) and ADR-0044 (Decision)), and the legacy public start page plus its Share button. The public channel (#3682) serves anonymous visitors, and the consent page's identifier capture goes with #4196. The feature is removed, with no deprecation window for the v2 inspect API field: nothing on web can match it once identifier capture goes, and the messaging-channel use was negligible.
+`Experiment.participant_allowlist` gated three surfaces: the per-message `ParticipantValidationStage` run on every channel, the token-less fallback in `SessionAccessPermission._has_legacy_access` (described in ADR-0039 (Consequences) and ADR-0044 (Decision)), and the legacy public start page plus its Share button. The public channel (#3682) serves anonymous visitors, and whether the consent page's identifier capture survives is an open question in that design. The feature is removed, with no deprecation window for the v2 inspect API field: nothing on web can match it once identifier capture goes, and the messaging-channel use was negligible.
 
 ## Decision
 
 We will remove the feature in two phases.
 
 - **Phase 1 (this branch):** enforcement and configuration go; persistence stays. `ParticipantValidationStage` becomes `ParticipantIdentifierStage`; `ctx.participant_allowed` is deleted. The keyless fallback in `_has_legacy_access` is unconditional for non-widget sessions and `NONE`-level widget channels. The legacy start page and Share dialog no longer gate on it. The settings section, form field, `normalize_participant_allowlist`, the v2 inspect and write API fields, and the version-diff field go.
-- **Phase 2 (#4196 sweep):** persistence goes: the column, its `VERSIONED_CONTENT_FIELDS` entry, the export-surface field, and `VersionFieldDisplayFormatters.format_array_field` are dropped.
+- **Phase 2 (#4278):** persistence goes: the column, its `VERSIONED_CONTENT_FIELDS` entry, the export-surface field, and `VersionFieldDisplayFormatters.format_array_field` are dropped.
 
 ## Consequences
 
@@ -30,5 +30,5 @@ We will remove the feature in two phases.
 
 ## Alternatives considered
 
-- **Keep the check on messaging channels until #4196** - rejected: it would leave a half-removed feature and a per-message check whose only remaining users were negligible.
+- **Keep the check on messaging channels until Phase 2** - rejected: it would leave a half-removed feature and a per-message check whose only remaining users were negligible.
 - **Block creating a public channel while an allowlist is set** - moot, since the allowlist no longer exists.
