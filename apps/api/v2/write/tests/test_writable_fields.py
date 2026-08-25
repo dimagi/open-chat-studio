@@ -30,15 +30,26 @@ def _writable_model_fields(serializer) -> set[str]:
 def test_patch_covers_every_versioned_field_except_the_pipeline():
     """`VERSIONED_CONTENT_FIELDS` is what a published version snapshots. Everything in it except
     `pipeline` -- which has its own façade at /chatbots/{id}/pipeline/* -- is writable here, so a
-    new versioned field has to be an explicit decision rather than an omission."""
-    assert _writable_model_fields(ChatbotWriteSerializer()) == (Experiment.VERSIONED_CONTENT_FIELDS - {"pipeline"})
+    new versioned field has to be an explicit decision rather than an omission.
+
+    `participant_allowlist` is the one deliberate exception: its column and versioning stay in
+    place while the participant allowlist feature is removed in phases, but nothing writes to it
+    through this API any more."""
+    assert _writable_model_fields(ChatbotWriteSerializer()) == (
+        Experiment.VERSIONED_CONTENT_FIELDS - {"pipeline", "participant_allowlist"}
+    )
 
 
 def test_patch_writes_exactly_what_the_settings_form_edits():
     """The write API mimics the UI's own form rather than the inspect response: inspecting and
     editing are different jobs, and inspect returns plenty that is not writable. A field added to
-    the settings page therefore has to be added here too."""
-    assert _writable_model_fields(ChatbotWriteSerializer()) == set(ChatbotSettingsForm.Meta.fields)
+    the settings page therefore has to be added here too.
+
+    `participant_allowlist` is excluded here too: the settings form still edits it until it is
+    removed from the UI, but the API no longer accepts it."""
+    assert _writable_model_fields(ChatbotWriteSerializer()) == set(ChatbotSettingsForm.Meta.fields) - {
+        "participant_allowlist"
+    }
 
 
 def _related_fields(serializer):
