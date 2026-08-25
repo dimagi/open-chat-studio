@@ -37,7 +37,7 @@ export class ChatAuthError extends Error {
 /**
  * Supplies the OAuth bearer token for `chat/start/`. Called once per session
  * start, and a second time with `forceRefresh` when the server rejected the
- * first token — a host that caches tokens should bypass its cache on that call.
+ * first token.
  */
 export type AuthTokenProvider = (context: { forceRefresh: boolean }) => string | undefined | Promise<string | undefined>;
 
@@ -149,8 +149,7 @@ export class ChatSessionService {
 
     // The provider may have handed back a cached token that has since expired, so
     // ask again with `forceRefresh` before giving up. One retry only, and only for
-    // a token that actually changed -- a provider that returns the same token (or
-    // nothing) would spend the retry on a request already refused.
+    // a token that actually changed.
     if (response.status === 401 && this.authTokenProvider) {
       const refreshed = await this.resolveAuthToken(true);
       if (refreshed && refreshed !== token) {
@@ -441,8 +440,7 @@ export class ChatSessionService {
   /**
    * Headers for `chat/start/`. The bearer token goes here and nowhere else: it
    * admits a *new* session, and every request after that is authorised by the
-   * session token instead. Sending it more widely would put the host's
-   * credential on three endpoints that ignore it.
+   * session token instead.
    */
   private getStartHeaders(authToken?: string): Record<string, string> {
     const headers = this.getJsonHeaders();
@@ -453,10 +451,7 @@ export class ChatSessionService {
   }
 
   /**
-   * Asks the host for a bearer token at the moment one is needed. There is no
-   * stored token to fall back on: a credential the widget holds onto goes stale
-   * without anything noticing, and the host is the only party that can mint a
-   * fresh one. A channel in `embed_key` mode has no provider and needs none.
+   * Asks the host for a bearer token at the moment one is needed.
    */
   private async resolveAuthToken(forceRefresh: boolean): Promise<string | undefined> {
     if (!this.authTokenProvider) {
