@@ -953,6 +953,10 @@ export class OcsChat {
   private startTaskPolling(taskId: string): void {
     if (!this.activeSessionId) return;
 
+    // The session this poll belongs to. A clear (new chat, kiosk restart,
+    // expired session) bumps the epoch, so callbacks that resolve afterwards
+    // belong to a session the widget has moved on from and are dropped.
+    const epoch = this.sessionEpoch;
     this.currentPollTaskId = taskId;
     this.isTyping = true;
     this.stopMessagePolling();
@@ -963,6 +967,7 @@ export class OcsChat {
 
     this.taskPollingHandle = this.getChatService().pollTask(this.activeSessionId, taskId, {
       onMessage: message => {
+        if (epoch !== this.sessionEpoch) return;
         this.messages = [...this.messages, message];
         this.saveSessionToStorage();
         this.dispatchWidgetEvent('ocs:message:received', {
@@ -978,9 +983,11 @@ export class OcsChat {
         this.focusInput();
       },
       onProgress: message => {
+        if (epoch !== this.sessionEpoch) return;
         this.typingProgressMessage = message;
       },
       onTimeout: () => {
+        if (epoch !== this.sessionEpoch) return;
         const timeoutMessage: ChatMessage = {
           created_at: new Date().toISOString(),
           role: 'system',
@@ -998,6 +1005,7 @@ export class OcsChat {
         this.focusInput();
       },
       onError: error => {
+        if (epoch !== this.sessionEpoch) return;
         this.typingProgressMessage = '';
         this.taskPollingHandle = undefined;
         if (error instanceof SessionAccessError) {
@@ -1019,9 +1027,13 @@ export class OcsChat {
       return;
     }
 
+    // See startTaskPolling: callbacks that fire after the session was cleared
+    // would otherwise write the old conversation into the new one.
+    const epoch = this.sessionEpoch;
     this.messagePollingHandle = this.getChatService().startMessagePolling(this.activeSessionId, {
       getSince: () => (this.messages.length > 0 ? this.messages.at(-1)?.created_at : undefined),
       onMessages: messages => {
+        if (epoch !== this.sessionEpoch) return;
         if (messages.length === 0) return;
         this.messages = [...this.messages, ...messages];
         this.saveSessionToStorage();
@@ -1037,6 +1049,7 @@ export class OcsChat {
         this.focusInput();
       },
       onSessionEnded: () => {
+        if (epoch !== this.sessionEpoch) return;
         this.messagePollingHandle = undefined;
         this.handleSessionEnded();
       },

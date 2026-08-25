@@ -1255,6 +1255,41 @@ describe('ocs-chat kiosk restart after session end', () => {
     await page.rootInstance.sendMessage('again');
     expect(mockStartSession).toHaveBeenCalledTimes(1);
   });
+
+  async function restartedPage() {
+    const page = await endedPage('mode="kiosk"');
+    const messageCallbacks = mockStartMessagePolling.mock.calls[0][1];
+    const taskCallbacks = mockPollTask.mock.calls[0][2];
+    const button = page.root?.shadowRoot?.querySelector('.kiosk-restart') as HTMLButtonElement;
+    button.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+    (window.localStorage.setItem as jest.Mock).mockClear();
+    return { page, messageCallbacks, taskCallbacks };
+  }
+
+  it('ignores message-poll callbacks from the session that was cleared by the restart', async () => {
+    const { page, messageCallbacks } = await restartedPage();
+
+    messageCallbacks.onMessages([{ created_at: '2026-01-01T00:00:00Z', role: 'assistant', content: 'stale reply', attachments: [] }]);
+    messageCallbacks.onSessionEnded();
+    await page.waitForChanges();
+
+    expect(page.rootInstance.messages).toEqual([]);
+    expect(page.rootInstance.sessionEnded).toBe(false);
+    expect(window.localStorage.setItem).not.toHaveBeenCalledWith('ocs-chat-messages-test-bot', expect.anything());
+  });
+
+  it('ignores task-poll callbacks from the session that was cleared by the restart', async () => {
+    const { page, taskCallbacks } = await restartedPage();
+
+    taskCallbacks.onMessage({ created_at: '2026-01-01T00:00:00Z', role: 'assistant', content: 'stale reply', attachments: [] });
+    await page.waitForChanges();
+
+    expect(page.rootInstance.messages).toEqual([]);
+    expect(page.rootInstance.isTyping).toBe(false);
+    expect(window.localStorage.setItem).not.toHaveBeenCalledWith('ocs-chat-messages-test-bot', expect.anything());
+  });
 });
 
 describe('ocs-chat visitor id', () => {
