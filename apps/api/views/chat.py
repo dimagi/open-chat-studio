@@ -472,6 +472,7 @@ def chat_start_session(request):
     session_data = data.get("session_data", {})
     remote_id = data.get("participant_remote_id", "")
     name = data.get("participant_name")
+    participant_timezone = data.get("timezone")
 
     # Pre-0.5.1 widgets send no version header; flag them (via session_data.source)
     # so deprecated old widgets still receive RFC 8594 sunset headers.
@@ -532,6 +533,7 @@ def chat_start_session(request):
         participant_identifier=participant.identifier,
         participant_user=user,
         metadata=metadata,
+        timezone=participant_timezone,
         version=version_number if version_number is not None else Experiment.DEFAULT_VERSION_NUMBER,
     )
 

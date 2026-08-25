@@ -1,4 +1,5 @@
 import textwrap
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
@@ -334,6 +335,22 @@ class ChatStartSessionRequest(serializers.Serializer):
     participant_name = serializers.CharField(
         label="Paricipant Name", required=False, help_text="Optional participant name"
     )
+    timezone = serializers.CharField(
+        label="Time zone",
+        required=False,
+        allow_blank=True,
+        help_text="Optional IANA time zone name of the participant's device (e.g. 'Africa/Johannesburg'), "
+        "recorded in the participant's data for this chatbot.",
+    )
+
+    def validate_timezone(self, value):
+        if not value:
+            return None
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as err:
+            raise serializers.ValidationError("Unknown time zone.") from err
+        return value
 
 
 class ChatStartSessionResponse(serializers.Serializer):
