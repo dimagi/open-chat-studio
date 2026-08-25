@@ -339,7 +339,6 @@ export class OcsChat {
       this.activeSessionId = this.sessionId;
       this.applySessionToken(this.sessionToken);
     } else {
-      this.sweepInactiveStore();
       if (this.isStorageAvailable()) {
         // Always try to load existing session if storage is available
         const { sessionId, messages, sessionToken } = this.loadSessionFromStorage();
@@ -1778,27 +1777,13 @@ export class OcsChat {
   }
 
   private clearSessionStorage(): void {
-    // Only the store this widget is using: another page in the same origin may
-    // be running the same chatbot in the other persistence mode.
+    // Only the store the current persistence mode uses: another page in the
+    // same origin may be running the same chatbot in the other mode. A
+    // record left behind in the other store by a mode change is reaped by
+    // persistentSessionExpire the next time that store is active.
     const storage = this.getStorage();
     if (!storage) return;
     this.removeSessionKeys(() => storage);
-  }
-
-  /**
-   * Drop this chatbot's keys from the store the current persistence mode does
-   * not use, so switching modes does not strand a session in the other one.
-   * Scoped per `chatbotId` and run once at load, so other chatbots' sessions
-   * and the store another page is actively using are left alone.
-   */
-  private sweepInactiveStore(): void {
-    const mode = this.getPersistenceMode();
-    if (mode !== 'local') {
-      this.removeSessionKeys(() => window.localStorage);
-    }
-    if (mode !== 'tab') {
-      this.removeSessionKeys(() => window.sessionStorage);
-    }
   }
 
   private removeSessionKeys(getStore: () => Storage): void {

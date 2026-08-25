@@ -738,16 +738,34 @@ describe('ocs-chat persistent-session modes', () => {
     expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBe('other-page-session');
   });
 
-  it('removes stale localStorage keys for its own chatbot when a tab-mode widget loads', async () => {
-    localStorageMock.setItem('ocs-chat-session-test-bot', 'stale-local-session');
-    localStorageMock.setItem('ocs-chat-messages-test-bot', '[]');
-    localStorageMock.setItem('ocs-chat-session-other-bot', 'untouched');
+  it('leaves a localStorage session untouched and does not adopt it when a tab-mode widget loads', async () => {
+    localStorageMock.setItem('ocs-chat-session-test-bot', 'LOCAL-OWNED-ELSEWHERE');
+    localStorageMock.setItem('ocs-chat-messages-test-bot', JSON.stringify([{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hi', attachments: [] }]));
+    localStorageMock.setItem.mockClear();
 
-    await newPage('persistent-session="tab"');
+    const page = await newPage('persistent-session="tab"');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
 
-    expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBeNull();
-    expect(localStorageMock.getItem('ocs-chat-messages-test-bot')).toBeNull();
-    expect(localStorageMock.getItem('ocs-chat-session-other-bot')).toBe('untouched');
+    expect(localStorageMock.setItem).not.toHaveBeenCalled();
+    expect(localStorageMock.removeItem).not.toHaveBeenCalled();
+    expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBe('LOCAL-OWNED-ELSEWHERE');
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
+  });
+
+  it('leaves a sessionStorage session untouched when a default-mode widget loads', async () => {
+    sessionStorageMock.setItem('ocs-chat-session-test-bot', 'TAB-OWNED-ELSEWHERE');
+    sessionStorageMock.setItem('ocs-chat-messages-test-bot', JSON.stringify([{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hi', attachments: [] }]));
+    sessionStorageMock.setItem.mockClear();
+
+    const page = await newPage('');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await page.waitForChanges();
+
+    expect(sessionStorageMock.setItem).not.toHaveBeenCalled();
+    expect(sessionStorageMock.removeItem).not.toHaveBeenCalled();
+    expect(sessionStorageMock.getItem('ocs-chat-session-test-bot')).toBe('TAB-OWNED-ELSEWHERE');
+    expect(page.rootInstance.activeSessionId).toBeUndefined();
   });
 
   it('writes nothing when persistence is off', async () => {
@@ -759,14 +777,18 @@ describe('ocs-chat persistent-session modes', () => {
     expect(localStorageMock.setItem).not.toHaveBeenCalledWith('ocs-chat-session-test-bot', expect.anything());
   });
 
-  it('clears both stores at load when persistence is off', async () => {
+  it('leaves both stores untouched at load when persistence is off', async () => {
     localStorageMock.setItem('ocs-chat-session-test-bot', 'stale-local-session');
     sessionStorageMock.setItem('ocs-chat-session-test-bot', 'stale-tab-session');
+    localStorageMock.setItem.mockClear();
+    sessionStorageMock.setItem.mockClear();
 
     await newPage('persistent-session="false"');
 
-    expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBeNull();
-    expect(sessionStorageMock.getItem('ocs-chat-session-test-bot')).toBeNull();
+    expect(localStorageMock.removeItem).not.toHaveBeenCalled();
+    expect(sessionStorageMock.removeItem).not.toHaveBeenCalled();
+    expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBe('stale-local-session');
+    expect(sessionStorageMock.getItem('ocs-chat-session-test-bot')).toBe('stale-tab-session');
   });
 });
 
