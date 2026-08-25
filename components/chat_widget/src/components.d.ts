@@ -88,10 +88,10 @@ export namespace Components {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Whether to persist session data to local storage to allow resuming previous conversations after page reload. Ignored when `sessionId` is provided.
+          * Where to keep the session so a conversation can resume after a page reload. - `true` (default): `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`: nothing is stored; a reload starts over. Ignored when `sessionId` is provided.
           * @default true
          */
-        "persistentSession": boolean;
+        "persistentSession": boolean | 'tab' | 'true' | 'false';
         /**
           * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
           * @default 60 * 24
@@ -236,10 +236,10 @@ declare namespace LocalJSX {
          */
         "pageContext"?: Record<string, any>;
         /**
-          * Whether to persist session data to local storage to allow resuming previous conversations after page reload. Ignored when `sessionId` is provided.
+          * Where to keep the session so a conversation can resume after a page reload. - `true` (default): `localStorage`, survives tab close. - `"tab"`: `sessionStorage`, survives reload, cleared when the tab closes. - `false`: nothing is stored; a reload starts over. Ignored when `sessionId` is provided.
           * @default true
          */
-        "persistentSession"?: boolean;
+        "persistentSession"?: boolean | 'tab' | 'true' | 'false';
         /**
           * Minutes since the most recent message after which the session data in local storage will expire. Set this to `0` to never expire.
           * @default 60 * 24
@@ -309,7 +309,7 @@ declare namespace LocalJSX {
         "starterQuestions": string;
         "userId": string;
         "userName": string;
-        "persistentSession": boolean;
+        "persistentSession": string;
         "persistentSessionExpire": number;
         "allowFullScreen": boolean;
         "allowAttachments": boolean;
