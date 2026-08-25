@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -208,6 +209,7 @@ class Command(BaseCommand):
         files = self._seed_files(team)
         self._seed_collection(team, files)
         self._seed_evaluation(team, llm_provider, llm_model)
+        self._seed_evaluation_runs(team)
 
     def _seed_llm_providers(self, team):
         self.stdout.write("")
@@ -645,6 +647,14 @@ class Command(BaseCommand):
                 dataset.messages.add(msg)
             self.stdout.write(f"    Added {len(_EVALUATION_DATASET_MESSAGES)} sample messages to dataset")
         return dataset
+
+    def _seed_evaluation_runs(self, team) -> None:
+        """Delegate the runs/results/aggregates/cost rows to the evaluations app's own
+        seed command, so that data can also be reseeded on its own while iterating on the
+        results UI."""
+        self.stdout.write("")
+        self.stdout.write("--- Creating Evaluation Runs ---")
+        call_command("bootstrap_evaluation_runs", team_slug=team.slug, stdout=self.stdout)
 
     def _log_created(self, entity_type: str, name: str, created: bool):
         """Helper to log entity creation status."""
