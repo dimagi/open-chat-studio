@@ -10,6 +10,8 @@ Each field carries its form field's name, with references narrowed to ids under 
 discovery. The body is flat, so the key an agent writes is the key it reads back.
 """
 
+from typing import Any
+
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
@@ -34,7 +36,7 @@ class RejectsUnknownKeys:
     ``initial_data``, which DRF sets on the root serializer alone.
     """
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: Any) -> Any:
         if isinstance(data, dict):
             unknown = sorted(set(data) - set(self.fields))
             if unknown:
@@ -52,7 +54,7 @@ class ChatbotCreateSerializer(RejectsUnknownKeys, serializers.Serializer):
     description = OptionalTextField(default="")
 
     @transaction.atomic()
-    def create(self, validated_data):
+    def create(self, validated_data: dict[str, Any]) -> Experiment:
         # Reimplements the ~10 lines of ChatbotForm.save that cannot be reused because they take a
         # request. Unlike the UI's CreateChatbot this deliberately does not publish a version.
         request = self.context["request"]
@@ -149,7 +151,7 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
             "file_uploads_enabled",
         ]
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         supplied = [name for name, source in self.VOICE_FIELDS if source in attrs]
         if not supplied:
             # Neither half was sent. The stored pair is deliberately not re-checked here: a row
@@ -172,7 +174,7 @@ class ChatbotWriteSerializer(RejectsUnknownKeys, serializers.ModelSerializer):
         return attrs
 
     @staticmethod
-    def _voice_pair_error(provider, voice) -> str | None:
+    def _voice_pair_error(provider: VoiceProvider | None, voice: SyntheticVoice | None) -> str | None:
         """Why this (provider, voice) pair cannot be spoken, or None if it can.
 
         Both-null is a valid pair: it means the chatbot has no voice.

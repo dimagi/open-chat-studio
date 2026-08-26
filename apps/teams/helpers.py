@@ -61,7 +61,7 @@ def create_default_team_for_user(user: CustomUser, team_name: str | None = None)
     return team
 
 
-def set_request_attrs(request, **attrs):
+def set_request_attrs(request, **attrs) -> None:
     """Set attributes on the underlying Django request rather than only on DRF's wrapper.
 
     DRF's OPTIONS metadata re-runs the permission checks against a ``clone_request``: a fresh DRF
