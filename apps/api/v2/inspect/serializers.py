@@ -27,7 +27,6 @@ from apps.api.v2.inspect.nodes import (
 )
 from apps.api.v2.inspect.param_serializers import node_params_schema
 from apps.api.v2.utils import parse_custom_actions
-from apps.assistants.models import OpenAiAssistant
 from apps.channels.models import ChannelPlatform, ExperimentChannel
 from apps.channels.utils import ALL_DOMAINS
 from apps.custom_actions.models import CustomAction
@@ -70,14 +69,6 @@ class ConsentFormSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConsentForm
         fields = ["id", "name", "consent_text", "capture_identifier", "identifier_label", "identifier_type"]
-
-
-class AssistantSerializer(serializers.ModelSerializer):
-    """Assistant fields. ``instructions`` and ``assistant_id`` are exposed on purpose."""
-
-    class Meta:
-        model = OpenAiAssistant
-        fields = ["id", "name", "assistant_id", "instructions", "builtin_tools", "tools", "temperature", "top_p"]
 
 
 class ProviderSerializer(serializers.Serializer):
@@ -496,7 +487,6 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         "llm",
         "voice",
         "source_material",
-        "assistant",
         "custom_actions",
         "media_collection",
         "indexed_collections",
@@ -505,7 +495,6 @@ class InspectNodeSerializer(serializers.ModelSerializer):
         "llm": ("llm_provider_id", "llm_provider_model_id"),
         "voice": ("synthetic_voice_id",),
         "source_material": ("source_material_id",),
-        "assistant": ("assistant_id",),
         "custom_actions": ("custom_actions",),
         "media_collection": ("collection_id",),
         "indexed_collections": ("collection_index_ids",),
@@ -523,7 +512,6 @@ class InspectNodeSerializer(serializers.ModelSerializer):
     voice = serializers.SerializerMethodField()
     custom_actions = serializers.SerializerMethodField()
     source_material = SourceMaterialSerializer(allow_null=True, read_only=True)
-    assistant = AssistantSerializer(allow_null=True, read_only=True)
     media_collection = MediaCollectionSerializer(source="collection", allow_null=True, read_only=True)
     indexed_collections = IndexedCollectionSerializer(source="collection_indexes", many=True, read_only=True)
 
@@ -540,7 +528,6 @@ class InspectNodeSerializer(serializers.ModelSerializer):
             "llm",
             "voice",
             "source_material",
-            "assistant",
             "custom_actions",
             "media_collection",
             "indexed_collections",
