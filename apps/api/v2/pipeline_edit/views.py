@@ -147,6 +147,13 @@ class PipelineNodeEditView(GenericAPIView):
         description=(
             "Change a node's params or its label. Params merge key by key, so send only what you "
             "want to change; everything else is left as it is.\n\n"
+            "Editing a router's `keywords` regenerates its output handles — they are positional, so "
+            "`output_0` serves `keywords[0]` — and the response carries the new list. The node's "
+            "edges follow their keyword: dropping a keyword deletes the edge that served it, and a "
+            "keyword that merely moved keeps its target on whichever handle it moved to. A renamed "
+            "keyword counts as one branch gone and another new, so its edge goes and the new branch "
+            "comes back unwired. Handle names are not stable across a keyword edit, so re-read "
+            "`output_handles` after one.\n\n"
             "What `params` may hold depends on the node's type. "
             "`GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
             "type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource "
