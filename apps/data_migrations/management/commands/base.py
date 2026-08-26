@@ -5,7 +5,6 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 from field_audit import disable_audit
 
-from apps.assistants.models import OpenAiAssistant
 from apps.data_migrations.utils.migrations import (
     is_migration_applied,
     mark_migration_applied,
@@ -21,13 +20,13 @@ def get_affected_teams_data(db_model) -> dict:
 
     Returns a dict of the form:
         {team_id: {"chatbots": {name: url}, "pipelines": {name: url},
-                   "assistants": {name: url}, "evaluators": {name: url}}}
+                   "evaluators": {name: url}}}
 
     Call this before repointing anything: evaluators are found through the FK, which the
     removal flow moves off ``db_model``.
     """
 
-    teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "assistants": {}, "evaluators": {}})
+    teams_data = defaultdict(lambda: {"chatbots": {}, "pipelines": {}, "evaluators": {}})
 
     related_pipeline_nodes = get_related_pipelines_queryset(db_model, "llm_provider_model_id")
     nodes_by_pipeline = defaultdict(list)
@@ -42,14 +41,10 @@ def get_affected_teams_data(db_model) -> dict:
     referenced_pipeline_ids = {exp.pipeline_id for exp in referenced_experiments}
     unreferenced_pipelines = [p for p in pipelines if p.id not in referenced_pipeline_ids]
 
-    referenced_assistants = OpenAiAssistant.objects.filter(llm_provider_model=db_model, working_version__isnull=True)
-
     for exp in referenced_experiments:
         teams_data[exp.team_id]["chatbots"][exp.name] = exp.get_absolute_url()
     for pipeline in unreferenced_pipelines:
         teams_data[pipeline.team_id]["pipelines"][pipeline.name] = pipeline.get_absolute_url()
-    for assistant in referenced_assistants:
-        teams_data[assistant.team_id]["assistants"][assistant.name] = assistant.get_absolute_url()
     for evaluator in db_model.evaluators.all():
         teams_data[evaluator.team_id]["evaluators"][evaluator.name] = evaluator.get_absolute_url()
 
