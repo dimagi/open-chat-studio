@@ -4,7 +4,6 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 
 from apps.analysis.models import TranscriptAnalysis
-from apps.assistants.models import OpenAiAssistant
 from apps.pipelines.models import Node
 from apps.service_providers.llm_service.default_models import DEFAULT_LLM_PROVIDER_MODELS
 from apps.service_providers.models import LlmProviderModel
@@ -77,12 +76,6 @@ class Command(BaseCommand):
 
     def _get_model_usage(self, model, include_archived=False):
         """Get usage statistics for a single model."""
-        # Direct FK references - use appropriate manager
-        if include_archived:
-            assistants_count = OpenAiAssistant.all_objects.filter(llm_provider_model=model).count()
-        else:
-            assistants_count = OpenAiAssistant.objects.filter(llm_provider_model=model).count()
-
         analyses_count = TranscriptAnalysis.objects.filter(llm_provider_model=model).count()
         translation_analyses_count = TranscriptAnalysis.objects.filter(translation_llm_provider_model=model).count()
 
@@ -91,12 +84,7 @@ class Command(BaseCommand):
             Q(params__llm_provider_model_id=model.id) | Q(params__llm_provider_model_id=str(model.id))
         ).count()
 
-        total_count = assistants_count + analyses_count + translation_analyses_count + pipeline_nodes_count
-
-        # Count archived separately for detailed view
-        archived_assistants = 0
-        if not include_archived:
-            archived_assistants = OpenAiAssistant.all_objects.filter(llm_provider_model=model, is_archived=True).count()
+        total_count = analyses_count + translation_analyses_count + pipeline_nodes_count
 
         # Get suggested replacement for deprecated models
         suggested_replacement = None
@@ -105,12 +93,10 @@ class Command(BaseCommand):
 
         return {
             "model": model,
-            "assistants": assistants_count,
             "analyses": analyses_count,
             "translation_analyses": translation_analyses_count,
             "pipeline_nodes": pipeline_nodes_count,
             "total": total_count,
-            "archived_assistants": archived_assistants,
             "suggested_replacement": suggested_replacement,
             "include_archived": include_archived,
         }
@@ -133,8 +119,8 @@ class Command(BaseCommand):
         # Table header
         header = (
             f"{'Model':<35} {'Provider':<15} {'Type':<12} {'Depr':<5} "
-            f"{'Asst':<5} {'Anly':<5} {'Tran':<5} {'Pipe':<5} {'Total':<6} "
-            f"{'Arch-A':<6} {'Replacement':<20}"
+            f"{'Anly':<5} {'Tran':<5} {'Pipe':<5} {'Total':<6} "
+            f"{'Replacement':<20}"
         )
         self.stdout.write(header)
         self.stdout.write("-" * 180)
@@ -156,9 +142,9 @@ class Command(BaseCommand):
 
             row = (
                 f"{model_name:<35} {model.type:<15} {model_type:<12} {deprecated:<5} "
-                f"{data['assistants']:<5} {data['analyses']:<5} "
+                f"{data['analyses']:<5} "
                 f"{data['translation_analyses']:<5} {data['pipeline_nodes']:<5} {data['total']:<6} "
-                f"{data['archived_assistants']:<6} {replacement:<20}"
+                f"{replacement:<20}"
             )
 
             # Color code deprecated models in use
@@ -184,8 +170,6 @@ class Command(BaseCommand):
         self.stdout.write(f"  Models in use: {models_in_use}")
         self.stdout.write(f"  Total references: {total_references}")
 
-        if usage_data and not usage_data[0]["include_archived"]:
-            self.stdout.write("\nNote: Arch-A = Archived Assistants (not counted in Total)")
         self.stdout.write("")
 
     def _output_csv(self, usage_data):
@@ -199,12 +183,10 @@ class Command(BaseCommand):
                 "Provider",
                 "Type",
                 "Deprecated",
-                "Assistants",
                 "Analyses",
                 "Translation Analyses",
                 "Pipeline Nodes",
                 "Total",
-                "Archived Assistants",
                 "Team",
                 "Suggested Replacement",
             ]
@@ -222,12 +204,10 @@ class Command(BaseCommand):
                     model.type,
                     model_type,
                     "Yes" if model.deprecated else "No",
-                    data["assistants"],
                     data["analyses"],
                     data["translation_analyses"],
                     data["pipeline_nodes"],
                     data["total"],
-                    data["archived_assistants"],
                     team_name,
                     data["suggested_replacement"] or "",
                 ]
