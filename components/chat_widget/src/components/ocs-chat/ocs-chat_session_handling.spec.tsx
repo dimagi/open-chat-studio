@@ -1,6 +1,7 @@
 import { newSpecPage } from '@stencil/core/testing';
 import { OcsChat } from './ocs-chat';
 import { SessionAccessError } from '../../services/chat-session-service';
+import { setupFetchMock, stubChatService } from './ocs-chat.test-helpers';
 
 // Matches the `ocs:` visitor id prefix followed by a v4 UUID.
 const UUID_RE = /^ocs:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -27,34 +28,6 @@ jest.mock('../../services/chat-session-service', () => {
     })),
   };
 });
-
-// Helper to create fetch mock with configurable session ID
-function setupFetchMock(sessionId = 'test-session-id', taskId = 'test-task-id') {
-  return jest.fn().mockImplementation((url: string) => {
-    if (url.includes('/api/chat/start/')) {
-      return Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            session_id: sessionId,
-            chatbot: {},
-            participant: {},
-          }),
-      } as Response);
-    }
-    if (url.includes('/api/chat/send/')) {
-      return Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            task_id: taskId,
-            status: 'processing',
-          }),
-      } as Response);
-    }
-    return Promise.reject(new Error('Unexpected fetch call'));
-  });
-}
 
 describe('ocs-chat session creation', () => {
   beforeEach(() => {
@@ -614,11 +587,12 @@ describe('ocs-chat storage getter blocked', () => {
       html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
     });
     await page.waitForChanges();
-    const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
-    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
-    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
+    stubChatService(page, {
+      startSession: mockStartSession,
+      sendMessage: mockSendMessage,
+      startMessagePolling: mockStartMessagePolling,
+      pollTask: mockPollTask,
+    });
 
     await page.rootInstance.sendMessage('hello');
     await page.waitForChanges();
@@ -738,33 +712,22 @@ describe('ocs-chat persistent-session modes', () => {
     expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBe('other-page-session');
   });
 
-  it('leaves a localStorage session untouched and does not adopt it when a tab-mode widget loads', async () => {
-    localStorageMock.setItem('ocs-chat-session-test-bot', 'LOCAL-OWNED-ELSEWHERE');
-    localStorageMock.setItem('ocs-chat-messages-test-bot', JSON.stringify([{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hi', attachments: [] }]));
-    localStorageMock.setItem.mockClear();
+  it.each([
+    ['a tab-mode widget leaves a localStorage session untouched', 'persistent-session="tab"', () => localStorageMock],
+    ['a default-mode widget leaves a sessionStorage session untouched', '', () => sessionStorageMock],
+  ])('%s and does not adopt it', async (_name, attr, otherStore) => {
+    const store = otherStore();
+    store.setItem('ocs-chat-session-test-bot', 'OWNED-ELSEWHERE');
+    store.setItem('ocs-chat-messages-test-bot', JSON.stringify([{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hi', attachments: [] }]));
+    store.setItem.mockClear();
 
-    const page = await newPage('persistent-session="tab"');
+    const page = await newPage(attr);
     await new Promise(resolve => setTimeout(resolve, 0));
     await page.waitForChanges();
 
-    expect(localStorageMock.setItem).not.toHaveBeenCalled();
-    expect(localStorageMock.removeItem).not.toHaveBeenCalled();
-    expect(localStorageMock.getItem('ocs-chat-session-test-bot')).toBe('LOCAL-OWNED-ELSEWHERE');
-    expect(page.rootInstance.activeSessionId).toBeUndefined();
-  });
-
-  it('leaves a sessionStorage session untouched when a default-mode widget loads', async () => {
-    sessionStorageMock.setItem('ocs-chat-session-test-bot', 'TAB-OWNED-ELSEWHERE');
-    sessionStorageMock.setItem('ocs-chat-messages-test-bot', JSON.stringify([{ created_at: '2026-01-01T00:00:00Z', role: 'user', content: 'hi', attachments: [] }]));
-    sessionStorageMock.setItem.mockClear();
-
-    const page = await newPage('');
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await page.waitForChanges();
-
-    expect(sessionStorageMock.setItem).not.toHaveBeenCalled();
-    expect(sessionStorageMock.removeItem).not.toHaveBeenCalled();
-    expect(sessionStorageMock.getItem('ocs-chat-session-test-bot')).toBe('TAB-OWNED-ELSEWHERE');
+    expect(store.setItem).not.toHaveBeenCalled();
+    expect(store.removeItem).not.toHaveBeenCalled();
+    expect(store.getItem('ocs-chat-session-test-bot')).toBe('OWNED-ELSEWHERE');
     expect(page.rootInstance.activeSessionId).toBeUndefined();
   });
 
@@ -850,12 +813,13 @@ describe('ocs-chat bound session (session-id prop)', () => {
     });
     // Force chatService creation now (before setTimeout fires) so we can spy on it.
     // componentDidLoad has already registered setTimeout(0) but it has not fired yet.
-    const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'fetchAllMessages').mockImplementation(mockFetchAllMessages);
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
-    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
-    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
-    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
+    stubChatService(page, {
+      fetchAllMessages: mockFetchAllMessages,
+      startMessagePolling: mockStartMessagePolling,
+      sendMessage: mockSendMessage,
+      startSession: mockStartSession,
+      pollTask: mockPollTask,
+    });
     await page.waitForChanges();
     // componentDidLoad defers history loading via setTimeout(0)
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -933,9 +897,7 @@ describe('ocs-chat bound session (session-id prop)', () => {
       components: [OcsChat],
       html: '<open-chat-studio-widget chatbot-id="test-bot" session-id="server-session" visible="false"></open-chat-studio-widget>',
     });
-    const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'fetchAllMessages').mockImplementation(mockFetchAllMessages);
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
+    stubChatService(page, { fetchAllMessages: mockFetchAllMessages, startMessagePolling: mockStartMessagePolling });
     await page.waitForChanges();
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(mockFetchAllMessages).not.toHaveBeenCalled();
@@ -1188,263 +1150,5 @@ describe('ocs-chat session tokens', () => {
     expect(page.rootInstance.activeSessionId).toBe('host-session');
     const systemMessage = page.rootInstance.messages.find((m: any) => m.role === 'system');
     expect(systemMessage).toBeDefined();
-  });
-});
-
-describe('ocs-chat kiosk restart after session end', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockStartSession.mockResolvedValue({ session_id: 'kiosk-session' });
-    mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
-    mockPollTask.mockReturnValue({ cancel: jest.fn() });
-    mockStartMessagePolling.mockReturnValue({ stop: jest.fn() });
-    const store: Record<string, string> = {};
-    Object.defineProperty(window, 'localStorage', {
-      value: {
-        getItem: jest.fn((k: string) => store[k] ?? null),
-        setItem: jest.fn((k: string, v: string) => {
-          store[k] = v;
-        }),
-        removeItem: jest.fn((k: string) => {
-          delete store[k];
-        }),
-        clear: jest.fn(),
-      },
-      writable: true,
-    });
-    global.fetch = setupFetchMock('kiosk-session');
-  });
-
-  async function endedPage(attrs: string) {
-    const page = await newSpecPage({
-      components: [OcsChat],
-      html: `<open-chat-studio-widget chatbot-id="test-bot" visible="true" ${attrs}></open-chat-studio-widget>`,
-    });
-    // The jest.mock('../../services/chat-session-service') factory above is inert
-    // under Stencil's jest preset, so the real ChatSessionService is instantiated;
-    // spy on it directly (mirrors the 'bound session' suite's newBoundPage helper).
-    const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
-    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
-    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
-    await page.waitForChanges();
-    await page.rootInstance.sendMessage('hello');
-    await page.waitForChanges();
-    const callbacks = mockStartMessagePolling.mock.calls[0][1];
-    callbacks.onSessionEnded();
-    await page.waitForChanges();
-    return page;
-  }
-
-  it('shows a restart button in kiosk mode once the session has ended', async () => {
-    const page = await endedPage('mode="kiosk"');
-    const button = page.root?.shadowRoot?.querySelector('.kiosk-restart') as HTMLButtonElement;
-    expect(button).not.toBeNull();
-    expect(button.textContent).toBe('Start new chat');
-  });
-
-  it('does not show the restart button in a read-only (disabled) kiosk widget', async () => {
-    const page = await endedPage('mode="kiosk"');
-    page.rootInstance.disabled = true;
-    await page.waitForChanges();
-    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
-  });
-
-  it('does not show the restart button before the session has ended', async () => {
-    const page = await newSpecPage({
-      components: [OcsChat],
-      html: '<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk"></open-chat-studio-widget>',
-    });
-    await page.waitForChanges();
-    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
-  });
-
-  it('does not show the restart button in standard mode (the header button covers it)', async () => {
-    const page = await endedPage('');
-    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
-  });
-
-  it('does not show the restart button for a bound kiosk session', async () => {
-    mockFetchAllMessages.mockResolvedValue([]);
-    const page = await newSpecPage({
-      components: [OcsChat],
-      html: '<open-chat-studio-widget chatbot-id="test-bot" mode="kiosk" session-id="server-session"></open-chat-studio-widget>',
-    });
-    const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'fetchAllMessages').mockImplementation(mockFetchAllMessages);
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
-    await page.waitForChanges();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await page.waitForChanges();
-    mockStartMessagePolling.mock.calls[0][1].onSessionEnded();
-    await page.waitForChanges();
-
-    expect(page.rootInstance.sessionEnded).toBe(true);
-    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
-  });
-
-  it('clicking restart clears the ended session so the next message starts a new one', async () => {
-    const page = await endedPage('mode="kiosk"');
-    const button = page.root?.shadowRoot?.querySelector('.kiosk-restart') as HTMLButtonElement;
-
-    button.click();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await page.waitForChanges();
-
-    expect(page.rootInstance.sessionEnded).toBe(false);
-    expect(page.rootInstance.activeSessionId).toBeUndefined();
-    expect(page.rootInstance.messages).toEqual([]);
-    expect(window.localStorage.removeItem).toHaveBeenCalledWith('ocs-chat-session-test-bot');
-    expect(page.root?.shadowRoot?.querySelector('.kiosk-restart')).toBeNull();
-    const textarea = page.root?.shadowRoot?.querySelector('.message-textarea') as HTMLTextAreaElement;
-    expect(textarea.hasAttribute('disabled')).toBe(false);
-
-    mockStartSession.mockClear();
-    await page.rootInstance.sendMessage('again');
-    expect(mockStartSession).toHaveBeenCalledTimes(1);
-  });
-
-  async function restartedPage() {
-    const page = await endedPage('mode="kiosk"');
-    const messageCallbacks = mockStartMessagePolling.mock.calls[0][1];
-    const taskCallbacks = mockPollTask.mock.calls[0][2];
-    const button = page.root?.shadowRoot?.querySelector('.kiosk-restart') as HTMLButtonElement;
-    button.click();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await page.waitForChanges();
-    (window.localStorage.setItem as jest.Mock).mockClear();
-    return { page, messageCallbacks, taskCallbacks };
-  }
-
-  it('ignores message-poll callbacks from the session that was cleared by the restart', async () => {
-    const { page, messageCallbacks } = await restartedPage();
-
-    messageCallbacks.onMessages([{ created_at: '2026-01-01T00:00:00Z', role: 'assistant', content: 'stale reply', attachments: [] }]);
-    messageCallbacks.onSessionEnded();
-    await page.waitForChanges();
-
-    expect(page.rootInstance.messages).toEqual([]);
-    expect(page.rootInstance.sessionEnded).toBe(false);
-    expect(window.localStorage.setItem).not.toHaveBeenCalledWith('ocs-chat-messages-test-bot', expect.anything());
-  });
-
-  it('ignores task-poll callbacks from the session that was cleared by the restart', async () => {
-    const { page, taskCallbacks } = await restartedPage();
-
-    taskCallbacks.onMessage({ created_at: '2026-01-01T00:00:00Z', role: 'assistant', content: 'stale reply', attachments: [] });
-    await page.waitForChanges();
-
-    expect(page.rootInstance.messages).toEqual([]);
-    expect(page.rootInstance.isTyping).toBe(false);
-    expect(window.localStorage.setItem).not.toHaveBeenCalledWith('ocs-chat-messages-test-bot', expect.anything());
-  });
-});
-
-describe('ocs-chat visitor id', () => {
-  let store: Record<string, string>;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    store = {};
-    Object.defineProperty(window, 'localStorage', {
-      value: {
-        getItem: jest.fn((k: string) => store[k] ?? null),
-        setItem: jest.fn((k: string, v: string) => {
-          store[k] = v;
-        }),
-        removeItem: jest.fn(),
-        clear: jest.fn(),
-      },
-      writable: true,
-    });
-  });
-
-  async function instance() {
-    const page = await newSpecPage({
-      components: [OcsChat],
-      html: '<open-chat-studio-widget chatbot-id="test-bot"></open-chat-studio-widget>',
-    });
-    return page.rootInstance;
-  }
-
-  it('generates a v4 UUID with the ocs prefix and stores it', async () => {
-    const id = (await instance())['getOrGenerateUserId']();
-    expect(id).toMatch(UUID_RE);
-    expect(store['ocs-user-id']).toBe(id);
-  });
-
-  it('reuses a stored id, including the legacy format', async () => {
-    store['ocs-user-id'] = 'ocs:1700000000000_abc123def';
-    expect((await instance())['getOrGenerateUserId']()).toBe('ocs:1700000000000_abc123def');
-  });
-
-  it('falls back to getRandomValues when randomUUID is unavailable', async () => {
-    const original = window.crypto.randomUUID;
-    Object.defineProperty(window.crypto, 'randomUUID', { value: undefined, configurable: true });
-    try {
-      expect((await instance())['getOrGenerateUserId']()).toMatch(UUID_RE);
-    } finally {
-      Object.defineProperty(window.crypto, 'randomUUID', { value: original, configurable: true });
-    }
-  });
-
-  it('prefers the user-id prop over a generated id', async () => {
-    const page = await newSpecPage({
-      components: [OcsChat],
-      html: '<open-chat-studio-widget chatbot-id="test-bot" user-id="me@example.com"></open-chat-studio-widget>',
-    });
-    expect(page.rootInstance['getOrGenerateUserId']()).toBe('me@example.com');
-    expect(store['ocs-user-id']).toBeUndefined();
-  });
-});
-
-describe('ocs-chat start payload timezone', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockStartSession.mockResolvedValue({ session_id: 'tz-session' });
-    mockSendMessage.mockResolvedValue({ status: 'success', task_id: 'task' });
-    Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn(), clear: jest.fn() },
-      writable: true,
-    });
-    global.fetch = setupFetchMock('tz-session');
-  });
-
-  afterEach(async () => {
-    await new Promise(resolve => setTimeout(resolve, 0));
-    jest.restoreAllMocks();
-  });
-
-  it('sends the device time zone on start', async () => {
-    jest.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ timeZone: 'Africa/Johannesburg' } as Intl.ResolvedDateTimeFormatOptions);
-    const page = await newSpecPage({
-      components: [OcsChat],
-      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
-    });
-    const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
-    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
-    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
-    await page.rootInstance.sendMessage('hello');
-
-    expect(mockStartSession).toHaveBeenCalledWith(expect.objectContaining({ timezone: 'Africa/Johannesburg' }));
-  });
-
-  it('omits the time zone when the browser cannot resolve one', async () => {
-    jest.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({} as Intl.ResolvedDateTimeFormatOptions);
-    const page = await newSpecPage({
-      components: [OcsChat],
-      html: '<open-chat-studio-widget chatbot-id="test-bot" visible="true"></open-chat-studio-widget>',
-    });
-    const svc = page.rootInstance['getChatService']();
-    jest.spyOn(svc, 'startSession').mockImplementation(mockStartSession);
-    jest.spyOn(svc, 'sendMessage').mockImplementation(mockSendMessage);
-    jest.spyOn(svc, 'startMessagePolling').mockImplementation(mockStartMessagePolling);
-    jest.spyOn(svc, 'pollTask').mockImplementation(mockPollTask);
-    await page.rootInstance.sendMessage('hello');
-
-    expect(mockStartSession.mock.calls[0][0]).not.toHaveProperty('timezone');
   });
 });

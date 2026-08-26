@@ -1806,6 +1806,15 @@ export class OcsChat {
     return this.mode === 'kiosk';
   }
 
+  /**
+   * The kiosk widget has no header new-chat button, so once the server ends
+   * the session it needs its own way to start over. Bound sessions belong to
+   * the host page and a read-only widget must stay read-only.
+   */
+  private shouldShowKioskRestart(): boolean {
+    return this.sessionEnded && this.isKioskMode() && !this.isSessionBound() && !this.isReadOnly();
+  }
+
   private isSessionBound(): boolean {
     return !!this.sessionId;
   }
@@ -2106,7 +2115,7 @@ export class OcsChat {
 
               {/* Input Area — kept visible but disabled when the widget is read-only */}
               <div class="input-area">
-                {this.sessionEnded && this.isKioskMode() && !this.isSessionBound() && !this.isReadOnly() && (
+                {this.shouldShowKioskRestart() && (
                   <button class="kiosk-restart send-button send-button-enabled" onClick={() => void this.clearSession()}>
                     {this.translationManager.get('window.newChat')}
                   </button>
