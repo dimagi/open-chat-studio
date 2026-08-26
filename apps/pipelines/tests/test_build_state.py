@@ -1,10 +1,14 @@
 """Tests for the pipeline build-state helpers: the three-bucket errors report, ``pipeline_valid``,
 the advisory ``unwired_handles`` map, and the stranded-router-edge guard."""
 
+import logging
+
 import pytest
 from pydantic import model_validator
 
 from apps.pipelines.build_state import node_output_handles, pipeline_build_state, unwired_handles
+from apps.pipelines.exceptions import PipelineNodeBuildError
+from apps.pipelines.graph import PipelineGraph
 from apps.pipelines.models import Node, Pipeline
 from apps.pipelines.nodes import nodes as pipeline_nodes
 from apps.pipelines.tests.utils import (
@@ -238,6 +242,32 @@ class TestPipelineBuildState:
             },
             "unwired_handles": {},
         }
+
+    def test_node_build_error_is_reported_generically_rather_than_verbatim(self, monkeypatch, caplog):
+        """A build-stage node error can wrap a raw pydantic error naming the classes behind the node.
+        The report is served over the API, so it carries a generic line and the detail is logged."""
+        start, end = start_node(), end_node()
+        pipeline = create_pipeline_model([start, end])
+
+        def raise_node_build_error(self):
+            raise PipelineNodeBuildError("SecretInternalNode: field 'api_key' is not a valid str")
+
+        monkeypatch.setattr(PipelineGraph, "build_runnable", raise_node_build_error)
+
+        with caplog.at_level(logging.ERROR, logger="ocs.pipelines"):
+            state = pipeline_build_state(pipeline)
+
+        assert state == {
+            "pipeline_valid": False,
+            "errors": {
+                "node": {},
+                "edge": [],
+                "pipeline": ["This pipeline could not be built. Check the values of its nodes' params."],
+            },
+            "unwired_handles": {},
+        }
+        assert "SecretInternalNode" not in str(state)
+        assert "SecretInternalNode" in caplog.text
 
     def test_unknown_node_type_reports_node_error_instead_of_raising(self):
         """The unknown type is a node error; with no edges at all the End node is also unreachable.
