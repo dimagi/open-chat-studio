@@ -361,22 +361,27 @@ def _is_team_member(request, experiment) -> bool:
     return request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
 
 
-def _public_channel_refusal(request, experiment, experiment_channel) -> Response | None:
-    """A 409 when a public link cannot serve a visitor, else None.
+def _published_public_version(experiment) -> tuple[Experiment | None, Response | None]:
+    """The version a public visitor may chat with, or the 409 that refuses them.
 
     Public visitors only ever reach the published version, and a consent-form chatbot has no
-    live link until consent moves into the widget. Team members are exempt so they can try the
-    page before publishing.
+    live link until consent moves into the widget.
     """
-    if experiment_channel.platform != ChannelPlatform.PUBLIC or _is_team_member(request, experiment):
-        return None
     try:
         published = resolve_chatbot_version(experiment, VersionSelectionRule.LATEST_PUBLISHED)
     except NoPublishedVersion:
-        return Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
+        return None, Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
     if published.consent_form_id:
-        return Response(CONSENT_UNAVAILABLE, status=status.HTTP_409_CONFLICT)
-    return None
+        return None, Response(CONSENT_UNAVAILABLE, status=status.HTTP_409_CONFLICT)
+    return published, None
+
+
+def _public_channel_refusal(request, experiment, experiment_channel) -> Response | None:
+    """A 409 when a public link cannot serve a visitor, else None. Team members are exempt so
+    they can try the page before publishing."""
+    if experiment_channel.platform != ChannelPlatform.PUBLIC or _is_team_member(request, experiment):
+        return None
+    return _published_public_version(experiment)[1]
 
 
 def _public_session_version(request, session) -> tuple[Experiment | None, Response | None]:
@@ -389,13 +394,30 @@ def _public_session_version(request, session) -> tuple[Experiment | None, Respon
         return session.experiment_version, None
     if _is_team_member(request, session.experiment):
         return session.experiment_version, None
+    return _published_public_version(session.experiment)
+
+
+def _send_version(request, session, version_number) -> tuple[Experiment | None, Response | None]:
+    """The version a send runs against: an explicitly requested one for team members, else the
+    session's own (subject to the public-link rule)."""
+    if version_number is None:
+        return _public_session_version(request, session)
+    if refusal := _version_number_refusal(request, session):
+        return None, refusal
+    if version_number == Experiment.DEFAULT_VERSION_NUMBER:
+        return _public_session_version(request, session)
     try:
-        published = resolve_chatbot_version(session.experiment, VersionSelectionRule.LATEST_PUBLISHED)
-    except NoPublishedVersion:
-        return None, Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
-    if published.consent_form_id:
-        return None, Response(CONSENT_UNAVAILABLE, status=status.HTTP_409_CONFLICT)
-    return published, None
+        return session.experiment.get_version(version_number), None
+    except Experiment.DoesNotExist:
+        raise NotFound(f"Experiment with version {version_number} not found") from None
+
+
+def _version_number_refusal(request, session) -> Response | None:
+    if not request.user.is_authenticated:
+        return Response({"error": "Version number requires authentication"}, status=status.HTTP_403_FORBIDDEN)
+    if not session.experiment.team.members.filter(id=request.user.id).exists():
+        return Response({"error": "You do not have access to this chatbot"}, status=status.HTTP_403_FORBIDDEN)
+    return None
 
 
 def _get_requested_version(experiment, version_number):
@@ -683,30 +705,9 @@ def chat_send_message(request, session_id):
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if version_number is not None:
-        if not request.user.is_authenticated:
-            return Response(
-                {"error": "Version number requires authentication"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if not session.experiment.team.members.filter(id=request.user.id).exists():
-            return Response(
-                {"error": "You do not have access to this chatbot"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if version_number != Experiment.DEFAULT_VERSION_NUMBER:
-            try:
-                experiment_version = session.experiment.get_version(version_number)
-            except Experiment.DoesNotExist:
-                raise NotFound(f"Experiment with version {version_number} not found") from None
-        else:
-            experiment_version, refusal = _public_session_version(request, session)
-            if refusal:
-                return refusal
-    else:
-        experiment_version, refusal = _public_session_version(request, session)
-        if refusal:
-            return refusal
+    experiment_version, refusal = _send_version(request, session, version_number)
+    if refusal:
+        return refusal
 
     attachment_data = []
     if attachment_ids:

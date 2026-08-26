@@ -8,6 +8,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
+from apps.chatbots.public_link import CSP
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
 from apps.utils.factories.user import UserFactory
@@ -62,8 +63,7 @@ def test_live_page_renders_the_kiosk_widget(client, team_with_users):
     assert "unpkg.com/open-chat-studio-widget" in html
     assert response["X-Robots-Tag"] == "noindex"
     assert response["Referrer-Policy"] == "origin"
-    assert "unpkg.com" in response["Content-Security-Policy"]
-    assert "cdnjs.cloudflare.com" in response["Content-Security-Policy"]
+    assert response["Content-Security-Policy"] == CSP
 
 
 @pytest.mark.django_db()
