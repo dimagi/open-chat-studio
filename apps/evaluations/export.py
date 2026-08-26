@@ -90,12 +90,11 @@ class CategoricalValue:
     a choice field stores the choice string itself, a binary field stores 0/1.
 
     `polarity` ("positive"/"negative"/"neutral") drives the results table's badge
-    color. There is no schema concept of which choice is "good", so it is only ever
-    set for a two-choice field, where the first-listed choice is treated as positive
-    and the second as negative - a real signal for a field like ["Acceptable",
-    "Unacceptable"], but not something that generalizes past two choices (three or
-    more has no obvious polarity) or to binary fields (true/false carries no inherent
-    direction - true is bad for "suspected_ai_usage" and good for "correct").
+    color. There is no schema concept of which choice is "good", so it defaults to the
+    first-listed value being positive and the second negative - a real signal for a
+    field like ["Acceptable", "Unacceptable"] or a binary field's true/false, but not
+    something that generalizes past two values (three or more choices has no obvious
+    polarity, so those stay neutral).
     """
 
     raw: str

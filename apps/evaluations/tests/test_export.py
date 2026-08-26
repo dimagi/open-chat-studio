@@ -69,10 +69,10 @@ def test_categorical_columns_for_evaluators_colors_a_two_choice_field():
 @pytest.mark.django_db()
 def test_categorical_columns_for_evaluators_includes_binary_fields_as_1_0():
     """Binary fields are stored as 1/0 (see BinaryFieldDefinition.python_type), so the
-    column's raw values are the strings "1"/"0", not the true/false labels. Despite being
-    two-valued like a colorable choice field, binary values stay "neutral" - true/false
-    carries no inherent positive/negative direction (true is bad for a field like
-    "suspected_ai_usage" and good for one like "correct")."""
+    column's raw values are the strings "1"/"0", not the true/false labels. Like a
+    two-choice field, the true value is treated as positive and false as negative -
+    right for a field like "correct" (true is good), even though the direction isn't
+    universal (true is bad for a field like "suspected_ai_usage")."""
     evaluator = EvaluatorFactory.create(name="Correctness Judge", binary_schema=True)
 
     columns = categorical_columns_for_evaluators([evaluator])
@@ -82,8 +82,8 @@ def test_categorical_columns_for_evaluators_includes_binary_fields_as_1_0():
             column_key="correct (Correctness Judge)",
             field_label="Correct",
             values=[
-                CategoricalValue(raw="1", label="Correct"),
-                CategoricalValue(raw="0", label="Incorrect"),
+                CategoricalValue(raw="1", label="Correct", polarity="positive"),
+                CategoricalValue(raw="0", label="Incorrect", polarity="negative"),
             ],
         )
     ]
