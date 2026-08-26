@@ -727,7 +727,6 @@ def chatbot_chat_session(request, team_slug: str, experiment_id: int, version_nu
         raise Http404() from None
 
     version_specific_vars = {
-        "assistant": experiment_version.get_assistant(),
         "experiment_name": experiment_version.name,
         "experiment_version": experiment_version,
         "experiment_version_number": experiment_version.version_number,
@@ -845,7 +844,6 @@ def chatbot_chat(request, team_slug: str, experiment_id: uuid.UUID, session_id: 
 def _chatbot_chat_ui(request):
     chatbot_version = resolve_published_or_working(request.experiment)
     version_specific_vars = {
-        "assistant": chatbot_version.get_assistant(),
         "chatbot_name": chatbot_version.name,
         "experiment_version": chatbot_version,
         "experiment_version_number": chatbot_version.version_number,
