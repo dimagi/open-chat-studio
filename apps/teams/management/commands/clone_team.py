@@ -348,7 +348,7 @@ class Command(BaseCommand):
         changed = False
 
         # Fail if unmapped params have values (these reference objects we don't clone)
-        unmapped_params = ["assistant_id", "collection_id", "collection_index_ids", "synthetic_voice_id"]
+        unmapped_params = ["collection_id", "collection_index_ids", "synthetic_voice_id"]
         for param in unmapped_params:
             if param in params and params[param]:
                 raise CommandError(
