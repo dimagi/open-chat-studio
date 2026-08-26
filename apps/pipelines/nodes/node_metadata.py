@@ -12,7 +12,6 @@ from django.db.models import QuerySet
 from django.db.models.functions import Lower
 from django.urls import reverse
 
-from apps.assistants.models import OpenAiAssistant
 from apps.custom_actions.form_utils import get_custom_action_operation_choices
 from apps.documents.models import Collection
 from apps.experiments.models import AgentTools, BuiltInTools, SourceMaterial, SyntheticVoice
@@ -109,7 +108,6 @@ def _team_resource_options(team: Team, include_versions: bool) -> dict:
     if not include_versions:
         common_filters["working_version"] = None
     source_materials = SourceMaterial.objects.filter(**common_filters).values("id", "topic").all()
-    assistants = OpenAiAssistant.objects.filter(**common_filters).values("id", "name").all()
     collections = Collection.objects.filter(**common_filters).filter(is_index=False).values("id", "name").all()
     collection_indexes = (
         Collection.objects.filter(**common_filters)
@@ -125,19 +123,6 @@ def _team_resource_options(team: Team, include_versions: bool) -> dict:
         OptionsSource.source_material: (
             [_option("", "Select a topic")]
             + [_option(material["id"], material["topic"]) for material in source_materials]
-        ),
-        OptionsSource.assistant: (
-            [_option("", "Select an Assistant")]
-            + [
-                _option(
-                    value=assistant["id"],
-                    label=assistant["name"],
-                    # Always link to the working version. If `working_version_id` is None, it means the
-                    # assistant is the working version.
-                    edit_url=reverse("assistants:edit", args=[team.slug, assistant["id"]]),
-                )
-                for assistant in assistants
-            ]
         ),
         OptionsSource.collection: (
             [_option("", "Select a Collection")]
