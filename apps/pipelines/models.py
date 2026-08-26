@@ -650,8 +650,8 @@ class Node(BaseModel, VersionsMixin, CustomActionOperationMixin):
 
     def archive(self):
         """
-        Archiving a node will also archive the assistant if it is an assistant node. The node's versions will be
-        archived when the pipeline they belong to is archived.
+        Archiving a node also archives the versioned resources its params reference. The node's
+        versions will be archived when the pipeline they belong to is archived.
         """
         super().archive()
         if not self.is_a_version:

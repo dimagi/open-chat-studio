@@ -106,8 +106,8 @@ def _find_live_custom_action_references(custom_action):
       version(s) that still reference them, so the user can see exactly which experiment
       version is affected.
 
-    Operations attached to an assistant rather than a node are ignored: the assistant
-    feature is removed, so nothing live can be broken through one.
+    Operations attached to an assistant rather than a node are ignored: the assistant feature
+    is removed (#4254), so nothing live can be broken through one.
     """
     operations = CustomActionOperation.objects.filter(custom_action=custom_action).select_related("node__pipeline")
 

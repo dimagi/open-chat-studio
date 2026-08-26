@@ -940,8 +940,8 @@ class Experiment(BaseTeamModel, VersionsMixin):
     @transaction.atomic()
     def archive(self):
         """
-        Archive the experiment and all versions in the case where this is the working version. The linked assistant and
-        pipeline for the working version should not be archived.
+        Archive the experiment and all versions in the case where this is the working version. The
+        linked pipeline for the working version should not be archived.
         """
         super().archive()
         self.static_triggers.update(is_archived=True)
