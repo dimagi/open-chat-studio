@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bullseye AS build-python
+FROM python:3.13-slim-bookworm AS build-python
 RUN apt-get update \
   # dependencies for building Python packages
   && apt-get install -y build-essential libpq-dev
@@ -50,7 +50,7 @@ COPY assets /code/assets/
 
 RUN corepack pnpm run build
 
-FROM python:3.13-slim-bullseye
+FROM python:3.13-slim-bookworm
 ENV PYTHONUNBUFFERED=1
 ENV DEBUG=0
 
