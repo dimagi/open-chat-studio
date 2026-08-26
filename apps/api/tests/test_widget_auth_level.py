@@ -99,7 +99,7 @@ def test_embed_key_level_opts_out_but_requires_embed_key(api_client, experiment)
     allowed = api_client.get(poll_url(session), HTTP_X_EMBED_KEY=WIDGET_TOKEN, HTTP_ORIGIN="https://example.com")
     assert allowed.status_code == 200
 
-    # but without the embed key the public/allowlist fallback is blocked
+    # but without the embed key the keyless fallback is blocked
     denied = api_client.get(poll_url(session))
     assert denied.status_code == 403
 
@@ -119,14 +119,14 @@ def test_none_level_allows_legacy_public_access(api_client, experiment):
 
 
 @pytest.mark.django_db()
-def test_none_level_still_blocks_non_allowlisted_participant(api_client, experiment):
+def test_none_level_admits_a_session_on_an_experiment_with_allowlist_rows(api_client, experiment):
     experiment.participant_allowlist = ["someone@example.com"]
     experiment.save(update_fields=["participant_allowlist"])
     channel = _widget_channel(experiment, WidgetAuthLevel.NONE)
     session = ExperimentSessionFactory.create(
         experiment=experiment, experiment_channel=channel, session_token_required=False
     )
-    assert api_client.get(poll_url(session)).status_code == 403
+    assert api_client.get(poll_url(session)).status_code == 200
 
 
 # --- permission enforcement independent of start ---------------------------------------
@@ -134,12 +134,11 @@ def test_none_level_still_blocks_non_allowlisted_participant(api_client, experim
 
 @pytest.mark.django_db()
 def test_embed_key_level_blocks_public_fallback_without_key(api_client, experiment):
-    """Even for a public experiment, an EMBED_KEY widget channel needs the embed key."""
+    """An EMBED_KEY widget channel needs the embed key even with no session token."""
     channel = _widget_channel(experiment, WidgetAuthLevel.EMBED_KEY)
     session = ExperimentSessionFactory.create(
         experiment=experiment, experiment_channel=channel, session_token_required=False
     )
-    assert experiment.is_public
     assert api_client.get(poll_url(session)).status_code == 403
 
 
@@ -208,8 +207,6 @@ def test_embed_key_riding_along_with_a_session_cookie_grants_access(api_client, 
     """ADR-0053: the site help widget is cookie-authenticated, so its embed key never reaches
     `request.auth`. An EMBED_KEY channel must still accept it, or the widget starts a session and
     is then denied every follow-up request."""
-    experiment.participant_allowlist = ["someone-else@example.com"]
-    experiment.save(update_fields=["participant_allowlist"])
     channel = _widget_channel(experiment, WidgetAuthLevel.EMBED_KEY)
     session = ExperimentSessionFactory.create(
         experiment=experiment, experiment_channel=channel, session_token_required=False

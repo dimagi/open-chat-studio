@@ -298,8 +298,6 @@ def start_session_public(request, team_slug: str, experiment_id: uuid.UUID):
         raise Http404() from None
 
     experiment_version = resolve_published_or_working(experiment)
-    if not experiment_version.is_public:
-        raise Http404
 
     # Checked before the consent form is rendered, so a participant never fills it in only to be
     # refused on submit. The channel is checked again inside start_experiment_session, which is

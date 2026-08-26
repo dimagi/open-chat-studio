@@ -200,14 +200,3 @@ def test_session_poll_with_messages(api_client, session):
         "messages": [expected_messages[0]],
         "session_status": "active",
     }
-
-
-@pytest.mark.skip("This no longer applies to the chat API until we have proper public access implemented.")
-@pytest.mark.django_db()
-def test_start_chat_session_requires_auth_when_not_public(team_with_users, api_client, experiment):
-    url = reverse("api:chat:start-session")
-    experiment.participant_allowlist = ["a", "b"]
-    experiment.save()
-    data = {"chatbot_id": experiment.public_id}
-    response = api_client.post(url, data=data, format="json")
-    assert response.status_code == 403

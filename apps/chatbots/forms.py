@@ -2,7 +2,7 @@ from django import forms
 from django.db import transaction
 
 from apps.channels.models import ExperimentChannel
-from apps.experiments.helpers import excluded_voice_services, normalize_participant_allowlist
+from apps.experiments.helpers import excluded_voice_services
 from apps.experiments.models import ConsentForm, Experiment, SyntheticVoice
 from apps.pipelines.models import Pipeline
 from apps.service_providers.messaging_service import MetaCloudAPIService
@@ -46,7 +46,6 @@ class ChatbotForm(forms.ModelForm):
 class ChatbotSettingsForm(forms.ModelForm):
     description = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
     seed_message = forms.CharField(widget=forms.Textarea(attrs={"rows": 2}), required=False)
-    participant_allowlist = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = Experiment
@@ -61,12 +60,10 @@ class ChatbotSettingsForm(forms.ModelForm):
             "debug_mode_enabled",
             "conversational_consent_enabled",
             "consent_form",
-            "participant_allowlist",
             "seed_message",
             "file_uploads_enabled",
         ]
         labels = {
-            "participant_allowlist": "Participant allowlist",
             "voice_provider": "Speech Provider",
             "voice_response_behaviour": "Response Provider",
         }
@@ -93,9 +90,6 @@ class ChatbotSettingsForm(forms.ModelForm):
         self.fields["voice_provider"].widget.attrs = {
             "x-model.fill": "voiceProvider",
         }
-
-    def clean_participant_allowlist(self):
-        return normalize_participant_allowlist(self.cleaned_data["participant_allowlist"].split(","))
 
     @transaction.atomic()
     def save(self, commit=True):

@@ -6,6 +6,7 @@ from django.db import IntegrityError
 from apps.channels.datamodels import BaseMessage
 from apps.channels.evaluation_channel import EvaluationChannel
 from apps.channels.models import ChannelPlatform, ExperimentChannel
+from apps.channels.stages.terminal import PersistenceStage
 from apps.channels.tasks import handle_evaluation_message
 from apps.chat.exceptions import ChannelException
 from apps.chat.models import ChatMessage
@@ -139,3 +140,18 @@ class TestEvaluationChannelEndToEnd:
 
         assert isinstance(result, ChatMessage)
         assert result.content == "Bot response"
+
+
+@pytest.mark.django_db()
+def test_evaluation_pipeline_never_persists_bot_side_messages(evals_experiment, evals_channel):
+    session = ExperimentSessionFactory.create(experiment=evals_experiment, experiment_channel=evals_channel)
+    channel = EvaluationChannel(
+        experiment=evals_experiment,
+        experiment_channel=evals_channel,
+        experiment_session=session,
+        participant_data={},
+    )
+
+    pipeline = channel._build_pipeline()
+
+    assert not any(isinstance(stage, PersistenceStage) for stage in pipeline.terminal_stages)
