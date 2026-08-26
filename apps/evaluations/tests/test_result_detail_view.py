@@ -4,7 +4,6 @@ import pytest
 from django.urls import reverse
 
 from apps.evaluations.evaluators import EvaluatorResult
-from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -14,12 +13,6 @@ from apps.utils.factories.evaluations import (
     EvaluatorFactory,
 )
 from apps.utils.factories.experiment import ExperimentSessionFactory
-
-
-def _enable_cost_tracking_for(team):
-    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
-    flag.teams.add(team)
-    flag.flush()
 
 
 def _result(run, evaluator, *, sentiment="positive", input_content="hi", generated="hi there", **kwargs):
@@ -194,8 +187,7 @@ class TestEvaluationResultDetailView:
 
         assert response.status_code == 404
 
-    def test_tokens_and_cost_shown_when_cost_tracking_enabled(self, client, team_with_users):
-        _enable_cost_tracking_for(team_with_users)
+    def test_tokens_and_cost_shown(self, client, team_with_users):
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])

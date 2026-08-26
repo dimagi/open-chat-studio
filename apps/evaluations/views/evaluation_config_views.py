@@ -23,7 +23,6 @@ from django.utils.http import urlencode
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
-from waffle import flag_is_active
 
 from apps.cost_tracking.services.reporting import (
     evaluation_config_cost_summary,
@@ -64,8 +63,6 @@ from apps.trace.models import Trace
 from apps.utils.time import seconds_to_human
 
 logger = logging.getLogger(__name__)
-
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
 class EvaluationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -180,17 +177,13 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team=self.request.team)
 
-        cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
-        context = {
+        return {
             **super().get_context_data(**kwargs),
             "config": config,
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
-            "cost_tracking_enabled": cost_tracking_enabled,
+            "cost_summary": evaluation_config_cost_summary(config),
         }
-        if cost_tracking_enabled:
-            context["cost_summary"] = evaluation_config_cost_summary(config)
-        return context
 
 
 class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
@@ -274,9 +267,6 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
             .order_by("-created_at")
         )
 
-    def get_table_kwargs(self):
-        return {"cost_tracking_enabled": flag_is_active(self.request, COST_TRACKING_FLAG)}
-
     def get_table(self, **kwargs):
         """Stamp cost onto the rows of the *current page* only, after pagination has
         already sliced them. Leaving `get_table_data` at its default (the lazy
@@ -284,12 +274,11 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
         than loading every run for the config on every request.
         """
         table = super().get_table(**kwargs)
-        if kwargs.get("cost_tracking_enabled"):
-            page_runs = [row.record for row in table.paginated_rows]
-            if page_runs:
-                costs = evaluation_run_costs(self.kwargs["evaluation_pk"], [run.id for run in page_runs])
-                for run in page_runs:
-                    run.cost = costs.get(run.id)
+        page_runs = [row.record for row in table.paginated_rows]
+        if page_runs:
+            costs = evaluation_run_costs(self.kwargs["evaluation_pk"], [run.id for run in page_runs])
+            for run in page_runs:
+                run.cost = costs.get(run.id)
         return table
 
 
@@ -305,19 +294,15 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         title = (
             "Evaluation Run Preview" if evaluation_run.type == EvaluationRunType.PREVIEW else "Evaluation Run Results"
         )
-        cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
+        run_cost = evaluation_run_cost(evaluation_run)
         context: dict[str, Any] = {
             "active_tab": "evaluations",
             "title": title,
             "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
-            "cost_tracking_enabled": cost_tracking_enabled,
+            "run_cost": run_cost,
         }
-        run_cost = None
-        if cost_tracking_enabled:
-            run_cost = evaluation_run_cost(evaluation_run)
-            context["run_cost"] = run_cost
 
         # Calculate duration if finished
         if evaluation_run.finished_at:
@@ -448,10 +433,6 @@ class EvaluationResultDataMixin:
         )
 
     @cached_property
-    def cost_tracking_enabled(self) -> bool:
-        return bool(flag_is_active(self.request, COST_TRACKING_FLAG))
-
-    @cached_property
     def evaluators(self) -> list[Evaluator]:
         return list(Evaluator.objects.filter(id__in=self.evaluation_run.evaluator_ids))
 
@@ -473,14 +454,10 @@ class EvaluationResultDataMixin:
 
     @cached_property
     def tokens_by_message(self) -> dict[int, int]:
-        if not self.cost_tracking_enabled:
-            return {}
         return evaluation_message_tokens(self.evaluation_run.config_id, self.evaluation_run.id)
 
     @cached_property
     def cost_by_message(self) -> dict[int, Decimal]:
-        if not self.cost_tracking_enabled:
-            return {}
         return evaluation_message_cost(self.evaluation_run.config_id, self.evaluation_run.id)
 
     def get_filter_field(self) -> str | None:
@@ -507,9 +484,8 @@ class EvaluationResultDataMixin:
         if field is not None:
             value = self.get_filter_value()
             data = [row for row in data if str(row.get(field)) == value]
-        if self.cost_tracking_enabled:
-            for row in data:
-                row["Tokens"] = self.tokens_by_message.get(row.get("id"))
+        for row in data:
+            row["Tokens"] = self.tokens_by_message.get(row.get("id"))
         return data
 
     def get_table_data(self):
@@ -572,9 +548,9 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
 
     def get_table_class(self):
         """Build a Table subclass with one Column per curated field: #, Dataset Input,
-        Generated Response, one per evaluator output field, and Tokens (cost tracking
-        permitting) — not the full grab-bag of keys `build_evaluation_table_data`
-        produces (message context, Applied Tags, session links aren't shown here).
+        Generated Response, one per evaluator output field, and Tokens — not the full
+        grab-bag of keys `build_evaluation_table_data` produces (message context, Applied
+        Tags, session links aren't shown here).
         """
         data = self.get_table_data()
         if not data:
@@ -586,8 +562,7 @@ class EvaluationResultTableView(EvaluationResultDataMixin, PermissionRequiredMix
 
         column_keys = ["#", "Dataset Input", "Generated Response"]
         column_keys += [key for key, _label in self.dynamic_columns]
-        if self.cost_tracking_enabled:
-            column_keys.append("Tokens")
+        column_keys.append("Tokens")
         attrs = {key: self.get_column(key) for key in column_keys}
 
         # Define row class factory to add highlighting
@@ -801,8 +776,8 @@ class EvaluationResultDetailView(EvaluationResultDataMixin, PermissionRequiredMi
             "generated_response": row.get("Generated Response"),
             "badges": badges,
             "text_fields": text_fields,
-            "tokens": row.get("Tokens") if self.cost_tracking_enabled else None,
-            "cost": self.cost_by_message.get(message_id) if self.cost_tracking_enabled else None,
+            "tokens": row.get("Tokens"),
+            "cost": self.cost_by_message.get(message_id),
             "session_url": session_url,
             "trace_url": trace_url,
         }

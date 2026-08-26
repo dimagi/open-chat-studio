@@ -61,6 +61,27 @@ def create_default_team_for_user(user: CustomUser, team_name: str | None = None)
     return team
 
 
+def set_request_attrs(request, **attrs):
+    """Set attributes on the underlying Django request rather than only on DRF's wrapper.
+
+    DRF's OPTIONS metadata re-runs the permission checks against a ``clone_request``: a fresh DRF
+    ``Request`` around the *same* Django request, carrying only ``_user``, ``_auth`` and a few
+    renderer fields off the original. Anything an authenticator set on the DRF request alone is
+    therefore missing on the clone, where ``request.team`` falls through to the middleware's lazy
+    lookup -- ``None`` on an API path -- and every team-scoped ``get_queryset()`` raises rather than
+    404s. DRF writes ``user`` and ``auth`` through to ``_request`` for this same reason.
+
+    ``user`` is not settable here: DRF exposes it as a property whose getter re-enters
+    authentication, so it must go through that setter instead.
+
+    Falls back to the request itself for a plain ``HttpRequest``, which is what the authenticators
+    get under ``RequestFactory``.
+    """
+    target = getattr(request, "_request", request)
+    for name, value in attrs.items():
+        setattr(target, name, value)
+
+
 def get_team_membership_for_request(request: HttpRequest):
     if request.user.is_authenticated and request.team:
         membership = Membership.objects.filter(team=request.team, user=request.user).first()

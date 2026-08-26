@@ -5,6 +5,7 @@ from drf_spectacular.authentication import TokenScheme
 from drf_spectacular.extensions import OpenApiAuthenticationExtension, OpenApiSerializerFieldExtension
 from rest_framework.permissions import SAFE_METHODS
 
+from apps.api.v2.write.serializers import RejectsUnknownKeys
 from apps.oauth.permissions import TokenHasOAuthResourceScope, TokenHasOAuthScope
 
 # Placeholder hosts baked into the schema: DRF hardcodes ``api.example.org`` in the cursor
@@ -67,6 +68,36 @@ def prune_unused_tags(result, **kwargs):
     }
     if "tags" in result:
         result["tags"] = [tag for tag in result["tags"] if tag["name"] in used]
+    return result
+
+
+def _closed_serializers(base):
+    """``base``'s subclasses, however deeply nested."""
+    for cls in base.__subclasses__():
+        yield cls
+        yield from _closed_serializers(cls)
+
+
+def mirror_unknown_key_rejection(result, **kwargs):
+    """Publish ``RejectsUnknownKeys`` as ``additionalProperties: false``.
+
+    Those serializers 400 on a key they do not declare, but OpenAPI permits extra properties by
+    default, so a generated client or a validator would accept a body the API refuses -- and the
+    consumer this API is built for reads the schema rather than the prose. Every field on the
+    serializers concerned is writable, so the declared properties are exactly the accepted keys.
+
+    Component names are derived from the serializer classes, including the ``Patched`` prefix
+    drf-spectacular gives a PATCH body, so a new closed serializer needs no edit here. A
+    postprocessing hook (signature: ``result`` -> ``result``).
+    """
+    closed = set()
+    for cls in _closed_serializers(RejectsUnknownKeys):
+        name = cls.__name__.removesuffix("Serializer")
+        closed |= {name, f"Patched{name}"}
+
+    for name, schema in result.get("components", {}).get("schemas", {}).items():
+        if name in closed and schema.get("type") == "object":
+            schema["additionalProperties"] = False
     return result
 
 

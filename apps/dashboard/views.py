@@ -4,12 +4,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.decorators import method_decorator
 from django.views.generic import TemplateView
-from waffle import flag_is_active
 
 from apps.cost_tracking.services.reporting import (
     CostFilters,
@@ -30,7 +29,6 @@ from .forms import DashboardFilterForm, SavedFilterForm
 from .models import DashboardCache, DashboardFilter
 from .services import DashboardService
 
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 DEFAULT_COST_PERIOD_DAYS = 30
 
 
@@ -100,16 +98,12 @@ def _coverage_gaps_from_cache(payload: dict) -> CoverageGaps:
 
 
 def _cost_tracking_context(request, filter_form: DashboardFilterForm) -> dict:
-    """Return the cost-tracking panel context. When the flag is off the panel
-    is hidden entirely - no service calls are made. Both reads go through
+    """Return the cost-tracking panel context. Both reads go through
     DashboardCache on the same 30-minute TTL as every other dashboard metric
     (#3905).
     """
-    if not flag_is_active(request, COST_TRACKING_FLAG):
-        return {"cost_tracking_enabled": False}
     start, end, filters = _cost_panel_scope(filter_form)
     return {
-        "cost_tracking_enabled": True,
         "cost_summary": _cached(
             request.team,
             _cost_cache_key("cost_summary", filter_form),
@@ -183,8 +177,7 @@ class DashboardView(LoginAndTeamRequiredMixin, TemplateView):
 class CostTrackingPanelView(LoginAndTeamRequiredMixin, TemplateView):
     """Re-render the cost panel partial when the dashboard's filter form
     changes. Returns the partial HTML so the dashboard JS can swap it into
-    `#cost-tracking-panel-container` without a full page reload. Empty
-    response when the flag is off (panel stays hidden)."""
+    `#cost-tracking-panel-container` without a full page reload."""
 
     template_name = "dashboard/_cost_tracking_panel.html"
 
@@ -193,11 +186,6 @@ class CostTrackingPanelView(LoginAndTeamRequiredMixin, TemplateView):
         filter_form = DashboardFilterForm(data=self.request.GET, team=self.request.team)
         context.update(_cost_tracking_context(self.request, filter_form))
         return context
-
-    def render_to_response(self, context, **response_kwargs):
-        if not context.get("cost_tracking_enabled"):
-            return HttpResponse("")
-        return super().render_to_response(context, **response_kwargs)
 
 
 @method_decorator(login_and_team_required, name="dispatch")
@@ -273,20 +261,15 @@ class BotPerformanceApiView(DashboardApiView):
             page_size=page_size,
             order_by=order_by,
             order_dir=order_dir,
-            include_cost=flag_is_active(request, COST_TRACKING_FLAG),
             **filter_params,
         )
         return self.json_response(data)
 
 
 class CostTrackingApiView(DashboardApiView):
-    """Cost-tracking data endpoint, gated on the team's cost-monitoring flag.
-    Returns an empty payload when the flag is off so the frontend can no-op.
-    """
+    """Cost-tracking timeseries endpoint for the cost panel's line chart."""
 
     def get(self, request, *args, **kwargs):
-        if not flag_is_active(request, COST_TRACKING_FLAG):
-            return self.json_response([])
         filter_form = DashboardFilterForm(data=request.GET, team=request.team)
         start, end, filters = _cost_panel_scope(filter_form)
         granularity = request.GET.get("granularity", "daily")
@@ -311,14 +294,11 @@ class CostTrackingApiView(DashboardApiView):
 
 class CostBreakdownApiView(DashboardApiView):
     """Provider/model and service-kind cost breakdowns for the cost panel's
-    charts, gated on the team's cost-monitoring flag. Returns an empty payload
-    when the flag is off so the frontend can no-op. Both groupings share one
-    cache entry - the frontend always consumes them together.
+    charts. Both groupings share one cache entry - the frontend always
+    consumes them together.
     """
 
     def get(self, request, *args, **kwargs):
-        if not flag_is_active(request, COST_TRACKING_FLAG):
-            return self.json_response({})
         filter_form = DashboardFilterForm(data=request.GET, team=request.team)
         start, end, filters = _cost_panel_scope(filter_form)
         data = _cached(
@@ -335,14 +315,9 @@ class CostBreakdownApiView(DashboardApiView):
 
 
 class CostP95ApiView(DashboardApiView):
-    """p95 cost-per-trace series for the cost panel's line chart, gated on the
-    team's cost-monitoring flag. Empty payload when the flag is off so the
-    frontend can no-op.
-    """
+    """p95 cost-per-trace series for the cost panel's line chart."""
 
     def get(self, request, *args, **kwargs):
-        if not flag_is_active(request, COST_TRACKING_FLAG):
-            return self.json_response([])
         filter_form = DashboardFilterForm(data=request.GET, team=request.team)
         start, end, filters = _cost_panel_scope(filter_form)
         granularity = request.GET.get("granularity", "daily")
@@ -371,7 +346,6 @@ class UserEngagementApiView(DashboardApiView):
 
         data = service.get_user_engagement_data(
             limit=limit,
-            include_cost=flag_is_active(request, COST_TRACKING_FLAG),
             **filter_params,
         )
         return self.json_response(data)

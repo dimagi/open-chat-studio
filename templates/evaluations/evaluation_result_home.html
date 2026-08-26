@@ -85,20 +85,18 @@
             <div class="text-2xl font-bold">{{ total_results|default_if_none:"—" }}</div>
             <div class="text-xs uppercase tracking-wide text-base-content/60">Results</div>
           </div>
-          {% if cost_tracking_enabled %}
-            <div>
-              <div class="text-2xl font-bold">
-                {% if run_cost.by_model %}
-                  {% include "cost_tracking/_usage_summary.html" with total_cost=run_cost.total_cost unpriced=run_cost.has_unpriced estimated=run_cost.has_estimated unknown=run_cost.has_unknown testid_prefix="eval-run-cost-stat" %}
-                {% else %}
-                  <span class="text-base-content/40">Not recorded</span>
-                {% endif %}
-              </div>
-              <div class="text-xs uppercase tracking-wide text-base-content/60">
-                Cost{% if run_cost.by_model %} · {{ run_cost.total_tokens|intcomma }} tokens{% endif %}
-              </div>
+          <div>
+            <div class="text-2xl font-bold">
+              {% if run_cost.by_model %}
+                {% include "cost_tracking/_usage_summary.html" with total_cost=run_cost.total_cost unpriced=run_cost.has_unpriced estimated=run_cost.has_estimated unknown=run_cost.has_unknown testid_prefix="eval-run-cost-stat" %}
+              {% else %}
+                <span class="text-base-content/40">Not recorded</span>
+              {% endif %}
             </div>
-          {% endif %}
+            <div class="text-xs uppercase tracking-wide text-base-content/60">
+              Cost{% if run_cost.by_model %} · {{ run_cost.total_tokens|intcomma }} tokens{% endif %}
+            </div>
+          </div>
           <div>
             <div class="text-2xl font-bold">{{ run_duration|default:"—" }}</div>
             <div class="text-xs uppercase tracking-wide text-base-content/60">Duration</div>
@@ -172,81 +170,72 @@
       {% include "evaluations/components/progress.html" %}
     {% elif evaluation_run.status == "completed" %}
       {# Aggregates + Cost #}
-      {% if cost_tracking_enabled %}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <div class="card card-border bg-base-100">
-            <div class="card-body p-4">
-              <h2 class="text-lg font-semibold mb-2">Aggregates</h2>
-              {% include "evaluations/components/aggregates.html" %}
-            </div>
-          </div>
-          <div class="card card-border bg-base-100">
-            <div class="card-body p-4">
-              <div class="flex justify-between items-baseline mb-3">
-                <h2 class="text-lg font-semibold">Cost</h2>
-                {% if run_cost.by_model %}
-                  <span class="text-xs text-base-content/60">{{ run_cost.total_tokens|intcomma }} tokens</span>
-                {% endif %}
-              </div>
-              {% if run_cost.by_model %}
-                <div class="flex items-baseline gap-2 mb-4">
-                  <span class="text-3xl font-bold">
-                    {% include "cost_tracking/_usage_summary.html" with total_cost=run_cost.total_cost unpriced=run_cost.has_unpriced estimated=run_cost.has_estimated unknown=run_cost.has_unknown testid_prefix="eval-run-cost" %}
-                  </span>
-                  {% if avg_cost_per_result %}
-                    <span class="text-xs text-base-content/60">${{ avg_cost_per_result|cost_display }} avg / result</span>
-                  {% endif %}
-                </div>
-                <div class="mb-4">
-                  <div class="text-xs uppercase tracking-wide text-base-content/60 mb-2">By evaluator</div>
-                  <div class="space-y-1">
-                    {% for row in run_cost.by_evaluator %}
-                      <div class="flex justify-between items-center text-sm">
-                        <span>{{ row.evaluator_name }}</span>
-                        <span class="flex items-center gap-2">
-                          {% if row.has_unpriced %}
-                            <span class="text-base-content/40">unpriced</span>
-                          {% else %}
-                            <span class="font-medium">${{ row.cost|cost_display }}</span>
-                          {% endif %}
-                          <span class="text-base-content/60 text-xs">{{ row.tokens|intcomma }} tokens</span>
-                        </span>
-                      </div>
-                    {% endfor %}
-                  </div>
-                </div>
-                <div>
-                  <div class="text-xs uppercase tracking-wide text-base-content/60 mb-2">By model</div>
-                  <div class="space-y-1">
-                    {% for row in run_cost.by_model %}
-                      <div class="flex justify-between items-center text-sm">
-                        <span>{{ row.model_name }}</span>
-                        <span class="flex items-center gap-2">
-                          {% if row.has_unpriced %}
-                            <span class="text-base-content/40">unpriced</span>
-                          {% else %}
-                            <span class="font-medium">${{ row.cost|cost_display }}</span>
-                          {% endif %}
-                          <span class="text-base-content/60 text-xs">{{ row.tokens|intcomma }} tokens</span>
-                        </span>
-                      </div>
-                    {% endfor %}
-                  </div>
-                </div>
-              {% else %}
-                <p class="text-sm text-base-content/60">No LLM cost recorded for this run.</p>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      {% else %}
-        <div class="card card-border bg-base-100 mb-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div class="card card-border bg-base-100">
           <div class="card-body p-4">
             <h2 class="text-lg font-semibold mb-2">Aggregates</h2>
             {% include "evaluations/components/aggregates.html" %}
           </div>
         </div>
-      {% endif %}
+        <div class="card card-border bg-base-100">
+          <div class="card-body p-4">
+            <div class="flex justify-between items-baseline mb-3">
+              <h2 class="text-lg font-semibold">Cost</h2>
+              {% if run_cost.by_model %}
+                <span class="text-xs text-base-content/60">{{ run_cost.total_tokens|intcomma }} tokens</span>
+              {% endif %}
+            </div>
+            {% if run_cost.by_model %}
+              <div class="flex items-baseline gap-2 mb-4">
+                <span class="text-3xl font-bold">
+                  {% include "cost_tracking/_usage_summary.html" with total_cost=run_cost.total_cost unpriced=run_cost.has_unpriced estimated=run_cost.has_estimated unknown=run_cost.has_unknown testid_prefix="eval-run-cost" %}
+                </span>
+                {% if avg_cost_per_result %}
+                  <span class="text-xs text-base-content/60">${{ avg_cost_per_result|cost_display }} avg / result</span>
+                {% endif %}
+              </div>
+              <div class="mb-4">
+                <div class="text-xs uppercase tracking-wide text-base-content/60 mb-2">By evaluator</div>
+                <div class="space-y-1">
+                  {% for row in run_cost.by_evaluator %}
+                    <div class="flex justify-between items-center text-sm">
+                      <span>{{ row.evaluator_name }}</span>
+                      <span class="flex items-center gap-2">
+                        {% if row.has_unpriced %}
+                          <span class="text-base-content/40">unpriced</span>
+                        {% else %}
+                          <span class="font-medium">${{ row.cost|cost_display }}</span>
+                        {% endif %}
+                        <span class="text-base-content/60 text-xs">{{ row.tokens|intcomma }} tokens</span>
+                      </span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+              <div>
+                <div class="text-xs uppercase tracking-wide text-base-content/60 mb-2">By model</div>
+                <div class="space-y-1">
+                  {% for row in run_cost.by_model %}
+                    <div class="flex justify-between items-center text-sm">
+                      <span>{{ row.model_name }}</span>
+                      <span class="flex items-center gap-2">
+                        {% if row.has_unpriced %}
+                          <span class="text-base-content/40">unpriced</span>
+                        {% else %}
+                          <span class="font-medium">${{ row.cost|cost_display }}</span>
+                        {% endif %}
+                        <span class="text-base-content/60 text-xs">{{ row.tokens|intcomma }} tokens</span>
+                      </span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% else %}
+              <p class="text-sm text-base-content/60">No LLM cost recorded for this run.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
 
       {# Results #}
       <div class="card card-border bg-base-100">

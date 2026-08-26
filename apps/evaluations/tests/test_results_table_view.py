@@ -9,7 +9,6 @@ from django.urls import reverse
 from apps.evaluations.evaluators import EvaluatorResult
 from apps.evaluations.export import CategoricalColumn, CategoricalValue
 from apps.evaluations.views.evaluation_config_views import ResultFilterPill, _build_result_filter_pills
-from apps.teams.models import Flag
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.evaluations import (
     EvaluationConfigFactory,
@@ -17,12 +16,6 @@ from apps.utils.factories.evaluations import (
     EvaluationRunFactory,
     EvaluatorFactory,
 )
-
-
-def _enable_cost_tracking_for(team):
-    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
-    flag.teams.add(team)
-    flag.flush()
 
 
 def _sentiment_result(run, evaluator, *, sentiment):
@@ -243,6 +236,7 @@ class TestResultsTableCuratedColumns:
             "Generated Response",
             f"score ({evaluator.name})",
             f"sentiment ({evaluator.name})",
+            "Tokens",
         ]
 
     def test_long_free_text_fields_are_clamped_not_left_to_blow_out_row_height(self, client, team_with_users):
@@ -275,7 +269,7 @@ class TestResultsTableCuratedColumns:
         content = response.content.decode()
         assert content.count(f'line-clamp-2 max-w-md" title="{long_text}"') == 2
 
-    def test_tokens_column_present_only_when_cost_tracking_enabled(self, client, team_with_users):
+    def test_tokens_column_always_present(self, client, team_with_users):
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Sentiment Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])
@@ -284,16 +278,10 @@ class TestResultsTableCuratedColumns:
         url = reverse("evaluations:evaluation_results_table", args=[team_with_users.slug, config.id, run.id])
 
         response = client.get(url)
-        assert "Tokens" not in list(response.context["table"].columns.columns)
 
-        _enable_cost_tracking_for(team_with_users)
-
-        response = client.get(url)
         assert "Tokens" in list(response.context["table"].columns.columns)
 
     def test_tokens_column_sums_judge_and_generation_for_that_row(self, client, team_with_users):
-        _enable_cost_tracking_for(team_with_users)
-
         evaluator = EvaluatorFactory.create(team=team_with_users, name="Sentiment Judge")
         config = EvaluationConfigFactory.create(team=team_with_users, evaluators=[evaluator])
         run = EvaluationRunFactory.create(team=team_with_users, config=config, evaluator_ids=[evaluator.id])

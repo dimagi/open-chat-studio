@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -40,7 +41,7 @@ from apps.service_providers.llm_service.credentials import (
 from apps.service_providers.models import LlmProvider, LlmProviderTypes
 from apps.service_providers.utils import get_first_llm_provider_model
 from apps.teams import backends
-from apps.teams.models import Flag, Membership, Team
+from apps.teams.models import Membership, Team
 from apps.trace.models import Trace, TraceStatus
 
 _PIPELINE_NAMES = [
@@ -74,7 +75,6 @@ _EVALUATION_DATASET_MESSAGES = [
     ("Thanks for the fast shipping!", "Glad to hear it — enjoy!"),
     ("This product doesn't match the description.", "I understand, let me help you with a return."),
 ]
-_COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 # Fake model names for the unpriced / no-usage rows so the panel's coverage-gap
 # warnings have something to list.
 _UNPRICED_MODEL = "experimental-model-x"
@@ -209,6 +209,7 @@ class Command(BaseCommand):
         files = self._seed_files(team)
         self._seed_collection(team, files)
         self._seed_evaluation(team, llm_provider, llm_model)
+        self._seed_evaluation_runs(team)
 
     def _seed_llm_providers(self, team):
         self.stdout.write("")
@@ -386,7 +387,7 @@ class Command(BaseCommand):
         the trace detail page's token card reads.
         """
         # Rerun-safe: an already-seeded team yields no new sessions upstream, so
-        # rehydrate from the DB rather than skipping usage seeding and the flag.
+        # rehydrate from the DB rather than skipping usage seeding.
         if not sessions:
             sessions = list(
                 ExperimentSession.objects.filter(team=team).select_related("experiment", "participant").order_by("id")
@@ -452,7 +453,6 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS(f"  Created {created} usage record(s)"))
-        self._enable_cost_tracking_flag(team)
 
     def _seed_daily_priced_usage(
         self,
@@ -542,14 +542,6 @@ class Command(BaseCommand):
                 unit_price=Decimal("0.00015"),
             )
         return rule
-
-    def _enable_cost_tracking_flag(self, team) -> None:
-        """The Cost Tracking panel is gated on this team-scoped flag, so enable
-        it here to make the seeded records visible on the dashboard."""
-        flag, _ = Flag.objects.get_or_create(name=_COST_TRACKING_FLAG)
-        flag.teams.add(team)
-        flag.flush()
-        self.stdout.write(self.style.SUCCESS(f"  Enabled '{_COST_TRACKING_FLAG}' flag for team"))
 
     def _seed_files(self, team) -> list[File]:
         self.stdout.write("")
@@ -655,6 +647,14 @@ class Command(BaseCommand):
                 dataset.messages.add(msg)
             self.stdout.write(f"    Added {len(_EVALUATION_DATASET_MESSAGES)} sample messages to dataset")
         return dataset
+
+    def _seed_evaluation_runs(self, team) -> None:
+        """Delegate the runs/results/aggregates/cost rows to the evaluations app's own
+        seed command, so that data can also be reseeded on its own while iterating on the
+        results UI."""
+        self.stdout.write("")
+        self.stdout.write("--- Creating Evaluation Runs ---")
+        call_command("bootstrap_evaluation_runs", team_slug=team.slug, stdout=self.stdout)
 
     def _log_created(self, entity_type: str, name: str, created: bool):
         """Helper to log entity creation status."""

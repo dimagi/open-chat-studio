@@ -12,7 +12,6 @@ from django.utils import timezone
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession, Participant, ParticipantData
 from apps.participants.forms import TriggerBotForm
-from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory, ParticipantFactory
@@ -282,16 +281,9 @@ def test_participant_home_shows_create_action(client, team_with_users):
     assert create_url.encode() in response.content
 
 
-def _enable_cost_flag(team):
-    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
-    flag.teams.add(team)
-    flag.flush()
-
-
 @pytest.mark.django_db()
 class TestParticipantTableCostColumn:
-    """The participants table shows a 30-day cost column only when the team has
-    `flag_ai_cost_monitoring`."""
+    """The participants table shows a 30-day cost column."""
 
     def _get_table(self, client, team):
         user = team.members.first()
@@ -299,16 +291,7 @@ class TestParticipantTableCostColumn:
         url = reverse("participants:participant_table", kwargs={"team_slug": team.slug})
         return client.get(url)
 
-    def test_column_absent_when_flag_off(self, client, team_with_users):
-        ParticipantFactory.create(team=team_with_users)
-
-        response = self._get_table(client, team_with_users)
-
-        assert response.status_code == 200
-        assert "Cost (30d)" not in response.content.decode()
-
     def test_column_shows_last_30_day_cost(self, client, team_with_users):
-        _enable_cost_flag(team_with_users)
         participant = ParticipantFactory.create(team=team_with_users)
         UsageRecordFactory.create(
             team=team_with_users,
@@ -331,7 +314,6 @@ class TestParticipantTableCostColumn:
         assert "$11.22" not in content
 
     def test_participant_without_usage_shows_zero(self, client, team_with_users):
-        _enable_cost_flag(team_with_users)
         ParticipantFactory.create(team=team_with_users)
 
         response = self._get_table(client, team_with_users)

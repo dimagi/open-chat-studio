@@ -516,7 +516,10 @@ class Experiment(BaseTeamModel, VersionsMixin):
     """Row identity, version bookkeeping, and lifecycle/admin state: fixed up after
     cloning (or owned by a single row) and never copied between rows in a family."""
 
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # Null for a chatbot created by a client-credentials (machine) token, which has no user.
+    # ``CASCADE`` is retained deliberately: nullable permits an ownerless row, it does not change
+    # what happens when an owner *is* deleted.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True)
     name = models.CharField(max_length=128)
     description = models.TextField(null=True, default="", verbose_name="A longer description of the experiment.")  # noqa DJ001
     pipeline = models.ForeignKey(

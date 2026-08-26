@@ -163,11 +163,6 @@ class EvaluationRunTable(tables.Table):
         ]
     )
 
-    def __init__(self, *args, cost_tracking_enabled: bool = False, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not cost_tracking_enabled:
-            self.columns.hide("cost")
-
     def render_cost(self, record):
         cost = getattr(record, "cost", None)
         if cost is None:

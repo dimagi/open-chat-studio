@@ -2,6 +2,10 @@ import pytest
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient
 
+from apps.api.v2.inspect.serializers import ChatbotInspectSerializer
+from apps.api.v2.serializers import ChatbotSerializer
+from apps.api.v2.views import ChatbotViewSet
+from apps.api.v2.write.serializers import ChatbotCreateSerializer, ChatbotWriteSerializer
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.service_provider_factories import LlmProviderFactory
 from apps.utils.factories.team import TeamWithUsersFactory
@@ -23,6 +27,25 @@ def test_v2_chatbot_reverse_is_versioned():
 def test_v2_chatbot_detail_resolves():
     match = resolve("/api/v2/chatbots/123e4567-e89b-12d3-a456-426614174000/")
     assert match.url_name == "chatbot-detail"
+
+
+@pytest.mark.parametrize(
+    ("action", "expected"),
+    [
+        pytest.param("list", ChatbotSerializer, id="list"),
+        pytest.param("retrieve", ChatbotSerializer, id="retrieve"),
+        pytest.param("create", ChatbotCreateSerializer, id="create"),
+        pytest.param("partial_update", ChatbotWriteSerializer, id="partial-update"),
+        pytest.param("inspect", ChatbotInspectSerializer, id="inspect"),
+    ],
+)
+def test_get_serializer_class_matches_the_action(action, expected):
+    """Three of the five actions build their serializer directly, so this method is easy to leave
+    behind -- and OPTIONS metadata reads it."""
+    view = ChatbotViewSet()
+    view.action = action
+
+    assert view.get_serializer_class() is expected
 
 
 @pytest.mark.django_db()

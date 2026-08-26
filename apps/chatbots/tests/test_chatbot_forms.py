@@ -91,3 +91,30 @@ def test_chatbot_settings_form_consent_form_queryset_is_team_scoped(team_with_us
     assert own_consent.id in consent_ids
     assert versioned_consent.id not in consent_ids
     assert other_consent.id not in consent_ids
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("entered", "cleaned"),
+    [
+        pytest.param("+27 82 000 0000", ["+27820000000"], id="spaces-inside-an-identifier-are-stripped"),
+        pytest.param("a@example.com, b@example.com", ["a@example.com", "b@example.com"], id="entries-are-split"),
+        pytest.param(
+            "a@example.com,,b@example.com", ["a@example.com", "b@example.com"], id="empty-entries-are-dropped"
+        ),
+        pytest.param("a@example.com,   ", ["a@example.com"], id="whitespace-only-entries-are-dropped"),
+        pytest.param("", [], id="an-empty-allowlist-stays-empty"),
+    ],
+)
+def test_chatbot_settings_form_normalises_the_participant_allowlist(team_with_users, entered, cleaned):
+    """`Experiment.is_participant_allowed` matches identifiers exactly, so an unstripped one is an
+    allowlist that looks configured and admits nobody. The v2 write API shares this normalisation
+    (`normalize_participant_allowlist`), so pinning it here pins both callers."""
+    request = RequestFactory().get("/")
+    request.team = team_with_users
+    request.user = team_with_users.members.first()
+
+    form = ChatbotSettingsForm(request, data={"name": "Bot", "participant_allowlist": entered})
+    form.is_valid()
+
+    assert form.cleaned_data["participant_allowlist"] == cleaned

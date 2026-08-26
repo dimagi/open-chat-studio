@@ -1139,6 +1139,14 @@ def test_experiment_get_absolute_url_published_version(team_with_users):
     assert snapshot.get_absolute_url() == expected
 
 
+@pytest.mark.django_db()
+def test_experiment_may_have_no_owner():
+    """A chatbot created by a machine token has no user behind it (apps/api/v2/write)."""
+    experiment = ExperimentFactory.create(owner=None)
+    experiment.refresh_from_db()
+    assert experiment.owner is None
+
+
 class TestParticipantStr:
     """Chips and other participant labels come from ``__str__``; a name equal to the identifier
     used to render it twice (e.g. "user@example.com (user@example.com)")."""

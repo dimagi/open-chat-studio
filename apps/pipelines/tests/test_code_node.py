@@ -599,3 +599,126 @@ def main(input, **kwargs):
     )
     with pytest.raises(CodeNodeRunError, match="'content' must be bytes"):
         node._process(state, NodeContext(state))
+
+
+def _run_sandbox(code, state=None):
+    node = CodeNode(name="test", node_id="123", django_node=None, code=code)
+    node._repo = InMemoryPipelineRepository()
+    if state is None:
+        state = PipelineState(outputs={}, experiment_session=None, last_node_input="hi", node_inputs=["hi"])
+    return node._process(state, NodeContext(state))
+
+
+class TestSandboxHardening:
+    """Regression tests for the RestrictedPython sandbox hardening.
+
+    See docs/developer_guides/security/pythonnode_sandbox_assessment.md.
+    """
+
+    def test_cannot_poison_shared_module_attribute(self):
+        """Assigning to an attribute of an injected module singleton must be blocked.
+
+        Otherwise a node could do ``json.dumps = evil`` and corrupt the shared module
+        for every other execution on the worker process.
+        """
+        code = """
+def main(input, **kwargs):
+    json.dumps = lambda *a, **k: "PWNED"
+    return "patched"
+"""
+        with pytest.raises(CodeNodeRunError):
+            _run_sandbox(code)
+
+    def test_can_write_attributes_on_per_execution_objects(self):
+        """Writing an attribute on a per-execution object (e.g. an Attachment) must work.
+
+        The write guard only blocks shared/process-global objects (modules, types); it
+        must not block mutation of ordinary data objects handed to node code.
+        """
+        attachment = Attachment(
+            file_id=1, type="code_interpreter", name="a.txt", size=1, content_type="text/plain", download_link=""
+        )
+        code = """
+def main(input, **kwargs):
+    for att in get_temp_state_key("attachments"):
+        att.send_to_llm = False
+    return str([att.send_to_llm for att in get_temp_state_key("attachments")])
+"""
+        state = PipelineState(
+            outputs={},
+            experiment_session=ExperimentSessionFactory.build(),
+            last_node_input="hi",
+            node_inputs=["hi"],
+            temp_state={"attachments": [attachment]},
+        )
+        output = _run_sandbox(code, state=state)
+        assert output.update["messages"][-1] == "[False]"
+
+    def test_cannot_write_attributes_on_shared_types(self):
+        """Writing an attribute on a class/type (shared, process-global) must be blocked."""
+        code = """
+def main(input, **kwargs):
+    dict.injected = 1
+    return "patched"
+"""
+        with pytest.raises(CodeNodeRunError):
+            _run_sandbox(code)
+
+    def test_shared_module_not_poisoned_across_executions(self):
+        """A poisoning attempt in one execution must not affect a later execution."""
+        poison = """
+def main(input, **kwargs):
+    json.dumps = lambda *a, **k: "PWNED"
+    return "patched"
+"""
+        with pytest.raises(CodeNodeRunError):
+            _run_sandbox(poison)
+
+        # A subsequent, independent execution must still see a clean json.dumps.
+        use_json = """
+def main(input, **kwargs):
+    return json.dumps({"safe": 1})
+"""
+        output = _run_sandbox(use_json)
+        assert output.update["messages"][-1] == '{"safe": 1}'
+
+    @pytest.mark.parametrize(
+        ("code", "expected"),
+        [
+            pytest.param("def main(input, **kwargs):\n\tx = 1\n\tx += 4\n\treturn str(x)", "5", id="int-iadd"),
+            pytest.param("def main(input, **kwargs):\n\tx = 10\n\tx -= 3\n\treturn str(x)", "7", id="int-isub"),
+            pytest.param("def main(input, **kwargs):\n\tx = 2\n\tx *= 5\n\treturn str(x)", "10", id="int-imul"),
+            pytest.param(
+                "def main(input, **kwargs):\n\txs = [1]\n\txs += [2, 3]\n\treturn str(xs)",
+                "[1, 2, 3]",
+                id="list-iadd",
+            ),
+        ],
+    )
+    def test_augmented_assignment_supported(self, code, expected):
+        """``_inplacevar_`` must make augmented assignment on names work again."""
+        output = _run_sandbox(code)
+        assert output.update["messages"][-1] == expected
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            # These forms all evade the source-regex validator but still reach the runtime,
+            # where the reserved-key check must reject them.
+            pytest.param('f = set_session_state_key\n    f("remote_context", "x")', id="aliased"),
+            pytest.param('k = "remote_" + "context"\n    set_session_state_key(k, "x")', id="computed-key"),
+            pytest.param('set_session_state_key("remote_" "context", "x")', id="literal-concat"),
+        ],
+    )
+    def test_reserved_session_state_key_enforced_at_runtime(self, body):
+        """Reserved keys must be rejected at runtime even when the source validator is bypassed."""
+        code = f"def main(input, **kwargs):\n    {body}\n    return input"
+        state = PipelineState(
+            outputs={},
+            experiment_session=ExperimentSessionFactory.build(),
+            last_node_input="hi",
+            node_inputs=["hi"],
+            session_state={},
+        )
+        with pytest.raises(CodeNodeRunError, match="reserved session state key"):
+            _run_sandbox(code, state=state)
