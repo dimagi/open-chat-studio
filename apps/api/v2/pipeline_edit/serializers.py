@@ -92,6 +92,23 @@ class WrittenNodeSerializer(serializers.Serializer):
         return node_output_handles(node)
 
 
+class NodeUpdateSerializer(RejectsServerAssignedKeys, RejectsUnknownKeys, serializers.Serializer):
+    """The PATCH body: the params and label to change, and nothing else.
+
+    ``type`` is absent on purpose — a node's type decides what its params mean, so changing it in
+    place would reinterpret every stored value. Delete the node and add one of the other type.
+    """
+
+    label = serializers.CharField(
+        required=False, allow_blank=True, help_text="Display name shown in the pipeline builder."
+    )
+    params = serializers.DictField(
+        required=False,
+        default=dict,
+        help_text="The params to change; the ones you leave out are left as they are. " + PARAM_NAMES,
+    )
+
+
 class PipelineWriteSerializer(serializers.Serializer):
     """What every façade write reports back about the pipeline it just changed.
 

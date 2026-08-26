@@ -3,9 +3,10 @@
 from typing import Any, cast
 from uuid import uuid4
 
-from rest_framework.exceptions import NotFound
+from rest_framework import status
+from rest_framework.exceptions import APIException, NotFound
 
-from apps.api.v2.discovery.node_types import get_node_type_schema
+from apps.api.v2.discovery.node_types import get_node_class, get_node_type_schema
 from apps.pipelines.flow import (
     REACT_FLOW_END_TYPE,
     EdgeDiff,
@@ -19,7 +20,7 @@ from apps.pipelines.models import Node
 from apps.pipelines.nodes.base import BasePipelineNode, NodeSchema, resolve_node_class
 
 from .facade import PipelineEdit
-from .node_params import node_params
+from .node_params import node_params, writable_params
 
 #: How far right of the rightmost node a new one is parked, and the row it is parked on. The step is
 #: about a node's width, so a parked node clears the one before it rather than half covering it.
@@ -34,6 +35,16 @@ ID_ATTEMPTS = 5
 #: ``PipelineDiffPayload`` requires this, but ``apply_pipeline_patch`` never reads it: it is the UI
 #: builder's optimistic-concurrency token, and the façade holds a row lock instead (W7).
 UNUSED_BASE_REVISION = 0
+
+
+class NodeIsServerManaged(APIException):
+    """The node is part of the pipeline's structure, so the API will not touch it.
+
+    409 rather than 404: the node is there and the caller addressed it correctly, so the refusal is
+    about what the node is, not about where it was looked for.
+    """
+
+    status_code = status.HTTP_409_CONFLICT
 
 
 def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
@@ -60,6 +71,60 @@ def plan_create(flow: dict, node_type: str, label: str | None, params: dict[str,
     )
     end_nodes = _reparked_end_nodes(flow, position["x"])
     return PipelineEdit(diff=_diff(NodeDiff(add=[node], update=end_nodes)), node_id=node_id)
+
+
+def plan_update(flow: dict, node_id: str, label: str | None, params: dict[str, Any]) -> PipelineEdit:
+    """Edit one node's params and label in place.
+
+    Params merge key by key rather than replacing the stored dict: the point of the façade is that
+    changing one setting does not mean resending the whole node.
+
+    Start and End are refused outright, label-only edits included.
+    """
+    node, content = find_node(flow, node_id)
+    refuse_if_server_managed(content.type)
+    if params:
+        # 404s a type the API does not publish. Only when there are params to write: renaming a
+        # node of such a type is not something the API has to withhold.
+        node_class = get_node_class(content.type)
+        params = writable_params(node_class, params)
+        content.params = node_params(node_class, node_id, {**stored_params(content), **params})
+    else:
+        # Drops the resource-id mirror `to_flow_node` merged in; normalising here would write every
+        # default to a row nobody asked to change.
+        content.params = stored_params(content)
+    if label is not None:
+        content.label = label
+    return PipelineEdit(diff=_diff(NodeDiff(update=[node])), node_id=node_id)
+
+
+def refuse_if_server_managed(node_type: str) -> None:
+    """Refuse to touch a node the server owns — Start and End, the two the API will not create.
+
+    ``can_delete`` is the UI builder's own flag for this and is False for exactly those two, so the
+    API withholds the same nodes rather than keeping a list of its own.
+    """
+    node_class = resolve_node_class(node_type)
+    # A type naming no node class -- removed since, or never one -- has no flag to consult, and is
+    # exactly the sort of node a pipeline has to be able to shed. So it is not withheld.
+    if node_class is not None and not node_schema(node_class).can_delete:
+        raise NodeIsServerManaged(
+            f"'{node_type}' is part of the pipeline's structure: it cannot be edited or deleted through the API."
+        )
+
+
+def find_node(flow: dict, node_id: str) -> tuple[FlowNode, FlowNodeData]:
+    """The graph's node with this id, and its content, or a 404.
+
+    Node ids are addresses, so a wrong one is a wrong URL rather than a bad body. The content comes
+    back separately because ``FlowNode.data`` is optional -- the stored blob is layout-only
+    (ADR-0049) -- while a node from ``flow_data`` has had its content rebuilt from its row.
+    """
+    for node in flow.get("nodes", []):
+        if node["id"] == node_id:
+            found = FlowNode(**node)
+            return found, cast(FlowNodeData, found.data)
+    raise NotFound(f"This pipeline has no node '{node_id}'.")
 
 
 def stored_params(content: FlowNodeData) -> dict[str, Any]:

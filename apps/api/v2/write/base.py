@@ -2,9 +2,42 @@
 
 from typing import Any
 
-from rest_framework import serializers
+from django.http import Http404
+from rest_framework import exceptions, serializers
+from rest_framework.metadata import SimpleMetadata
+from rest_framework.request import clone_request
 
 from apps.api.permissions import RequiresTeamPermission
+
+
+class DescribesPatch(SimpleMetadata):
+    """OPTIONS metadata that describes PATCH alongside PUT and POST.
+
+    DRF describes only the verbs that replace a whole resource, so on a route offering PATCH and
+    DELETE alone stock OPTIONS answers with no body at all. OPTIONS is how the agent this API is
+    built for discovers what it may send, so such a route is one it cannot learn to call.
+    """
+
+    describes = ("PUT", "POST", "PATCH")
+
+    def determine_actions(self, request, view) -> dict[str, dict]:
+        actions: dict[str, dict] = {}
+        for method in [method for method in self.describes if method in view.allowed_methods]:
+            view.request = clone_request(request, method)
+            try:
+                if hasattr(view, "check_permissions"):
+                    view.check_permissions(view.request)
+                if method == "PUT" and hasattr(view, "get_object"):
+                    view.get_object()
+            except (exceptions.APIException, exceptions.PermissionDenied, Http404):
+                # Same as DRF's own: a verb this caller may not use is left undescribed rather than
+                # failing the whole OPTIONS response.
+                pass
+            else:
+                actions[method] = self.get_serializer_info(view.get_serializer())
+            finally:
+                view.request = request
+        return actions
 
 
 class ChatbotCompositionPermission(RequiresTeamPermission):

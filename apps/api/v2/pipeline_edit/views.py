@@ -7,25 +7,36 @@ setting, and two edits to different nodes cannot overwrite each other.
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.api.permissions import BASE_PERMISSION_CLASSES
 from apps.api.v2.discovery.node_types import get_node_class
-from apps.api.v2.write.base import ChatbotCompositionPermission
+from apps.api.v2.write.base import ChatbotCompositionPermission, DescribesPatch
 from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Pipeline
 
 from .facade import edit_pipeline
-from .graph_editor import plan_create
+from .graph_editor import plan_create, plan_update
 from .node_params import writable_params
-from .serializers import NodeCreateSerializer, NodeWriteSerializer, WrittenNodeSerializer
+from .serializers import (
+    NodeCreateSerializer,
+    NodeUpdateSerializer,
+    NodeWriteSerializer,
+    WrittenNodeSerializer,
+)
 
 CHATBOT_ID = OpenApiParameter(
     name="id", type=OpenApiTypes.UUID, location=OpenApiParameter.PATH, description="Chatbot ID"
+)
+NODE_ID = OpenApiParameter(
+    name="node_id",
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.PATH,
+    description="The node's server-assigned id, as returned by a write or by GET /api/v2/chatbots/{id}/inspect/.",
 )
 BAD_REQUEST = OpenApiResponse(
     description=(
@@ -45,10 +56,20 @@ FORBIDDEN = OpenApiResponse(
         "application is not authorised for this chatbot."
     )
 )
+SERVER_MANAGED = OpenApiResponse(
+    description=(
+        "The node is part of the pipeline's structure (the Start or End node) and cannot be edited "
+        "or deleted through the API."
+    )
+)
 
 
 class PipelineNodeEditView(GenericAPIView):
-    """The façade's node endpoints: add a node to a chatbot's working pipeline.
+    """The façade's node endpoints: add a node, edit one.
+
+    Serves both routes, so each ``path()`` narrows ``http_method_names`` to the verbs it offers --
+    otherwise a PATCH to the collection route would reach ``patch`` with no ``node_id`` and raise
+    instead of answering 405.
 
     Editing a chatbot's composition is a *change* to the chatbot whatever the verb, so the stock
     ``DjangoModelPermissions`` verb map is replaced rather than extended.
@@ -56,9 +77,19 @@ class PipelineNodeEditView(GenericAPIView):
 
     permission_classes = [*BASE_PERMISSION_CLASSES, ChatbotCompositionPermission, TokenHasOAuthResourceScope]
     required_scopes = ["chatbots"]
-    serializer_class = NodeCreateSerializer
+    # So that OPTIONS on the detail route describes its PATCH body, which stock DRF metadata leaves
+    # out entirely.
+    metadata_class = DescribesPatch
     # Only here so the generic view has a queryset; permissions are not derived from it.
     queryset = Pipeline.objects.none()
+
+    def get_serializer_class(self) -> type[serializers.Serializer]:
+        """POST takes a `type`, PATCH takes params -- keyed on the method since one class serves both.
+
+        `DescribesPatch` calls this once per verb it describes, via a `clone_request`, so OPTIONS
+        still resolves the right body for each.
+        """
+        return NodeCreateSerializer if self.request.method == "POST" else NodeUpdateSerializer
 
     @extend_schema(
         operation_id="pipeline_node_create",
@@ -104,6 +135,42 @@ class PipelineNodeEditView(GenericAPIView):
         return Response(
             edit_pipeline(request, id, lambda flow: plan_create(flow, node_type, label, params), self._write_response),
             status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        operation_id="pipeline_node_update",
+        summary="Edit a Pipeline Node",
+        description=(
+            "Change a node's params or its label. Params merge key by key, so send only what you "
+            "want to change; everything else is left as it is.\n\n"
+            "What `params` may hold depends on the node's type. "
+            "`GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
+            "type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource "
+            "params may name."
+        ),
+        tags=["Pipelines"],
+        parameters=[CHATBOT_ID, NODE_ID],
+        request=NodeUpdateSerializer,
+        responses={
+            200: NodeWriteSerializer,
+            400: BAD_REQUEST,
+            403: FORBIDDEN,
+            404: OpenApiResponse(
+                description=(
+                    "No such chatbot or node, or the node is of a type this API does not publish "
+                    "and so cannot describe the params of."
+                )
+            ),
+            409: SERVER_MANAGED,
+        },
+    )
+    def patch(self, request, id: str, node_id: str) -> Response:
+        body = self.get_serializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        params = body.validated_data["params"]
+        label = body.validated_data.get("label")
+        return Response(
+            edit_pipeline(request, id, lambda flow: plan_update(flow, node_id, label, params), self._write_response)
         )
 
     @staticmethod

@@ -27,11 +27,18 @@ urlpatterns = [
     path("pipeline/nodes/<str:node_type>/", PipelineNodeView.as_view(), name="pipeline-node"),
     path("pipeline/options/", PipelineOptionsView.as_view(), name="pipeline-options"),
     path("pipeline/options/<str:node_type>/", PipelineNodeOptionsView.as_view(), name="pipeline-node-options"),
-    # Before the router so it wins over its ``chatbots/{id}/`` detail route.
+    # Before the router so they win over its ``chatbots/{id}/`` detail route. One view serves both,
+    # so each route keeps only the verbs it offers -- else a PATCH to the collection would reach
+    # ``patch`` with no ``node_id`` and raise instead of 405ing.
     path(
         "chatbots/<str:id>/pipeline/nodes/",
         PipelineNodeEditView.as_view(http_method_names=["post", "options"]),
         name="pipeline-node-create",
+    ),
+    path(
+        "chatbots/<str:id>/pipeline/nodes/<str:node_id>/",
+        PipelineNodeEditView.as_view(http_method_names=["patch", "options"]),
+        name="pipeline-node-update",
     ),
     path("", include(router.urls)),
 ]
