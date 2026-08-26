@@ -163,6 +163,10 @@ def chat_upload_file(request, session_id):
 
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
+
+    _, refusal = _public_session_version(session)
+    if refusal:
+        return refusal
     files = request.FILES.getlist("files")
     if not files:
         return Response({"error": "No files provided"}, status=status.HTTP_400_BAD_REQUEST)
@@ -373,6 +377,18 @@ def _public_channel_refusal(request, experiment, experiment_channel) -> Response
     if published.consent_form_id:
         return Response(CONSENT_UNAVAILABLE, status=status.HTTP_409_CONFLICT)
     return None
+
+
+def _public_session_version(session) -> tuple[Experiment | None, Response | None]:
+    """The version a request on `session` runs against, or a 409 for a public session whose
+    published version has gone. Other channels keep the published-or-working fallback."""
+    channel = session.experiment_channel
+    if channel is None or channel.platform != ChannelPlatform.PUBLIC:
+        return session.experiment_version, None
+    try:
+        return resolve_chatbot_version(session.experiment, VersionSelectionRule.LATEST_PUBLISHED), None
+    except NoPublishedVersion:
+        return None, Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
 
 
 def _get_requested_version(experiment, version_number):
@@ -677,9 +693,13 @@ def chat_send_message(request, session_id):
             except Experiment.DoesNotExist:
                 raise NotFound(f"Experiment with version {version_number} not found") from None
         else:
-            experiment_version = session.experiment_version
+            experiment_version, refusal = _public_session_version(session)
+            if refusal:
+                return refusal
     else:
-        experiment_version = session.experiment_version
+        experiment_version, refusal = _public_session_version(session)
+        if refusal:
+            return refusal
 
     attachment_data = []
     if attachment_ids:

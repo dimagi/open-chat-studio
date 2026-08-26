@@ -4,11 +4,16 @@ The embed key is in page source, so the API enforces: only a published version i
 consent-form chatbot has no live link until the consent work (step 3) ships.
 """
 
+from unittest import mock
+
 import pytest
 from django.contrib.sites.models import Site
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from field_audit.models import AuditAction
 from rest_framework.test import APIClient
 
+from apps.api.views import chat as chat_views
 from apps.channels.models import ChannelPlatform
 from apps.experiments.models import ExperimentSession
 from apps.utils.factories.channels import ExperimentChannelFactory
@@ -103,3 +108,68 @@ def test_disabled_public_channel_refuses_before_the_published_check(team_with_us
     response = _start(APIClient(), channel.experiment)
     assert response.status_code == 403
     assert "Back soon" in response.json()["error"]
+
+
+def _send(client, session_id, token, text="hi"):
+    return client.post(
+        reverse("api:chat:send-message", kwargs={"session_id": session_id}),
+        data={"message": text},
+        format="json",
+        HTTP_X_SESSION_TOKEN=token,
+        HTTP_ORIGIN=ORIGIN,
+    )
+
+
+def _upload(client, session_id, token):
+    return client.post(
+        reverse("api:chat:upload-file", kwargs={"session_id": session_id}),
+        data={"files": [SimpleUploadedFile("note.txt", b"hello", content_type="text/plain")]},
+        format="multipart",
+        HTTP_X_SESSION_TOKEN=token,
+        HTTP_ORIGIN=ORIGIN,
+    )
+
+
+def _unpublish(experiment):
+    experiment.versions.update(is_default_version=False, audit_action=AuditAction.AUDIT)
+
+
+@pytest.mark.django_db()
+def test_send_refuses_once_the_published_version_is_gone(team_with_users):
+    channel = _public_channel(team_with_users)
+    client = APIClient()
+    started = _start(client, channel.experiment).json()
+    _unpublish(channel.experiment)
+    response = _send(client, started["session_id"], started["session_token"])
+    assert response.status_code == 409
+    assert response.json()["code"] == "no_published_version"
+
+
+@pytest.mark.django_db()
+def test_upload_refuses_once_the_published_version_is_gone(team_with_users):
+    channel = _public_channel(team_with_users)
+    client = APIClient()
+    started = _start(client, channel.experiment).json()
+    _unpublish(channel.experiment)
+    response = _upload(client, started["session_id"], started["session_token"])
+    assert response.status_code == 409
+    assert response.json()["code"] == "no_published_version"
+
+
+@pytest.mark.django_db()
+def test_send_on_a_live_public_session_uses_the_published_version(team_with_users, monkeypatch):
+    channel = _public_channel(team_with_users)
+    seen = {}
+
+    def fake_delay(*args, **kwargs):
+        seen["args"] = args
+        seen["kwargs"] = kwargs
+        return mock.Mock(task_id="public-send-test-task")
+
+    monkeypatch.setattr(chat_views.get_response_for_webchat_task, "delay", fake_delay)
+    client = APIClient()
+    started = _start(client, channel.experiment).json()
+    response = _send(client, started["session_id"], started["session_token"])
+    assert response.status_code == 202, response.content
+    published = channel.experiment.versions.get(is_default_version=True)
+    assert seen["kwargs"]["experiment_id"] == published.id
