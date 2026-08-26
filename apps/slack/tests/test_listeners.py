@@ -9,6 +9,7 @@ from slack_bolt import BoltContext
 
 from apps.channels.const import SLACK_ALL_CHANNELS
 from apps.channels.models import ChannelPlatform
+from apps.chat.models import ChatMessage, ChatMessageType
 from apps.experiments.models import ExperimentSession
 from apps.service_providers.models import MessagingProviderType
 from apps.slack.models import SlackInstallation
@@ -47,6 +48,21 @@ THREAD_REPLY_EVENT = {
     "text": "thread reply",
     "user": "SLACK_USER_ID",
 }
+
+
+@pytest.mark.django_db()
+@pytest.mark.usefixtures("experiment_channel")
+def test_replayed_event_is_answered_once(bolt_context):
+    """Slack is the one channel whose ids are built by its listener rather than by a `parse()`, so
+    the wiring needs cover of its own -- the datamodel alone cannot show that they are set."""
+    bolt_context.client.chat_postMessage = MagicMock()
+    event = {**BOT_MENTION_EVENT, "client_msg_id": "cmid-1"}
+
+    for _ in range(2):
+        new_message(event, bolt_context)
+
+    bolt_context.client.chat_postMessage.assert_called_once()
+    assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
 
 
 @pytest.mark.django_db()

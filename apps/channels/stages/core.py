@@ -10,6 +10,7 @@ from django.db.models import Q
 from apps.annotations.models import TagCategories
 from apps.channels.const import MESSAGE_TYPES
 from apps.channels.datamodels import Attachment
+from apps.channels.deduplication import is_duplicate_delivery
 from apps.channels.exceptions import EarlyAbort, EarlyExitResponse
 from apps.channels.pipeline import MessageProcessingContext
 from apps.channels.stages.base import ProcessingStage
@@ -104,6 +105,40 @@ def get_or_create_participant(
     if not created:
         _associate_user(participant, participant_user)
     return participant
+
+
+# ---------------------------------------------------------------------------
+# DuplicateDeliveryStage
+# ---------------------------------------------------------------------------
+
+
+class DuplicateDeliveryStage(ProcessingStage):
+    """Drops a provider delivery whose message ids are already recorded.
+
+    This check is all-or-nothing, so a delivery carrying both recorded and fresh ids is
+    processed in full, so no new content is ever lost.
+    """
+
+    span_input_fields = ("message.external_ids",)
+
+    def should_run(self, ctx: MessageProcessingContext) -> bool:
+        # No ids means the delivery cannot be identified, which is never a duplicate.
+        return bool(ctx.message.external_ids)
+
+    def process(self, ctx: MessageProcessingContext) -> None:
+        if is_duplicate_delivery(ctx.message.external_ids, ctx.experiment.team_id):
+            logger.info(
+                "Dropping replayed %s delivery %s",
+                ctx.experiment_channel.platform,
+                ctx.message.external_ids,
+                extra={
+                    "platform": ctx.experiment_channel.platform,
+                    "channel_id": ctx.experiment_channel.id,
+                    "experiment_id": ctx.experiment.id,
+                    "external_ids": ctx.message.external_ids,
+                },
+            )
+            raise EarlyAbort()
 
 
 # ---------------------------------------------------------------------------

@@ -1,12 +1,15 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from apps.channels.datamodels import WhatsAppMessage
 from apps.channels.stages.terminal import ResponseSendingStage
 from apps.channels.tests.channels.conftest import make_context
+from apps.channels.tests.message_examples import turnio_messages
 from apps.channels.whatsapp_channel import WhatsappCallbacks, WhatsappChannel, WhatsappSender
 from apps.chat.exceptions import ServiceWindowExpiredException
+from apps.chat.models import Chat, ChatMessage, ChatMessageType
 
 BSUID = "US.13491208655302741918"
 PHONE = "+27456897512"
@@ -93,3 +96,23 @@ class TestShouldVoiceFallbackToText:
         pipeline = channel._build_pipeline()
         stage = next(s for s in pipeline.terminal_stages if isinstance(s, ResponseSendingStage))
         assert stage._should_voice_fallback_to_text == channel._should_voice_fallback_to_text
+
+
+@pytest.mark.django_db()
+class TestReplayedDelivery:
+    """The provider retrying a delivery must not produce a second reply."""
+
+    @patch("apps.service_providers.messaging_service.TurnIOService.send_text_message")
+    @patch("apps.chat.bots.PipelineBot.process_input")
+    def test_replayed_delivery_does_not_reply_twice(
+        self, bot_process_input, send_text_message, turnio_whatsapp_channel
+    ):
+        experiment = turnio_whatsapp_channel.experiment
+        bot_process_input.return_value = ChatMessage(content="Hi human", chat=Chat.objects.create(team=experiment.team))
+        message = WhatsAppMessage.parse(turnio_messages.text_message())
+
+        for _ in range(2):
+            WhatsappChannel(experiment=experiment, experiment_channel=turnio_whatsapp_channel).new_user_message(message)
+
+        assert ChatMessage.objects.filter(message_type=ChatMessageType.HUMAN).count() == 1
+        assert send_text_message.call_count == 1
