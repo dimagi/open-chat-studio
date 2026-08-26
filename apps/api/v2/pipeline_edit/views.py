@@ -19,6 +19,7 @@ from apps.oauth.permissions import TokenHasOAuthResourceScope
 from apps.pipelines.build_state import pipeline_build_state
 from apps.pipelines.models import Pipeline
 
+from .examples import create_examples, update_examples
 from .facade import edit_pipeline
 from .graph_editor import plan_create, plan_delete, plan_update
 from .node_params import writable_params
@@ -107,14 +108,15 @@ class PipelineNodeEditView(GenericAPIView):
             "cannot be chosen. It is parked clear to the right of the nodes already there, and the "
             "End node is moved further right if the new node reaches it, so the End node stays the "
             "rightmost node on the canvas.\n\n"
-            "What `params` may hold depends on `type`. "
-            "`GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
-            "type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource "
-            "params may name."
+            "What `params` may hold depends on `type`, so the examples below show a full body for "
+            "each type. `GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema "
+            "for one type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its "
+            "resource params may name."
         ),
         tags=["Pipelines"],
         parameters=[CHATBOT_ID],
         request=NodeCreateSerializer,
+        examples=create_examples(),
         responses={
             201: NodeWriteSerializer,
             400: BAD_REQUEST,
@@ -154,7 +156,8 @@ class PipelineNodeEditView(GenericAPIView):
             "keyword counts as one branch gone and another new, so its edge goes and the new branch "
             "comes back unwired. Handle names are not stable across a keyword edit, so re-read "
             "`output_handles` after one.\n\n"
-            "What `params` may hold depends on the node's type. "
+            "What `params` may hold depends on the node's type. The examples below name every param "
+            "of each type for completeness, but a PATCH writes only the ones you send. "
             "`GET /api/v2/pipeline/nodes/{node_type}/` is the authoritative JSON Schema for one "
             "type, and `GET /api/v2/pipeline/options/{node_type}/` serves the ids its resource "
             "params may name."
@@ -162,6 +165,7 @@ class PipelineNodeEditView(GenericAPIView):
         tags=["Pipelines"],
         parameters=[CHATBOT_ID, NODE_ID],
         request=NodeUpdateSerializer,
+        examples=update_examples(),
         responses={
             200: NodeWriteSerializer,
             400: BAD_REQUEST,
