@@ -50,10 +50,6 @@ class Attachment(BaseModel):
     content_type: str = "application/octet-stream"
     download_link: str
 
-    upload_to_assistant: bool = False
-    """Setting this to True will cause the Assistant Node to send the attachment
-    as a file attachment with the message."""
-
     send_to_llm: bool = True
     """Setting this to False will prevent the attachment from being sent to the LLM node."""
 
