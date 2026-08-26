@@ -553,20 +553,16 @@ def test_patch_a_static_router_node_with_every_param(client, chatbot):
 
 
 @pytest.mark.django_db()
-def test_patch_an_llm_node_with_every_param(
-    client, chatbot, llm, source_material, media_collection, collection_indexes, custom_action, synthetic_voice
-):
+def test_patch_an_llm_node_with_every_param(client, chatbot, llm, llm_node_resources):
     """The type with the most to say, and the only one whose params constrain each other: a resource
     param and its prompt variable each require the other, so `source_material_id` obliges the prompt
-    to use `{source_material}`, `collection_id` obliges `{media}`, more than one index obliges
-    `{collection_index_summaries}`, and a tool obliges whatever it needs -- `{participant_data}` for
-    `update-user-data`, `{current_datetime}` for `one-off-reminder`.
+    to use `{source_material}`, `collection_id` obliges `{media}`, and so on.
 
     All in one PATCH, which is the only way this node can reach that state: sending the resource and
-    the prompt that names it in separate calls would have each of them refused on its own.
+    the prompt that names it in separate calls would have each refused on its own.
     """
     provider, model = llm
-    support_kb, billing_kb = collection_indexes
+    support_kb, billing_kb = llm_node_resources.collection_indexes
     node_id = add_bare_node(client, chatbot, "LLMResponseWithPrompt")
     payload = {
         "label": "Answer the question",
@@ -585,13 +581,13 @@ def test_patch_an_llm_node_with_every_param(
             "history_mode": "summarize",
             "user_max_token_limit": 8000,
             "max_history_length": 30,
-            "source_material_id": source_material.id,
-            "collection_id": media_collection.id,
+            "source_material_id": llm_node_resources.source_material.id,
+            "collection_id": llm_node_resources.media_collection.id,
             "collection_index_ids": [support_kb.id, billing_kb.id],
             "max_results": 5,
             "generate_citations": False,
             "tools": ["update-user-data", "one-off-reminder", "calculator"],
-            "custom_actions": [f"{custom_action.id}:weather_get"],
+            "custom_actions": [f"{llm_node_resources.custom_action.id}:weather_get"],
             "built_in_tools": ["web-search", "code-execution"],
             "tool_config": {
                 "web-search": {
@@ -599,7 +595,7 @@ def test_patch_an_llm_node_with_every_param(
                     "blocked_domains": ["forum.example.test"],
                 }
             },
-            "synthetic_voice_id": synthetic_voice.id,
+            "synthetic_voice_id": llm_node_resources.synthetic_voice.id,
             "tag": "answered",
         },
     }

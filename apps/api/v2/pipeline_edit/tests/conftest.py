@@ -3,8 +3,13 @@
 A chatbot whose team can actually reference an LLM, because almost every node type needs one.
 """
 
+from dataclasses import dataclass
+
 import pytest
 
+from apps.custom_actions.models import CustomAction
+from apps.documents.models import Collection
+from apps.experiments.models import SourceMaterial, SyntheticVoice
 from apps.pipelines.models import Node
 from apps.utils.factories.custom_actions import CustomActionFactory
 from apps.utils.factories.documents import CollectionFactory
@@ -86,11 +91,33 @@ def custom_action(team):
 
 @pytest.fixture()
 def synthetic_voice(team):
-    """`synthetic_voice_id`. A voice is only reachable if the team holds a provider that can speak
-    it, matched on `SyntheticVoice.service` against the provider's type -- so the provider comes
-    with it."""
+    """`synthetic_voice_id`. A voice is only reachable if the team holds a provider that can speak it
+    -- matched on `SyntheticVoice.service` -- so the provider comes with it."""
     provider = VoiceProviderFactory.create(team=team, name="Prod Polly")
     return SyntheticVoiceFactory.create(name="Joanna", service="AWS", voice_provider=provider)
+
+
+@dataclass
+class LlmNodeResources:
+    """Every resource an ``LLMResponseWithPrompt`` can reference, so a test naming them all takes one
+    fixture rather than five."""
+
+    source_material: SourceMaterial
+    media_collection: Collection
+    collection_indexes: list[Collection]
+    custom_action: CustomAction
+    synthetic_voice: SyntheticVoice
+
+
+@pytest.fixture()
+def llm_node_resources(source_material, media_collection, collection_indexes, custom_action, synthetic_voice):
+    return LlmNodeResources(
+        source_material=source_material,
+        media_collection=media_collection,
+        collection_indexes=collection_indexes,
+        custom_action=custom_action,
+        synthetic_voice=synthetic_voice,
+    )
 
 
 @pytest.fixture()
