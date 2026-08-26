@@ -1,0 +1,34 @@
+{% extends "web/base.html" %}
+{% load chat_widget_tags %}
+{% block page_title %}{{ chatbot_name }}{% endblock %}
+
+{% block top_nav %}{% endblock %}
+
+{% block body %}
+  <main class="min-h-screen flex flex-col items-center bg-base-200 p-4">
+    <header class="w-full max-w-3xl mb-4">
+      <h1 class="text-2xl font-bold">{{ chatbot_name }}</h1>
+      {% if chatbot_description %}<p class="opacity-80">{{ chatbot_description }}</p>{% endif %}
+    </header>
+    {% if not state.live %}
+      <div role="alert" class="alert alert-warning w-full max-w-3xl mb-4" data-state="{{ state.code }}">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>{{ state.banner }}</span>
+      </div>
+    {% endif %}
+    <div class="w-full max-w-3xl flex-1 relative">
+      <open-chat-studio-widget
+        mode="kiosk"
+        chatbot-id="{{ public_id }}"
+        embed-key="{{ token }}"
+        api-base-url="{{ api_base_url }}"
+        persistent-session="tab"
+        welcome-messages="{{ welcome_json }}"
+        starter-questions="{{ starters_json }}"
+        {% if not state.live %}disabled="true"{% endif %}
+        {% if user %}user-id="{{ user.email }}" user-name="{{ user.get_full_name }}"{% endif %}
+      ></open-chat-studio-widget>
+    </div>
+  </main>
+  <script type="module" src="{% widget_script_url %}"></script>
+{% endblock body %}
