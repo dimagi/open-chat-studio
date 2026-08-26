@@ -171,8 +171,8 @@ TEAM_PATH_REGISTRY: dict[str, str | list[str]] = {
 # Additional queryset filters applied after team scoping, for models that need row-level exclusions
 # beyond the team boundary (e.g. rows that reference a deliberately-excluded model).
 EXTRA_FILTERS: dict[str, Q] = {
-    # Assistant-attached operations can't be synced (assistants are excluded). Only node-attached
-    # operations, so the check constraint (assistant OR node non-null) is satisfied on import.
+    # Only node-attached operations are synced, so the check constraint (assistant OR node
+    # non-null) is satisfied on import. The assistant arm is legacy — see #4254.
     "custom_actions.customactionoperation": Q(node__isnull=False),
     # Data-export files are transient download bundles, so they're never shared across servers.
     "files.file": ~Q(purpose=FilePurpose.DATA_EXPORT),
