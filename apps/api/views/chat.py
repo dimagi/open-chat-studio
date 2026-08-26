@@ -164,7 +164,7 @@ def chat_upload_file(request, session_id):
     if session.is_complete:
         return Response({"error": "Session has ended"}, status=status.HTTP_400_BAD_REQUEST)
 
-    _, refusal = _public_session_version(session)
+    _, refusal = _public_session_version(request, session)
     if refusal:
         return refusal
     files = request.FILES.getlist("files")
@@ -379,11 +379,15 @@ def _public_channel_refusal(request, experiment, experiment_channel) -> Response
     return None
 
 
-def _public_session_version(session) -> tuple[Experiment | None, Response | None]:
+def _public_session_version(request, session) -> tuple[Experiment | None, Response | None]:
     """The version a request on `session` runs against, or a 409 for a public session whose
-    published version has gone. Other channels keep the published-or-working fallback."""
+    published version has gone. Other channels keep the published-or-working fallback, and so
+    do team members on a public channel so they can preview an unpublished chatbot through its
+    page."""
     channel = session.experiment_channel
     if channel is None or channel.platform != ChannelPlatform.PUBLIC:
+        return session.experiment_version, None
+    if _is_team_member(request, session.experiment):
         return session.experiment_version, None
     try:
         return resolve_chatbot_version(session.experiment, VersionSelectionRule.LATEST_PUBLISHED), None
@@ -693,11 +697,11 @@ def chat_send_message(request, session_id):
             except Experiment.DoesNotExist:
                 raise NotFound(f"Experiment with version {version_number} not found") from None
         else:
-            experiment_version, refusal = _public_session_version(session)
+            experiment_version, refusal = _public_session_version(request, session)
             if refusal:
                 return refusal
     else:
-        experiment_version, refusal = _public_session_version(session)
+        experiment_version, refusal = _public_session_version(request, session)
         if refusal:
             return refusal
 

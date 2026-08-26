@@ -157,6 +157,22 @@ def test_upload_refuses_once_the_published_version_is_gone(team_with_users):
 
 
 @pytest.mark.django_db()
+def test_team_member_can_send_on_an_unpublished_public_link(team_with_users, monkeypatch):
+    channel = _public_channel(team_with_users, publish=False)
+    user = team_with_users.members.first()
+    monkeypatch.setattr(
+        chat_views.get_response_for_webchat_task, "delay", lambda *a, **k: mock.Mock(task_id="member-preview")
+    )
+    client = APIClient()
+    client.force_login(user)
+    started = _start(client, channel.experiment, participant_remote_id=user.email)
+    assert started.status_code == 201, started.content
+    body = started.json()
+    response = _send(client, body["session_id"], body["session_token"])
+    assert response.status_code == 202, response.content
+
+
+@pytest.mark.django_db()
 def test_send_on_a_live_public_session_uses_the_published_version(team_with_users, monkeypatch):
     channel = _public_channel(team_with_users)
     seen = {}
