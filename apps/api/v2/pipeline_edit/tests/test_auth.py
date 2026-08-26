@@ -1,7 +1,10 @@
 """Authorization for the pipeline façade (#4140).
 
-Editing a chatbot's composition is a *change* to the chatbot whatever the verb, so all three node
-endpoints demand the same permission — deleting a node is not deleting the chatbot.
+One view class serves all three node endpoints, and every gate on it turns on the *credential*
+rather than the verb: the read-only API-key gate and the OAuth resource scope both treat POST, PATCH
+and DELETE alike as unsafe methods, and the chatbot lookup is the same for all three. So only the
+model-permission gate — the one place the verb could have changed the answer — is exercised per
+verb; the rest are checked once.
 """
 
 import pytest
@@ -30,7 +33,7 @@ def team_with_roles(db):
         unset_current_team(token)
 
 
-def _call(client, chatbot, verb):
+def _call(client, chatbot, verb="post"):
     """Exercise one verb against `chatbot`, with a node of its own to edit.
 
     Not the Start node: the endpoints refuse to edit or delete it whatever the caller's role, so it
@@ -47,11 +50,10 @@ def _call(client, chatbot, verb):
 
 
 ALLOWED_STATUS = {"post": 201, "patch": 200, "delete": 200}
-VERBS = ["post", "patch", "delete"]
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("verb", VERBS)
+@pytest.mark.parametrize("verb", ["post", "patch", "delete"])
 @pytest.mark.parametrize(
     ("group", "allowed"),
     [
@@ -61,7 +63,8 @@ VERBS = ["post", "patch", "delete"]
 )
 def test_every_verb_requires_change_experiment(team_with_roles, verb, group, allowed):
     """Team membership alone is not enough: the role has to hold the permission the builder
-    requires. The stock verb->permission map would have demanded `delete_experiment` for DELETE."""
+    requires. All three verbs, because this is where the verb map matters -- the stock
+    `DjangoModelPermissions` one would have demanded `delete_experiment` for DELETE."""
     chatbot = ChatbotFactory.create(team=team_with_roles)
     user = UserFactory.create()
     add_user_to_team(team_with_roles, user, [group])
@@ -72,23 +75,21 @@ def test_every_verb_requires_change_experiment(team_with_roles, verb, group, all
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("verb", VERBS)
-def test_a_read_only_key_cannot_edit(verb):
+def test_a_read_only_key_cannot_edit():
     """`UserAPIKey.read_only` defaults to True, so writing takes a key an operator issued
     deliberately."""
     chatbot = ChatbotFactory.create(team=TeamWithUsersFactory.create())
     client = ApiTestClient(chatbot.team.members.first(), chatbot.team, read_only=True)
 
-    assert _call(client, chatbot, verb).status_code == 403
+    assert _call(client, chatbot).status_code == 403
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("verb", VERBS)
-def test_another_teams_chatbot_is_not_found(verb):
+def test_another_teams_chatbot_is_not_found():
     chatbot = ChatbotFactory.create(team=TeamWithUsersFactory.create())
     other = TeamWithUsersFactory.create()
 
-    response = _call(ApiTestClient(other.members.first(), other), chatbot, verb)
+    response = _call(ApiTestClient(other.members.first(), other), chatbot)
 
     assert response.status_code == 404, response.content
 
@@ -104,31 +105,27 @@ def _machine_client(team, allowed_chatbots):
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("verb", VERBS)
-def test_a_machine_token_is_refused_an_unlisted_chatbot(verb):
+@pytest.mark.parametrize(
+    ("listed", "expected"),
+    [
+        pytest.param(False, 403, id="unlisted-is-refused"),
+        pytest.param(True, 201, id="listed-may-edit"),
+    ],
+)
+def test_a_machine_token_is_held_to_its_applications_chatbot_allowlist(listed, expected):
     """Unlike POST /chatbots/, which cannot be gated because the chatbot does not exist yet, every
     façade write names an existing chatbot and so is held to the application's allowlist."""
     chatbot = ChatbotFactory.create(team=TeamWithUsersFactory.create())
+    allowed = [chatbot] if listed else []
 
-    response = _call(_machine_client(chatbot.team, allowed_chatbots=[]), chatbot, verb)
+    response = _call(_machine_client(chatbot.team, allowed_chatbots=allowed), chatbot)
 
-    assert response.status_code == 403, response.content
-
-
-@pytest.mark.django_db()
-@pytest.mark.parametrize("verb", VERBS)
-def test_a_machine_token_may_edit_a_listed_chatbot(verb):
-    chatbot = ChatbotFactory.create(team=TeamWithUsersFactory.create())
-
-    response = _call(_machine_client(chatbot.team, allowed_chatbots=[chatbot]), chatbot, verb)
-
-    assert response.status_code == ALLOWED_STATUS[verb], response.content
+    assert response.status_code == expected, response.content
 
 
 @pytest.mark.django_db()
-@pytest.mark.parametrize("verb", VERBS)
-def test_a_token_without_the_write_scope_is_refused(verb):
+def test_a_token_without_the_write_scope_is_refused():
     chatbot = ChatbotFactory.create(team=TeamWithUsersFactory.create())
     client = ApiTestClient(chatbot.team.members.first(), chatbot.team, auth_method="oauth", scopes=["chatbots:read"])
 
-    assert _call(client, chatbot, verb).status_code == 403
+    assert _call(client, chatbot).status_code == 403

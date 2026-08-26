@@ -30,19 +30,13 @@ def wired_llm_node(client, chatbot, llm):
 
 
 @pytest.mark.django_db()
-def test_delete_removes_the_node(client, chatbot, wired_llm_node):
+def test_delete_removes_the_node_and_its_edges(client, chatbot, wired_llm_node):
+    """An edge left pointing at a node that no longer exists breaks cycle detection and
+    reachability, so culling them is the server's job and not something the caller has to ask for."""
     response = client.delete(node_url(chatbot, wired_llm_node))
 
     assert response.status_code == 200, response.content
     assert not Node.objects.filter(pipeline=chatbot.pipeline, flow_id=wired_llm_node).exists()
-
-
-@pytest.mark.django_db()
-def test_delete_takes_the_nodes_edges_with_it(client, chatbot, wired_llm_node):
-    """An edge left pointing at a node that no longer exists breaks cycle detection and
-    reachability, so culling them is the server's job and not something the caller has to ask for."""
-    client.delete(node_url(chatbot, wired_llm_node))
-
     chatbot.pipeline.refresh_from_db()
     endpoints = {end for edge in chatbot.pipeline.data["edges"] for end in (edge["source"], edge["target"])}
     assert wired_llm_node not in endpoints

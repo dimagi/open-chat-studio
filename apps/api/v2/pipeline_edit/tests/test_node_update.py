@@ -109,6 +109,36 @@ def test_patch_refuses_to_change_a_nodes_type(client, chatbot, llm_node):
 
 
 @pytest.fixture()
+def deprecated_node(chatbot):
+    """A node of a type the API no longer publishes, so it has no schema to describe or check."""
+    node = Node.objects.create(
+        pipeline=chatbot.pipeline, type="LLMResponse", flow_id="LLMResponse-old1", label="Old", params={"name": "old"}
+    )
+    chatbot.pipeline.data["nodes"] = []
+    chatbot.pipeline.save(update_fields=["data"])
+    return node
+
+
+@pytest.mark.django_db()
+def test_a_label_only_edit_to_a_deprecated_type_is_allowed(client, chatbot, deprecated_node):
+    """Renaming such a node needs no schema, and a pipeline holding one has to stay editable."""
+    response = client.patch(node_url(chatbot, deprecated_node.flow_id), {"label": "Renamed"}, format="json")
+
+    assert response.status_code == 200, response.content
+    deprecated_node.refresh_from_db()
+    assert deprecated_node.label == "Renamed"
+
+
+@pytest.mark.django_db()
+def test_setting_a_param_on_a_deprecated_type_is_refused(client, chatbot, deprecated_node):
+    """The other half of it: the API has no schema to check the value against, so it will not
+    pretend to."""
+    response = client.patch(node_url(chatbot, deprecated_node.flow_id), {"params": {"name": "new"}}, format="json")
+
+    assert response.status_code == 404, response.content
+
+
+@pytest.fixture()
 def router(client, chatbot, llm):
     provider, model = llm
     response = client.post(
@@ -130,44 +160,24 @@ def router(client, chatbot, llm):
 @pytest.mark.django_db()
 def test_editing_router_keywords_regenerates_the_output_handles(client, chatbot, router):
     """Handles are positional (`output_i` serves `keywords[i]`) and the model upper-cases the
-    keywords, so the labels read back upper-cased whatever case they were sent in."""
+    keywords, so the labels read back upper-cased whatever case they were sent in.
+
+    The added branch has nowhere to go, which is a normal state while building: it comes back under
+    `unwired_handles` and not as an error.
+    """
     response = client.patch(
         node_url(chatbot, router), {"params": {"keywords": ["schedule", "reschedule", "cancel"]}}, format="json"
     )
 
     assert response.status_code == 200, response.content
-    assert response.json()["node"]["output_handles"] == [
+    body = response.json()
+    assert body["node"]["output_handles"] == [
         {"handle": "output_0", "label": "SCHEDULE"},
         {"handle": "output_1", "label": "RESCHEDULE"},
         {"handle": "output_2", "label": "CANCEL"},
     ]
-
-
-@pytest.mark.django_db()
-def test_a_new_router_branch_shows_up_as_unwired_not_as_an_error(client, chatbot, router):
-    """A branch with nowhere to go is a normal state while building, so it is advisory only."""
-    response = client.patch(
-        node_url(chatbot, router), {"params": {"keywords": ["schedule", "reschedule", "cancel"]}}, format="json"
-    )
-
-    handles = response.json()["unwired_handles"][router]
-    assert {"handle": "output_2", "label": "CANCEL"} in handles
-    assert response.json()["pipeline_errors"]["edge"] == []
-
-
-@pytest.mark.django_db()
-def test_dropping_a_keyword_deletes_the_edge_that_served_it(client, chatbot, llm, router):
-    """A branch that no longer exists cannot keep an edge: the builder's own deleteKeyword drops it
-    too, and there is no edge endpoint an agent could use to clear up after itself."""
-    start = chatbot.pipeline.node_set.get(type="StartNode").flow_id
-    add_edge(chatbot.pipeline, start, router)
-    dropped = add_edge(chatbot.pipeline, router, add_llm_node(client, chatbot, llm), source_handle="output_1")
-
-    response = client.patch(node_url(chatbot, router), {"params": {"keywords": ["schedule"]}}, format="json")
-
-    assert response.status_code == 200, response.content
-    assert dropped not in outgoing_handles(chatbot.pipeline, router)
-    assert response.json()["pipeline_errors"]["edge"] == []
+    assert {"handle": "output_2", "label": "CANCEL"} in body["unwired_handles"][router]
+    assert body["pipeline_errors"]["edge"] == []
 
 
 @pytest.mark.django_db()
@@ -175,7 +185,12 @@ def test_dropping_a_middle_keyword_moves_the_branches_below_it_up(client, chatbo
     """Handles are positional, so dropping RESCHEDULE renumbers CANCEL from `output_2` to
     `output_1`. Old handles are matched to new ones by keyword, so CANCEL's edge follows it down and
     keeps its target -- dropping `output_2` on position alone would have left CANCEL routing to
-    RESCHEDULE's target instead."""
+    RESCHEDULE's target instead.
+
+    RESCHEDULE's own edge goes with the branch, the way the builder's `deleteKeyword` drops it:
+    there is no edge endpoint an agent could use to clear up after itself, so it must not be left
+    behind as a stranded edge either.
+    """
     client.patch(
         node_url(chatbot, router), {"params": {"keywords": ["schedule", "reschedule", "cancel"]}}, format="json"
     )
@@ -192,6 +207,7 @@ def test_dropping_a_middle_keyword_moves_the_branches_below_it_up(client, chatbo
         moved: ("output_1", cancelled),
     }
     assert dropped not in outgoing_handles(chatbot.pipeline, router)
+    assert response.json()["pipeline_errors"]["edge"] == []
 
 
 @pytest.mark.django_db()

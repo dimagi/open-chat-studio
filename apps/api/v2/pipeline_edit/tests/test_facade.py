@@ -1,4 +1,4 @@
-"""The write cycle every façade endpoint shares (#4140, W2/W7)."""
+"""What every façade endpoint shares: the routes, and the write cycle behind them (#4140, W2/W7)."""
 
 import pytest
 from django.db import connection
@@ -10,23 +10,17 @@ from .conftest import node_url, nodes_url
 
 
 @pytest.mark.django_db()
-def test_a_write_locks_the_pipeline_row(client, chatbot):
-    """The graph is read, merged and written back, so without the lock two concurrent writes would
-    each merge into the pre-write graph and the second would drop the first. Query capture rather
-    than threads: a real concurrency test would be slow and flaky."""
-    with CaptureQueriesContext(connection) as captured:
-        assert client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json").status_code == 201
-
-    locked = [query for query in captured.captured_queries if "FOR UPDATE" in query["sql"]]
-    assert any('"pipelines_pipeline"' in query["sql"] for query in locked), locked
-
-
-@pytest.mark.django_db()
 @pytest.mark.parametrize("verb", ["post", "patch"])
-def test_the_option_lists_are_built_before_the_row_is_locked(client, chatbot, llm, verb):
-    """Checking a reference costs around fifteen queries and parses every custom action's OpenAPI
-    schema. Doing that while holding the pipeline row would serialise concurrent edits to the same
-    chatbot for the whole of it, so it happens before the lock is taken."""
+def test_the_option_lists_are_built_before_the_pipeline_row_is_locked(client, chatbot, llm, verb):
+    """The graph is read, merged and written back under a row lock: without it, two concurrent
+    writes would each merge into the pre-write graph and the second would drop the first.
+
+    Checking a reference, though, costs around fifteen queries and parses every custom action's
+    OpenAPI schema. Doing that while holding the row would serialise concurrent edits to the same
+    chatbot for the whole of it, so it happens before the lock is taken.
+
+    Query capture rather than threads: a real concurrency test would be slow and flaky.
+    """
     provider, model = llm
     params = {"llm_provider_id": provider.id, "llm_provider_model_id": model.id}
     node_id = client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json").json()["node"][
@@ -40,13 +34,47 @@ def test_the_option_lists_are_built_before_the_row_is_locked(client, chatbot, ll
             client.patch(node_url(chatbot, node_id), {"params": params}, format="json")
 
     sql = [query["sql"] for query in captured.captured_queries]
-    lock = next(index for index, query in enumerate(sql) if "FOR UPDATE" in query and '"pipelines_pipeline"' in query)
+    locks = [index for index, query in enumerate(sql) if "FOR UPDATE" in query and '"pipelines_pipeline"' in query]
     # The team-scoped provider list, which only `options_for_team` asks for -- as opposed to the
     # by-id existence checks `_sync_resource_fk_fields` runs while persisting, which belong inside.
     built = [index for index, query in enumerate(sql) if '"service_providers_llmprovider"."team_id"' in query]
 
+    assert locks, "the pipeline row was never locked"
     assert built, "the option lists were never built, so this proves nothing"
-    assert max(built) < lock, f"option lists were built under the lock (at {built}, lock at {lock})"
+    assert max(built) < min(locks), f"option lists were built under the lock (at {built}, lock at {locks})"
+
+
+@pytest.mark.django_db()
+@pytest.mark.parametrize(
+    ("route", "verb", "fields"),
+    [
+        pytest.param("collection", "POST", {"type", "label", "params"}, id="collection-post"),
+        pytest.param("detail", "PATCH", {"label", "params"}, id="detail-patch"),
+    ],
+)
+def test_options_describes_the_body_the_route_takes(client, chatbot, route, verb, fields):
+    """OPTIONS is how the agent this API is built for discovers what it may send. One view serves
+    both routes, so the body described has to be resolved per verb rather than per class -- and
+    since PATCH is the detail route's only writable verb, stock DRF metadata (which describes PUT
+    and POST alone) would answer it with no body at all."""
+    node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
+    url = nodes_url(chatbot) if route == "collection" else node_url(chatbot, node_id)
+
+    response = client.options(url)
+
+    assert response.status_code == 200, response.content
+    assert set(response.json()["actions"][verb]) == fields
+
+
+@pytest.mark.django_db()
+def test_a_verb_the_route_does_not_offer_is_a_405(client, chatbot):
+    """Each `path()` narrows `http_method_names` to the verbs its own route offers -- without that,
+    a verb from the other route reaches its handler with the wrong path kwargs and raises a 500."""
+    node_id = client.post(nodes_url(chatbot), {"type": "CodeNode"}, format="json").json()["node"]["node_id"]
+
+    assert client.patch(nodes_url(chatbot), {"params": {}}, format="json").status_code == 405
+    assert client.delete(nodes_url(chatbot)).status_code == 405
+    assert client.post(node_url(chatbot, node_id), {"type": "CodeNode"}, format="json").status_code == 405
 
 
 @pytest.mark.django_db()
@@ -146,7 +174,19 @@ def test_a_write_to_a_chatbot_with_no_pipeline_is_a_404(client, chatbot):
 
 
 @pytest.mark.django_db()
-def test_a_version_snapshot_cannot_be_edited(client, chatbot, llm):
+def test_a_write_to_an_archived_pipeline_is_a_404(client, chatbot):
+    """The default manager hides archived rows, so reaching for one by pk is a ``DoesNotExist``
+    rather than a miss -- a 404 is the answer, not a 500."""
+    chatbot.pipeline.is_archived = True
+    chatbot.pipeline.save(update_fields=["is_archived"])
+
+    response = client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
+
+    assert response.status_code == 404, response.content
+
+
+@pytest.mark.django_db()
+def test_a_version_snapshot_cannot_be_edited(client, chatbot):
     """Snapshots are immutable: writes only ever target the working version."""
     version = chatbot.create_new_version()
 

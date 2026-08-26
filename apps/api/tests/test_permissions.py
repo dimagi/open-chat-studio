@@ -106,12 +106,9 @@ def machine_token(db):
     )
 
 
-def test_requires_team_permission_allows_a_holder():
-    assert _NeedsChange().has_permission(_request(has_perms=True), view=None) is True
-
-
-def test_requires_team_permission_denies_a_non_holder():
-    assert _NeedsChange().has_permission(_request(has_perms=False), view=None) is False
+@pytest.mark.parametrize("has_perms", [True, False], ids=["holder-allowed", "non-holder-denied"])
+def test_requires_team_permission_follows_the_users_permissions(has_perms):
+    assert _NeedsChange().has_permission(_request(has_perms=has_perms), view=None) is has_perms
 
 
 def test_requires_team_permission_refuses_a_subclass_that_declares_nothing():

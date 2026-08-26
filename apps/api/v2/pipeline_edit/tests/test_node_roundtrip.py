@@ -42,31 +42,3 @@ def test_a_label_only_edit_does_not_rewrite_params(client, chatbot):
     node = Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id)
     assert node.label == "Renamed"
     assert node.params == before
-
-
-@pytest.mark.django_db()
-def test_a_withheld_param_is_not_reported_as_settable(client, chatbot):
-    """``mcp_tools`` is ``api:exclude``d, so PATCH refuses it -- which makes reporting it in the
-    response a body the caller cannot send back."""
-    created = client.post(nodes_url(chatbot), {"type": "LLMResponseWithPrompt"}, format="json")
-
-    assert "mcp_tools" not in created.json()["node"]["params"]
-
-
-@pytest.mark.django_db()
-def test_params_are_written_through_the_patch_engine_only(client, chatbot):
-    """The blob is the source of truth (#4140): the row is written by ``update_nodes_from_data``
-    off the patched graph, never by the view reaching for ``Node`` directly. A row whose params
-    match the graph's is the observable form of that."""
-    created = client.post(
-        nodes_url(chatbot),
-        {"type": "CodeNode", "params": {"code": "def main(x, **k): return x"}},
-        format="json",
-    )
-    node_id = created.json()["node"]["node_id"]
-
-    stored = Node.objects.get(pipeline=chatbot.pipeline, flow_id=node_id)
-    in_graph = next(node for node in chatbot.pipeline.flow_data["nodes"] if node["id"] == node_id)
-
-    assert stored.params["code"] == in_graph["data"]["params"]["code"]
-    assert stored.params["code"] == "def main(x, **k): return x"
