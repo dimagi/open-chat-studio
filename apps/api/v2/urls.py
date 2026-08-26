@@ -9,6 +9,7 @@ from apps.api.v2.discovery import (
     PipelineNodeView,
     PipelineOptionsView,
 )
+from apps.api.v2.pipeline_edit.views import PipelineNodeEditView
 from apps.api.v2.usage.views import UsageView
 
 app_name = "v2"
@@ -26,5 +27,11 @@ urlpatterns = [
     path("pipeline/nodes/<str:node_type>/", PipelineNodeView.as_view(), name="pipeline-node"),
     path("pipeline/options/", PipelineOptionsView.as_view(), name="pipeline-options"),
     path("pipeline/options/<str:node_type>/", PipelineNodeOptionsView.as_view(), name="pipeline-node-options"),
+    # Before the router so it wins over its ``chatbots/{id}/`` detail route.
+    path(
+        "chatbots/<str:id>/pipeline/nodes/",
+        PipelineNodeEditView.as_view(http_method_names=["post", "options"]),
+        name="pipeline-node-create",
+    ),
     path("", include(router.urls)),
 ]

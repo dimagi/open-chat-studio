@@ -4,6 +4,19 @@ from typing import Any
 
 from rest_framework import serializers
 
+from apps.api.permissions import RequiresTeamPermission
+
+
+class ChatbotCompositionPermission(RequiresTeamPermission):
+    """Editing a chatbot's composition is a *change* to the chatbot, whatever the verb.
+
+    Deleting a pipeline node is not deleting the chatbot, so the stock ``DjangoModelPermissions``
+    verb->permission map (which would demand ``delete_experiment``) is wrong for the sub-resources
+    under ``/chatbots/{id}/``. The top-level chatbot resource keeps it.
+    """
+
+    required_permissions = ["experiments.change_experiment"]
+
 
 class RejectsUnknownKeys:
     """Refuse a request body carrying keys this serializer does not declare.
