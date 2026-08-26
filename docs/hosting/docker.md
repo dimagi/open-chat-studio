@@ -15,14 +15,26 @@ This guide covers deploying Open Chat Studio on a single server or small cluster
 
 ## Step 1: Build the Image
 
-Clone the repository and build the production image.
+Clone the repository, check out the release you want to run, and build the
+production image.
 
 ```bash
 git clone https://github.com/dimagi/open-chat-studio.git
 cd open-chat-studio
+git checkout v1.0.0
 
 docker build -t open-chat-studio:latest .
 ```
+
+The checked-out tag determines the version you run; `docker-compose.prod.yml`
+refers to the image as `open-chat-studio:latest` regardless. To upgrade, check
+out the new tag and rebuild.
+
+!!! warning "Don't build from `main`"
+    `main` is Dimagi's continuous-deployment branch — it moves several times a
+    day, has not been through the release soak, and carries no migration notes.
+    See [Releases and Upgrades](./releases.md) for the tagged release train and
+    the supported upgrade path.
 
 ## Step 2: Create the Environment File
 
@@ -144,7 +156,8 @@ docker compose -f docker-compose.prod.yml run --rm web python manage.py <command
 # Apply migrations after an upgrade
 docker compose -f docker-compose.prod.yml run --rm migrate
 
-# Rebuild after a code update
+# Upgrade to a new release
+git checkout v1.1.0
 docker build -t open-chat-studio:latest .
 docker compose -f docker-compose.prod.yml up -d
 ```
