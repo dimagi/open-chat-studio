@@ -23,6 +23,15 @@
     {% endwith %}
   </button>
 {% endfor %}
+{% for channel in channels %}
+  {% if channel.platform == "public" %}
+    {% with id_str=channel.id|stringformat:"s" %}
+      {% with link_id="public-link-"|add:id_str %}
+        {% include "generic/copy_chip.html" with copy_element_id=link_id copy_value=channel.public_url action_text="Copy link" extra_styles="btn-ghost" %}
+      {% endwith %}
+    {% endwith %}
+  {% endif %}
+{% endfor %}
 {% if platforms %}
   <div class="dropdown">
     <button tabindex="0" class="btn btn-ghost btn-sm">

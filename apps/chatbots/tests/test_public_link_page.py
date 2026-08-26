@@ -8,6 +8,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.channels.models import ChannelPlatform
+from apps.teams.models import Flag
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
 
@@ -22,6 +23,14 @@ def _canonical_site(db, settings):
     settings.ALLOWED_HOSTS = [CANONICAL, "other.example.com", "testserver"]
     yield
     Site.objects.clear_cache()
+
+
+@pytest.fixture(autouse=True)
+def _public_channel_flag_enabled(db, team_with_users):
+    flag = Flag.objects.create(name="flag_public_channel")
+    flag.teams.add(team_with_users)
+    flag.flush()
+    return flag
 
 
 def _channel(team, *, consent=False, publish=True, enabled=True):
@@ -125,3 +134,13 @@ def test_page_is_throttled_per_ip(client, team_with_users):
 def test_robots_disallows_the_public_prefix(client):
     response = client.get("/robots.txt")
     assert b"Disallow: /c/" in response.content
+
+
+@pytest.mark.django_db()
+def test_chatbot_home_shows_a_copy_chip_for_the_public_link(client, team_with_users):
+    channel = _channel(team_with_users)
+    client.force_login(team_with_users.members.first())
+    url = reverse("chatbots:single_chatbot_home", args=[team_with_users.slug, channel.experiment_id])
+    html = client.get(url, HTTP_HOST=CANONICAL).content.decode()
+    assert channel.public_url in html
+    assert f'id="public-link-{channel.id}"' in html
