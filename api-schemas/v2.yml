@@ -829,60 +829,6 @@ components:
             type: string
       required:
       - paths
-    Assistant:
-      type: object
-      description: Assistant fields. ``instructions`` and ``assistant_id`` are exposed
-        on purpose.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          maxLength: 255
-        assistant_id:
-          type: string
-          maxLength: 255
-        instructions:
-          type: string
-        builtin_tools:
-          type: array
-          items:
-            type: string
-            maxLength: 128
-        tools:
-          type: array
-          items:
-            type: string
-            maxLength: 128
-        temperature:
-          type: number
-          format: double
-          maximum: 2.0
-          minimum: 0.0
-        top_p:
-          type: number
-          format: double
-          maximum: 1.0
-          minimum: 0.0
-      required:
-      - assistant_id
-      - id
-      - instructions
-      - name
-    AssistantNodeParams:
-      type: object
-      properties:
-        tag:
-          type: string
-          description: Tag applied to this node's output message; blank means no tag.
-        citations_enabled:
-          type: boolean
-          description: Include cited sources in responses.
-        input_formatter:
-          type: string
-          description: Optional wrapper for the user input; use ``{input}`` as the
-            placeholder.
     BooleanNodeParams:
       type: object
       properties:
@@ -1692,11 +1638,6 @@ components:
           - $ref: '#/components/schemas/SourceMaterial'
           readOnly: true
           nullable: true
-        assistant:
-          allOf:
-          - $ref: '#/components/schemas/Assistant'
-          readOnly: true
-          nullable: true
         custom_actions:
           type: array
           items:
@@ -1728,7 +1669,6 @@ components:
       - $ref: '#/components/schemas/StaticRouterNodeParams'
       - $ref: '#/components/schemas/BooleanNodeParams'
       - $ref: '#/components/schemas/SendEmailParams'
-      - $ref: '#/components/schemas/AssistantNodeParams'
       - $ref: '#/components/schemas/ExtractStructuredDataParams'
       - $ref: '#/components/schemas/ExtractParticipantDataParams'
     InspectOutputHandle:
