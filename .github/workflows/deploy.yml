@@ -400,6 +400,10 @@ jobs:
         SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
         SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
       with:
+        # Must match what the SDK sends as `release` (see config/settings.py).
+        # Left unset, the action proposes the HEAD SHA instead, so the release
+        # object and the events would land on two different identifiers.
+        version: ${{ steps.ocs-version.outputs.version }}
         environment: "${{ env.DEPLOY_ENV == 'prod' && 'production' || 'development' }}"
         ignore_empty: true
         ignore_missing: true
