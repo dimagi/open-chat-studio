@@ -15,8 +15,8 @@ from apps.channels.stages.core import (
     ConsentCheckStage,
     ConsentFlowStage,
     MessageTypeValidationStage,
+    ParticipantIdentifierStage,
     ParticipantResolverStage,
-    ParticipantValidationStage,
     QueryExtractionStage,
     ResponseFormattingStage,
     SessionActivationStage,
@@ -91,7 +91,7 @@ class ApiChannel(ChannelBase):
     def _build_pipeline(self) -> MessageProcessingPipeline:
         return MessageProcessingPipeline(
             core_stages=[
-                ParticipantValidationStage(),
+                ParticipantIdentifierStage(),
                 ParticipantResolverStage(),
                 ConsentCheckStage(),
                 ChannelDisabledStage(),

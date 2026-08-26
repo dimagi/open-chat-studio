@@ -116,11 +116,9 @@
               <i class="fa-regular fa-window-maximize"></i> Web <i class="fa-solid fa-caret-down fa-sm pg-text-muted"></i>
             </div>
             <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm border">
-              {% if experiment.is_public %}
-                <li onclick="sharing_modal.showModal()">
-                  <span><i class="fa-solid fa-share-nodes"></i> Share</span>
-                </li>
-              {% endif %}
+              <li onclick="sharing_modal.showModal()">
+                <span><i class="fa-solid fa-share-nodes"></i> Share</span>
+              </li>
               {% if perms.experiments.invite_participants %}
                 <li>
                   <a href="{% url 'chatbots:chatbots_invitations' team.slug experiment.id %}">
@@ -141,9 +139,7 @@
         {% include "chatbots/components/broadcast_dialog.html" %}
       {% endif %}
       {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
-      {% if experiment.is_public %}
-        {% include "experiments/share/dialog.html" %}
-      {% endif %}
+      {% include "experiments/share/dialog.html" %}
       <div id="channel_create_edit_modal_placeholder"></div>
     {% endif %}
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm" data-testid="chatbot-usage-widget">

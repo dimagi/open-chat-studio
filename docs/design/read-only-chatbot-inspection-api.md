@@ -498,8 +498,7 @@ shape, one parser.
     "voice_response_behaviour": "reciprocal",
     "echo_transcript": false,
     "debug_mode_enabled": false,
-    "file_uploads_enabled": false,
-    "participant_allowlist": []
+    "file_uploads_enabled": false
   },
 
   // chatbot resources embedded inline (numeric db id; null if unset)

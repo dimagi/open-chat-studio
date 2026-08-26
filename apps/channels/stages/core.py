@@ -107,26 +107,18 @@ def get_or_create_participant(
 
 
 # ---------------------------------------------------------------------------
-# ParticipantValidationStage
+# ParticipantIdentifierStage
 # ---------------------------------------------------------------------------
 
 
-class ParticipantValidationStage(ProcessingStage):
-    """Validates the participant is allowed to interact with this experiment."""
+class ParticipantIdentifierStage(ProcessingStage):
+    """Copies the inbound message's participant id onto the context for the stages that follow."""
 
     span_input_fields = ("message.participant_id",)
-    span_output_fields = ("participant_allowed",)
+    span_output_fields = ("participant_identifier",)
 
     def process(self, ctx: MessageProcessingContext) -> None:
         ctx.participant_identifier = ctx.message.participant_id
-
-        if ctx.experiment.is_public:
-            ctx.participant_allowed = True
-            return
-
-        ctx.participant_allowed = ctx.experiment.is_participant_allowed(ctx.participant_identifier)
-        if not ctx.participant_allowed:
-            raise EarlyExitResponse("Sorry, you are not allowed to chat to this bot")
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +127,7 @@ class ParticipantValidationStage(ProcessingStage):
 
 
 class ParticipantResolverStage(ProcessingStage):
-    """Resolves (or creates) the Participant record for the validated identifier.
+    """Resolves (or creates) the Participant record for the identifier on the context.
 
     Always sets ctx.participant; new participants are created here so that
     SessionResolutionStage can use the FK directly without a separate creation step.
