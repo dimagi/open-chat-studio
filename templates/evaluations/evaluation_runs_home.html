@@ -65,18 +65,16 @@
       </div>
     </div>
 
-    {% if cost_tracking_enabled %}
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4 text-xs" data-testid="evaluation-cost-summary">
-        <div class="flex items-center gap-1.5">
-          <span class="uppercase tracking-wide text-base-content/60">Spend (30 days)</span>
-          {% include "cost_tracking/_usage_summary.html" with total_cost=cost_summary.last_30_days.total_cost unpriced=cost_summary.last_30_days.has_unpriced estimated=cost_summary.last_30_days.has_estimated unknown=cost_summary.last_30_days.has_unknown testid_prefix="eval-cost-30d" %}
-        </div>
-        <div class="flex items-center gap-1.5">
-          <span class="uppercase tracking-wide text-base-content/60">Spend (all time)</span>
-          {% include "cost_tracking/_usage_summary.html" with total_cost=cost_summary.all_time.total_cost unpriced=cost_summary.all_time.has_unpriced estimated=cost_summary.all_time.has_estimated unknown=cost_summary.all_time.has_unknown testid_prefix="eval-cost-all-time" %}
-        </div>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4 text-xs" data-testid="evaluation-cost-summary">
+      <div class="flex items-center gap-1.5">
+        <span class="uppercase tracking-wide text-base-content/60">Spend (30 days)</span>
+        {% include "cost_tracking/_usage_summary.html" with total_cost=cost_summary.last_30_days.total_cost unpriced=cost_summary.last_30_days.has_unpriced estimated=cost_summary.last_30_days.has_estimated unknown=cost_summary.last_30_days.has_unknown testid_prefix="eval-cost-30d" %}
       </div>
-    {% endif %}
+      <div class="flex items-center gap-1.5">
+        <span class="uppercase tracking-wide text-base-content/60">Spend (all time)</span>
+        {% include "cost_tracking/_usage_summary.html" with total_cost=cost_summary.all_time.total_cost unpriced=cost_summary.all_time.has_unpriced estimated=cost_summary.all_time.has_estimated unknown=cost_summary.all_time.has_unknown testid_prefix="eval-cost-all-time" %}
+      </div>
+    </div>
 
     <div class="mb-8">
       <div class="flex justify-between items-center mb-4">

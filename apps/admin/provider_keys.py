@@ -22,6 +22,7 @@ import logging
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from apps.admin.team_data import serialize_team_creator
 from apps.service_providers.models import LlmProvider, LlmProviderTypes, TraceProvider
 from apps.teams.metadata import get_team_metadata_fields
 
@@ -74,16 +75,16 @@ def mask_secret(secret: str, provider_type: str) -> str:
 def get_provider_key_fingerprints(metadata_fields: list[dict] | None = None) -> Iterator[dict]:
     """Yield one masked-key record per LLM provider across all teams.
 
-    Each record carries the owning team's `metadata` and `slug` so a report can
-    label a team even when it has no usage in the reporting window (and so is
-    absent from the usage report, which is keyed on recorded usage).
+    Each record carries the owning team's creator, `metadata`, and `slug` so a
+    report can label a team even when it has no usage in the reporting window
+    (and so is absent from the usage report, which is keyed on recorded usage).
 
     ``metadata_fields`` is accepted so a caller emitting several of these listings in
     one response validates the setting once instead of per listing.
     """
     if metadata_fields is None:
         metadata_fields = get_team_metadata_fields()
-    providers = LlmProvider.objects.select_related("team").order_by("team__name", "type", "name")
+    providers = LlmProvider.objects.select_related("team", "team__created_by").order_by("team__name", "type", "name")
     for provider in providers.iterator():
         secret_field = _secret_field_for(provider)
         secret = (provider.config.get(secret_field) or "") if secret_field else ""
@@ -91,6 +92,7 @@ def get_provider_key_fingerprints(metadata_fields: list[dict] | None = None) -> 
             "team_id": provider.team_id,
             "team_name": provider.team.name,
             "team_slug": provider.team.slug,
+            "created_by": serialize_team_creator(provider.team.created_by),
             "metadata": _team_metadata(provider.team, metadata_fields),
             "provider_id": provider.id,
             "provider_type": provider.type,
@@ -116,12 +118,13 @@ def get_trace_provider_records(metadata_fields: list[dict] | None = None) -> Ite
     """
     if metadata_fields is None:
         metadata_fields = get_team_metadata_fields()
-    providers = TraceProvider.objects.select_related("team").order_by("team__name", "type", "name")
+    providers = TraceProvider.objects.select_related("team", "team__created_by").order_by("team__name", "type", "name")
     for provider in providers.iterator():
         yield {
             "team_id": provider.team_id,
             "team_name": provider.team.name,
             "team_slug": provider.team.slug,
+            "created_by": serialize_team_creator(provider.team.created_by),
             "metadata": _team_metadata(provider.team, metadata_fields),
             "provider_id": provider.id,
             "provider_type": provider.type,

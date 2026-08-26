@@ -74,14 +74,6 @@ class Flags(FlagInfo, Enum):
         True,
     )
 
-    AI_COST_MONITORING = (
-        "flag_ai_cost_monitoring",
-        "AI cost tracking - surface the usage dashboard and pricing UI (data is recorded for all teams)",
-        "",
-        [],
-        True,
-    )
-
     CONTEXTUAL_RETRIEVAL = (
         "flag_contextual_retrieval",
         "Contextual retrieval - generate per-chunk context headers at indexing time (issue #2681)",

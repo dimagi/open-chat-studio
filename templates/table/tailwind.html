@@ -1,7 +1,19 @@
 {% extends "django_tables2/bootstrap5.html" %}
-{% load django_tables2 i18n %}
+{% load django_tables2 humanize i18n %}
 {% block table-wrapper %}
     <div class="table-container">
+        {% block record_count %}
+            {% if table.show_record_count %}
+                {% with total=table.paginator.count %}
+                    {% if total %}
+                        <div class="mb-1 text-sm text-base-content/60" data-cy="table-record-count">
+                            {% blocktranslate with total_display=total|intcomma count total=total %}{{ total_display }} record{% plural %}{{ total_display }} records{% endblocktranslate %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+            {% endif %}
+        {% endblock record_count %}
+
         {% block table %}
             {{ block.super }}
         {% endblock table %}

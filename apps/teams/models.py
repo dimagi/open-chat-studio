@@ -37,6 +37,15 @@ class Team(BaseModel):
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="teams", through="Membership")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        editable=False,
+        on_delete=models.SET_NULL,
+        related_name="created_teams",
+        help_text="User who created this team, if known.",
+    )
     public_key = models.TextField(
         blank=True,
         default="",

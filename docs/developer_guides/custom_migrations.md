@@ -73,8 +73,8 @@ python manage.py custom_migrations unmark <name>        # Remove record
 Use descriptive names with dates: `{description}_{version}_{YYYY_MM_DD}`
 
 Examples:
-- `migrate_user_data_v1_2024_11_21`
-- `backfill_team_settings_2024_12_01`
+ * `migrate_user_data_v1_2024_11_21`
+ * `backfill_team_settings_2024_12_01`
 
 ## Two / Three-Phase Deployment Workflow
 
@@ -125,9 +125,9 @@ When adding new fields that require data backfilling, use a two or three-phase d
    ```
 
 4. **Deploy and run**:
-   - Deploy the PR with model and data migration
-   - Run manually in production: `python manage.py backfill_normalized_names`
-   - Verify the data was migrated correctly
+   * Deploy the PR with model and data migration
+   * Run manually in production: `python manage.py backfill_normalized_names`
+   * Verify the data was migrated correctly
 
 ### Phase 2: Add Django Migration Top-Up
 
@@ -157,9 +157,9 @@ When adding new fields that require data backfilling, use a two or three-phase d
    ```
 
 3. **Deploy**:
-   - The migration runs automatically during deployment
-   - The data migration command processes any records created between Phase 1 and Phase 2
-   - No constraint changes, so no risk of deploy failures
+   * The migration runs automatically during deployment
+   * The data migration command processes any records created between Phase 1 and Phase 2
+   * No constraint changes, so no risk of deploy failures
 
 ### Phase 3: Make Field Required (Optional)
 
@@ -199,8 +199,8 @@ When adding new fields that require data backfilling, use a two or three-phase d
    ```
 
 3. **Deploy**:
-   - The constraint is applied to the field
-   - All data should already be migrated from Phase 2
+   * The constraint is applied to the field
+   * All data should already be migrated from Phase 2
 
 ### Why Three Phases?
 
@@ -245,7 +245,7 @@ class Migration(migrations.Migration):
 ```
 
 **Use single-phase only when**:
-- Dataset is small (< 10,000 records)
-- Migration is fast (< 30 seconds)
-- Field is non-critical
-- You have tested thoroughly in staging
+ * Dataset is small (< 10,000 records)
+ * Migration is fast (< 30 seconds)
+ * Field is non-critical
+ * You have tested thoroughly in staging

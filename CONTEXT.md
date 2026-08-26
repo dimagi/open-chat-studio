@@ -18,7 +18,8 @@ _Avoid_: "the Experiment", when what you mean is a particular version row.
 The single editable draft of a Chatbot — the head of the family, where edits land before they're promoted into a snapshot. Identified in code by `working_version_id IS NULL`.
 
 **Published Version**:
-The Chatbot (or Pipeline) Version that external channels and APIs serve. Exactly one per family. Becoming the Published Version is a **choice made at snapshot time** (`make_default` on `create_new_version`), not an automatic consequence of snapshotting — the one exception is the very first version, which is published automatically. When a new snapshot is published, the previous Published Version is demoted. So "snapshot" and "publish" are separable: a Working Version can be snapshotted into an immutable Chatbot Version *without* that version going live.
+The Chatbot (or Pipeline) Version that external channels and APIs serve. Exactly one per family.
+Becoming the Published Version is a **choice made at snapshot time** (`make_default` on `create_new_version`), not an automatic consequence of snapshotting — the one exception is the very first version, which is published automatically. When a new snapshot is published, the previous Published Version is demoted. So "snapshot" and "publish" are separable: a Working Version can be snapshotted into an immutable Chatbot Version *without* that version going live.
 _Avoid_: Default Version (the underlying field is `is_default_version`, but new writing should say Published Version to match the UI).
 
 **Pipeline**:
@@ -98,10 +99,18 @@ The multi-tenancy root scope. Almost every domain resource (Chatbot, Pipeline, C
 ### Integrations
 
 **Service Provider**:
-A Team-scoped record holding credentials and configuration for one external integration. Kinds: **LLM Provider** (OpenAI, Anthropic, Groq, Gemini, Azure, …), **Messaging Provider** (Twilio, Telegram, Slack credentials, …), **Voice Provider** (TTS/STT services), **Auth Provider** (OAuth/SAML, used by Custom Actions and sign-in), and **Trace Provider** (observability backends). The LLM, Voice, and Messaging kinds share a `ProviderMixin`; Auth and Trace providers do not. The encrypted credential blob lives in a `config` field and is never exposed externally.
+A Team-scoped record holding credentials and configuration for one external integration. Kinds:
+- **LLM Provider** (OpenAI, Anthropic, Groq, Gemini, Azure, …),
+- **Messaging Provider** (Twilio, Telegram, Slack credentials, …),
+- **Voice Provider** (TTS/STT services),
+- **Auth Provider** (OAuth/SAML, used by Custom Actions and sign-in), and
+- **Trace Provider** (observability backends).
+
+The LLM, Voice, and Messaging kinds share a `ProviderMixin`; Auth and Trace providers do not. The encrypted credential blob lives in a `config` field and is never exposed externally.
 
 **LLM Provider Model**:
-A specific model offering a **Provider** can serve — e.g. `gpt-4o`, `claude-opus-4` — with its own token limit. Distinct from the **LLM Provider**: a Provider is the credentialed account, a Model is a catalogue entry. They are **independent rows joined by provider `type`, not a foreign key**, and a Pipeline Node selects *both* — a Provider and a Model. May be Team-scoped or a global (Team-less) catalogue row. The same Provider/Model split applies to embeddings (an **Embedding Provider Model** paired with a Provider).
+A specific model offering a **Provider** can serve — e.g. `gpt-4o`, `claude-opus-4` — with its own token limit.
+Distinct from the **LLM Provider**: a Provider is the credentialed account, a Model is a catalogue entry. They are **independent rows joined by provider `type`, not a foreign key**, and a Pipeline Node selects *both* — a Provider and a Model. May be Team-scoped or a global (Team-less) catalogue row. The same Provider/Model split applies to embeddings (an **Embedding Provider Model** paired with a Provider).
 _Avoid_: conflating "Provider" and "Model" — choosing a bot's LLM means choosing both.
 
 **OpenAI Assistant**:
@@ -109,7 +118,8 @@ A Team-scoped, versioned wrapper around a resource in OpenAI's Assistants API. P
 _Avoid_: bare "Assistant" — it overloads with the colloquial sense ("the chatbot as an assistant").
 
 **OAuth Application**:
-A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents). A machine application also names the Chatbots it may **reach**; naming none means it may reach none. The allowlist gates every door the machine scope opens — chat completions, message ingress and outbound bot messages (ADR-0056) — with chat-session admission as one more consumer.
+A Team-scoped registration that lets an external system authenticate to OCS. Two kinds, fixed at registration: **machine** applications (client credentials — no human, no login, a synthetic service identity acting for the Team) and **user-facing** applications (authorization code — a real User signs in and consents).
+A machine application also names the Chatbots it may **reach**; naming none means it may reach none. The allowlist gates every door the machine scope opens — chat completions, message ingress and outbound bot messages (ADR-0056) — with chat-session admission as one more consumer.
 _Avoid_: "API key" (a separate, user-scoped credential), and "the OAuth app's user" for a machine application — it has none.
 
 **Custom Action**:

@@ -94,11 +94,7 @@ class TestRecordCostsShortCircuits:
 
 @pytest.mark.django_db()
 class TestCostRecordingEndToEnd:
-    """Full path: trace context -> LLM callbacks -> finalisation writes UsageRecord rows.
-
-    Cost data is recorded for every team regardless of the `flag_ai_cost_monitoring`
-    flag; the flag only gates the UI.
-    """
+    """Full path: trace context -> LLM callbacks -> finalisation writes UsageRecord rows."""
 
     def test_writes_usage_records_for_all_teams(self, experiment):
         _seed_rule("openai", "test-model", ServiceKind.LLM_INPUT, "0.00015")

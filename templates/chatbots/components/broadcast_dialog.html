@@ -1,0 +1,49 @@
+{% load form_tags i18n %}
+<dialog id="broadcast_message_modal" class="modal">
+  <div class="modal-box" x-data="{ selectedChannels: [], message: '', whatsappSelected: false }"
+       x-on:change="whatsappSelected = !!$el.querySelectorAll('input[data-platform=whatsapp]:checked').length">
+    <h3 class="font-bold text-lg">{% translate "Broadcast message" %}</h3>
+    <p class="text-sm pg-text-muted mt-1">
+      {% translate "Send a message to the participants who have chatted to this bot recently on the channels you pick." %}
+    </p>
+
+    <form id="broadcast-message-form" method="post"
+          action="{% url 'chatbots:broadcast_message' request.team.slug experiment.id %}">
+      {% csrf_token %}
+      {% render_field broadcast_form.channels %}
+
+      <div role="alert" class="alert alert-warning text-sm my-2" x-show="whatsappSelected" x-cloak>
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>
+          {% blocktranslate trimmed %}
+            Broadcasts land outside WhatsApp's 24-hour service window, so they go out as a template
+            message. Make sure the messaging provider used by this channel has a
+            <code>new_bot_message</code> template configured.
+          {% endblocktranslate %}
+          <a class="link" target="_blank"
+             href="https://docs.openchatstudio.com/how-to/whatsapp_meta_cloud_api/#create-the-required-template-in-meta-business-manager">
+            {% translate "How to create the template" %}
+          </a>
+        </span>
+      </div>
+
+      {% render_field broadcast_form.active_within_days %}
+
+      {% render_field broadcast_form.message %}
+      <p class="label" x-text="`${message.length} / {{ broadcast_form.fields.message.max_length }}`"></p>
+    </form>
+
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn">{% translate "Cancel" %}</button>
+      </form>
+      <button form="broadcast-message-form" type="submit" class="btn btn-primary"
+              x-bind:disabled="!selectedChannels.length || !message.trim()">
+        {% translate "Send" %}
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>{% translate "close" %}</button>
+  </form>
+</dialog>

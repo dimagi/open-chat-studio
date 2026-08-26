@@ -130,9 +130,12 @@
                 {# Mirrors generic/help.html; inlined because the card list is rendered by Alpine, not Django. #}
                 <template x-if="stat.tooltip">
                   <div class="dropdown dropdown-top dropdown-hover">
-                    <div role="button" class="btn btn-circle btn-ghost btn-xs text-info">
-                      <i class="text-xs fa-regular fa-circle-question"></i>
-                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-circle btn-ghost btn-xs text-info"
+                      aria-label="{% translate 'More information' %}">
+                      <i class="text-xs fa-regular fa-circle-question" aria-hidden="true"></i>
+                    </button>
                     <div
                       tabindex="0"
                       class="card card-sm dropdown-content bg-slate-300 dark:bg-slate-700 rounded-box z-1 w-64 shadow-sm">
@@ -153,9 +156,7 @@
     </div>
 
   <div id="cost-tracking-panel-container">
-    {% if cost_tracking_enabled %}
-      {% include "dashboard/_cost_tracking_panel.html" %}
-    {% endif %}
+    {% include "dashboard/_cost_tracking_panel.html" %}
   </div>
 
   <!-- Charts Grid -->
@@ -290,20 +291,18 @@
                     <i :class="getSortIcon('completion_rate')" class="text-xs"></i>
                   </div>
                 </th>
-                {% if cost_tracking_enabled %}
-                  <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-right" @click="sortBotPerformance('cost')">
-                    <div class="flex items-center justify-end gap-1">
-                      {% translate "Cost" %}
-                      <i :class="getSortIcon('cost')" class="text-xs"></i>
-                    </div>
-                  </th>
-                  <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-right" @click="sortBotPerformance('cost_per_session')">
-                    <div class="flex items-center justify-end gap-1">
-                      {% translate "Cost / session" %}
-                      <i :class="getSortIcon('cost_per_session')" class="text-xs"></i>
-                    </div>
-                  </th>
-                {% endif %}
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-right" @click="sortBotPerformance('cost')">
+                  <div class="flex items-center justify-end gap-1">
+                    {% translate "Cost" %}
+                    <i :class="getSortIcon('cost')" class="text-xs"></i>
+                  </div>
+                </th>
+                <th class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-right" @click="sortBotPerformance('cost_per_session')">
+                  <div class="flex items-center justify-end gap-1">
+                    {% translate "Cost / session" %}
+                    <i :class="getSortIcon('cost_per_session')" class="text-xs"></i>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -327,10 +326,8 @@
                       <span class="text-xs" x-text="`${(item.completion_rate * 100).toFixed(1)}%`"></span>
                     </div>
                   </td>
-                  {% if cost_tracking_enabled %}
-                    <td class="text-right" x-text="formatCurrency(item.cost)"></td>
-                    <td class="text-right" x-text="item.cost_per_session != null ? formatCurrency(item.cost_per_session) : '-'"></td>
-                  {% endif %}
+                  <td class="text-right" x-text="formatCurrency(item.cost)"></td>
+                  <td class="text-right" x-text="item.cost_per_session != null ? formatCurrency(item.cost_per_session) : '-'"></td>
                 </tr>
               </template>
             </tbody>
@@ -382,9 +379,7 @@
                   <th>{% translate "Participant" %}</th>
                   <th>{% translate "Messages" %}</th>
                   <th>{% translate "Sessions" %}</th>
-                  {% if cost_tracking_enabled %}
-                    <th class="text-right" data-testid="most-active-cost-header">{% translate "Cost" %}</th>
-                  {% endif %}
+                  <th class="text-right" data-testid="most-active-cost-header">{% translate "Cost" %}</th>
                   <th>{% translate "Last Activity" %}</th>
                 </tr>
               </thead>
@@ -399,9 +394,7 @@
                     </td>
                     <td x-text="formatNumber(participant.total_messages)"></td>
                     <td x-text="formatNumber(participant.total_sessions)"></td>
-                    {% if cost_tracking_enabled %}
-                      <td class="text-right" x-text="formatCurrency(participant.cost)"></td>
-                    {% endif %}
+                    <td class="text-right" x-text="formatCurrency(participant.cost)"></td>
                     <td x-text="`${formatDate(participant.last_activity)} ago`"></td>
                   </tr>
                 </template>

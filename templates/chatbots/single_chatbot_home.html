@@ -49,7 +49,12 @@
           </div>
         {% endif %}
       </div>
-      <div class="justify-self-end">
+      <div class="justify-self-end flex items-center gap-2">
+        {% if experiment.is_editable and broadcast_form.eligible_channels and perms.experiments.invite_participants %}
+          <button class="btn btn-sm btn-outline btn-primary" onclick="broadcast_message_modal.showModal()">
+            <i class="fa-solid fa-bullhorn"></i> Broadcast message
+          </button>
+        {% endif %}
         <div class="join">
           {% if experiment.is_editable %}
             <div class="tooltip" data-tip="Chat to the bot">
@@ -111,11 +116,9 @@
               <i class="fa-regular fa-window-maximize"></i> Web <i class="fa-solid fa-caret-down fa-sm pg-text-muted"></i>
             </div>
             <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm border">
-              {% if experiment.is_public %}
-                <li onclick="sharing_modal.showModal()">
-                  <span><i class="fa-solid fa-share-nodes"></i> Share</span>
-                </li>
-              {% endif %}
+              <li onclick="sharing_modal.showModal()">
+                <span><i class="fa-solid fa-share-nodes"></i> Share</span>
+              </li>
               {% if perms.experiments.invite_participants %}
                 <li>
                   <a href="{% url 'chatbots:chatbots_invitations' team.slug experiment.id %}">
@@ -132,28 +135,27 @@
       {% endif %}
     </div>
     {% if experiment.is_editable %}
-      {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
-      {% if experiment.is_public %}
-        {% include "experiments/share/dialog.html" %}
+      {% if broadcast_form.eligible_channels and perms.experiments.invite_participants %}
+        {% include "chatbots/components/broadcast_dialog.html" %}
       {% endif %}
+      {% include "chatbots/chatbot_copy_dialog.html" with chatbot_id=experiment.id team_slug=request.team.slug name=experiment.name %}
+      {% include "experiments/share/dialog.html" %}
       <div id="channel_create_edit_modal_placeholder"></div>
     {% endif %}
-    {% if cost_tracking_enabled %}
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm" data-testid="chatbot-usage-widget">
-        <div class="flex items-center gap-2">
-          <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (30d)</span>
-          {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_call_count unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" %}
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs uppercase tracking-wide text-base-content/60">Sessions (30d)</span>
-          <span class="font-semibold">{{ usage_summary.sessions_count|intcomma }}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs uppercase tracking-wide text-base-content/60">Messages (30d)</span>
-          <span class="font-semibold">{{ usage_summary.messages_count|intcomma }}</span>
-        </div>
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 text-sm" data-testid="chatbot-usage-widget">
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-base-content/60">Spend (30d)</span>
+        {% include "cost_tracking/_usage_summary.html" with total_cost=usage_summary.cost.total_cost unpriced=usage_summary.cost.unpriced_call_count estimated=usage_summary.cost.estimated_call_count unknown=usage_summary.cost.unknown_call_count testid_prefix="chatbot-usage" %}
       </div>
-    {% endif %}
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-base-content/60">Sessions (30d)</span>
+        <span class="font-semibold">{{ usage_summary.sessions_count|intcomma }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs uppercase tracking-wide text-base-content/60">Messages (30d)</span>
+        <span class="font-semibold">{{ usage_summary.messages_count|intcomma }}</span>
+      </div>
+    </div>
   </div>
   <div class="tabs-container">
     <div role="tablist" class="tabs tabs-border flex justify-start">

@@ -31,21 +31,14 @@ from apps.chatbots.views import (
 )
 from apps.cost_tracking.models import Confidence, ServiceKind
 from apps.events.models import StaticTriggerType
-from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus
+from apps.experiments.models import Experiment, ExperimentSession, Participant, SessionStatus, VoiceResponseBehaviours
 from apps.pipelines.models import Pipeline
 from apps.teams.helpers import get_team_membership_for_request
-from apps.teams.models import Flag
 from apps.teams.utils import set_current_team
 from apps.utils.factories.cost_tracking import UsageRecordFactory
 from apps.utils.factories.experiment import ExperimentFactory, ExperimentSessionFactory
 from apps.utils.factories.team import MembershipFactory
 from apps.utils.factories.user import UserFactory
-
-
-def _enable_cost_tracking_flag_for(team):
-    flag, _ = Flag.objects.get_or_create(name="flag_ai_cost_monitoring")
-    flag.teams.add(team)
-    flag.flush()
 
 
 @pytest.mark.django_db()
@@ -181,38 +174,10 @@ def _create_chatbot(team, user):
 
 
 @pytest.mark.django_db()
-def test_chatbot_home_hides_usage_widget_when_flag_off(client, team_with_users):
-    """The usage widget is gated by flag_ai_cost_monitoring."""
+def test_chatbot_home_shows_usage_widget(client, team_with_users):
     team = team_with_users
     user = team.members.first()
     user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    client.force_login(user)
-    experiment = _create_chatbot(team, user)
-    session = ExperimentSessionFactory.create(experiment=experiment, team=team)
-    UsageRecordFactory.create(
-        team=team,
-        experiment=experiment,
-        session=session,
-        service_kind=ServiceKind.LLM_INPUT,
-        quantity=100,
-        cost=Decimal("1.00"),
-    )
-
-    url = reverse("chatbots:single_chatbot_home", args=[team.slug, experiment.id])
-    response = client.get(url)
-
-    assert response.status_code == 200
-    assert response.context_data["cost_tracking_enabled"] is False
-    assert response.context_data["usage_summary"] is None
-    assert b'data-testid="chatbot-usage-widget"' not in response.content
-
-
-@pytest.mark.django_db()
-def test_chatbot_home_shows_usage_widget_when_flag_on(client, team_with_users):
-    team = team_with_users
-    user = team.members.first()
-    user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    _enable_cost_tracking_flag_for(team)
     client.force_login(user)
     experiment = _create_chatbot(team, user)
     session = ExperimentSessionFactory.create(experiment=experiment, team=team)
@@ -232,7 +197,6 @@ def test_chatbot_home_shows_usage_widget_when_flag_on(client, team_with_users):
     response = client.get(url)
 
     assert response.status_code == 200
-    assert response.context_data["cost_tracking_enabled"] is True
     usage = response.context_data["usage_summary"]
     assert usage.cost.total_cost == Decimal("1.50000000")
     assert usage.sessions_count == 1
@@ -247,7 +211,6 @@ def test_chatbot_home_shows_no_pricing_data_when_unpriced(client, team_with_user
     team = team_with_users
     user = team.members.first()
     user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    _enable_cost_tracking_flag_for(team)
     client.force_login(user)
     experiment = _create_chatbot(team, user)
     session = ExperimentSessionFactory.create(experiment=experiment, team=team)
@@ -281,7 +244,6 @@ def test_chatbot_home_shows_confidence_badge_for_estimated_rows(client, team_wit
     team = team_with_users
     user = team.members.first()
     user.user_permissions.add(Permission.objects.get(codename="view_experiment"))
-    _enable_cost_tracking_flag_for(team)
     client.force_login(user)
     experiment = _create_chatbot(team, user)
     session = ExperimentSessionFactory.create(experiment=experiment, team=team)
@@ -1232,33 +1194,9 @@ def test_session_view_only_links_http_embed_source(client, team_with_users, embe
 
 
 @pytest.mark.django_db()
-def test_session_view_hides_usage_summary_when_flag_off(client, team_with_users):
-    """The usage summary row is gated by flag_ai_cost_monitoring."""
+def test_session_view_shows_usage_summary(client, team_with_users):
     team = team_with_users
     user = team.members.first()
-    session = ExperimentSessionFactory.create(experiment__team=team)
-    UsageRecordFactory.create(
-        team=team, session=session, service_kind=ServiceKind.LLM_INPUT, quantity=100, cost=Decimal("1.00")
-    )
-    client.force_login(user)
-
-    url = reverse(
-        "chatbots:chatbot_session_view",
-        args=[team.slug, session.experiment.public_id, session.external_id],
-    )
-    response = client.get(url)
-
-    assert response.status_code == 200
-    assert response.context_data["cost_tracking_enabled"] is False
-    assert response.context_data["usage_summary"] is None
-    assert b'data-testid="session-usage-summary"' not in response.content
-
-
-@pytest.mark.django_db()
-def test_session_view_shows_usage_summary_when_flag_on(client, team_with_users):
-    team = team_with_users
-    user = team.members.first()
-    _enable_cost_tracking_flag_for(team)
     session = ExperimentSessionFactory.create(experiment__team=team)
     UsageRecordFactory.create(
         team=team,
@@ -1285,7 +1223,7 @@ def test_session_view_shows_usage_summary_when_flag_on(client, team_with_users):
     response = client.get(url)
 
     assert response.status_code == 200
-    assert response.context_data["cost_tracking_enabled"] is True
+    assert response.context_data["show_usage_summary"] is True
     usage = response.context_data["usage_summary"]
     assert usage.total_cost == Decimal("1.80000000")
     assert usage.total_tokens == 1200
@@ -1296,10 +1234,51 @@ def test_session_view_shows_usage_summary_when_flag_on(client, team_with_users):
 
 
 @pytest.mark.django_db()
+def test_session_view_hides_usage_summary_from_participant(client, team_with_users):
+    """A participant viewing their own session has no team membership, so the
+    team-internal usage/cost summary must not render for them."""
+    team = team_with_users
+    session = ExperimentSessionFactory.create(experiment__team=team, status=SessionStatus.SETUP)
+    session.participant = Participant.objects.create(team=team, identifier="someone@example.com", platform="web")
+    session.save()
+    UsageRecordFactory.create(
+        team=team,
+        session=session,
+        model_name="gpt-4o",
+        service_kind=ServiceKind.LLM_INPUT,
+        quantity=1000,
+        cost=Decimal("1.50"),
+    )
+    # Consenting sets the session-access cookie the participant-facing view requires.
+    consent_response = client.post(
+        reverse(
+            "experiments:start_session_from_invite",
+            args=[team.slug, session.experiment.public_id, session.external_id],
+        ),
+        data={
+            "consent_agreement": "on",
+            "experiment_id": session.experiment.id,
+            "participant_id": session.participant.id,
+        },
+    )
+    assert consent_response.status_code == 302
+
+    url = reverse(
+        "chatbots:chatbot_session_view",
+        args=[team.slug, session.experiment.public_id, session.external_id],
+    )
+    response = client.get(url)
+
+    assert response.status_code == 200
+    assert response.context_data["show_usage_summary"] is False
+    assert response.context_data["usage_summary"] is None
+    assert b'data-testid="session-usage-summary"' not in response.content
+
+
+@pytest.mark.django_db()
 def test_session_view_shows_no_pricing_data_when_unpriced(client, team_with_users):
     team = team_with_users
     user = team.members.first()
-    _enable_cost_tracking_flag_for(team)
     session = ExperimentSessionFactory.create(experiment__team=team)
     UsageRecordFactory.create(
         team=team, session=session, service_kind=ServiceKind.LLM_INPUT, quantity=100, cost=Decimal("0")
@@ -1320,7 +1299,6 @@ def test_session_view_shows_no_pricing_data_when_unpriced(client, team_with_user
 def test_session_view_shows_confidence_badge_for_estimated_rows(client, team_with_users):
     team = team_with_users
     user = team.members.first()
-    _enable_cost_tracking_flag_for(team)
     session = ExperimentSessionFactory.create(experiment__team=team)
     UsageRecordFactory.create(
         team=team,
@@ -1340,3 +1318,36 @@ def test_session_view_shows_confidence_badge_for_estimated_rows(client, team_wit
     assert response.status_code == 200
     assert b'data-testid="session-usage-confidence-badge"' in response.content
     assert "Estimated" in response.content.decode()
+
+
+@pytest.mark.django_db()
+def test_settings_page_has_no_allowlist_section(client, experiment):
+    client.force_login(experiment.team.members.first())
+    url = reverse("chatbots:settings", args=(experiment.team.slug, experiment.id))
+    response = client.get(url)
+    assert response.status_code == 200
+    assert b'id="allowlist-section"' not in response.content
+
+
+@pytest.mark.django_db()
+def test_settings_save_ignores_a_posted_allowlist(client, experiment):
+    """The settings form no longer has a `participant_allowlist` field, so a posted value for it
+    is inert -- the save still succeeds and the column is untouched."""
+    experiment.participant_allowlist = ["+27123456789"]
+    experiment.save(update_fields=["participant_allowlist"])
+    client.force_login(experiment.team.members.first())
+    url = reverse("chatbots:settings", args=(experiment.team.slug, experiment.id))
+
+    response = client.post(
+        url,
+        data={
+            "name": "Updated Chatbot Name",
+            "voice_response_behaviour": VoiceResponseBehaviours.RECIPROCAL,
+            "participant_allowlist": "+27999999999",
+        },
+    )
+
+    assert response.status_code == 200
+    experiment.refresh_from_db()
+    assert experiment.name == "Updated Chatbot Name"
+    assert experiment.participant_allowlist == ["+27123456789"]

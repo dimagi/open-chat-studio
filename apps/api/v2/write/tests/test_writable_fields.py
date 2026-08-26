@@ -30,8 +30,14 @@ def _writable_model_fields(serializer) -> set[str]:
 def test_patch_covers_every_versioned_field_except_the_pipeline():
     """`VERSIONED_CONTENT_FIELDS` is what a published version snapshots. Everything in it except
     `pipeline` -- which has its own façade at /chatbots/{id}/pipeline/* -- is writable here, so a
-    new versioned field has to be an explicit decision rather than an omission."""
-    assert _writable_model_fields(ChatbotWriteSerializer()) == (Experiment.VERSIONED_CONTENT_FIELDS - {"pipeline"})
+    new versioned field has to be an explicit decision rather than an omission.
+
+    `participant_allowlist` is the one deliberate exception: its column and versioning stay in
+    place while the participant allowlist feature is removed in phases, but nothing writes to it
+    through this API any more."""
+    assert _writable_model_fields(ChatbotWriteSerializer()) == (
+        Experiment.VERSIONED_CONTENT_FIELDS - {"pipeline", "participant_allowlist"}
+    )
 
 
 def test_patch_writes_exactly_what_the_settings_form_edits():

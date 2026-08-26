@@ -1,0 +1,18 @@
+{
+  "description": "Open Chat Studio development environment setup.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/scripts/ensure-worktree-setup.sh\"",
+            "timeout": 1200,
+            "statusMessage": "Setting up the Open Chat Studio worktree"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -20,7 +20,6 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import CreateView, TemplateView, UpdateView, View
 from django_tables2 import SingleTableView, columns, tables
-from waffle import flag_is_active
 
 from apps.cost_tracking.services.reporting import (
     evaluation_config_cost_summary,
@@ -52,8 +51,6 @@ from apps.teams.mixins import LoginAndTeamRequiredMixin
 from apps.utils.time import seconds_to_human
 
 logger = logging.getLogger(__name__)
-
-COST_TRACKING_FLAG = "flag_ai_cost_monitoring"
 
 
 class EvaluationHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, TemplateView):
@@ -168,17 +165,13 @@ class EvaluationRunHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, Temp
     def get_context_data(self, team_slug: str, **kwargs):  # ty: ignore[invalid-method-override]
         config = get_object_or_404(EvaluationConfig, id=kwargs["evaluation_pk"], team=self.request.team)
 
-        cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
-        context = {
+        return {
             **super().get_context_data(**kwargs),
             "config": config,
             "table_url": reverse("evaluations:evaluation_runs_table", args=[team_slug, kwargs["evaluation_pk"]]),
             "trends_url": reverse("evaluations:evaluation_trends", args=[team_slug, kwargs["evaluation_pk"]]),
-            "cost_tracking_enabled": cost_tracking_enabled,
+            "cost_summary": evaluation_config_cost_summary(config),
         }
-        if cost_tracking_enabled:
-            context["cost_summary"] = evaluation_config_cost_summary(config)
-        return context
 
 
 class ClearEvaluationRuns(LoginAndTeamRequiredMixin, PermissionRequiredMixin, View):
@@ -262,9 +255,6 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
             .order_by("-created_at")
         )
 
-    def get_table_kwargs(self):
-        return {"cost_tracking_enabled": flag_is_active(self.request, COST_TRACKING_FLAG)}
-
     def get_table(self, **kwargs):
         """Stamp cost onto the rows of the *current page* only, after pagination has
         already sliced them. Leaving `get_table_data` at its default (the lazy
@@ -272,12 +262,11 @@ class EvaluationRunTableView(PermissionRequiredMixin, SingleTableView):  # ty: i
         than loading every run for the config on every request.
         """
         table = super().get_table(**kwargs)
-        if kwargs.get("cost_tracking_enabled"):
-            page_runs = [row.record for row in table.paginated_rows]
-            if page_runs:
-                costs = evaluation_run_costs(self.kwargs["evaluation_pk"], [run.id for run in page_runs])
-                for run in page_runs:
-                    run.cost = costs.get(run.id)
+        page_runs = [row.record for row in table.paginated_rows]
+        if page_runs:
+            costs = evaluation_run_costs(self.kwargs["evaluation_pk"], [run.id for run in page_runs])
+            for run in page_runs:
+                run.cost = costs.get(run.id)
         return table
 
 
@@ -293,17 +282,14 @@ class EvaluationResultHome(LoginAndTeamRequiredMixin, PermissionRequiredMixin, T
         title = (
             "Evaluation Run Preview" if evaluation_run.type == EvaluationRunType.PREVIEW else "Evaluation Run Results"
         )
-        cost_tracking_enabled = flag_is_active(self.request, COST_TRACKING_FLAG)
         context: dict[str, Any] = {
             "active_tab": "evaluations",
             "title": title,
             "page_title": title,
             "evaluation_run": evaluation_run,
             "allow_new": False,
-            "cost_tracking_enabled": cost_tracking_enabled,
+            "run_cost": evaluation_run_cost(evaluation_run),
         }
-        if cost_tracking_enabled:
-            context["run_cost"] = evaluation_run_cost(evaluation_run)
 
         # Calculate duration if finished
         if evaluation_run.finished_at:

@@ -69,7 +69,6 @@ def mock_session():
     mock_sess = mock.Mock()
     mock_sess.experiment.name = "TestBot"
     mock_sess.experiment.description = "A test bot"
-    mock_sess.experiment.is_public = True
     mock_sess.session_token_required = False
     # Non-widget session: no per-channel widget auth policy applies.
     mock_sess.experiment_channel.widget_auth_level = None

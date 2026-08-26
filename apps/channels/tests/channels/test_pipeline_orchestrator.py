@@ -8,7 +8,7 @@ from apps.channels.pipeline import (
     MessageProcessingPipeline,
 )
 from apps.chat.exceptions import ChatException
-from apps.pipelines.exceptions import PipelineBuildError, PipelineNodeBuildError
+from apps.pipelines.exceptions import CodeNodeRunError, PipelineBuildError, PipelineNodeBuildError
 
 from .conftest import make_context
 
@@ -183,17 +183,20 @@ class TestUnexpectedException:
         assert "something bad" in ctx.processing_errors
 
 
-class TestPipelineBuildError:
+class TestUserCausedErrors:
     @pytest.mark.parametrize(
         "error",
         [
             pytest.param(PipelineBuildError("no nodes"), id="build-error"),
             pytest.param(PipelineNodeBuildError("deprecated model"), id="node-build-error"),
+            pytest.param(CodeNodeRunError("name 'foo' is not defined"), id="code-node-run-error"),
         ],
     )
     @patch("apps.channels.pipeline.MessageProcessingPipeline._generate_error_message")
-    def test_build_error_uses_generic_message_and_does_not_reraise(self, mock_gen, error):
-        """Build errors reply with the generic text and run terminal stages, but are not re-raised.
+    def test_user_caused_error_uses_generic_message_and_does_not_reraise(self, mock_gen, error):
+        """Errors caused by the user's own configuration reply with the generic text and run
+        terminal stages, but are not re-raised -- they are not system bugs, so they must not
+        crash the task or reach Sentry.
 
         The LLM is not used to generate the message -- it may be the thing that is
         misconfigured -- so _generate_error_message is never called.

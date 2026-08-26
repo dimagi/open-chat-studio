@@ -47,8 +47,8 @@ than inferring it from per-request heuristics:
 
 | Level | Value | What the server enforces |
 |---|---|---|
-| `NONE` | 0 | Legacy path: embed key optional, `is_public`/allowlist fallback permitted (pre-0.5.1 widgets). |
-| `EMBED_KEY` | 1 | A valid `X-Embed-Key` + allowed-domain check; no session token. The `is_public` fallback is blocked. |
+| `NONE` | 0 | Legacy path: embed key optional, keyless fallback permitted (pre-0.5.1 widgets). |
+| `EMBED_KEY` | 1 | A valid `X-Embed-Key` + allowed-domain check; no session token. The keyless fallback is blocked. |
 | `SESSION_TOKEN` | 2 | A valid `X-Embed-Key` **and** `X-Session-Token`. No legacy path reachable. |
 
 - New channels default to `SESSION_TOKEN` (the strictest level).

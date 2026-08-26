@@ -2,6 +2,7 @@
 
 import json
 from datetime import timedelta
+from unittest import mock
 
 import pytest
 from django.conf import settings
@@ -15,12 +16,13 @@ from waffle import get_waffle_flag_model
 
 from apps.api.models import UserAPIKey
 from apps.api.throttling import APIRateThrottle, ChatAPIRateThrottle
-from apps.channels.models import ChannelPlatform
+from apps.channels.models import ChannelPlatform, CredentialMode, WidgetAuthLevel
 from apps.oauth.models import OAuth2AccessToken, OAuth2Application
 from apps.utils.factories.channels import ExperimentChannelFactory
 from apps.utils.factories.experiment import ExperimentFactory
 from apps.utils.factories.team import TeamWithUsersFactory
-from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG
+from apps.utils.factories.user import UserFactory
+from apps.utils.rate_limit import RATE_LIMIT_EXEMPT_FLAG, check
 from apps.utils.tests.clients import ApiTestClient
 
 TINY_LIMITS = settings.RATE_LIMITS | {"api": {"rate": "3/5m", "fail_open": True}}
@@ -219,3 +221,40 @@ def test_chat_api_throttle_falls_back_to_ip():
     request = RequestFactory().post("/", REMOTE_ADDR="203.0.113.9")
 
     assert throttle.identity(request, _view_stub()) == ("ip", "203.0.113.9")
+
+
+@pytest.mark.django_db()
+def test_chat_api_throttle_buckets_an_oauth_caller_on_its_channel(experiment):
+    """An OAuth caller reaches `chat/start/` with no session and no embed key, so without the
+    channel in `request.auth` it would fall to the IP bucket -- sharing one allowance across every
+    machine caller behind a single egress IP, and with unrelated anonymous traffic from that IP.
+
+    `ChatOAuthAuthentication` returning the channel is what closes that, with no change to the
+    throttle: bucketing is per channel, exactly as widget traffic already buckets.
+    """
+    channel = ExperimentChannelFactory.create(
+        team=experiment.team,
+        experiment=experiment,
+        platform=ChannelPlatform.EMBEDDED_WIDGET,
+        credential_mode=CredentialMode.OAUTH,
+        required_auth_level=WidgetAuthLevel.SESSION_TOKEN,
+        extra_data={"allowed_domains": []},
+    )
+    client = ApiTestClient(
+        UserFactory.create(),
+        experiment.team,
+        auth_method="oauth_client_credentials",
+        scopes=["chat:start"],
+        allowed_chatbots=[experiment],
+    )
+
+    with mock.patch("apps.api.throttling.check", wraps=check) as checked:
+        response = client.post(
+            reverse("api:chat:start-session"),
+            data={"chatbot_id": str(experiment.public_id)},
+            format="json",
+            REMOTE_ADDR="203.0.113.9",
+        )
+
+    assert response.status_code == 201, response.json()
+    assert [call.args[1:] for call in checked.call_args_list] == [("channel", str(channel.pk))]

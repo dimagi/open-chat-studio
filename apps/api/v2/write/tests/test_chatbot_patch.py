@@ -126,7 +126,6 @@ def test_a_partial_patch_leaves_the_unsent_fields_alone(client, chatbot):
     back -- the mirror that makes read-modify-write cheap for an agent."""
     chatbot.echo_transcript = False
     chatbot.file_uploads_enabled = True
-    chatbot.participant_allowlist = ["alice"]
     chatbot.save()
 
     response = client.patch(_url(chatbot), {"seed_message": "Hi!"}, format="json")
@@ -137,20 +136,6 @@ def test_a_partial_patch_leaves_the_unsent_fields_alone(client, chatbot):
     assert chatbot.seed_message == "Hi!"
     assert chatbot.echo_transcript is False
     assert chatbot.file_uploads_enabled is True
-    assert chatbot.participant_allowlist == ["alice"]
-
-
-@pytest.mark.django_db()
-def test_the_allowlist_is_normalized_the_way_the_form_normalizes_it(client, chatbot):
-    """`is_participant_allowed` matches identifiers exactly, and the UI form strips spaces on the
-    way in. Stored as written, a human-formatted phone number -- which is what an LLM produces --
-    gives an allowlist that looks configured and admits nobody, with no error to say so."""
-    response = client.patch(_url(chatbot), {"participant_allowlist": ["+27 82 000 0000"]}, format="json")
-
-    assert response.status_code == 200
-    chatbot.refresh_from_db()
-    assert chatbot.participant_allowlist == ["+27820000000"]
-    assert chatbot.is_participant_allowed("+27820000000")
 
 
 @pytest.mark.django_db()
@@ -239,6 +224,7 @@ def test_an_unrecognised_key_is_a_400_naming_it(client, chatbot):
         pytest.param("owner", None, id="owner"),
         pytest.param("team", None, id="team"),
         pytest.param("is_archived", True, id="is-archived"),
+        pytest.param("participant_allowlist", ["+27000000000"], id="participant_allowlist"),
     ],
 )
 def test_a_protected_model_field_stays_unwritable(client, chatbot, field, value):

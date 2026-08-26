@@ -104,12 +104,10 @@
                       {% if model.cache_write_tokens %}
                         <span class="text-base-content/40">· {{ model.cache_write_tokens|intcomma }} cache write</span>
                       {% endif %}
-                      {% if cost_tracking_enabled %}
-                        {% if model.has_unpriced %}
-                          <span class="text-base-content/40">· unpriced</span>
-                        {% else %}
-                          <span class="text-base-content/40">· ${{ model.cost|cost_display }}</span>
-                        {% endif %}
+                      {% if model.has_unpriced %}
+                        <span class="text-base-content/40">· unpriced</span>
+                      {% else %}
+                        <span class="text-base-content/40">· ${{ model.cost|cost_display }}</span>
                       {% endif %}
                     </span>
                   </div>
@@ -144,7 +142,7 @@
 
       {# Metadata pill row #}
       <div class="flex flex-wrap gap-2 mt-4">
-        {% if cost_tracking_enabled and token_usage.by_model %}
+        {% if token_usage.by_model %}
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-base-300">
             <span class="text-xs text-base-content/60">Cost</span>
             {% include "cost_tracking/_usage_summary.html" with total_cost=token_usage.total_cost unpriced=token_usage.has_unpriced estimated=token_usage.has_estimated unknown=token_usage.has_unknown testid_prefix="trace" %}
