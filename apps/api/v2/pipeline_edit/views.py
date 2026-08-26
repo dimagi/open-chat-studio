@@ -22,6 +22,7 @@ from apps.pipelines.models import Pipeline
 from .facade import edit_pipeline
 from .graph_editor import plan_create, plan_delete, plan_update
 from .node_params import writable_params
+from .references import check_references
 from .serializers import (
     NodeCreateSerializer,
     NodeUpdateSerializer,
@@ -42,8 +43,9 @@ NODE_ID = OpenApiParameter(
 BAD_REQUEST = OpenApiResponse(
     description=(
         "The body is not one this endpoint can act on. Errors are keyed by the field at fault, and "
-        "param-level errors are nested under `params`. This covers an unrecognised body key and a "
-        "server-assigned key the client tried to set (`node_id`, `position`).\n\n"
+        "param-level errors are nested under `params`. This covers an unrecognised body key, a "
+        "server-assigned key the client tried to set (`node_id`, `position`), and a param naming a "
+        "resource this team cannot reach.\n\n"
         "A param the type does not declare is *not* an error: it is dropped, and the response "
         "reports the params the node actually holds. Nor is a param whose value the type cannot "
         "parse — that is stored and reported in `pipeline_errors`, the same as a missing required "
@@ -133,6 +135,7 @@ class PipelineNodeEditView(GenericAPIView):
         node_type = body.validated_data["type"]
         node_class = get_node_class(node_type)
         params = writable_params(node_class, body.validated_data["params"])
+        check_references(team=request.team, node_class=node_class, params=params)
         return Response(
             edit_pipeline(request, id, lambda flow: plan_create(flow, node_type, label, params), self._write_response),
             status=status.HTTP_201_CREATED,
@@ -171,7 +174,14 @@ class PipelineNodeEditView(GenericAPIView):
         params = body.validated_data["params"]
         label = body.validated_data.get("label")
         return Response(
-            edit_pipeline(request, id, lambda flow: plan_update(flow, node_id, label, params), self._write_response)
+            edit_pipeline(
+                request,
+                id,
+                # The node's type comes from the graph, so its params can only be checked under the
+                # lock; the team goes in so the check can look its references up there.
+                lambda flow: plan_update(flow, request.team, node_id, label, params),
+                self._write_response,
+            )
         )
 
     @extend_schema(

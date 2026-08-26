@@ -5,6 +5,8 @@ A write stores the node model's own dump, not the body's dict. Nothing here read
 would be checking against a copy.
 """
 
+import types
+import typing
 from typing import Any
 
 from django.db import DatabaseError
@@ -41,9 +43,31 @@ def node_params(node_class: type[BasePipelineNode], node_id: str, merged: dict[s
     return model.model_dump(mode="json")
 
 
+def is_list_param(node_class: type[BasePipelineNode], name: str) -> bool:
+    """Whether the type declares this param list-valued.
+
+    By the declaration, not the value: reading a one-element array as a list is what let a wrapped
+    scalar id pass the resource check.
+    """
+    field = node_class.model_fields.get(name)
+    if field is None:
+        return False
+    return _is_list_annotation(field.annotation)
+
+
 def _is_writable(node_class: type[BasePipelineNode], name: str) -> bool:
     field = node_class.model_fields.get(name)
     if field is None:
         return False
     extra = field.json_schema_extra
     return not (isinstance(extra, UiSchema) and extra.api_exclude)
+
+
+def _is_list_annotation(annotation: Any) -> bool:
+    """Whether an annotation is a list or an optional one — ``list[int]``, ``list[int] | None``."""
+    origin = typing.get_origin(annotation)
+    if origin in (list, set, tuple):
+        return True
+    if origin is typing.Union or origin is types.UnionType:
+        return any(_is_list_annotation(arg) for arg in typing.get_args(annotation))
+    return False
