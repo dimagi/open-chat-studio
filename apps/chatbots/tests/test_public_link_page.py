@@ -61,6 +61,7 @@ def test_live_page_renders_the_kiosk_widget(client, team_with_users):
     assert response["X-Robots-Tag"] == "noindex"
     assert response["Referrer-Policy"] == "origin"
     assert "unpkg.com" in response["Content-Security-Policy"]
+    assert "cdnjs.cloudflare.com" in response["Content-Security-Policy"]
 
 
 @pytest.mark.django_db()
