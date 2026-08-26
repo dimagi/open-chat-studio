@@ -1,0 +1,105 @@
+"""Start-session guards for the public channel (spec D4).
+
+The embed key is in page source, so the API enforces: only a published version is served, and a
+consent-form chatbot has no live link until the consent work (step 3) ships.
+"""
+
+import pytest
+from django.contrib.sites.models import Site
+from django.urls import reverse
+from rest_framework.test import APIClient
+
+from apps.channels.models import ChannelPlatform
+from apps.experiments.models import ExperimentSession
+from apps.utils.factories.channels import ExperimentChannelFactory
+from apps.utils.factories.experiment import ConsentFormFactory, ExperimentFactory
+
+TOKEN = "public_token_1234567890123456789012"
+CANONICAL = "ocs.example.com"
+ORIGIN = f"https://{CANONICAL}"
+
+
+@pytest.fixture(autouse=True)
+def _canonical_site(db):
+    Site.objects.filter(id=1).update(domain=CANONICAL)
+    Site.objects.clear_cache()
+    yield
+    Site.objects.clear_cache()
+
+
+def _public_channel(team, *, consent=False, publish=True):
+    experiment = ExperimentFactory.create(
+        team=team, consent_form=ConsentFormFactory.create(team=team) if consent else None
+    )
+    if publish:
+        experiment.create_new_version(make_default=True)
+    return ExperimentChannelFactory.create(
+        team=team, experiment=experiment, platform=ChannelPlatform.PUBLIC, extra_data={"widget_token": TOKEN}
+    )
+
+
+def _start(client, experiment, **body):
+    return client.post(
+        reverse("api:chat:start-session"),
+        data={"chatbot_id": experiment.public_id, "session_data": {"source": "widget"}, **body},
+        format="json",
+        HTTP_X_EMBED_KEY=TOKEN,
+        HTTP_ORIGIN=ORIGIN,
+    )
+
+
+@pytest.mark.django_db()
+def test_published_public_chatbot_starts_with_a_session_token(team_with_users):
+    channel = _public_channel(team_with_users)
+    response = _start(APIClient(), channel.experiment)
+    assert response.status_code == 201, response.content
+    body = response.json()
+    assert body["session_token"]
+    session = ExperimentSession.objects.get(external_id=body["session_id"])
+    assert session.session_token_required is True
+    assert session.participant.platform == "public"
+
+
+@pytest.mark.django_db()
+def test_unpublished_public_chatbot_refuses_with_409(team_with_users):
+    channel = _public_channel(team_with_users, publish=False)
+    response = _start(APIClient(), channel.experiment)
+    assert response.status_code == 409
+    assert response.json()["code"] == "no_published_version"
+    assert not ExperimentSession.objects.filter(experiment_channel=channel).exists()
+
+
+@pytest.mark.django_db()
+def test_consent_form_chatbot_refuses_with_409_until_step_3(team_with_users):
+    channel = _public_channel(team_with_users, consent=True)
+    response = _start(APIClient(), channel.experiment)
+    assert response.status_code == 409
+    assert response.json()["code"] == "consent_unavailable"
+
+
+@pytest.mark.django_db()
+def test_anonymous_version_number_is_refused(team_with_users):
+    channel = _public_channel(team_with_users)
+    response = _start(APIClient(), channel.experiment, version_number=1)
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db()
+def test_team_member_may_start_an_unpublished_public_chatbot(team_with_users):
+    channel = _public_channel(team_with_users, publish=False)
+    client = APIClient()
+    user = team_with_users.members.first()
+    client.force_login(user)
+    response = _start(client, channel.experiment, participant_remote_id=user.email)
+    assert response.status_code == 201, response.content
+
+
+@pytest.mark.django_db()
+def test_disabled_public_channel_refuses_before_the_published_check(team_with_users):
+    channel = _public_channel(team_with_users, publish=False)
+    channel.enabled = False
+    channel.disabled_message = "Back soon"
+    channel.save()
+    response = _start(APIClient(), channel.experiment)
+    assert response.status_code == 403
+    assert "Back soon" in response.json()["error"]

@@ -40,7 +40,7 @@ from apps.api.session_tokens import issue_session_token
 from apps.api.throttling import ChatAPIRateThrottle
 from apps.channels.api_channel import ApiChannel
 from apps.channels.datamodels import Attachment
-from apps.channels.models import CredentialMode, ExperimentChannel, WidgetAuthLevel
+from apps.channels.models import ChannelPlatform, CredentialMode, ExperimentChannel, WidgetAuthLevel
 from apps.channels.utils import get_experiment_session_cached
 from apps.channels.widget_versions import (
     WIDGET_VERSION_HEADER,
@@ -50,6 +50,7 @@ from apps.channels.widget_versions import (
 )
 from apps.chat.models import Chat, ChatAttachment, ChatMessage, ChatMessageType
 from apps.chat.utils import safe_link_url
+from apps.chatbots.version_resolver import NoPublishedVersion, VersionSelectionRule, resolve_chatbot_version
 from apps.experiments.models import Experiment, Participant, ParticipantData
 from apps.experiments.task_utils import get_message_task_response
 from apps.experiments.tasks import get_response_for_webchat_task
@@ -345,6 +346,35 @@ def _channel_disabled_response(experiment_channel) -> Response | None:
     return Response({"error": detail}, status=status.HTTP_403_FORBIDDEN)
 
 
+NO_PUBLISHED_VERSION = {"error": "This chatbot has no published version", "code": "no_published_version"}
+CONSENT_UNAVAILABLE = {
+    "error": "This chatbot requires consent, which the public link cannot collect yet",
+    "code": "consent_unavailable",
+}
+
+
+def _is_team_member(request, experiment) -> bool:
+    return request.user.is_authenticated and experiment.team.members.filter(id=request.user.id).exists()
+
+
+def _public_channel_refusal(request, experiment, experiment_channel) -> Response | None:
+    """A 409 when a public link cannot serve a visitor, else None.
+
+    Public visitors only ever reach the published version, and a consent-form chatbot has no
+    live link until consent moves into the widget. Team members are exempt so they can try the
+    page before publishing.
+    """
+    if experiment_channel.platform != ChannelPlatform.PUBLIC or _is_team_member(request, experiment):
+        return None
+    try:
+        published = resolve_chatbot_version(experiment, VersionSelectionRule.LATEST_PUBLISHED)
+    except NoPublishedVersion:
+        return Response(NO_PUBLISHED_VERSION, status=status.HTTP_409_CONFLICT)
+    if published.consent_form_id:
+        return Response(CONSENT_UNAVAILABLE, status=status.HTTP_409_CONFLICT)
+    return None
+
+
 def _get_requested_version(experiment, version_number):
     """The explicitly requested version, or None to use the working version."""
     if version_number is None or version_number == Experiment.DEFAULT_VERSION_NUMBER:
@@ -395,6 +425,15 @@ def _resolve_experiment_channel(request, team, session_data, embed_key_channel, 
             {
                 "error": serializers.CharField(),
                 "code": serializers.CharField(help_text="Always `chat_access_denied`."),
+            },
+        ),
+        # Public-channel admission: no published version yet, or the chatbot has a consent form
+        # the public link cannot collect (`no_published_version` / `consent_unavailable`).
+        409: inline_serializer(
+            "ChatStartSessionRefused",
+            {
+                "error": serializers.CharField(),
+                "code": serializers.CharField(help_text="`no_published_version` or `consent_unavailable`."),
             },
         ),
     },
@@ -497,6 +536,9 @@ def chat_start_session(request):
     # Before the participant work below, which creates records as a side effect.
     if disabled := _channel_disabled_response(experiment_channel):
         return disabled
+
+    if refusal := _public_channel_refusal(request, experiment, experiment_channel):
+        return refusal
 
     if request.user.is_authenticated:
         user = request.user

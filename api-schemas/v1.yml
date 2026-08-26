@@ -234,6 +234,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatAccessDenied'
           description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStartSessionRefused'
+          description: ''
   /api/experiments/:
     get:
       operationId: experiment_list
@@ -1174,6 +1180,17 @@ components:
         * `processing` - Processing
         * `completed` - Completed
         * `error` - Error
+    ChatStartSessionRefused:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: '`no_published_version` or `consent_unavailable`.'
+      required:
+      - code
+      - error
     ChatStartSessionRequest:
       type: object
       properties:
