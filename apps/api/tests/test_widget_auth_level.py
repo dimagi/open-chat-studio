@@ -267,3 +267,17 @@ def test_public_channel_carries_the_default_session_token_level(experiment):
         experiment=experiment, platform=ChannelPlatform.PUBLIC, extra_data={"widget_token": WIDGET_TOKEN}
     )
     assert channel.widget_auth_level == WidgetAuthLevel.SESSION_TOKEN
+
+
+@pytest.mark.django_db()
+def test_public_session_without_token_requirement_is_still_refused(api_client, experiment):
+    """A public session carries SESSION_TOKEN by default, so the keyless fallback in
+    SessionAccessPermission can never admit it, even if the row was misconfigured."""
+    channel = ExperimentChannelFactory.create(
+        experiment=experiment, platform=ChannelPlatform.PUBLIC, extra_data={"widget_token": WIDGET_TOKEN}
+    )
+    session = ExperimentSessionFactory.create(
+        experiment=experiment, experiment_channel=channel, session_token_required=False
+    )
+    response = api_client.get(poll_url(session), HTTP_ORIGIN="https://example.com")
+    assert response.status_code == 403
