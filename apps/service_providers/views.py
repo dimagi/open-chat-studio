@@ -16,7 +16,6 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 from django_tables2 import SingleTableView
 
-from apps.assistants.models import OpenAiAssistant
 from apps.cost_tracking.models import PricingRule, PricingSource, ServiceKind
 from apps.evaluations.models import Evaluator
 from apps.experiments.models import Experiment
@@ -152,11 +151,6 @@ def delete_service_provider(request, team_slug: str, provider_type: str, pk: int
                 Chip(label=_experiment_chip_label(experiment), url=experiment.get_absolute_url())
                 for experiment in filtered_objects
                 if isinstance(experiment, Experiment)
-            ],
-            "assistants": [
-                Chip(label=assistant.name, url=assistant.get_absolute_url())
-                for assistant in filtered_objects
-                if isinstance(assistant, OpenAiAssistant)
             ],
             # Evaluators reference the provider by FK. Deleting underneath one leaves it
             # unrunnable — nulled FK, stale id in params — so it blocks like the rest.
